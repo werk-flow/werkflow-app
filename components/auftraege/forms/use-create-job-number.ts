@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getNextJobNumber } from '@/lib/jobs/actions';
+import { logError } from '@/lib/logging';
 
 type CreateJobNumberOptions = {
   initialJobNumber: string | null | undefined;
@@ -34,11 +35,14 @@ export function useCreateJobNumber({ initialJobNumber, isActive }: CreateJobNumb
     if (!isActive || initialJobNumber || jobNumber) return;
     let isCurrent = true;
 
-    getNextJobNumber().then((result) => {
-      if (!isCurrent || !result.success) return;
+    // Without a suggestion the field stays empty for the user to fill; the log keeps the failure.
+    getNextJobNumber()
+      .then((result) => {
+        if (!isCurrent || !result.success) return;
 
-      setJobNumber((currentJobNumber) => currentJobNumber || result.jobNumber);
-    });
+        setJobNumber((currentJobNumber) => currentJobNumber || result.jobNumber);
+      })
+      .catch((error: unknown) => logError('jobs.next_number_failed', error));
 
     return () => {
       isCurrent = false;

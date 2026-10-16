@@ -11,8 +11,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { fingerprintSnapshot } from '@/lib/planning/capacity';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
-import { formatBerlinLocalDateTime } from '@/lib/planning/date-time';
+import { formatBerlinLocalDateTime, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { assessPlanningOccurrences } from '@/lib/planning/server';
 import type {
   MaterializedOccurrence,
@@ -35,7 +34,11 @@ function revalidateDispatchMutation(): void {
   revalidatePath('/aufgaben');
 }
 
-function mapRpcError(operation: string, error: { code?: string; message: string }, known: string[]): string {
+function dispatchFailureCode(
+  operation: string,
+  error: { code?: string; message: string },
+  known: string[],
+): string {
   logError(operation, error);
   return known.find((identifier) => error.message.includes(identifier)) ?? 'update_failed';
 }
@@ -180,7 +183,7 @@ export async function issueDispatch(rawInput: unknown): Promise<ActionResult<{ d
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to issue dispatch', error, [
+      error: dispatchFailureCode('Failed to issue dispatch', error, [
         'dispatch_occurrence_not_found',
         'dispatch_occurrence_not_scheduled',
         'dispatch_job_not_found',
@@ -216,7 +219,7 @@ export async function acknowledgeDispatch(
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to acknowledge dispatch', error, [
+      error: dispatchFailureCode('Failed to acknowledge dispatch', error, [
         'dispatch_not_found',
         'dispatch_not_active',
         'stale_dispatch_revision',
@@ -257,7 +260,7 @@ export async function challengeDispatch(
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to challenge dispatch', error, [
+      error: dispatchFailureCode('Failed to challenge dispatch', error, [
         'dispatch_not_found',
         'dispatch_not_active',
         'stale_dispatch_revision',
@@ -298,7 +301,7 @@ export async function resolveDispatchChallenge(
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to resolve dispatch challenge', error, [
+      error: dispatchFailureCode('Failed to resolve dispatch challenge', error, [
         'challenge_not_found',
         'resolution_reason_invalid',
       ]),
@@ -332,7 +335,10 @@ export async function cancelDispatch(dispatchId: string, reason: string): Promis
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to cancel dispatch', error, ['dispatch_not_found', 'cancel_reason_invalid']),
+      error: dispatchFailureCode('Failed to cancel dispatch', error, [
+        'dispatch_not_found',
+        'cancel_reason_invalid',
+      ]),
     };
   }
   revalidateDispatchMutation();
@@ -646,13 +652,13 @@ async function prepareBatchReschedule(
   const today = getBusinessTodayIso();
   for (const row of rows ?? []) {
     if (row.status !== 'scheduled') {
-      return { success: false, error: `batch_item_not_scheduled:${row.id}` };
+      return { success: false, error: 'batch_item_not_scheduled' };
     }
     const isFuture = row.start_at
       ? new Date(row.start_at).getTime() > now
       : Boolean(row.start_date && row.start_date > today);
     if (!isFuture) {
-      return { success: false, error: `batch_item_started:${row.id}` };
+      return { success: false, error: 'batch_item_started' };
     }
   }
 
@@ -668,14 +674,7 @@ async function prepareBatchReschedule(
     })),
     { dayShift: input.dayShift, newTime: input.newTime },
   );
-  if (!shiftResult.success) {
-    return {
-      success: false,
-      error: shiftResult.occurrenceId
-        ? `${shiftResult.error}:${shiftResult.occurrenceId}`
-        : shiftResult.error,
-    };
-  }
+  if (!shiftResult.success) return { success: false, error: shiftResult.error };
 
   const assignmentsResult = await loadBatchAssignmentsByOccurrence(admin, orgId, uniqueIds);
   if (!assignmentsResult.success) return assignmentsResult;
@@ -880,7 +879,7 @@ export async function batchReschedule(rawInput: unknown): Promise<PlanningAction
   if (error) {
     return {
       success: false as const,
-      error: mapRpcError('Failed to batch reschedule', error, [
+      error: dispatchFailureCode('Failed to batch reschedule', error, [
         'batch_item_not_found',
         'batch_item_not_scheduled',
         'batch_item_stale',

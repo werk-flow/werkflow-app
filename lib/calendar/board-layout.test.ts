@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { barEdge, boardColumns, boardDateRange, minutesOfDay, mondayOf, packLanes } from './board-layout';
+import { boardColumns, minutesOfDay, mondayOf, packLanes } from './board-layout';
 
 describe('board columns', () => {
   test('start on Monday, mark weekends and today, and hide weekends on request', () => {
@@ -31,7 +31,6 @@ describe('board columns', () => {
     });
     expect(workdays).toHaveLength(10);
     expect(workdays.at(-1)?.date).toBe('2026-09-25');
-    expect(boardDateRange('2026-09-18', 6)).toEqual({ from: '2026-09-14', to: '2026-10-25' });
   });
 });
 
@@ -77,13 +76,7 @@ describe('lane packing', () => {
     expect(lanes[0]).toMatchObject({ column: 4, span: 2 });
   });
 
-  test('bar edges and minutes of the day', () => {
-    expect([barEdge(0, 1), barEdge(0, 3), barEdge(1, 3), barEdge(2, 3)]).toEqual([
-      'single',
-      'start',
-      'middle',
-      'end',
-    ]);
+  test('minutes of the day', () => {
     expect(minutesOfDay('09:30')).toBe(570);
     expect(minutesOfDay(null)).toBe(0);
     expect(minutesOfDay('x')).toBe(0);

@@ -77,7 +77,7 @@ export const MAINTENANCE_PLAN_REQUIRED_FIELD_IDS: Array<[MaintenancePlanRequired
 
 // Mirrors maintenancePlanSchema so the user sees the missing field instead of
 // the generic invalid_input message.
-export function missingFields(
+export function missingMaintenancePlanFields(
   form: MaintenancePlanFormState,
   isRevision: boolean,
 ): Partial<Record<MaintenancePlanRequiredField, string>> {

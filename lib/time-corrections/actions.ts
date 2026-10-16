@@ -33,7 +33,8 @@ import type { Json, Tables } from '@/lib/supabase/database.types';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
 import { correctionHistoryVisibility } from './history-visibility';
-import type { OrgRole, TimeEntryType } from '@/lib/time-tracking/types';
+import type { OrgRole } from '@/lib/roles';
+import type { TimeEntryType } from '@/lib/time-tracking/types';
 
 import {
   isTimeCorrectionSnapshot,
@@ -155,9 +156,7 @@ async function loadEmployeeIdentities(
   );
   if (membershipError) logReadFailure('loadEmployeeIdentities: memberships failed', membershipError);
   if (membershipError || memberships.length !== uniqueIds.length) return null;
-  const roleByUser = new Map(
-    memberships.map((membership) => [membership.user_id, membership.role as OrgRole]),
-  );
+  const roleByUser = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
   return new Map(
     employees.map((employee) => [
       employee.id,
@@ -366,7 +365,7 @@ function hasValidChronology(snapshot: TimeCorrectionSnapshot): boolean {
   });
 }
 
-function mapRpcError(message: string): string {
+function timeCorrectionFailureCode(message: string): string {
   if (/deadlock detected|could not serialize access/.test(message)) return 'time_correction_timeline_changed';
   const known = [
     'time_correction_not_responsible',
@@ -390,62 +389,61 @@ function revalidateCorrectionSurfaces(): void {
   revalidatePath('/auftraege');
 }
 
-export async function submitTimeCorrection(
-  rawInput: SubmitTimeCorrectionInput,
-): Promise<TimeCorrectionResult> {
-  const parsed = submitTimeCorrectionSchema.safeParse(rawInput);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const input = parsed.data;
+/** The refusal of a submission's shape, decided before any read; null when the shape fits. */
+function submissionShapeError(input: SubmitTimeCorrectionInput): string | null {
   if (
     input.calendarAdjustment &&
     (input.source !== null || input.proposedFacts.length !== 0 || !['edit', 'reassign'].includes(input.kind))
   ) {
-    return { success: false, error: 'invalid_shape' };
+    return 'invalid_shape';
   }
   if (input.calendarAdjustment) {
     const targets = new Set(input.calendarAdjustment.map((boundary) => boundary.employeeRecordId));
     if (targets.size !== 1 || (input.kind === 'edit') !== targets.has(input.subjectEmployeeRecordId)) {
-      return { success: false, error: 'invalid_shape' };
+      return 'invalid_shape';
     }
   }
-  const shapeError = validateCorrectionShape({
+  return validateCorrectionShape({
     kind: input.kind,
     hasSource: Boolean(input.source || input.calendarAdjustment),
     proposedFactCount: input.calendarAdjustment?.length ?? input.proposedFacts.length,
   });
-  if (shapeError) return { success: false, error: shapeError };
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(input.organizationId);
-  if (!caller.success) return caller;
-  const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
-  const subject = identities?.get(input.subjectEmployeeRecordId);
-  if (!subject) return { success: false, error: 'subject_not_found' };
+}
 
-  let responsibilitySnapshot: Json = {};
-  if (subject.userId !== user.id) {
-    const authorization = await authorizeResponsibilityForTarget({
-      organizationId: input.organizationId,
-      responsibility: 'time_approval',
-      actorUserId: user.id,
-      targetUserId: subject.userId,
-      targetRole: subject.role,
-    });
-    if (!authorization.success) {
-      return { success: false, error: authorization.error };
-    }
-    responsibilitySnapshot = {
+/**
+ * The responsibility a submission for another person rests on, recorded with
+ * the request; an own submission records none.
+ */
+async function submissionResponsibility(
+  organizationId: string,
+  actorUserId: string,
+  subject: EmployeeIdentity,
+): Promise<{ success: true; snapshot: { [key: string]: Json | undefined } } | ActionFailure> {
+  if (subject.userId === actorUserId) return { success: true, snapshot: {} };
+  const authorization = await authorizeResponsibilityForTarget({
+    organizationId,
+    responsibility: 'time_approval',
+    actorUserId,
+    targetUserId: subject.userId,
+    targetRole: subject.role,
+  });
+  if (!authorization.success) {
+    return { success: false, error: authorization.error };
+  }
+  return {
+    success: true,
+    snapshot: {
       holderEmployeeRecordId: authorization.holder.employeeRecordId,
       source: authorization.holder.source,
       configurationId: authorization.effective.configurationId,
       resolvedAt: new Date().toISOString(),
-    };
-  }
+    },
+  };
+}
 
-  const replaying = await correctionOperationExists(input.organizationId, user.id, input.operationId);
-  const initialTimeline = await readCorrectionTimelineRevision(input.organizationId);
-  if (!initialTimeline.success) return initialTimeline;
-  const sourceInputs = input.calendarAdjustment
+/** The sources a submission names: each calendar boundary's source once, in a stable order. */
+function submissionSourceInputs(input: SubmitTimeCorrectionInput) {
+  return input.calendarAdjustment
     ? [
         ...new Map(
           input.calendarAdjustment.map((boundary) => [
@@ -457,16 +455,16 @@ export async function submitTimeCorrection(
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([, source]) => source)
     : [input.source];
-  if (
-    input.calendarAdjustment &&
-    sourceInputs.filter((source) => source?.kind === 'correction_application').length > 1
-  ) {
-    return { success: false, error: 'time_correction_multiple_application_sources' };
-  }
+}
+
+/** The context of every source, or the refusal of the first that has none. */
+async function loadSubmissionContexts(
+  organizationId: string,
+  subject: EmployeeIdentity,
+  sourceInputs: ReturnType<typeof submissionSourceInputs>,
+): Promise<{ success: true; contexts: SourceContext[] } | ActionFailure<SourceRefusal>> {
   const contexts = await Promise.all(
-    sourceInputs.map((source) =>
-      loadSourceContext({ organizationId: input.organizationId, subject, source }),
-    ),
+    sourceInputs.map((source) => loadSourceContext({ organizationId, subject, source })),
   );
   const refusals = contexts.filter((context) => typeof context === 'string');
   if (refusals.length) {
@@ -476,7 +474,96 @@ export async function submitTimeCorrection(
       : 'source_not_found';
     return { success: false, error };
   }
-  const loadedContexts = contexts.filter((context) => typeof context !== 'string');
+  return { success: true, contexts: contexts.filter((context) => typeof context !== 'string') };
+}
+
+/**
+ * A calendar adjustment of legacy entries covers one whole approved session:
+ * it runs from a clock-in to a clock-out, every entry inside it is a source,
+ * and no session before it is still open. False when it does not, or when a
+ * read fails; true when no legacy entry is a source.
+ */
+async function coversWholeLegacySession(input: {
+  organizationId: string;
+  userId: string;
+  sourceInputs: ReturnType<typeof submissionSourceInputs>;
+  before: TimeCorrectionSnapshot;
+}): Promise<boolean> {
+  const legacySources = input.sourceInputs.filter((source) => source?.kind === 'legacy_entry');
+  if (!legacySources.length) return true;
+  const first = input.before.facts[0];
+  const last = input.before.facts.at(-1);
+  if (
+    legacySources.length !== input.sourceInputs.length ||
+    !first ||
+    !last ||
+    first.entryType !== 'clock_in' ||
+    last.entryType !== 'clock_out'
+  ) {
+    return false;
+  }
+  const admin = createSupabaseAdminClient();
+  const [inside, preceding] = await Promise.all([
+    admin
+      .from('time_entries')
+      .select('id, status')
+      .eq('organization_id', input.organizationId)
+      .eq('user_id', input.userId)
+      .gte('timestamp', first.timestamp)
+      .lte('timestamp', last.timestamp)
+      .limit(legacySources.length + 1),
+    admin
+      .from('time_entries')
+      .select('entry_type')
+      .eq('organization_id', input.organizationId)
+      .eq('user_id', input.userId)
+      .lt('timestamp', first.timestamp)
+      .order('timestamp', { ascending: false })
+      .limit(1),
+  ]);
+  const sourceIds = new Set(legacySources.map((source) => source?.id));
+  return !(
+    inside.error ||
+    preceding.error ||
+    inside.data?.length !== sourceIds.size ||
+    inside.data.some((entry) => !sourceIds.has(entry.id) || entry.status !== 'approved') ||
+    (preceding.data?.[0] && preceding.data[0].entry_type !== 'clock_out')
+  );
+}
+
+export async function submitTimeCorrection(
+  rawInput: SubmitTimeCorrectionInput,
+): Promise<TimeCorrectionResult> {
+  const parsed = submitTimeCorrectionSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
+  const input = parsed.data;
+  const shapeError = submissionShapeError(input);
+  if (shapeError) return { success: false, error: shapeError };
+  const user = await getAuthenticatedUser();
+  if (!user) return { success: false, error: 'not_authenticated' };
+  const caller = await getMembershipRole(input.organizationId);
+  if (!caller.success) return caller;
+  const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
+  const subject = identities?.get(input.subjectEmployeeRecordId);
+  if (!subject) return { success: false, error: 'subject_not_found' };
+
+  const responsibility = await submissionResponsibility(input.organizationId, user.id, subject);
+  if (!responsibility.success) return { success: false, error: responsibility.error };
+  let responsibilitySnapshot = responsibility.snapshot;
+
+  const replaying = await correctionOperationExists(input.organizationId, user.id, input.operationId);
+  const initialTimeline = await readCorrectionTimelineRevision(input.organizationId);
+  if (!initialTimeline.success) return initialTimeline;
+  const sourceInputs = submissionSourceInputs(input);
+  if (
+    input.calendarAdjustment &&
+    sourceInputs.filter((source) => source?.kind === 'correction_application').length > 1
+  ) {
+    return { success: false, error: 'time_correction_multiple_application_sources' };
+  }
+  const loaded = await loadSubmissionContexts(input.organizationId, subject, sourceInputs);
+  if (!loaded.success) return loaded;
+  const loadedContexts = loaded.contexts;
   let beforeSnapshot: TimeCorrectionSnapshot = {
     schemaVersion: 1,
     facts: loadedContexts.flatMap((context) => context.snapshot.facts),
@@ -490,49 +577,13 @@ export async function submitTimeCorrection(
     if (!proposal.success) return proposal;
     proposedFacts = proposal.snapshot.facts;
     beforeSnapshot = proposal.before;
-    const legacySources = sourceInputs.filter((source) => source?.kind === 'legacy_entry');
-    if (legacySources.length) {
-      const first = beforeSnapshot.facts[0];
-      const last = beforeSnapshot.facts.at(-1);
-      if (
-        legacySources.length !== sourceInputs.length ||
-        !first ||
-        !last ||
-        first.entryType !== 'clock_in' ||
-        last.entryType !== 'clock_out'
-      ) {
-        return { success: false, error: 'calendar_incomplete_source' };
-      }
-      const admin = createSupabaseAdminClient();
-      const [inside, preceding] = await Promise.all([
-        admin
-          .from('time_entries')
-          .select('id, status')
-          .eq('organization_id', input.organizationId)
-          .eq('user_id', subject.userId)
-          .gte('timestamp', first.timestamp)
-          .lte('timestamp', last.timestamp)
-          .limit(legacySources.length + 1),
-        admin
-          .from('time_entries')
-          .select('entry_type')
-          .eq('organization_id', input.organizationId)
-          .eq('user_id', subject.userId)
-          .lt('timestamp', first.timestamp)
-          .order('timestamp', { ascending: false })
-          .limit(1),
-      ]);
-      const sourceIds = new Set(legacySources.map((source) => source?.id));
-      if (
-        inside.error ||
-        preceding.error ||
-        inside.data?.length !== sourceIds.size ||
-        inside.data.some((entry) => !sourceIds.has(entry.id) || entry.status !== 'approved') ||
-        (preceding.data?.[0] && preceding.data[0].entry_type !== 'clock_out')
-      ) {
-        return { success: false, error: 'calendar_incomplete_source' };
-      }
-    }
+    const wholeSession = await coversWholeLegacySession({
+      organizationId: input.organizationId,
+      userId: subject.userId,
+      sourceInputs,
+      before: beforeSnapshot,
+    });
+    if (!wholeSession) return { success: false, error: 'calendar_incomplete_source' };
   }
   const proposedSnapshot = await buildProposedSnapshot({
     organizationId: input.organizationId,
@@ -586,7 +637,7 @@ export async function submitTimeCorrection(
     p_sources: sources,
     p_responsibility_snapshot: responsibilitySnapshot,
   });
-  if (error) return { success: false, error: mapRpcError(error.message) };
+  if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
 }
@@ -632,7 +683,7 @@ export async function reviewTimeCorrection(
     responsibility: 'time_approval',
     actorUserId: user.id,
     targetUserId: request.subject_user_id,
-    targetRole: membership.role as OrgRole,
+    targetRole: membership.role,
   });
   if (!authorization.success) {
     return { success: false, error: authorization.error };
@@ -665,7 +716,7 @@ export async function reviewTimeCorrection(
       p_responsibility_snapshot: responsibilitySnapshot,
     }),
   );
-  if (error) return { success: false, error: mapRpcError(error.message) };
+  if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
 }
@@ -684,7 +735,7 @@ export async function withdrawTimeCorrection(rawInput: {
     p_actor_id: user.id,
     p_operation_id: input.operationId,
   });
-  if (error) return { success: false, error: mapRpcError(error.message) };
+  if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
 }
@@ -773,7 +824,7 @@ export async function resubmitTimeCorrection(rawInput: {
     p_proposed_snapshot: revision.proposed_snapshot,
     p_sources: sourcePayload,
   });
-  if (error) return { success: false, error: mapRpcError(error.message) };
+  if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
 }
@@ -826,9 +877,7 @@ export async function reviewTimeCorrectionsBatch(rawInput: {
     logReadFailure('reviewTimeCorrectionsBatch: memberships failed', membershipError);
     return { success: false, error: 'fetch_failed' };
   }
-  const roleByUser = new Map(
-    memberships.map((membership) => [membership.user_id, membership.role as OrgRole]),
-  );
+  const roleByUser = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
   for (const request of roots) {
     const targetRole = roleByUser.get(request.subject_user_id);
     if (!targetRole) return { success: false, error: 'subject_not_found' };
@@ -864,7 +913,7 @@ export async function reviewTimeCorrectionsBatch(rawInput: {
       },
     }),
   );
-  if (error) return { success: false, error: mapRpcError(error.message) };
+  if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return { success: true };
 }
@@ -968,9 +1017,7 @@ async function hydrateCorrectionRequests(input: {
     logReadFailure('getTimeCorrectionRequests: request details failed', detailError);
     return { success: false, error: 'fetch_failed' };
   }
-  const roleByUser = new Map(
-    memberships.data.map((membership) => [membership.user_id, membership.role as OrgRole]),
-  );
+  const roleByUser = new Map(memberships.data.map((membership) => [membership.user_id, membership.role]));
   const nameByUser = new Map(
     profiles.data.map((profile) => [
       profile.id,
@@ -1205,7 +1252,7 @@ export async function getTimeCorrectionFormOptions(
     return { success: false, error: 'fetch_failed' };
   }
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const roleById = new Map(memberships.map((membership) => [membership.user_id, membership.role as OrgRole]));
+  const roleById = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
   const people = employees.flatMap((employee) => {
     const userId = employee.user_id as string;
     const role = roleById.get(userId);

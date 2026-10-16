@@ -1,7 +1,7 @@
-import { expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
-import ts from 'typescript';
-import { listProductSources, parseProductSource } from './product-sources';
+import { moduleHelpers, moduleTypes, renamedCopies, sharedNames } from './duplicate-detection';
+import { listProductSources } from './product-sources';
 
 // Tier 2 for the one-home rule (AGENTS.md coding standards). A module-level
 // helper name declared in two or more product files is a copy until proven
@@ -9,84 +9,42 @@ import { listProductSources, parseProductSource } from './product-sources';
 // count may only fall, and a name leaves the list with its last copy.
 // A new shared name, or a known one with a new copy, fails here with the files.
 
-const KNOWN_DUPLICATE_HELPERS: Readonly<Record<string, number>> = {
-  announceSubmission: 3,
-  calculateTotalMinutes: 2,
-  errorMessage: 4,
-  EvidenceDialog: 2,
-  Fact: 2,
-  getActiveJobIdsForOrg: 2,
-  getCalendarWindow: 2,
-  getCurrentClockState: 2,
-  getSortValue: 2,
-  mapRpcError: 2,
-  missingFields: 3,
-  mutationError: 2,
-  normalizeDatabaseError: 2,
-  optionalText: 2,
-  ReasonDialog: 3,
-  sortTimeEntries: 2,
-};
-
-type ModuleHelper = { name: string; file: string; body: string; tokenCount: number };
+const KNOWN_DUPLICATE_HELPERS: Readonly<Record<string, number>> = {};
 
 // A body shorter than this many tokens is a trivial one-liner (a property read,
 // a constant) whose repetition is not a copied rule; longer identical bodies are copies.
 const MIN_COPIED_BODY_TOKENS = 12;
+// With identifiers erased, short bodies match by shape alone: below this
+// length the matches on the product tree were thin wrappers over different
+// data (two badges, two guards); from it on, an equal shape is a copied rule.
+const MIN_ERASED_BODY_TOKENS = 40;
+// A shorter type body is a one- or two-field record that many concepts share.
+const MIN_COPIED_TYPE_TOKENS = 20;
 
-/** The node's tokens without comments and whitespace, joined by single spaces. */
-function normalizedTokens(node: ts.Node, source: ts.SourceFile): string[] {
-  const scanner = ts.createScanner(
-    ts.ScriptTarget.Latest,
-    true,
-    source.languageVariant,
-    source.text.slice(node.getStart(source), node.getEnd()),
-  );
-  const tokens: string[] = [];
-  for (let kind = scanner.scan(); kind !== ts.SyntaxKind.EndOfFileToken; kind = scanner.scan())
-    tokens.push(scanner.getTokenText());
-  return tokens;
+const productFiles = listProductSources().filter((file) => !file.endsWith('/route.ts'));
+const helpers = productFiles.flatMap((file) => moduleHelpers(file));
+const types = productFiles.flatMap((file) => moduleTypes(file));
+
+/** A known-copy list may only shrink: new groups fail, and so do entries whose copies are gone. */
+function expectKnownCopies(
+  found: ReadonlyMap<string, readonly { name: string; file: string }[]>,
+  known: Readonly<Record<string, string>>,
+  listName: string,
+  fix: string,
+): void {
+  const unknown = [...found].filter(([key]) => !(key in known));
+  expect(
+    unknown.map(([, copies]) => copies.map((copy) => `${copy.name} (${copy.file})`).join(' = ')),
+    fix,
+  ).toEqual([]);
+  expect(
+    Object.keys(known).filter((key) => !found.has(key)),
+    `These copies are gone; remove them from ${listName} so the list only shrinks.`,
+  ).toEqual([]);
 }
-
-/** Module-level function declarations and arrow or function expressions bound to a const. */
-function moduleHelpers(file: string): ModuleHelper[] {
-  const source = parseProductSource(file);
-  const helpers: ModuleHelper[] = [];
-  const add = (name: string, node: ts.FunctionLikeDeclaration): void => {
-    // The parameters and the body; the name and modifiers may differ between copies.
-    const tokens = [...node.parameters, ...(node.body ? [node.body] : [])].flatMap((part) =>
-      normalizedTokens(part, source),
-    );
-    helpers.push({ name, file, body: tokens.join(' '), tokenCount: tokens.length });
-  };
-  for (const statement of source.statements) {
-    if (ts.isFunctionDeclaration(statement) && statement.name) add(statement.name.text, statement);
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      const initializer = declaration.initializer;
-      if (
-        ts.isIdentifier(declaration.name) &&
-        initializer &&
-        (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer))
-      ) {
-        add(declaration.name.text, initializer);
-      }
-    }
-  }
-  return helpers;
-}
-
-const helpers = listProductSources()
-  .filter((file) => !file.endsWith('/route.ts'))
-  .flatMap(moduleHelpers);
 
 test('a module-level helper name is declared in one product file unless it is a known copy', () => {
-  const filesByName = new Map<string, string[]>();
-  for (const { name, file } of helpers) {
-    const files = filesByName.get(name) ?? [];
-    if (!files.includes(file)) filesByName.set(name, [...files, file]);
-  }
-  const duplicated = new Map([...filesByName].filter(([, files]) => files.length > 1));
+  const duplicated = sharedNames(helpers);
   const grown = [...duplicated].filter(
     ([name, files]) => files.length > (KNOWN_DUPLICATE_HELPERS[name] ?? 1),
   );
@@ -103,31 +61,112 @@ test('a module-level helper name is declared in one product file unless it is a 
   ).toEqual([]);
 }, 60_000);
 
-// Renamed copies that predate the check, as their sorted names joined by " = ".
-// An entry leaves the list with its last copy.
-const KNOWN_RENAMED_COPIES: readonly string[] = [];
+// Known copies of the checks below, keyed by their sorted names joined by
+// " = ", each with the reason it stays. An entry leaves its list with its last copy.
+const KNOWN_RENAMED_COPIES: Readonly<Record<string, string>> = {};
+const KNOWN_ERASED_COPIES: Readonly<Record<string, string>> = {};
+const KNOWN_DUPLICATE_TYPES: Readonly<Record<string, string>> = {};
+const KNOWN_RENAMED_TYPES: Readonly<Record<string, string>> = {
+  'AssignmentEmployeeRow = ConflictEmployeeRecord':
+    'Each Pick names the columns its own read selects from employee_records; the generated row type is the home.',
+};
 
 // The same rule for a copy that was renamed: two helpers with token-identical
 // parameters and bodies under different names. Same-name copies are the
-// previous test's business.
+// first test's business.
 test('no helper body is copied under another name', () => {
-  const byBody = new Map<string, ModuleHelper[]>();
-  for (const helper of helpers) {
-    if (helper.tokenCount < MIN_COPIED_BODY_TOKENS) continue;
-    byBody.set(helper.body, [...(byBody.get(helper.body) ?? []), helper]);
-  }
-  const renamedCopies = new Map<string, ModuleHelper[]>();
-  for (const copies of byBody.values()) {
-    const names = [...new Set(copies.map((copy) => copy.name))].sort();
-    if (names.length > 1) renamedCopies.set(names.join(' = '), copies);
-  }
-  const unknown = [...renamedCopies].filter(([key]) => !KNOWN_RENAMED_COPIES.includes(key));
-  expect(
-    unknown.map(([, copies]) => copies.map((copy) => `${copy.name} (${copy.file})`).join(' = ')),
+  expectKnownCopies(
+    renamedCopies(helpers, (helper) =>
+      helper.tokenCount < MIN_COPIED_BODY_TOKENS ? undefined : helper.body,
+    ),
+    KNOWN_RENAMED_COPIES,
+    'KNOWN_RENAMED_COPIES',
     'Identical helper bodies under different names: keep one in its owning module and import it.',
-  ).toEqual([]);
-  expect(
-    KNOWN_RENAMED_COPIES.filter((key) => !renamedCopies.has(key)),
-    'These renamed copies are gone; remove them from KNOWN_RENAMED_COPIES so the list only shrinks.',
-  ).toEqual([]);
+  );
 }, 60_000);
+
+// A copy that renamed its parameters, its locals or the module data it reads
+// is still a copy: equal parameters and bodies once every identifier but a
+// member name is erased.
+test('no helper body is copied with its identifiers renamed', () => {
+  expectKnownCopies(
+    renamedCopies(helpers, (helper) =>
+      helper.tokenCount < MIN_ERASED_BODY_TOKENS ? undefined : helper.erasedBody,
+    ),
+    KNOWN_ERASED_COPIES,
+    'KNOWN_ERASED_COPIES',
+    'Helper bodies equal up to their identifiers: keep one implementation in its owning module and pass the part that differs as a parameter.',
+  );
+}, 60_000);
+
+// One home per shared type: an exported type alias or interface name is
+// declared in one product file. A local type stays private to its file.
+test('an exported type name is declared in one product file', () => {
+  const duplicated = sharedNames(types.filter((type) => type.exported));
+  expectKnownCopies(
+    new Map([...duplicated].map(([name, files]) => [name, files.map((file) => ({ name, file }))] as const)),
+    KNOWN_DUPLICATE_TYPES,
+    'KNOWN_DUPLICATE_TYPES',
+    'One home per type: export it from its owning module and import it there; a type with another meaning needs another name.',
+  );
+}, 60_000);
+
+test('no type body is copied under another name', () => {
+  expectKnownCopies(
+    renamedCopies(types, (type) => (type.tokenCount < MIN_COPIED_TYPE_TOKENS ? undefined : type.body)),
+    KNOWN_RENAMED_TYPES,
+    'KNOWN_RENAMED_TYPES',
+    'Identical type bodies under different names: declare the type once and import it, or alias it where the second name says more.',
+  );
+}, 60_000);
+
+describe('duplicate detection probes', () => {
+  const sumBody = (name: string, values: string, entry: string): string =>
+    `export function ${name}(${values}: Entry[]): number {\n  let total = 0;\n  for (const ${entry} of ${values}) {\n    if (${entry}.minutes > 0) total += ${entry}.minutes;\n    else total += ${entry}.fallbackMinutes ?? 0;\n  }\n  return total;\n}\n`;
+
+  test('a helper copied with renamed parameters and locals is caught; a mapper over other fields is not', () => {
+    const copies = [
+      ...moduleHelpers('lib/a.ts', sumBody('sumMinutes', 'entries', 'entry')),
+      ...moduleHelpers('lib/b.ts', sumBody('totalOf', 'rows', 'row')),
+      ...moduleHelpers('lib/c.ts', sumBody('sumMinutes', 'items', 'item').replaceAll('minutes', 'seconds')),
+    ];
+    expect(copies[0]?.tokenCount).toBeGreaterThanOrEqual(MIN_ERASED_BODY_TOKENS);
+    const erased = renamedCopies(copies, (helper) => helper.erasedBody);
+    expect([...erased.keys()]).toEqual(['sumMinutes = totalOf']);
+    expect(erased.get('sumMinutes = totalOf')?.map((helper) => helper.file)).toEqual([
+      'lib/a.ts',
+      'lib/b.ts',
+    ]);
+    expect([...renamedCopies(copies, (helper) => helper.body).keys()]).toEqual([]);
+  });
+
+  test('an exported type name in two files is caught; a local one is not', () => {
+    const declared = [
+      ...moduleTypes(
+        'lib/a.ts',
+        "export type OrgRole = 'admin' | 'buero' | 'employee';\ntype Props = { id: string };\n",
+      ),
+      ...moduleTypes(
+        'components/b.tsx',
+        "export type OrgRole = 'admin' | 'employee';\ntype Props = { name: string };\n",
+      ),
+      ...moduleTypes('hooks/c.ts', "type OrgRole = 'admin';\nexport type { OrgRole };\n"),
+    ];
+    expect([...sharedNames(declared.filter((type) => type.exported))]).toEqual([
+      ['OrgRole', ['lib/a.ts', 'components/b.tsx', 'hooks/c.ts']],
+    ]);
+  });
+
+  test('a type body copied under another name is caught, as alias and as interface', () => {
+    const record = '{ id: string; name: string; email: string | null; role: OrgRole; active: boolean }';
+    const declared = [
+      ...moduleTypes('lib/a.ts', `export type MemberInfo = ${record};\n`),
+      ...moduleTypes('lib/b.ts', `export type CalendarMember = ${record};\n`),
+      ...moduleTypes('lib/c.ts', `export interface OtherMember ${record}\n`),
+    ];
+    expect(declared[0]?.tokenCount).toBeGreaterThanOrEqual(MIN_COPIED_TYPE_TOKENS);
+    expect([...renamedCopies(declared, (type) => type.body).keys()]).toEqual([
+      'CalendarMember = MemberInfo = OtherMember',
+    ]);
+  });
+});

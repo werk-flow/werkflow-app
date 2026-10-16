@@ -24,7 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cancelSicknessReport, endSicknessReport, setSicknessEvidence } from '@/lib/sickness/actions';
 import { formatSicknessRange, SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/types';
 import { toLocalDateString } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 
 export function ManagerEndDialog({

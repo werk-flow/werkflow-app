@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-04
+Status: living — last reviewed 2026-10-16
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -16,6 +16,7 @@ Write each test at its boundary while you build the behavior, and run the narrow
 4. A shared control, pending feedback or a held write gets a contract in `tests/ui-contracts/`.
 5. A connected outcome across roles or sessions gets a step in the slice's golden or audit spec.
 6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the boundary that proves it.
+7. Probe a lint rule with `createProbeLinter()` from `eslint-rules/probe-linter.mjs`, never `new ESLint()`.
 
 Wrong turn: a browser test for a rule a unit test can expose. It costs minutes and fails for reasons the rule does not own.
 
@@ -54,7 +55,7 @@ Wrong turn: a clean review score taken as acceptance. CodeRabbit adds to the ind
 
 ## What browser tests are for
 
-Browser groups are a rough check that the user flows in the [catalog](../product/user-flow-catalog.md) and the golden journeys still work. A rule belongs at the cheapest boundary that can expose its failure: domain units for calculations, SQL for permissions and history, component contracts (`ui:contracts`) for shared controls, a browser journey for connected outcomes and cross-user freshness, the cloud canary for live providers.
+Browser groups are a rough check that the user flows in the [catalog](../product/user-flow-catalog.md) and the golden journeys still work.
 
 A group is one executable check in `lib/testing/selection/test-groups.ts`. The kinds are static, unit, SQL, component (`ui:contracts`), golden (one business journey per file), audit (one catalog area per file), and canary (live DEV providers). Every golden and audit group owns one spec file and one disposable organization.
 
@@ -106,10 +107,11 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## Publication gate
 
-`.githooks/pre-push` is the one gate before publication. Enable it once per clone with `git config core.hooksPath .githooks`. The hook runs `scripts/check-publication-gate.ts` and refuses the push unless both conditions hold:
+`.githooks/pre-push` is the one gate before publication. Enable it once per clone with `git config core.hooksPath .githooks`. The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all three conditions hold:
 
 1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, and no input file is uncommitted.
 2. A CodeRabbit review completed on the tree being pushed. `bun run review` writes a record under `.agent-logs/review/` with the content digest of every changed file its scope covered. A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
+3. Every commit that no remote has yet carries a `Deletion pass:` line in its body.
 
 The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`.
 
@@ -214,7 +216,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
 - Unit tests assert no duration; the preload and the runner set one hang guard for every file. [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
-- A push passes the publication gate: a passing report, and review records whose per-file digests cover every changed file of the pushed tree. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`]
+- A push passes the publication gate: a passing report, review records whose per-file digests cover every changed file of the pushed tree, and a `Deletion pass:` line in every commit no remote has yet. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`]
 
 ## Never
 

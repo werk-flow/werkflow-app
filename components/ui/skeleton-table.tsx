@@ -32,6 +32,21 @@ export interface SkeletonColumn {
 
 const DEFAULT_CELL = <Skeleton className="h-4 w-24" />;
 
+/** The header row of a table built from its column definition, for the loaded table and its skeleton alike. */
+export function ColumnsTableHeader({ columns }: { columns: readonly SkeletonColumn[] }) {
+  return (
+    <TableHeader>
+      <TableRow>
+        {columns.map((column) => (
+          <TableHead key={column.id} className={column.className}>
+            {column.header}
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+  );
+}
+
 export function SkeletonRows({
   columns,
   rows = 8,
@@ -70,15 +85,7 @@ export function SkeletonTable({
   return (
     <div className={cn('rounded-lg border', className)}>
       <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((column) => (
-              <TableHead key={column.id} className={column.className}>
-                {column.header}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
+        <ColumnsTableHeader columns={columns} />
         <TableBody>
           <SkeletonRows columns={columns} rows={rows} interactive={interactive} />
         </TableBody>

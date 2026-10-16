@@ -9,6 +9,7 @@ import { failCachedRead } from '@/lib/data/cached-read-failure';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 
 import type {
@@ -258,9 +259,7 @@ export async function loadWorkTemplateDetail(
   );
   const eventVersions = await loadVersions(admin, organizationId, eventVersionIds);
   const versionNumbers = new Map(eventVersions.map((version) => [version.id, version.version_number]));
-  const eventPayloads = (eventsResult.data ?? []).map(
-    (event) => event.event_payload as Record<string, unknown>,
-  );
+  const eventPayloads = (eventsResult.data ?? []).map((event) => jsonRecordOrEmpty(event.event_payload));
   const jobIds = eventPayloads.flatMap((payload) =>
     typeof payload.jobId === 'string' ? [payload.jobId] : [],
   );
@@ -335,7 +334,7 @@ export async function loadWorkTemplateDetail(
       })),
     },
     history: (eventsResult.data ?? []).map((event) => {
-      const payload = event.event_payload as Record<string, unknown>;
+      const payload = jsonRecordOrEmpty(event.event_payload);
       const targetId =
         typeof payload.jobId === 'string'
           ? payload.jobId

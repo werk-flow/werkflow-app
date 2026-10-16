@@ -5,12 +5,17 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Building2 } from 'lucide-react';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import {
+  ColumnsTableHeader,
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { ClientActionsMenu } from './client-actions-menu';
 import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
@@ -56,20 +61,6 @@ const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
   },
 ];
 
-function ClientsTableHeader() {
-  return (
-    <TableHeader>
-      <TableRow>
-        {CLIENT_COLUMNS.map((column) => (
-          <TableHead key={column.id} className={column.className}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
-    </TableHeader>
-  );
-}
-
 /** Same frame as the loaded list; rows hover because loaded rows navigate. */
 export function ClientsTableSkeleton({ count }: { count: number }) {
   return (
@@ -89,7 +80,7 @@ export function ClientsTableSkeleton({ count }: { count: number }) {
       </SkeletonList>
       <div className="hidden md:block">
         <Table>
-          <ClientsTableHeader />
+          <ColumnsTableHeader columns={CLIENT_COLUMNS} />
           <TableBody>
             <SkeletonRows columns={CLIENT_COLUMNS} rows={count} interactive />
           </TableBody>
@@ -227,7 +218,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <ClientsTableHeader />
+          <ColumnsTableHeader columns={CLIENT_COLUMNS} />
           <TableBody>
             {rows.map(({ item: client, isOptimistic }) =>
               isOptimistic ? (

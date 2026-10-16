@@ -73,6 +73,11 @@ function strongestCandidateRecord(
   return strongest ?? { status: 'missing', record: null };
 }
 
+/**
+ * Whether the candidates cover one requirement on the assessed date. The unit tests pin
+ * the coverage rules case by case here instead of through the whole evaluation.
+ * @internal
+ */
 export function resolveRequirementCoverage(
   requirement: JobCapabilityRequirement,
   candidates: AssignmentCandidate[],
@@ -119,6 +124,11 @@ export function resolveRequirementCoverage(
   };
 }
 
+/**
+ * The apprentice warning for a candidate set. The unit tests pin its cases here instead
+ * of through the whole evaluation.
+ * @internal
+ */
 export function resolveApprenticeWarning(
   enabled: boolean,
   candidates: AssignmentCandidate[],

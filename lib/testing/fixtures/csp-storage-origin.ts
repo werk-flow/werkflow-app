@@ -5,6 +5,10 @@ import { mock } from 'bun:test';
 
 mock.module('server-only', () => ({}));
 const { getR2Endpoint } = await import('@/lib/storage/r2');
-const { storageOrigin } = await import('@/lib/security/csp-report');
+const { buildContentSecurityPolicy } = await import('@/lib/security/csp-report');
 
-assert.equal(storageOrigin(process.env), new URL(getR2Endpoint()).origin);
+// The policy frames exactly the storage origin, so its frame-src names that origin.
+const frameSource = buildContentSecurityPolicy(process.env)
+  .split('; ')
+  .find((directive) => directive.startsWith('frame-src '));
+assert.equal(frameSource, `frame-src ${new URL(getR2Endpoint()).origin}`);

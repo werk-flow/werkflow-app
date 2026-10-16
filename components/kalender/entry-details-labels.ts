@@ -1,8 +1,10 @@
 // German labels and formatters of the calendar entry details dialog.
 
+import type { FailureFacts } from '@/lib/action-messages';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import { formatBerlin, formatLocalCalendarDay } from '@/lib/utils';
 
 export type StatusConfig = { label: string; className: string };
 
@@ -27,26 +29,28 @@ const STATUS_LABELS = {
 const STATUS_LABEL_BY_CODE: Record<string, StatusConfig> = STATUS_LABELS;
 
 export function formatDateTime(date: Date): string {
-  return date.toLocaleString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatBerlin(date, 'weekdayDateTime');
 }
 
-export function formatActionError(error: string): string {
-  if (error === 'validation_failed') {
+/** 3.9.2026: the viewer's calendar day of an entry, as the dialog's date fields show it. */
+export function formatEntryDay(date: Date): string;
+export function formatEntryDay(date: Date | null | undefined): string | undefined;
+export function formatEntryDay(date: Date | null | undefined): string | undefined {
+  return date ? formatLocalCalendarDay(date, 'numericDate') : undefined;
+}
+
+/** Pass the whole failure: a time rule refusal names its times beside its code. */
+export function formatActionError(failure: string | FailureFacts): string {
+  const code = typeof failure === 'string' ? failure : failure.error;
+  if (code === 'validation_failed') {
     return 'Diese Zeitänderung würde zu einer ungültigen oder überlappenden Arbeitszeit führen.';
   }
 
-  if (error === 'job_not_found') {
+  if (code === 'job_not_found') {
     return 'Der Auftrag wurde nicht gefunden.';
   }
 
-  return calendarRefusalMessage(error) ?? 'Die Änderung konnte nicht gespeichert werden.';
+  return calendarRefusalMessage(failure) ?? 'Die Änderung konnte nicht gespeichert werden.';
 }
 
 export function getStatusConfig(entry?: TimeEntry | null): StatusConfig {

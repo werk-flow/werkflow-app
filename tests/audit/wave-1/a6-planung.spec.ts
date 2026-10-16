@@ -72,7 +72,7 @@ import {
   withdrawOwnPendingVacationRequestByDate,
 } from '../support/a6-steps';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
-import { addLocalMonthsClamped, formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
+import { addLocalMonthsClamped, formatBerlinLocalDateTime } from '../../../lib/date-time/berlin';
 import { getPublicHolidaysForYear, HOLIDAY_REGION_LABELS } from '../../../lib/personnel/holidays';
 
 // A6 — Planung (P1-11): edge cases, role variants and capacity sources around

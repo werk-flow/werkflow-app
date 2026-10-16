@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/customer-relationships/date-time';
+import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
 import {
   createClientRequest,
   getNextRequestNumber,

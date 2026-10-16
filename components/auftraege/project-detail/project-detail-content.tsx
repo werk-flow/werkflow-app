@@ -126,7 +126,7 @@ function useProjectDetailState({
   // session just deleted needs the event itself (DELETE payloads carry the
   // id), not a refetch.
   useRealtimeEvent('projects', (event) => {
-    const oldId = (event.old as { id?: string } | null)?.id;
+    const oldId = event.old?.id;
     if (event.eventType === 'DELETE' && oldId === liveProject.id) {
       router.push('/auftraege');
     }

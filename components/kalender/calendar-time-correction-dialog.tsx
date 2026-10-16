@@ -26,6 +26,7 @@ import {
   type CalendarTimeCorrectionDraft,
 } from '@/lib/time-corrections/calendar-draft';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
+import { formatBerlin } from '@/lib/utils';
 
 // The correction sentences every surface shares, plus the ones that name the
 // calendar; the shared codes (`invalid_input`, `period_closed`, ...) take their
@@ -39,12 +40,6 @@ const errors: Readonly<Partial<Record<string, string>>> = {
   time_correction_multiple_application_sources:
     'Dieser Block enthält mehrere frühere Korrekturen. Bitte bearbeite sie einzeln in der Zeiterfassung.',
 };
-const formatCalendarCorrectionTime = (value: string): string =>
-  new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'Europe/Berlin',
-  }).format(new Date(value));
 
 export function CalendarTimeCorrectionDialog({
   organizationId,
@@ -176,9 +171,9 @@ export function CalendarTimeCorrectionDialog({
                 return original ? (
                   <div key={update.entryId}>
                     <dt className="text-muted-foreground">
-                      {formatCalendarCorrectionTime(original.timestamp)}
+                      {formatBerlin(original.timestamp, 'shortDateTime')}
                     </dt>
-                    <dd>{formatCalendarCorrectionTime(update.newTimestamp)}</dd>
+                    <dd>{formatBerlin(update.newTimestamp, 'shortDateTime')}</dd>
                   </div>
                 ) : null;
               })}

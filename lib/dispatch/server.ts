@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { formatBerlinLocalDateTime } from '@/lib/planning/date-time';
+import { formatBerlinLocalDateTime } from '@/lib/date-time/berlin';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { isCommitmentMismatch, type CustomerCommitment } from '@/lib/commitments/types';

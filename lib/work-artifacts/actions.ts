@@ -8,7 +8,6 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
-import type { OrgRole } from '@/lib/responsibilities/types';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -331,13 +330,13 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   if (!auth.success) return auth;
   const access = await authorizeTarget(auth, parsed.data);
   if (!access.success) return access;
-  const content = {
+  const content = toJson({
     ...parsed.data.content,
     measurementLines: parsed.data.content.measurementLines?.map((line) => ({
       ...line,
       quantity: line.quantity.replace(',', '.'),
     })),
-  } as Json;
+  });
   const admin = createSupabaseAdminClient();
   const args = rpcArgs('create_work_artifact_revision', {
     p_organization_id: auth.context.orgId,
@@ -361,15 +360,14 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }
-  const result = data as Record<string, Json | undefined>;
   revalidateWorkEvidenceViews();
   // The authoritative detail after the write, read with the same permission checks as an open.
   const saved = await getWorkArtifactDetail(parsed.data.artifactId);
   return {
     success: true,
     artifactId: parsed.data.artifactId,
-    version: Number(result.version),
-    status: String(result.status) as WorkArtifactStatus,
+    version: Number(data.version),
+    status: String(data.status) as WorkArtifactStatus,
     data,
     artifact: saved.success ? saved.artifact : null,
   };
@@ -413,7 +411,7 @@ export async function recordWorkArtifactAction(
       responsibility: 'work_artifact_approval',
       actorUserId: auth.context.userId,
       targetUserId: revision.created_by,
-      targetRole: membership.role as OrgRole,
+      targetRole: membership.role,
     });
     if (!approval.success) return { success: false, error: approval.error };
     responsibilitySnapshot = {
@@ -435,20 +433,19 @@ export async function recordWorkArtifactAction(
       p_reason: parsed.data.reason ?? null,
       p_comment: parsed.data.comment ?? null,
       p_responsibility_snapshot: responsibilitySnapshot,
-      p_customer_context: (parsed.data.customerContext ?? null) as Json,
+      p_customer_context: toJson(parsed.data.customerContext ?? null),
       p_signature_document_id: parsed.data.signatureDocumentId ?? null,
     }),
   );
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }
-  const result = data as Record<string, Json | undefined>;
   revalidateWorkEvidenceViews();
   return {
     success: true,
     artifactId: parsed.data.artifactId,
-    version: Number(result.version),
-    status: String(result.status) as WorkArtifactStatus,
+    version: Number(data.version),
+    status: String(data.status) as WorkArtifactStatus,
     data,
   };
 }
@@ -475,12 +472,11 @@ export async function voidWorkArtifact(input: {
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }
-  const result = data as Record<string, Json | undefined>;
   revalidateWorkEvidenceViews();
   return {
     success: true,
     artifactId: parsed.data.artifactId,
-    version: Number(result.version),
+    version: Number(data.version),
     status: 'voided',
     data,
   };
@@ -498,9 +494,8 @@ function linkedArtifactResult(
   if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
     return { success: false, error: mapArtifactError(error) };
   }
-  const result = data as Record<string, Json | undefined>;
   revalidateWorkEvidenceViews();
-  return { success: true, artifactId, version: Number(result.version), data };
+  return { success: true, artifactId, version: Number(data.version), data };
 }
 
 export async function linkWorkArtifactDocument(rawInput: {

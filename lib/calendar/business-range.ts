@@ -1,5 +1,4 @@
-import { resolveBerlinWallTime } from '@/lib/planning/date-time';
-import { shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type { CalendarFetchRange } from './navigation';
 
 /**
@@ -9,8 +8,8 @@ import type { CalendarFetchRange } from './navigation';
  * Europe/Berlin, so a server prefetch can seed the client's coverage.
  */
 export function getBerlinDayFetchRange(businessDate: string): CalendarFetchRange {
-  const start = resolveBerlinWallTime(`${shiftIsoDateByDays(businessDate, -1)}T00:00`);
-  const nextDay = resolveBerlinWallTime(`${shiftIsoDateByDays(businessDate, 1)}T00:00`);
+  const start = resolveBerlinWallTime(`${addLocalDays(businessDate, -1)}T00:00`);
+  const nextDay = resolveBerlinWallTime(`${addLocalDays(businessDate, 1)}T00:00`);
   if (!start || !nextDay) throw new Error(`Invalid business date: ${businessDate}`);
   return {
     start: start.instant,
@@ -30,11 +29,11 @@ export function getBerlinWeekFetchRange(
   horizonWeeks: number,
 ): CalendarFetchRange & { fromIso: string; toIso: string } {
   const daysSinceMonday = (new Date(`${businessDate}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const monday = shiftIsoDateByDays(businessDate, -daysSinceMonday);
-  const fromIso = shiftIsoDateByDays(monday, -1);
-  const toIso = shiftIsoDateByDays(monday, 7 * horizonWeeks);
+  const monday = addLocalDays(businessDate, -daysSinceMonday);
+  const fromIso = addLocalDays(monday, -1);
+  const toIso = addLocalDays(monday, 7 * horizonWeeks);
   const start = resolveBerlinWallTime(`${fromIso}T00:00`);
-  const afterEnd = resolveBerlinWallTime(`${shiftIsoDateByDays(toIso, 1)}T00:00`);
+  const afterEnd = resolveBerlinWallTime(`${addLocalDays(toIso, 1)}T00:00`);
   if (!start || !afterEnd) throw new Error(`Invalid business date: ${businessDate}`);
   return { start: start.instant, end: new Date(afterEnd.instant.getTime() - 1), fromIso, toIso };
 }
@@ -45,10 +44,10 @@ export function getBerlinMonthFetchRange(
 ): CalendarFetchRange & { fromIso: string; toIso: string } {
   const firstOfMonth = `${businessDate.slice(0, 7)}-01`;
   const daysSinceMonday = (new Date(`${firstOfMonth}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const fromIso = shiftIsoDateByDays(firstOfMonth, -daysSinceMonday - 1);
-  const toIso = shiftIsoDateByDays(firstOfMonth, -daysSinceMonday + 42);
+  const fromIso = addLocalDays(firstOfMonth, -daysSinceMonday - 1);
+  const toIso = addLocalDays(firstOfMonth, -daysSinceMonday + 42);
   const start = resolveBerlinWallTime(`${fromIso}T00:00`);
-  const afterEnd = resolveBerlinWallTime(`${shiftIsoDateByDays(toIso, 1)}T00:00`);
+  const afterEnd = resolveBerlinWallTime(`${addLocalDays(toIso, 1)}T00:00`);
   if (!start || !afterEnd) throw new Error(`Invalid business date: ${businessDate}`);
   return { start: start.instant, end: new Date(afterEnd.instant.getTime() - 1), fromIso, toIso };
 }

@@ -3,6 +3,13 @@
 import { useEffect, useState } from 'react';
 import { getProjectJobPage, type ProjectJobPageResult } from '@/lib/jobs/list-actions';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
+import { describeFailure } from '@/lib/action-messages';
+
+/** The project job page's own failures; the shared codes come from `describeFailure`. */
+const PROJECT_JOB_PAGE_MESSAGES = {
+  project_jobs_load_failed: 'Aufträge konnten nicht geladen werden.',
+  project_clients_load_failed: 'Kunden konnten nicht geladen werden.',
+} as const;
 
 export function useProjectJobPage(
   project: ProjectWithDetails,
@@ -35,7 +42,7 @@ export function useProjectJobPage(
             project,
             page,
             attempt,
-            result: { success: false, error: 'Aufträge konnten nicht geladen werden.' },
+            result: { success: false, error: 'project_jobs_load_failed' },
           });
       });
     return () => {
@@ -51,7 +58,14 @@ export function useProjectJobPage(
     page,
     setPage,
     busy,
-    error: isCurrentResponse && result?.success === false ? result.error : null,
+    error:
+      isCurrentResponse && result?.success === false
+        ? describeFailure(
+            result.error,
+            PROJECT_JOB_PAGE_MESSAGES,
+            PROJECT_JOB_PAGE_MESSAGES.project_jobs_load_failed,
+          )
+        : null,
     retry: () => setAttempt((value) => value + 1),
   };
 }

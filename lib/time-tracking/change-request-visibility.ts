@@ -1,4 +1,4 @@
-import type { OrgRole } from '@/lib/jobs/types';
+import type { OrgRole } from '@/lib/roles';
 
 export type ChangeRequestVisibilityFacts = {
   organizationId: string;

@@ -21,24 +21,6 @@ export function indexAtOffset(starts: readonly number[], position: number): numb
   return low;
 }
 
-/** Cumulative starts for equal-width tracks, one entry more than the count. */
-export function uniformTrackStarts(count: number, size: number, origin = 0): number[] {
-  const starts: number[] = [];
-  for (let index = 0; index <= count; index += 1) starts.push(origin + index * size);
-  return starts;
-}
-
-/** Cumulative starts from measured track sizes, one entry more than the count. */
-export function measuredTrackStarts(sizes: readonly number[], origin = 0): number[] {
-  const starts = [origin];
-  let position = origin;
-  for (const size of sizes) {
-    position += size;
-    starts.push(position);
-  }
-  return starts;
-}
-
 /** Snap minutes of the day to a step (15 by default, 5 with the fine modifier). */
 export function snapMinutes(minutes: number, step: number): number {
   const snapped = Math.round(minutes / step) * step;
@@ -87,15 +69,6 @@ export function exceedsDragThreshold(
   const dx = current.x - start.x;
   const dy = current.y - start.y;
   return dx * dx + dy * dy >= DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX;
-}
-
-/** Minutes of the day for a pixel offset on an hour axis. */
-export function pixelsToMinutes(pixels: number, hourWidth: number): number {
-  return Math.max(0, Math.min(24 * 60, (pixels / hourWidth) * 60));
-}
-
-export function minutesToPixels(minutes: number, hourWidth: number): number {
-  return (minutes / 60) * hourWidth;
 }
 
 export function formatMinutesOfDay(minutes: number): string {

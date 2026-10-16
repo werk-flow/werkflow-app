@@ -8,7 +8,7 @@ import { createPlanningEntry } from '@/lib/planning/actions';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
 import type { PlanningConflict } from '@/lib/planning/types';
 import { toLocalDateString } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
 import {
   checkPlanningEntryDraft,

@@ -1,12 +1,11 @@
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { logError } from '@/lib/logging';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { isManagerRole } from '@/lib/roles';
 import { parseRequestListQuery } from '@/lib/requests/list-page';
 import { readRequestPage } from '@/lib/requests/list-page-server';
 import { AnfragenContent } from '@/components/anfragen/anfragen-content';
@@ -15,7 +14,6 @@ import { AnfragenContentSkeleton } from '@/components/loading-states/anfragen-pa
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { OrgRole } from '@/lib/members/actions';
 import { getManagerAssigneeOptions } from '@/lib/members/profile-name';
 
 async function AnfragenData({
@@ -54,23 +52,9 @@ export default async function AnfragenPage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return (
       <PageShell>
         <PageHeader title="Anfragen" />
@@ -81,11 +65,8 @@ export default async function AnfragenPage({
     );
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
-
-  if (!isAdminOrManager) {
+  const activeOrgId = membership.orgId;
+  if (!isManagerRole(membership.role)) {
     redirect('/dashboard');
   }
 

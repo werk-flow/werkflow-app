@@ -63,8 +63,8 @@ export function TaskRow({ task }: { task: AttentionTask }) {
           {task.email && <p className="truncate text-xs text-muted-foreground">{task.email}</p>}
         </TaskLink>
       );
-    // Client follow-ups; open requests are the fallback row.
-    default:
+    case 'client_follow_up':
+    case 'client_request_open':
       return <AttentionClientTaskRow task={task} />;
   }
 }

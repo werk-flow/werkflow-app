@@ -23,6 +23,7 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import { logError } from '../logging';
+import { isJsonRecord } from '../supabase/json';
 import { isUuid } from '../validation/uuid';
 
 const SIGNED_UPLOAD_URL_EXPIRES_SECONDS = 60 * 30;
@@ -138,6 +139,7 @@ function buildContentDisposition(type: 'inline' | 'attachment', fileName?: strin
  * takes the server-resolved organization id explicitly and refuses any key
  * outside it, so a wrong or forged path can never reach another organization's
  * object even if a caller is mistaken. Exported for its unit test.
+ * @internal
  */
 export function assertOrganizationStorageKey(organizationId: string, path: string): void {
   const segments = path.split('/');
@@ -224,8 +226,8 @@ export async function headStorageObject({
 
 function isNotFoundError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } };
-  return candidate.name === 'NotFound' || candidate.$metadata?.httpStatusCode === 404;
+  if ('name' in error && error.name === 'NotFound') return true;
+  return '$metadata' in error && isJsonRecord(error.$metadata) && error.$metadata.httpStatusCode === 404;
 }
 
 /** Copies an object inside one organization: source and target both lie under its prefix. */

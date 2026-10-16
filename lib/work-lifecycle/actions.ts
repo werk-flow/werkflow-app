@@ -17,6 +17,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { composeReadinessForTarget } from '@/lib/dispatch/readiness-target';
+import { formatBerlin } from '@/lib/utils';
 
 import {
   parseWorkLifecycleSnapshot,
@@ -833,10 +834,6 @@ export async function getApprovedArtifactActionsForTarget(input: {
     (left, right) =>
       Date.parse(right.created_at) - Date.parse(left.created_at) || (left.id < right.id ? 1 : -1),
   );
-  const approvalDateFormatter = new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'medium',
-    timeZone: 'Europe/Berlin',
-  });
   return {
     success: true,
     options: newestActions.flatMap((action) => {
@@ -846,7 +843,7 @@ export async function getApprovedArtifactActionsForTarget(input: {
             {
               value: action.id,
               label: revision.title,
-              description: `Version ${revision.revision_number} · freigegeben ${approvalDateFormatter.format(new Date(action.created_at))}`,
+              description: `Version ${revision.revision_number} · freigegeben ${formatBerlin(action.created_at, 'date')}`,
             },
           ]
         : [];

@@ -1,5 +1,6 @@
-import type { ActionFailure } from '@/lib/action-result';
-import type { Json } from '@/lib/supabase/database.types';
+import type { ActionResult } from '@/lib/action-result';
+import type { Database, Json } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { z } from '@/lib/zod';
 import type { communicationPreferenceInputSchema, communicationSettingsInputSchema } from './schemas';
 
@@ -43,15 +44,26 @@ export type TimelinePage = {
   nextCursor: string | null;
 };
 
-export type FollowUpStatus = 'open' | 'completed' | 'cancelled';
-export type FollowUpSourceType =
-  | 'contact'
-  | 'site'
-  | 'request'
-  | 'job'
-  | 'project'
-  | 'service_case'
-  | 'maintenance_coverage';
+const FOLLOW_UP_STATUSES = ['open', 'completed', 'cancelled'] as const;
+export type FollowUpStatus = (typeof FOLLOW_UP_STATUSES)[number];
+const FOLLOW_UP_SOURCE_TYPES = [
+  'contact',
+  'site',
+  'request',
+  'job',
+  'project',
+  'service_case',
+  'maintenance_coverage',
+] as const;
+export type FollowUpSourceType = (typeof FOLLOW_UP_SOURCE_TYPES)[number];
+
+export function toFollowUpStatus(value: string): FollowUpStatus {
+  return constrainedValue(FOLLOW_UP_STATUSES, value, 'follow-up status');
+}
+
+export function toFollowUpSourceType(value: string): FollowUpSourceType {
+  return constrainedValue(FOLLOW_UP_SOURCE_TYPES, value, 'follow-up source_type');
+}
 
 export type ClientFollowUp = {
   id: string;
@@ -84,11 +96,18 @@ export type FollowUpOwner = {
   role: 'admin' | 'buero';
 };
 
-export type CommunicationChannel = 'phone' | 'email' | 'sms' | 'letter' | 'in_person';
+const COMMUNICATION_CHANNELS = ['phone', 'email', 'sms', 'letter', 'in_person'] as const;
+export type CommunicationChannel = (typeof COMMUNICATION_CHANNELS)[number];
 
-export type CommunicationPurpose = 'appointment_service' | 'marketing' | 'commercial_required';
+const COMMUNICATION_PURPOSES = ['appointment_service', 'marketing', 'commercial_required'] as const;
+export type CommunicationPurpose = (typeof COMMUNICATION_PURPOSES)[number];
 
-export type CommunicationPreferenceState = 'allowed' | 'disallowed' | 'unknown';
+const COMMUNICATION_PREFERENCE_STATES = ['allowed', 'disallowed', 'unknown'] as const;
+export type CommunicationPreferenceState = (typeof COMMUNICATION_PREFERENCE_STATES)[number];
+
+function toCommunicationChannel(value: string): CommunicationChannel {
+  return constrainedValue(COMMUNICATION_CHANNELS, value, 'communication channel');
+}
 
 export type CommunicationSettings = {
   id: string;
@@ -116,6 +135,40 @@ export type CommunicationPreference = {
   updatedAt: string;
 };
 
+type Tables = Database['public']['Tables'];
+
+export function settingsFromRow(row: Tables['client_communication_settings']['Row']): CommunicationSettings {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    preferredContactId: row.preferred_contact_id,
+    preferredChannel: row.preferred_channel === null ? null : toCommunicationChannel(row.preferred_channel),
+    doNotContactInstruction: row.do_not_contact_instruction,
+    contactTimeNote: row.contact_time_note,
+    languageNote: row.language_note,
+    accessibilityNote: row.accessibility_note,
+    sourceNote: row.source_note,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function preferenceFromRow(
+  row: Tables['client_communication_preferences']['Row'],
+): CommunicationPreference {
+  return {
+    id: row.id,
+    clientId: row.client_id,
+    contactId: row.contact_id,
+    channel: toCommunicationChannel(row.channel),
+    purpose: constrainedValue(COMMUNICATION_PURPOSES, row.purpose, 'communication purpose'),
+    state: constrainedValue(COMMUNICATION_PREFERENCE_STATES, row.state, 'communication preference state'),
+    sourceNote: row.source_note,
+    updatedBy: row.updated_by,
+    updatedAt: row.updated_at,
+  };
+}
+
 export type CommunicationWarningCode = 'do_not_contact' | 'wrong_contact' | 'disallowed_channel';
 
 export type CommunicationGuidance = {
@@ -138,6 +191,6 @@ export type CommunicationSettingsInput = z.infer<typeof communicationSettingsInp
 
 export type CommunicationPreferenceInput = z.infer<typeof communicationPreferenceInputSchema>;
 
-export type RelationshipActionResult<T = undefined> =
-  | (T extends undefined ? { success: true } : { success: true; data: T })
-  | ActionFailure;
+export type RelationshipActionResult<T = undefined> = ActionResult<
+  T extends undefined ? object : { data: T }
+>;

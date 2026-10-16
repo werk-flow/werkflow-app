@@ -2,23 +2,17 @@ import { loadJobListPage } from '@/lib/jobs/list-server';
 import { parseJobListQuery, type ListSearchParams } from '@/lib/jobs/list-page';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  getCachedMemberships,
-  getCachedUser,
-  getOrganizationUserPreferencesForView,
-} from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { getOrganizationUserPreferencesForView } from '@/lib/data/cached';
+import { isManagerRole } from '@/lib/roles';
 import { AuftraegeContent } from '@/components/auftraege/list/auftraege-content';
 import { AuftraegeContentSkeleton } from '@/components/loading-states/auftraege-content-skeleton';
 import { PageActionButton, PageActionProvider } from '@/components/shared/page-action';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 
 async function AuftraegeData({
@@ -70,23 +64,9 @@ export default async function AuftraegePage({
 }: {
   searchParams?: Promise<ListSearchParams>;
 }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return (
       <PageShell>
         <PageHeader title="Aufträge" />
@@ -97,9 +77,8 @@ export default async function AuftraegePage({
     );
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
   const { visibleColumns } = await getOrganizationUserPreferencesForView(activeOrgId, user.id);
 
   // The header and its create action paint before the list data; the create

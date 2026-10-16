@@ -1,5 +1,5 @@
 import type { InteractiveCalendarSession, TimeEntry, WorkSessionBreak } from './types';
-import { getLocalDayEnd, isSameLocalDay } from './day-utils';
+import { getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 import {

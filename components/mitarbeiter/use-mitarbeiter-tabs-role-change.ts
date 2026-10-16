@@ -7,7 +7,8 @@ import type { OrgMember } from './members-table';
 import { getRoleLabel } from '@/lib/roles';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
-import { updateMemberRole, type OrgRole } from '@/lib/members/actions';
+import { updateMemberRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 
 type MitarbeiterTabsRoleChangeInput = {
@@ -45,7 +46,7 @@ export function useMitarbeiterTabsRoleChange({
           rollbackMember(memberId);
           showBanner({
             variant: 'error',
-            message: `Die Rolle von ${displayName} konnte nicht geändert werden: ${getMemberActionErrorMessage(result?.error)}`,
+            message: `Die Rolle von ${displayName} konnte nicht geändert werden: ${getMemberActionErrorMessage(result)}`,
           });
           return;
         }

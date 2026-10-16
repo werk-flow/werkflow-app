@@ -3,6 +3,7 @@
 import { useBanner } from '@/components/ui/banner';
 import { useAttentionCountsFromOverview } from '@/components/realtime/attention-count-provider';
 import { markAllAttentionNotificationsRead, markAttentionNotificationRead } from '@/lib/attention/actions';
+import type { ActionResult } from '@/lib/action-result';
 import type { AttentionNotification, AttentionOverview } from '@/lib/attention/types';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
@@ -69,7 +70,7 @@ export function useAufgabenOverview() {
   // an error banner, and the follow-up read reconciles with the server.
   const markRead = async (
     sourceId: string | null,
-    action: () => Promise<{ success: boolean }>,
+    action: () => Promise<ActionResult>,
     errorMessage: string,
   ) => {
     const busyId = sourceId ?? ALL_NOTIFICATIONS_ID;

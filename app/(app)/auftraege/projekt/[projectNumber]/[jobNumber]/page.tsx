@@ -1,14 +1,12 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { isManagerRole } from '@/lib/roles';
 import { getJobByNumber } from '@/lib/jobs/actions';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import { getJobDocuments } from '@/lib/documents/actions';
 import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
-import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
@@ -32,24 +30,11 @@ async function NestedJobDetailData({
   projectNumber: string;
   jobNumber: string;
 }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/auftraege');
 
-  if (!user) redirect('/login');
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-  if (!activeOrgId) redirect('/auftraege');
-
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
   if (!isAdminOrManager) {
     return (
       <FieldWorkPackPage

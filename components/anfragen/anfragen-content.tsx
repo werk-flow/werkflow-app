@@ -12,8 +12,13 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 import { SearchInput } from '@/components/ui/search-input';
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  ColumnsTableHeader,
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
@@ -74,20 +79,6 @@ const REQUEST_COLUMNS: readonly SkeletonColumn[] = [
   },
 ];
 
-function RequestsTableHeader() {
-  return (
-    <TableHeader>
-      <TableRow>
-        {REQUEST_COLUMNS.map((column) => (
-          <TableHead key={column.id} className={column.className}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
-    </TableHeader>
-  );
-}
-
 /** Same frame as the loaded list; rows hover because loaded rows navigate. */
 export function AnfragenTableSkeleton({ count }: { count: number }) {
   return (
@@ -108,7 +99,7 @@ export function AnfragenTableSkeleton({ count }: { count: number }) {
       </SkeletonList>
       <div className="hidden md:block">
         <Table>
-          <RequestsTableHeader />
+          <ColumnsTableHeader columns={REQUEST_COLUMNS} />
           <TableBody>
             <SkeletonRows columns={REQUEST_COLUMNS} rows={count} interactive />
           </TableBody>
@@ -240,7 +231,7 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
           {/* Desktop view - table layout */}
           <div className="hidden md:block">
             <Table>
-              <RequestsTableHeader />
+              <ColumnsTableHeader columns={REQUEST_COLUMNS} />
               <TableBody>
                 {entries.map((entry) => (
                   <TableRow

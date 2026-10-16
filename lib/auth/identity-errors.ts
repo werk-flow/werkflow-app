@@ -20,7 +20,7 @@ export class AuthUnavailableError extends Error {
 // itself (auth-js `error-codes.ts`). Every other error, including a 401/403
 // without one of these codes (gateway or API-key failures answer that way
 // too), a 429 or a 5xx, is an availability failure.
-export const REJECTED_IDENTITY_CODES: ReadonlySet<string> = new Set([
+const REJECTED_IDENTITY_CODES: ReadonlySet<string> = new Set([
   'bad_jwt',
   'user_not_found',
   'session_not_found',

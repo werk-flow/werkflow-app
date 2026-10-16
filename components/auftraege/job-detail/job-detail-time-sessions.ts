@@ -1,16 +1,8 @@
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
-import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
+import type { JobTimeParticipant, TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import type { JobAssignmentWithProfile } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { getSessionPersonName, type SessionPerson } from './job-detail-person';
-
-export type JobTimeParticipant = {
-  userId: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  avatarPath: string | null;
-};
 
 /** A work session of this job; sessions without a clock-in are filtered out. */
 export type JobWorkSession = WorkSession & { clockIn: TimeEntry };

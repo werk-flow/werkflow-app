@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { useMemberStatus, type MemberStatus } from '@/hooks/use-member-status';
+import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
-import { getNonNegativeElapsedMs, WORK_GOAL_MINUTES } from '@/lib/time-tracking/helpers';
+import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
-import { getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
-
-const DAILY_GOAL_MINUTES = WORK_GOAL_MINUTES;
+import { DEFAULT_DAILY_TARGET_MINUTES, getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
 
 function computeLiveBreakMinutesForMember(
   status: MemberStatus | undefined,
@@ -21,10 +20,7 @@ function computeLiveBreakMinutesForMember(
   const effectiveBreakMode = status?.breakMode ?? defaultBreakMode;
   const trackedLiveBreakMinutes =
     effectiveBreakMode === 'manual'
-      ? (status?.breakMinutes ?? 0) +
-        (status?.status === 'on_break' && status.statusStartedAt
-          ? getNonNegativeElapsedMs(status.statusStartedAt) / 60000
-          : 0)
+      ? liveMinutes(status?.breakMinutes ?? 0, status?.status === 'on_break' ? status.statusStartedAt : null)
       : (status?.breakMinutes ?? 0);
 
   return computeBreakdownForSettings(
@@ -88,25 +84,22 @@ export function useMitarbeiterDetailLiveTime({
     autoBreakDurationMinutes,
   });
 
-  const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
-  useEffect(() => {
-    const compute = () => {
-      let base = status?.todayMinutes ?? 0;
-      if (status?.isClockedIn && status.statusStartedAt) {
-        base += getNonNegativeElapsedMs(status.statusStartedAt) / 60000;
-      }
-      setLiveTotalMinutes(base);
-    };
-    compute();
-    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
-    const interval = setInterval(compute, 60000);
-    return () => clearInterval(interval);
-  }, [status?.isClockedIn, status?.statusStartedAt, status?.todayMinutes]);
+  // 0 on the server and in the hydrating render, then today's minutes with the
+  // running ones, refreshed every minute.
+  const nowMs = useMountedWallClockTick(60_000);
+  const liveTotalMinutes =
+    nowMs === null
+      ? 0
+      : liveMinutes(
+          status?.todayMinutes ?? 0,
+          status?.isClockedIn ? (status.statusStartedAt ?? null) : null,
+          nowMs,
+        );
 
   // This member's resolved target for today (P1-04); the legacy 8h value only
   // appears as the visibly labeled `default` source.
   const todayTarget: DailyTarget | undefined = weekTargets?.[todayIndex];
-  const todayTargetMinutes = todayTarget?.targetMinutes ?? DAILY_GOAL_MINUTES;
+  const todayTargetMinutes = todayTarget?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES;
   const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
 
   const memberBreakdown = computeLiveBreakMinutesForMember(

@@ -3,6 +3,7 @@ import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
+import type { OrgRole } from '@/lib/roles';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { canApproveEntries } from './helpers';
@@ -13,7 +14,6 @@ import {
   type ChangeRequestWithDetails,
   type GetChangeRequestsResult,
   type GetPendingSessionsResult,
-  type OrgRole,
   type PendingSession,
   type TimeEntryRow,
 } from './types';
@@ -67,7 +67,7 @@ export async function readPendingSessionQueue(input: {
     logReadFailure('Error fetching pending-entry member roles:', memberRowsError);
     return { success: false, error: 'fetch_failed' };
   }
-  const roleByUser = new Map(memberRows.map((member) => [member.user_id, member.role as OrgRole]));
+  const roleByUser = new Map(memberRows.map((member) => [member.user_id, member.role]));
   const approvableEntries: TimeEntryRow[] = pendingEntries.filter((entry) => {
     const targetRole = roleByUser.get(entry.user_id);
     return Boolean(

@@ -21,7 +21,7 @@ export const ERROR_MESSAGES = {
   mutation_failed: 'Die Änderung konnte nicht gespeichert werden.',
 } satisfies Record<string, string>;
 
-export function errorMessage(code: string): string {
+export function personnelLifecycleErrorMessage(code: string): string {
   return describeFailure(code, ERROR_MESSAGES, 'Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.');
 }
 

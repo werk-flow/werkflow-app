@@ -1,6 +1,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import type { QualificationWarningResult } from '@/lib/jobs/types';
 import type { Database } from '@/lib/supabase/database.types';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 
 // ============================================
 // Database Row Aliases
@@ -200,10 +201,7 @@ export function toClientRequestEvent(row: ClientRequestEventRow): ClientRequestE
     organizationId: row.organization_id,
     requestId: row.request_id,
     eventType: row.event_type,
-    eventPayload:
-      row.event_payload && typeof row.event_payload === 'object' && !Array.isArray(row.event_payload)
-        ? (row.event_payload as Record<string, unknown>)
-        : {},
+    eventPayload: jsonRecordOrEmpty(row.event_payload),
     createdBy: row.created_by,
     createdAt: row.created_at,
   };

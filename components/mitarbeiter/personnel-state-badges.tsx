@@ -22,30 +22,18 @@ const ACCESS_STATE_CLASSES: Record<AccessState, string> = {
   ohne_zugang: 'bg-muted text-muted-foreground',
 };
 
-export function EmploymentStateBadge({ state, className }: { state: EmploymentState; className?: string }) {
+function PersonnelStatePill({ tone, label }: { tone: string; label: string }) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        EMPLOYMENT_STATE_CLASSES[state],
-        className,
-      )}
-    >
-      {EMPLOYMENT_STATE_LABELS[state]}
+    <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', tone)}>
+      {label}
     </span>
   );
 }
 
-export function AccessStateBadge({ state, className }: { state: AccessState; className?: string }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        ACCESS_STATE_CLASSES[state],
-        className,
-      )}
-    >
-      {ACCESS_STATE_LABELS[state]}
-    </span>
-  );
+export function EmploymentStateBadge({ state }: { state: EmploymentState }) {
+  return <PersonnelStatePill tone={EMPLOYMENT_STATE_CLASSES[state]} label={EMPLOYMENT_STATE_LABELS[state]} />;
+}
+
+export function AccessStateBadge({ state }: { state: AccessState }) {
+  return <PersonnelStatePill tone={ACCESS_STATE_CLASSES[state]} label={ACCESS_STATE_LABELS[state]} />;
 }

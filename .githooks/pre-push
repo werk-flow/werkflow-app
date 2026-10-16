@@ -1,7 +1,8 @@
 #!/bin/sh
 # The one gate before publication (docs/technical/testing.md, "Publication gate").
 # Refuses a push unless the newest local verification report passed on the tree
-# being pushed and a CodeRabbit review completed on it.
+# being pushed and a CodeRabbit review completed on it, and every commit the
+# push publishes carries a "Deletion pass:" line (docs/technical/code-quality.md).
 # Enable once per clone: git config core.hooksPath .githooks
 # Owner override: WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...
 

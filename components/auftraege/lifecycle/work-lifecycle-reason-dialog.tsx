@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
+import type { ActionResult } from '@/lib/action-result';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -24,7 +25,7 @@ type ReasonDialogProps = {
   description: string;
   submitLabel: string;
   onClose: () => void;
-  onSubmit: (reason: string) => Promise<{ success: boolean; error?: string }>;
+  onSubmit: (reason: string) => Promise<ActionResult>;
 };
 
 export function ReasonDialog({ title, description, submitLabel, onClose, onSubmit }: ReasonDialogProps) {
@@ -40,7 +41,7 @@ export function ReasonDialog({ title, description, submitLabel, onClose, onSubmi
     void runReasonTask(async () => {
       const result = await onSubmit(reason.trim());
       if (!result.success) {
-        setError(workLifecycleErrorMessage(result.error ?? ''));
+        setError(workLifecycleErrorMessage(result.error));
         return;
       }
       onClose();

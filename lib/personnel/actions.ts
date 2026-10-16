@@ -9,9 +9,9 @@ import type { InviteRole } from '@/lib/invites/actions';
 import { createAndMailOrganizationInvite } from '@/lib/invites/send-invite';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { formatProfileName } from '@/lib/members/profile-name';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   EMPLOYMENT_TYPES,
-  getBusinessTodayIso,
   toEmployeeRecord,
   toEmploymentCondition,
   toEmployeeRecordEvent,
@@ -22,11 +22,12 @@ import {
 } from '@/lib/personnel/types';
 import { toWorkSchedule, type WorkSchedule } from '@/lib/personnel/schedule';
 import { logError } from '@/lib/logging';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { recordEmployeeRecordEvent } from '@/lib/personnel/employee-record-events';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 
 // Boundary schemas: types, ids and bounds. The value rules below keep their
 // own error codes for the forms.
@@ -91,15 +92,16 @@ const PERSONNEL_WRITE_REFUSALS: ReadonlySet<string> = new Set([
 
 // The refusal raised under the lock, or the action's own failure code for
 // anything else.
-function personnelWriteFailure(
-  error: { message: string } | null,
-  failureCode: string,
-  logLabel: string,
-): ActionFailure {
-  if (error && PERSONNEL_WRITE_REFUSALS.has(error.message)) return { success: false, error: error.message };
-  logError(logLabel, error);
-  return { success: false, error: failureCode };
+/**
+ * Whether a record's embedded invite is pending. supabase-js types an embedded to-one relation
+ * inconsistently, so both the object and the single-element-array shape are read.
+ */
+function hasPendingInviteEmbed(embed: unknown): boolean {
+  const invite: unknown = Array.isArray(embed) ? embed[0] : embed;
+  return typeof invite === 'object' && invite !== null && 'status' in invite && invite.status === 'pending';
 }
+
+const personnelWriteFailure = writeRefusalFor(PERSONNEL_WRITE_REFUSALS);
 
 /** Identity, active organization and the manager role, for the personnel writes. */
 async function requirePersonnelManager(): Promise<
@@ -217,15 +219,9 @@ export async function getPersonnelRecords(): Promise<
     }
 
     const entries: PersonnelListEntry[] = recordsResult.data.map((row) => {
-      // supabase-js types embedded to-one relations inconsistently; accept
-      // both the object and single-element-array shapes.
-      const rawInvite = row.organization_invites as unknown;
-      const invite = (Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite) as {
-        status: string;
-      } | null;
       return {
         record: toEmployeeRecord(row),
-        hasPendingInvite: invite?.status === 'pending',
+        hasPendingInvite: hasPendingInviteEmbed(row.organization_invites),
         currentCondition: currentConditionByRecord.get(row.id) ?? null,
       };
     });
@@ -338,11 +334,6 @@ export async function getPersonnelDetail(
       return { success: false, error: 'load_failed' };
     }
 
-    const rawInvite = row.organization_invites as unknown;
-    const invite = (Array.isArray(rawInvite) ? (rawInvite[0] ?? null) : rawInvite) as {
-      status: string;
-    } | null;
-
     const profile = profileResult.data;
 
     return {
@@ -352,7 +343,7 @@ export async function getPersonnelDetail(
         conditions: (conditionsResult.data ?? []).map(toEmploymentCondition),
         schedules: (schedulesResult.data ?? []).map(toWorkSchedule),
         events: (eventsResult.data ?? []).map(toEmployeeRecordEvent),
-        hasPendingInvite: invite?.status === 'pending',
+        hasPendingInvite: hasPendingInviteEmbed(row.organization_invites),
         profileName: profile ? formatProfileName(profile) : null,
         profileEmail: profile?.email ?? null,
       },
@@ -489,10 +480,7 @@ const MASTER_DATA_COLUMNS: Record<keyof PersonnelMasterDataPatch, string> = {
   notes: 'notes',
 };
 
-export type UpdatePersonnelResult = {
-  success: boolean;
-  error?: string;
-};
+export type UpdatePersonnelResult = ActionResult;
 
 export async function updatePersonnelMasterData(
   recordIdInput: string,

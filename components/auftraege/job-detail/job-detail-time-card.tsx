@@ -6,7 +6,7 @@ import { ChevronDown, Clock } from 'lucide-react';
 import { PlainButton } from '@/components/ui/plain-button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn, formatBerlinTime } from '@/lib/utils';
+import { cn, formatBerlin, formatBerlinTime } from '@/lib/utils';
 import { formatDurationOrDash } from './job-detail-format';
 import { PersonAvatar, getSessionPersonName } from './job-detail-person';
 import type { JobDetailTimeSummary } from './use-job-detail-time-summary';
@@ -154,11 +154,7 @@ function JobDetailSessionTimeline({
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{getSessionPersonName(member)}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(session.clockIn.timestamp).toLocaleDateString('de-DE', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                    })}
+                    {formatBerlin(session.clockIn.timestamp, 'date')}
                     {' · '}
                     {formatBerlinTime(session.clockIn.timestamp)}
                     {' – '}

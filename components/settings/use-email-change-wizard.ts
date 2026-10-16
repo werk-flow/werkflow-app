@@ -16,6 +16,7 @@ import {
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { usePendingTask, useServerAction } from '@/hooks/use-server-action';
+import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import {
   requestCurrentEmailChangeOtp,
   resetEmailChangeWizard,
@@ -76,7 +77,7 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
   const { run: runVerifyNewEmailOtp, isPending: isNewEmailOtpSubmitting } = usePendingTask();
   const { run: runResendNewEmailOtp, isPending: isNewEmailOtpResending } = usePendingTask();
   const { run: runReset, isPending: isResetting } = useServerAction(resetEmailChangeWizard);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useWallClockTick(1000);
 
   const emailForm = useForm<NewEmailValues>({
     resolver: zodResolver(newEmailSchema),
@@ -97,15 +98,6 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
       email: initialState.newEmail ?? '',
     });
   }, [emailForm, initialState]);
-
-  useEffect(() => {
-    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
-    const timer = window.setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
-
-    return () => window.clearInterval(timer);
-  }, []);
 
   const currentEmail = profile?.email ?? wizardState.currentEmail ?? '';
   const pendingNewEmail = wizardState.newEmail;

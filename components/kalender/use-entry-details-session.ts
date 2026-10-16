@@ -8,8 +8,9 @@ import type {
   WorkSession,
   WorkSessionBreak,
 } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/members/actions';
-import { deriveBreaksFromEntries, sortTimeEntries } from './entry-details-timeline';
+import type { OrgRole } from '@/lib/roles';
+import { sortTimeEntries } from '@/lib/time-tracking/effective-entries';
+import { deriveBreaksFromEntries } from './entry-details-timeline';
 
 /** Everything the entry details dialog reads from its session prop. */
 export type EntryDetailsSnapshot = {

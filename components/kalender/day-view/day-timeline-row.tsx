@@ -6,7 +6,7 @@ import { isStartedOccurrence } from '@/lib/calendar/board';
 import { DAY_LANE_HEIGHT, DAY_NAME_COLUMN_PX, DAY_TRAY_HEIGHT, travelGaps } from '@/lib/calendar/day-layout';
 import { dayRowLabel, isDayRowOff } from '@/lib/calendar/day-row-status';
 import { formatRefusalDate } from '@/lib/calendar/messages';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { EntryChangeRequestMap, InteractiveCalendarSession } from '@/lib/time-tracking/types';
 import { cn } from '@/lib/utils';

@@ -12,7 +12,7 @@ import type { ClientContact } from '@/lib/clients/types';
 
 import {
   EMPTY_CONTACT,
-  errorMessage,
+  clientRelationErrorMessage,
   getRelationId,
   type ContactDialogState,
 } from './client-relation-drafts';
@@ -101,7 +101,7 @@ export function useClientContacts({
       if (!result.success) {
         // The dialog returns with the entered values and the reason.
         contactList.rollback(echoId);
-        setContactDialog({ contactId, draft, error: errorMessage(result.error) });
+        setContactDialog({ contactId, draft, error: clientRelationErrorMessage(result.error) });
         return;
       }
       showBanner({
@@ -123,7 +123,7 @@ export function useClientContacts({
       }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
       if (!result.success) {
         contactList.rollback(contact.id);
-        setSectionError(errorMessage(result.error));
+        setSectionError(clientRelationErrorMessage(result.error));
         return;
       }
       await settleRow(contactList, contact.id, waitForContacts);

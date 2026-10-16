@@ -1,4 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
 // ============================================
 // Database Row Aliases
@@ -8,9 +9,20 @@ export type VacationRequestRow = Database['public']['Tables']['vacation_requests
 
 // status and day_portion are text columns with CHECK constraints; keep these
 // unions in sync with the database (migration add_vacation_requests).
-export type VacationRequestStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'cancelled';
+const VACATION_REQUEST_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn', 'cancelled'] as const;
+export type VacationRequestStatus = (typeof VACATION_REQUEST_STATUSES)[number];
 
-export type VacationDayPortion = 'full' | 'half_day';
+const VACATION_DAY_PORTIONS = ['full', 'half_day'] as const;
+export type VacationDayPortion = (typeof VACATION_DAY_PORTIONS)[number];
+
+export function toVacationRequestStatus(value: string): VacationRequestStatus {
+  return constrainedValue(VACATION_REQUEST_STATUSES, value, 'vacation status');
+}
+
+/** The day portion of a vacation or sickness row; both tables share the check constraint. */
+export function toVacationDayPortion(value: string): VacationDayPortion {
+  return constrainedValue(VACATION_DAY_PORTIONS, value, 'day_portion');
+}
 
 export const VACATION_STATUS_LABELS: Record<VacationRequestStatus, string> = {
   pending: 'Offen',
@@ -59,8 +71,8 @@ export function toVacationRequest(row: VacationRequestRow): VacationRequest {
     requestedBy: row.requested_by,
     startDate: row.start_date,
     endDate: row.end_date,
-    dayPortion: row.day_portion as VacationDayPortion,
-    status: row.status as VacationRequestStatus,
+    dayPortion: toVacationDayPortion(row.day_portion),
+    status: toVacationRequestStatus(row.status),
     comment: row.comment,
     decidedBy: row.decided_by,
     decidedAt: row.decided_at,
@@ -79,7 +91,7 @@ function parseApprovedDaysByYear(value: unknown): Record<string, number> | null 
     return null;
   }
   const result: Record<string, number> = {};
-  for (const [year, days] of Object.entries(value as Record<string, unknown>)) {
+  for (const [year, days] of Object.entries(value)) {
     if (typeof days === 'number' && Number.isFinite(days)) {
       result[year] = days;
     }

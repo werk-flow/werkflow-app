@@ -9,7 +9,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { setInstalledEquipmentWorkLink } from '@/lib/installed-equipment/actions';
 import { EQUIPMENT_IDENTIFIER_TYPE_LABELS, type EquipmentDetail } from '@/lib/installed-equipment/types';
-import { Fact } from './equipment-detail-sections';
+import { Fact } from './fact';
 import type { EquipmentDetailActions } from './use-equipment-detail-actions';
 
 function EquipmentClientSection({ item }: { item: EquipmentDetail }): ReactElement {

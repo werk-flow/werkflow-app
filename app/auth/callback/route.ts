@@ -23,8 +23,10 @@ function isSessionPayload(value: unknown): value is { access_token: string; refr
   return (
     typeof value === 'object' &&
     value !== null &&
-    typeof (value as { access_token?: unknown }).access_token === 'string' &&
-    typeof (value as { refresh_token?: unknown }).refresh_token === 'string'
+    'access_token' in value &&
+    typeof value.access_token === 'string' &&
+    'refresh_token' in value &&
+    typeof value.refresh_token === 'string'
   );
 }
 

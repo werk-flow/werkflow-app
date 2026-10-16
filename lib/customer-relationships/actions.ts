@@ -25,6 +25,10 @@ import {
 import {
   FOLLOW_UP_PAGE_SIZE,
   TIMELINE_PAGE_SIZE,
+  preferenceFromRow,
+  settingsFromRow,
+  toFollowUpSourceType,
+  toFollowUpStatus,
   type ClientFollowUp,
   type CommunicationChannel,
   type CommunicationPreference,
@@ -45,8 +49,6 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
 type FollowUpRow = Database['public']['Tables']['client_follow_ups']['Row'];
-type CommunicationSettingsRow = Database['public']['Tables']['client_communication_settings']['Row'];
-type CommunicationPreferenceRow = Database['public']['Tables']['client_communication_preferences']['Row'];
 
 type SourceReference = {
   label: string;
@@ -62,7 +64,7 @@ function toClientFollowUp(
   return {
     id: row.id,
     clientId: row.client_id,
-    sourceType: row.source_type as FollowUpSourceType | null,
+    sourceType: row.source_type === null ? null : toFollowUpSourceType(row.source_type),
     sourceId: row.source_id,
     sourceLabel: source?.label ?? (row.source_id ? 'Quelle nicht mehr verfügbar' : null),
     sourceHref: source?.href ?? null,
@@ -72,7 +74,7 @@ function toClientFollowUp(
     ownerName,
     ownerIsActiveManager,
     dueAt: row.due_at,
-    status: row.status as FollowUpStatus,
+    status: toFollowUpStatus(row.status),
     resolutionNote: row.resolution_note,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -161,36 +163,6 @@ function profileName(
 function firstRelation<T>(relation: T | T[] | null): T | null {
   if (Array.isArray(relation)) return relation[0] ?? null;
   return relation;
-}
-
-function settingsFromRow(row: CommunicationSettingsRow): CommunicationSettings {
-  return {
-    id: row.id,
-    clientId: row.client_id,
-    preferredContactId: row.preferred_contact_id,
-    preferredChannel: row.preferred_channel as CommunicationChannel | null,
-    doNotContactInstruction: row.do_not_contact_instruction,
-    contactTimeNote: row.contact_time_note,
-    languageNote: row.language_note,
-    accessibilityNote: row.accessibility_note,
-    sourceNote: row.source_note,
-    updatedBy: row.updated_by,
-    updatedAt: row.updated_at,
-  };
-}
-
-function preferenceFromRow(row: CommunicationPreferenceRow): CommunicationPreference {
-  return {
-    id: row.id,
-    clientId: row.client_id,
-    contactId: row.contact_id,
-    channel: row.channel as CommunicationChannel,
-    purpose: row.purpose as CommunicationPurpose,
-    state: row.state as CommunicationPreference['state'],
-    sourceNote: row.source_note,
-    updatedBy: row.updated_by,
-    updatedAt: row.updated_at,
-  };
 }
 
 function timelineItem(input: Omit<TimelineItem, 'stableKey'>): TimelineItem {
@@ -1073,7 +1045,7 @@ async function loadFollowUps(
   const sourceIdsByType = new Map<FollowUpSourceType, string[]>();
   for (const row of rows ?? []) {
     if (!row.source_type || !row.source_id) continue;
-    const sourceType = row.source_type as FollowUpSourceType;
+    const sourceType = toFollowUpSourceType(row.source_type);
     sourceIdsByType.set(sourceType, [...(sourceIdsByType.get(sourceType) ?? []), row.source_id]);
   }
 
@@ -1231,7 +1203,7 @@ export async function createCustomerFollowUp(
     loadSingleFollowUpSource(
       auth.context,
       clientId,
-      data.source_type as FollowUpSourceType | null,
+      data.source_type === null ? null : toFollowUpSourceType(data.source_type),
       data.source_id,
     ),
   ]);
@@ -1242,7 +1214,7 @@ export async function createCustomerFollowUp(
   return {
     success: true,
     data: toClientFollowUp(
-      data as FollowUpRow,
+      data,
       owner?.name ?? 'Ehemalige Zuständigkeit',
       ownersResult.managerUserIds.has(data.owner_user_id),
       sourceResult.source,

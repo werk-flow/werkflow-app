@@ -1,8 +1,11 @@
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { timeActivitySelectionSchema } from './activity-selection-schema';
 import type { LiveClockState } from './types';
-import type { getCurrentClockState as readClock, getActiveJobIdsForOrg as readActiveJobs } from './actions';
+import type {
+  getCurrentClockState as readClock,
+  getActiveJobIdsForOrg as readActiveJobs,
+} from './clock-state-actions';
 
 const text = z.string();
 const nullableText = text.nullable();
@@ -56,7 +59,7 @@ const activeJobsResponse = z.discriminatedUnion('success', [
   z.object({ success: z.literal(true), activeJobIds: z.array(text), activeProjectIds: z.array(text) }),
 ]);
 
-async function readState<Result extends { success: boolean }>(
+async function readState<Result extends ActionResult>(
   organizationId: string,
   kind: 'clock' | 'active-jobs',
   schema: z.ZodType<Result>,
@@ -76,7 +79,8 @@ async function readState<Result extends { success: boolean }>(
   }
 }
 
-export async function getCurrentClockState(
+/** The browser's read of the clock Server Action's answer, through /api/time-tracking-state. */
+export async function fetchCurrentClockState(
   organizationId: string,
   signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<typeof readClock>>> {
@@ -86,7 +90,8 @@ export async function getCurrentClockState(
   return result;
 }
 
-export async function getActiveJobIdsForOrg(
+/** The browser's read of the active-jobs Server Action's answer, through /api/time-tracking-state. */
+export async function fetchActiveJobIdsForOrg(
   organizationId: string,
   signal?: AbortSignal,
 ): Promise<Awaited<ReturnType<typeof readActiveJobs>>> {

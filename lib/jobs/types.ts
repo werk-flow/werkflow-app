@@ -28,7 +28,6 @@ export type JobStatus = Database['public']['Enums']['job_status'];
 export type JobPriority = Database['public']['Enums']['job_priority'];
 export type ProjectStatus = Database['public']['Enums']['project_status'];
 type WorkExecutionState = Database['public']['Enums']['work_execution_state'];
-export type OrgRole = Database['public']['Enums']['org_role'];
 
 // ============================================
 // Application-Level Types (camelCase)

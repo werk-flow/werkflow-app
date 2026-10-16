@@ -35,18 +35,12 @@ export function CreateOrganizationForm() {
       try {
         const result = await createOrganization(name);
 
-        if (result.success && result.organizationId) {
+        if (result.success) {
           // A full load so the new page reads the new active-organization cookie.
           loadDocument(`/dashboard?created=${result.organizationId}`);
           return untilPageLeaves();
         }
-        setError(
-          describeFailure(
-            result.error ?? 'unexpected_error',
-            ERROR_MESSAGES,
-            SHARED_FAILURE_MESSAGES.unexpected_error,
-          ),
-        );
+        setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
       } catch {
         setError(SHARED_FAILURE_MESSAGES.unexpected_error);
       }

@@ -7,7 +7,7 @@ import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
 import type { ApprovedAbsenceSpan } from '@/lib/personnel/targets';
 import type { VacationCountingContext } from './balance';
-import { toVacationRequest, type VacationRequest } from './types';
+import { toVacationDayPortion, toVacationRequest, type VacationRequest } from './types';
 import { logError } from '@/lib/logging';
 
 // Server-only shared loaders for the vacation domain. Server actions and the
@@ -113,7 +113,7 @@ export async function loadApprovedVacationSpansByRecord(
       type: 'vacation',
       startDate: row.start_date,
       endDate: row.end_date,
-      dayPortion: row.day_portion as ApprovedAbsenceSpan['dayPortion'],
+      dayPortion: toVacationDayPortion(row.day_portion),
     });
     spansByRecord.set(row.employee_record_id, spans);
   }

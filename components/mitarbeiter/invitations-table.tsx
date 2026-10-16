@@ -3,18 +3,19 @@
 import { EmptyState } from '@/components/ui/empty-state';
 import { Mail } from 'lucide-react';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type SkeletonColumn } from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { InviteActionsMenu } from './invite-actions-menu';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
+import { formatBerlin } from '@/lib/utils';
 
 export type Invite = {
   id: string;
@@ -83,20 +84,6 @@ const INVITATION_COLUMNS: readonly SkeletonColumn[] = [
     skeleton: <Skeleton className="size-8 rounded" />,
   },
 ];
-
-function InvitationsTableHeader() {
-  return (
-    <TableHeader>
-      <TableRow>
-        {INVITATION_COLUMNS.map((column) => (
-          <TableHead key={column.id} className={column.className}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
-    </TableHeader>
-  );
-}
 
 function displayStatusFor(invite: Invite) {
   const statusInfo = STATUS_LABEL_BY_CODE[invite.status] || STATUS_LABELS.pending;
@@ -172,23 +159,9 @@ function InviteCard({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
           <RoleBadge role={invite.invited_role} compact />
           <span className="text-muted-foreground">·</span>
-          <span>
-            Eingeladen:{' '}
-            {new Date(invite.created_at).toLocaleDateString('de-DE', {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-            })}
-          </span>
+          <span>Eingeladen: {formatBerlin(invite.created_at, 'shortYearDate')}</span>
           <span className="text-muted-foreground">·</span>
-          <span>
-            Läuft ab:{' '}
-            {new Date(invite.expires_at).toLocaleDateString('de-DE', {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-            })}
-          </span>
+          <span>Läuft ab: {formatBerlin(invite.expires_at, 'shortYearDate')}</span>
         </div>
       </div>
       <InviteActionsMenu
@@ -253,7 +226,7 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <InvitationsTableHeader />
+          <ColumnsTableHeader columns={INVITATION_COLUMNS} />
           <TableBody>
             {rows.map(({ item: invite, isOptimistic }) => {
               if (isOptimistic) {
@@ -298,18 +271,10 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
                     </span>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(invite.created_at).toLocaleDateString('de-DE', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                    })}
+                    {formatBerlin(invite.created_at, 'date')}
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(invite.expires_at).toLocaleDateString('de-DE', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                    })}
+                    {formatBerlin(invite.expires_at, 'date')}
                   </TableCell>
                   <TableCell>
                     <InviteActionsMenu

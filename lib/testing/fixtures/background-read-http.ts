@@ -90,10 +90,12 @@ function seam(kind: string) {
     return { success: true, kind, input };
   };
 }
-mock.module('@/lib/time-tracking/actions', () => ({
+mock.module('@/lib/time-tracking/entry-read-actions', () => ({
   getTimeEntries: seam('time-entries'),
   getTimeEntriesForJob: seam('time-entries-for-job'),
   getTimeEntriesForProjectJobs: seam('project-job-time-entries'),
+}));
+mock.module('@/lib/time-tracking/review-actions', () => ({
   getPendingSessions: seam('pending-sessions'),
   getPendingChangeRequests: seam('pending-change-requests'),
 }));

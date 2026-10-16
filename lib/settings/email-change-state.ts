@@ -62,7 +62,10 @@ function buildIdleState(currentEmail: string | null): EmailChangeWizardState {
  * `failOnReadError` is set (the settings page shows it with a retry); the
  * wizard actions keep their idle fallback after a committed step.
  */
-async function getChallengeRow(userId: string, failOnReadError: boolean) {
+async function getChallengeRow(
+  userId: string,
+  failOnReadError: boolean,
+): Promise<EmailChangeChallengeRow | null> {
   const admin = createSupabaseAdminClient();
   const { data, error } = await admin
     .from('email_change_challenges')
@@ -77,7 +80,7 @@ async function getChallengeRow(userId: string, failOnReadError: boolean) {
     return null;
   }
 
-  return data as EmailChangeChallengeRow | null;
+  return data;
 }
 
 export async function getInitialEmailChangeWizardState({

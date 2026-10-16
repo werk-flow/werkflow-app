@@ -6,9 +6,9 @@ import { Check, X, Clock, Plus, Pencil, Trash2, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { PendingSession, ChangeRequestWithDetails, WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { formatDuration } from '@/lib/time-tracking/helpers';
-import { formatBerlinTime, toLocalDateString } from '@/lib/utils';
+import { formatBerlin, formatBerlinTime, toLocalDateString } from '@/lib/utils';
 
 const EntryDetailsDialog = dynamic(
   () => import('@/components/kalender/entry-details-dialog').then((mod) => mod.EntryDetailsDialog),
@@ -16,23 +16,11 @@ const EntryDetailsDialog = dynamic(
 );
 
 function formatWeekdayDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('de-DE', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  return formatBerlin(dateStr, 'longWeekdayDate');
 }
 
 function formatWeekdayDateTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleString('de-DE', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatBerlin(timestamp, 'longWeekdayDateTime');
 }
 
 /** The clocked span in whole minutes; seconds are dropped, as the clock shows them. */

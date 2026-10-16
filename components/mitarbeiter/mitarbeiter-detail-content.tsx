@@ -9,7 +9,8 @@ import type { PersonnelQualificationSummaryData } from './personnel-qualificatio
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
 
-import type { OrgRole, MemberDetail } from '@/lib/members/actions';
+import type { MemberDetail } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { OrganizationDocument } from '@/lib/documents/types';

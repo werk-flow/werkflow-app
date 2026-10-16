@@ -36,15 +36,9 @@ import {
   type EquipmentCreateSubmission,
   type EquipmentPendingDraft,
 } from './equipment-form-dialog';
+import { createSubmissionChannel } from './submission-channel';
 
-// The page mounts the create button in its own Suspense tree beside the
-// heading, so a submission reaches the list through this module channel
-// instead of props. The list is the one listener: it renders the pending
-// row, settles through its live read, and shows the failure banner.
-const submissionListeners = new Set<(submission: EquipmentCreateSubmission) => void>();
-function announceSubmission(submission: EquipmentCreateSubmission): void {
-  for (const listener of submissionListeners) listener(submission);
-}
+const submissions = createSubmissionChannel<EquipmentCreateSubmission>();
 
 // One column definition for the loaded table and its skeleton (design canon):
 // header count, widths and hover cannot drift apart.
@@ -359,10 +353,7 @@ function EquipmentListResults({
         })
         .finally(() => setPendingCreates((current) => current.filter((item) => item.id !== draft.id)));
     };
-    submissionListeners.add(listener);
-    return () => {
-      submissionListeners.delete(listener);
-    };
+    return submissions.subscribe(listener);
   }, [liveInvalidate, liveRefresh, showBanner]);
   // Equipment numbers ascend, so a new record lands last; a Realtime read
   // that arrives before the settle read drops the placeholder by id.
@@ -417,7 +408,7 @@ export function EquipmentCreateButton(): ReactElement {
         Anlage erfassen
       </Button>
       {open && (
-        <EquipmentFormDialog open onOpenChange={setOpen} mode="create" onSubmitted={announceSubmission} />
+        <EquipmentFormDialog open onOpenChange={setOpen} mode="create" onSubmitted={submissions.announce} />
       )}
     </>
   );

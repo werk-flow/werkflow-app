@@ -2,8 +2,8 @@
 
 import { Badge } from '@/components/ui/badge';
 import { MetadataSection, type MetadataField } from '@/components/shared/metadata-section';
-import type { OrgRole, MemberDetail } from '@/lib/members/actions';
-import { ROLE_LABELS } from '@/lib/roles';
+import type { MemberDetail } from '@/lib/members/actions';
+import { isOrgRole, ROLE_LABELS, type OrgRole } from '@/lib/roles';
 import { formatGermanDate } from '@/lib/utils';
 
 type MitarbeiterDetailProfileSectionProps = {
@@ -35,7 +35,7 @@ export function MitarbeiterDetailProfileSection({
             type: 'select' as const,
             currentValue: member.role,
             onSave: async (v: string) => {
-              await onRoleChange(v as OrgRole);
+              if (isOrgRole(v)) await onRoleChange(v);
             },
             options: roleOptions,
           }

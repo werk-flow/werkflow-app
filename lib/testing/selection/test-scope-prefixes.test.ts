@@ -54,6 +54,8 @@ test('every hook is either registered under one feature scope or listed as share
     'use-settle-on-change.ts',
     // The sign-out hook belongs to the authentication row of the core set (group-selection.ts).
     'use-sign-out.ts',
+    // The render tick of the calendar, time tracking, job detail, personnel and settings surfaces.
+    'use-wall-clock-tick.ts',
   ]);
   const problems = readdirSync(resolve(repositoryRoot, 'hooks'))
     .filter((name) => /\.tsx?$/.test(name) && !/\.test\./.test(name))

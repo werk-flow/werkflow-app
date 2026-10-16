@@ -217,24 +217,6 @@ export function getMembershipAccessMode(
   return lifecycle.state === 'active' ? 'operational' : 'blocked';
 }
 
-export function getOnboardingCompletion(
-  requirements: Array<{
-    isRequired: boolean;
-    state: PersonnelRequirementState;
-  }>,
-): { complete: number; total: number; isReady: boolean } {
-  const required = requirements.filter((requirement) => requirement.isRequired);
-  const complete = required.filter(
-    (requirement) => requirement.state === 'fulfilled' || requirement.state === 'waived',
-  ).length;
-  // Optional-only plans are ready, but an empty plan cannot prove readiness.
-  return {
-    complete,
-    total: required.length,
-    isReady: requirements.length > 0 && complete === required.length,
-  };
-}
-
 export function toTemplateRpcItems(
   items: Array<{
     requirementType: PersonnelRequirementType;

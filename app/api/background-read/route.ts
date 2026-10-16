@@ -51,7 +51,7 @@ export async function GET(request: Request): Promise<NextResponse> {
       async () => {
         const auth = await authenticateAndAuthorize();
         if (!auth.success) return auth;
-        const requestedOrganization = (input.data as { organizationId?: string }).organizationId;
+        const requestedOrganization = 'organizationId' in input.data ? input.data.organizationId : undefined;
         if (requestedOrganization !== undefined && auth.context.orgId !== requestedOrganization) {
           return { success: false as const, error: 'organization_changed' };
         }

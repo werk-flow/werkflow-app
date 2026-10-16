@@ -9,12 +9,8 @@ import { dayRowFor, dayRowKey, type DayRowModel } from '@/lib/calendar/day-rows'
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
 import type { DragSurface } from '../drag-engine/drag-engine';
-import type {
-  CalendarDragPayload,
-  CalendarDragTarget,
-  DragModifiers,
-  DragVerdict,
-} from '../drag-engine/payload';
+import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../drag-engine/payload';
+import type { DragVerdict } from '@/lib/calendar/drag-ghost';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { applyDayDrop } from './day-surface-drop';
 import { dayTargetVerdict, jobSpanMinutes, payloadDuration } from './day-surface-rules';

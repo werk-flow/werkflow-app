@@ -15,7 +15,8 @@ import { copiedVisit } from '@/lib/calendar/visit-placement';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { updateJob as updateJobAction } from '@/lib/jobs/actions';
 import { createPlanningEntry, updatePlanningCalendarEntry } from '@/lib/planning/actions';
-import type { ActionResult, OptimisticOperation } from './use-optimistic-run';
+import type { ActionResult } from '@/lib/action-result';
+import type { OptimisticOperation } from './use-optimistic-run';
 import type { UseCalendarMutationsOptions } from './use-calendar-mutations';
 
 type PendingJobMoves = { confirmed: CalendarJob; latest: number; tail: Promise<ActionResult | null> };

@@ -1,3 +1,5 @@
+import { isJsonRecord } from '@/lib/supabase/json';
+
 /**
  * The pending entries of an optimistic list (`hooks/use-optimistic-list.ts`),
  * keyed by row id. `settled` marks an entry whose mutation the server already
@@ -36,8 +38,7 @@ export function expireOptimisticOverlay<Item>(
   return remaining.size === overlay.size ? overlay : remaining;
 }
 
-function carriesEveryField<Item>(serverItem: Item, echo: Item): boolean {
-  return Object.entries(echo as Record<string, unknown>).every(
-    ([key, value]) => (serverItem as Record<string, unknown>)[key] === value,
-  );
+function carriesEveryField(serverItem: unknown, echo: unknown): boolean {
+  if (!isJsonRecord(serverItem) || !isJsonRecord(echo)) return serverItem === echo;
+  return Object.entries(echo).every(([key, value]) => serverItem[key] === value);
 }

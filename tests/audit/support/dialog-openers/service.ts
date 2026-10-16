@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { addLocalMonthsClamped } from '../../../../lib/planning/date-time';
+import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { seedCustomer } from '../../../golden/support/db/customers';
 import {

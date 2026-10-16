@@ -1,4 +1,4 @@
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 /**
  * Boundary parser for calendar date windows that reach server actions as
@@ -26,8 +26,8 @@ export function isValidIsoDate(value: string): boolean {
 export function defaultCalendarWindow(): IsoDateRange {
   const businessDate = getBusinessTodayIso();
   return {
-    from: shiftIsoDateByDays(businessDate, -365),
-    to: shiftIsoDateByDays(businessDate, 730),
+    from: addLocalDays(businessDate, -365),
+    to: addLocalDays(businessDate, 730),
   };
 }
 

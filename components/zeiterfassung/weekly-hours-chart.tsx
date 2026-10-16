@@ -6,7 +6,7 @@ import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { sumTargetMinutes, type DailyTarget } from '@/lib/personnel/targets';
 import type { DayData } from '@/hooks/use-weekly-time-data';
-import type { OrgBreakMode } from '@/lib/time-tracking/types';
+import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 
 interface WeeklyHoursChartProps {
   weekData: DayData[];
@@ -24,6 +24,8 @@ interface WeeklyHoursChartProps {
 }
 
 const GRID_HOURS = [2, 4, 6, 8, 10, 12];
+// The value axis always reaches at least eight hours, however short the week.
+const MIN_AXIS_CEILING_MINUTES = 8 * 60;
 const BAR_HEIGHT = 180;
 const LABEL_AREA = 24;
 
@@ -189,7 +191,7 @@ export function WeeklyHoursChart({
 
   const maxMinutes = useMemo(() => {
     const tallest = Math.max(...data.map((d) => d.totalMinutes), 0);
-    const ceil = Math.max(Math.ceil(tallest / 120) * 120, 480);
+    const ceil = Math.max(Math.ceil(tallest / 120) * 120, MIN_AXIS_CEILING_MINUTES);
     return Math.min(ceil, 12 * 60);
   }, [data]);
 

@@ -581,7 +581,8 @@ export async function getNextJobNumber(): Promise<ActionResult<{ jobNumber: stri
 // Client-scoped queries
 // ============================================
 
-export type ClientJobsResult = {
+/** The jobs related to one client or one member, with their projects, client names and assignments. */
+type RelatedJobs = {
   jobs: Job[];
   projects: ProjectWithDetails[];
   clientMap: Record<string, string>;
@@ -593,7 +594,7 @@ export type ClientJobsResult = {
  * Includes jobs directly linked to the client AND jobs belonging to
  * projects linked to the client. Requires admin/manager access.
  */
-export async function getJobsForClient(rawClientId: string): Promise<ActionResult<ClientJobsResult>> {
+export async function getJobsForClient(rawClientId: string): Promise<ActionResult<RelatedJobs>> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const { orgId, isManagerOrAbove } = auth.context;
@@ -728,19 +729,12 @@ export async function getJobsForClient(rawClientId: string): Promise<ActionResul
 // Member-scoped queries
 // ============================================
 
-export type MemberJobsResult = {
-  jobs: Job[];
-  projects: ProjectWithDetails[];
-  clientMap: Record<string, string>;
-  jobAssignmentMap: Record<string, string[]>;
-};
-
 /**
  * Fetch all jobs assigned to a specific member, along with their parent
  * projects, client names, and the full assignment map for those jobs.
  * Requires admin/manager access.
  */
-export async function getJobsForMember(rawMemberId: string): Promise<ActionResult<MemberJobsResult>> {
+export async function getJobsForMember(rawMemberId: string): Promise<ActionResult<RelatedJobs>> {
   const parsedMemberId = uuidSchema.safeParse(rawMemberId);
   if (!parsedMemberId.success) return { success: false, error: 'invalid_input' };
   const memberId = parsedMemberId.data;

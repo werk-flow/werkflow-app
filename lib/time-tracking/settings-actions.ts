@@ -9,7 +9,7 @@ import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { getLocalDayEnd, getLocalDayStart } from '@/lib/time-tracking/day-utils';
+import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from '@/lib/time-tracking/effective-entries';
 import { deriveCurrentClockState } from '@/lib/time-tracking/helpers';
 import {

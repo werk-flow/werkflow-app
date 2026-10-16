@@ -122,7 +122,7 @@ window.calendarContract = {
       }
   },
 };
-export function getCalendarWindow(
+export function fetchCalendarWindow(
   input: CalendarWindowInput,
   signal?: AbortSignal,
 ): Promise<CalendarWindowResult> {

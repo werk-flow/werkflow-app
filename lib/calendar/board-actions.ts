@@ -7,8 +7,7 @@ import { getAuthenticatedUser } from '@/lib/data/cached';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { loadOccurrenceDispatchStates } from '@/lib/dispatch/server';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import type { OrgRole } from '@/lib/jobs/types';
-import { addLocalDays, resolveBerlinWallTime } from '@/lib/planning/date-time';
+import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { loadDailyTargetsByRecord } from '@/lib/planning/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -147,7 +146,7 @@ export async function getCalendarBoardContext(rawInput: CalendarBoardInput): Pro
   if (teamsResult.error) return boardLoadFailed('teams', teamsResult.error.code);
   const teams = new Map((teamsResult.data ?? []).map((team) => [team.id, team]));
   const profiles = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-  const roles = new Map((membersResult.data ?? []).map((member) => [member.user_id, member.role as OrgRole]));
+  const roles = new Map((membersResult.data ?? []).map((member) => [member.user_id, member.role]));
   // The membership valid on the window's first day wins; a person keeps one row for the whole window.
   const teamByRecord = new Map<string, { id: string; name: string }>();
   for (const membership of memberships) {

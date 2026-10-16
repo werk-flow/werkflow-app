@@ -1,4 +1,8 @@
 import type { ActionFailure } from '@/lib/action-result';
+import type { ProfileReference } from '@/lib/profile-reference';
+import type { OrgRole } from '@/lib/roles';
+import type { OrgBreakMode } from '@/lib/time-tracking/settings';
+import type { TimeValidationCode, TimeValidationFailure } from '@/lib/time-tracking/validation-messages';
 import type { Database } from '@/lib/supabase/database.types';
 
 // Database types
@@ -7,8 +11,6 @@ export type TimeEntryRow = Database['public']['Tables']['time_entries']['Row'];
 // Entry type and status
 export type TimeEntryType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end';
 export type TimeEntryStatus = Database['public']['Enums']['time_entry_status'];
-export type OrgRole = Database['public']['Enums']['org_role'];
-export type OrgBreakMode = Database['public']['Enums']['time_tracking_break_mode'];
 export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
 export type TimeSegmentKind = 'work' | 'travel' | 'break' | 'standby' | 'callout' | 'internal_activity';
@@ -366,11 +368,15 @@ export type ZeiterfassungOverview = {
 export type AddManualEntryResult =
   | { success: true; entries: TimeEntry[] }
   | (ActionFailure<'working_in_other_org'> & { otherOrgId: string; otherOrgName: string })
+  | TimeValidationActionFailure
   | ActionFailure;
 
 export type ReviewEntryResult = { success: true; reviewed: number } | ActionFailure;
 
-export type UpdateEntryResult = { success: true; entry: TimeEntry } | ActionFailure;
+export type UpdateEntryResult =
+  | { success: true; entry: TimeEntry }
+  | TimeValidationActionFailure
+  | ActionFailure;
 
 export type DeleteEntryResult = { success: true } | ActionFailure;
 
@@ -384,13 +390,8 @@ export type GetTimeEntriesResult =
     }
   | ActionFailure;
 
-export type JobTimeParticipant = {
-  userId: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  avatarPath: string | null;
-};
+/** A person who recorded time on a job. */
+export type JobTimeParticipant = ProfileReference;
 
 /**
  * A pending session awaiting approval (may be a single entry or a pair)
@@ -417,10 +418,10 @@ export type GetPendingSessionsResult = { success: true; sessions: PendingSession
 /**
  * Validation result for overlap checks
  */
-export type ValidationResult = {
-  valid: boolean;
-  error?: string;
-};
+export type ValidationResult = { valid: true } | { valid: false; failure: TimeValidationFailure };
+
+/** A time rule refusal as an action answers it: the code, with the instants it names beside it. */
+type TimeValidationActionFailure = ActionFailure<TimeValidationCode> & TimeValidationFailure;
 
 /**
  * Roles that a manager can manage (roles below manager)

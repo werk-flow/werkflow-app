@@ -4,9 +4,9 @@ import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 
 import type { ActionResult } from '@/lib/action-result';
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
-import { addLocalDays } from '@/lib/planning/date-time';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readTimeAccountManagement, requireAuth } from './access';
@@ -588,7 +588,7 @@ export async function getTimePeriodDetail(
           : null,
         kind: finding.finding_kind,
         severity: finding.severity,
-        explanation: finding.explanation as Record<string, unknown>,
+        explanation: jsonRecordOrEmpty(finding.explanation),
         decision: decisionByFinding.get(finding.id) ?? null,
       })),
       openSessions,

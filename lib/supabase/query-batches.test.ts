@@ -3,21 +3,28 @@ import { expect, test } from 'bun:test';
 import {
   readCompleteRows,
   BATCH_CONCURRENCY,
-  chunkIds,
   ID_BATCH_SIZE,
   readAllRows,
   readInBatches,
   ROW_PAGE_SIZE,
 } from './query-batches';
 
-test("ids are deduplicated and chunked below the gateway's query-string limit", () => {
-  const ids = Array.from({ length: 360 }, (_, index) => `id-${index % 250}`);
-  const chunks = chunkIds(ids);
+test("ids are deduplicated and chunked below the gateway's query-string limit", async () => {
+  const chunks: Array<readonly string[]> = [];
+  const read = async (batch: readonly string[]) => {
+    chunks.push(batch);
+    return { data: [], error: null };
+  };
+  await readInBatches(
+    Array.from({ length: 360 }, (_, index) => `id-${index % 250}`),
+    read,
+  );
   expect(chunks).toHaveLength(3);
   expect(chunks.flat()).toHaveLength(250);
   expect(chunks.every((chunk) => chunk.length <= ID_BATCH_SIZE)).toBe(true);
-  expect(chunkIds([])).toEqual([]);
-  expect(() => chunkIds(['a'], 0)).toThrow();
+  await readInBatches([], read);
+  expect(chunks).toHaveLength(3);
+  await expect(readInBatches(['a'], read, 0)).rejects.toThrow();
 });
 
 test('batched reads concatenate rows and keep the first error', async () => {

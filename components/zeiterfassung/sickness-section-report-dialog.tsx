@@ -25,7 +25,7 @@ import {
   type SicknessAbsenceType,
 } from '@/lib/sickness/types';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { describeFailure } from '@/lib/action-messages';
 
 type OwnSicknessReportDateErrors = {

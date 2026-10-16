@@ -6,13 +6,14 @@ import { ArrowLeft, ExternalLink, History, Pencil, Replace } from 'lucide-react'
 
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { Fact } from './fact';
 import {
   EQUIPMENT_CATEGORY_LABELS,
   EQUIPMENT_STATE_LABELS,
   EQUIPMENT_SUBTYPE_LABELS,
   type EquipmentDetail,
 } from '@/lib/installed-equipment/types';
-import { formatGermanMediumDateTime, parseIsoLocalDate } from '@/lib/utils';
+import { formatGermanMediumDateTime, formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
 
 const EVENT_LABELS: Record<string, string> = {
   registered: 'Anlage erfasst',
@@ -35,29 +36,10 @@ const EVENT_LABELS: Record<string, string> = {
   document_unlinked: 'Dokumentverknüpfung entfernt',
 };
 
-const equipmentDateFormat = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium' });
-
 function formatEquipmentDate(value: string | null | undefined): string {
   if (!value) return 'Nicht erfasst';
   const date = parseIsoLocalDate(value);
-  return date ? equipmentDateFormat.format(date) : value;
-}
-
-export function Fact({
-  label,
-  value,
-  testId,
-}: {
-  label: string;
-  value: string | null | undefined;
-  testId?: string;
-}): ReactElement {
-  return (
-    <div data-testid={testId}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-1 text-sm">{value || 'Nicht erfasst'}</dd>
-    </div>
-  );
+  return date ? formatLocalCalendarDay(date, 'date') : value;
 }
 
 type EquipmentDetailHeaderProps = {

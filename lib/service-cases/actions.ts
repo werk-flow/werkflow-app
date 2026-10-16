@@ -39,7 +39,7 @@ import type {
 import { logError } from '@/lib/logging';
 import { requireServiceManager, type ServiceAdminClient as AdminClient } from './manager-context';
 
-function mutationError(error: { message?: string } | null, fallback: string): string {
+function serviceCaseFailureCode(error: { message?: string } | null, fallback: string): string {
   const known = [
     'service_case_not_authorized',
     'service_case_idempotency_conflict',
@@ -574,7 +574,7 @@ export async function createServiceCase(input: ServiceCaseCreateInput): Promise<
     p_idempotency_key: parsed.data.idempotencyKey,
   });
   if (error || !data) {
-    return { success: false, error: mutationError(error, 'service_case_create_failed') };
+    return { success: false, error: serviceCaseFailureCode(error, 'service_case_create_failed') };
   }
   refreshServicePaths(data.case_number);
   return { success: true, serviceCase: data };
@@ -606,7 +606,7 @@ export async function updateServiceCase(input: ServiceCaseUpdateInput): Promise<
     p_idempotency_key: parsed.data.idempotencyKey,
   });
   if (error || !data) {
-    return { success: false, error: mutationError(error, 'service_case_update_failed') };
+    return { success: false, error: serviceCaseFailureCode(error, 'service_case_update_failed') };
   }
   refreshServicePaths(data.case_number);
   return { success: true, serviceCase: data };
@@ -630,7 +630,7 @@ export async function linkServiceCaseRelation(input: ServiceCaseRelationInput): 
     p_idempotency_key: parsed.data.idempotencyKey,
   });
   if (error) {
-    return { success: false, error: mutationError(error, 'service_case_relation_failed') };
+    return { success: false, error: serviceCaseFailureCode(error, 'service_case_relation_failed') };
   }
   await refreshServiceCasePathsById(context.admin, context.organizationId, parsed.data.serviceCaseId);
   return { success: true };
@@ -650,7 +650,7 @@ export async function linkServiceCaseEvidence(input: ServiceCaseEvidenceInput): 
     p_idempotency_key: parsed.data.idempotencyKey,
   });
   if (error) {
-    return { success: false, error: mutationError(error, 'service_case_evidence_failed') };
+    return { success: false, error: serviceCaseFailureCode(error, 'service_case_evidence_failed') };
   }
   await refreshServiceCasePathsById(context.admin, context.organizationId, parsed.data.serviceCaseId);
   return { success: true };

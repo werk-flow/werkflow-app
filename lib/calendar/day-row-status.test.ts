@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CalendarBoardDay } from './board';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { canManageBlock, dayRowLabel, isBlockInClosedPeriod, isDayRowOff } from './day-row-status';
+import { canManageBlock, dayRowLabel, isDayRowOff } from './day-row-status';
 
 function boardDay(overrides: Partial<CalendarBoardDay> = {}): CalendarBoardDay {
   return {
@@ -103,7 +103,6 @@ describe('canManageBlock', () => {
     const october = [{ startDate: '2026-10-01', endDate: '2026-10-31' }];
     const september = [{ startDate: '2026-09-01', endDate: '2026-09-30' }];
     expect(canManageBlock(block(), 'admin', 'me', 'employee', october)).toBe(false);
-    expect(isBlockInClosedPeriod(block(), october)).toBe(true);
     expect(canManageBlock(block(), 'admin', 'me', 'employee', september)).toBe(true);
   });
 });

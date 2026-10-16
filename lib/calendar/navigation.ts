@@ -81,7 +81,7 @@ export function getCalendarFetchRange(
   return getCalendarMonthFetchRange(currentDate);
 }
 
-export function getCalendarMonthFetchRange(currentDate: Date): CalendarFetchRange {
+function getCalendarMonthFetchRange(currentDate: Date): CalendarFetchRange {
   const firstOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   const firstVisibleMonday = mondayOfWeek(firstOfMonth);
 

@@ -19,7 +19,7 @@ test('global clock and active-job providers cannot queue background reads as Ser
   for (const file of ['components/clock-state-provider.tsx', 'hooks/use-active-jobs.ts']) {
     const source = readFileSync(resolve(import.meta.dir, '../..', file), 'utf8');
     expect(source).toContain("from '@/lib/time-tracking/state-client'");
-    expect(source).not.toMatch(/import[\s\S]*?from ['"]@\/lib\/time-tracking\/actions['"]/);
+    expect(source).not.toMatch(/import[\s\S]*?from ['"]@\/lib\/time-tracking\/clock-state-actions['"]/);
   }
 });
 

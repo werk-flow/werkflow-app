@@ -12,7 +12,7 @@ import {
   type PersonnelLifecycleView,
 } from '@/lib/personnel/lifecycle-actions';
 
-import { errorMessage } from './personnel-lifecycle-errors';
+import { personnelLifecycleErrorMessage } from './personnel-lifecycle-errors';
 import { logError } from '@/lib/logging';
 
 export type PersonnelLifecycleController = ReturnType<typeof usePersonnelLifecycleView>;
@@ -70,7 +70,7 @@ export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
   /** The stale_version text promises a refresh; the owned reader delivers it (Step 3 release run 6). */
   function failureMessage(code: string): string {
     if (code === 'stale_version') void view.refresh();
-    return errorMessage(code);
+    return personnelLifecycleErrorMessage(code);
   }
 
   async function downloadManifest(): Promise<void> {

@@ -34,6 +34,7 @@ const CONTEXT_WRAPPERS: Record<string, string> = {
   requireAuth: 'lib/time-accounts/access.ts',
   requireManagerAndClient: 'lib/clients/manager-access.ts',
   requireManagedInvite: 'lib/invites/managed-invite.ts',
+  verifyCurrentMembership: 'lib/time-tracking/action-access.ts',
 };
 
 const SESSION_IDENTITY = 'getAuthenticatedUser';
@@ -64,9 +65,9 @@ const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
     'Activates the subscription before the first organization exists.',
   'lib/members/actions.ts#getProfilesByIds':
     'Names are visible across every organization the caller shares with the person (SI-015).',
-  'lib/time-tracking/actions.ts#clockOutBeforeSignOut':
+  'lib/time-tracking/clock-state-actions.ts#clockOutBeforeSignOut':
     "Ends the caller's own open sessions in every organization at sign-out.",
-  'lib/time-tracking/actions.ts#getChangeRequestsForEntries':
+  'lib/time-tracking/review-actions.ts#getChangeRequestsForEntries':
     "Reads only organizations from the caller's current memberships, with the role in each.",
   'lib/time-corrections/actions.ts#withdrawTimeCorrection':
     "withdraw_time_correction accepts only the request's author and changes only that request.",

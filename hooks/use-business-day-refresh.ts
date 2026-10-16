@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 /**
  * Wall-clock companion to the live-view primitive: fires `refresh` when the

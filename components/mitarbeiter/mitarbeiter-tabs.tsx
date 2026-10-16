@@ -13,7 +13,7 @@ import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+import { isUuid } from '@/lib/validation/uuid';
 import { deterministicWorkHandoverUuid, workHandoverPackageId } from './identity';
 
 describe('work handover identity', () => {
@@ -17,7 +18,9 @@ describe('work handover identity', () => {
     const projectId = workHandoverPackageId('10000000-0000-4000-8000-000000000001', 'project', targetId);
     expect(jobId).not.toBe(projectId);
     expect(jobId).not.toBe(workHandoverPackageId('10000000-0000-4000-8000-000000000003', 'job', targetId));
-    expect(jobId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    // RFC 4122 version 5 with the RFC variant: the version nibble, then the variant nibble.
+    expect(isUuid(jobId)).toBe(true);
+    expect([jobId[14], '89ab'.includes(jobId[19] ?? '')]).toEqual(['5', true]);
     expect(deterministicWorkHandoverUuid('draft', 'source')).not.toBe(jobId);
   });
 });

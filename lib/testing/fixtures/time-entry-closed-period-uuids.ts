@@ -111,9 +111,10 @@ mock.module('@/lib/data/cached', () => ({
   }),
   getCachedOrganizationCalendar: async () => null,
 }));
-const { updateEntry, deleteEntry, deleteEntriesBatch, reviewChangeRequest } = await import(
-  '@/lib/time-tracking/actions'
+const { updateEntry, deleteEntry, deleteEntriesBatch } = await import(
+  '@/lib/time-tracking/entry-write-actions'
 );
+const { reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
 const refused = { success: false, error: 'period_closed' };
 
 // An entry of the closed month keeps its time, also when the new time lies in an open month.

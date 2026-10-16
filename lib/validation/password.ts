@@ -73,7 +73,7 @@ export function translateSupabasePasswordError(error: unknown): string {
     typeof error === 'string'
       ? error
       : typeof error === 'object' && error && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
+        ? String(error.message ?? '')
         : '';
 
   if (!message) {

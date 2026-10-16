@@ -4,7 +4,7 @@ import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resol
 import { canHolderApproveTarget } from '@/lib/responsibilities/resolution';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import type { OrgRole } from '@/lib/time-tracking/types';
+import { isOrgRole, type OrgRole } from '@/lib/roles';
 
 import { isTimeCorrectionSnapshot, type TimeCorrectionSnapshot } from './types';
 
@@ -21,11 +21,11 @@ import { isTimeCorrectionSnapshot, type TimeCorrectionSnapshot } from './types';
  */
 
 type Tables = Database['public']['Tables'];
-export type PendingRequestRow = Pick<
+type PendingRequestRow = Pick<
   Tables['time_correction_requests']['Row'],
   'id' | 'kind' | 'status' | 'subject_user_id' | 'requested_by' | 'current_revision' | 'updated_at'
 >;
-export type RevisionRow = Pick<
+type RevisionRow = Pick<
   Tables['time_correction_request_revisions']['Row'],
   'request_id' | 'revision' | 'proposed_snapshot'
 >;
@@ -38,7 +38,7 @@ export const PENDING_CORRECTION_STATUSES = ['submitted', 'clarification_required
 // under the URL limit (lib/conventions/id-list-string-filters.test.ts).
 const REVISION_PAIR_BATCH_SIZE = 40;
 /** Read completely up to the shared bound; overflow must not appear as an empty calendar. */
-export const PENDING_CORRECTION_LIMIT = LIST_ROW_CAP;
+const PENDING_CORRECTION_LIMIT = LIST_ROW_CAP;
 
 /** Four logical reads. Their adapters page rows and bound ID batches. */
 export type PendingProjectionPort = {
@@ -162,10 +162,6 @@ export type PendingCorrectionProjectionInput = {
     holder: EffectiveResponsibilityHolder | null;
   };
 };
-
-function isOrgRole(value: string): value is OrgRole {
-  return value === 'admin' || value === 'buero' || value === 'employee';
-}
 
 /**
  * Loads the pending requests visible to the caller with their current

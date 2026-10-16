@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { captureInputSnapshot, isDocumentationInput } from '../lib/testing/evidence/group-evidence';
+import { deletionPassProblems, parsePublishedCommits } from '../lib/testing/publication/deletion-pass';
 import {
   publicationGateProblems,
   publicationReportSchema,
@@ -13,8 +14,9 @@ import {
 /**
  * The pre-push gate (.githooks/pre-push pipes git's ref list into this
  * script): exits 1 and prints what is missing unless the newest local
- * verification report passed on the tree being pushed and a CodeRabbit review
- * completed on it. It reads evidence only; the hook owns the owner override.
+ * verification report passed on the tree being pushed, a CodeRabbit review
+ * completed on it, and every commit the push publishes records its deletion
+ * pass. It reads evidence only; the hook owns the owner override.
  */
 const repository = resolve(import.meta.dir, '..');
 
@@ -81,6 +83,13 @@ const uncommitted = [
   ...git('ls-files', '--others', '--exclude-standard', '-z').split('\0'),
 ].filter((file) => file && !isDocumentationInput(file));
 
+// The commits this push publishes: reachable from a pushed commit, on no remote yet.
+const publishedCommits = parsePublishedCommits(
+  pushed.length
+    ? git('log', '--no-merges', '--format=%H%x00%B%x1e', ...pushed, '--not', '--remotes', '--')
+    : '',
+);
+
 const problems = publicationGateProblems({
   newestReport: newestLocalReport(),
   current: captureInputSnapshot(repository),
@@ -89,7 +98,7 @@ const problems = publicationGateProblems({
   pushed,
   pushedFiles: [...new Set(pushedFiles.filter(Boolean))].sort(),
   reviews: reviewRecords(),
-});
+}).concat(deletionPassProblems(publishedCommits));
 if (problems.length) {
   console.error(`[publication-gate] Push refused; ${problems.length} requirement(s) missing:`);
   for (const problem of problems) console.error(`  - ${problem}`);
@@ -98,4 +107,6 @@ if (problems.length) {
   );
   process.exit(1);
 }
-console.log('[publication-gate] Verification report and CodeRabbit review cover this tree.');
+console.log(
+  '[publication-gate] Verification report and CodeRabbit review cover this tree; every published commit records its deletion pass.',
+);

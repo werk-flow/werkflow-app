@@ -140,7 +140,7 @@ export function VacationApprovals() {
       </StaleRegion>
 
       {reasonDialog.mode !== 'closed' && (
-        <ReasonDialog
+        <VacationDecisionReasonDialog
           title={reasonDialog.mode === 'reject' ? 'Urlaubsantrag ablehnen' : 'Genehmigten Urlaub stornieren'}
           description={
             reasonDialog.mode === 'reject'
@@ -161,7 +161,7 @@ export function VacationApprovals() {
   );
 }
 
-function ReasonDialog({
+function VacationDecisionReasonDialog({
   title,
   description,
   confirmLabel,

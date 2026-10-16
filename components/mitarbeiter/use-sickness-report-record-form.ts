@@ -7,7 +7,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { recordSicknessForMember } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType } from '@/lib/sickness/types';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
 
 export type SicknessReportRecordForm = ReturnType<typeof useSicknessReportRecordForm>;

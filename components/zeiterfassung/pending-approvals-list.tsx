@@ -6,7 +6,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { PendingSession, ChangeRequestWithDetails } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { ChangeRequestCard, SessionRequestCard } from './pending-approvals-cards';
 
 // Union type for all request types

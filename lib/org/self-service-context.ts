@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 import type { ActionFailure } from '@/lib/action-result';
 import { getAuthenticatedUser, getCachedMemberships, getCachedPrestartMemberships } from '@/lib/data/cached';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { CURRENT_ORG_COOKIE } from '@/lib/org/action-context';
 
 // The owner of the self-service caller context: an employee acting on their

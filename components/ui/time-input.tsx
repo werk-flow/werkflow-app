@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { clickedSegment } from '@/components/ui/clicked-segment';
 import { useFieldContext } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
 
@@ -13,13 +14,6 @@ interface TimeInputProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 
 
 const TIME_SEGMENTS = ['hours', 'minutes'] as const;
 type Segment = (typeof TIME_SEGMENTS)[number];
-
-/** The segment under a click inside the field, read from its `data-segment`. */
-function clickedTimeSegment(target: EventTarget): Segment | undefined {
-  const name =
-    target instanceof Element ? target.closest<HTMLElement>('[data-segment]')?.dataset.segment : undefined;
-  return TIME_SEGMENTS.find((segment) => segment === name);
-}
 
 function EmptySegmentLine() {
   return <span aria-hidden className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle" />;
@@ -233,7 +227,7 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
         }}
         onKeyDown={handleKeyDown}
         onClick={(event) => {
-          const segment = clickedTimeSegment(event.target);
+          const segment = clickedSegment(event.target, TIME_SEGMENTS);
           if (segment) handleSegmentClick(segment);
           onClick?.(event);
         }}

@@ -19,7 +19,7 @@ import {
   MAINTENANCE_PLAN_ERROR_MESSAGES,
   MAINTENANCE_PLAN_REQUIRED_FIELD_IDS,
   formFromPlan,
-  missingFields,
+  missingMaintenancePlanFields,
   toMaintenancePlanInput,
   type MaintenancePlanFormState,
   type MaintenancePlanRequiredField,
@@ -108,12 +108,12 @@ export function useMaintenancePlanForm({
       if (initial && onSaved) onSaved();
     },
   );
-  const fieldErrors = attempted ? missingFields(form, Boolean(initial)) : {};
+  const fieldErrors = attempted ? missingMaintenancePlanFields(form, Boolean(initial)) : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errors = missingFields(form, Boolean(initial));
+    const errors = missingMaintenancePlanFields(form, Boolean(initial));
     const firstInvalid = MAINTENANCE_PLAN_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
     if (firstInvalid) {
       document.getElementById(firstInvalid[1])?.focus();

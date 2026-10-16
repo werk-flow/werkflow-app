@@ -7,8 +7,8 @@
 
 import { z } from '@/lib/zod';
 
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { EmploymentCondition } from '@/lib/personnel/types';
-import { toBusinessIsoDate } from '@/lib/personnel/types';
 import { getEffectiveCondition } from '@/lib/personnel/types';
 import { getEffectiveSchedule, getWeekdayIndex, type WorkSchedule } from '@/lib/personnel/schedule';
 import {
@@ -114,6 +114,8 @@ export const EMPTY_HOLIDAY_CALENDAR: OrganizationHolidayCalendar = {
 /**
  * The holiday region effective on a Berlin business date: newest history entry
  * whose effectiveFrom (as a Berlin date) is on or before the date; none → null.
+ * The unit tests pin the history cases here instead of through a daily target.
+ * @internal
  */
 export function resolveHolidayRegionOnDate(
   calendar: Pick<OrganizationHolidayCalendar, 'holidayRegion' | 'holidayRegionHistory'>,
@@ -132,7 +134,7 @@ export function resolveHolidayRegionOnDate(
   );
 
   for (const entry of history.reverse()) {
-    if (toBusinessIsoDate(new Date(entry.effectiveFrom)) <= dateIso) {
+    if (formatBerlinLocalDate(entry.effectiveFrom) <= dateIso) {
       return entry.region.length > 0 ? entry.region : null;
     }
   }

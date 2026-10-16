@@ -4,7 +4,8 @@
 
 import type { useBanner } from '@/components/ui/banner';
 import { describeBatchRefusal } from '@/lib/action-messages';
-import { deleteEntriesBatch, deleteEntry, reviewEntries, updateEntry } from '@/lib/time-tracking/actions';
+import { deleteEntriesBatch, deleteEntry, updateEntry } from '@/lib/time-tracking/entry-write-actions';
+import { reviewEntries } from '@/lib/time-tracking/review-actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { formatActionError } from './entry-details-labels';
 import type { EntryDetailsSnapshot } from './use-entry-details-session';
@@ -50,7 +51,7 @@ export function deleteEntryDetailsBlock(
         });
 
         if (!result.success) {
-          setError(formatActionError(result.error));
+          setError(formatActionError(result));
           return;
         }
 

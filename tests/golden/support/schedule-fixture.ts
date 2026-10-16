@@ -1,4 +1,4 @@
-import { resolveBerlinWallTime } from '../../../lib/planning/date-time';
+import { resolveBerlinWallTime } from '../../../lib/date-time/berlin';
 import { createAdminClient } from './db/shared';
 import { getEmployeeRecordStateByUser } from './db/personnel';
 import type { TestWorld } from './world';

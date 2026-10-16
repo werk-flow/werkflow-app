@@ -64,7 +64,7 @@ function socketOrigin(origin: string): string {
  * the same variables. That module is server-only and cannot load in
  * next.config.ts; lib/security/csp-report.test.ts pins the two.
  */
-export function storageOrigin(env: CspEnvironment): string | null {
+function storageOrigin(env: CspEnvironment): string | null {
   const endpointOverride = env.R2_ENDPOINT?.trim();
   if (endpointOverride) return webOrigin(endpointOverride);
   const accountId = env.R2_ACCOUNT_ID;
@@ -84,7 +84,11 @@ function policyOrigins(env: CspEnvironment): { supabase: string | null; storage:
   return { supabase: webOrigin(env.NEXT_PUBLIC_SUPABASE_URL), storage: storageOrigin(env) };
 }
 
-/** The enforced policy. Every directive is proven in the comment above. */
+/**
+ * The enforced policy. Every directive is proven in the comment above. Its consumer is
+ * next.config.ts, which `knip --production` does not read.
+ * @internal
+ */
 export function buildContentSecurityPolicy(env: CspEnvironment): string {
   const { supabase, storage } = policyOrigins(env);
   return [
@@ -108,6 +112,8 @@ export function buildContentSecurityPolicy(env: CspEnvironment): string {
  * for every browser and library. It blocks nothing; its violations reach the
  * same endpoint with `disposition: report` and decide whether a directive can
  * move into the enforced policy. Directives it omits are unrestricted here.
+ * Its consumer is next.config.ts, which `knip --production` does not read.
+ * @internal
  */
 export function buildReportOnlyContentSecurityPolicy(env: CspEnvironment): string {
   const { supabase, storage } = policyOrigins(env);
@@ -134,10 +140,11 @@ export type CspViolation = {
   column: number | null;
 };
 
+// next.config.ts loads this module before the build, without the `@/` path
+// alias, so the module imports nothing from lib/.
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  return Object.fromEntries(Object.entries(value));
 }
 
 function text(value: unknown): string | null {

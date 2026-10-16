@@ -2,15 +2,15 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { autoScrollDue, autoScrollVelocity, exceedsDragThreshold } from '@/lib/calendar/drag-math';
-import { ghostPaint, ghostWidth, visibleGhostOrigin, zoneAtPoint } from '@/lib/calendar/drag-ghost';
-import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import {
-  targetKey,
-  type CalendarDragPayload,
-  type CalendarDragTarget,
-  type DragModifiers,
+  ghostPaint,
+  ghostWidth,
+  visibleGhostOrigin,
+  zoneAtPoint,
   type DragVerdict,
-} from './payload';
+} from '@/lib/calendar/drag-ghost';
+import { CALENDAR_LAYER_CLASS } from '../surface/layers';
+import { targetKey, type CalendarDragPayload, type CalendarDragTarget, type DragModifiers } from './payload';
 
 /**
  * The calendar's one drag engine (P1-24a, decision Q6): pointer events with

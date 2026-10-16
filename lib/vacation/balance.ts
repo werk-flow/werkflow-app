@@ -71,7 +71,11 @@ export function countCalendarDaysInRange(startDate: string, endDate: string): nu
   return Math.round((endUtc - startUtc) / 86_400_000) + 1;
 }
 
-/** Inclusive ISO-date iteration without timezone drift. */
+/**
+ * Inclusive ISO-date iteration without timezone drift. The unit test pins the year
+ * boundary here.
+ * @internal
+ */
 export function listIsoDatesInRange(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   const [startYear, startMonth, startDay] = startDate.split('-').map(Number);

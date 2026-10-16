@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import type { ActionResult } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { isValidIsoDate } from '@/lib/calendar/date-range';
@@ -49,7 +49,7 @@ export type ResponsibilityPreview = {
   lostHolderIds: string[];
 };
 
-function normalizeDatabaseError(message: string): string {
+function responsibilityFailureCode(message: string): string {
   const knownCodes = [
     'responsibility_configuration_changed',
     'responsibility_requires_active_holder',
@@ -218,7 +218,7 @@ export async function applyResponsibilityConfiguration(rawInput: {
   );
   if (error) {
     logError('Failed to apply responsibility configuration:', error);
-    return { success: false, error: normalizeDatabaseError(error.message) };
+    return { success: false, error: responsibilityFailureCode(error.message) };
   }
 
   refreshResponsibilitySurfaces();
@@ -258,7 +258,7 @@ export async function createResponsibilityDelegation(rawInput: {
   });
   if (error) {
     logError('Failed to create responsibility delegation:', error);
-    return { success: false, error: normalizeDatabaseError(error.message) };
+    return { success: false, error: responsibilityFailureCode(error.message) };
   }
 
   refreshResponsibilitySurfaces();
@@ -293,7 +293,7 @@ export async function endResponsibilityDelegation(rawDelegationId: string): Prom
   });
   if (error) {
     logError('Failed to end responsibility delegation:', error);
-    return { success: false, error: normalizeDatabaseError(error.message) };
+    return { success: false, error: responsibilityFailureCode(error.message) };
   }
 
   refreshResponsibilitySurfaces();

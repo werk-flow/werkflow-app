@@ -175,7 +175,7 @@ export const DIALOG_INVENTORY = {
   'components/kalender/dispatch-panel-commitment-dialog.tsx#CommitmentDialog|Kundenzusage erfassen': {
     audits: [{ route: '/kalender', role: 'admin', opener: 'calendar.dispatch-commitment' }],
   },
-  'components/kalender/dispatch-panel-reason-dialog.tsx#ReasonDialog|{title}': {
+  'components/kalender/dispatch-panel-reason-dialog.tsx#DispatchReasonDialog|{title}': {
     audits: [{ route: '/kalender', role: 'admin', opener: 'calendar.dispatch-reason' }],
   },
   'components/kalender/dispatch-panel.tsx#DispatchPanel|Verschiebung prüfen': {
@@ -239,10 +239,6 @@ export const DIALOG_INVENTORY = {
   'components/mitarbeiter/create-personnel-dialog.tsx#CreatePersonnelDialog|Personalakte anlegen': {
     audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.create-personnel' }],
   },
-  'components/mitarbeiter/employment-condition-delete-dialog.tsx#EmploymentConditionDeleteDialog|Kondition löschen?':
-    {
-      audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.condition-delete' }],
-    },
   "components/mitarbeiter/employment-condition-dialog.tsx#EmploymentConditionDialog|{condition ? 'Kondition bearbeiten' : 'Kondition hinzufügen'}":
     {
       audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.condition' }],
@@ -307,8 +303,11 @@ export const DIALOG_INVENTORY = {
   'components/mitarbeiter/team-management-dissolve-dialog.tsx#TeamManagementDissolveDialog|Team auflösen?': {
     audits: [{ route: '/mitarbeiter', role: 'admin', opener: 'people.team-dissolve' }],
   },
-  'components/mitarbeiter/work-schedule-delete-dialog.tsx#WorkScheduleDeleteDialog|Wochenplan löschen?': {
-    audits: [{ route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.schedule-delete' }],
+  'components/mitarbeiter/version-delete-dialog.tsx#VersionDeleteDialog|{title}': {
+    audits: [
+      { route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.condition-delete' },
+      { route: '/mitarbeiter/[userId]', role: 'admin', opener: 'people.schedule-delete' },
+    ],
   },
   "components/mitarbeiter/work-schedule-dialog.tsx#WorkScheduleDialog|{schedule ? 'Wochenplan bearbeiten' : 'Wochenplan hinzufügen'}":
     {
@@ -386,7 +385,7 @@ export const DIALOG_INVENTORY = {
   'components/service/service-case-detail-dialogs.tsx#RelationDialog|Servicefälle verknüpfen': {
     audits: [{ route: '/service/faelle/[caseNumber]', role: 'admin', opener: 'service.case-relation' }],
   },
-  'components/service/service-case-detail-dialogs.tsx#EvidenceDialog|Arbeitsnachweis verknüpfen': {
+  'components/service/service-case-detail-dialogs.tsx#ServiceCaseEvidenceDialog|Arbeitsnachweis verknüpfen': {
     audits: [{ route: '/service/faelle/[caseNumber]', role: 'admin', opener: 'service.case-evidence' }],
   },
   'components/service/service-case-detail-dialogs.tsx#FollowUpDialog|Nachfassaktion anlegen': {
@@ -438,7 +437,7 @@ export const DIALOG_INVENTORY = {
       { route: '/zeiterfassung', role: 'employee', opener: 'field.time-correction' },
     ],
   },
-  'components/zeiterfassung/vacation-approvals.tsx#ReasonDialog|{title}': {
+  'components/zeiterfassung/vacation-approvals.tsx#VacationDecisionReasonDialog|{title}': {
     audits: [{ route: '/zeiterfassung', role: 'admin', opener: 'time.vacation-reason' }],
   },
   'components/zeiterfassung/vacation-section-request-dialog.tsx#OwnVacationRequestDialog|Urlaub beantragen': {

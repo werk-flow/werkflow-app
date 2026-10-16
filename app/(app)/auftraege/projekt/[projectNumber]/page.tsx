@@ -2,17 +2,15 @@ import { Suspense } from 'react';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 import { logError } from '@/lib/logging';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { resolvePageMembership } from '@/lib/org/page-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { isManagerRole } from '@/lib/roles';
 import { getProjectDocumentsOverview } from '@/lib/documents/actions';
 import { getInventoryPickerPage, getProjectMaterialSummary } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import type { OrgRole } from '@/lib/members/actions';
 import { ProjectDetailContent } from '@/components/auftraege/project-detail/project-detail-content';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
@@ -28,24 +26,11 @@ interface ProjectDetailPageProps {
 }
 
 async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/auftraege');
 
-  if (!user) redirect('/login');
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-  if (!activeOrgId) redirect('/auftraege');
-
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
   const admin = createSupabaseAdminClient();
 
   const projectResultPromise = getProjectByNumber(decodeURIComponent(projectNumber));

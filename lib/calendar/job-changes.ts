@@ -1,7 +1,7 @@
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { UpdateJobInput } from '@/lib/jobs/actions';
 import type { UpdatePlanningCalendarInput } from '@/lib/planning/actions';
-import { addLocalDays, resolveBerlinWallTime } from '@/lib/planning/date-time';
+import { addLocalDays, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 
 /**
  * The fields one calendar gesture changes on a visit, and the pure steps the

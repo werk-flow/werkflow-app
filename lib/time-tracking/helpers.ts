@@ -1,15 +1,15 @@
+import type { OrgRole } from '@/lib/roles';
 import type {
   BreakSession,
   ClockStatus,
   ClockTimelineSegment,
-  OrgRole,
   TimeEntry,
   TimeEntryStatus,
   WorkSession,
 } from './types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
-import { getLocalDayEnd, getLocalDayKey, isSameLocalDay } from './day-utils';
+import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
 import {
   canHolderApproveTarget,
@@ -22,7 +22,6 @@ const BREAK_THRESHOLD_MINUTES = 360; // 6h total clocked → break applies
 const BREAK_DURATION_MINUTES = 30;
 const BREAK_START_MINUTES = 330; // 5.5h mark on ring where yellow starts
 const OVERTIME_THRESHOLD_MINUTES = 510; // legacy threshold for fixed-break fallback
-export const WORK_GOAL_MINUTES = DEFAULT_DAILY_TARGET_MINUTES; // 8h legacy default, one source
 const OVERTIME_RING_MAX_MINUTES = 240; // 4h = full outer overtime ring
 
 export interface TimeBreakdown {
@@ -40,7 +39,7 @@ export interface TimeBreakdown {
 export function computeTimeBreakdown(
   totalMinutes: number,
   actualBreakMinutes?: number,
-  targetMinutes: number = WORK_GOAL_MINUTES,
+  targetMinutes: number = DEFAULT_DAILY_TARGET_MINUTES,
 ): TimeBreakdown {
   if (actualBreakMinutes !== undefined) {
     const clampedBreakMinutes = Math.max(0, Math.min(actualBreakMinutes, totalMinutes));
@@ -60,13 +59,26 @@ export function computeTimeBreakdown(
  * Compute elapsed milliseconds for a live session.
  * Client and server clocks can drift slightly, so never return a negative duration.
  */
-export function getNonNegativeElapsedMs(clockInTime: string | null): number {
+export function getNonNegativeElapsedMs(clockInTime: string | null, nowMs: number = Date.now()): number {
   if (!clockInTime) return 0;
 
   const startMs = new Date(clockInTime).getTime();
   if (Number.isNaN(startMs)) return 0;
 
-  return Math.max(0, Date.now() - startMs);
+  return Math.max(0, nowMs - startMs);
+}
+
+/**
+ * Recorded minutes plus the minutes a still-running status has added since
+ * `runningSince` (null when nothing runs): the live counters of the clock,
+ * the member list and the dashboard.
+ */
+export function liveMinutes(
+  baseMinutes: number,
+  runningSince: string | null,
+  nowMs: number = Date.now(),
+): number {
+  return baseMinutes + getNonNegativeElapsedMs(runningSince, nowMs) / 60_000;
 }
 
 interface RingSegment {
@@ -180,7 +192,7 @@ export function buildClockTimelineSegments(
 export function computeRingSegments(
   totalMinutes: number,
   actualBreakMinutes?: number,
-  targetMinutes: number = WORK_GOAL_MINUTES,
+  targetMinutes: number = DEFAULT_DAILY_TARGET_MINUTES,
 ): RingData {
   if (actualBreakMinutes !== undefined) {
     const clamped = Math.max(0, totalMinutes);
@@ -244,7 +256,7 @@ export function computeRingSegments(
 
 export function computeRingSegmentsFromTimeline(
   timelineSegments: ClockTimelineSegment[],
-  targetMinutes: number = WORK_GOAL_MINUTES,
+  targetMinutes: number = DEFAULT_DAILY_TARGET_MINUTES,
 ): RingData {
   const normalizedSegments = timelineSegments.filter((segment) => segment.minutes > 0);
   const totalWorkMinutes = normalizedSegments.reduce(
@@ -549,7 +561,7 @@ export function groupEntriesByDate(entries: TimeEntry[]): Record<string, TimeEnt
   const grouped: Record<string, TimeEntry[]> = {};
 
   for (const entry of entries) {
-    const date = getLocalDayKey(new Date(entry.timestamp));
+    const date = formatBerlinLocalDate(entry.timestamp);
     if (!grouped[date]) {
       grouped[date] = [];
     }

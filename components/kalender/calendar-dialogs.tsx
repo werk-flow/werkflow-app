@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import type { useBanner } from '@/components/ui/banner';
 import type { CalendarBoardRow } from '@/lib/calendar/board';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { ShortcutsHelp } from './board/shortcuts-help';
 import { CalendarEntryDialog } from './calendar-entry-dialog';

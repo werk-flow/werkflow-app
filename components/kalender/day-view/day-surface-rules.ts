@@ -11,12 +11,8 @@ import {
 } from '@/lib/calendar/refusal-checks';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type {
-  CalendarDragPayload,
-  CalendarDragTarget,
-  DragModifiers,
-  DragVerdict,
-} from '../drag-engine/payload';
+import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../drag-engine/payload';
+import type { DragVerdict } from '@/lib/calendar/drag-ghost';
 import { dayRowFor, dayRowKey } from '@/lib/calendar/day-rows';
 import type { DaySurfaceInput } from './use-day-surface';
 
@@ -28,7 +24,9 @@ export function payloadDuration(payload: CalendarDragPayload): number {
       return payload.job.estimatedDurationMinutes ?? DEFAULT_VISIT_MINUTES;
     case 'timeBlock':
       return payload.durationMinutes;
-    default:
+    case 'barEdge':
+    case 'resizeJob':
+    case 'resizeBlock':
       return 0;
   }
 }

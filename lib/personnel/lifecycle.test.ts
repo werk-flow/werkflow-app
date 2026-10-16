@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 
-import { sanitizeDocumentStorageFileName } from '../documents/storage-path';
-import {
-  getEffectiveAccessState,
-  getMembershipAccessMode,
-  getOnboardingCompletion,
-  toTemplateRpcItems,
-} from './lifecycle';
+import { buildDocumentStoragePath } from '../documents/storage-path';
+import { getEffectiveAccessState, getMembershipAccessMode, toTemplateRpcItems } from './lifecycle';
+
+/** The file-name part of a document storage path. */
+function storedFileName(fileName: string): string {
+  return buildDocumentStoragePath({ organizationId: 'org', documentId: 'doc', fileName }).slice(
+    'org/doc/'.length,
+  );
+}
 
 describe('P1-24 lifecycle projections', () => {
   test('preserves a visible not-configured state when no lifecycle exists', () => {
@@ -115,47 +117,12 @@ describe('P1-24 lifecycle projections', () => {
     ).toBe('operational');
   });
 
-  test('treats an optional-only configured plan as ready', () => {
-    expect(getOnboardingCompletion([{ isRequired: false, state: 'pending' }])).toEqual({
-      complete: 0,
-      total: 0,
-      isReady: true,
-    });
-  });
-
-  test('does not call an empty plan complete', () => {
-    expect(getOnboardingCompletion([])).toEqual({
-      complete: 0,
-      total: 0,
-      isReady: false,
-    });
-  });
-
-  test('counts waived required items as explicitly resolved', () => {
-    expect(
-      getOnboardingCompletion([
-        { isRequired: true, state: 'fulfilled' },
-        { isRequired: true, state: 'waived' },
-        { isRequired: false, state: 'missing' },
-      ]),
-    ).toEqual({ complete: 2, total: 2, isReady: true });
-  });
-
-  test('keeps a plan blocked while one required item remains open', () => {
-    expect(
-      getOnboardingCompletion([
-        { isRequired: true, state: 'fulfilled' },
-        { isRequired: true, state: 'pending' },
-      ]),
-    ).toEqual({ complete: 1, total: 2, isReady: false });
-  });
-
   test('keeps personnel storage names bounded and traversal-free', () => {
-    expect(sanitizeDocumentStorageFileName('..')).toBe('document');
-    expect(sanitizeDocumentStorageFileName('../../etc/passwd')).toBe('etc-passwd');
-    expect(sanitizeDocumentStorageFileName('')).toBe('document');
-    expect(sanitizeDocumentStorageFileName('a'.repeat(180))).toHaveLength(140);
-    expect(sanitizeDocumentStorageFileName(`${'a'.repeat(139)}.ignored`)).toBe('a'.repeat(139));
+    expect(storedFileName('..')).toBe('document');
+    expect(storedFileName('../../etc/passwd')).toBe('etc-passwd');
+    expect(storedFileName('')).toBe('document');
+    expect(storedFileName('a'.repeat(180))).toHaveLength(140);
+    expect(storedFileName(`${'a'.repeat(139)}.ignored`)).toBe('a'.repeat(139));
   });
 
   test('preserves the RPC template-item field contract', () => {

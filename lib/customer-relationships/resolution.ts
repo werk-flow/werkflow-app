@@ -1,3 +1,4 @@
+import { isUuid } from '@/lib/validation/uuid';
 import type {
   CommunicationChannel,
   CommunicationGuidance,
@@ -29,8 +30,6 @@ const TIMELINE_KINDS = new Set<TimelineKind>([
   'follow_up_event',
   'communication_preference_event',
 ]);
-const TIMELINE_SOURCE_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TIMELINE_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export function isTimelineCursorSafe(cursor: Pick<TimelineCursor, 'occurredAt' | 'stableKey'>): boolean {
@@ -40,7 +39,7 @@ export function isTimelineCursorSafe(cursor: Pick<TimelineCursor, 'occurredAt' |
   const sourceId = cursor.stableKey.slice(separatorIndex + 1);
   return (
     TIMELINE_KINDS.has(kind) &&
-    TIMELINE_SOURCE_ID_PATTERN.test(sourceId) &&
+    isUuid(sourceId) &&
     TIMELINE_TIMESTAMP_PATTERN.test(cursor.occurredAt) &&
     Number.isFinite(Date.parse(cursor.occurredAt))
   );

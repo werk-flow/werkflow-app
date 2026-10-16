@@ -1,5 +1,5 @@
 import type { Database } from '@/lib/supabase/database.types';
-import { toBusinessIsoDate } from '@/lib/personnel/types';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 
 export type WorkScheduleRow = Database['public']['Tables']['work_schedules']['Row'];
 
@@ -92,7 +92,7 @@ export function getWeekdayIndex(dateIso: string): number {
 
 /** ISO dates Monday–Sunday of the week containing the given Berlin business date. */
 export function getBusinessWeekDates(referenceDate: Date = new Date()): string[] {
-  const todayIso = toBusinessIsoDate(referenceDate);
+  const todayIso = formatBerlinLocalDate(referenceDate);
   const [year, month, day] = todayIso.split('-').map(Number);
   if (year === undefined) throw new Error(`Invalid ISO date: ${todayIso}`);
   const todayUtcMs = Date.UTC(year, (month ?? 1) - 1, day ?? 1);

@@ -10,7 +10,7 @@ import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { SkeletonColumn } from '@/components/ui/skeleton-table';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
-import { cn } from '@/lib/utils';
+import { cn, formatBerlin } from '@/lib/utils';
 import {
   MAINTENANCE_COVERAGE_STATUS_LABELS,
   MAINTENANCE_DUE_STATUS_LABELS,
@@ -20,9 +20,8 @@ import {
 } from '@/lib/maintenance/types';
 import type { MaintenanceCoveragePendingDraft } from './maintenance-coverage-dialog';
 
-const dateFormatter = new Intl.DateTimeFormat('de-DE');
 export function formatMaintenanceDate(value: string | null): string {
-  return value ? dateFormatter.format(new Date(`${value}T12:00:00Z`)) : 'Nicht festgelegt';
+  return value ? formatBerlin(value, 'numericDate') : 'Nicht festgelegt';
 }
 
 // One column definition for the due list header and its skeleton (design canon).

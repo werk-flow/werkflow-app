@@ -1,3 +1,4 @@
+import { isUuid } from '@/lib/validation/uuid';
 import { REALTIME_TABLES, type RealtimeTable } from './tables';
 
 /** One row change as the realtime provider delivers it; both rows null marks a synthetic resync. */
@@ -24,7 +25,7 @@ export function normalizeRealtimeDeletion(value: unknown, activeOrgId: string): 
     value.organization_id !== activeOrgId ||
     !('row_id' in value) ||
     typeof value.row_id !== 'string' ||
-    !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.row_id)
+    !isUuid(value.row_id)
   )
     return null;
   return {

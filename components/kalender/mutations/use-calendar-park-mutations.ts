@@ -6,7 +6,8 @@ import type { CalendarRefusalContext } from '@/lib/calendar/messages';
 import { unparkPlacement, type UnparkRequest } from '@/lib/calendar/visit-placement';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { parkWorkTarget, unparkJobIntoSchedule } from '@/lib/work-lifecycle/actions';
-import type { ActionResult, OptimisticOperation } from './use-optimistic-run';
+import type { ActionResult } from '@/lib/action-result';
+import type { OptimisticOperation } from './use-optimistic-run';
 import type { MutationFeedback } from './use-mutation-feedback';
 import type { UseCalendarMutationsOptions } from './use-calendar-mutations';
 

@@ -1,7 +1,7 @@
-import type { ActionFailure } from '@/lib/action-result';
+import type { ActionFailure, ActionResult } from '@/lib/action-result';
 
 /** Convert a transport rejection into the same visible rollback path as a returned failure. */
-export async function calendarActionResult<T extends { success: boolean }>(
+export async function calendarActionResult<T extends ActionResult>(
   operation: () => Promise<T>,
 ): Promise<T | ActionFailure<'calendar_transport_failed'>> {
   try {

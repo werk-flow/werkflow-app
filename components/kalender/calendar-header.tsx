@@ -12,6 +12,7 @@ import { CalendarEntryDialog } from './calendar-entry-dialog';
 import { ParkplatzButton } from './parkplatz-button';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { CalendarView } from './calendar-container';
+import { formatLocalCalendarDay } from '@/lib/utils';
 
 interface CalendarHeaderProps {
   currentDate: Date;
@@ -62,8 +63,7 @@ function getISOWeekNumber(date: Date): number {
 
 function formatDateDisplay(date: Date, view: CalendarView, horizonWeeks: number, compact = false): string {
   if (view === 'day') {
-    if (compact)
-      return date.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: '2-digit' });
+    if (compact) return formatLocalCalendarDay(date, 'compactDate');
     return `${DAY_NAMES[date.getDay()]}, ${date.getDate()}. ${
       MONTH_NAMES[date.getMonth()]
     } ${date.getFullYear()}`;
@@ -89,7 +89,7 @@ function formatDateDisplay(date: Date, view: CalendarView, horizonWeeks: number,
     } ${endOfWeek.getFullYear()} · ${kw}`;
   }
 
-  if (compact) return date.toLocaleDateString('de-DE', { month: 'short', year: 'numeric' });
+  if (compact) return formatLocalCalendarDay(date, 'shortMonthYear');
   // Month view
   return `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}`;
 }

@@ -1,4 +1,4 @@
-import { formatBerlinLocalDate } from '../../../../lib/planning/date-time';
+import { formatBerlinLocalDate } from '../../../../lib/date-time/berlin';
 import { createAdminClient } from './shared';
 
 export type PlanningDbState = {

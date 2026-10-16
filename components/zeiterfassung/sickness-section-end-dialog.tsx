@@ -19,7 +19,7 @@ import { endSicknessReport } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/types';
 import { describeFailure } from '@/lib/action-messages';
 import { toLocalDateString, formatGermanDate } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 export function OwnSicknessEndDialog({
   report,

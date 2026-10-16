@@ -22,6 +22,8 @@ import {
   FolderActionsMenu,
   FolderContextMenuContent,
   MultiSelectionContextMenuContent,
+  type DocumentActionHandlers,
+  type FolderActionHandlers,
 } from './document-row-actions';
 import {
   getFileIcon,
@@ -37,26 +39,6 @@ import { SelectionCircle } from './document-library-table-selection-circle';
 // tint under the pointer; a row being dragged stops reacting to it.
 const SELECTED_ROW_CLASS = 'bg-primary/10 hover:bg-primary/15';
 const DRAGGED_ROW_CLASS = 'cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent';
-
-export type DocumentActionHandlers = {
-  onOpen: () => void;
-  onDetails: () => void;
-  onRename: () => void;
-  onLink: () => void;
-  onMove: () => void;
-  onCopy: () => void;
-  onDelete: () => void;
-  onRestore: () => void;
-  onPermanentDelete: () => void;
-};
-
-export type FolderActionHandlers = {
-  onOpen: () => void;
-  onMove: () => void;
-  onCopy: () => void;
-  onRename: () => void;
-  onDelete: () => void;
-};
 
 function handleRowContextMenu(event: MouseEvent<HTMLTableRowElement>): void {
   event.stopPropagation();

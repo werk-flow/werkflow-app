@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
+import { describeFailure } from '@/lib/action-messages';
 import { PARKING_ERROR_MESSAGES } from './types';
 
 // The actions need module mocks for identity, cookies and the database, which
@@ -28,6 +29,6 @@ test('every error code the Parkplatz actions return has a German message', () =>
     'stale_version',
     'update_failed',
   ]) {
-    expect(PARKING_ERROR_MESSAGES[code], code).toBeString();
+    expect(describeFailure(code, PARKING_ERROR_MESSAGES, ''), code).not.toBe('');
   }
 });

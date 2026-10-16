@@ -17,7 +17,7 @@ import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
 
-export function ReasonDialog({
+export function DispatchReasonDialog({
   title,
   description,
   confirmLabel,

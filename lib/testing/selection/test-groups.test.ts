@@ -222,6 +222,11 @@ describe('independent group registry', () => {
     const format = expectDefined(groups.find((entry) => entry.id === 'static:format'));
     expect(format.script).toBe('format:check');
     expect(packageScripts['format:check']).toContain('prettier --check');
+    // The unused gate runs the production pass, where a unit test is no consumer of an export.
+    const unused = expectDefined(groups.find((entry) => entry.id === 'static:unused'));
+    expect(unused.script).toBe('unused:check');
+    expect(packageScripts['unused:check']).toContain('bun run unused:production');
+    expect(packageScripts['unused:production']).toMatch(/^knip --production\b/);
     // A static gate is selected without changed files, so the passing report the pre-push gate requires includes it.
     const plan = groupSelections({ mode: 'change', groups, changedFiles: [], unresolvedGroupIds: [] });
     expect(plan.get('static:format')).toEqual({ reason: 'Current policy check', changedFiles: [] });

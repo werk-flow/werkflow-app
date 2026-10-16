@@ -1,8 +1,9 @@
 // Rule test: a session that must keep outdated state is frozen through one helper.
 import { expect, test } from 'bun:test';
-import { ESLint } from 'eslint';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import { createProbeLinter } from '../../../eslint-rules/probe-linter.mjs';
 
 // A multi-session spec whose premise is that one session still shows what
 // another session has just changed (a stale draft, a stale approval card)
@@ -15,7 +16,7 @@ import { join } from 'node:path';
 const ROOT = join(import.meta.dir, '../../..');
 
 test('ESLint refuses taking a session offline or routing its socket inside a spec', async () => {
-  const eslint = new ESLint();
+  const eslint = createProbeLinter();
   const messages = async (source: string): Promise<string[]> => {
     const [result] = await eslint.lintText(source, { filePath: 'tests/golden/probe.spec.ts' });
     return (result?.messages ?? []).map(({ ruleId, message }) => `${ruleId}: ${message.slice(0, 38)}`);

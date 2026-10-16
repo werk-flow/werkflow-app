@@ -30,12 +30,22 @@ mock.module('@/lib/supabase/server', () => ({
   }),
 }));
 
-const { REJECTED_IDENTITY_CODES, AuthUnavailableError } = await import('@/lib/auth/identity-errors');
+const { AuthUnavailableError } = await import('@/lib/auth/identity-errors');
+// The codes with which Auth rejects the token or session itself (auth-js `error-codes.ts`).
+const REJECTED_IDENTITY_CODES = [
+  'bad_jwt',
+  'user_not_found',
+  'session_not_found',
+  'session_expired',
+  'refresh_token_not_found',
+  'refresh_token_already_used',
+  'user_banned',
+];
 const { proxy } = await import('../../../proxy');
 const { getAuthenticatedUser } = await import('@/lib/data/cached');
 
 const errors: Array<{ error: AuthError; rejected: boolean }> = [
-  ...[...REJECTED_IDENTITY_CODES].map((code) => ({
+  ...REJECTED_IDENTITY_CODES.map((code) => ({
     error: new AuthApiError('rejected', 401, code),
     rejected: true,
   })),

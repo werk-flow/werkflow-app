@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
+import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { getNonNegativeElapsedMs, liveMinutes } from '@/lib/time-tracking/helpers';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
-function formatLiveTime(baseMinutes: number, statusStartedAt: string | null, isClockedIn: boolean): string {
-  let totalMs = baseMinutes * 60 * 1000;
-
-  if (isClockedIn && statusStartedAt) {
-    totalMs += getNonNegativeElapsedMs(statusStartedAt);
-  }
+function formatLiveTime(baseMinutes: number, runningSince: string | null, nowMs: number): string {
+  const totalMs = baseMinutes * 60 * 1000 + getNonNegativeElapsedMs(runningSince, nowMs);
 
   const hours = Math.floor(totalMs / (1000 * 60 * 60));
   const minutes = Math.floor((totalMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -20,53 +16,19 @@ function formatLiveTime(baseMinutes: number, statusStartedAt: string | null, isC
     .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-function calculateLiveTotalMinutes(
-  baseMinutes: number,
-  statusStartedAt: string | null,
-  isClockedIn: boolean,
-): number {
-  let totalMinutes = baseMinutes;
-
-  if (isClockedIn && statusStartedAt) {
-    totalMinutes += getNonNegativeElapsedMs(statusStartedAt) / (1000 * 60);
-  }
-
-  return totalMinutes;
-}
-
 // Today's running clock: the formatted total and its minutes, refreshed
-// every second while the dashboard is mounted.
+// every second while the dashboard is mounted. The server and the hydrating
+// render show 00:00:00.
 export function useZeiterfassungLiveTime(effectiveState: LiveClockState): {
   liveTime: string;
   liveTotalMinutes: number;
 } {
-  const [liveTime, setLiveTime] = useState('00:00:00');
-  const [liveTotalMinutes, setLiveTotalMinutes] = useState(0);
+  const nowMs = useMountedWallClockTick(1000);
+  if (nowMs === null) return { liveTime: '00:00:00', liveTotalMinutes: 0 };
 
-  useEffect(() => {
-    const updateLiveValues = () => {
-      setLiveTime(
-        formatLiveTime(
-          effectiveState.todayMinutes,
-          effectiveState.statusStartedAt,
-          effectiveState.isClockedIn,
-        ),
-      );
-      setLiveTotalMinutes(
-        calculateLiveTotalMinutes(
-          effectiveState.todayMinutes,
-          effectiveState.statusStartedAt,
-          effectiveState.isClockedIn,
-        ),
-      );
-    };
-
-    updateLiveValues();
-
-    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
-    const interval = setInterval(updateLiveValues, 1000);
-    return () => clearInterval(interval);
-  }, [effectiveState.todayMinutes, effectiveState.statusStartedAt, effectiveState.isClockedIn]);
-
-  return { liveTime, liveTotalMinutes };
+  const runningSince = effectiveState.isClockedIn ? effectiveState.statusStartedAt : null;
+  return {
+    liveTime: formatLiveTime(effectiveState.todayMinutes, runningSince, nowMs),
+    liveTotalMinutes: liveMinutes(effectiveState.todayMinutes, runningSince, nowMs),
+  };
 }

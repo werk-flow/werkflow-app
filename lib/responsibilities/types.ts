@@ -1,10 +1,10 @@
+import type { OrgRole } from '@/lib/roles';
 import type { Database } from '@/lib/supabase/database.types';
 
 export type OrganizationResponsibility = Database['public']['Enums']['organization_responsibility'];
 export type ResponsibilityConfigurationMode =
   Database['public']['Enums']['responsibility_configuration_mode'];
 export type ResponsibilityAssignmentSource = Database['public']['Enums']['responsibility_assignment_source'];
-export type OrgRole = Database['public']['Enums']['org_role'];
 
 export const ORGANIZATION_RESPONSIBILITIES = [
   'time_approval',
@@ -38,6 +38,16 @@ export type ResponsibilityPerson = {
   email: string | null;
   role: OrgRole;
 };
+
+/**
+ * The responsibility that the membership trigger's
+ * `last_responsibility_holder:<responsibility>` refusal names; null for any
+ * other message.
+ */
+export function strandedResponsibilityOf(message: string): OrganizationResponsibility | null {
+  const named = /last_responsibility_holder:(\w+)/.exec(message)?.[1];
+  return ORGANIZATION_RESPONSIBILITIES.find((responsibility) => responsibility === named) ?? null;
+}
 
 export function formatResponsibilityPersonName(
   person: Pick<ResponsibilityPerson, 'firstName' | 'lastName' | 'email'>,

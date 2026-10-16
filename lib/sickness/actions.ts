@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { defaultCalendarWindow, parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
 import { loadSicknessReportsForRecord } from './server';
 import {
@@ -15,8 +15,9 @@ import {
   type SicknessReport,
   type SicknessReportRow,
 } from './types';
-import type { VacationDayPortion } from '@/lib/vacation/types';
+import { toVacationDayPortion, type VacationDayPortion } from '@/lib/vacation/types';
 import { logError } from '@/lib/logging';
+import { rowWriteResultFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { isManagerRole } from '@/lib/roles';
@@ -78,16 +79,13 @@ function validateReportRange(input: {
     return 'invalid_range';
   }
   const todayIso = getBusinessTodayIso();
-  if (input.startDate < shiftIsoDateByDays(todayIso, -MAX_PAST_START_DAYS)) {
+  if (input.startDate < addLocalDays(todayIso, -MAX_PAST_START_DAYS)) {
     return 'start_too_far_past';
   }
-  if (input.startDate > shiftIsoDateByDays(todayIso, MAX_FUTURE_START_DAYS)) {
+  if (input.startDate > addLocalDays(todayIso, MAX_FUTURE_START_DAYS)) {
     return 'start_too_far_future';
   }
-  if (
-    input.endDate !== null &&
-    input.endDate > shiftIsoDateByDays(input.startDate, MAX_SICKNESS_RANGE_DAYS)
-  ) {
+  if (input.endDate !== null && input.endDate > addLocalDays(input.startDate, MAX_SICKNESS_RANGE_DAYS)) {
     return 'range_too_long';
   }
   if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
@@ -138,20 +136,9 @@ const SICKNESS_WRITE_REFUSALS: ReadonlySet<string> = new Set([
 
 // The result of one sickness write function: the saved report, the refusal
 // raised under the lock, or the action's own failure code for anything else.
-function sicknessWriteResult(
-  outcome: { data: SicknessReportRow | null; error: { message: string } | null },
-  failureCode: string,
-  logLabel: string,
-): MutateSicknessReportResult {
-  if (outcome.error && SICKNESS_WRITE_REFUSALS.has(outcome.error.message)) {
-    return { success: false, error: outcome.error.message };
-  }
-  if (outcome.error || !outcome.data) {
-    logError(logLabel, outcome.error);
-    return { success: false, error: failureCode };
-  }
-  return { success: true, report: toSicknessReport(outcome.data) };
-}
+const sicknessWriteResult = rowWriteResultFor(SICKNESS_WRITE_REFUSALS, (row: SicknessReportRow) => ({
+  report: toSicknessReport(row),
+}));
 
 /**
  * Overlap hint against the person's approved vacation (visible signal, never
@@ -407,7 +394,7 @@ async function loadReportForMutation(context: ActionContext, reportId: string): 
   }
   if (!data) return { success: false, error: 'not_found' };
 
-  const report = toSicknessReport(data as SicknessReportRow);
+  const report = toSicknessReport(data);
   const { recordId, failed } = await loadOwnEmployeeRecordId(context.orgId, context.userId);
   if (failed) return { success: false, error: 'load_failed' };
   const isOwn = recordId !== null && recordId === report.employeeRecordId;
@@ -445,7 +432,7 @@ export async function endSicknessReport(rawInput: {
     if (input.endDate < report.startDate) {
       return { success: false, error: 'invalid_range' };
     }
-    if (input.endDate > shiftIsoDateByDays(report.startDate, MAX_SICKNESS_RANGE_DAYS)) {
+    if (input.endDate > addLocalDays(report.startDate, MAX_SICKNESS_RANGE_DAYS)) {
       return { success: false, error: 'range_too_long' };
     }
     if (report.dayPortion === 'half_day' && input.endDate !== report.startDate) {
@@ -742,7 +729,7 @@ export async function getSicknessCalendarEntries(
         startDate: row.start_date,
         endDate: row.end_date ?? windowEndIso,
         openEnded: row.end_date === null,
-        dayPortion: row.day_portion as VacationDayPortion,
+        dayPortion: toVacationDayPortion(row.day_portion),
       })),
     };
   } catch (error) {

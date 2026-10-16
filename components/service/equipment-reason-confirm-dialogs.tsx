@@ -20,7 +20,7 @@ import {
   setInstalledEquipmentArchived,
 } from '@/lib/installed-equipment/actions';
 import type { EquipmentDetail } from '@/lib/installed-equipment/types';
-import type { EquipmentDetailActions } from './use-equipment-detail-actions';
+import type { EquipmentActionDialogProps, EquipmentDetailActions } from './use-equipment-detail-actions';
 import { Spinner } from '@/components/ui/spinner';
 
 type EquipmentCorrectionDialogProps = {
@@ -89,17 +89,11 @@ export function EquipmentCorrectionDialog({
   );
 }
 
-type EquipmentArchiveDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  actions: EquipmentDetailActions;
-};
-
 export function EquipmentArchiveDialog({
   open,
   onOpenChange,
   actions,
-}: EquipmentArchiveDialogProps): ReactElement {
+}: EquipmentActionDialogProps): ReactElement {
   const { busy, item, reason, setReason, reasonError, attempted, errorFor } = actions;
   const { perform, rejectInvalid } = actions;
   return (

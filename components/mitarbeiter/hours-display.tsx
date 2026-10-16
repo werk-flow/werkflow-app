@@ -1,8 +1,10 @@
 'use client';
 
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
+import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
 import type { DailyTarget } from '@/lib/personnel/targets';
 
@@ -15,27 +17,6 @@ interface HoursDisplayProps {
   canViewStatus?: boolean | undefined;
   /** Resolved daily target (P1-04); without it the legacy 8h goal applies. */
   target?: DailyTarget | undefined;
-}
-
-// Legacy daily goal in minutes (8 hours); only used when no resolved target
-// is available — equals the labeled `default` target source.
-const DAILY_GOAL_MINUTES = DEFAULT_DAILY_TARGET_MINUTES;
-
-/**
- * Calculate total minutes including live elapsed time
- */
-function calculateTotalMinutes(
-  status: 'clocked_out' | 'working' | 'on_break',
-  statusStartedAt: string | null,
-  baseMinutes: number,
-  nowMs: number,
-): number {
-  if (status !== 'working' || !statusStartedAt) return baseMinutes;
-
-  const startMs = new Date(statusStartedAt).getTime();
-  const elapsedMinutes = Math.max(0, (nowMs - startMs) / (1000 * 60));
-
-  return baseMinutes + elapsedMinutes;
 }
 
 /**
@@ -63,36 +44,14 @@ export function HoursDisplay({
   target,
 }: HoursDisplayProps) {
   const effectiveStatus = status ?? (isClockedIn ? 'working' : 'clocked_out');
-  const [nowMs, setNowMs] = useState(() => (statusStartedAt ? new Date(statusStartedAt).getTime() : 0));
+  // Only a working member's minutes grow; the server and the hydrating render
+  // show the recorded minutes, the tick adds the running ones after mount.
+  const runningSince = effectiveStatus === 'working' ? statusStartedAt : null;
+  const nowMs = useMountedWallClockTick(60_000, runningSince !== null);
+  const totalMinutes = nowMs === null ? workMinutes : liveMinutes(workMinutes, runningSince, nowMs);
 
-  // Live update when clocked in
-  useEffect(() => {
-    if (effectiveStatus !== 'working' || !statusStartedAt) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      setNowMs(Date.now());
-    }, 0);
-
-    // Then update every minute for smoother progress
-    // eslint-disable-next-line no-restricted-syntax -- wall-clock render tick, no data polling
-    const interval = setInterval(() => {
-      setNowMs(Date.now());
-    }, 60000); // Update every minute
-
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, [effectiveStatus, statusStartedAt]);
-
-  const totalMinutes = useMemo(
-    () => calculateTotalMinutes(effectiveStatus, statusStartedAt, workMinutes, nowMs),
-    [effectiveStatus, nowMs, statusStartedAt, workMinutes],
-  );
-
-  const goalMinutes = target?.targetMinutes ?? DAILY_GOAL_MINUTES;
+  // Without a resolved target the labeled `default` target source applies.
+  const goalMinutes = target?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES;
   // Visible exception, not a silent assumption: mark unconfigured members.
   const goalHint =
     target?.source === 'default'

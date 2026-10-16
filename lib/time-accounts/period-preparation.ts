@@ -11,8 +11,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { buildLegacyIntervals } from './legacy-intervals';
 
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
-import { addLocalDays, resolveBerlinWallTime } from '@/lib/planning/date-time';
-import { toBusinessIsoDate, toEmploymentCondition } from '@/lib/personnel/types';
+import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime } from '@/lib/date-time/berlin';
+import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
 import { resolveDailyTarget, type DailyTarget } from '@/lib/personnel/targets';
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
@@ -27,7 +27,7 @@ import {
   type TimeCorrectionApplicationProjection,
   type TimeCorrectionSource,
 } from '@/lib/time-corrections/types';
-import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
+import type { TimeEntry, TimeEntryRow, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { loadApprovedVacationSpansByRecord } from '@/lib/vacation/server';
 import { calculateEmployeePeriod } from './calculation';
 import type {
@@ -80,22 +80,20 @@ export function getBerlinInstant(localDateTime: string): string {
   return resolved.instant.toISOString();
 }
 
-function toLegacyEntries(rows: Array<Record<string, unknown>>): TimeEntry[] {
+function toLegacyEntries(rows: readonly TimeEntryRow[]): TimeEntry[] {
   return rows.map((row) => ({
-    id: String(row.id),
-    userId: String(row.user_id),
-    organizationId: String(row.organization_id),
-    entryType: String(row.entry_type) as TimeEntry['entryType'],
-    timestamp: String(row.timestamp),
-    isManual: Boolean(row.is_manual),
-    status: String(row.status) as TimeEntry['status'],
-    reviewedBy: row.reviewed_by ? String(row.reviewed_by) : null,
-    reviewedAt: row.reviewed_at ? String(row.reviewed_at) : null,
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
-    originalTimestamp: row.original_timestamp ? String(row.original_timestamp) : null,
-    jobId: row.job_id ? String(row.job_id) : null,
-    projectId: row.project_id ? String(row.project_id) : null,
+    id: row.id,
+    userId: row.user_id,
+    organizationId: row.organization_id,
+    entryType: row.entry_type as TimeEntry['entryType'],
+    timestamp: row.timestamp,
+    isManual: row.is_manual,
+    status: row.status,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    jobId: row.job_id,
   }));
 }
 
@@ -551,7 +549,7 @@ function indexPeriodSources(
     ),
   );
   const effectiveEntries = projectLegacyEntriesForWindow({
-    entries: toLegacyEntries((legacyRows ?? []) as Array<Record<string, unknown>>),
+    entries: toLegacyEntries(legacyRows ?? []),
     applications: approvedCorrectionApplications,
     organizationId: context.orgId,
     startInstant: getBerlinInstant(`${addLocalDays(bounds.start, -1)}T00:00`),
@@ -983,8 +981,8 @@ function pushEmployeeWarningFindings(input: {
   for (const [index, current] of workedIntervals.entries()) {
     const previous = workedIntervals[index - 1];
     if (!previous) continue;
-    const previousDate = toBusinessIsoDate(new Date(previous.endedAt));
-    const currentDate = toBusinessIsoDate(new Date(current.startedAt));
+    const previousDate = formatBerlinLocalDate(previous.endedAt);
+    const currentDate = formatBerlinLocalDate(current.startedAt);
     if (previousDate === currentDate) continue;
     const restMinutes = Math.max(
       0,

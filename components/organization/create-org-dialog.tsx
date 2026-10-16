@@ -49,11 +49,11 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
     try {
       const result = await runCreate(name);
 
-      if (result.success && result.organizationId) {
+      if (result.success) {
         // A full load: the new organization is the active one, and the shell starts from its cookie.
         loadDocument(`/dashboard?created=${result.organizationId}`);
       } else {
-        setError(describeFailure(result.error ?? 'unexpected_error', ERROR_MESSAGES, UNEXPECTED_MESSAGE));
+        setError(describeFailure(result.error, ERROR_MESSAGES, UNEXPECTED_MESSAGE));
       }
     } catch (submitError) {
       logError('CreateOrgDialog: organization creation failed', submitError);

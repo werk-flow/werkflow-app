@@ -1,4 +1,4 @@
-import { getLocalDayKey, getLocalDayStart } from './day-utils';
+import { formatBerlinLocalDate, getLocalDayStart } from '@/lib/date-time/berlin';
 import type { TimeEntry } from './types';
 
 /** A closed period of an organization: its first and last Europe/Berlin date, both inclusive. */
@@ -32,14 +32,15 @@ export function isDateInClosedPeriod(date: string, closedPeriods: readonly Close
 /**
  * The Europe/Berlin date a recorded entry belongs to. A closing entry at
  * exactly midnight still closes the day before, as the database's
- * closed-period guard counts it.
+ * closed-period guard counts it. The unit test pins the midnight cases here.
+ * @internal
  */
 export function entryBusinessDate(entry: Pick<TimeEntry, 'timestamp' | 'entryType'>): string {
   const instant = new Date(entry.timestamp);
   const closesAtMidnight =
     (entry.entryType === 'clock_out' || entry.entryType === 'break_end') &&
     getLocalDayStart(instant).getTime() === instant.getTime();
-  return getLocalDayKey(closesAtMidnight ? new Date(instant.getTime() - 1) : instant);
+  return formatBerlinLocalDate(closesAtMidnight ? new Date(instant.getTime() - 1) : instant);
 }
 
 /** True when the recorded entry belongs to a day of a closed period. */

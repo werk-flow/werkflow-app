@@ -9,13 +9,14 @@
  * codes and fails on one the union does not carry, and scans the calendar
  * components for a rendered raw code.
  *
- * A sentence with whitespace is not a code: the time-tracking validators
- * return German sentences that already name the rule, and those pass through.
+ * A time rule refusal carries its times beside its code; its sentence comes
+ * from the time-tracking home (`lib/time-tracking/validation-messages.ts`).
  * A shared code keeps the shared sentence (`lib/action-messages.ts`) unless
  * the calendar names a more specific next step.
  */
 
-import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { describeFailure, SHARED_FAILURE_MESSAGES, type FailureFacts } from '@/lib/action-messages';
+import { TIME_VALIDATION_MESSAGES } from '@/lib/time-tracking/validation-messages';
 
 /** Codes returned by the actions the calendar calls (scanned by the unit test). */
 type CalendarActionErrorCode =
@@ -290,26 +291,35 @@ const CALENDAR_MESSAGES = {
   parkplatz_changed: 'Der Parkplatz wurde inzwischen geändert. Bitte lade die Ansicht neu.',
 } satisfies Record<CalendarRefusalCode, Sentence | null>;
 
-export const CALENDAR_REFUSAL_CODES = Object.keys(CALENDAR_MESSAGES) as CalendarRefusalCode[];
+/**
+ * Every code with a sentence, for the unit test that checks the map against the codes the
+ * calendar-reachable actions return.
+ * @internal
+ */
+export const CALENDAR_REFUSAL_CODES: readonly string[] = Object.keys(CALENDAR_MESSAGES);
 
-export function isCalendarRefusalCode(value: string): value is CalendarRefusalCode {
+function isCalendarRefusalCode(value: string): value is CalendarRefusalCode {
   return Object.hasOwn(CALENDAR_MESSAGES, value);
 }
 
 /**
  * The sentence for a refusal, or null when the code is handled elsewhere
- * (a dialog, a silent no-op). A server-side German sentence passes through.
- * An unknown code never reaches the user: it falls back to the generic
- * save failure, and the unit test keeps unknown codes out of the map.
+ * (a dialog, a silent no-op). Pass the whole failure when it can be a time
+ * rule refusal, so its sentence names its times. An unknown code never
+ * reaches the user: it falls back to the generic save failure, and the unit
+ * test keeps unknown codes out of the map.
  */
-export function calendarRefusalMessage(code: string, context: CalendarRefusalContext = {}): string | null {
+export function calendarRefusalMessage(
+  failure: string | FailureFacts,
+  context: CalendarRefusalContext = {},
+): string | null {
+  const code = typeof failure === 'string' ? failure : failure.error;
   if (isCalendarRefusalCode(code)) {
     const sentence = CALENDAR_MESSAGES[code];
     if (sentence === null) return null;
     return typeof sentence === 'function' ? sentence(context) : sentence;
   }
-  if (/\s/.test(code)) return code;
-  return SAVE_FAILED;
+  return describeFailure(failure, TIME_VALIDATION_MESSAGES, SAVE_FAILED);
 }
 
 /** Undo names its cause: the same sentence behind one fixed lead-in. */

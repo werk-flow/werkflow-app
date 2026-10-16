@@ -22,28 +22,20 @@ const URGENCY_CLASSES: Record<RequestUrgency, string> = {
   notfall: 'bg-destructive/10 text-destructive dark:bg-destructive/20',
 };
 
-export function RequestStatusBadge({ status }: { status: RequestStatus }) {
+function RequestPill({ tone, label }: { tone: string; label: string }) {
   return (
     <span
-      className={cn(
-        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        STATUS_CLASSES[status],
-      )}
+      className={cn('inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium', tone)}
     >
-      {REQUEST_STATUS_LABELS[status]}
+      {label}
     </span>
   );
 }
 
+export function RequestStatusBadge({ status }: { status: RequestStatus }) {
+  return <RequestPill tone={STATUS_CLASSES[status]} label={REQUEST_STATUS_LABELS[status]} />;
+}
+
 export function RequestUrgencyBadge({ urgency }: { urgency: RequestUrgency }) {
-  return (
-    <span
-      className={cn(
-        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium',
-        URGENCY_CLASSES[urgency],
-      )}
-    >
-      {REQUEST_URGENCY_LABELS[urgency]}
-    </span>
-  );
+  return <RequestPill tone={URGENCY_CLASSES[urgency]} label={REQUEST_URGENCY_LABELS[urgency]} />;
 }

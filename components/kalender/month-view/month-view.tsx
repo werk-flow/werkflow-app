@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { WEEKDAY_SHORT } from '@/lib/calendar/board-layout';
 import { canManageBlock } from '@/lib/calendar/day-row-status';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { monthCellItemsByDate, type MonthCellItem } from '@/lib/calendar/month-cell-items';
 import { monthGridRange, monthWeeks } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';

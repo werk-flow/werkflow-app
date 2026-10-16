@@ -26,13 +26,14 @@ mock.module('@/lib/supabase/admin', () => ({
 }));
 mock.module('@/lib/subscription/helpers', () => ({ isUserSubscribed: async () => false }));
 const { setActiveOrgCookie } = await import('@/lib/org/actions');
+const refused = (error: string) => ({ success: false, error });
 authenticated = false;
-await assert.rejects(setActiveOrgCookie(organizationId), /not_authenticated/);
+assert.deepEqual(await setActiveOrgCookie(organizationId), refused('not_authenticated'));
 authenticated = true;
-await assert.rejects(setActiveOrgCookie(organizationId), /not_a_member/);
+assert.deepEqual(await setActiveOrgCookie(organizationId), refused('not_a_member'));
 assert.equal(writes.length, 0);
 permitted = true;
-await setActiveOrgCookie(organizationId);
+assert.deepEqual(await setActiveOrgCookie(organizationId), { success: true });
 assert.deepEqual(writes, [
   [
     'current_org_id',
@@ -40,7 +41,7 @@ assert.deepEqual(writes, [
     { httpOnly: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30, path: '/' },
   ],
 ]);
-await assert.rejects(setActiveOrgCookie('10000000-0000-4000-8000-000000000002'), /not_a_member/);
+assert.deepEqual(await setActiveOrgCookie('10000000-0000-4000-8000-000000000002'), refused('not_a_member'));
 permitted = false;
-await assert.rejects(setActiveOrgCookie(organizationId), /not_a_member/);
+assert.deepEqual(await setActiveOrgCookie(organizationId), refused('not_a_member'));
 assert.equal(writes.length, 1, 'Denied or revoked membership must never produce a successful cookie write.');

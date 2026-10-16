@@ -20,7 +20,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import { formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { parseIsoLocalDate } from '@/lib/utils';
 import { useMaintenanceCoverageForm } from './use-maintenance-coverage-form';
 

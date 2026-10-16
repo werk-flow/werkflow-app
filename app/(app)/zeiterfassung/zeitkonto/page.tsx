@@ -4,6 +4,7 @@ import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
 import { formatMinutes, formatPeriod, PERIOD_STATE_LABELS } from '@/lib/time-accounts/presentation';
+import { formatBerlin } from '@/lib/utils';
 import {
   getTimeAccountOverview,
   OVERVIEW_EVENT_LIMIT,
@@ -58,10 +59,7 @@ function TimeAccountOverviewContent({ overview }: { overview: TimeAccountOvervie
               {formatMinutes(overview.account.currentBalanceMinutes)}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Eröffnet am{' '}
-              {new Intl.DateTimeFormat('de-DE', {
-                timeZone: 'Europe/Berlin',
-              }).format(new Date(`${overview.account.openedOn}T12:00:00Z`))}
+              Eröffnet am {formatBerlin(overview.account.openedOn, 'numericDate')}
             </p>
           </CardContent>
         </Card>
@@ -116,9 +114,7 @@ function TimeAccountOverviewContent({ overview }: { overview: TimeAccountOvervie
                 <div>
                   <p className="font-medium">{event.reason}</p>
                   <p className="text-sm text-muted-foreground">
-                    {new Intl.DateTimeFormat('de-DE', {
-                      timeZone: 'Europe/Berlin',
-                    }).format(new Date(`${event.effectiveDate}T12:00:00Z`))}
+                    {formatBerlin(event.effectiveDate, 'numericDate')}
                   </p>
                 </div>
                 <span className="font-medium tabular-nums">{formatMinutes(event.minutes)}</span>

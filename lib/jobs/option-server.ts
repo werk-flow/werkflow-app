@@ -71,6 +71,11 @@ export async function readEntityOptions(input: JobOptionRequest): Promise<JobOpt
   return loadJobEntityOptions(auth.context, parsed.data);
 }
 
+/**
+ * The option read behind the action's identity and input checks. The unit test drives
+ * the read with a resolved context.
+ * @internal
+ */
 export async function loadJobEntityOptions(context: AuthContext, input: Request): Promise<JobOptionResult> {
   // Managers browse their organization's options. Employee filters and manual
   // entries keep database RLS; a verified identity alone grants no admin read.

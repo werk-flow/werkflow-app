@@ -16,7 +16,8 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { removeMember, type OrgRole } from '@/lib/members/actions';
+import { removeMember } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 import { MemberRemoveConfirmDialog } from './member-actions-menu-remove-dialog';
@@ -104,9 +105,9 @@ export function MemberActionsMenu({
           loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(memberName || 'Mitglied')}`);
           return untilPageLeaves();
         }
-        setError(getMemberActionErrorMessage(result.error));
+        setError(getMemberActionErrorMessage(result));
       } catch {
-        setError(getMemberActionErrorMessage(undefined));
+        setError(getMemberActionErrorMessage(null));
       }
     });
   };

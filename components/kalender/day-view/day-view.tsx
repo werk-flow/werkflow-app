@@ -5,7 +5,7 @@ import { cn, toLocalDateString } from '@/lib/utils';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
 import { DAY_NAME_COLUMN_PX, minutesIntoDay } from '@/lib/calendar/day-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { JobParkingContext } from '@/lib/parking/types';
 import { getHolidayContextDays, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';

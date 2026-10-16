@@ -1,165 +1,52 @@
+import type { Database } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { InventoryPageQuery } from './list-page';
-export type InventoryItemType = 'material' | 'consumable' | 'tool' | 'asset';
-export type InventoryLocationType = 'storage' | 'room' | 'shelf' | 'vehicle' | 'other';
-export type InventoryMovementType =
-  | 'initial_count'
-  | 'stock_in'
-  | 'stock_out'
-  | 'job_take'
-  | 'job_return'
-  | 'correction'
-  | 'transfer_in'
-  | 'transfer_out';
-export type JobMaterialStatus = 'planned' | 'partially_taken' | 'taken' | 'returned' | 'cancelled';
+
+// The values the database check constraints allow for each text column.
+const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
+const INVENTORY_LOCATION_TYPES = ['storage', 'room', 'shelf', 'vehicle', 'other'] as const;
+const INVENTORY_MOVEMENT_TYPES = [
+  'initial_count',
+  'stock_in',
+  'stock_out',
+  'job_take',
+  'job_return',
+  'correction',
+  'transfer_in',
+  'transfer_out',
+] as const;
+const JOB_MATERIAL_STATUSES = ['planned', 'partially_taken', 'taken', 'returned', 'cancelled'] as const;
+
+export type InventoryItemType = (typeof INVENTORY_ITEM_TYPES)[number];
+export type InventoryLocationType = (typeof INVENTORY_LOCATION_TYPES)[number];
+export type InventoryMovementType = (typeof INVENTORY_MOVEMENT_TYPES)[number];
+export type JobMaterialStatus = (typeof JOB_MATERIAL_STATUSES)[number];
 export type InventoryStockStatus = 'in_stock' | 'low_stock' | 'out_of_stock';
 
-export type InventoryCategoryRow = {
-  id: string;
-  organization_id: string;
-  parent_category_id: string | null;
-  name: string;
-  description: string | null;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-};
+export function toJobMaterialStatus(value: string): JobMaterialStatus {
+  return constrainedValue(JOB_MATERIAL_STATUSES, value, 'job material status');
+}
 
-export type InventoryLocationRow = {
-  id: string;
-  organization_id: string;
-  parent_location_id: string | null;
-  name: string;
-  description: string | null;
-  location_type: InventoryLocationType;
-  sort_order: number;
-  is_active: boolean;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
+export function toInventoryMovementType(value: string): InventoryMovementType {
+  return constrainedValue(INVENTORY_MOVEMENT_TYPES, value, 'movement type');
+}
 
-export type InventorySupplierRow = {
-  id: string;
-  organization_id: string;
-  name: string;
-  customer_number: string | null;
-  email: string | null;
-  phone: string | null;
-  website: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type InventoryItemRow = {
-  id: string;
-  organization_id: string;
-  item_type: InventoryItemType;
-  name: string;
-  description: string | null;
-  category_id: string | null;
-  unit: string;
-  internal_sku: string | null;
-  manufacturer: string | null;
-  supplier_id: string | null;
-  supplier_article_number: string | null;
-  purchase_price_cents: number | null;
-  sale_price_cents: number | null;
-  currency_code: string;
-  tax_rate_basis_points: number;
-  is_billable: boolean;
-  global_minimum_stock: number | string;
-  global_target_stock: number | string | null;
-  track_quantity: boolean;
-  track_individual_assets: boolean;
-  notes: string | null;
-  is_active: boolean;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type InventoryBarcodeRow = {
-  id: string;
-  organization_id: string;
-  item_id: string;
-  barcode_value: string;
-  barcode_type: string;
-  is_primary: boolean;
-  created_at: string;
-};
-
-export type InventoryStockLevelRow = {
-  id: string;
-  organization_id: string;
-  item_id: string;
-  location_id: string;
-  quantity_on_hand: number | string;
-  updated_at: string;
-};
-
-export type JobMaterialLineRow = {
-  id: string;
-  organization_id: string;
-  job_id: string | null;
-  project_id: string | null;
-  item_id: string;
-  preferred_location_id: string | null;
-  planned_quantity: number | string;
-  taken_quantity: number | string;
-  returned_quantity: number | string;
-  billable_quantity: number | string;
-  is_billable: boolean;
-  is_unplanned: boolean;
-  status: JobMaterialStatus;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type InventoryMovementRow = {
-  id: string;
-  organization_id: string;
-  item_id: string;
-  location_id: string;
-  movement_type: InventoryMovementType;
-  quantity_delta: number | string;
-  quantity_before: number | string;
-  quantity_after: number | string;
-  job_id: string | null;
-  project_id: string | null;
-  job_material_line_id: string | null;
-  import_batch_id: string | null;
-  actor_id: string | null;
-  reason: string | null;
-  created_at: string;
-};
-
-export type InventoryAssetInstanceRow = {
-  id: string;
-  organization_id: string;
-  item_id: string;
-  asset_tag: string | null;
-  serial_number: string | null;
-  status: string;
-  current_location_id: string | null;
-  assigned_to_user_id: string | null;
-  current_job_id: string | null;
-  purchased_at: string | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-};
+type Tables = Database['public']['Tables'];
+export type InventoryCategoryRow = Tables['inventory_categories']['Row'];
+export type InventoryLocationRow = Tables['inventory_locations']['Row'];
+export type InventorySupplierRow = Tables['inventory_suppliers']['Row'];
+export type InventoryItemRow = Tables['inventory_items']['Row'];
+export type InventoryBarcodeRow = Tables['inventory_item_barcodes']['Row'];
+export type InventoryStockLevelRow = Tables['inventory_stock_levels']['Row'];
+export type JobMaterialLineRow = Tables['job_material_lines']['Row'];
+export type InventoryMovementRow = Tables['inventory_movements']['Row'];
+export type InventoryAssetInstanceRow = Tables['inventory_asset_instances']['Row'];
 
 export type InventoryCategory = {
   id: string;
-  parentCategoryId: string | null;
   name: string;
   description: string | null;
   sortOrder: number;
-  isActive: boolean;
 };
 
 export type InventoryLocation = {
@@ -412,11 +299,9 @@ export function toNumber(value: number | string | null | undefined): number {
 export function toInventoryCategory(row: InventoryCategoryRow): InventoryCategory {
   return {
     id: row.id,
-    parentCategoryId: row.parent_category_id,
     name: row.name,
     description: row.description,
     sortOrder: row.sort_order,
-    isActive: row.is_active,
   };
 }
 
@@ -426,7 +311,7 @@ export function toInventoryLocation(row: InventoryLocationRow): InventoryLocatio
     parentLocationId: row.parent_location_id,
     name: row.name,
     description: row.description,
-    locationType: row.location_type,
+    locationType: constrainedValue(INVENTORY_LOCATION_TYPES, row.location_type, 'location type'),
     sortOrder: row.sort_order,
     isActive: row.is_active,
   };
@@ -447,7 +332,7 @@ export function toInventorySupplier(row: InventorySupplierRow): InventorySupplie
 export function toInventoryItem(row: InventoryItemRow): InventoryItem {
   return {
     id: row.id,
-    itemType: row.item_type,
+    itemType: constrainedValue(INVENTORY_ITEM_TYPES, row.item_type, 'item type'),
     name: row.name,
     description: row.description,
     categoryId: row.category_id,

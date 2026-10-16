@@ -13,17 +13,9 @@ import {
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { getProfileAvatarUrl } from '@/lib/profile-avatar';
+import type { UserProfile } from '@/lib/profile-reference';
 
 // Types
-export type UserProfile = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  avatarPath: string | null;
-  avatarUrl: string | null;
-};
-
 export type UserProfileContextValue = {
   profile: UserProfile | null;
   isLoading: boolean;
@@ -56,7 +48,8 @@ export function UserProfileProvider({ children, initialProfile = null }: UserPro
   useEffect(() => {
     if (hydratedRef.current || initialProfile !== null) return;
     hydratedRef.current = true;
-    refreshProfile();
+    // As for a failed profile read: consumers keep their name fallbacks; the log keeps it.
+    refreshProfile().catch((error: unknown) => logError('user_profile.read_failed', error));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one self-hydration on mount, guarded by hydratedRef
   }, []);
 

@@ -8,7 +8,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-change-actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { logError } from '@/lib/logging';
-import { clockOutBeforeSignOut } from '@/lib/time-tracking/actions';
+import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
 
 /**
  * Best-effort step before every sign-out: a pending email-change challenge

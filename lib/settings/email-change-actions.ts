@@ -1,5 +1,6 @@
 'use server';
 
+import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { randomInt } from 'crypto';
 import { z } from '@/lib/zod';
@@ -14,6 +15,7 @@ import { transitionEmailChange } from '@/lib/settings/email-change-transition';
 import {
   CURRENT_EMAIL_OTP_EXPIRY_MINUTES,
   CURRENT_EMAIL_OTP_LENGTH,
+  type EmailChangeActionError,
   type EmailChangeActionResult,
 } from '@/lib/settings/email-change.types';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
@@ -33,11 +35,14 @@ function generateOtpCode(): string {
   return String(randomInt(0, 10 ** CURRENT_EMAIL_OTP_LENGTH)).padStart(CURRENT_EMAIL_OTP_LENGTH, '0');
 }
 
-async function buildResult(
-  success: boolean,
-  error?: EmailChangeActionResult['error'],
-): Promise<EmailChangeActionResult> {
-  return { success, error, state: await getInitialEmailChangeWizardState() };
+/** A failure with the wizard state the client shows next. */
+async function emailChangeFailure(error: EmailChangeActionError): Promise<EmailChangeActionResult> {
+  return { success: false, error, state: await getInitialEmailChangeWizardState() };
+}
+
+/** A success with the wizard state the client shows next. */
+async function emailChangeSuccess(): Promise<EmailChangeActionResult> {
+  return { success: true, state: await getInitialEmailChangeWizardState() };
 }
 
 // The 60-second send window per account (transition_email_change) paces
@@ -53,8 +58,8 @@ async function consumeEmailChangeCodeLimit(
     { action: 'email_change_code_per_user', subject: userId },
     { action: 'email_change_code_per_recipient', subject: recipient },
   );
-  if (verdict === 'limited') return buildResult(false, 'too_many_attempts');
-  if (verdict === 'unavailable') return buildResult(false, 'unexpected_error');
+  if (verdict === 'limited') return emailChangeFailure('too_many_attempts');
+  if (verdict === 'unavailable') return emailChangeFailure('unexpected_error');
   return null;
 }
 
@@ -80,31 +85,31 @@ async function sendEmailChangeOtpEmail(params: {
       kind: params.kind,
     },
   });
-  return buildResult(!error, error ? 'email_send_failed' : undefined);
+  return error ? emailChangeFailure('email_send_failed') : emailChangeSuccess();
 }
 
 export async function requestCurrentEmailChangeOtp(): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
-  if (!user.email) return buildResult(false, 'no_active_email');
+  if (!user) return emailChangeFailure('not_authenticated');
+  if (!user.email) return emailChangeFailure('no_active_email');
   const email = user.email.trim().toLowerCase();
   const refused = await consumeEmailChangeCodeLimit(user.id, email);
   if (refused) return refused;
   const code = generateOtpCode();
   const result = await transitionEmailChange(user, 'request_current', { codeHash: hashOtpCode(user, code) });
-  if ('error' in result) return buildResult(false, result.error);
+  if ('error' in result) return emailChangeFailure(result.error);
   return sendEmailChangeOtpEmail({ userId: user.id, email, code, kind: 'current' });
 }
 
 export async function verifyCurrentEmailChangeOtp(code: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
+  if (!user) return emailChangeFailure('not_authenticated');
   const parsed = otpCodeSchema.safeParse(code);
-  if (!parsed.success) return buildResult(false, 'invalid_code');
+  if (!parsed.success) return emailChangeFailure('invalid_code');
   const result = await transitionEmailChange(user, 'verify_current', {
     codeHash: hashOtpCode(user, parsed.data),
   });
-  return 'error' in result ? buildResult(false, result.error) : buildResult(true);
+  return 'error' in result ? emailChangeFailure(result.error) : emailChangeSuccess();
 }
 
 /** `email` is the parsed, lower-case destination address. */
@@ -113,7 +118,7 @@ async function sendNewEmailCode(
   email: string,
   operation: 'save_new' | 'resend_new',
 ): Promise<EmailChangeActionResult> {
-  if (email === user.email?.trim().toLowerCase()) return buildResult(false, 'invalid_email');
+  if (email === user.email?.trim().toLowerCase()) return emailChangeFailure('invalid_email');
   const refused = await consumeEmailChangeCodeLimit(user.id, email);
   if (refused) return refused;
   const code = generateOtpCode();
@@ -121,35 +126,35 @@ async function sendNewEmailCode(
     codeHash: hashOtpCode(user, code),
     newEmail: email,
   });
-  if ('error' in result) return buildResult(false, result.error);
+  if ('error' in result) return emailChangeFailure(result.error);
   return sendEmailChangeOtpEmail({ userId: user.id, email, code, kind: 'new' });
 }
 
 export async function savePendingNewEmailVerification(newEmail: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
+  if (!user) return emailChangeFailure('not_authenticated');
   const parsed = newEmailSchema.safeParse(newEmail);
-  if (!parsed.success) return buildResult(false, 'invalid_email');
+  if (!parsed.success) return emailChangeFailure('invalid_email');
   return sendNewEmailCode(user, parsed.data, 'save_new');
 }
 
 export async function touchPendingNewEmailVerification(newEmail: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
+  if (!user) return emailChangeFailure('not_authenticated');
   const parsed = newEmailSchema.safeParse(newEmail);
-  if (!parsed.success) return buildResult(false, 'invalid_email');
+  if (!parsed.success) return emailChangeFailure('invalid_email');
   return sendNewEmailCode(user, parsed.data, 'resend_new');
 }
 
 export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
+  if (!user) return emailChangeFailure('not_authenticated');
   const parsed = otpCodeSchema.safeParse(code);
-  if (!parsed.success) return buildResult(false, 'new_email_invalid_code');
+  if (!parsed.success) return emailChangeFailure('new_email_invalid_code');
   const claim = await transitionEmailChange(user, 'verify_new', { codeHash: hashOtpCode(user, parsed.data) });
-  if ('error' in claim) return buildResult(false, claim.error);
+  if ('error' in claim) return emailChangeFailure(claim.error);
   if (claim.status !== 'claimed' && claim.status !== 'completion_pending') {
-    return buildResult(false, 'unexpected_error');
+    return emailChangeFailure('unexpected_error');
   }
   const completionInput = { challengeId: claim.challengeId, completionToken: claim.token };
   if (claim.status === 'claimed') {
@@ -165,19 +170,19 @@ export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChange
         // claim stays locked until the changed account can be reconciled.
         if (isDefiniteEmailUpdateRejection(error.status)) {
           await transitionEmailChange(user, 'abandon_rejected_completion', completionInput);
-          return buildResult(false, 'unexpected_error');
+          return emailChangeFailure('unexpected_error');
         }
-        return buildResult(false, 'completion_pending');
+        return emailChangeFailure('completion_pending');
       }
     } catch {
-      return buildResult(false, 'completion_pending');
+      return emailChangeFailure('completion_pending');
     }
   }
   // Repeated calls only reconcile. They never issue another Auth update or
   // replace the destination while the first request might still be running.
   const completed = await transitionEmailChange(user, 'complete', completionInput);
-  if ('error' in completed) return buildResult(false, completed.error);
-  if (completed.status !== 'completed') return buildResult(false, 'unexpected_error');
+  if ('error' in completed) return emailChangeFailure(completed.error);
+  if (completed.status !== 'completed') return emailChangeFailure('unexpected_error');
   updateTag(CACHE_TAGS.profile(user.id));
   return {
     success: true,
@@ -196,14 +201,16 @@ export async function verifyNewEmailChangeOtp(code: string): Promise<EmailChange
 
 export async function resetEmailChangeWizard(): Promise<EmailChangeActionResult> {
   const user = await getAuthenticatedUser();
-  if (!user) return buildResult(false, 'not_authenticated');
+  if (!user) return emailChangeFailure('not_authenticated');
   const result = await transitionEmailChange(user, 'reset');
-  return 'error' in result ? buildResult(false, result.error) : buildResult(true);
+  return 'error' in result ? emailChangeFailure(result.error) : emailChangeSuccess();
 }
 
-export async function clearEmailChangeChallengeBeforeSignOut(): Promise<{ success: boolean }> {
+export async function clearEmailChangeChallengeBeforeSignOut(): Promise<
+  ActionResult<object, EmailChangeActionError>
+> {
   const user = await getAuthenticatedUser();
   if (!user) return { success: true };
   const result = await transitionEmailChange(user, 'reset');
-  return { success: !('error' in result) };
+  return 'error' in result ? { success: false, error: result.error } : { success: true };
 }

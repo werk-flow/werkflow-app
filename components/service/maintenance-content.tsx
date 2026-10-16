@@ -24,7 +24,7 @@ import { MaintenanceCoverageList, MaintenanceDueList, type DueAction } from './m
 import { MaintenancePlanActionDialog } from './maintenance-plan-action-dialog';
 import { MaintenancePlanCards, type PlanAction } from './maintenance-plan-cards';
 import { MaintenancePlanDialog } from './maintenance-plan-dialog';
-import { announceSubmission, useMaintenancePendingCreates } from './use-maintenance-pending-creates';
+import { maintenanceSubmissions, useMaintenancePendingCreates } from './use-maintenance-pending-creates';
 
 type MaintenanceList = keyof typeof MAINTENANCE_PAGE_PARAMS;
 
@@ -298,14 +298,14 @@ export function MaintenanceCreateButtons({
           open
           onOpenChange={setPlanDialogOpen}
           templates={templates}
-          onSubmitted={announceSubmission}
+          onSubmitted={maintenanceSubmissions.announce}
         />
       )}
       {coverageDialogOpen && (
         <MaintenanceCoverageDialog
           open
           onOpenChange={setCoverageDialogOpen}
-          onSubmitted={announceSubmission}
+          onSubmitted={maintenanceSubmissions.announce}
         />
       )}
     </div>

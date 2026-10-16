@@ -1,4 +1,7 @@
+import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { Database } from '@/lib/supabase/database.types';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
 // ============================================
 // Database Row Aliases
@@ -19,6 +22,10 @@ export const EMPLOYMENT_TYPES: EmploymentType[] = [
   'minijob',
   'sonstiges',
 ];
+
+export function toEmploymentType(value: string): EmploymentType {
+  return constrainedValue(EMPLOYMENT_TYPES, value, 'employment_type');
+}
 
 // ============================================
 // Application-Level Types (camelCase)
@@ -100,7 +107,7 @@ export function toEmploymentCondition(row: EmploymentConditionRow): EmploymentCo
     organizationId: row.organization_id,
     employeeRecordId: row.employee_record_id,
     validFrom: row.valid_from,
-    employmentType: row.employment_type as EmploymentType,
+    employmentType: toEmploymentType(row.employment_type),
     weeklyHours: row.weekly_hours,
     vacationDaysPerYear: row.vacation_days_per_year,
     note: row.note,
@@ -116,7 +123,7 @@ export function toEmployeeRecordEvent(row: EmployeeRecordEventRow): EmployeeReco
     organizationId: row.organization_id,
     employeeRecordId: row.employee_record_id,
     eventType: row.event_type,
-    eventPayload: (row.event_payload ?? {}) as Record<string, unknown>,
+    eventPayload: jsonRecordOrEmpty(row.event_payload),
     createdBy: row.created_by,
     createdAt: row.created_at,
   };
@@ -155,39 +162,22 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   sonstiges: 'Sonstiges',
 };
 
-// Business dates are Europe/Berlin dates regardless of where the code runs:
-// the server (UTC on Vercel) and every browser must agree on "today" or
-// derived states flip around midnight. sv-SE formats as YYYY-MM-DD.
-const BERLIN_DATE_FORMATTER = new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'Europe/Berlin',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-
-export function toBusinessIsoDate(date: Date): string {
-  return BERLIN_DATE_FORMATTER.format(date);
-}
-
-export function getBusinessTodayIso(): string {
-  return toBusinessIsoDate(new Date());
-}
-
 /**
- * Shift an ISO business date by whole days. Noon UTC anchors the calendar
- * date across DST changes (same technique as the target resolver).
+ * Shift an ISO business date by whole days. Product code calls addLocalDays
+ * (lib/date-time/berlin.ts); this name stays for the measurement digest
+ * inputs that import it (tests/audit/performance/calendar.spec.ts,
+ * tests/audit/support/performance-profile.ts), whose content must not change
+ * outside a measured release.
  */
 export function shiftIsoDateByDays(dateIso: string, days: number): string {
-  const date = new Date(`${dateIso}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return addLocalDays(dateIso, days);
 }
 
 export function getEmploymentState(
   record: Pick<EmployeeRecord, 'entryDate' | 'exitDate'>,
   today: Date = new Date(),
 ): EmploymentState {
-  const todayIso = toBusinessIsoDate(today);
+  const todayIso = formatBerlinLocalDate(today);
   // A person counts as exited from their exit date on — a member removed today
   // must immediately read as ausgeschieden, not tomorrow.
   if (record.exitDate && record.exitDate <= todayIso) return 'ausgeschieden';
@@ -211,7 +201,7 @@ export function getEffectiveCondition(
   conditions: EmploymentCondition[],
   onDate: Date = new Date(),
 ): EmploymentCondition | null {
-  const dateIso = toBusinessIsoDate(onDate);
+  const dateIso = formatBerlinLocalDate(onDate);
   const applicable = conditions
     .filter((condition) => condition.validFrom <= dateIso)
     .sort((a, b) => b.validFrom.localeCompare(a.validFrom));

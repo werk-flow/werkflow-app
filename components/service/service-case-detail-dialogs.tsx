@@ -25,7 +25,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
-import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/customer-relationships/date-time';
+import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/date-time/berlin';
 import { linkServiceCaseRelation } from '@/lib/service-cases/actions';
 import {
   SERVICE_CASE_RELATION_LABELS,
@@ -176,7 +176,7 @@ export function RelationDialog({
  * runs the write: the dialog stays open and pending until the server answers,
  * and a refusal shows here, beside the submit.
  */
-export function EvidenceDialog({
+export function ServiceCaseEvidenceDialog({
   options,
   open,
   onOpenChange,

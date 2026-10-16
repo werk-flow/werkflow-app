@@ -4,7 +4,7 @@ import { KalenderContentSkeleton } from '@/components/loading-states/kalender-co
 import { PageBody } from '@/components/shared/page-shell';
 import { ScrollRegion } from '@/components/ui/scroll-region';
 import { SectionError } from '@/components/ui/section-error';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { WorkSession } from '@/lib/time-tracking/types';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';

@@ -15,8 +15,8 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useServerAction } from '@/hooks/use-server-action';
 import { addClosureDay, removeClosureDay } from '@/lib/org/calendar-actions';
 import type { ClosureDay } from '@/lib/personnel/targets';
-import { toLocalDateString } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { formatBerlin, toLocalDateString } from '@/lib/utils';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { Spinner } from '@/components/ui/spinner';
 
 const CLOSURE_ERROR_MESSAGES = {
@@ -31,12 +31,7 @@ const CLOSURE_ERROR_MESSAGES = {
 } satisfies Record<string, string>;
 
 function formatClosureDay(value: string): string {
-  return new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
-    weekday: 'short',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
+  return formatBerlin(value, 'weekdayDate');
 }
 
 function ClosureDayList({

@@ -88,16 +88,13 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });
             // The calendar views' one optimistic owner writes through these actions; the contract holds each write.
-            builder.onResolve(
-              { filter: /^@\/lib\/(jobs|time-tracking|planning|work-lifecycle)\/actions$/ },
-              (args) => {
-                if (
-                  args.importer.endsWith('use-calendar-visit-writes.ts') ||
-                  args.importer.endsWith('use-calendar-park-mutations.ts')
-                )
-                  return { path: join(import.meta.dir, 'calendar-views-service-boundaries.tsx') };
-              },
-            );
+            builder.onResolve({ filter: /^@\/lib\/(jobs|planning|work-lifecycle)\/actions$/ }, (args) => {
+              if (
+                args.importer.endsWith('use-calendar-visit-writes.ts') ||
+                args.importer.endsWith('use-calendar-park-mutations.ts')
+              )
+                return { path: join(import.meta.dir, 'calendar-views-service-boundaries.tsx') };
+            });
             builder.onResolve({ filter: /^next\/navigation$/ }, (args) => {
               if (
                 args.importer.endsWith('use-list-navigation.ts') ||
@@ -137,7 +134,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^@\/(lib\/supabase\/client|components\/organization\/organization-context|components\/user\/user-profile-context|lib\/time-tracking\/actions)$/,
+                  /^@\/(lib\/supabase\/client|components\/organization\/organization-context|components\/user\/user-profile-context)$/,
               },
               (args) => {
                 if (
@@ -169,7 +166,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/actions|inventory\/actions|supabase\/client))$/,
+                  /^(next\/navigation|@\/lib\/(subscription\/actions|settings\/email-change-actions|time-tracking\/(?:clock-state|entry-write|review)-actions|inventory\/actions|supabase\/client))$/,
               },
               () => ({
                 path: join(import.meta.dir, 'service-boundaries.ts'),

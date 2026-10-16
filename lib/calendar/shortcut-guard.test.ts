@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { isCalendarShortcutKey, type ShortcutKeyEvent, type ShortcutTarget } from './shortcut-guard';
+import { isCalendarShortcutKey, type ShortcutKeyEvent } from './shortcut-guard';
+
+type ShortcutTarget = NonNullable<ShortcutKeyEvent['target']>;
 
 // A minimal element with ancestors: `closest` matches the simple selectors the
 // guard uses (a tag name, `[attr]` and `[attr="value"]`) against the element

@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { isValidIsoDate } from '@/lib/calendar/date-range';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { addLocalDays } from '@/lib/planning/date-time';
+import { addLocalDays } from '@/lib/date-time/berlin';
 import { putStorageObject, discardStorageObjects, createSignedDownloadUrl } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
@@ -95,15 +95,18 @@ const downloadPayrollExportFormSchema = z.object({ exportId: id });
  * responsibility read; `canManage` is then false, and the surface shows the
  * failure with a retry instead of treating it as "not responsible".
  */
-export async function getTimeAccountAccess(): Promise<{
-  canManage: boolean;
-  managementReadFailed: boolean;
-  isAdmin: boolean;
-  canProposeAdjustments: boolean;
-}> {
+export async function getTimeAccountAccess(): Promise<
+  { success: true } & {
+    canManage: boolean;
+    managementReadFailed: boolean;
+    isAdmin: boolean;
+    canProposeAdjustments: boolean;
+  }
+> {
   const context = await requireAuth();
   const management = await readTimeAccountManagement(context);
   return {
+    success: true,
     canManage: management.success && management.canManage,
     managementReadFailed: !management.success,
     isAdmin: context.role === 'admin',

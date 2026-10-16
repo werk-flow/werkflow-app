@@ -6,6 +6,7 @@ import { Card } from '@/components/ui/card';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { PersonnelQualificationSummary } from '@/lib/qualifications/types';
 import { SectionTitle } from '@/components/shared/section-title';
+import { formatBerlin } from '@/lib/utils';
 
 export type PersonnelQualificationSummaryData = PersonnelQualificationSummary;
 
@@ -17,7 +18,7 @@ export function PersonnelQualificationSummary({ data }: { data: PersonnelQualifi
       </RegionLoadError>
     );
   }
-  const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
+  const formatDate = (value: string) => formatBerlin(value, 'numericDate');
   return (
     <Card className="gap-4 p-4">
       <div className="flex items-start justify-between gap-3">

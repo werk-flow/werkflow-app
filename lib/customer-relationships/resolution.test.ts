@@ -4,6 +4,7 @@ import {
   buildTimelinePage,
   decodeTimelineCursor,
   isFollowUpOverdue,
+  isTimelineCursorSafe,
   resolveCommunicationGuidance,
   timelineItemKey,
 } from './resolution';
@@ -148,6 +149,29 @@ describe('customer timeline resolution', () => {
     ).toString('base64url');
 
     expect(decodeTimelineCursor(injected)).toBeNull();
+  });
+});
+
+describe('timeline cursor safety', () => {
+  const occurredAt = '2026-10-01T08:00:00Z';
+
+  test('accepts a hand-made production id whose version and variant nibbles are zero', () => {
+    expect(
+      isTimelineCursorSafe({ occurredAt, stableKey: 'job_created:b2000001-0000-0000-0000-000000000001' }),
+    ).toBe(true);
+  });
+
+  test('refuses an unknown kind, a malformed id and a malformed time', () => {
+    expect(
+      isTimelineCursorSafe({ occurredAt, stableKey: 'unknown:b2000001-0000-0000-0000-000000000001' }),
+    ).toBe(false);
+    expect(isTimelineCursorSafe({ occurredAt, stableKey: 'job_created:not-an-id' })).toBe(false);
+    expect(
+      isTimelineCursorSafe({
+        occurredAt: 'yesterday',
+        stableKey: 'job_created:b2000001-0000-0000-0000-000000000001',
+      }),
+    ).toBe(false);
   });
 });
 

@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { linkInstalledEquipmentSource } from '@/lib/installed-equipment/actions';
-import type { EquipmentDetailActions } from './use-equipment-detail-actions';
+import type { EquipmentActionDialogProps } from './use-equipment-detail-actions';
 import { useEquipmentSourceOptions } from './use-equipment-source-options';
 
 type SourceKind = 'job' | 'project' | 'document';
@@ -61,12 +61,6 @@ function SourceKindField({
   );
 }
 
-type EquipmentSourceDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  actions: EquipmentDetailActions;
-};
-
 /**
  * Links an exact source to the equipment. A job or project is searched on the
  * server first; its Arbeitsnachweis revisions and handover releases are read
@@ -77,7 +71,7 @@ export function EquipmentSourceDialog({
   open,
   onOpenChange,
   actions,
-}: EquipmentSourceDialogProps): ReactElement {
+}: EquipmentActionDialogProps): ReactElement {
   const { busy, item, reason, setReason, reasonError, attempted, errorFor, perform, rejectInvalid } = actions;
   const [kind, setKind] = useState<SourceKind>('job');
   const [workId, setWorkId] = useState('');

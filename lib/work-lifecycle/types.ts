@@ -148,6 +148,11 @@ export const WORK_DECLARED_KIND_LABELS: Record<WorkDeclaredDependencyKind, strin
   external_trade: 'Fremdgewerk',
 };
 
+/**
+ * Every directed execution transition, including the handover arcs that only the
+ * handover workflow takes. The unit test pins the whole table.
+ * @internal
+ */
 export const WORK_TRANSITIONS: Record<WorkExecutionState, WorkExecutionState[]> = {
   not_started: ['in_progress', 'cancelled'],
   in_progress: ['interrupted', 'execution_complete', 'cancelled'],

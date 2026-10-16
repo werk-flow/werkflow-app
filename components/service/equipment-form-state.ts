@@ -49,7 +49,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   installed_equipment_action_failed: GENERIC_EQUIPMENT_FORM_ERROR,
 };
 
-export function errorMessage(code: string): string {
+export function equipmentErrorMessage(code: string): string {
   return describeFailure(
     code,
     ERROR_MESSAGES,
@@ -70,7 +70,7 @@ export const EQUIPMENT_REQUIRED_FIELD_IDS: Array<[EquipmentRequiredField, string
 
 // Mirrors equipmentFormSchema and the update/replace reason rule so the user
 // sees the missing field instead of "Bitte prüfe die markierten Angaben".
-export function missingFields(
+export function missingEquipmentFields(
   form: EquipmentFormState,
   mode: EquipmentFormMode,
 ): Partial<Record<EquipmentRequiredField, string>> {

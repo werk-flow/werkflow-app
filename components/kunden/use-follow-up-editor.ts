@@ -12,7 +12,7 @@ import {
   formatBerlinDateTimeInput,
   parseBerlinDateTimeInput,
   tomorrowMorningInBerlin,
-} from '@/lib/customer-relationships/date-time';
+} from '@/lib/date-time/berlin';
 import type {
   ClientFollowUp,
   CustomerRelationshipBundle,

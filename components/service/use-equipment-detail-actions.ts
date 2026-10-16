@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
+import type { ActionResult } from '@/lib/action-result';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { getEquipmentMutationErrorMessage, type EquipmentDetail } from '@/lib/installed-equipment/types';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
@@ -21,6 +22,13 @@ type EquipmentActionScope =
   | `unlink:${string}`;
 
 type EquipmentActionError = { scope: EquipmentActionScope; message: string };
+
+/** The props of a dialog that runs one of the equipment page's actions. */
+export type EquipmentActionDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  actions: EquipmentDetailActions;
+};
 
 export type EquipmentDetailActions = {
   busy: ReturnType<typeof useBusyIds<EquipmentActionScope>>;
@@ -40,11 +48,7 @@ export type EquipmentDetailActions = {
     errors: Readonly<Record<string, string | undefined>>,
   ) => boolean;
   clearReason: () => void;
-  perform: (
-    scope: EquipmentActionScope,
-    task: () => Promise<{ success: boolean; error?: string }>,
-    onSuccess?: () => void,
-  ) => void;
+  perform: (scope: EquipmentActionScope, task: () => Promise<ActionResult>, onSuccess?: () => void) => void;
 };
 
 /** Live record, scoped pending state and the shared reason/error state of the equipment detail page. */
@@ -98,15 +102,13 @@ export function useEquipmentDetailActions(initial: EquipmentDetail): EquipmentDe
   // pending until the live view is authoritative again.
   function perform(
     scope: EquipmentActionScope,
-    task: () => Promise<{ success: boolean; error?: string }>,
+    task: () => Promise<ActionResult>,
     onSuccess?: () => void,
   ): void {
     setError(null);
     void busy.run(scope, async () => {
-      const result = await task().catch(() => ({
-        success: false as const,
-        error: undefined,
-      }));
+      // A thrown action reads as the generic failure.
+      const result = await task().catch(() => ({ success: false as const, error: undefined }));
       if (!result.success) {
         setError({
           scope,

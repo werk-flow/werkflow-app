@@ -9,7 +9,7 @@ import {
   resizedBarSpan,
 } from '@/lib/calendar/board-slots';
 import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
-import { addLocalDays } from '@/lib/planning/date-time';
+import { addLocalDays } from '@/lib/date-time/berlin';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
 import { reassignmentChanges, type BoardRowModel } from '@/lib/calendar/board-model';
 import {
@@ -24,12 +24,8 @@ import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messag
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useCalendarAnnounce } from '../surface/live-region';
 import type { DragSurface } from '../drag-engine/drag-engine';
-import type {
-  CalendarDragPayload,
-  CalendarDragTarget,
-  DragModifiers,
-  DragVerdict,
-} from '../drag-engine/payload';
+import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../drag-engine/payload';
+import type { DragVerdict } from '@/lib/calendar/drag-ghost';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import type { JobParkingContext } from '@/lib/parking/types';
 

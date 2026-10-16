@@ -4,6 +4,7 @@ import { FieldWorkPackSource } from '@/components/auftraege/work-pack/field-work
 import { EQUIPMENT_STATE_LABELS, EQUIPMENT_SUBTYPE_LABELS } from '@/lib/installed-equipment/types';
 import type { JobWithDetails } from '@/lib/jobs/types';
 import { SERVICE_CASE_URGENCY_LABELS } from '@/lib/service-cases/types';
+import { formatBerlin } from '@/lib/utils';
 import type { FieldWorkPackData } from './field-work-pack-data';
 
 type FieldWorkPackContextProps = {
@@ -74,8 +75,7 @@ export function FieldWorkPackContextSources({ job, data }: FieldWorkPackContextP
                       {context.templateName} · Version {context.templateVersionNumber}
                     </p>
                     <span className="text-xs text-muted-foreground">
-                      {context.planNumber} · fällig{' '}
-                      {new Intl.DateTimeFormat('de-DE').format(new Date(`${context.dueDate}T12:00:00Z`))}
+                      {context.planNumber} · fällig {formatBerlin(context.dueDate, 'numericDate')}
                     </span>
                   </div>
                   {context.operationalInstructions && (

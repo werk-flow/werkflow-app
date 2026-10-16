@@ -6,6 +6,7 @@ import { unstable_cache } from 'next/cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getProfileAvatarUrl } from '@/lib/profile-avatar';
+import type { UserProfile } from '@/lib/profile-reference';
 import { isAuthError, type User } from '@supabase/supabase-js';
 import { AuthUnavailableError, isRejectedIdentity } from '@/lib/auth/identity-errors';
 import { logReadFailure } from './read-request-cache';
@@ -376,15 +377,6 @@ export async function getOrganizationUserPreferencesForView(
     return { visibleColumns: getAuftraegePreferencesFromJson(null), preferences: null };
   }
 }
-
-export type UserProfile = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  avatarPath: string | null;
-  avatarUrl: string | null;
-};
 
 /**
  * Cross-request cached user profile. Email is passed in since it comes from

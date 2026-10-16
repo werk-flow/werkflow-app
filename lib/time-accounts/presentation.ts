@@ -1,3 +1,5 @@
+import { formatBerlin } from '@/lib/utils';
+
 export function formatMinutes(minutes: number): string {
   const sign = minutes < 0 ? '−' : minutes > 0 ? '+' : '';
   const absolute = Math.abs(minutes);
@@ -6,12 +8,9 @@ export function formatMinutes(minutes: number): string {
   return `${sign}${hours}:${String(remainder).padStart(2, '0')} Std.`;
 }
 
+/** September 2026: the month a period starting on `startDate` covers. */
 export function formatPeriod(startDate: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'Europe/Berlin',
-  }).format(new Date(`${startDate}T12:00:00.000Z`));
+  return formatBerlin(startDate, 'monthYear');
 }
 
 export const PERIOD_STATE_LABELS: Record<TimePeriodState, string> = {

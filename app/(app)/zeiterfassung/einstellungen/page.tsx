@@ -14,7 +14,7 @@ import { SubpageHeader } from '@/components/shared/subpage-header';
 import { formatGermanDate } from '@/lib/utils';
 import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
 import { getTimeAccountSettings, type TimeAccountSettingsData } from '@/lib/time-accounts/queries';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 function TimeAccountSettingsContent({
   settings,

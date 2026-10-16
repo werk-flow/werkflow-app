@@ -21,7 +21,7 @@ import {
   type MaintenanceTemplateOption,
 } from '@/lib/maintenance/types';
 import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
-import { formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { MaintenancePlanFormState } from './maintenance-plan-form-state';
 import type { MaintenancePlanFormController } from './use-maintenance-plan-form';
 import { parseIsoLocalDate } from '@/lib/utils';

@@ -1,8 +1,8 @@
 // Berlin-local date and schedule formatting of the dispatch panel.
 
+import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import type { DispatchOverviewOccurrence } from '@/lib/dispatch/types';
-import { getBusinessTodayIso, toBusinessIsoDate } from '@/lib/personnel/types';
-import { formatBerlinTime } from '@/lib/utils';
+import { formatBerlin, formatBerlinTime } from '@/lib/utils';
 
 // Also formats the batch preview's old/new instants — keep the two surfaces
 // visually identical so the preview reads like the panel rows it moves.
@@ -11,14 +11,8 @@ export function formatOccurrenceSchedule(entry: {
   startDate: string | null;
 }): string {
   if (entry.startAt) {
-    const start = new Date(entry.startAt);
-    const dateText = start.toLocaleDateString('de-DE', {
-      timeZone: 'Europe/Berlin',
-      weekday: 'short',
-      day: '2-digit',
-      month: '2-digit',
-    });
-    const timeText = formatBerlinTime(start);
+    const dateText = formatBerlin(entry.startAt, 'weekdayDayMonth');
+    const timeText = formatBerlinTime(entry.startAt);
     return `${dateText}, ${timeText} Uhr`;
   }
   if (entry.startDate) {
@@ -29,6 +23,6 @@ export function formatOccurrenceSchedule(entry: {
 }
 
 export function berlinLocalDateOf(entry: DispatchOverviewOccurrence): string {
-  if (entry.startAt) return toBusinessIsoDate(new Date(entry.startAt));
+  if (entry.startAt) return formatBerlinLocalDate(entry.startAt);
   return entry.startDate ?? getBusinessTodayIso();
 }

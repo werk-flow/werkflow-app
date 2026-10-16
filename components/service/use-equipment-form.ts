@@ -15,9 +15,9 @@ import type { EquipmentDetail, EquipmentFormInput, EquipmentListItem } from '@/l
 import {
   EQUIPMENT_REQUIRED_FIELD_IDS,
   GENERIC_EQUIPMENT_FORM_ERROR,
-  errorMessage,
+  equipmentErrorMessage,
   initialEquipmentForm,
-  missingFields,
+  missingEquipmentFields,
   toEquipmentFormPayload,
   equipmentParentOptions,
   equipmentSiteOptions,
@@ -91,7 +91,7 @@ export function useEquipmentForm({
   const siteOptions = equipmentSiteOptions(sites, form, initial);
   const parentOptions = equipmentParentOptions(sites, form, initial);
   const isPending = isCreating || isUpdating || isReplacing;
-  const fieldErrors = attempted ? missingFields(form, mode) : {};
+  const fieldErrors = attempted ? missingEquipmentFields(form, mode) : {};
 
   const payload = useMemo<EquipmentFormInput>(() => toEquipmentFormPayload(form), [form]);
 
@@ -102,7 +102,7 @@ export function useEquipmentForm({
   async function handleSubmit(): Promise<void> {
     setError(null);
     setAttempted(true);
-    const errors = missingFields(form, mode);
+    const errors = missingEquipmentFields(form, mode);
     const firstInvalid = EQUIPMENT_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
     if (firstInvalid) {
       document.getElementById(firstInvalid[1])?.focus();
@@ -132,7 +132,11 @@ export function useEquipmentForm({
           (created) =>
             created.success
               ? { success: true as const }
-              : { success: false as const, error: created.error, message: errorMessage(created.error) },
+              : {
+                  success: false as const,
+                  error: created.error,
+                  message: equipmentErrorMessage(created.error),
+                },
           () => ({
             success: false as const,
             error: 'unexpected_error',
@@ -174,7 +178,7 @@ export function useEquipmentForm({
                 error: 'installed_equipment_action_failed',
               };
     if (!result.success) {
-      setError(errorMessage(result.error));
+      setError(equipmentErrorMessage(result.error));
       return;
     }
     onOpenChange(false);

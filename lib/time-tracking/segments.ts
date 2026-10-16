@@ -8,7 +8,7 @@ import type {
   TimeTravelRole,
   TimeTravelRoute,
 } from './types';
-import { getLocalDayEnd, getLocalDayKey } from './day-utils';
+import { formatBerlinLocalDate, getLocalDayEnd } from '@/lib/date-time/berlin';
 
 export type TimeSegmentFact = TimeActivitySelection & {
   id: string;
@@ -128,6 +128,11 @@ function invalidSegmentShape(row: SegmentRow): never {
   throw new Error(`Invalid canonical time segment shape: ${row.id}`);
 }
 
+/**
+ * Minutes of a segment inside a range. The unit test pins the clamping here instead of
+ * through the activity totals.
+ * @internal
+ */
 export function getSegmentDurationMinutes(
   segment: Pick<TimeSegmentFact, 'startedAt' | 'endedAt'>,
   rangeStart: Date,
@@ -313,8 +318,8 @@ export function projectTimeSegmentsToLegacyTransitions(
       const followsPreviousSegment = Boolean(
         previous &&
           previous.segment.id !== current.segment.id &&
-          getLocalDayKey(new Date(previous.slice.startedAt)) ===
-            getLocalDayKey(new Date(current.slice.startedAt)) &&
+          formatBerlinLocalDate(new Date(previous.slice.startedAt)) ===
+            formatBerlinLocalDate(new Date(current.slice.startedAt)) &&
           previous.slice.endedAt === current.slice.startedAt,
       );
 
@@ -336,8 +341,8 @@ export function projectTimeSegmentsToLegacyTransitions(
       const continuesWithNextSegment = Boolean(
         next &&
           next.segment.id !== current.segment.id &&
-          getLocalDayKey(new Date(next.slice.startedAt)) ===
-            getLocalDayKey(new Date(current.slice.startedAt)) &&
+          formatBerlinLocalDate(new Date(next.slice.startedAt)) ===
+            formatBerlinLocalDate(new Date(current.slice.startedAt)) &&
           next.slice.startedAt === current.slice.endedAt,
       );
       if (continuesWithNextSegment) continue;

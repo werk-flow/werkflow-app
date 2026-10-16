@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { updateMemberRole, removeMember, type OrgRole, type MemberDetail } from '@/lib/members/actions';
+import { updateMemberRole, removeMember, type MemberDetail } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
@@ -87,14 +88,11 @@ export function useMitarbeiterDetailMemberActions({
     if (isUpdatingRole) return;
     setActionError(null);
     // A thrown action (network loss) reads as the generic failure instead of a stuck control.
-    const result = await runRoleUpdate(member.userId, newRole).catch(() => ({
-      success: false as const,
-      error: undefined,
-    }));
-    if (result.success) {
+    const result = await runRoleUpdate(member.userId, newRole).catch(() => null);
+    if (result?.success) {
       router.refresh();
     } else {
-      setActionError(getMemberActionErrorMessage(result.error));
+      setActionError(getMemberActionErrorMessage(result));
     }
   };
 
@@ -102,11 +100,8 @@ export function useMitarbeiterDetailMemberActions({
     if (isRemoving) return;
     setActionError(null);
     await runRemove(async () => {
-      const result = await removeMember(member.userId).catch(() => ({
-        success: false as const,
-        error: undefined,
-      }));
-      if (result.success) {
+      const result = await removeMember(member.userId).catch(() => null);
+      if (result?.success) {
         // Hard navigation: the refresh of this now-removed member's detail
         // redirects to plain /mitarbeiter and can land after a soft push,
         // dropping the banner param (documented post-delete race). Removal
@@ -114,7 +109,7 @@ export function useMitarbeiterDetailMemberActions({
         loadDocument(`/mitarbeiter?removed_member=${encodeURIComponent(fullName)}`);
         return untilPageLeaves();
       }
-      setActionError(getMemberActionErrorMessage(result.error));
+      setActionError(getMemberActionErrorMessage(result));
     });
   };
 

@@ -70,7 +70,7 @@ export const SERVICE_CASE_REQUIRED_FIELD_IDS: Array<[ServiceCaseRequiredField, s
 
 // Mirrors the server schema (serviceCaseCreateSchema / serviceCaseUpdateSchema)
 // so the user sees the missing field instead of a generic "Bitte prüfe".
-export function missingFields(
+export function missingServiceCaseFields(
   form: ServiceCaseFormState,
   isUpdate: boolean,
   terminal: boolean,

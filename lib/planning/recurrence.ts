@@ -1,4 +1,4 @@
-import { addLocalDays, addLocalMonths, getLocalWeekday, resolveBerlinWallTime } from './date-time';
+import { addLocalDays, addLocalMonths, getLocalWeekday, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type { MaterializedOccurrence, PlanningSeriesDraft } from './types';
 
 const MAX_OCCURRENCES = 730;
@@ -93,12 +93,4 @@ export function materializeSeries(
       dstResolution: resolved.resolution,
     };
   });
-}
-
-export function occurrenceIdentity(
-  organizationId: string,
-  lineageId: string,
-  originalStartLocal: string,
-): string {
-  return `${organizationId}:${lineageId}:${originalStartLocal}`;
 }

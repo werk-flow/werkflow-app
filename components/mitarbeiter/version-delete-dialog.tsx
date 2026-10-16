@@ -11,25 +11,31 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import type { EmploymentCondition } from '@/lib/personnel/types';
 import { formatGermanDate } from '@/lib/utils';
 import { Spinner } from '@/components/ui/spinner';
 
-type EmploymentConditionDeleteDialogProps = {
-  deleteTarget: EmploymentCondition | null;
+type VersionDeleteDialogProps = {
+  /** The question in the title, such as „Kondition löschen?“. */
+  title: string;
+  /** The version with its article, such as „Die Kondition“; the date follows it. */
+  subject: string;
+  deleteTarget: { validFrom: string } | null;
   deleteError: string | null;
   isDeleting: boolean;
   onClose: () => void;
   onDelete: () => void;
 };
 
-export function EmploymentConditionDeleteDialog({
+/** The delete confirmation of a dated personnel version (a condition or a weekly schedule). */
+export function VersionDeleteDialog({
+  title,
+  subject,
   deleteTarget,
   deleteError,
   isDeleting,
   onClose,
   onDelete,
-}: EmploymentConditionDeleteDialogProps) {
+}: VersionDeleteDialogProps) {
   return (
     <AlertDialog
       open={deleteTarget !== null}
@@ -40,9 +46,9 @@ export function EmploymentConditionDeleteDialog({
     >
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Kondition löschen?</AlertDialogTitle>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>
-            Die Kondition ab {deleteTarget ? formatGermanDate(deleteTarget.validFrom) : ''} wird entfernt. Die
+            {subject} ab {deleteTarget ? formatGermanDate(deleteTarget.validFrom) : ''} wird entfernt. Die
             Löschung wird im Verlauf nachvollziehbar festgehalten.
           </AlertDialogDescription>
         </AlertDialogHeader>

@@ -7,8 +7,13 @@ import { Briefcase, Building2, ChevronRight, UserRound } from 'lucide-react';
 
 import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  ColumnsTableHeader,
+  SkeletonList,
+  SkeletonRows,
+  type SkeletonColumn,
+} from '@/components/ui/skeleton-table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import type { DocumentEmployee, OrganizationDocument } from '@/lib/documents/types';
 import type { Job, ProjectWithDetails, Client } from '@/lib/jobs/types';
 import { cn } from '@/lib/utils';
@@ -27,9 +32,9 @@ import {
   DocumentSummary,
   MobileDocumentCard,
   OpenContextLink,
-  type DocumentActionHandlers,
   type WorkContextGroupProps,
 } from './document-work-context-row-parts';
+import type { DocumentActionHandlers } from './document-row-actions';
 
 type DocumentWorkContextViewProps = {
   documents: OrganizationDocument[];
@@ -90,20 +95,6 @@ const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
     skeleton: <Skeleton className="ml-auto size-8 rounded-md" />,
   },
 ];
-
-function WorkContextTableHeader() {
-  return (
-    <TableHeader>
-      <TableRow>
-        {WORK_CONTEXT_COLUMNS.map((column) => (
-          <TableHead key={column.id} className={column.className}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
-    </TableHeader>
-  );
-}
 
 function getDocumentHandlers({
   document,
@@ -343,7 +334,7 @@ export function DocumentWorkContextView({
     <>
       <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
         <Table>
-          <WorkContextTableHeader />
+          <ColumnsTableHeader columns={WORK_CONTEXT_COLUMNS} />
           <TableBody>
             {projectGroups.map((group) => {
               const rowId = `project:${group.project.id}`;
@@ -403,7 +394,7 @@ export function WorkContextSkeleton() {
     <>
       <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
         <Table>
-          <WorkContextTableHeader />
+          <ColumnsTableHeader columns={WORK_CONTEXT_COLUMNS} />
           <TableBody>
             <SkeletonRows columns={WORK_CONTEXT_COLUMNS} interactive />
           </TableBody>

@@ -1,12 +1,7 @@
-const berlinDateFormatter = new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'Europe/Berlin',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
+import { formatBerlinLocalDate } from '../../date-time/berlin';
 
 export function resolveBusinessDate(anchor: string | undefined, now = new Date()): string {
-  if (anchor === undefined) return berlinDateFormatter.format(now);
+  if (anchor === undefined) return formatBerlinLocalDate(now);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(anchor)) throw new Error('Invalid test business-date anchor.');
   const parsed = new Date(`${anchor}T12:00:00Z`);
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== anchor) {

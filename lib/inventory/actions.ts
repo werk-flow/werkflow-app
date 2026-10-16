@@ -11,18 +11,13 @@ import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import type { AuthContext } from '@/lib/jobs/auth';
 import type {
-  InventoryCategoryRow,
   InventoryItem,
-  InventoryItemRow,
   InventoryItemType,
   InventoryLocation,
-  InventoryLocationRow,
   InventoryLocationType,
-  InventoryMovementRow,
   InventoryOverview,
   InventoryPickerOption,
   ProjectMaterialSummary,
-  InventoryStockLevelRow,
   JobMaterialLine,
   JobMaterialLineRow,
 } from './types';
@@ -31,10 +26,10 @@ import {
   toInventoryCategory,
   toInventoryItem,
   toInventoryLocation,
+  toJobMaterialStatus,
   toNumber,
 } from './types';
 import {
-  asRows,
   loadActiveInventoryLocations,
   loadInventoryOverviewLists,
   loadInventoryPickerOptions,
@@ -183,10 +178,6 @@ async function requireInventoryManager(): Promise<ActionResult<{ context: AuthCo
   return auth;
 }
 
-function asRow<T>(data: unknown): T | null {
-  return data ? (data as T) : null;
-}
-
 function cleanText(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? '';
   return trimmed ? trimmed : null;
@@ -280,7 +271,7 @@ async function getJobContext(
       .maybeSingle(),
   );
 
-  const job = asRow<{ id: string; project_id: string | null }>(data);
+  const job = data;
   if (error) return { success: false, error: 'load_failed' };
   if (!job) {
     return { success: false, error: 'job_not_found' };
@@ -322,7 +313,7 @@ async function getProjectContext(
       .maybeSingle(),
   );
 
-  const project = asRow<{ id: string }>(data);
+  const project = data;
   if (error) return { success: false, error: 'load_failed' };
   if (!project) {
     return { success: false, error: 'project_not_found' };
@@ -487,7 +478,7 @@ async function resolveInventoryOrganizationReference(
     return { success: false, error: 'reference_lookup_failed' };
   }
 
-  const resolvedReference = asRow<{ id: string }>(data);
+  const resolvedReference = data;
   if (!resolvedReference) return { success: false, error: missingError };
 
   return { success: true, referenceId: resolvedReference.id };
@@ -521,7 +512,7 @@ export async function getInventoryOverview(
   const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
   if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
   const page = parsedPage.data;
-  const movements = asRows<InventoryMovementRow>(movementsResult.data);
+  const movements = movementsResult.data ?? [];
   const lists = await loadInventoryOverviewLists(admin, orgId, page, movements);
   if (!lists.success) return lists;
 
@@ -656,7 +647,7 @@ export async function createInventoryLocation(
   }
 
   invalidateInventory();
-  return { success: true, location: toInventoryLocation(data as InventoryLocationRow) };
+  return { success: true, location: toInventoryLocation(data) };
 }
 
 export async function upsertInventoryItem(
@@ -721,7 +712,7 @@ export async function upsertInventoryItem(
   }
 
   invalidateInventory();
-  return { success: true, item: toInventoryItem(data as InventoryItemRow) };
+  return { success: true, item: toInventoryItem(data) };
 }
 
 export async function adjustInventoryStock(
@@ -799,7 +790,7 @@ async function insertMaterialLine(
   );
   if (itemRowError) return { success: false, error: 'load_failed' };
 
-  const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
+  const item = itemRow ? toInventoryItem(itemRow) : null;
   if (!item) return { success: false, error: 'item_not_found' };
 
   const locationReference = await resolveInventoryOrganizationReference(
@@ -906,7 +897,7 @@ export async function updateJobMaterialLine(
 
   const updateData: Record<string, unknown> = {};
   if (input.itemId !== undefined && input.itemId !== existing.item_id) {
-    const existingLine = existing as JobMaterialLineRow;
+    const existingLine = existing;
     const hasMovement =
       toNumber(existingLine.taken_quantity) > 0 || toNumber(existingLine.returned_quantity) > 0;
 
@@ -925,7 +916,7 @@ export async function updateJobMaterialLine(
     );
     if (itemRowError) return { success: false, error: 'load_failed' };
 
-    const item = itemRow ? toInventoryItem(itemRow as InventoryItemRow) : null;
+    const item = itemRow ? toInventoryItem(itemRow) : null;
     if (!item) return { success: false, error: 'item_not_found' };
 
     updateData.item_id = item.id;
@@ -1002,7 +993,7 @@ export async function deleteJobMaterialLine(lineIdInput: string): Promise<Action
   );
   if (existingError) return { success: false, error: 'load_failed' };
 
-  const line = asRow<JobMaterialLineRow>(existing);
+  const line = existing;
   if (!line) return { success: false, error: 'line_not_found' };
 
   // A line with movements is cancelled so its ledger keeps the line; one without
@@ -1068,7 +1059,7 @@ export async function getJobMaterialLines(
     return { success: false, error: 'lines_failed' };
   }
 
-  const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, asRows<JobMaterialLineRow>(data));
+  const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, data);
   if (!hydrated.success) return hydrated;
   const { lines } = hydrated;
 
@@ -1130,13 +1121,13 @@ export async function getProjectMaterialSummary(
     return { success: false, error: 'jobs_failed' };
   }
 
-  const rows = asRows<JobMaterialLineRow>(linesResult.data);
+  const rows = linesResult.data;
   const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, rows);
   if (!hydrated.success) return hydrated;
   const { lines } = hydrated;
   const directLines = lines.filter((line) => !line.jobId);
   const jobLines = lines.filter((line) => line.jobId);
-  const jobs = asRows<{ id: string; job_number: string | null; title: string | null }>(jobsResult.data);
+  const jobs = jobsResult.data;
   const jobMap = new Map(jobs.map((job) => [job.id, job]));
   const jobGroups = jobs
     .map((job) => ({
@@ -1196,8 +1187,8 @@ async function hydrateJobMaterialLines(
 
   const itemIds = Array.from(new Set(rows.map((line) => line.item_id)));
   const locationIds = Array.from(
-    new Set(rows.map((line) => line.preferred_location_id).filter(Boolean)),
-  ) as string[];
+    new Set(rows.flatMap((line) => (line.preferred_location_id ? [line.preferred_location_id] : []))),
+  );
 
   const [itemsResult, categoriesResult, locationsResult, stockResult] = await Promise.all([
     readInBatches(itemIds, (batch) =>
@@ -1246,10 +1237,10 @@ async function hydrateJobMaterialLines(
     return { success: false, error: 'lines_failed' };
   }
 
-  const items = asRows<InventoryItemRow>(itemsResult.data).map(toInventoryItem);
-  const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
-  const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
-  const stockLevels = asRows<InventoryStockLevelRow>(stockResult.data);
+  const items = itemsResult.data.map(toInventoryItem);
+  const categories = categoriesResult.data.map(toInventoryCategory);
+  const locations = locationsResult.data.map(toInventoryLocation);
+  const stockLevels = stockResult.data;
   const itemMap = new Map(items.map((item) => [item.id, item]));
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const locationMap = new Map(locations.map((location) => [location.id, location]));
@@ -1283,7 +1274,7 @@ async function hydrateJobMaterialLines(
         billableQuantity: toNumber(line.billable_quantity),
         isBillable: line.is_billable,
         isUnplanned: line.is_unplanned,
-        status: line.status,
+        status: toJobMaterialStatus(line.status),
         notes: line.notes,
         availableQuantity: stockByItem.get(item.id) ?? 0,
       },
@@ -1322,7 +1313,7 @@ export async function takeJobMaterial(
         .maybeSingle(),
     );
     if (lineError) return { success: false, error: 'load_failed' };
-    const existingLine = asRow<JobMaterialLineRow>(line);
+    const existingLine = line;
     if (!existingLine) return { success: false, error: 'line_not_found' };
     result = await recordMovement(admin, auth.context, {
       itemId: existingLine.item_id,
@@ -1384,7 +1375,7 @@ export async function takeProjectMaterial(
         .maybeSingle(),
     );
     if (lineError) return { success: false, error: 'load_failed' };
-    const existingLine = asRow<JobMaterialLineRow>(line);
+    const existingLine = line;
     if (!existingLine) return { success: false, error: 'line_not_found' };
     result = await recordMovement(admin, auth.context, {
       itemId: existingLine.item_id,
@@ -1438,7 +1429,7 @@ export async function returnJobMaterial(
   );
   if (lineDataError) return { success: false, error: 'load_failed' };
 
-  const line = asRow<JobMaterialLineRow>(lineData);
+  const line = lineData;
   if (!line) return { success: false, error: 'line_not_found' };
 
   let jobId: string | null = null;
@@ -1514,7 +1505,7 @@ export async function importInventoryRows(
     .select('id')
     .single();
 
-  const batch = asRow<{ id: string }>(batchData);
+  const batch = batchData;
   if (batchError || !batch) {
     logError('Error creating inventory import batch:', batchError);
     return { success: false, error: 'batch_failed' };

@@ -8,7 +8,7 @@ import { CACHE_TAGS } from '@/lib/data/cached';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isHolidayRegion } from '@/lib/personnel/holidays';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { parseHolidayRegionHistory, type HolidayRegionHistoryEntry } from '@/lib/personnel/targets';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';

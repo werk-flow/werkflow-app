@@ -1,4 +1,4 @@
-import { addLocalDays, getLocalWeekday } from '@/lib/planning/date-time';
+import { addLocalDays, getLocalWeekday } from '@/lib/date-time/berlin';
 
 /**
  * Pure layout of the Plantafel (P1-24a): the visible day columns of a
@@ -39,12 +39,6 @@ export function boardColumns(input: {
     columns.push({ date, weekday, isWeekend, isToday: date === input.todayIso });
   }
   return columns;
-}
-
-/** First and last date of a horizon, weekends included, for the window read. */
-export function boardDateRange(anchorIso: string, horizonWeeks: number): { from: string; to: string } {
-  const from = mondayOf(anchorIso);
-  return { from, to: addLocalDays(from, horizonWeeks * 7 - 1) };
 }
 
 export type BoardSpanItem = {
@@ -123,13 +117,6 @@ export function packLanes<Item extends BoardSpanItem>(
 
 /** Where a bar segment sits inside its span, for joined edges. */
 export type BarEdge = 'single' | 'start' | 'middle' | 'end';
-
-export function barEdge(index: number, count: number): BarEdge {
-  if (count <= 1) return 'single';
-  if (index === 0) return 'start';
-  if (index === count - 1) return 'end';
-  return 'middle';
-}
 
 /** Minutes of the day of a Berlin wall-clock string („09:30" → 570). */
 export function minutesOfDay(time: string | null | undefined): number {

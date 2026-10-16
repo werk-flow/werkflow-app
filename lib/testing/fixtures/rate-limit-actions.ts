@@ -103,14 +103,15 @@ assert.deepEqual(
 for (const action of ['email_change_code_per_user', 'email_change_code_per_recipient']) {
   reset({ [action]: 'refuse' });
   const current = await requestCurrentEmailChangeOtp();
-  assert.deepEqual([current.success, current.error], [false, 'too_many_attempts'], action);
+  assert.deepEqual(current.success ? null : current.error, 'too_many_attempts', action);
   const next = await savePendingNewEmailVerification('next@example.test');
-  assert.deepEqual([next.success, next.error], [false, 'too_many_attempts'], action);
+  assert.deepEqual(next.success ? null : next.error, 'too_many_attempts', action);
   assert.deepEqual(businessRpcs(), [], action);
   assert.equal(world.functionCalls.length, 0, action);
 }
 reset({ email_change_code_per_user: 'fail' });
-assert.equal((await requestCurrentEmailChangeOtp()).error, 'unexpected_error');
+const unavailable = await requestCurrentEmailChangeOtp();
+assert.equal(unavailable.success ? null : unavailable.error, 'unexpected_error');
 assert.deepEqual(businessRpcs(), []);
 assert.equal(world.functionCalls.length, 0);
 reset({});

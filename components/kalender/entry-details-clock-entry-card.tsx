@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { EntryDetailsDateTimePicker } from './entry-details-date-time-picker';
-import { formatDateTime, getEntryLabel, getStatusConfig } from './entry-details-labels';
+import { formatDateTime, formatEntryDay, getEntryLabel, getStatusConfig } from './entry-details-labels';
 
 type EntryDetailsClockEntryCardProps = {
   entry: TimeEntry;
@@ -34,9 +34,7 @@ export function EntryDetailsClockEntryCard({
               value={editedValue}
               onChange={onEditedValueChange}
               label={getEntryLabel(entry)}
-              dateLabel={
-                editedBlockDate?.toLocaleDateString('de-DE') ?? originalDate?.toLocaleDateString('de-DE')
-              }
+              dateLabel={formatEntryDay(editedBlockDate ?? originalDate)}
               disableDateEditing
             />
           </div>

@@ -81,7 +81,8 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
         <form
           onSubmit={(e) => {
             e.stopPropagation();
-            handleSubmit(e);
+            // handleSubmit reports its own failures in the dialog.
+            void handleSubmit(e);
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col"

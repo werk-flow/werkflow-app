@@ -2,6 +2,7 @@
 
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
+import type { ActionResult } from '@/lib/action-result';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { resolveActionContext } from '@/lib/org/action-context';
@@ -9,11 +10,8 @@ import { CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 
-export type DeleteOrgResult = {
-  success: boolean;
-  error?: string;
-  nextOrgId?: string | null; // The next org to switch to (null if no remaining orgs)
-};
+/** A success names the organization to switch to, or null when none remains. */
+export type DeleteOrgResult = ActionResult<{ nextOrgId: string | null }>;
 
 const confirmationNameSchema = z.string();
 

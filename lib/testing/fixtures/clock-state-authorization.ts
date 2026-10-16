@@ -21,7 +21,7 @@ mock.module('@/lib/data/cached', () => ({
   getCachedOrganizationCalendar: forbiddenRead,
 }));
 const { getCanonicalClockState } = await import('@/lib/time-tracking/segment-actions');
-const { getCurrentClockState } = await import('@/lib/time-tracking/actions');
+const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
 for (const read of [getCanonicalClockState, getCurrentClockState]) {
   authenticated = false;
   assert.deepEqual(await read(organizationId), { success: false, error: 'not_authenticated' });

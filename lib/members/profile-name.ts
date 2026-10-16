@@ -9,6 +9,9 @@ export type ProfileNameFields = {
   email: string | null;
 };
 
+/** An organization member as the calendar and time-tracking pages hand their member list to the views. */
+export type MemberListEntry = ProfileNameFields & { user_id: string; email: string; role: string };
+
 export function formatProfileName(profile: ProfileNameFields): string {
   return [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'Unbekannt';
 }

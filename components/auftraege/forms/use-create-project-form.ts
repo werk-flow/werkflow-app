@@ -4,6 +4,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect } from 'react';
 import { getNextProjectNumber } from '@/lib/projects/actions';
+import { logError } from '@/lib/logging';
 import type { Job } from '@/lib/jobs/types';
 import type { ClientSelectItem } from '../shared/client-select-with-create';
 
@@ -39,11 +40,14 @@ export function useCreateProjectForm({
 
   useEffect(() => {
     if (!isActive) return;
-    getNextProjectNumber().then((result) => {
-      if (result.success) {
-        setProjectNumber((current) => current || result.projectNumber);
-      }
-    });
+    // Without a suggestion the field stays empty for the user to fill; the log keeps the failure.
+    getNextProjectNumber()
+      .then((result) => {
+        if (result.success) {
+          setProjectNumber((current) => current || result.projectNumber);
+        }
+      })
+      .catch((error: unknown) => logError('projects.next_number_failed', error));
   }, [isActive]);
 
   const jobSearch = useJobEntityOptions(

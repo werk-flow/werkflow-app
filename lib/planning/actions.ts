@@ -2,7 +2,6 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
 import type { z } from '@/lib/zod';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
@@ -11,9 +10,11 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import {
   addLocalDays,
   addLocalMonthsClamped,
+  BERLIN_TIME_ZONE,
   formatBerlinLocalDateTime,
+  getBusinessTodayIso,
   resolveBerlinWallTime,
-} from './date-time';
+} from '@/lib/date-time/berlin';
 import { preparePlanningCreation } from './creation';
 import { materializeSeries } from './recurrence';
 import {
@@ -189,7 +190,7 @@ export async function extendPlanningSeriesHorizon(
     startsAtLocal: series.starts_at_local,
     durationMinutes: series.duration_minutes,
     durationDays: series.duration_days,
-    timezone: 'Europe/Berlin',
+    timezone: BERLIN_TIME_ZONE,
     frequency: series.recurrence_frequency as PlanningSeriesDraft['frequency'],
     interval: series.recurrence_interval,
     weekdays: series.weekdays,
@@ -524,7 +525,7 @@ function buildRescheduledSeriesDraft(input: {
       series.time_kind === 'all_day'
         ? (input.request.durationDays ?? existingDurationDays ?? series.duration_days)
         : null,
-    timezone: 'Europe/Berlin',
+    timezone: BERLIN_TIME_ZONE,
     frequency: series.recurrence_frequency as PlanningSeriesDraft['frequency'],
     interval: series.recurrence_interval,
     weekdays: series.weekdays,

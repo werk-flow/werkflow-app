@@ -14,18 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { WEEKDAY_LABELS, type WorkSchedule } from '@/lib/personnel/schedule';
+import { WEEKDAY_LABELS } from '@/lib/personnel/schedule';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import { toLocalDateString } from '@/lib/utils';
-import { useWorkScheduleForm } from './use-work-schedule-form';
+import { useWorkScheduleForm, type WorkScheduleFormInput } from './use-work-schedule-form';
 
-type WorkScheduleDialogProps = {
-  recordId: string;
-  schedule: WorkSchedule | null;
-  onClose: (saved: boolean) => void;
-};
-
-export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkScheduleDialogProps) {
+export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkScheduleFormInput) {
   const {
     validFrom,
     setValidFrom,

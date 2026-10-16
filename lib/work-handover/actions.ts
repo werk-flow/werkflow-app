@@ -7,7 +7,7 @@ import type { ActionFailure } from '@/lib/action-result';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
-import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { authenticateAndAuthorize, type AuthContext } from '@/lib/jobs/auth';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -32,10 +32,6 @@ import type {
 } from './types';
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
-type AuthContext = Extract<
-  Awaited<ReturnType<typeof authenticateAndAuthorize>>,
-  { success: true }
->['context'];
 type Target = { targetType: WorkTargetType; targetId: string };
 type LoadedWorkspace = {
   organizationId: string;

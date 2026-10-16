@@ -25,10 +25,21 @@ const CONTEXT_RESOLVERS = new Set([
   'requireManagedInvite',
   // lib/org/cookies.ts: the cookie's organization only when the user is a current member.
   'resolveActiveOrgId',
+  // lib/org/page-context.ts: the same membership choice, with its role, for a page.
+  'resolvePageMembership',
+  // lib/time-tracking/action-access.ts: the time actions' shared steps over
+  // resolveActionContextFor and resolveActiveOrgId.
+  'verifyCurrentMembership',
+  'getCurrentOrgId',
 ]);
 
 /** The resolvers that verify their first argument as an organization the caller belongs to. */
-const ORGANIZATION_VERIFIERS = new Set(['resolveActionContextFor', 'resolveSelfServiceContextFor']);
+const ORGANIZATION_VERIFIERS = new Set([
+  'resolveActionContextFor',
+  'resolveSelfServiceContextFor',
+  // lib/time-tracking/action-access.ts: answers the role only for a current member.
+  'verifyCurrentMembership',
+]);
 
 /** Calls whose result is the signed-in user, so its id is a trusted `user_id` filter. */
 const USER_RESOLVERS = ['getAuthenticatedUser'];

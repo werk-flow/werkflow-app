@@ -9,18 +9,13 @@ import type {
   MaintenanceCoveragePendingDraft,
 } from './maintenance-coverage-dialog';
 import type { MaintenancePlanCreateSubmission, MaintenancePlanPendingDraft } from './maintenance-plan-dialog';
+import { createSubmissionChannel } from './submission-channel';
 
 type MaintenanceCreateSubmission = MaintenancePlanCreateSubmission | MaintenanceCoverageCreateSubmission;
 type MaintenancePendingDraft = MaintenancePlanPendingDraft | MaintenanceCoveragePendingDraft;
 
-// The page mounts the create buttons in their own Suspense tree beside the
-// heading, so a submission reaches the workspace through this module channel
-// instead of props. The workspace is the one listener: it renders the pending
-// card or row, settles through its live read, and shows the failure banner.
-const submissionListeners = new Set<(submission: MaintenanceCreateSubmission) => void>();
-export function announceSubmission(submission: MaintenanceCreateSubmission): void {
-  for (const listener of submissionListeners) listener(submission);
-}
+// The create buttons sit beside the heading; the workspace is the one listener.
+export const maintenanceSubmissions = createSubmissionChannel<MaintenanceCreateSubmission>();
 
 /** The workspace's optimistic create placeholders, fed by the toolbar's submission channel. */
 export function useMaintenancePendingCreates({
@@ -46,10 +41,7 @@ export function useMaintenancePendingCreates({
         })
         .finally(() => setPendingCreates((current) => current.filter((item) => item.id !== draft.id)));
     };
-    submissionListeners.add(listener);
-    return () => {
-      submissionListeners.delete(listener);
-    };
+    return maintenanceSubmissions.subscribe(listener);
   }, [liveInvalidate, liveRefresh, showBanner]);
   // Both lists are newest first, so a new record leads; a Realtime read that
   // arrives before the settle read drops the placeholder by id.

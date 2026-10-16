@@ -1,6 +1,6 @@
 /**
  * Invite-owned failure sentences for `describeFailure`. The shared codes
- * (`SHARED_FAILURE_CODES`) get their sentence from lib/action-messages.ts.
+ * (`SharedFailureCode`) get their sentence from lib/action-messages.ts.
  */
 export const SEND_INVITE_MESSAGES: Readonly<Record<string, string>> = {
   org_not_found: 'Organisation nicht gefunden.',

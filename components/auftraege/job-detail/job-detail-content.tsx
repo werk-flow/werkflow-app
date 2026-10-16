@@ -13,7 +13,7 @@ import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 
 import { readInBackground } from '@/lib/data/background-read-client';
-import type { TimeEntry } from '@/lib/time-tracking/types';
+import type { JobTimeParticipant, TimeEntry } from '@/lib/time-tracking/types';
 import { useLiveView } from '@/hooks/use-live-view';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import {
@@ -33,7 +33,6 @@ import { JobDetailDeleteDialog } from './job-detail-delete-dialog';
 import { JobDetailHeader } from './job-detail-header';
 import { JobDetailOverview } from './job-detail-overview';
 import { JobDetailRelationDialogs } from './job-detail-relation-dialogs';
-import type { JobTimeParticipant } from './job-detail-time-sessions';
 import { useJobDetailAssignments } from './use-job-detail-assignments';
 import { useJobDetailMetadataFields } from './use-job-detail-metadata-fields';
 import { useJobDetailTimeSummary } from './use-job-detail-time-summary';

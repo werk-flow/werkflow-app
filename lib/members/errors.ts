@@ -1,5 +1,9 @@
+import type { ActionFailure } from '@/lib/action-result';
+import { describeFailure } from '@/lib/action-messages';
+import type { StrandedResponsibilityFailure } from '@/lib/members/actions';
 import { RESPONSIBILITY_LABELS, type OrganizationResponsibility } from '@/lib/responsibilities/types';
 
+/** Member-management sentences; shared codes come from `describeFailure`. */
 const MEMBER_ACTION_ERROR_MESSAGES: Record<string, string> = {
   cannot_remove_self: 'Du kannst dich nicht selbst entfernen.',
   cannot_remove_admin: 'Der Organisationsadmin kann nicht entfernt werden.',
@@ -15,6 +19,8 @@ const MEMBER_ACTION_ERROR_MESSAGES: Record<string, string> = {
   member_changed: 'Die Rolle wurde inzwischen geändert. Lade die Seite neu und prüfe sie.',
 };
 
+const MEMBER_ACTION_FALLBACK = 'Die Änderung konnte nicht gespeichert werden.';
+
 function responsibilityRemovalMessage(responsibilities: OrganizationResponsibility[]): string {
   const [onlyResponsibility] = responsibilities;
   if (responsibilities.length === 1 && onlyResponsibility !== undefined) {
@@ -24,19 +30,13 @@ function responsibilityRemovalMessage(responsibilities: OrganizationResponsibili
   return `Vor dem Entfernen müssen diese Verantwortlichkeiten neu zugewiesen oder auf den Standard zurückgestellt werden: ${labels}.`;
 }
 
-export function getMemberActionErrorMessage(error: string | undefined): string {
-  if (error?.startsWith('last_responsibility_holder:')) {
-    const responsibility = error.split(':')[1] as OrganizationResponsibility;
-    return responsibilityRemovalMessage([responsibility]);
-  }
-  if (error?.startsWith('last_responsibility_holders:')) {
-    const responsibilities = error
-      .slice('last_responsibility_holders:'.length)
-      .split(',')
-      .filter(Boolean) as OrganizationResponsibility[];
-    return responsibilityRemovalMessage(responsibilities);
-  }
-  return MEMBER_ACTION_ERROR_MESSAGES[error ?? ''] ?? 'Die Änderung konnte nicht gespeichert werden.';
+/** The sentence for a failed role change or removal; null is a call that never answered. */
+export function getMemberActionErrorMessage(
+  failure: ActionFailure | StrandedResponsibilityFailure | null,
+): string {
+  if (failure === null) return MEMBER_ACTION_FALLBACK;
+  if ('responsibilities' in failure) return responsibilityRemovalMessage(failure.responsibilities);
+  return describeFailure(failure.error, MEMBER_ACTION_ERROR_MESSAGES, MEMBER_ACTION_FALLBACK);
 }
 
 export function getResponsibilityRemovalBlockMessage(

@@ -8,7 +8,13 @@ import { cn } from '@/lib/utils';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { EntryDetailsDateTimePicker } from './entry-details-date-time-picker';
-import { formatDateTime, getEntryLabel, getStatusConfig, type StatusConfig } from './entry-details-labels';
+import {
+  formatDateTime,
+  formatEntryDay,
+  getEntryLabel,
+  getStatusConfig,
+  type StatusConfig,
+} from './entry-details-labels';
 import { buildDraftEntry, getBreakDurationMinutes, type EditableBreak } from './entry-details-timeline';
 import type { EntryDetailsDraft } from './use-entry-details-draft';
 
@@ -45,9 +51,7 @@ function EntryDetailsBreakEditFields({
             value={workBreak.breakStart}
             onChange={(value) => onBreakChange(workBreak.key, 'breakStart', value)}
             label={getEntryLabel(breakStartEntry, index)}
-            dateLabel={
-              editedBlockDate?.toLocaleDateString('de-DE') ?? workBreak.breakStart.toLocaleDateString('de-DE')
-            }
+            dateLabel={formatEntryDay(editedBlockDate ?? workBreak.breakStart)}
             disableDateEditing
           />
         </div>
@@ -68,9 +72,7 @@ function EntryDetailsBreakEditFields({
               value={workBreak.breakEnd}
               onChange={(value) => onBreakChange(workBreak.key, 'breakEnd', value)}
               label={breakEndEntry ? getEntryLabel(breakEndEntry, index) : ''}
-              dateLabel={
-                editedBlockDate?.toLocaleDateString('de-DE') ?? workBreak.breakEnd.toLocaleDateString('de-DE')
-              }
+              dateLabel={formatEntryDay(editedBlockDate ?? workBreak.breakEnd)}
               disableDateEditing
             />
           </div>

@@ -48,7 +48,7 @@ mock.module('@/lib/data/cached', () => ({
   getCachedMemberships: async () => [],
 }));
 const { requestOrganizationJoin } = await import('@/lib/org/join-request-actions');
-const { generateRandomCode } = await import('@/lib/org/generate-code');
+const { generateUniqueOrgCode } = await import('@/lib/org/generate-code');
 const { ORGANIZATION_CODE_CHARSET, ORGANIZATION_CODE_LENGTH } = await import('@/lib/org/schemas');
 const codePattern = new RegExp(`^[${ORGANIZATION_CODE_CHARSET}]{${ORGANIZATION_CODE_LENGTH}}$`);
 
@@ -97,7 +97,7 @@ assert.equal(joinRequests().length, 1);
 Math.random = (): number => {
   throw new Error('organization codes must not use Math.random');
 };
-for (let index = 0; index < 200; index += 1) assert.match(generateRandomCode(), codePattern);
+for (let index = 0; index < 200; index += 1) assert.match(await generateUniqueOrgCode(), codePattern);
 const originalGetRandomValues = crypto.getRandomValues.bind(crypto);
 let draws = 0;
 crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
@@ -106,7 +106,7 @@ crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
   return array;
 }) as typeof crypto.getRandomValues;
 try {
-  assert.equal(generateRandomCode(), 'AAAAAA');
+  assert.equal(await generateUniqueOrgCode(), 'AAAAAA');
   assert.equal(draws, 2);
 } finally {
   crypto.getRandomValues = originalGetRandomValues;

@@ -142,14 +142,17 @@ const { getProfilesByIds } = await import('@/lib/members/actions');
 const { verifyNewEmailChangeOtp, verifyCurrentEmailChangeOtp, touchPendingNewEmailVerification } =
   await import('@/lib/settings/email-change-actions');
 const { getInitialEmailChangeWizardState } = await import('@/lib/settings/email-change-state');
+/** The failure code of an email change result; a success has none. */
+const failureCode = (result: { success: true } | { success: false; error: string }): string | null =>
+  result.success ? null : result.error;
 
 authenticated = false;
 assert.deepEqual(await getProfilesByIds(['00000000-0000-4000-8000-0000000000b1']), {
   success: false,
   error: 'not_authenticated',
 });
-assert.equal((await verifyCurrentEmailChangeOtp('123456')).error, 'not_authenticated');
-assert.equal((await verifyNewEmailChangeOtp('123456')).error, 'not_authenticated');
+assert.equal(failureCode(await verifyCurrentEmailChangeOtp('123456')), 'not_authenticated');
+assert.equal(failureCode(await verifyNewEmailChangeOtp('123456')), 'not_authenticated');
 assert.equal(dataReads, 0);
 assert.equal(rpcCalls, 0);
 authenticated = true;
@@ -222,10 +225,10 @@ membershipReadError = false;
 assert.equal(dataReads, beforeDeniedRead, 'denied callers never reach admin subject reads');
 assert.equal(cachedMembershipReads, 0, 'profile authorization must not consult the stale membership cache');
 
-assert.equal((await verifyNewEmailChangeOtp('bad')).error, 'new_email_invalid_code');
+assert.equal(failureCode(await verifyNewEmailChangeOtp('bad')), 'new_email_invalid_code');
 assert.equal(rpcCalls, 0);
-assert.equal((await touchPendingNewEmailVerification('new@example.test')).error, 'challenge_not_found');
-assert.equal((await verifyNewEmailChangeOtp('123456')).error, 'challenge_not_found');
+assert.equal(failureCode(await touchPendingNewEmailVerification('new@example.test')), 'challenge_not_found');
+assert.equal(failureCode(await verifyNewEmailChangeOtp('123456')), 'challenge_not_found');
 assert.equal(authUpdates, 0);
 const claim = {
   status: 'claimed',
@@ -242,11 +245,11 @@ assert.equal(authUpdates, 1, 'reconciliation must not repeat the Auth write');
 transitionResponse = claim;
 authError = { status: 504 };
 operations.length = 0;
-assert.equal((await verifyNewEmailChangeOtp('123456')).error, 'completion_pending');
+assert.equal(failureCode(await verifyNewEmailChangeOtp('123456')), 'completion_pending');
 assert.deepEqual(operations, ['verify_new'], 'ambiguous Auth result must retain its claim');
 authError = { status: 422 };
 operations.length = 0;
-assert.equal((await verifyNewEmailChangeOtp('123456')).error, 'unexpected_error');
+assert.equal(failureCode(await verifyNewEmailChangeOtp('123456')), 'unexpected_error');
 assert.deepEqual(operations, ['verify_new', 'abandon_rejected_completion']);
 tables.email_change_challenges = [
   {

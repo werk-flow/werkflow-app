@@ -181,15 +181,21 @@ mock.module('@/lib/responsibilities/server', () => ({
   ...responsibilities,
   authorizeResponsibilityForTarget: async () => ({ success: true }),
 }));
-const {
-  addManualEntry,
-  deleteEntry,
-  deleteEntriesBatch,
-  reviewEntries,
-  reviewChangeRequest,
-  updateEntry,
-  getCurrentClockState,
-} = await import('@/lib/time-tracking/actions');
+const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry } = await import(
+  '@/lib/time-tracking/entry-write-actions'
+);
+const { reviewEntries, reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
+const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
+const { getTimeEntries, getTimeEntriesForJob } = await import('@/lib/time-tracking/entry-read-actions');
+
+// A read names the organization or the job: another organization's entries
+// and another organization's job are refused before any entry is read.
+const range = { from: yesterday(0), to: today };
+assert.deepEqual(await getTimeEntries({ organizationId: foreignOrganization, ...range }), {
+  success: false,
+  error: 'not_a_member',
+});
+assert.deepEqual(await getTimeEntriesForJob(foreignJob), { success: false, error: 'not_a_member' });
 
 // A paired id from another organization or another person deletes nothing,
 // not even the authorized entry.

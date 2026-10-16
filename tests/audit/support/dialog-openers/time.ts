@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import { addLocalDays } from '../../../../lib/planning/date-time';
+import { addLocalDays } from '../../../../lib/date-time/berlin';
 import { formatSicknessRange } from '../../../../lib/sickness/types';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import {

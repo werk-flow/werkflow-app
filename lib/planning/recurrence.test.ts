@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { materializeSeries, occurrenceIdentity } from './recurrence';
+import { materializeSeries } from './recurrence';
 import type { PlanningSeriesDraft } from './types';
 
 function draft(patch: Partial<PlanningSeriesDraft> = {}): PlanningSeriesDraft {
@@ -75,12 +75,10 @@ describe('planning recurrence materialization', () => {
     });
   });
 
-  test('uses a stable logical identity', () => {
+  test('keys each occurrence by its original local start', () => {
     const [firstOccurrence] = materializeSeries(draft(), '2027-01-01');
     if (!firstOccurrence) throw new Error('Expected at least one occurrence');
-    expect(occurrenceIdentity('org', 'lineage', firstOccurrence.originalStartLocal)).toBe(
-      'org:lineage:2026-08-14T09:00',
-    );
+    expect(firstOccurrence.originalStartLocal).toBe('2026-08-14T09:00');
   });
 
   test('rejects non-advancing intervals and respects an inclusive until date', () => {

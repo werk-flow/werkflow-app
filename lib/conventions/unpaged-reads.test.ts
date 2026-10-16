@@ -121,9 +121,9 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/sickness/server.ts::loadSicknessReportsForRecord::sickness_reports': ONE_EMPLOYEE,
   'lib/time-corrections/actions.ts::resubmitTimeCorrection::time_correction_request_sources':
     'the sources of one revision of one correction request',
-  'lib/time-tracking/actions.ts::getUserEntriesForDay::time_entries': ONE_USER_DAY,
-  'lib/time-tracking/actions.ts::clockOutBeforeSignOut::time_sessions': ONE_USER_DAY,
-  'lib/time-tracking/actions.ts::getTimeEntriesForProjectJobs::jobs': 'the jobs of one project',
+  'lib/time-tracking/action-access.ts::getUserEntriesForDay::time_entries': ONE_USER_DAY,
+  'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut::time_sessions': ONE_USER_DAY,
+  'lib/time-tracking/entry-read-actions.ts::getTimeEntriesForProjectJobs::jobs': 'the jobs of one project',
   'lib/time-tracking/open-session-orgs.ts::getOpenSessionOrgsForUserOnDay::time_entries': ONE_USER_DAY,
   'lib/time-tracking/segment-actions.ts::getCanonicalClockState::time_segments': ONE_USER_DAY,
   'lib/vacation/server.ts::loadVacationCountingContext::work_schedules': ONE_EMPLOYEE,

@@ -122,7 +122,7 @@ export async function clockOutBeforeSignOut(): Promise<{ success: true; clockedO
   return { success: true, clockedOutOrgIds: [] };
 }
 
-// `@/lib/time-tracking/actions`: the approval cards and the entry details dialog.
+// `@/lib/time-tracking/{entry-write,review}-actions`: the approval cards and the entry details dialog.
 export const reviewEntries = reviewEntriesContract;
 export const reviewChangeRequest = reviewChangeRequestContract;
 export const deleteEntry = deleteEntryContract;

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import type { WorkSession } from '@/lib/time-tracking/types';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import {
   deleteEntryDetailsBlock,
   reviewEntryDetailsEntries,

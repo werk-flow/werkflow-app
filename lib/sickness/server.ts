@@ -3,6 +3,7 @@ import 'server-only';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { ApprovedAbsenceSpan } from '@/lib/personnel/targets';
+import { toVacationDayPortion } from '@/lib/vacation/types';
 import { toSicknessReport, type SicknessReport } from './types';
 import { logError } from '@/lib/logging';
 
@@ -73,7 +74,7 @@ export async function loadActiveSicknessSpansByRecord(
       // Open-ended: absent until further notice, honestly bounded to the
       // requested window instead of pretending a known end date exists.
       endDate: row.end_date ?? windowEndIso,
-      dayPortion: row.day_portion as ApprovedAbsenceSpan['dayPortion'],
+      dayPortion: toVacationDayPortion(row.day_portion),
     });
     spansByRecord.set(row.employee_record_id, spans);
   }

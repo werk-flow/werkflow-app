@@ -27,7 +27,7 @@ function isCurrentPasswordError(error: unknown): boolean {
     typeof error === 'string'
       ? error
       : typeof error === 'object' && error && 'message' in error
-        ? String((error as { message?: unknown }).message ?? '')
+        ? String(error.message ?? '')
         : '';
   const normalized = message.toLowerCase();
 

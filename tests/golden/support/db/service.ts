@@ -7,7 +7,7 @@ import {
 } from '../../../../lib/installed-equipment/validation';
 import type { EquipmentCategory } from '../../../../lib/installed-equipment/types';
 import { maintenanceCoverageSchema, maintenancePlanSchema } from '../../../../lib/maintenance/validation';
-import { addLocalMonthsClamped } from '../../../../lib/planning/date-time';
+import { addLocalMonthsClamped } from '../../../../lib/date-time/berlin';
 import { serviceCaseCreateSchema, serviceCaseUpdateSchema } from '../../../../lib/service-cases/validation';
 import { toJson } from '../../../../lib/supabase/json';
 import type { ServiceCaseChargeContext } from '../../../../lib/service-cases/types';

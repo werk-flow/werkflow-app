@@ -127,7 +127,7 @@ async function readDomain<T>(orgId: string, result: T): Promise<T> {
   if (failRead) throw new Error('sensitive provider detail');
   return result;
 }
-mock.module('@/lib/time-tracking/actions', () => ({
+mock.module('@/lib/time-tracking/clock-state-actions', () => ({
   getCurrentClockState: (orgId: string) => readDomain(orgId, clock),
   getActiveJobIdsForOrg: (orgId: string) => readDomain(orgId, jobs),
 }));
@@ -177,7 +177,7 @@ memberships = [{ orgId: organizationId, role: 'employee' }];
 failRead = true;
 await check(request('clock'), 500, { success: false, error: 'unexpected_error' });
 
-const { getCurrentClockState, getActiveJobIdsForOrg } = await import('@/lib/time-tracking/state-client');
+const { fetchCurrentClockState, fetchActiveJobIdsForOrg } = await import('@/lib/time-tracking/state-client');
 const originalFetch = globalThis.fetch;
 const pending: Array<{ url: URL; init: RequestInit | undefined; resolve: (response: Response) => void }> = [];
 globalThis.fetch = Object.assign(
@@ -188,8 +188,8 @@ globalThis.fetch = Object.assign(
   { preconnect: originalFetch.preconnect },
 );
 try {
-  const first = getCurrentClockState(organizationId);
-  const second = getActiveJobIdsForOrg(organizationId);
+  const first = fetchCurrentClockState(organizationId);
+  const second = fetchActiveJobIdsForOrg(organizationId);
   assert.equal(pending.length, 2, 'both reads start without waiting for a Server Action');
   for (const item of pending) {
     assert.equal(item.url.pathname, '/api/time-tracking-state');
@@ -211,12 +211,12 @@ try {
     { kind: 'internal_activity', allocationKind: 'internal_activity', internalType: 'training' },
   ];
   for (const currentActivity of activities) {
-    const result = getCurrentClockState(organizationId);
+    const result = fetchCurrentClockState(organizationId);
     const value = { ...clock, state: { ...state, currentActivity } };
     expectDefined(pending.at(-1)).resolve(Response.json(value));
     assert.deepEqual(await result, value);
   }
-  const wrongOrg = getCurrentClockState(organizationId);
+  const wrongOrg = fetchCurrentClockState(organizationId);
   expectDefined(pending.at(-1)).resolve(
     Response.json({ ...clock, state: { ...state, organizationId: foreignOrg } }),
   );
@@ -226,11 +226,11 @@ try {
     Response.json(clock, { status: 500 }),
     new Response('private upstream detail', { status: 502 }),
   ]) {
-    const result = getCurrentClockState(organizationId);
+    const result = fetchCurrentClockState(organizationId);
     expectDefined(pending.at(-1)).resolve(response);
     assert.deepEqual(await result, { success: false, error: 'time_state_read_failed' });
   }
-  const invalidJobs = getActiveJobIdsForOrg(organizationId);
+  const invalidJobs = fetchActiveJobIdsForOrg(organizationId);
   expectDefined(pending.at(-1)).resolve(Response.json({ ...jobs, activeJobIds: [42] }));
   assert.deepEqual(await invalidJobs, { success: false, error: 'time_state_read_failed' });
 } finally {

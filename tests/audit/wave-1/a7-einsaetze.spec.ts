@@ -88,7 +88,7 @@ import {
   unscheduledDispatchRow,
 } from '../support/a7-steps';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
-import { formatBerlinLocalDateTime } from '../../../lib/planning/date-time';
+import { formatBerlinLocalDateTime } from '../../../lib/date-time/berlin';
 import { COMMITMENT_SOURCE_LABELS } from '../../../lib/commitments/types';
 import { DISPATCH_RECIPIENT_STATE_LABELS, dispatchErrorMessage } from '../../../lib/dispatch/types';
 import { REASON_MIN_8_MESSAGE } from '../../../lib/ui/field-validation';

@@ -53,7 +53,7 @@ mock.module('@/lib/org/cookies', () => ({
 mock.module('@/lib/auth/redirects', () => ({
   getAuthenticatedRedirectPath: async () => '/onboarding/start',
 }));
-mock.module('@/lib/time-tracking/actions', () => ({
+mock.module('@/lib/time-tracking/clock-state-actions', () => ({
   getCurrentClockState: () => new Promise(() => undefined),
   getActiveJobIdsForOrg: () => new Promise(() => undefined),
 }));

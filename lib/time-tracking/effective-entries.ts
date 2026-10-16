@@ -1,13 +1,14 @@
 import { compareTimeEntries } from '@/lib/time-tracking/entry-order';
 import type { TimeEntry } from './types';
-import { isSameLocalDay } from './day-utils';
+import { isSameLocalDay } from '@/lib/date-time/berlin';
 
 type EffectiveEntryOptions = {
   referenceDate?: Date;
   sameLocalDayOnly?: boolean;
 };
 
-function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
+/** Time entries in their canonical order (compareTimeEntries), as a new array. */
+export function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
   return [...entries].sort(compareTimeEntries);
 }
 

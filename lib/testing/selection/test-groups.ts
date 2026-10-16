@@ -479,7 +479,7 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     ['lint', 'eslint.config.mjs', 'lint'],
     ['docs', 'scripts/check-docs.ts', 'docs:check'],
     ['coverage', 'scripts/check-test-coverage.ts', 'test:coverage'],
-    ['unused', 'knip.jsonc', 'unused:check'],
+    ['unused', 'knip.ts', 'unused:check'],
     ['format', '.prettierrc.json', 'format:check'],
   ] as const) {
     groups.push({

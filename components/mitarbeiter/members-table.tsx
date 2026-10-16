@@ -5,23 +5,25 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Users } from 'lucide-react';
 
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader, SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
 import { MemberActionsMenu } from './member-actions-menu';
 import { STATUS_SKELETON, PROGRESS_SKELETON, memberColumns } from './members-table-columns';
 import { StatusBadge } from './status-badge';
 import { HoursDisplay } from './hours-display';
 import { AccessStateBadge, EmploymentStateBadge } from './personnel-state-badges';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgMemberInfo } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status';
 import type { PersonnelListEntry } from '@/lib/personnel/actions';
 import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from '@/lib/time-tracking/types';
+import { formatBerlin } from '@/lib/utils';
 
 /**
  * Check if the current user can view a member's working status
@@ -49,14 +51,7 @@ function canViewMemberStatus(
   return false;
 }
 
-export type OrgMember = {
-  user_id: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  role: OrgRole;
-  joined_at: string;
-};
+export type OrgMember = OrgMemberInfo;
 
 type RoleChangeHandler = (
   memberId: string,
@@ -106,20 +101,6 @@ type MemberRowProps = {
   removalBlockedMessage?: string | undefined;
 };
 
-function MembersTableHeader({ columns }: { columns: readonly SkeletonColumn[] }) {
-  return (
-    <TableHeader>
-      <TableRow>
-        {columns.map((column) => (
-          <TableHead key={column.id} className={column.className}>
-            {column.header}
-          </TableHead>
-        ))}
-      </TableRow>
-    </TableHeader>
-  );
-}
-
 /** Same frame as the loaded list; rows hover because loaded rows navigate. */
 export function MembersTableSkeleton({ count, showActions }: { count: number; showActions: boolean }) {
   const columns = memberColumns(showActions);
@@ -140,7 +121,7 @@ export function MembersTableSkeleton({ count, showActions }: { count: number; sh
       </SkeletonList>
       <div className="hidden md:block">
         <Table>
-          <MembersTableHeader columns={columns} />
+          <ColumnsTableHeader columns={columns} />
           <TableBody>
             <SkeletonRows columns={columns} rows={count} interactive />
           </TableBody>
@@ -212,14 +193,7 @@ function MemberCard({
         )}
         <div className="text-xs text-muted-foreground">
           <span className="block truncate">{member.email}</span>
-          <span>
-            Beigetreten:{' '}
-            {new Date(member.joined_at).toLocaleDateString('de-DE', {
-              day: '2-digit',
-              month: '2-digit',
-              year: '2-digit',
-            })}
-          </span>
+          <span>Beigetreten: {formatBerlin(member.joined_at, 'shortYearDate')}</span>
         </div>
       </div>
       {canManageMembers && (
@@ -316,13 +290,7 @@ function MemberTableRow({
           />
         )}
       </TableCell>
-      <TableCell className="text-muted-foreground">
-        {new Date(member.joined_at).toLocaleDateString('de-DE', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        })}
-      </TableCell>
+      <TableCell className="text-muted-foreground">{formatBerlin(member.joined_at, 'date')}</TableCell>
       {canManageMembers && (
         <TableCell onClick={(e) => e.stopPropagation()}>
           <MemberActionsMenu
@@ -408,7 +376,7 @@ export function MembersTable({
       {/* Desktop view - Table layout */}
       <div className="hidden md:block">
         <Table>
-          <MembersTableHeader columns={memberColumns(canManageMembers)} />
+          <ColumnsTableHeader columns={memberColumns(canManageMembers)} />
           <TableBody>
             {members.map((member) => {
               const memberName =

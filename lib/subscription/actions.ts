@@ -1,16 +1,15 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import type { ActionFailure } from '@/lib/action-result';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { userHasOrganizations } from './helpers';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 
-export type SimulatePaymentResult = {
-  success: boolean;
-  error?: string;
-};
+/** A success redirects and never returns, so only a failure comes back. */
+export type SimulatePaymentResult = ActionFailure;
 
 /**
  * Simulates a successful payment by activating the user's subscription.

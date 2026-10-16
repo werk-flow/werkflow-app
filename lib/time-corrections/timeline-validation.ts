@@ -1,5 +1,5 @@
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { getLocalDayKey, getLocalDayStart, getLocalDayEnd } from '@/lib/time-tracking/day-utils';
+import { formatBerlinLocalDate, getLocalDayStart, getLocalDayEnd } from '@/lib/date-time/berlin';
 import { validateDayEntrySequence } from '@/lib/time-tracking/validation';
 import { applyApprovedTimeCorrections } from './projection';
 import type { TimeCorrectionApplicationProjection, TimeCorrectionFact } from './types';
@@ -18,7 +18,9 @@ export function correctionTimelineWindow(
   if (!facts.length) return null;
   const owners = facts.map(correctionDayOwner);
   return {
-    affectedDays: new Set(facts.map((fact) => `${fact.userId}:${getLocalDayKey(correctionDayOwner(fact))}`)),
+    affectedDays: new Set(
+      facts.map((fact) => `${fact.userId}:${formatBerlinLocalDate(correctionDayOwner(fact))}`),
+    ),
     from: getLocalDayStart(new Date(Math.min(...owners.map((date) => date.getTime())))).toISOString(),
     // The closing boundary belongs to this day even when it lands at the next midnight.
     to: new Date(
@@ -44,7 +46,7 @@ export function validateCorrectionTimeline(input: {
   const days = new Map<string, TimeEntry[]>();
   for (const entry of entries) {
     const dayOwner = correctionDayOwner(entry);
-    const key = `${entry.userId}:${getLocalDayKey(dayOwner)}`;
+    const key = `${entry.userId}:${formatBerlinLocalDate(dayOwner)}`;
     if (!input.affectedDays.has(key)) continue;
     const day = days.get(key) ?? [];
     day.push(entry);

@@ -5,13 +5,13 @@ import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { addWorkSchedule, updateWorkSchedule } from '@/lib/personnel/actions';
 import type { WorkSchedule } from '@/lib/personnel/schedule';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { SCHEDULE_ERROR_MESSAGES, getScheduleErrorMessage } from './work-schedule-format';
 
 // Default for a new schedule: the common full-time week; the office adjusts.
 const DEFAULT_DAY_HOURS = ['8', '8', '8', '8', '8', '0', '0'];
 
-type WorkScheduleFormInput = {
+export type WorkScheduleFormInput = {
   recordId: string;
   schedule: WorkSchedule | null;
   onClose: (saved: boolean) => void;

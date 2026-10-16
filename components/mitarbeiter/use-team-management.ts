@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';

@@ -2,7 +2,8 @@ import { z } from '@/lib/zod';
 import { Constants } from '@/lib/supabase/database.types';
 import { uuidSchema } from '@/lib/validation/uuid';
 
-// Input schemas of the time-tracking Server Actions in actions.ts. Every
+// Input schemas of the time-tracking Server Actions (entry-write-actions.ts,
+// entry-read-actions.ts, review-actions.ts). Every
 // argument arrives from the network unchecked; each action parses it here
 // before its first use and answers `invalid_input` when it does not fit.
 

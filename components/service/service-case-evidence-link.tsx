@@ -11,7 +11,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { linkServiceCaseEvidence } from '@/lib/service-cases/actions';
 import type { ServiceCaseDetail, ServiceCaseEvidenceOption } from '@/lib/service-cases/types';
 import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
-import { EvidenceDialog } from './service-case-detail-dialogs';
+import { ServiceCaseEvidenceDialog } from './service-case-detail-dialogs';
 
 const EVIDENCE_ERRORS: Record<string, string> = {
   service_case_stale_version:
@@ -122,7 +122,7 @@ export function ServiceCaseEvidenceLink({
         </p>
       )}
       {(open || link.isPending) && (
-        <EvidenceDialog
+        <ServiceCaseEvidenceDialog
           open={open}
           onOpenChange={setOpen}
           options={options}

@@ -160,7 +160,7 @@ const longDialogOwners = new Set([
   'components/service/maintenance-coverage-documents-dialog.tsx#MaintenanceCoverageDocumentsDialog',
   'components/service/equipment-detail-content.tsx#EquipmentDetailContent',
   'components/service/service-case-detail-dialogs.tsx#RelationDialog',
-  'components/service/service-case-detail-dialogs.tsx#EvidenceDialog',
+  'components/service/service-case-detail-dialogs.tsx#ServiceCaseEvidenceDialog',
   'components/mitarbeiter/personnel-lifecycle-section.tsx#PersonnelLifecycleSection',
   'components/settings/personnel-onboarding-template-settings.tsx#PersonnelOnboardingTemplateSettings',
   'components/inventar/location-select-with-create.tsx#CreateLocationDialog',

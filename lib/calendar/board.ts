@@ -1,12 +1,12 @@
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { OrgRole } from '@/lib/jobs/types';
+import type { OrgRole } from '@/lib/roles';
 import {
   addLocalDays,
   formatBerlinLocalDate,
   resolveBerlinWallTime,
   splitTimedIntervalByBerlinDate,
-} from '@/lib/planning/date-time';
+} from '@/lib/date-time/berlin';
 
 /**
  * The board context (P1-24a): what the calendar needs beyond the window's

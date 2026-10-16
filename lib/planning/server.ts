@@ -32,7 +32,7 @@ import {
   formatBerlinLocalDateTime,
   resolveBerlinWallTime,
   splitTimedIntervalByBerlinDate,
-} from './date-time';
+} from '@/lib/date-time/berlin';
 import type {
   CapacityDayContext,
   MaterializedOccurrence,

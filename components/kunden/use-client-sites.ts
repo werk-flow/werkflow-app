@@ -10,7 +10,12 @@ import { createClientSite, updateClientSite } from '@/lib/clients/actions';
 import { buildSiteEcho, withPendingPrimary } from '@/lib/clients/relation-echo';
 import type { ClientSite } from '@/lib/clients/types';
 
-import { EMPTY_SITE, errorMessage, getRelationId, type SiteDialogState } from './client-relation-drafts';
+import {
+  EMPTY_SITE,
+  clientRelationErrorMessage,
+  getRelationId,
+  type SiteDialogState,
+} from './client-relation-drafts';
 import type { RelationRowTasks } from './use-relation-row-tasks';
 
 interface ClientSitesState {
@@ -111,7 +116,7 @@ export function useClientSites({
 
       if (!result.success) {
         siteList.rollback(echoId);
-        setSiteDialog({ siteId, draft, error: errorMessage(result.error) });
+        setSiteDialog({ siteId, draft, error: clientRelationErrorMessage(result.error) });
         return;
       }
       showBanner({ variant: 'success', message: 'Einsatzort gespeichert.' });
@@ -130,7 +135,7 @@ export function useClientSites({
       }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
       if (!result.success) {
         siteList.rollback(site.id);
-        setSectionError(errorMessage(result.error));
+        setSectionError(clientRelationErrorMessage(result.error));
         return;
       }
       await settleRow(siteList, site.id, waitForSites);

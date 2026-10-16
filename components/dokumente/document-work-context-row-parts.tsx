@@ -23,19 +23,11 @@ import { ListRow, ListRowActions } from '@/components/ui/list-row';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { DOCUMENT_CATEGORY_LABELS, type OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
-import { DocumentActionsMenu, DocumentContextMenuContent } from './document-row-actions';
-
-export type DocumentActionHandlers = {
-  onOpen: () => void;
-  onDetails: () => void;
-  onRename: () => void;
-  onLink: () => void;
-  onMove: () => void;
-  onCopy: () => void;
-  onDelete: () => void;
-  onRestore: () => void;
-  onPermanentDelete: () => void;
-};
+import {
+  DocumentActionsMenu,
+  DocumentContextMenuContent,
+  type DocumentActionHandlers,
+} from './document-row-actions';
 
 /** What every group of the work-context view needs to expand and render its documents. */
 export type WorkContextGroupProps = {

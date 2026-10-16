@@ -4,7 +4,6 @@ import {
   calendarAnchorDate,
   getCalendarFetchRange,
   isCurrentCalendarPeriod,
-  getCalendarMonthFetchRange,
   rangeCovers,
   shiftCalendarDate,
 } from './navigation';
@@ -46,8 +45,8 @@ describe('calendar navigation', () => {
   });
 
   test('covers every day in a six-week month grid plus session-pairing edges', () => {
-    const august = getCalendarMonthFetchRange(new Date(2026, 7, 31, 12));
-    const february = getCalendarMonthFetchRange(new Date(2027, 1, 10, 12));
+    const august = getCalendarFetchRange(new Date(2026, 7, 31, 12), 'month');
+    const february = getCalendarFetchRange(new Date(2027, 1, 10, 12), 'month');
 
     expect(august.start).toEqual(new Date(2026, 6, 26, 0, 0, 0, 0));
     expect(august.end).toEqual(new Date(2026, 8, 7, 23, 59, 59, 999));
@@ -107,7 +106,7 @@ describe('calendar fetch range (PF-01)', () => {
 
   test('month delegates to the six-week grid window', () => {
     expect(getCalendarFetchRange(local(2026, 8, 31), 'month')).toEqual(
-      getCalendarMonthFetchRange(local(2026, 8, 31)),
+      getCalendarFetchRange(local(2026, 8, 31), 'month'),
     );
   });
 

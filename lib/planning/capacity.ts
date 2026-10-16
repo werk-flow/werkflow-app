@@ -117,17 +117,6 @@ export function evaluateCapacity(
   return { conflicts, employeeDays };
 }
 
-export function calculateIntervalOverlapMinutes(
-  firstStart: Date,
-  firstEnd: Date,
-  secondStart: Date,
-  secondEnd: Date,
-): number {
-  const overlapStart = Math.max(firstStart.getTime(), secondStart.getTime());
-  const overlapEnd = Math.min(firstEnd.getTime(), secondEnd.getTime());
-  return Math.max(0, Math.round((overlapEnd - overlapStart) / 60_000));
-}
-
 export async function fingerprintSnapshot(value: unknown): Promise<string> {
   const serialized = JSON.stringify(sortObject(value));
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized));
@@ -154,7 +143,7 @@ function sortObject(value: unknown): unknown {
   }
   if (value && typeof value === 'object') {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
+      Object.entries(value)
         .sort(([left], [right]) => compareByCodePoint(left, right))
         .map(([key, nested]) => [key, sortObject(nested)]),
     );

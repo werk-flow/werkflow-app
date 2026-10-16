@@ -212,7 +212,8 @@ export function CalendarEntryDialog({
               onPendingChange={setIsFormPending}
               onSuccess={() => {
                 onOpenChange(false);
-                onJobSuccess?.();
+                // Both callers pass a synchronous refresh; nothing here can reject.
+                void onJobSuccess?.();
               }}
             />
           </TabsContent>

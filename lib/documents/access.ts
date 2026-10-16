@@ -6,7 +6,7 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
-import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
+import { toDocumentCategory, type DocumentFolderRow, type DocumentRow } from './types';
 
 // The authorization layer of the document Server Actions: the caller's
 // context, the per-target access checks and the per-document check that also
@@ -78,7 +78,7 @@ export async function getFolderById(
 
   if (error) return { success: false, error: 'load_failed' };
   if (!data) return { success: false, error: 'folder_not_found' };
-  return { success: true, folder: data as DocumentFolderRow };
+  return { success: true, folder: data };
 }
 
 export async function ensureFolder(
@@ -346,7 +346,7 @@ export async function getAuthorizedDocument(
     return { success: false, error: 'document_not_found' };
   }
 
-  const row = document as DocumentRow;
+  const row = document;
   const { data: protectedDocument, error: protectedError } = await loggedRead(
     'getAuthorizedDocument: personnel_documents read failed',
     context.admin
@@ -393,10 +393,7 @@ export async function getAuthorizedDocument(
         .maybeSingle(),
     );
     if (employeeError) return { success: false, error: 'load_failed' };
-    const releases = (protectedDocument.personnel_document_releases ?? []) as Array<{
-      document_version_number: number;
-      revoked_at: string | null;
-    }>;
+    const releases = protectedDocument.personnel_document_releases;
     const releasedVersionNumbers = releases
       .filter((release) => release.revoked_at === null)
       .map((release) => release.document_version_number);
@@ -426,7 +423,7 @@ export async function getAuthorizedDocument(
     .eq('document_id', row.id)
     .eq('organization_id', context.orgId);
 
-  const linkedRows = (links ?? []) as Pick<DocumentLinkRow, 'job_id' | 'project_id'>[];
+  const linkedRows = links ?? [];
   const jobIds = linkedRows.map((link) => link.job_id).filter((jobId): jobId is string => Boolean(jobId));
   const projectIds = linkedRows
     .map((link) => link.project_id)
@@ -490,7 +487,7 @@ export async function getDeletedDocumentForManager(
     return { success: false, error: 'document_not_found' };
   }
 
-  return { success: true, document: document as DocumentRow };
+  return { success: true, document };
 }
 
 export async function getVersionableDocument(

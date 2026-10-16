@@ -3,7 +3,7 @@
 // applies all-or-nothing; this module only computes the target schedule.
 
 import type { ActionFailure } from '@/lib/action-result';
-import { addLocalDays, formatBerlinLocalDateTime, resolveBerlinWallTime } from '@/lib/planning/date-time';
+import { addLocalDays, formatBerlinLocalDateTime, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type { DstResolution } from '@/lib/planning/types';
 
 export type BatchSourceOccurrence = {

@@ -11,10 +11,11 @@ import type { ActionResult } from '@/lib/action-result';
  * Call this after upserting a profile from a client component. The identity is
  * taken from the verified session, never from the caller (SI-004).
  */
-export async function invalidateProfileCache(): Promise<void> {
+export async function invalidateProfileCache(): Promise<ActionResult<object, 'not_authenticated'>> {
   const user = await getAuthenticatedUser();
-  if (!user) return;
+  if (!user) return { success: false, error: 'not_authenticated' };
   updateTag(CACHE_TAGS.profile(user.id));
+  return { success: true };
 }
 
 export type DeleteAccountResult = ActionResult;

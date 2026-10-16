@@ -17,14 +17,12 @@ export type JobParkingContext = {
   updatedAt: string;
 };
 
+/** Parking-owned sentences; the shared codes come from `describeFailure`. */
 export const PARKING_ERROR_MESSAGES: Record<string, string> = {
-  invalid_input: 'Die Eingaben sind unvollständig oder ungültig.',
   job_not_found: 'Der Auftrag wurde nicht gefunden.',
   job_not_parked: 'Nur geparkte Aufträge können Parkplatz-Kontext erhalten.',
   responsible_not_manager: 'Die verantwortliche Person muss ein aktives Büro- oder Admin-Mitglied sein.',
-  not_authorized: 'Keine Berechtigung für diese Aktion.',
   load_failed: 'Der Parkplatz-Kontext konnte nicht geladen werden.',
   update_failed: 'Der Parkplatz-Kontext konnte nicht gespeichert werden.',
   stale_version: 'Der Parkplatz-Kontext wurde inzwischen geändert. Bitte lade ihn neu.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };

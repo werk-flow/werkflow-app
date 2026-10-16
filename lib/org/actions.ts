@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import type { ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isUserSubscribed } from '@/lib/subscription/helpers';
@@ -18,11 +19,13 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
  * membership on every read, so this only refuses obviously wrong input early
  * and never stores a foreign organization for a stranger (SI-007).
  */
-export async function setActiveOrgCookie(orgId: string): Promise<void> {
+export async function setActiveOrgCookie(
+  orgId: string,
+): Promise<ActionResult<object, 'not_authenticated' | 'not_a_member'>> {
   const parsedOrgId = uuidSchema.safeParse(orgId);
-  if (!parsedOrgId.success) throw new Error('not_a_member');
+  if (!parsedOrgId.success) return { success: false, error: 'not_a_member' };
   const caller = await resolveActionContextFor(parsedOrgId.data);
-  if (!caller.success) throw new Error(caller.error);
+  if (!caller.success) return caller;
 
   const cookieStore = await cookies();
   cookieStore.set(CURRENT_ORG_COOKIE, parsedOrgId.data, {
@@ -31,13 +34,10 @@ export async function setActiveOrgCookie(orgId: string): Promise<void> {
     maxAge: CURRENT_ORG_MAX_AGE,
     path: '/',
   });
+  return { success: true };
 }
 
-export type CreateOrganizationResult = {
-  success: boolean;
-  organizationId?: string;
-  error?: string;
-};
+export type CreateOrganizationResult = ActionResult<{ organizationId: string }>;
 
 const organizationNameInputSchema = z.string();
 

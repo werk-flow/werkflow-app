@@ -19,6 +19,7 @@ import {
 import { boardJobsByRow, filterBoardGroups } from '@/lib/calendar/board-row-filters';
 import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
+import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
 type PlantafelModelInput = {
@@ -70,7 +71,7 @@ export function usePlantafelModel(input: PlantafelModelInput) {
     () =>
       plannedMinutesByEmployeeDate(
         jobs,
-        (record, date) => days.get(boardDayKey(record, date))?.targetMinutes ?? 480,
+        (record, date) => days.get(boardDayKey(record, date))?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES,
         recordIdByUserId,
       ),
     [days, jobs, recordIdByUserId],

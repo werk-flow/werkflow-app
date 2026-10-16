@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { cn, formatGermanDateTime, parseIsoLocalDate } from '@/lib/utils';
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
@@ -21,14 +21,15 @@ import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
 import { useClosedTimePeriods } from './use-closed-time-periods';
-import { EntryHistoryFilters, type EntryHistoryMemberInfo } from './entry-history-filters';
+import type { MemberListEntry } from '@/lib/members/profile-name';
+import { EntryHistoryFilters } from './entry-history-filters';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
 const NEW_ENTRY_ID = 'new';
 
 interface EntryHistoryProps {
   organizationId: string;
-  members?: EntryHistoryMemberInfo[];
+  members?: MemberListEntry[];
 }
 
 interface EntryWithProfile extends TimeEntry {
@@ -350,10 +351,10 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
   // render and the browser agree on; the runtime's local date would differ
   // around midnight and the date fields would not hydrate.
   const [dateFrom, setDateFrom] = useState<Date | undefined>(() =>
-    parseIsoLocalDate(shiftIsoDateByDays(getBusinessTodayIso(), -30)),
+    parseIsoLocalDate(addLocalDays(getBusinessTodayIso(), -30)),
   );
   const [dateTo, setDateTo] = useState<Date | undefined>(() =>
-    parseIsoLocalDate(shiftIsoDateByDays(getBusinessTodayIso(), 14)),
+    parseIsoLocalDate(addLocalDays(getBusinessTodayIso(), 14)),
   );
   const hasRange = dateFrom !== undefined && dateTo !== undefined;
   const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(undefined);

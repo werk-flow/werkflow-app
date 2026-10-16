@@ -31,7 +31,7 @@ const REPEATING_CALLBACKS = /^(map|flatMap|forEach|filter|reduce)$/;
 // Reviewed actions, keyed `file::function`, with the reason their writes stay
 // separate by design. A stale entry fails the test.
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
-  'lib/time-tracking/actions.ts::clockOutBeforeSignOut':
+  'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',
   'lib/inventory/actions.ts::importInventoryRows':
     'Independent by design: each CSV row is booked by its own import_inventory_row call so a refused row keeps the rows before it; the batch row records the counts.',

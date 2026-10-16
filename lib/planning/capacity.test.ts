@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { calculateIntervalOverlapMinutes, evaluateCapacity, fingerprintSnapshot } from './capacity';
+import { evaluateCapacity, fingerprintSnapshot } from './capacity';
 
 describe('planning capacity resolution', () => {
   test('separates effective, provisional, overlap, and capacity warnings', () => {
@@ -78,17 +78,6 @@ describe('planning capacity resolution', () => {
     expect(result.employeeDays).toHaveLength(1);
     expect(result.employeeDays[0]?.proposedMinutes).toBe(540);
     expect(result.conflicts.map((conflict) => conflict.kind)).toEqual(['over_capacity']);
-  });
-
-  test('calculates actual interval overlap only', () => {
-    expect(
-      calculateIntervalOverlapMinutes(
-        new Date('2026-08-12T08:00:00Z'),
-        new Date('2026-08-12T10:00:00Z'),
-        new Date('2026-08-12T09:30:00Z'),
-        new Date('2026-08-12T11:00:00Z'),
-      ),
-    ).toBe(30);
   });
 
   test('fingerprints snapshots independently of object key order', async () => {

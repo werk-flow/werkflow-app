@@ -56,8 +56,6 @@ export type DragModifiers = {
   fine: boolean;
 };
 
-export type DragVerdict = { ok: true; label?: string } | { ok: false; message: string };
-
 export function targetKey(target: CalendarDragTarget | null): string {
   if (!target) return 'none';
   if (target.kind === 'zone') return `zone:${target.zone}`;

@@ -1,3 +1,4 @@
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import type { Database, Json } from '@/lib/supabase/database.types';
 
 export const DISPATCH_OVERVIEW_MAX_OFFSET_DAYS = 14;
@@ -147,14 +148,8 @@ export type EmployeeDispatchCard = {
   myOpenChallengeReason: string | null;
 };
 
-const DISPATCH_ERROR_MESSAGES: Record<string, string> & {
-  unexpected_error: string;
-} = {
-  not_authenticated: 'Bitte erneut anmelden.',
-  no_active_org: 'Keine aktive Organisation gefunden.',
-  not_a_member: 'Kein Zugriff auf diese Organisation.',
-  not_authorized: 'Keine Berechtigung für diese Aktion.',
-  invalid_input: 'Die Eingaben sind unvollständig oder ungültig.',
+/** Dispatch-owned sentences; the shared codes come from `describeFailure`. */
+const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
   load_failed: 'Die Einsatzdaten konnten nicht geladen werden.',
   dispatch_not_found: 'Der Einsatz wurde nicht gefunden.',
   dispatch_not_active: 'Der Einsatz ist nicht mehr aktiv.',
@@ -187,14 +182,8 @@ const DISPATCH_ERROR_MESSAGES: Record<string, string> & {
   stale_assessment: 'Die Planungslage hat sich geändert. Bitte die Hinweise erneut prüfen.',
   update_failed: 'Die Änderung konnte nicht gespeichert werden.',
   create_failed: 'Der Einsatz konnte nicht erstellt werden.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };
 
 export function dispatchErrorMessage(error: string): string {
-  const known = DISPATCH_ERROR_MESSAGES[error];
-  if (known) return known;
-  const batchMessage = Object.entries(DISPATCH_ERROR_MESSAGES).find(
-    ([key]) => key.startsWith('batch_item_') && error.startsWith(key),
-  )?.[1];
-  return batchMessage ?? DISPATCH_ERROR_MESSAGES.unexpected_error;
+  return describeFailure(error, DISPATCH_ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error);
 }

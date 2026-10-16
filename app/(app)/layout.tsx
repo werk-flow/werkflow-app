@@ -13,12 +13,8 @@ import { ClockFAB } from '@/components/clock-fab';
 import { ActiveJobsProvider } from '@/components/active-jobs-provider';
 import { ClockStateProvider } from '@/components/clock-state-provider';
 import { AppShellSkeleton } from '@/components/sidebar/app-shell-skeleton';
-import {
-  getCachedUser,
-  getCachedMemberships,
-  getCachedUserProfile,
-  type UserProfile,
-} from '@/lib/data/cached';
+import { getCachedUser, getCachedMemberships, getCachedUserProfile } from '@/lib/data/cached';
+import type { UserProfile } from '@/lib/profile-reference';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
 import { CURRENT_ORG_COOKIE, resolveActiveOrgId } from '@/lib/org/cookies';
 

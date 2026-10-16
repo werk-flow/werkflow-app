@@ -20,7 +20,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { useServerAction } from '@/hooks/use-server-action';
 import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
-import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/customer-relationships/date-time';
+import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/date-time/berlin';
 import type { MaintenanceCatalogs, MaintenanceCoverageItem } from '@/lib/maintenance/types';
 
 export function MaintenanceCoverageFollowUpDialog({

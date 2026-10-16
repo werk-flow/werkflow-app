@@ -3,35 +3,35 @@ import { Constants } from '@/lib/supabase/database.types';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { WORK_ARTIFACT_KINDS, type WorkArtifactActionType } from './types';
 
-const optionalText = z.string().trim().max(5000).optional();
+const artifactText = z.string().trim().max(5000).optional();
 const optionalUuid = uuidSchema.optional();
 
 const workArtifactContentSchema = z
   .object({
     siteId: optionalUuid,
     instructionItemId: optionalUuid,
-    summary: optionalText,
-    customerStatement: optionalText,
+    summary: artifactText,
+    customerStatement: artifactText,
     requiresCustomerResponse: z.boolean().optional(),
     requiresSignature: z.boolean().optional(),
     workDate: z.string().date().optional(),
-    progress: optionalText,
-    peoplePresent: optionalText,
-    weatherConditions: optionalText,
-    siteConditions: optionalText,
-    deliveries: optionalText,
-    impediments: optionalText,
-    decisions: optionalText,
-    notableEvents: optionalText,
+    progress: artifactText,
+    peoplePresent: artifactText,
+    weatherConditions: artifactText,
+    siteConditions: artifactText,
+    deliveries: artifactText,
+    impediments: artifactText,
+    decisions: artifactText,
+    notableEvents: artifactText,
     visitStartedAt: z.string().datetime({ offset: true }).optional(),
     visitEndedAt: z.string().datetime({ offset: true }).optional(),
-    performedWork: optionalText,
-    outstandingWork: optionalText,
-    materialsSummary: optionalText,
+    performedWork: artifactText,
+    outstandingWork: artifactText,
+    materialsSummary: artifactText,
     nextVisitAt: z.string().datetime({ offset: true }).optional(),
     measurementDate: z.string().date().optional(),
     measurementLocation: z.string().trim().max(500).optional(),
-    measurementNotes: optionalText,
+    measurementNotes: artifactText,
     measurementLines: z
       .array(
         z.object({
@@ -57,16 +57,16 @@ const workArtifactContentSchema = z
       )
       .max(200)
       .optional(),
-    defectDescription: optionalText,
+    defectDescription: artifactText,
     defectSeverity: z.enum(['low', 'medium', 'high', 'critical']).optional(),
     defectLocation: z.string().trim().max(500).optional(),
     responsibleEmployeeRecordId: optionalUuid,
     responsibilityContext: z.string().trim().max(1000).optional(),
     dueDate: z.string().date().optional(),
     defectState: z.enum(['open', 'in_progress', 'resolved']).optional(),
-    proposedResolution: optionalText,
-    resolutionSummary: optionalText,
-    changeDescription: optionalText,
+    proposedResolution: artifactText,
+    resolutionSummary: artifactText,
+    changeDescription: artifactText,
     changeReason: z.string().trim().max(2000).optional(),
     requestedByContext: z.string().trim().max(500).optional(),
     expectedLaborMinutes: z
@@ -79,10 +79,10 @@ const workArtifactContentSchema = z
       .regex(/^\d{1,10}$/)
       .refine((value) => Number(value) <= 2_147_483_647, 'labor_minutes_out_of_range')
       .optional(),
-    expectedMaterialSummary: optionalText,
-    actualMaterialSummary: optionalText,
+    expectedMaterialSummary: artifactText,
+    actualMaterialSummary: artifactText,
     authorizationState: z.enum(['not_requested', 'requested', 'authorized', 'rejected']).optional(),
-    scheduleImpact: optionalText,
+    scheduleImpact: artifactText,
   })
   .superRefine((content, context) => {
     if (
@@ -241,7 +241,7 @@ export const workArtifactActionSchema = z
       'voided',
     ]),
     reason: z.string().trim().min(3).max(2000).optional(),
-    comment: optionalText,
+    comment: artifactText,
     customerContext: z
       .object({
         signerName: z.string().trim().min(2).max(200),

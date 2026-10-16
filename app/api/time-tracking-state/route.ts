@@ -3,7 +3,7 @@ import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { withReadRequest } from '@/lib/data/read-request-cache';
-import { getCurrentClockState, getActiveJobIdsForOrg } from '@/lib/time-tracking/actions';
+import { getCurrentClockState, getActiveJobIdsForOrg } from '@/lib/time-tracking/clock-state-actions';
 
 const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store' };
 const inputSchema = z.object({ organizationId: uuidSchema, kind: z.enum(['clock', 'active-jobs']) });

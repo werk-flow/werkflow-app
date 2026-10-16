@@ -3,19 +3,14 @@ import 'server-only';
 import { redirect } from 'next/navigation';
 
 import type { ActionResult } from '@/lib/action-result';
-import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { authenticateAndAuthorize, type AuthContext } from '@/lib/jobs/auth';
 import {
   getEffectiveResponsibilityHolderForActor,
   loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
 
-type TimeAccountContext = Extract<
-  Awaited<ReturnType<typeof authenticateAndAuthorize>>,
-  { success: true }
->['context'];
-
 /** The verified caller with current membership; a missing session goes to the login. */
-export async function requireAuth(): Promise<TimeAccountContext> {
+export async function requireAuth(): Promise<AuthContext> {
   const auth = await authenticateAndAuthorize();
   if (!auth.success) redirect('/login');
   return auth.context;

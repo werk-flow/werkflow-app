@@ -10,7 +10,7 @@ import type {
   MaintenanceEvidenceOption,
   MaintenanceScopeOutcome,
 } from '@/lib/maintenance/types';
-import { formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
 import {
   MAINTENANCE_DUE_REQUIRED_FIELD_IDS,

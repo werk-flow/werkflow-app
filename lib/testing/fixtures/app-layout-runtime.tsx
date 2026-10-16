@@ -42,7 +42,7 @@ const heldRead = (): Promise<never> => {
   optionalReads++;
   return new Promise(() => undefined);
 };
-mock.module('@/lib/time-tracking/actions', () => ({
+mock.module('@/lib/time-tracking/clock-state-actions', () => ({
   getCurrentClockState: heldRead,
   getActiveJobIdsForOrg: heldRead,
 }));

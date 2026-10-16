@@ -104,21 +104,16 @@ import {
   DOCUMENT_STORAGE_BUCKET,
   toDocumentCategory,
   toDocumentFolder,
-  type DocumentAuditEventRow,
   type DocumentCategory,
   type DocumentDetailsResult,
   type DocumentEmployee,
   type DocumentFolder,
-  type DocumentFolderRow,
   type DocumentLibraryResult,
-  type DocumentLinkRow,
   type DocumentListResult,
   type DocumentMutationResult,
   type DocumentResult,
-  type DocumentRow,
   type DocumentUploadTicketResult,
   type DocumentVersion,
-  type DocumentVersionRow,
   type DocumentVersionUploadTicketResult,
   type FolderResult,
   type LinkDocumentsToTargetInput,
@@ -293,7 +288,7 @@ export async function getDocumentFolderOptions(): Promise<ActionResult<{ folders
   try {
     return {
       success: true,
-      folders: await hydrateFolders(auth.context.admin, (data ?? []) as DocumentFolderRow[]),
+      folders: await hydrateFolders(auth.context.admin, data),
     };
   } catch (hydrationError) {
     logError('Failed to hydrate document folder options', hydrationError);
@@ -374,7 +369,7 @@ export async function getAttachableDocuments(
   }
 
   // One row beyond the page tells the dialog that a search can find more.
-  const rows = (data ?? []) as DocumentRow[];
+  const rows = documentRowsFromOrdinaryView(data ?? []);
   const documents = await hydrateDocumentsOrNull(
     auth.context.admin,
     rows.slice(0, ATTACHABLE_DOCUMENT_PAGE_SIZE),
@@ -573,7 +568,7 @@ export async function createDocumentFolder(rawInput: CreateFolderInput): Promise
   }
 
   revalidateDocuments();
-  return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
+  return { success: true, folder: toDocumentFolder(data) };
 }
 
 export async function renameDocumentFolder(rawInput: RenameFolderInput): Promise<FolderResult> {
@@ -605,7 +600,7 @@ export async function renameDocumentFolder(rawInput: RenameFolderInput): Promise
   }
 
   revalidateDocuments();
-  return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
+  return { success: true, folder: toDocumentFolder(data) };
 }
 
 export async function moveDocumentFolder(rawInput: MoveFolderInput): Promise<FolderResult> {
@@ -671,7 +666,7 @@ export async function moveDocumentFolder(rawInput: MoveFolderInput): Promise<Fol
   }
 
   revalidateDocuments();
-  return { success: true, folder: toDocumentFolder(data as DocumentFolderRow) };
+  return { success: true, folder: toDocumentFolder(data) };
 }
 
 export async function copyDocumentFolder(rawInput: CopyFolderInput): Promise<FolderResult> {
@@ -706,10 +701,7 @@ export async function copyDocumentFolder(rawInput: CopyFolderInput): Promise<Fol
     return { success: false, error: 'copy_failed' };
   }
 
-  const { sourceFolderIds, orderedSourceFolders } = orderCopiedFolderTree(
-    (allFolders ?? []) as DocumentFolderRow[],
-    input.folderId,
-  );
+  const { sourceFolderIds, orderedSourceFolders } = orderCopiedFolderTree(allFolders, input.folderId);
 
   if (input.targetParentFolderId && sourceFolderIds.has(input.targetParentFolderId)) {
     return { success: false, error: 'invalid_target' };
@@ -1125,7 +1117,7 @@ export async function unlinkDocument(rawInput: UnlinkDocumentInput): Promise<Doc
     return { success: false, error: 'link_not_found' };
   }
 
-  const result = await writeDocumentLinks(auth.context, (link as DocumentLinkRow).document_id, {
+  const result = await writeDocumentLinks(auth.context, link.document_id, {
     removeLinkIds: [input.linkId],
     additions: [],
     fallback: 'unlink_failed',
@@ -1288,7 +1280,7 @@ export async function getDocumentVersionSignedUrl(
     return { success: false, error: 'version_not_found' };
   }
 
-  const versionRow = version as DocumentVersionRow;
+  const versionRow = version;
   const existing = await getAuthorizedDocument(auth.context, versionRow.document_id, {
     protectedVersionNumber: versionRow.version_number,
   });
@@ -1367,8 +1359,8 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
   }
 
   const [versions, auditEvents] = await Promise.all([
-    hydrateDocumentVersions(auth.context.admin, versionsResult.data as DocumentVersionRow[]),
-    hydrateDocumentAuditEvents(auth.context.admin, auditResult.data as DocumentAuditEventRow[]),
+    hydrateDocumentVersions(auth.context.admin, versionsResult.data),
+    hydrateDocumentAuditEvents(auth.context.admin, auditResult.data),
   ]);
   if (!versions) return { success: false, error: 'versions_failed', document };
   if (!auditEvents) return { success: false, error: 'audit_failed', document };

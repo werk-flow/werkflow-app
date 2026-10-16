@@ -100,7 +100,7 @@ export function InviteDialog() {
     inviteCreations.publish({
       kind: 'commit',
       tempId,
-      confirmed: { ...draft, id: result.inviteId ?? tempId },
+      confirmed: { ...draft, id: result.inviteId },
     });
     showBanner({
       variant: 'success',

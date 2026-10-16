@@ -1,16 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarBoardRow } from './board';
-import {
-  dayRowFor,
-  dayRowKey,
-  deriveDayRows,
-  UNASSIGNED_DAY_ROW_KEY,
-  type DayRowMember,
-  type DayRowsInput,
-} from './day-rows';
+import { dayRowFor, dayRowKey, deriveDayRows, UNASSIGNED_DAY_ROW_KEY, type DayRowsInput } from './day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { getDefaultTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+
+type DayRowMember = DayRowsInput['members'][number];
 
 // The day view keys its rows by employee record like the board (P1-24a), so a
 // visit planned for a personnel record without a login lands in that

@@ -7,7 +7,7 @@ import 'server-only';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ActionContext } from '@/lib/org/action-context';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { resolveProjectHandoverExecutionState } from '@/lib/work-handover/project-state';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';

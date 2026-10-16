@@ -7,7 +7,7 @@ import {
   dayTimeline,
   trailingResizeHandle,
 } from './support/plantafel';
-import { resolveBerlinWallTime } from '../../lib/planning/date-time';
+import { resolveBerlinWallTime } from '../../lib/date-time/berlin';
 import { TIME_CORRECTION_STATUS_LABELS } from '../../lib/time-corrections/types';
 import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
 import { expect, test } from './support/fixtures';

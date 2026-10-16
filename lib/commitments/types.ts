@@ -1,3 +1,4 @@
+import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import type { Database } from '@/lib/supabase/database.types';
 
 export type CustomerCommitmentSource = Database['public']['Enums']['customer_commitment_source'];
@@ -74,19 +75,15 @@ export function formatCommitmentWindow(
 }
 
 export function commitmentErrorMessage(error: string): string {
-  return COMMITMENT_ERROR_MESSAGES[error] ?? COMMITMENT_ERROR_MESSAGES.unexpected_error;
+  return describeFailure(error, COMMITMENT_ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error);
 }
 
-const COMMITMENT_ERROR_MESSAGES: Record<string, string> & {
-  unexpected_error: string;
-} = {
-  invalid_input: 'Die Eingaben sind unvollständig oder ungültig.',
+/** Commitment-owned sentences; the shared codes come from `describeFailure`. */
+const COMMITMENT_ERROR_MESSAGES: Record<string, string> = {
   commitment_occurrence_not_found: 'Der geplante Besuch wurde nicht gefunden.',
   commitment_occurrence_not_scheduled: 'Nur eingeplante Besuche können eine Kundenzusage erhalten.',
   commitment_not_found: 'Die Kundenzusage wurde nicht gefunden.',
   withdrawal_reason_invalid: 'Bitte eine Begründung mit 3 bis 1000 Zeichen angeben.',
-  not_authorized: 'Keine Berechtigung für diese Aktion.',
   load_failed: 'Die Kundenzusagen konnten nicht geladen werden.',
   update_failed: 'Die Änderung konnte nicht gespeichert werden.',
-  unexpected_error: 'Ein unerwarteter Fehler ist aufgetreten.',
 };

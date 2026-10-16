@@ -1,12 +1,11 @@
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships, getCachedOrganizationSettings } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { getCachedOrganizationSettings } from '@/lib/data/cached';
 import { InviteDialog } from '@/components/mitarbeiter/invite-dialog';
 import { CreatePersonnelDialog } from '@/components/mitarbeiter/create-personnel-dialog';
 import { MitarbeiterTabs } from '@/components/mitarbeiter/mitarbeiter-tabs';
@@ -14,9 +13,8 @@ import { MitarbeiterContentSkeleton } from '@/components/loading-states/mitarbei
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import type { OrgMember } from '@/components/mitarbeiter/members-table';
-import type { Invite } from '@/components/mitarbeiter/invitations-table';
-import { getProfilesByIds, type OrgRole } from '@/lib/members/actions';
+import { getProfilesByIds } from '@/lib/members/actions';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { logError } from '@/lib/logging';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
@@ -72,8 +70,8 @@ async function MitarbeiterData({
     logError('Mitarbeiter: qualification workspace read failed', qualificationWorkspaceResult.error);
   }
 
-  const memberList = membersResult.success ? (membersResult.members as OrgMember[]) : [];
-  const inviteList = invitesResult.data as Invite[];
+  const memberList = membersResult.success ? membersResult.members : [];
+  const inviteList = invitesResult.data;
 
   if (invitesResult.error) {
     logError('Mitarbeiter: invite read failed', invitesResult.error);
@@ -156,23 +154,9 @@ async function MitarbeiterData({
 }
 
 export default async function MitarbeiterPage() {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return (
       <PageShell>
         <PageHeader title="Mitarbeiter" />
@@ -183,12 +167,9 @@ export default async function MitarbeiterPage() {
     );
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
-
-  if (!isAdminOrManager) {
+  const activeOrgId = membership.orgId;
+  const currentUserRole = membership.role;
+  if (!isManagerRole(currentUserRole)) {
     redirect('/dashboard');
   }
 

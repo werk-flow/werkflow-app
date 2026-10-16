@@ -6,7 +6,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { updateEmployeeCapability } from '@/lib/qualifications/actions';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import type { EmployeeCapabilityRecord, QualificationWorkspace } from '@/lib/qualifications/types';
 
 import type {

@@ -4,18 +4,13 @@ import {
   exceedsDragThreshold,
   formatMinutesOfDay,
   indexAtOffset,
-  measuredTrackStarts,
-  minutesToPixels,
-  pixelsToMinutes,
   snapMinutes,
-  uniformTrackStarts,
   autoScrollDue,
 } from './drag-math';
 
 describe('drag math', () => {
   test('resolves track indices from cumulative starts and reports outside positions as null', () => {
-    const starts = measuredTrackStarts([80, 120, 60], 10);
-    expect(starts).toEqual([10, 90, 210, 270]);
+    const starts = [10, 90, 210, 270];
     expect(indexAtOffset(starts, 10)).toBe(0);
     expect(indexAtOffset(starts, 89.9)).toBe(0);
     expect(indexAtOffset(starts, 90)).toBe(1);
@@ -23,17 +18,14 @@ describe('drag math', () => {
     expect(indexAtOffset(starts, 270)).toBeNull();
     expect(indexAtOffset(starts, 5)).toBeNull();
     expect(indexAtOffset([], 5)).toBeNull();
-    expect(uniformTrackStarts(3, 100, 160)).toEqual([160, 260, 360, 460]);
-    expect(indexAtOffset(uniformTrackStarts(7, 100), 650)).toBe(6);
+    expect(indexAtOffset([0, 100, 200, 300, 400, 500, 600, 700], 650)).toBe(6);
   });
 
-  test('snaps minutes to the step inside the day and converts pixels', () => {
+  test('snaps minutes to the step inside the day and formats minutes of the day', () => {
     expect(snapMinutes(37, 15)).toBe(30);
     expect(snapMinutes(38, 15)).toBe(45);
     expect(snapMinutes(38, 5)).toBe(40);
     expect(snapMinutes(1_500, 15)).toBe(1_440);
-    expect(pixelsToMinutes(90, 60)).toBe(90);
-    expect(minutesToPixels(90, 60)).toBe(90);
     expect(formatMinutesOfDay(555)).toBe('09:15');
     expect(formatMinutesOfDay(1_440)).toBe('24:00');
   });

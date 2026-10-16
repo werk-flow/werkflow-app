@@ -1,6 +1,6 @@
 import { indexAtOffset } from './drag-math';
 import type { BoardRowModel } from './board-model';
-import { addLocalDays } from '@/lib/planning/date-time';
+import { addLocalDays } from '@/lib/date-time/berlin';
 
 /**
  * Pure geometry of the Plantafel's drag surface (P1-24a): the slot under a

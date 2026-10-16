@@ -7,11 +7,11 @@ import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { JOB_CREATION_REFUSALS, prepareJobCreation } from '@/lib/jobs/creation';
-import { addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { preparePlanningCreation } from '@/lib/planning/creation';
 import { createPlanningEntrySchema } from '@/lib/planning/schemas';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { toJson } from '@/lib/supabase/json';
+import { jsonRecordOrEmpty, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type {
@@ -40,7 +40,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { maintenanceWorkspaceQuerySchema, type MaintenanceWorkspaceQuery } from './workspace-page';
 import { loadMaintenanceCatalogs, readMaintenanceWorkspace } from './workspace-reads';
 
-function mutationError(error: { message?: string } | null, fallback: string): string {
+function maintenanceFailureCode(error: { message?: string } | null, fallback: string): string {
   const known = [
     'maintenance_not_authorized',
     'maintenance_idempotency_conflict',
@@ -122,7 +122,7 @@ export async function createMaintenanceCoverage(
   if (error) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_coverage_create_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_coverage_create_failed'),
     };
   }
   refreshMaintenancePaths();
@@ -147,7 +147,7 @@ export async function createMaintenancePlan(input: MaintenancePlanInput): Promis
   if (error || !data) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_plan_create_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_plan_create_failed'),
     };
   }
   refreshMaintenancePaths();
@@ -193,7 +193,7 @@ export async function reviseMaintenancePlan(
   if (error || !data) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_plan_revision_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_plan_revision_failed'),
     };
   }
   refreshMaintenancePaths();
@@ -218,7 +218,7 @@ export async function transitionMaintenancePlan(input: unknown): Promise<Mainten
   if (error || !data) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_transition_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_transition_failed'),
     };
   }
   refreshMaintenancePaths();
@@ -249,7 +249,7 @@ export async function setMaintenancePlanArchived(rawInput: {
   if (error)
     return {
       success: false,
-      error: mutationError(error, 'maintenance_archive_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_archive_failed'),
     };
   refreshMaintenancePaths();
   return { success: true };
@@ -282,7 +282,7 @@ export async function createMaintenanceVisit(input: {
     const replayDueIds = new Set(replayEvents.map((event) => event.maintenance_due_work_id));
     const replayJobIds = new Set(
       replayEvents.flatMap((event) => {
-        const payload = event.request_payload as Record<string, unknown>;
+        const payload = jsonRecordOrEmpty(event.request_payload);
         return typeof payload.jobId === 'string' ? [payload.jobId] : [];
       }),
     );
@@ -404,7 +404,7 @@ export async function createMaintenanceVisit(input: {
     if (!jobRefusal) logError('Failed to create maintenance visit:', error);
     return {
       success: false,
-      error: jobRefusal ?? mutationError(error, 'maintenance_visit_create_failed'),
+      error: jobRefusal ?? maintenanceFailureCode(error, 'maintenance_visit_create_failed'),
     };
   }
   updateTag(CACHE_TAGS.workTemplates(context.organizationId));
@@ -466,7 +466,7 @@ export async function scheduleMaintenanceVisit(input: {
   if (error) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_schedule_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_schedule_failed'),
     };
   }
   refreshMaintenancePaths();
@@ -490,7 +490,7 @@ export async function setMaintenanceDueException(input: unknown): Promise<Mainte
   if (error)
     return {
       success: false,
-      error: mutationError(error, 'maintenance_exception_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_exception_failed'),
     };
   refreshMaintenancePaths();
   return { success: true };
@@ -515,7 +515,7 @@ export async function completeMaintenanceDueWork(input: unknown): Promise<Mainte
   if (error)
     return {
       success: false,
-      error: mutationError(error, 'maintenance_completion_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_completion_failed'),
     };
   refreshMaintenancePaths();
   return { success: true };
@@ -547,7 +547,7 @@ export async function linkMaintenanceServiceCase(rawInput: {
   if (error) {
     return {
       success: false,
-      error: mutationError(error, 'maintenance_service_case_link_failed'),
+      error: maintenanceFailureCode(error, 'maintenance_service_case_link_failed'),
     };
   }
   refreshMaintenancePaths();

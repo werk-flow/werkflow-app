@@ -10,7 +10,7 @@ import {
   type EquipmentSubtype,
 } from './types';
 
-const optionalText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
+const trimmedNullableText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
 const optionalDate = z
   .union([z.string().date(), z.literal(''), z.null()])
   .optional()
@@ -19,9 +19,14 @@ const optionalDate = z
 const equipmentIdentifierSchema = z.object({
   identifierType: z.enum(EQUIPMENT_IDENTIFIER_TYPES),
   value: z.string().trim().min(1).max(200),
-  issuer: optionalText(160),
+  issuer: trimmedNullableText(160),
 });
 
+/**
+ * The fields every equipment form shares. The unit test pins them here once instead of
+ * through each create, update and replacement schema.
+ * @internal
+ */
 export const equipmentFormSchema = z
   .object({
     clientId: uuidSchema,
@@ -31,18 +36,18 @@ export const equipmentFormSchema = z
     category: z.enum(EQUIPMENT_CATEGORIES),
     subtype: z.enum(EQUIPMENT_SUBTYPES).optional().nullable(),
     state: z.enum(EQUIPMENT_STATES),
-    manufacturer: optionalText(160),
-    model: optionalText(160),
-    locationDetail: optionalText(300),
-    technicalNotes: optionalText(4000),
+    manufacturer: trimmedNullableText(160),
+    model: trimmedNullableText(160),
+    locationDetail: trimmedNullableText(300),
+    technicalNotes: trimmedNullableText(4000),
     installationDate: optionalDate,
     commissioningDate: optionalDate,
-    warrantyProvider: optionalText(200),
-    warrantyBasis: optionalText(2000),
+    warrantyProvider: trimmedNullableText(200),
+    warrantyBasis: trimmedNullableText(2000),
     warrantyStartDate: optionalDate,
     warrantyEndDate: optionalDate,
     identifiers: z.array(equipmentIdentifierSchema).max(30),
-    reason: optionalText(1000),
+    reason: trimmedNullableText(1000),
     effectiveAt: z.string().datetime({ offset: true }).optional().nullable(),
   })
   .superRefine((input, context) => {
@@ -131,7 +136,7 @@ export const equipmentWorkLinkSchema = z
     jobId: uuidSchema.optional().nullable(),
     projectId: uuidSchema.optional().nullable(),
     linked: z.boolean(),
-    reason: optionalText(1000),
+    reason: trimmedNullableText(1000),
     idempotencyKey: uuidSchema,
   })
   .refine((input) => Number(Boolean(input.jobId)) + Number(Boolean(input.projectId)) === 1, {

@@ -131,7 +131,7 @@ mock.module('@/lib/time-corrections/actions', () => ({
     return { entries: [], sources: [] };
   },
 }));
-const { getTimeEntries } = await import('@/lib/time-tracking/actions');
+const { getTimeEntries } = await import('@/lib/time-tracking/entry-read-actions');
 const { getVacationCalendarEntries } = await import('@/lib/vacation/actions');
 const { getSicknessCalendarEntries } = await import('@/lib/sickness/actions');
 const window = { from: '2026-06-15', to: '2026-06-15' };

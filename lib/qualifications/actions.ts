@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { normalizeOptionalText } from '@/lib/validation/text';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   CAPABILITY_KINDS,
   CONFIRMATION_STATUSES,
@@ -23,6 +23,7 @@ import {
 } from './types';
 import { loadAssignmentEvaluation, toCapabilityDefinition, toEmployeeCapability } from './server';
 import { logError } from '@/lib/logging';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
@@ -109,16 +110,7 @@ const QUALIFICATION_WRITE_REFUSALS: ReadonlySet<string> = new Set([
 
 // The refusal raised under the lock, or the action's own failure code for
 // anything else.
-function qualificationWriteFailure(
-  error: { message: string } | null,
-  failureCode: string,
-  logLabel: string,
-): ActionFailure {
-  if (error && QUALIFICATION_WRITE_REFUSALS.has(error.message))
-    return { success: false, error: error.message };
-  logError(logLabel, error);
-  return { success: false, error: failureCode };
-}
+const qualificationWriteFailure = writeRefusalFor(QUALIFICATION_WRITE_REFUSALS);
 
 export async function getQualificationWorkspace(): Promise<
   { success: true; data: QualificationWorkspace } | ActionFailure

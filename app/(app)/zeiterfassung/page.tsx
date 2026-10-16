@@ -1,17 +1,15 @@
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
 import { getCachedOrganizationSettings } from '@/lib/data/cached';
 import { ManualEntryButton } from '@/components/zeiterfassung/manual-entry-button';
 import { PageHeaderActions } from '@/components/shared/page-action';
 import { ZeiterfassungContent } from '@/components/zeiterfassung/zeiterfassung-content';
 import { ZeiterfassungContentSkeleton } from '@/components/loading-states/zeiterfassung-content-skeleton';
-import { getCurrentClockState, getTimeEntries } from '@/lib/time-tracking/actions';
+import { getCurrentClockState } from '@/lib/time-tracking/clock-state-actions';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
-import { type OrgRole } from '@/lib/members/actions';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 import {
@@ -134,35 +132,15 @@ interface ZeiterfassungPageProps {
 }
 
 export default async function ZeiterfassungPage({ searchParams }: ZeiterfassungPageProps) {
-  const [
-    { tab },
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([searchParams, getCachedUser(), cookies()]);
+  const [{ tab }, { user, membership }] = await Promise.all([searchParams, resolvePageMembership()]);
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return <p className="text-muted-foreground">Bitte wähle zuerst eine Organisation aus.</p>;
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-
-  if (!currentMembership) {
-    redirect('/dashboard');
-  }
-
-  const currentUserRole = currentMembership.role as OrgRole;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const currentUserRole = membership.role;
+  const isAdminOrManager = isManagerRole(currentUserRole);
   const isAdmin = currentUserRole === 'admin';
   return (
     <>

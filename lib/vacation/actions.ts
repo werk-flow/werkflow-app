@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActionContext } from '@/lib/org/action-context';
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   defaultCalendarWindow,
   isValidIsoDate,
@@ -13,7 +13,7 @@ import {
   type IsoDateRange,
 } from '@/lib/calendar/date-range';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import {
   computeVacationBalance,
   countCalendarDaysInRange,
@@ -26,12 +26,14 @@ import {
 import { loadVacationCountingContext, loadVacationRequestsForRecord } from './server';
 import {
   sumApprovedDays,
+  toVacationDayPortion,
   toVacationRequest,
   type VacationDayPortion,
   type VacationRequest,
   type VacationRequestRow,
 } from './types';
 import { logError } from '@/lib/logging';
+import { rowWriteResultFor } from '@/lib/supabase/write-refusal';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { isManagerRole } from '@/lib/roles';
@@ -99,20 +101,9 @@ const VACATION_WRITE_REFUSALS: ReadonlySet<string> = new Set([
 
 // The result of one vacation write function: the saved request, the refusal
 // raised under the lock, or the action's own failure code for anything else.
-function vacationWriteResult(
-  outcome: { data: VacationRequestRow | null; error: { message: string } | null },
-  failureCode: string,
-  logLabel: string,
-): { success: true; request: VacationRequest } | ActionFailure {
-  if (outcome.error && VACATION_WRITE_REFUSALS.has(outcome.error.message)) {
-    return { success: false, error: outcome.error.message };
-  }
-  if (outcome.error || !outcome.data) {
-    logError(logLabel, outcome.error);
-    return { success: false, error: failureCode };
-  }
-  return { success: true, request: toVacationRequest(outcome.data) };
-}
+const vacationWriteResult = rowWriteResultFor(VACATION_WRITE_REFUSALS, (row: VacationRequestRow) => ({
+  request: toVacationRequest(row),
+}));
 
 // ============================================
 // Own overview (dashboard widget)
@@ -414,7 +405,7 @@ async function loadRequestWithTarget(
     success: true,
     request,
     targetUserId: record.user_id,
-    targetRole: membership.role as OrgRole,
+    targetRole: membership.role,
   };
 }
 
@@ -468,7 +459,7 @@ export async function decideVacationRequest(rawInput: {
         {
           startDate: request.start_date,
           endDate: request.end_date,
-          dayPortion: request.day_portion as VacationDayPortion,
+          dayPortion: toVacationDayPortion(request.day_portion),
         },
         context,
       );
@@ -607,7 +598,7 @@ async function loadRequestTargetMaps(
 
   return {
     recordById,
-    roleByUserId: new Map((membershipsResult.data ?? []).map((row) => [row.user_id, row.role as OrgRole])),
+    roleByUserId: new Map((membershipsResult.data ?? []).map((row) => [row.user_id, row.role])),
     profileByUserId: new Map((profilesResult.data ?? []).map((row) => [row.id, row])),
   };
 }
@@ -809,17 +800,11 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
         return job && job.plannedDate >= row.start_date && job.plannedDate <= row.end_date ? [job] : [];
       });
 
+      const request = toVacationRequest(row);
       results.push({
-        request: toVacationRequest(row),
+        request,
         personName: formatTargetName(record, profileByUserId.get(record.user_id)),
-        totalDays: countVacationDays(
-          {
-            startDate: row.start_date,
-            endDate: row.end_date,
-            dayPortion: row.day_portion as VacationDayPortion,
-          },
-          context,
-        ),
+        totalDays: countVacationDays(request, context),
         balance,
         hasAbsenceOverlap,
         assignedJobsInRange,
@@ -855,7 +840,7 @@ export async function getDecidableApprovedVacationRequests(): Promise<ApproverVa
           .select('*')
           .eq('organization_id', orgId)
           .eq('status', 'approved')
-          .gte('end_date', shiftIsoDateByDays(businessDate, -60))
+          .gte('end_date', addLocalDays(businessDate, -60))
           .order('start_date', { ascending: true })
           .order('id')
           .range(from, to),
@@ -1034,7 +1019,7 @@ export async function getVacationCalendarEntries(
         personName: nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt',
         startDate: row.start_date,
         endDate: row.end_date,
-        dayPortion: row.day_portion as VacationDayPortion,
+        dayPortion: toVacationDayPortion(row.day_portion),
         status: row.status as 'approved' | 'pending',
       })),
     };

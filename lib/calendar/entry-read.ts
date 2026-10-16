@@ -1,5 +1,6 @@
 import type { ActionResult } from '@/lib/action-result';
-import type { getTimeEntries, getChangeRequestsForEntries } from '@/lib/time-tracking/actions';
+import type { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import type { getChangeRequestsForEntries } from '@/lib/time-tracking/review-actions';
 import type { TimeEntry, EntryChangeRequestMap } from '@/lib/time-tracking/types';
 import { changeRequestEntryIds, toEntryChangeRequestMap } from '@/lib/time-tracking/change-request-map';
 

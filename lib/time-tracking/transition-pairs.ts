@@ -1,5 +1,5 @@
 import type { TimeEntry } from './types';
-import { isSameLocalDay } from './day-utils';
+import { isSameLocalDay } from '@/lib/date-time/berlin';
 
 export function isBreakEndFollowedByClockIn(entries: TimeEntry[], index: number): boolean {
   const entry = entries[index];

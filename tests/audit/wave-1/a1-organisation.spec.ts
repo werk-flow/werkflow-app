@@ -434,7 +434,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     // database keeps the membership and the history. The page shows the denial.
     const removalDialog = await requestMemberRemovalFromRow(adminPage, joinedInviteeRow);
     await expect(removalDialog.getByRole('alert')).toContainText(
-      getMemberActionErrorMessage('has_time_history'),
+      getMemberActionErrorMessage({ success: false, error: 'has_time_history' }),
     );
     await removalDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
     await adminPage.reload();

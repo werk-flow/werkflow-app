@@ -8,7 +8,7 @@ import { withdrawCustomerCommitment } from '@/lib/commitments/actions';
 import { commitmentErrorMessage } from '@/lib/commitments/types';
 import { DispatchIssueDialog } from './dispatch-issue-dialog';
 import { CommitmentDialog } from './dispatch-panel-commitment-dialog';
-import { ReasonDialog } from './dispatch-panel-reason-dialog';
+import { DispatchReasonDialog } from './dispatch-panel-reason-dialog';
 
 type IssueTarget = { occurrenceId: string };
 type WithdrawCommitmentTarget = { commitmentId: string; rowKey: string };
@@ -102,7 +102,7 @@ export function DispatchPanelRowDialogs({ dialogs, settleRow }: DispatchPanelRow
       )}
 
       {withdrawCommitment && (
-        <ReasonDialog
+        <DispatchReasonDialog
           title="Kundenzusage zurückziehen"
           description="Die Zusage wird als zurückgezogen dokumentiert. Der Kunde wird dadurch nicht benachrichtigt."
           confirmLabel="Zusage zurückziehen"
@@ -119,7 +119,7 @@ export function DispatchPanelRowDialogs({ dialogs, settleRow }: DispatchPanelRow
       )}
 
       {resolveChallengeId && (
-        <ReasonDialog
+        <DispatchReasonDialog
           title="Plan beibehalten"
           description="Die Rückfrage wird mit Begründung beantwortet; der Einsatz bleibt bestehen und die Person bestätigt erneut."
           confirmLabel="Beibehalten"
@@ -136,7 +136,7 @@ export function DispatchPanelRowDialogs({ dialogs, settleRow }: DispatchPanelRow
       )}
 
       {cancelDispatch && (
-        <ReasonDialog
+        <DispatchReasonDialog
           title="Einsatz zurückziehen"
           description="Der Einsatz wird zurückgezogen und verschwindet bei den zugewiesenen Personen. Die Historie bleibt erhalten."
           confirmLabel="Einsatz zurückziehen"

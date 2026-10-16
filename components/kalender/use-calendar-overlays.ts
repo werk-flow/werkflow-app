@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { InteractiveCalendarSession, WorkSession } from '@/lib/time-tracking/types';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';

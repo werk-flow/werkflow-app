@@ -40,12 +40,11 @@ import {
   getTimeCorrectionRequests,
 } from '@/lib/time-corrections/actions';
 import {
-  getPendingChangeRequests,
-  getPendingSessions,
   getTimeEntries,
   getTimeEntriesForJob,
   getTimeEntriesForProjectJobs,
-} from '@/lib/time-tracking/actions';
+} from '@/lib/time-tracking/entry-read-actions';
+import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
 import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
 import { jobPickerRequestSchema } from '@/lib/time-tracking/picker-types';

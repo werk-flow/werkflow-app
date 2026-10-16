@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { getCalendarBoard, getCalendarWindow } from './client';
+import { getCalendarBoard, fetchCalendarWindow } from './client';
 
 test('one calendar owner signal cancels both private fetch transports', async () => {
   const controller = new AbortController();
@@ -20,7 +20,7 @@ test('one calendar owner signal cancels both private fetch transports', async ()
   try {
     const dates = { organizationId: 'contract-org', fromDate: '2026-09-08', toDate: '2026-09-09' };
     const reads = [
-      getCalendarWindow(
+      fetchCalendarWindow(
         { ...dates, from: '2026-09-07T22:00:00Z', to: '2026-09-09T21:59:59Z' },
         controller.signal,
       ),

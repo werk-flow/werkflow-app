@@ -1,27 +1,11 @@
 import { compareTimeEntries } from '@/lib/time-tracking/entry-order';
 import type { BreakSession, TimeEntry, ManualEntryInput, ValidationResult, WorkSession } from './types';
-import { getLocalDayEnd, getLocalDayKey, isSameLocalDay, TIME_TRACKING_TIME_ZONE } from './day-utils';
+import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
 import { isBreakEndFollowedByClockIn } from './transition-pairs';
 
-// Validation messages reach the user from the server, which runs in UTC:
-// every time in a message is the Berlin wall-clock time.
-const berlinTime = new Intl.DateTimeFormat('de-DE', {
-  timeZone: TIME_TRACKING_TIME_ZONE,
-  hour: '2-digit',
-  minute: '2-digit',
-});
-const berlinDayTime = new Intl.DateTimeFormat('de-DE', {
-  timeZone: TIME_TRACKING_TIME_ZONE,
-  day: '2-digit',
-  month: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-function formatTimeLabel(date: Date): string {
-  return berlinTime.format(date);
-}
+// A refusal answers a code and the instants it names, never a sentence:
+// lib/time-tracking/validation-messages.ts owns the German wording.
 
 /**
  * Check if two timestamps are in the same minute (minute-level overlap)
@@ -68,10 +52,7 @@ function validateSingleEntryNoOverlap(
         continue;
       }
 
-      return {
-        valid: false,
-        error: `Ein Eintrag existiert bereits um ${formatTimeLabel(existingTs)}. Der früheste verfügbare Zeitpunkt ist eine Minute später.`,
-      };
+      return { valid: false, failure: { error: 'entry_minute_taken', at: entry.timestamp } };
     }
   }
   return { valid: true };
@@ -348,6 +329,17 @@ function isTimestampInsideBreakWindow(
   return null;
 }
 
+/** The window a refusal names: its start and its end, or null while it is open. */
+type RefusedWindow = { start: string; end: string | null };
+
+function breakWindow(session: BreakSession): RefusedWindow {
+  return { start: session.breakStart.timestamp, end: session.breakEnd?.timestamp ?? null };
+}
+
+function workWindow(clockIn: TimeEntry, clockOut: TimeEntry | null): RefusedWindow {
+  return { start: clockIn.timestamp, end: clockOut?.timestamp ?? null };
+}
+
 function validateBreakWindowOverlap(
   breakSessions: BreakSession[],
   newStart: Date,
@@ -361,13 +353,7 @@ function validateBreakWindowOverlap(
     const endMs = getBreakSessionEndMs(session);
 
     if (newStartMs < endMs && startMs < newEndMs) {
-      const startLabel = formatTimeLabel(new Date(session.breakStart.timestamp));
-      const endLabel = session.breakEnd ? formatTimeLabel(new Date(session.breakEnd.timestamp)) : 'offen';
-
-      return {
-        valid: false,
-        error: `Der neue Zeitraum überschneidet sich mit einer bestehenden Pause (${startLabel} - ${endLabel}). Manuelle Arbeitszeiten müssen vollständig außerhalb bestehender Pausen liegen.`,
-      };
+      return { valid: false, failure: { error: 'pair_overlaps_break', ...breakWindow(session) } };
     }
   }
 
@@ -416,42 +402,30 @@ export function validateDayEntrySequence(entries: TimeEntry[]): ValidationResult
   let previousEntry: TimeEntry | null = null;
 
   for (const entry of sortedEntries) {
-    const timeLabel = formatTimeLabel(new Date(entry.timestamp));
+    const at = entry.timestamp;
 
     switch (entry.entryType) {
       case 'clock_in':
         if (state !== 'clocked_out' && previousEntry?.entryType !== 'break_end') {
-          return {
-            valid: false,
-            error: `Ungültige Eintragsfolge um ${timeLabel}: Ein Arbeitsblock kann nur begonnen werden, wenn keine laufende Arbeitszeit oder Pause besteht.`,
-          };
+          return { valid: false, failure: { error: 'sequence_clock_in_while_open', at } };
         }
         state = 'working';
         break;
       case 'break_start':
         if (state !== 'working') {
-          return {
-            valid: false,
-            error: `Ungültige Eintragsfolge um ${timeLabel}: Eine Pause kann nur während einer laufenden Arbeitszeit gestartet werden.`,
-          };
+          return { valid: false, failure: { error: 'sequence_break_start_not_working', at } };
         }
         state = 'on_break';
         break;
       case 'break_end':
         if (state !== 'on_break') {
-          return {
-            valid: false,
-            error: `Ungültige Eintragsfolge um ${timeLabel}: Eine Pause kann nur beendet werden, wenn zu diesem Zeitpunkt bereits eine Pause läuft.`,
-          };
+          return { valid: false, failure: { error: 'sequence_break_end_not_on_break', at } };
         }
         state = 'working';
         break;
       case 'clock_out':
         if (state === 'clocked_out') {
-          return {
-            valid: false,
-            error: `Ungültige Eintragsfolge um ${timeLabel}: Ausstempeln ist nur während einer laufenden Arbeitszeit oder Pause möglich.`,
-          };
+          return { valid: false, failure: { error: 'sequence_clock_out_while_clocked_out', at } };
         }
         state = 'clocked_out';
         break;
@@ -496,80 +470,46 @@ function validateSingleManualEntry(
   const stateBefore = deriveSequenceStateAtTimestamp(dayEntries, beforeTimestamp);
 
   if (newEntry.entryType === 'clock_in') {
-    if (stateBefore !== 'clocked_out' && previousEntry?.entryType !== 'break_end') {
-      return {
-        valid: false,
-        error:
-          stateBefore === 'on_break'
-            ? 'Während einer laufenden Pause kann kein manueller Arbeitsbeginn hinzugefügt werden.'
-            : 'Ein manueller Arbeitsbeginn ist nur möglich, wenn zu diesem Zeitpunkt keine laufende Arbeitszeit besteht.',
-      };
+    const startsInsideOpenTime = stateBefore !== 'clocked_out' && previousEntry?.entryType !== 'break_end';
+    if (startsInsideOpenTime && stateBefore === 'on_break') {
+      return { valid: false, failure: { error: 'clock_in_during_break' } };
     }
+    if (startsInsideOpenTime) return { valid: false, failure: { error: 'clock_in_while_working' } };
 
     const overlappingWorkSession = isTimestampInsideWorkWindow(workSessions, timestamp, {
       includeOpenSessions: true,
     });
     if (overlappingWorkSession?.clockIn) {
-      const startLabel = formatTimeLabel(new Date(overlappingWorkSession.clockIn.timestamp));
-      const endLabel = overlappingWorkSession.clockOut
-        ? formatTimeLabel(new Date(overlappingWorkSession.clockOut.timestamp))
-        : 'offen';
-
-      return {
-        valid: false,
-        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden Arbeitszeit (${startLabel} - ${endLabel}).`,
-      };
+      const window = workWindow(overlappingWorkSession.clockIn, overlappingWorkSession.clockOut);
+      return { valid: false, failure: { error: 'clock_in_inside_work', ...window } };
     }
 
     const overlappingBreakSession = isTimestampInsideBreakWindow(breakSessions, timestamp, {
       includeOpenSessions: true,
     });
     if (overlappingBreakSession) {
-      const startLabel = formatTimeLabel(new Date(overlappingBreakSession.breakStart.timestamp));
-      const endLabel = overlappingBreakSession.breakEnd
-        ? formatTimeLabel(new Date(overlappingBreakSession.breakEnd.timestamp))
-        : 'offen';
-
       return {
         valid: false,
-        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden Pause (${startLabel} - ${endLabel}). Manuelle Arbeitszeiten müssen vollständig außerhalb von Pausen liegen.`,
+        failure: { error: 'clock_in_inside_break', ...breakWindow(overlappingBreakSession) },
       };
     }
   }
 
   if (newEntry.entryType === 'clock_out') {
     if (stateBefore === 'clocked_out') {
-      return {
-        valid: false,
-        error:
-          'Ein manuelles Ausstempeln ist nur möglich, wenn zu diesem Zeitpunkt bereits eine laufende Arbeitszeit oder Pause besteht.',
-      };
+      return { valid: false, failure: { error: 'clock_out_without_open_time' } };
     }
 
     const overlappingClosedWorkSession = isTimestampInsideWorkWindow(workSessions, timestamp);
     if (overlappingClosedWorkSession?.clockIn) {
-      const startLabel = formatTimeLabel(new Date(overlappingClosedWorkSession.clockIn.timestamp));
-      const endLabel = overlappingClosedWorkSession.clockOut
-        ? formatTimeLabel(new Date(overlappingClosedWorkSession.clockOut.timestamp))
-        : 'offen';
-
-      return {
-        valid: false,
-        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden abgeschlossenen Arbeitszeit (${startLabel} - ${endLabel}).`,
-      };
+      const window = workWindow(overlappingClosedWorkSession.clockIn, overlappingClosedWorkSession.clockOut);
+      return { valid: false, failure: { error: 'clock_out_inside_closed_work', ...window } };
     }
 
     const overlappingClosedBreakSession = isTimestampInsideBreakWindow(breakSessions, timestamp);
     if (overlappingClosedBreakSession) {
-      const startLabel = formatTimeLabel(new Date(overlappingClosedBreakSession.breakStart.timestamp));
-      const endLabel = overlappingClosedBreakSession.breakEnd
-        ? formatTimeLabel(new Date(overlappingClosedBreakSession.breakEnd.timestamp))
-        : 'offen';
-
-      return {
-        valid: false,
-        error: `Der gewählte Zeitpunkt liegt innerhalb einer bestehenden abgeschlossenen Pause (${startLabel} - ${endLabel}).`,
-      };
+      const window = breakWindow(overlappingClosedBreakSession);
+      return { valid: false, failure: { error: 'clock_out_inside_closed_break', ...window } };
     }
   }
 
@@ -607,14 +547,9 @@ function checkWindowOverlap(
     // Check for any overlap between [newStart, newEnd] and [sessionStart, sessionEnd]
     // Two intervals [a, b] and [c, d] overlap if a < d AND c < b
     if (newStart < sessionEnd && sessionStart < newEnd) {
-      const sessionStartStr = berlinDayTime.format(new Date(session.clockIn.timestamp));
-      const sessionEndStr = session.clockOut
-        ? formatTimeLabel(new Date(session.clockOut.timestamp))
-        : 'offen';
-
       return {
         valid: false,
-        error: `Der neue Zeitraum überschneidet sich mit einer bestehenden Arbeitszeit (${sessionStartStr} - ${sessionEndStr}). Manuelle Einträge müssen vollständig außerhalb bestehender Zeitfenster liegen.`,
+        failure: { error: 'pair_overlaps_work', ...workWindow(session.clockIn, session.clockOut) },
       };
     }
   }
@@ -634,10 +569,7 @@ function validateManualPair(
 ): ValidationResult {
   // Validate clock_in is before clock_out
   if (clockInTimestamp.getTime() >= clockOutTimestamp.getTime()) {
-    return {
-      valid: false,
-      error: 'Die Einstempelzeit muss vor der Ausstempelzeit liegen.',
-    };
+    return { valid: false, failure: { error: 'pair_clock_in_not_before_clock_out' } };
   }
 
   // Check minute-level overlap for both timestamps
@@ -666,14 +598,11 @@ function validateManualPair(
 
   const beforeClockIn = new Date(clockInTimestamp.getTime() - 1);
   const stateBeforeClockIn = deriveSequenceStateAtTimestamp(existingEntries, beforeClockIn);
+  if (stateBeforeClockIn === 'on_break') {
+    return { valid: false, failure: { error: 'pair_start_during_break' } };
+  }
   if (stateBeforeClockIn !== 'clocked_out') {
-    return {
-      valid: false,
-      error:
-        stateBeforeClockIn === 'on_break'
-          ? 'Während einer laufenden Pause kann kein manueller Arbeitsblock begonnen werden.'
-          : 'Ein manueller Arbeitsblock kann nur beginnen, wenn zu diesem Zeitpunkt keine laufende Arbeitszeit besteht.',
-    };
+    return { valid: false, failure: { error: 'pair_start_while_working' } };
   }
 
   const simulatedEntries = [
@@ -696,10 +625,7 @@ function validateManualBreakPair(
   breakEndTimestamp: Date,
 ): ValidationResult {
   if (breakStartTimestamp.getTime() >= breakEndTimestamp.getTime()) {
-    return {
-      valid: false,
-      error: 'Der Pausenbeginn muss vor dem Pausenende liegen.',
-    };
+    return { valid: false, failure: { error: 'break_start_not_before_end' } };
   }
 
   const breakStartOverlap = validateSingleEntryNoOverlap(existingEntries, breakStartTimestamp);
@@ -741,7 +667,7 @@ export function validateManualEntries(
 ): ValidationResult {
   const [firstEntry] = newEntries;
   if (!firstEntry) {
-    return { valid: false, error: 'Mindestens ein Eintrag ist erforderlich.' };
+    return { valid: false, failure: { error: 'manual_entries_missing' } };
   }
 
   const allowFutureTimestamps = options?.allowFutureTimestamps ?? false;
@@ -750,15 +676,12 @@ export function validateManualEntries(
   for (const entry of newEntries) {
     const ts = new Date(entry.timestamp);
     if (isNaN(ts.getTime())) {
-      return { valid: false, error: 'Ungültiges Datum oder Uhrzeit.' };
+      return { valid: false, failure: { error: 'manual_timestamp_invalid' } };
     }
 
     // Only admins may create future-dated manual entries.
     if (!allowFutureTimestamps && ts.getTime() > Date.now()) {
-      return {
-        valid: false,
-        error: 'Manuelle Einträge können nicht in der Zukunft liegen.',
-      };
+      return { valid: false, failure: { error: 'manual_entry_in_future' } };
     }
   }
 
@@ -766,10 +689,7 @@ export function validateManualEntries(
   const allOnSameDay = newEntries.every((entry) => isSameLocalDay(new Date(entry.timestamp), firstEntryDate));
 
   if (!allOnSameDay) {
-    return {
-      valid: false,
-      error: 'Manuelle Einträge müssen innerhalb desselben Tages liegen.',
-    };
+    return { valid: false, failure: { error: 'manual_entries_span_days' } };
   }
 
   const dayEntries = existingEntries.filter((entry) =>
@@ -823,10 +743,7 @@ export function validateManualEntryJobOwnership(
   const invalidClockOut = newEntries.find((entry) => entry.entryType === 'clock_out' && !!entry.jobId);
 
   if (invalidClockOut) {
-    return {
-      valid: false,
-      error: 'Ein Auftrag kann nur einem Eintrag zugewiesen werden, der einen Arbeitsblock startet.',
-    };
+    return { valid: false, failure: { error: 'job_on_clock_out' } };
   }
 
   return { valid: true };
@@ -843,7 +760,7 @@ export function validateTimestampUpdate(
   // Find the entry being updated
   const entryBeingUpdated = existingEntries.find((e) => e.id === entryId);
   if (!entryBeingUpdated) {
-    return { valid: false, error: 'Eintrag nicht gefunden.' };
+    return { valid: false, failure: { error: 'edited_entry_missing' } };
   }
 
   const relevantEntries = existingEntries.filter(
@@ -858,10 +775,7 @@ export function validateTimestampUpdate(
 
   // Cannot update to future timestamp
   if (newTimestamp.getTime() > Date.now()) {
-    return {
-      valid: false,
-      error: 'Zeitstempel kann nicht in der Zukunft liegen.',
-    };
+    return { valid: false, failure: { error: 'edited_timestamp_in_future' } };
   }
 
   const simulatedEntries = existingEntries.map((entry) =>
@@ -874,8 +788,8 @@ export function validateTimestampUpdate(
   );
 
   const affectedDayKeys = new Set([
-    getLocalDayKey(new Date(entryBeingUpdated.timestamp)),
-    getLocalDayKey(newTimestamp),
+    formatBerlinLocalDate(new Date(entryBeingUpdated.timestamp)),
+    formatBerlinLocalDate(newTimestamp),
   ]);
 
   for (const dayKey of affectedDayKeys) {

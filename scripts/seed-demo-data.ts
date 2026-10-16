@@ -25,7 +25,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import type { Database, Json } from '../lib/supabase/database.types';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
-import { resolveBerlinWallTime } from '../lib/planning/date-time';
+import { resolveBerlinWallTime } from '../lib/date-time/berlin';
 import { deleteStorageObjects, listStorageObjectPaths } from '../lib/storage/r2';
 
 type Tables = Database['public']['Tables'];

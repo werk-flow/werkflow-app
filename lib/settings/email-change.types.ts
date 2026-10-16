@@ -1,3 +1,5 @@
+import type { ActionResult } from '@/lib/action-result';
+
 export const CURRENT_EMAIL_OTP_LENGTH = 6;
 export const CURRENT_EMAIL_OTP_EXPIRY_MINUTES = 10;
 export const CURRENT_EMAIL_OTP_RESEND_COOLDOWN_SECONDS = 60;
@@ -33,8 +35,7 @@ export type EmailChangeActionError =
   | 'completion_pending'
   | 'unexpected_error';
 
-export type EmailChangeActionResult = {
-  success: boolean;
-  error?: EmailChangeActionError | undefined;
+/** Success or failure, each with the wizard state the client shows next. */
+export type EmailChangeActionResult = ActionResult<object, EmailChangeActionError> & {
   state: EmailChangeWizardState;
 };

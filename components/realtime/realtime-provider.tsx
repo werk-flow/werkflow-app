@@ -151,7 +151,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       channelRef.current = channel;
     }
 
-    setup();
+    // A failed session read leaves the page without live updates; the log keeps it.
+    setup().catch((error: unknown) => logError('realtime.setup_failed', error));
 
     const {
       data: { subscription: authListener },

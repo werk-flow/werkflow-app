@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
+import type { ActionResult } from '@/lib/action-result';
 import { getWorkArtifactDetail } from '@/lib/work-artifacts/actions';
 import type {
   WorkArtifactDetail,
@@ -129,12 +130,12 @@ export function useWorkArtifactEditor({
   }
 
   async function handleMutationFailure(
-    result: { success: boolean; error?: string },
+    result: ActionResult,
     message: string,
     reloadOnConflict = true,
   ): Promise<boolean> {
     if (result.success) return false;
-    if (result.error?.includes('stale')) {
+    if (result.error.includes('stale')) {
       if (reloadOnConflict && detail) await load(detail.id);
       setError(
         reloadOnConflict
@@ -144,7 +145,7 @@ export function useWorkArtifactEditor({
       return true;
     }
     // A shared code (a failed read, a missing permission) names its cause; the rest keep the action's sentence.
-    setError(describeFailure(result.error ?? '', {}, message));
+    setError(describeFailure(result.error, {}, message));
     return true;
   }
 

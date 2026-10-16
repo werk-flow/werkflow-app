@@ -1,6 +1,7 @@
 'use client';
 
 import { FormDisclosure } from '@/components/ui/form-disclosure';
+import { formatBerlinDateTime } from '@/lib/utils';
 import { WORK_EXECUTION_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 
 export function WorkLifecycleGatesAndHistory({ snapshot }: { snapshot: WorkLifecycleSnapshot }) {
@@ -32,10 +33,7 @@ export function WorkLifecycleGatesAndHistory({ snapshot }: { snapshot: WorkLifec
               <div key={event.id} className="border-l-2 pl-3 text-sm">
                 <p>{event.to_state ? WORK_EXECUTION_LABELS[event.to_state] : 'Automatische Ableitung'}</p>
                 <p className="text-xs text-muted-foreground">
-                  {new Intl.DateTimeFormat('de-DE', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  }).format(new Date(event.created_at))}
+                  {formatBerlinDateTime(event.created_at)}
                   {event.reason ? ` · ${event.reason}` : ''}
                 </p>
               </div>

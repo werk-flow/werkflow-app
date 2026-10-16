@@ -2,7 +2,7 @@ import 'server-only';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Json } from '@/lib/supabase/database.types';
-import { addLocalMonthsClamped } from './date-time';
+import { addLocalMonthsClamped, BERLIN_TIME_ZONE } from '@/lib/date-time/berlin';
 import { materializeSeries } from './recurrence';
 import type { CreatePlanningEntryInput } from './schemas';
 import { rejectUnacknowledgedConflicts } from './conflict-acknowledgement';
@@ -54,7 +54,7 @@ function buildSeriesDraft(input: CreatePlanningEntryInput): PlanningSeriesDraft 
     startsAtLocal: input.startsAtLocal,
     durationMinutes: input.durationMinutes,
     durationDays: input.durationDays,
-    timezone: 'Europe/Berlin',
+    timezone: BERLIN_TIME_ZONE,
     ...recurrence,
   };
 }

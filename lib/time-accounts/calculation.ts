@@ -1,4 +1,4 @@
-import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime } from '@/lib/planning/date-time';
+import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import type {
   EmployeePeriodCalculation,
   EmployeePeriodCalculationInput,
@@ -18,6 +18,11 @@ function assertIsoDate(value: string): void {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error('invalid_local_date');
 }
 
+/**
+ * Whole minutes from recorded seconds. The unit test pins the rounding boundary here
+ * instead of through a period calculation.
+ * @internal
+ */
 export function roundSecondsToMinutes(seconds: number): {
   minutes: number;
   roundingDeltaSeconds: number;

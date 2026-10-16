@@ -28,7 +28,7 @@ const BOUNDED_LISTS: Readonly<Record<string, Readonly<Record<string, string>>>> 
     'organization_id <- organizationIds':
       "the caller's own memberships; the requested user ids beside it are batched",
   },
-  'lib/time-tracking/actions.ts': {
+  'lib/time-tracking/entry-write-actions.ts': {
     'id <- [entryId, pairedEntryId ?? entryId]': 'one entry and its verified pair: two ids',
   },
   'lib/time-tracking/change-request-reader.ts': {

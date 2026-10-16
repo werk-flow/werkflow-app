@@ -2,7 +2,7 @@ function trimStorageName(value: string): string {
   return value.trim().replace(/\s+/g, ' ');
 }
 
-export function sanitizeDocumentStorageFileName(fileName: string): string {
+function sanitizeDocumentStorageFileName(fileName: string): string {
   const trimmed = trimStorageName(fileName) || 'document';
   return (
     trimmed

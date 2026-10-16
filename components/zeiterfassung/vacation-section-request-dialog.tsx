@@ -21,7 +21,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { createVacationRequest } from '@/lib/vacation/actions';
 import { formatVacationDays } from '@/lib/vacation/balance';
 import { cn, toLocalDateString } from '@/lib/utils';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { describeFailure } from '@/lib/action-messages';
 import { useVacationDaysPreview } from './use-vacation-section-days-preview';
 import { getVacationRequestErrorMessage, REQUEST_ERROR_MESSAGES } from './vacation-section-messages';

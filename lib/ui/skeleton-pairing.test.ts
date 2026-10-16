@@ -181,7 +181,8 @@ describe('skeleton pairing (design canon, Loading states)', () => {
     test(`${identifier} (${path}) feeds both header and skeleton`, () => {
       // A list may derive its final column list through a helper
       // (`memberColumns(showActions)`) and render header cells from a
-      // `columns` prop; both count as consuming the definition.
+      // `columns` prop or through ColumnsTableHeader; each counts as consuming
+      // the definition.
       const declaringSource = sources.get(path) ?? '';
       const helperNames = [...declaringSource.matchAll(/function (\w+)\([^)]*\)[^{]*\{[^}]*\b\w*_COLUMNS\b/g)]
         .filter((match) => match[0].includes(identifier))
@@ -190,6 +191,7 @@ describe('skeleton pairing (design canon, Loading states)', () => {
       const rendersHeader = [...sources.values()].some(
         (source) =>
           consumers.some((name) => new RegExp(`${name}\\b[^\\n]*\\.map\\(`).test(source)) ||
+          consumers.some((name) => source.includes(`<ColumnsTableHeader columns={${name}`)) ||
           (consumers.some((name) => source.includes(`columns={${name}`)) &&
             /<TableHead\b/.test(source) &&
             /\bcolumns\.map\(/.test(source)),

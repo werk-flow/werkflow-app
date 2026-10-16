@@ -12,6 +12,7 @@ import {
   type ServiceCaseDetailWorkspace,
 } from '@/lib/service-cases/types';
 import { formatGermanMediumDateTime } from '@/lib/utils';
+import { Fact } from './fact';
 
 const EVENT_LABELS: Record<string, string> = {
   created: 'Servicefall erfasst',
@@ -25,24 +26,6 @@ const EVENT_LABELS: Record<string, string> = {
   document_linked: 'Dokument verknüpft',
   document_unlinked: 'Dokumentverknüpfung entfernt',
 };
-
-function Fact({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: string | null | undefined;
-  className?: string | undefined;
-}): ReactElement {
-  // A description list allows one div around each dt/dd pair, never a second wrapper (axe definition-list).
-  return (
-    <div className={className}>
-      <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-      <dd className="mt-1 whitespace-pre-wrap text-sm">{value || 'Nicht erfasst'}</dd>
-    </div>
-  );
-}
 
 export function ServiceCaseOriginSection({ item }: { item: ServiceCaseDetail }): ReactElement {
   return (
@@ -75,11 +58,17 @@ export function ServiceCaseTriageSection({ item }: { item: ServiceCaseDetail }):
         <Fact
           label="Vorläufiger Kostenkontext"
           value={SERVICE_CASE_CHARGE_CONTEXT_LABELS[item.chargeContext]}
+          keepLineBreaks
         />
-        <Fact label="Zugang und Hinweise vor Ort" value={item.accessInstructions} />
-        <Fact label="Interne Einschätzung" value={item.triageNote} className="sm:col-span-2" />
+        <Fact label="Zugang und Hinweise vor Ort" value={item.accessInstructions} keepLineBreaks />
+        <Fact label="Interne Einschätzung" value={item.triageNote} className="sm:col-span-2" keepLineBreaks />
         {item.resolutionNote && (
-          <Fact label="Abschlussbegründung" value={item.resolutionNote} className="sm:col-span-2" />
+          <Fact
+            label="Abschlussbegründung"
+            value={item.resolutionNote}
+            className="sm:col-span-2"
+            keepLineBreaks
+          />
         )}
       </dl>
       <p className="mt-4 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">

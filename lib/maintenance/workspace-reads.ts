@@ -4,7 +4,7 @@ import { z } from '@/lib/zod';
 
 import { logReadErrors, logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { addLocalDays, addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { addLocalDays, addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type {
   ServiceAdminClient as AdminClient,
   ServiceManagerContext as ManagerContext,

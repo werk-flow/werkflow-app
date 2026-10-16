@@ -9,13 +9,12 @@ import { timeActivitySelectionSchema as selectionSchema } from './activity-selec
 
 import { resolveActionContextFor } from '@/lib/org/action-context';
 import { readOrganizationSettings } from './organization-settings-read';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { hasActiveSicknessOn } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
-import { getLocalDayEnd, getLocalDayStart } from './day-utils';
 import { isPeriodClosedError } from './closed-periods';
 import { calculateTimeActivityTotals, toTimeActivitySelection, toTimeSegmentFact } from './segments';
 import { readResumeActivity } from './resume-activity';
@@ -50,24 +49,16 @@ const transitionSchema = z.object({
 
 export type TimeTransitionInput = z.infer<typeof transitionSchema>;
 
-type CanonicalSessionRow = {
-  id: string;
-  employee_record_id: string;
-  status: 'open' | 'closed' | 'recovery_required';
-  started_at: string;
-  version: number;
-  recovery_reason: string | null;
-};
-
-type TransitionPayload = {
-  outcome: 'active' | 'ended' | 'no_change' | 'recovery_required';
-  sessionId?: string | null;
-  segmentId?: string | null;
-  version?: number | null;
-  recoveryReason?: string | null;
-  replayed?: boolean;
-  legacyBridged?: boolean;
-};
+/** The JSON object `record_time_transition` returns. */
+const transitionPayloadSchema = z.object({
+  outcome: z.enum(['active', 'ended', 'no_change', 'recovery_required']),
+  sessionId: z.string().nullish(),
+  segmentId: z.string().nullish(),
+  version: z.number().nullish(),
+  recoveryReason: z.string().nullish(),
+  replayed: z.boolean().optional(),
+  legacyBridged: z.boolean().optional(),
+});
 
 function mapTransitionError(error: { code?: string; message: string }): TimeTransitionError {
   if (isPeriodClosedError(error)) return 'period_closed';
@@ -131,10 +122,11 @@ export async function transitionTimeActivity(rawInput: TimeTransitionInput): Pro
   );
 
   if (error) return { success: false, error: mapTransitionError(error) };
-  if (!data || typeof data !== 'object') {
+  const parsedPayload = transitionPayloadSchema.safeParse(data);
+  if (!parsedPayload.success) {
     return { success: false, error: 'time_transition_failed' };
   }
-  const payload = data as TransitionPayload;
+  const payload = parsedPayload.data;
   revalidatePath('/zeiterfassung');
   revalidatePath('/auftraege');
 
@@ -208,7 +200,7 @@ export async function getCanonicalClockState(
   }
   if (!settings) return { success: false, error: 'fetch_failed' };
   if (!sessionData) return { success: true, state: null };
-  const session = sessionData as CanonicalSessionRow;
+  const session = sessionData;
   const now = new Date();
   const dayStart = getLocalDayStart(now);
   const dayEnd = getLocalDayEnd(now);

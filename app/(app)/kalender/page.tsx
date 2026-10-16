@@ -1,15 +1,9 @@
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  getCachedMemberships,
-  getCachedOrganizationCalendar,
-  getCachedOrganizationSettings,
-  getCachedUser,
-} from '@/lib/data/cached';
-import { getChangeRequestsForEntries, getTimeEntries } from '@/lib/time-tracking/actions';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { getCachedOrganizationCalendar, getCachedOrganizationSettings } from '@/lib/data/cached';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import { getChangeRequestsForEntries } from '@/lib/time-tracking/review-actions';
 import { completeCalendarEntryRead } from '@/lib/calendar/entry-read';
 import { calendarDateFromQuery } from '@/lib/calendar/date-range';
 import { getPlanningEntries } from '@/lib/planning/actions';
@@ -31,17 +25,10 @@ import {
 import { getCalendarPreferencesForPage } from '@/lib/calendar/preferences-server';
 import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import { logError } from '@/lib/logging';
-import { type OrgRole } from '@/lib/members/actions';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
-
-type MemberRow = {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-};
+import type { MemberListEntry } from '@/lib/members/profile-name';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 async function KalenderData({
   activeOrgId,
@@ -87,14 +74,14 @@ async function KalenderData({
         ? getBerlinMonthFetchRange(businessDate)
         : {
             ...getBerlinDayFetchRange(businessDate),
-            fromIso: shiftIsoDateByDays(businessDate, -1),
+            fromIso: addLocalDays(businessDate, -1),
             toIso: businessDate,
           };
   const range = { start: window.start, end: window.end };
   const fromIso = window.fromIso;
   const toIso = window.toIso;
 
-  async function fetchMembers(): Promise<MemberRow[] | null> {
+  async function fetchMembers(): Promise<MemberListEntry[] | null> {
     const membersRead = await getOrgMembersForUser(activeOrgId, userId);
     if (!membersRead.success) return null;
     if (isAdminOrManager) {
@@ -183,23 +170,9 @@ export default async function KalenderPage({
 }: {
   searchParams: Promise<{ date?: string | string[] }>;
 }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return (
       <PageShell>
         <PageHeader title="Kalender" />
@@ -210,14 +183,9 @@ export default async function KalenderPage({
     );
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-
-  if (!currentMembership) {
-    redirect('/dashboard');
-  }
-
-  const currentUserRole = currentMembership.role as OrgRole;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const currentUserRole = membership.role;
+  const isAdminOrManager = isManagerRole(currentUserRole);
 
   // CalendarContainer renders the page shell itself: its header carries the
   // date navigation and the create action, which are bound to client state.

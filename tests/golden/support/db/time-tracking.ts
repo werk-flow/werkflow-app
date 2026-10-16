@@ -1,4 +1,4 @@
-import { resolveBerlinWallTime } from '../../../../lib/planning/date-time';
+import { resolveBerlinWallTime } from '../../../../lib/date-time/berlin';
 import { createHash, randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {

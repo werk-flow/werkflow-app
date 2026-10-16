@@ -8,13 +8,14 @@ import {
 } from '@/lib/jobs/field-work-pack';
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import type { JobInstructionActor, JobWithDetails } from '@/lib/jobs/types';
-import { getTimeEntriesForJob } from '@/lib/time-tracking/actions';
+import { getTimeEntriesForJob } from '@/lib/time-tracking/entry-read-actions';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkHandoverFieldStatus } from '@/lib/work-handover/actions';
 import { getAssignedEquipmentForJob } from '@/lib/installed-equipment/actions';
 import { getAssignedServiceContextForJob } from '@/lib/service-cases/actions';
 import { getAssignedMaintenanceContextForJob } from '@/lib/maintenance/actions';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 /** Every source of the field work pack, read in parallel, with the values the page derives from them. */
 export async function loadFieldWorkPackData(
@@ -80,11 +81,7 @@ export async function loadFieldWorkPackData(
     .map((entry) => ({
       id: entry.canonicalSegmentId ?? entry.id,
       sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
-      label: new Intl.DateTimeFormat('de-DE', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'Europe/Berlin',
-      }).format(new Date(entry.timestamp)),
+      label: formatBerlinDateTime(entry.timestamp),
     }));
 
   return {

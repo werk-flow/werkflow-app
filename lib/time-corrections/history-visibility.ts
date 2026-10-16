@@ -2,7 +2,7 @@ import {
   canHolderApproveTarget,
   type EffectiveResponsibilityHolder,
 } from '@/lib/responsibilities/resolution';
-import type { OrgRole } from '@/lib/time-tracking/types';
+import type { OrgRole } from '@/lib/roles';
 
 /**
  * Which requests of the correction history a caller sees, as the database

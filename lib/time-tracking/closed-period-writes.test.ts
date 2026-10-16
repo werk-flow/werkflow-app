@@ -129,8 +129,10 @@ async function runFixture(): Promise<void> {
     ...responsibilities,
     authorizeResponsibilityForTarget: async () => ({ success: true }),
   }));
-  const { addManualEntry, reviewEntries, updateEntry, deleteEntry, deleteEntriesBatch, reviewChangeRequest } =
-    await import('@/lib/time-tracking/actions');
+  const { addManualEntry, updateEntry, deleteEntry, deleteEntriesBatch } = await import(
+    '@/lib/time-tracking/entry-write-actions'
+  );
+  const { reviewEntries, reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
   const refused = { success: false, error: 'period_closed' };
   const entryCount = (): number => (tables.time_entries ?? []).length;
   const statusOf = (table: string, id: string): unknown =>

@@ -149,7 +149,10 @@ export function ResetPasswordForm() {
       }
     };
 
-    establishRecoverySession(supabase, resolveToken);
+    // A failed session read shows at once what the five-second guard below would show.
+    establishRecoverySession(supabase, resolveToken).catch(() =>
+      resolveToken('invalid', 'Es ist ein Fehler aufgetreten. Bitte versuche es erneut.'),
+    );
 
     const {
       data: { subscription },

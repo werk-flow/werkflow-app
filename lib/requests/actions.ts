@@ -24,6 +24,7 @@ import {
   toClientRequest,
 } from '@/lib/requests/types';
 import { logError } from '@/lib/logging';
+import { rowWriteResultFor } from '@/lib/supabase/write-refusal';
 import { blankableUuidSchema, createJobInputSchema } from '@/lib/jobs/action-schemas';
 import { createProjectInputSchema } from '@/lib/projects/action-schemas';
 import { Constants, type Json } from '@/lib/supabase/database.types';
@@ -192,20 +193,9 @@ const REQUEST_WRITE_REFUSALS: ReadonlySet<string> = new Set([
 
 // The result of one request write function: the saved request, the refusal
 // raised under the lock, or the action's own failure code for anything else.
-function requestWriteResult(
-  outcome: { data: ClientRequestRow | null; error: { message: string } | null },
-  failureCode: string,
-  logLabel: string,
-): ClientRequestResult {
-  if (outcome.error && REQUEST_WRITE_REFUSALS.has(outcome.error.message)) {
-    return { success: false, error: outcome.error.message };
-  }
-  if (outcome.error || !outcome.data) {
-    logError(logLabel, outcome.error);
-    return { success: false, error: failureCode };
-  }
-  return { success: true, request: toClientRequest(outcome.data) };
-}
+const requestWriteResult = rowWriteResultFor(REQUEST_WRITE_REFUSALS, (row: ClientRequestRow) => ({
+  request: toClientRequest(row),
+}));
 
 // ============================================
 // Capture And Maintain

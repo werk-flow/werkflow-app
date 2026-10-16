@@ -16,7 +16,8 @@ const VacationApprovals = dynamic(() => import('./vacation-approvals').then((mod
   ),
 });
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
-import type { OrgRole } from '@/lib/members/actions';
+import type { MemberListEntry } from '@/lib/members/profile-name';
+import type { OrgRole } from '@/lib/roles';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 
 const PendingApprovals = dynamic(() => import('./pending-approvals').then((mod) => mod.PendingApprovals), {
@@ -38,14 +39,6 @@ const EntryHistory = dynamic(() => import('./entry-history').then((mod) => mod.E
   ),
 });
 
-interface MemberInfo {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-}
-
 interface ZeiterfassungContentProps {
   organizationId: string;
   userId: string;
@@ -55,7 +48,7 @@ interface ZeiterfassungContentProps {
   currentUserRole: OrgRole;
   initialTab?: 'overview' | 'approvals' | 'history';
   /** Members for the history filter (admin/manager only) */
-  members?: MemberInfo[];
+  members?: MemberListEntry[];
   /** Null when a server read of the overview failed: the tab shows the failure with retry. */
   initialOverview: ZeiterfassungOverview | null;
 }

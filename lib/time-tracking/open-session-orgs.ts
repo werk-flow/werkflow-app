@@ -3,7 +3,7 @@ import 'server-only';
 import { logError } from '@/lib/logging';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
-import { getLocalDayEnd, getLocalDayStart } from './day-utils';
+import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 
 type OpenSessionOrg = { organizationId: string; organizationName: string };
 

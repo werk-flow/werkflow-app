@@ -39,7 +39,9 @@ const world = installActionWorld({
     lineRow(lineIds.delete, 0),
     lineRow(lineIds.cancel, 2),
   ],
-  inventory_items: [{ id: newItemId, organization_id: ORGANIZATION_A, is_billable: false }],
+  inventory_items: [
+    { id: newItemId, organization_id: ORGANIZATION_A, item_type: 'material', is_billable: false },
+  ],
 });
 const { deleteJobMaterialLine, updateJobMaterialLine } = await import('@/lib/inventory/actions');
 

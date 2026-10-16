@@ -42,7 +42,7 @@ export function formatMovementTarget(movement: InventoryOverview['movements'][nu
       return { from: 'Umlagerung', to: movement.locationName };
     case 'transfer_out':
       return { from: movement.locationName, to: 'Umlagerung' };
-    default:
+    case 'correction':
       return { from: movement.locationName, to: 'Korrektur' };
   }
 }

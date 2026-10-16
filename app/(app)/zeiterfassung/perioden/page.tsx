@@ -8,16 +8,13 @@ import { TimePeriodPrepareForm } from '@/components/zeiterfassung/time-period-pr
 import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
 import { formatPeriod, PERIOD_STATE_LABELS } from '@/lib/time-accounts/presentation';
 import { formatGermanDate } from '@/lib/utils';
+import { addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getTimePeriods, type TimePeriodListItem } from '@/lib/time-accounts/queries';
 import { TIME_PERIOD_LIST_LIVE_TABLES } from '@/lib/time-accounts/live-tables';
 
+/** The Berlin month before the current one, `YYYY-MM`: the period an office closes next. */
 function defaultMonth(): string {
-  const berlinToday = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Berlin',
-  }).format(new Date());
-  const date = new Date(`${berlinToday.slice(0, 7)}-01T12:00:00.000Z`);
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  return date.toISOString().slice(0, 7);
+  return addLocalMonthsClamped(`${getBusinessTodayIso().slice(0, 7)}-01`, -1).slice(0, 7);
 }
 
 export default async function TimePeriodsPage() {

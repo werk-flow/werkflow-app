@@ -5,7 +5,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { logReadFailure, memoizeRequestRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   canHolderApproveTarget,
   getResponsibilitiesStrandedByEmployeeRemoval,
@@ -16,7 +16,8 @@ import {
   type ResponsibilityDelegation,
   type ResponsibilityMember,
 } from './resolution';
-import type { OrgRole, OrganizationResponsibility, ResponsibilityPerson } from './types';
+import type { OrgRole } from '@/lib/roles';
+import type { OrganizationResponsibility, ResponsibilityPerson } from './types';
 import { ORGANIZATION_RESPONSIBILITIES } from './types';
 
 export type ResponsibilityRuntimeState = {
@@ -141,7 +142,7 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
     }
 
     const membershipByUserId = new Map(
-      (membershipsResult.data ?? []).map((membership) => [membership.user_id, membership.role as OrgRole]),
+      (membershipsResult.data ?? []).map((membership) => [membership.user_id, membership.role]),
     );
     const userIds = Array.from(membershipByUserId.keys());
     const profilesResult = await readInBatches(userIds, (batch) =>

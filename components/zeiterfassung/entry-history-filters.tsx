@@ -8,21 +8,14 @@ import { RefreshButton } from '@/components/ui/refresh-button';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
-
-export interface EntryHistoryMemberInfo {
-  user_id: string;
-  first_name: string | null;
-  last_name: string | null;
-  email: string;
-  role: string;
-}
+import type { MemberListEntry } from '@/lib/members/profile-name';
 
 type EntryHistoryFiltersProps = {
   dateFrom: Date | undefined;
   setDateFrom: (date: Date | undefined) => void;
   dateTo: Date | undefined;
   setDateTo: (date: Date | undefined) => void;
-  members: EntryHistoryMemberInfo[];
+  members: MemberListEntry[];
   memberFilter: string;
   setMemberFilter: (value: string) => void;
   statusFilter: string;
@@ -49,7 +42,7 @@ export function EntryHistoryFilters({
   isSettlingNewEntry,
 }: EntryHistoryFiltersProps) {
   // Helper to get member display name
-  const getMemberDisplayName = (member: EntryHistoryMemberInfo): string => {
+  const getMemberDisplayName = (member: MemberListEntry): string => {
     if (member.first_name || member.last_name) {
       return `${member.first_name || ''} ${member.last_name || ''}`.trim();
     }

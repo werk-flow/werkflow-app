@@ -1,7 +1,7 @@
 import type { CalendarBoardRow, CalendarDispatchState } from './board';
 import { minutesOfDay, type BoardSpanItem } from './board-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
-import { addLocalDays, formatBerlinLocalDate } from '@/lib/planning/date-time';
+import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';

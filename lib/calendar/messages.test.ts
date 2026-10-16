@@ -2,14 +2,19 @@ import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
-import { SHARED_FAILURE_CODES } from '@/lib/action-result';
+import { TIME_VALIDATION_CODES } from '@/lib/time-tracking/validation-messages';
 import {
   CALENDAR_REFUSAL_CODES,
   calendarRefusalMessage,
   calendarUndoFailureMessage,
   formatRefusalDate,
-  isCalendarRefusalCode,
 } from './messages';
+
+const mappedCodes = new Set(CALENDAR_REFUSAL_CODES);
+const isCalendarRefusalCode = (code: string): boolean => mappedCodes.has(code);
+// The time rule codes keep their sentences in the time-tracking home, which
+// the message layer delegates to.
+const timeRuleCodes = new Set(TIME_VALIDATION_CODES);
 
 // Tier 2 for criterion 27: the message map is checked against the actual
 // result codes of the modules the calendar calls, and no calendar component
@@ -24,7 +29,10 @@ const CALENDAR_ACTION_MODULES = [
   'lib/jobs/auth.ts',
   'lib/planning/actions.ts',
   'lib/work-lifecycle/actions.ts',
-  'lib/time-tracking/actions.ts',
+  'lib/time-tracking/entry-read-actions.ts',
+  'lib/time-tracking/entry-write-actions.ts',
+  'lib/time-tracking/validation.ts',
+  'lib/time-tracking/review-actions.ts',
   'lib/calendar/actions.ts',
   'lib/calendar/board-actions.ts',
   'lib/calendar/preferences-actions.ts',
@@ -48,8 +56,25 @@ function scanActionCodes(): Set<string> {
 
 describe('calendar message map', () => {
   test('carries a sentence for every result code the calendar-reachable actions return', () => {
-    const missing = [...scanActionCodes()].filter((code) => !isCalendarRefusalCode(code)).sort();
+    const missing = [...scanActionCodes()]
+      .filter((code) => !isCalendarRefusalCode(code) && !timeRuleCodes.has(code))
+      .sort();
     expect(missing).toEqual([]);
+  });
+
+  test('the scan sees the time rule codes, and every one reaches its time-tracking sentence', () => {
+    const scanned = scanActionCodes();
+    for (const code of TIME_VALIDATION_CODES) {
+      expect(scanned.has(code), code).toBe(true);
+      expect(isCalendarRefusalCode(code), `${code} must keep one home`).toBe(false);
+    }
+    const failure = { success: false, error: 'entry_minute_taken', at: '2026-03-29T01:15:00.000Z' };
+    expect(calendarRefusalMessage(failure)).toBe(
+      'Ein Eintrag existiert bereits um 03:15. Der früheste verfügbare Zeitpunkt ist eine Minute später.',
+    );
+    expect(calendarUndoFailureMessage('edited_timestamp_in_future')).toBe(
+      'Rückgängig war nicht möglich: Zeitstempel kann nicht in der Zukunft liegen.',
+    );
   });
 
   test('every sentence is German prose that names a next step, or an explicit dialog-owned null', () => {
@@ -74,7 +99,7 @@ describe('calendar message map', () => {
     // A guard in any calendar-reachable action can answer a shared code
     // (lib/action-result.ts); the database refuses time-fact writes in a
     // closed period, so a calendar time edit can return `period_closed`.
-    for (const code of SHARED_FAILURE_CODES) {
+    for (const code of Object.keys(SHARED_FAILURE_MESSAGES)) {
       expect(isCalendarRefusalCode(code), code).toBe(true);
       expect(calendarRefusalMessage(code), code).not.toBeNull();
     }
@@ -88,10 +113,10 @@ describe('calendar message map', () => {
     expect(calendarRefusalMessage('overlapping_time_block', {})).toContain('Diese Person hat');
   });
 
-  test('passes a server sentence through, never renders an unknown code, and prefixes undo failures', () => {
-    const serverSentence = 'Zeitstempel kann nicht in der Zukunft liegen.';
-    expect(calendarRefusalMessage(serverSentence)).toBe(serverSentence);
-    expect(calendarRefusalMessage('some_new_code')).not.toContain('some_new_code');
+  test('never passes a sentence through, never renders an unknown code, and prefixes undo failures', () => {
+    const saveFailed = calendarRefusalMessage('update_failed');
+    expect(calendarRefusalMessage('Zeitstempel kann nicht in der Zukunft liegen.')).toBe(saveFailed);
+    expect(calendarRefusalMessage('some_new_code')).toBe(saveFailed);
     expect(calendarUndoFailureMessage('overlapping_time_block', { name: 'Mia' })).toBe(
       'Rückgängig war nicht möglich: Mia hat in diesem Zeitraum bereits Arbeitszeit. Wähle eine freie Zeit.',
     );

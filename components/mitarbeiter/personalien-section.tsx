@@ -8,6 +8,7 @@ import { updatePersonnelMasterData, type PersonnelMasterDataPatch } from '@/lib/
 import type { EmployeeRecord } from '@/lib/personnel/types';
 import { ErrorText } from '@/components/ui/error-text';
 import { describeFailure } from '@/lib/action-messages';
+import { formatGermanDate } from '@/lib/utils';
 
 const SAVE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   number_taken: 'Diese Personalnummer ist in der Organisation bereits vergeben.',
@@ -71,13 +72,7 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
     value: string | null,
   ): MetadataField => ({
     label,
-    value: value
-      ? new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        })
-      : '—',
+    value: formatGermanDate(value, { empty: '—' }),
     editableConfig: canEdit
       ? {
           type: 'date',

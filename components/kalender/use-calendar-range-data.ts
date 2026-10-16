@@ -13,7 +13,7 @@ import {
 
 import { useLiveView } from '@/hooks/use-live-view';
 import { EMPTY_CALENDAR_BOARD, type CalendarBoardContext } from '@/lib/calendar/board';
-import { getCalendarBoard, getCalendarWindow } from '@/lib/calendar/client';
+import { getCalendarBoard, fetchCalendarWindow } from '@/lib/calendar/client';
 import {
   composeCalendarReadiness,
   createDatasetState,
@@ -115,7 +115,7 @@ type InFlightRead = {
 function readWindowPair(organizationId: string, range: CalendarFetchRange, signal: AbortSignal) {
   const dates = { fromDate: toLocalDateString(range.start), toDate: toLocalDateString(range.end) };
   return Promise.all([
-    getCalendarWindow(
+    fetchCalendarWindow(
       {
         organizationId,
         from: range.start.toISOString(),

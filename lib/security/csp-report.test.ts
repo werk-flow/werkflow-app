@@ -1,10 +1,18 @@
 import { expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   buildContentSecurityPolicy,
   buildReportOnlyContentSecurityPolicy,
   summarizeCspReport,
 } from './csp-report';
+
+// next.config.ts loads this module before the build without the `@/` alias:
+// an import from lib/ breaks every build (found 2026-10-16).
+test('next.config.ts can load the policy module: it imports nothing, statically or dynamically', () => {
+  const source = readFileSync(resolve(import.meta.dir, 'csp-report.ts'), 'utf8');
+  expect(source.match(/^\s*import\b.*$|\bimport\(|\brequire\(/gm) ?? []).toEqual([]);
+});
 
 const cloud = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',

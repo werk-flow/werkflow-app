@@ -7,6 +7,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Field } from '@/components/ui/field';
 import { TimeInput } from '@/components/ui/time-input';
 import { toLocalTimeOfDay } from '@/lib/utils';
+import { formatEntryDay } from './entry-details-labels';
 
 type EntryDetailsDateTimePickerProps = {
   value: Date;
@@ -58,7 +59,7 @@ export function EntryDetailsDateTimePicker({
         <div className="flex-1">
           {disableDateEditing ? (
             <div className="flex h-10 items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
-              {dateLabel ?? value.toLocaleDateString('de-DE')}
+              {dateLabel ?? formatEntryDay(value)}
             </div>
           ) : (
             <DatePicker value={value} onChange={handleDateChange} />

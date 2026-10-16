@@ -1,4 +1,4 @@
-import { addLocalDays } from '@/lib/planning/date-time';
+import { addLocalDays } from '@/lib/date-time/berlin';
 import { mondayOf } from './board-layout';
 
 /**

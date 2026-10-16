@@ -9,7 +9,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   no_changes: 'Keine Änderungen zum Speichern.',
 };
 
-export function errorMessage(error: string): string {
+export function clientRelationErrorMessage(error: string): string {
   return describeFailure(error, ERROR_MESSAGES, 'Speichern fehlgeschlagen. Bitte versuche es erneut.');
 }
 

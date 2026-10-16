@@ -61,8 +61,6 @@ type EmploymentTransitionResult =
   | { success: true; data: { lifecycleId: string } }
   | (ActionFailure & { data?: TransitionInventory });
 
-type AccessLifecycleRow = Database['public']['Tables']['personnel_access_lifecycles']['Row'];
-type EmploymentLifecycleRow = Database['public']['Tables']['personnel_employment_lifecycles']['Row'];
 type RequirementRow = Database['public']['Tables']['personnel_onboarding_requirements']['Row'];
 
 // The admin client is untyped, so embedded relations are parsed where they cross in.
@@ -224,7 +222,7 @@ function hashRequest(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-function normalizeDatabaseError(error: { code?: string; message?: string } | null): string {
+function lifecycleFailureCode(error: { code?: string; message?: string } | null): string {
   const message = error?.message ?? 'mutation_failed';
   const known = [
     'forbidden',
@@ -413,8 +411,8 @@ export async function getPersonnelLifecycle(
     return { success: false, error: 'load_failed' };
   }
 
-  const access = accessResult.data as AccessLifecycleRow | null;
-  const employment = employmentResult.data as EmploymentLifecycleRow | null;
+  const access = accessResult.data;
+  const employment = employmentResult.data;
   const requirements = (requirementsResult.data ?? []).map(toRequirement);
   const strandedResponsibilities = userId
     ? await getResponsibilitiesStrandedByMemberRemoval({ organizationId, userId })
@@ -426,10 +424,7 @@ export async function getPersonnelLifecycle(
       const parsedFile = documentFileSchema.safeParse(document.documents);
       if (!parsedFile.success) return [];
       const file = parsedFile.data;
-      const releases = (document.personnel_document_releases ?? []) as Array<{
-        document_version_number: number;
-        revoked_at: string | null;
-      }>;
+      const releases = document.personnel_document_releases;
       return [
         {
           id: document.id,
@@ -534,7 +529,7 @@ export async function setPersonnelAccessTransition(
     p_operation_id: request.operationId,
     p_request_hash: hashRequest(request),
   });
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { lifecycleId: data } };
 }
@@ -603,7 +598,7 @@ export async function setPersonnelEmploymentTransition(input: unknown): Promise<
     p_operation_id: request.operationId,
     p_request_hash: hashRequest({ ...request, unresolvedWork }),
   });
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { lifecycleId: data } };
 }
@@ -626,7 +621,7 @@ export async function createPersonnelOnboardingPlan(
     p_operation_id: request.operationId,
     p_request_hash: hashRequest(request),
   });
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { planId: data } };
 }
@@ -670,7 +665,7 @@ export async function savePersonnelOnboardingRequirement(
     p_operation_id: request.operationId,
     p_request_hash: hashRequest(request),
   });
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { requirementId: data } };
 }
@@ -699,7 +694,7 @@ export async function publishPersonnelOnboardingTemplate(
   });
   if (error || !data) {
     logError('Failed to publish personnel onboarding template', error);
-    return { success: false, error: normalizeDatabaseError(error) };
+    return { success: false, error: lifecycleFailureCode(error) };
   }
   revalidatePersonnel();
   return { success: true, data: { versionId: data } };
@@ -775,7 +770,7 @@ export async function setPersonnelDocumentRelease(
     p_operation_id: request.operationId,
     p_request_hash: hashRequest(request),
   });
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { releaseId: data } };
 }
@@ -887,10 +882,7 @@ export async function getOwnPersonnelActions(): Promise<LifecycleResult<OwnPerso
     const parsedFile = documentFileSchema.safeParse(document.documents);
     if (!parsedFile.success) return [];
     const file = parsedFile.data;
-    const releases = (document.personnel_document_releases ?? []) as Array<{
-      document_version_number: number;
-      revoked_at: string | null;
-    }>;
+    const releases = document.personnel_document_releases;
     const released = releases.some(
       (release) =>
         release.document_version_number === file.current_version_number && release.revoked_at === null,
@@ -948,7 +940,7 @@ export async function acknowledgePersonnelRequirement(
       p_request_hash: hashRequest(request),
     }),
   );
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { acknowledgementId: data } };
 }
@@ -976,7 +968,7 @@ export async function acknowledgePersonnelDocument(
       p_request_hash: hashRequest(request),
     }),
   );
-  if (error || !data) return { success: false, error: normalizeDatabaseError(error) };
+  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { acknowledgementId: data } };
 }
@@ -1183,7 +1175,7 @@ export async function finalizePersonnelDocumentUpload(
     p_request_hash: hashRequest(request),
   });
   if (error || !data) {
-    const normalized = normalizeDatabaseError(error);
+    const normalized = lifecycleFailureCode(error);
     const { data: owner, error: ownerError } = await loggedRead(
       'finalizePersonnelDocumentUpload: documents read failed',
       context.admin
@@ -1243,10 +1235,7 @@ export async function getPersonnelDocumentSignedUrl(
       .maybeSingle(),
   );
   if (employeeError) return { success: false, error: 'load_failed' };
-  const releases = (document.personnel_document_releases ?? []) as Array<{
-    document_version_number: number;
-    revoked_at: string | null;
-  }>;
+  const releases = document.personnel_document_releases;
   const ownReleased =
     employee?.user_id === caller.context.userId &&
     releases.some(

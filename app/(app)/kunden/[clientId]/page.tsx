@@ -1,18 +1,13 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import {
-  getCachedMemberships,
-  getCachedUser,
-  getOrganizationUserPreferencesForView,
-} from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { getOrganizationUserPreferencesForView } from '@/lib/data/cached';
+import { isManagerRole } from '@/lib/roles';
 import { getClientDetail, getClientRelations } from '@/lib/clients/actions';
 import { getClientDocuments } from '@/lib/documents/actions';
 import { getJobsForClient } from '@/lib/jobs/actions';
 import { getCustomerRelationshipBundle } from '@/lib/customer-relationships/actions';
 import { getInstalledEquipmentForClient } from '@/lib/installed-equipment/actions';
-import { type OrgRole } from '@/lib/members/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { KundenDetailContent } from '@/components/kunden/kunden-detail-content';
@@ -25,24 +20,11 @@ interface KundenDetailPageProps {
 }
 
 async function KundenDetailData({ clientId }: { clientId: string }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/kunden');
 
-  if (!user) redirect('/login');
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-  if (!activeOrgId) redirect('/kunden');
-
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
 
   if (!isAdminOrManager) {
     redirect('/dashboard');

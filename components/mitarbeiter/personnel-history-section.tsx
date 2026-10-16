@@ -6,6 +6,7 @@ import { EMPLOYMENT_TYPE_LABELS, type EmployeeRecordEvent, type EmploymentType }
 import { isJsonRecord } from '@/lib/supabase/json';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
+import { formatBerlin, formatBerlinDateTime } from '@/lib/utils';
 
 const EVENT_LABELS: Record<string, string> = {
   created: 'Personalakte angelegt',
@@ -68,10 +69,7 @@ function formatValue(field: string, value: unknown): string {
     return EMPLOYMENT_TYPE_LABELS[value as EmploymentType] ?? value;
   }
   if (DATE_FIELDS.has(field) && typeof value === 'string') {
-    const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value);
-    return Number.isNaN(date.getTime())
-      ? value
-      : date.toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
+    return Number.isNaN(new Date(value).getTime()) ? value : formatBerlin(value, 'numericDate');
   }
   if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
   if (typeof value === 'number') {
@@ -120,18 +118,6 @@ function historyDetails(event: EmployeeRecordEvent): HistoryDetail[] {
   return [];
 }
 
-function formatTimestamp(value: string): string {
-  // Pin the timezone so server-side rendering (UTC) and every browser agree.
-  return new Date(value).toLocaleString('de-DE', {
-    timeZone: 'Europe/Berlin',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 interface PersonnelHistorySectionProps {
   events: EmployeeRecordEvent[];
   /** Null when the names could not be read. */
@@ -160,7 +146,7 @@ export function PersonnelHistorySection({ events, actorNames }: PersonnelHistory
               <li key={event.id} className="text-sm">
                 <span className="font-medium">{EVENT_LABELS[event.eventType] ?? UNKNOWN_EVENT_LABEL}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {formatTimestamp(event.createdAt)}
+                  {formatBerlinDateTime(event.createdAt)}
                   {actor ? ` · ${actor}` : ''}
                 </span>
                 {details.length > 0 ? (

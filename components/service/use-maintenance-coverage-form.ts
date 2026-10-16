@@ -14,7 +14,7 @@ const COVERAGE_ERROR_MESSAGES: Record<string, string> = {
   maintenance_coverage_site_mismatch: 'Der Einsatzort gehört nicht zum gewählten Kunden.',
 };
 
-function errorMessage(code: string): string {
+function coverageErrorMessage(code: string): string {
   return describeFailure(code, COVERAGE_ERROR_MESSAGES, GENERIC_ERROR);
 }
 
@@ -66,7 +66,7 @@ export function useMaintenanceCoverageForm({
     setError(null);
     const result = await createMaintenanceCoverage(buildInput());
     if (!result.success) {
-      setError(errorMessage(result.error));
+      setError(coverageErrorMessage(result.error));
       return;
     }
     // The action's response renders the route with the new coverage.
@@ -94,7 +94,11 @@ export function useMaintenanceCoverageForm({
           (created) =>
             created.success
               ? { success: true as const }
-              : { success: false as const, error: created.error, message: errorMessage(created.error) },
+              : {
+                  success: false as const,
+                  error: created.error,
+                  message: coverageErrorMessage(created.error),
+                },
           () => ({ success: false as const, error: 'unexpected_error', message: GENERIC_ERROR }),
         ),
       });

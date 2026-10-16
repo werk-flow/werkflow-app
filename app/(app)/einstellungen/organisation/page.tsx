@@ -6,6 +6,7 @@ import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { formatBerlin } from '@/lib/utils';
 
 export default async function OrganizationSettingsPage() {
   const [
@@ -44,9 +45,7 @@ export default async function OrganizationSettingsPage() {
   }
   if (!organization) redirect('/dashboard');
 
-  const createdAtLabel = new Intl.DateTimeFormat('de-DE', {
-    dateStyle: 'long',
-  }).format(new Date(organization.created_at));
+  const createdAtLabel = formatBerlin(organization.created_at, 'longDate');
 
   return (
     <OrganizationSettingsForm

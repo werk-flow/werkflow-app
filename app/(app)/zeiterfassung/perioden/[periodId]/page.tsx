@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
-import { formatGermanDate } from '@/lib/utils';
+import { formatBerlin, formatGermanDate } from '@/lib/utils';
 import { TimePeriodCloseForm } from '@/components/zeiterfassung/time-period-close-form';
 import { TimePeriodFindingDecisionForm } from '@/components/zeiterfassung/time-period-finding-decision-form';
 import {
@@ -28,12 +28,6 @@ import {
   type TimePeriodDetail,
 } from '@/lib/time-accounts/queries';
 
-const SESSION_START_FORMAT = new Intl.DateTimeFormat('de-DE', {
-  dateStyle: 'short',
-  timeStyle: 'short',
-  timeZone: 'Europe/Berlin',
-});
-
 function FindingIcon({ severity }: { severity: string }) {
   if (severity === 'close_blocked')
     return <AlertTriangle aria-hidden="true" className="size-4 text-destructive" />;
@@ -55,8 +49,8 @@ function OpenSessionFinding({ session }: { session: OpenPeriodSession }) {
             : FINDING_LABELS.open_session}
         </p>
         <p className="text-sm text-muted-foreground">
-          {session.employeeName} · seit {SESSION_START_FORMAT.format(new Date(session.startedAt))} · muss vor
-          dem Abschluss beendet werden
+          {session.employeeName} · seit {formatBerlin(session.startedAt, 'shortDateTime')} · muss vor dem
+          Abschluss beendet werden
         </p>
       </div>
     </div>

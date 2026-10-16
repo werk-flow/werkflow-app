@@ -29,7 +29,7 @@ import { toLocalDateString } from '@/lib/utils';
 export const UNASSIGNED_DAY_ROW_KEY = 'unassigned';
 
 /** A login of the organization as the day view needs it. */
-export type DayRowMember = { userId: string; name: string; role: string };
+type DayRowMember = { userId: string; name: string; role: string };
 
 export type TimeBlockSegment = {
   id: string;

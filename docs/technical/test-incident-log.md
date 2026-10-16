@@ -22,6 +22,36 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-16: audit:layout:planning environment failure
+
+<!-- incident-run: 2026-10-16T033909166Z-262188 -->
+
+- Run: run `2026-10-16T033909166Z-262188`, group `audit:layout:planning`, target local, fingerprint `c5e6cf87c59b`, world `80dbccfbf1eb4b539169883177d0a736`.
+- Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: The scope settles: no aria-busy, pending dialog, skeleton, spinner, unconfirmed content or route refresh, and every calendar ready
+- Root cause: The Realtime socket to the WSL stack reconnected every 5 to 7 s from 04:43Z (52 socket opens in 4 min, during the CodeRabbit retry stream); each reconnect queued a catch-up route refresh, so the settle check never cleared. audit:layout:planning-board and the planning goldens passed on the same build.
+- Prevention: Tier 3: no runner mechanism sees a WSL process outside the verification run; the operator rule is to run CodeRabbit WSL passes before or after the browser plan, never during it.
+- Evidence: after the world cleanup, the repair plan `2026-10-16T063133871Z-56605863` ran the group on a rebuilt server with no review pass running, and it passed; no file of the planning surface changed in between.
+
+## 2026-10-16: audit:wave-3:p1-24a environment failure
+
+<!-- incident-run: 2026-10-16T033909166Z-0db6fd -->
+
+- Run: run `2026-10-16T033909166Z-0db6fd`, group `audit:wave-3:p1-24a`, target local, fingerprint `6595377b925e`, world `fdbb60ff3ab5489999cf2106d54a4f4c`.
+- Failure point:  >  > wave-3\p1-24a.spec.ts > P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3 > AUDIT-05 the month view: closure label, absence bar, „+n mehr“, a date move and the popover @P1-24A-05: Error: expect(locator).toBeVisible() failed
+- Root cause: The month move's confirmation did not land within 1 s at 04:03Z during the concurrent CodeRabbit WSL streams; the card is present and confirmed in the failure snapshot, the write path is unchanged in behaviour, and golden:p1-24a and the other calendar groups passed on the same build.
+- Prevention: Tier 3: no runner mechanism sees a WSL process outside the verification run; the operator rule is to run CodeRabbit WSL passes before or after the browser plan, never during it.
+- Evidence: after the world cleanup, the repair plan `2026-10-16T063133871Z-56605863` ran the group on a rebuilt server with no review pass running, and it passed, including the 1 s month-move assertion; no calendar file changed in between.
+
+## 2026-10-16: audit:wave-2:p1-22 environment failure
+
+<!-- incident-run: 2026-10-16T033909166Z-791c74 -->
+
+- Run: run `2026-10-16T033909166Z-791c74`, group `audit:wave-2:p1-22`, target local, fingerprint `0caa2a129096`, world `13090ca284b64e1fbb9b40514eabd6d1`.
+- Failure point:  >  > wave-2\p1-22.spec.ts > P1-22 correction review audit @AUDIT-W2-P1-22 @AUDIT-W2 > applies a Büro correction for another person at once but keeps the own correction a request @READINESS: Error: page.goto: net::ERR_NETWORK_CHANGED at http://localhost:3000/zeiterfassung?tab=history
+- Root cause: page.goto failed with net::ERR_NETWORK_CHANGED at 03:59Z while three concurrent CodeRabbit WSL review streams ran; the Windows network path to the WSL Supabase gateway changed under the browser.
+- Prevention: Tier 3: no runner mechanism sees a WSL process outside the verification run; the operator rule is to run CodeRabbit WSL passes before or after the browser plan, never during it.
+- Evidence: after the world cleanup, the repair plan `2026-10-16T063133871Z-56605863` ran the group on a rebuilt server with no review pass running, and it passed.
+
 ## 2026-10-15: audit:layout:work transient failure
 
 <!-- incident-run: 2026-10-15T190815412Z-f15eed -->

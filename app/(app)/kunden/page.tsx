@@ -1,20 +1,18 @@
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Suspense } from 'react';
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { parseListPage } from '@/lib/ui/list-pagination';
 import { type ListSearchParams } from '@/lib/jobs/list-page';
 import { readCustomerPage } from '@/lib/clients/list-page-server';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { isManagerRole } from '@/lib/roles';
 import { CreateClientDialog } from '@/components/kunden/create-client-dialog';
 import { KundenContent } from '@/components/kunden/kunden-content';
 import { KundenContentSkeleton } from '@/components/loading-states/kunden-content-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
-import type { OrgRole } from '@/lib/members/actions';
 
 async function KundenData({
   activeOrgId,
@@ -53,23 +51,9 @@ export default async function KundenPage({
 }: {
   searchParams?: Promise<ListSearchParams>;
 }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     return (
       <PageShell>
         <PageHeader title="Kunden" />
@@ -80,12 +64,9 @@ export default async function KundenPage({
     );
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
-
-  if (!isAdminOrManager) {
+  const activeOrgId = membership.orgId;
+  const currentUserRole = membership.role;
+  if (!isManagerRole(currentUserRole)) {
     redirect('/dashboard');
   }
 

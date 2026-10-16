@@ -86,8 +86,8 @@ const readEmpty = async () => {
   if (failRead) throw new Error('sensitive upstream details');
   return { success: true, entries: [] };
 };
-mock.module('@/lib/time-tracking/actions', () => ({
-  getTimeEntries: readEmpty,
+mock.module('@/lib/time-tracking/entry-read-actions', () => ({ getTimeEntries: readEmpty }));
+mock.module('@/lib/time-tracking/review-actions', () => ({
   getChangeRequestsForEntries: async () => ({ success: true, requests: [] }),
 }));
 mock.module('@/lib/planning/actions', () => ({ getPlanningEntries: readEmpty }));
@@ -177,9 +177,9 @@ globalThis.fetch = Object.assign(
   { preconnect: originalFetch.preconnect },
 );
 try {
-  const { getCalendarWindow } = await import('@/lib/calendar/client');
-  const first = getCalendarWindow(input);
-  const second = getCalendarWindow({ ...input, fromDate: '2026-06-01', toDate: '2026-06-30' });
+  const { fetchCalendarWindow } = await import('@/lib/calendar/client');
+  const first = fetchCalendarWindow(input);
+  const second = fetchCalendarWindow({ ...input, fromDate: '2026-06-01', toDate: '2026-06-30' });
   assert.equal(pending.length, 2);
   for (const item of pending) {
     assert.equal(item.url.pathname, '/api/calendar-window');
@@ -304,7 +304,7 @@ try {
       },
     ],
   };
-  const populatedRead = getCalendarWindow(input);
+  const populatedRead = fetchCalendarWindow(input);
   const populatedPending = pending.at(-1);
   assert.ok(populatedPending, 'expected a pending read');
   populatedPending.resolve(Response.json(populated));
@@ -315,7 +315,7 @@ try {
     Response.json(empty, { status: 500 }),
     new Response('<html>upstream failure</html>', { status: 502 }),
   ]) {
-    const result = getCalendarWindow(input);
+    const result = fetchCalendarWindow(input);
     const failurePending = pending.at(-1);
     assert.ok(failurePending, 'expected a pending read');
     failurePending.resolve(response);

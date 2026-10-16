@@ -174,6 +174,212 @@ function classScrolls(classAttribute: ts.Node, source: ts.SourceFile): boolean {
   return scrolls;
 }
 
+/** The parsed product sources, keyed by their repository path. */
+type ParsedSources = ReadonlyMap<string, ts.SourceFile>;
+
+/** The file and export an imported name of a source refers to; undefined for a local name. */
+function resolveImportBinding(
+  sources: ParsedSources,
+  source: ts.SourceFile,
+  name: string,
+): { file: string; name: string } | undefined {
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    let exported: string | undefined;
+    if (bindings && ts.isNamedImports(bindings)) {
+      const match = bindings.elements.find((element) => element.name.text === name);
+      if (match) exported = match.propertyName?.text ?? match.name.text;
+    }
+    if (bindings && ts.isNamespaceImport(bindings) && name.startsWith(`${bindings.name.text}.`)) {
+      exported = name.slice(bindings.name.text.length + 1);
+    }
+    if (statement.importClause?.name?.text === name) exported = 'default';
+    if (!exported) continue;
+    const specifier = statement.moduleSpecifier.text;
+    const base = specifier.startsWith('@/')
+      ? specifier.slice(2)
+      : posix.normalize(posix.join(dirname(source.fileName), specifier));
+    const file = [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`].find((candidate) =>
+      sources.has(candidate),
+    );
+    return { file: file ?? base, name: exported };
+  }
+  return undefined;
+}
+
+/** The tag of a JSX element under its exported name when it is imported. */
+function layerTagName(sources: ParsedSources, node: ts.JsxOpeningElement | ts.JsxSelfClosingElement): string {
+  const raw = node.tagName.getText();
+  return resolveImportBinding(sources, node.getSourceFile(), raw)?.name ?? raw;
+}
+
+/** The function that implements a rendered component, followed across imports; undefined for a UI primitive. */
+function findComponentImplementation(
+  sources: ParsedSources,
+  source: ts.SourceFile,
+  name: string,
+): Component | undefined {
+  const binding = resolveImportBinding(sources, source, name);
+  if (binding) {
+    // UI primitives own their implementation; their children retain the caller's form context.
+    if (binding.file.startsWith('components/ui/')) return undefined;
+    const target = sources.get(binding.file);
+    return target ? findComponentImplementation(sources, target, binding.name) : undefined;
+  }
+  let found: Component | undefined;
+  function visit(node: ts.Node): void {
+    if (
+      ts.isFunctionDeclaration(node) &&
+      (node.name?.text === name ||
+        (name === 'default' &&
+          node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)))
+    ) {
+      found = node;
+      return;
+    }
+    if (ts.isVariableDeclaration(node) && node.name.getText() === name && node.initializer) {
+      if (isComponent(node.initializer)) found = node.initializer;
+      else if (ts.isCallExpression(node.initializer)) {
+        found = node.initializer.arguments.find(
+          (argument): argument is ts.ArrowFunction | ts.FunctionExpression =>
+            ts.isArrowFunction(argument) || ts.isFunctionExpression(argument),
+        );
+      }
+    }
+    if (!found) ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return found;
+}
+
+/** The source text of a layer's title element, outside nested portals. */
+function readLayerTitle(sources: ParsedSources, layer: ts.JsxElement, titleTag: string): string {
+  let title = '';
+  function findTitle(child: ts.Node): void {
+    if (ts.isJsxElement(child)) {
+      const tag = layerTagName(sources, child.openingElement);
+      if (child !== layer && portalBoundaries.has(tag)) return;
+      if (tag === titleTag) {
+        title = child.children
+          .filter((part) => ts.isJsxText(part) || ts.isJsxExpression(part))
+          .map((part) => part.getText())
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+      }
+    }
+    ts.forEachChild(child, findTitle);
+  }
+  findTitle(layer);
+  return title;
+}
+
+/** The form contract of one rendered layer, following the components it renders. */
+function inspectLayer(
+  sources: ParsedSources,
+  file: string,
+  source: ts.SourceFile,
+  node: ts.JsxElement,
+  kind: DialogKind,
+): DialogContract {
+  const owner = `${file}#${ownerName(node)}`;
+  const contract: DialogContract = {
+    key: `${owner}|${readLayerTitle(sources, node, LAYER_TITLES[kind])}`,
+    kind,
+    owner,
+    forms: 0,
+    bodies: 0,
+    uncoveredControls: [],
+    contentScrolls: false,
+    formBoundaries: [],
+    associatedSubmits: [],
+  };
+  const classAttribute = node.openingElement.attributes.properties.find(
+    (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText() === 'className',
+  );
+  if (classAttribute) contract.contentScrolls = classScrolls(classAttribute, source);
+
+  function walk(
+    current: ts.Node,
+    inForm: boolean,
+    active: ReadonlySet<ts.Node>,
+    children: readonly ts.JsxChild[] = [],
+  ): void {
+    if (
+      ts.isJsxExpression(current) &&
+      current.expression &&
+      ['children', 'props.children'].includes(current.expression.getText())
+    ) {
+      for (const child of children) walk(child, inForm, active);
+      return;
+    }
+    if (ts.isJsxExpression(current) && current.expression && ts.isIdentifier(current.expression)) {
+      const initializer = localInitializer(current.expression);
+      if (initializer && !active.has(initializer)) {
+        walk(initializer, inForm, new Set([...active, initializer]), children);
+        return;
+      }
+    }
+    if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) {
+      const opening = ts.isJsxElement(current) ? current.openingElement : current;
+      const tag = layerTagName(sources, opening);
+      if (current !== node && portalBoundaries.has(tag)) return;
+      if (tag === 'form') {
+        const submits = opening.attributes.properties.some(
+          (attribute) =>
+            ts.isJsxAttribute(attribute) && ['onSubmit', 'action'].includes(attribute.name.getText()),
+        );
+        if (submits) {
+          contract.forms += 1;
+          contract.formBoundaries.push({
+            id: attributeValue(opening, 'id'),
+            conditions: renderConditions(current),
+          });
+        }
+        inForm = submits;
+      }
+      if (
+        ['Button', 'button', 'input'].includes(tag) &&
+        attributeValue(opening, 'type') === 'submit' &&
+        attributeValue(opening, 'form')
+      ) {
+        contract.associatedSubmits.push({
+          id: attributeValue(opening, 'form'),
+          conditions: renderConditions(current),
+        });
+      }
+      if (tag === 'DialogBody') contract.bodies += 1;
+      if (editableControls.has(tag) && !inForm) contract.uncoveredControls.push(tag);
+      const implementation = editableControls.has(tag)
+        ? undefined
+        : findComponentImplementation(sources, current.getSourceFile(), opening.tagName.getText());
+      if (implementation && !active.has(implementation)) {
+        const next = new Set([...active, implementation]);
+        const passedChildren = ts.isJsxElement(current) ? current.children : [];
+        function render(part: ts.Node): void {
+          if (part !== implementation && isComponent(part)) return;
+          if (ts.isReturnStatement(part) && part.expression) {
+            walk(part.expression, inForm, next, passedChildren);
+            return;
+          }
+          ts.forEachChild(part, render);
+        }
+        if (ts.isArrowFunction(implementation) && !ts.isBlock(implementation.body)) {
+          walk(implementation.body, inForm, next, passedChildren);
+        } else render(implementation);
+        return;
+      }
+      if (ts.isJsxElement(current))
+        for (const child of current.children) walk(child, inForm, active, children);
+      return;
+    }
+    ts.forEachChild(current, (child) => walk(child, inForm, active, children));
+  }
+  walk(node, false, new Set());
+  return contract;
+}
+
 /** Follow rendered component returns, never unrelated functions or nested portals. */
 export function inspectDialogs(files: ReadonlyMap<string, string>): DialogContract[] {
   const sources = new Map(
@@ -183,190 +389,13 @@ export function inspectDialogs(files: ReadonlyMap<string, string>): DialogContra
     ]),
   );
 
-  function imported(source: ts.SourceFile, name: string): { file: string; name: string } | undefined {
-    for (const statement of source.statements) {
-      if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-      const bindings = statement.importClause?.namedBindings;
-      let exported: string | undefined;
-      if (bindings && ts.isNamedImports(bindings)) {
-        const match = bindings.elements.find((element) => element.name.text === name);
-        if (match) exported = match.propertyName?.text ?? match.name.text;
-      }
-      if (bindings && ts.isNamespaceImport(bindings) && name.startsWith(`${bindings.name.text}.`)) {
-        exported = name.slice(bindings.name.text.length + 1);
-      }
-      if (statement.importClause?.name?.text === name) exported = 'default';
-      if (!exported) continue;
-      const specifier = statement.moduleSpecifier.text;
-      const base = specifier.startsWith('@/')
-        ? specifier.slice(2)
-        : posix.normalize(posix.join(dirname(source.fileName), specifier));
-      const file = [base, `${base}.tsx`, `${base}.ts`, `${base}/index.tsx`].find((candidate) =>
-        sources.has(candidate),
-      );
-      return { file: file ?? base, name: exported };
-    }
-    return undefined;
-  }
-
-  function tagName(node: ts.JsxOpeningElement | ts.JsxSelfClosingElement): string {
-    const raw = node.tagName.getText();
-    return imported(node.getSourceFile(), raw)?.name ?? raw;
-  }
-
-  function componentAt(source: ts.SourceFile, name: string): Component | undefined {
-    const binding = imported(source, name);
-    if (binding) {
-      // UI primitives own their implementation; their children retain the caller's form context.
-      if (binding.file.startsWith('components/ui/')) return undefined;
-      const target = sources.get(binding.file);
-      return target ? componentAt(target, binding.name) : undefined;
-    }
-    let found: Component | undefined;
-    function visit(node: ts.Node): void {
-      if (
-        ts.isFunctionDeclaration(node) &&
-        (node.name?.text === name ||
-          (name === 'default' &&
-            node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)))
-      ) {
-        found = node;
-        return;
-      }
-      if (ts.isVariableDeclaration(node) && node.name.getText() === name && node.initializer) {
-        if (isComponent(node.initializer)) found = node.initializer;
-        else if (ts.isCallExpression(node.initializer)) {
-          found = node.initializer.arguments.find(
-            (argument): argument is ts.ArrowFunction | ts.FunctionExpression =>
-              ts.isArrowFunction(argument) || ts.isFunctionExpression(argument),
-          );
-        }
-      }
-      if (!found) ts.forEachChild(node, visit);
-    }
-    visit(source);
-    return found;
-  }
-
   const contracts: DialogContract[] = [];
   for (const [file, source] of sources) {
     function discover(node: ts.Node): void {
-      const kind = ts.isJsxElement(node) ? LAYER_ROOTS[tagName(node.openingElement)] : undefined;
-      if (ts.isJsxElement(node) && kind) {
-        const owner = `${file}#${ownerName(node)}`;
-        const titleTag = LAYER_TITLES[kind];
-        let title = '';
-        function findTitle(child: ts.Node): void {
-          if (ts.isJsxElement(child)) {
-            const tag = tagName(child.openingElement);
-            if (child !== node && portalBoundaries.has(tag)) return;
-            if (tag === titleTag) {
-              title = child.children
-                .filter((part) => ts.isJsxText(part) || ts.isJsxExpression(part))
-                .map((part) => part.getText())
-                .join(' ')
-                .replace(/\s+/g, ' ')
-                .trim();
-            }
-          }
-          ts.forEachChild(child, findTitle);
-        }
-        findTitle(node);
-        const contract: DialogContract = {
-          key: `${owner}|${title}`,
-          kind,
-          owner,
-          forms: 0,
-          bodies: 0,
-          uncoveredControls: [],
-          contentScrolls: false,
-          formBoundaries: [],
-          associatedSubmits: [],
-        };
-        const classAttribute = node.openingElement.attributes.properties.find(
-          (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText() === 'className',
-        );
-        if (classAttribute) contract.contentScrolls = classScrolls(classAttribute, source);
-
-        function walk(
-          current: ts.Node,
-          inForm: boolean,
-          active: ReadonlySet<ts.Node>,
-          children: readonly ts.JsxChild[] = [],
-        ): void {
-          if (
-            ts.isJsxExpression(current) &&
-            current.expression &&
-            ['children', 'props.children'].includes(current.expression.getText())
-          ) {
-            for (const child of children) walk(child, inForm, active);
-            return;
-          }
-          if (ts.isJsxExpression(current) && current.expression && ts.isIdentifier(current.expression)) {
-            const initializer = localInitializer(current.expression);
-            if (initializer && !active.has(initializer)) {
-              walk(initializer, inForm, new Set([...active, initializer]), children);
-              return;
-            }
-          }
-          if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) {
-            const opening = ts.isJsxElement(current) ? current.openingElement : current;
-            const tag = tagName(opening);
-            if (current !== node && portalBoundaries.has(tag)) return;
-            if (tag === 'form') {
-              const submits = opening.attributes.properties.some(
-                (attribute) =>
-                  ts.isJsxAttribute(attribute) && ['onSubmit', 'action'].includes(attribute.name.getText()),
-              );
-              if (submits) {
-                contract.forms += 1;
-                contract.formBoundaries.push({
-                  id: attributeValue(opening, 'id'),
-                  conditions: renderConditions(current),
-                });
-              }
-              inForm = submits;
-            }
-            if (
-              ['Button', 'button', 'input'].includes(tag) &&
-              attributeValue(opening, 'type') === 'submit' &&
-              attributeValue(opening, 'form')
-            ) {
-              contract.associatedSubmits.push({
-                id: attributeValue(opening, 'form'),
-                conditions: renderConditions(current),
-              });
-            }
-            if (tag === 'DialogBody') contract.bodies += 1;
-            if (editableControls.has(tag) && !inForm) contract.uncoveredControls.push(tag);
-            const implementation = editableControls.has(tag)
-              ? undefined
-              : componentAt(current.getSourceFile(), opening.tagName.getText());
-            if (implementation && !active.has(implementation)) {
-              const next = new Set([...active, implementation]);
-              const passedChildren = ts.isJsxElement(current) ? current.children : [];
-              function render(part: ts.Node): void {
-                if (part !== implementation && isComponent(part)) return;
-                if (ts.isReturnStatement(part) && part.expression) {
-                  walk(part.expression, inForm, next, passedChildren);
-                  return;
-                }
-                ts.forEachChild(part, render);
-              }
-              if (ts.isArrowFunction(implementation) && !ts.isBlock(implementation.body)) {
-                walk(implementation.body, inForm, next, passedChildren);
-              } else render(implementation);
-              return;
-            }
-            if (ts.isJsxElement(current))
-              for (const child of current.children) walk(child, inForm, active, children);
-            return;
-          }
-          ts.forEachChild(current, (child) => walk(child, inForm, active, children));
-        }
-        walk(node, false, new Set());
-        contracts.push(contract);
-      }
+      const kind = ts.isJsxElement(node)
+        ? LAYER_ROOTS[layerTagName(sources, node.openingElement)]
+        : undefined;
+      if (ts.isJsxElement(node) && kind) contracts.push(inspectLayer(sources, file, source, node, kind));
       ts.forEachChild(node, discover);
     }
     discover(source);

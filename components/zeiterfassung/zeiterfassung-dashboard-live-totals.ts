@@ -1,4 +1,4 @@
-import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
+import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import type { ClockTimelineSegment, LiveClockState } from '@/lib/time-tracking/types';
 
@@ -20,30 +20,31 @@ export function computeZeiterfassungLiveTotals(
   liveTotalMinutes: number,
   todayTargetMinutes: number | undefined,
 ): ZeiterfassungLiveTotals {
+  // The minutes of the still-running activity; 0 when nothing runs.
+  const currentActivityMinutes = liveMinutes(
+    0,
+    effectiveState.isClockedIn ? effectiveState.statusStartedAt : null,
+  );
+
   const liveTimelineSegments: ClockTimelineSegment[] = (() => {
     const segments = [...(effectiveState.timelineSegments ?? [])];
-    if (!effectiveState.isClockedIn || !effectiveState.statusStartedAt) {
-      return segments;
-    }
-
-    const liveMinutes = getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60);
-    if (liveMinutes <= 0) {
+    if (currentActivityMinutes <= 0) {
       return segments;
     }
 
     segments.push({
       type: effectiveState.status === 'on_break' ? 'break' : 'work',
-      minutes: liveMinutes,
+      minutes: currentActivityMinutes,
     });
     return segments;
   })();
 
   const trackedLiveBreakMinutes =
     effectiveState.breakMode === 'manual'
-      ? effectiveState.breakMinutes +
-        (effectiveState.status === 'on_break' && effectiveState.statusStartedAt
-          ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
-          : 0)
+      ? liveMinutes(
+          effectiveState.breakMinutes,
+          effectiveState.status === 'on_break' ? effectiveState.statusStartedAt : null,
+        )
       : effectiveState.breakMinutes;
 
   const breakdown = computeBreakdownForSettings(
@@ -59,10 +60,6 @@ export function computeZeiterfassungLiveTotals(
       ? Math.min(Math.round((liveWorkMinutes / todayTargetMinutes) * 100), 100)
       : null;
   const ringTimelineSegments = effectiveState.breakMode === 'manual' ? liveTimelineSegments : undefined;
-  const currentActivityMinutes =
-    effectiveState.isClockedIn && effectiveState.statusStartedAt
-      ? getNonNegativeElapsedMs(effectiveState.statusStartedAt) / (1000 * 60)
-      : 0;
   const liveTravelMinutes =
     effectiveState.travelMinutes +
     (effectiveState.currentActivity?.kind === 'travel' ? currentActivityMinutes : 0);

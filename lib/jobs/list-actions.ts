@@ -28,9 +28,9 @@ export async function getProjectJobPage(input: {
   const parsed = z
     .object({ projectId: uuidSchema, page: z.number().int().min(1).max(1_000_000) })
     .safeParse(input);
-  if (!parsed.success) return { success: false, error: 'Ungültige Seitenauswahl.' };
+  if (!parsed.success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
-  if (!auth.success) return { success: false, error: 'Aufträge konnten nicht geladen werden.' };
+  if (!auth.success) return auth;
   const { orgId, userId, isManagerOrAbove } = auth.context;
   const admin = createSupabaseAdminClient();
   const selected = await admin.rpc('list_project_job_page', {
@@ -42,8 +42,7 @@ export async function getProjectJobPage(input: {
     p_page_size: LIST_PAGE_SIZE,
   });
   const page = entityIdPageSchema.safeParse(selected.data);
-  if (selected.error || !page.success)
-    return { success: false, error: 'Aufträge konnten nicht geladen werden.' };
+  if (selected.error || !page.success) return { success: false, error: 'project_jobs_load_failed' };
   if (!page.data.ids.length)
     return { success: true, jobs: [], total: page.data.total, clientMap: {}, assignmentMap: {} };
   const [jobs, assignments] = await Promise.all([
@@ -71,7 +70,7 @@ export async function getProjectJobPage(input: {
   ]);
   if (jobs.error || assignments.error) {
     logReadErrors('getProjectJobPage: read failed', jobs.error, assignments.error);
-    return { success: false, error: 'Aufträge konnten nicht geladen werden.' };
+    return { success: false, error: 'project_jobs_load_failed' };
   }
   const clientIds = [...new Set(jobs.data.flatMap((job) => (job.client_id ? [job.client_id] : [])))];
   const clients = await readInBatches(clientIds, (ids) =>
@@ -83,7 +82,7 @@ export async function getProjectJobPage(input: {
   );
   if (clients.error) {
     logReadErrors('getProjectJobPage: read failed', clients.error);
-    return { success: false, error: 'Kunden konnten nicht geladen werden.' };
+    return { success: false, error: 'project_clients_load_failed' };
   }
   const assignmentMap: Record<string, string[]> = {};
   for (const assignment of assignments.data)

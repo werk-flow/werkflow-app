@@ -16,7 +16,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { SearchInput } from '@/components/ui/search-input';
 import { updateDocumentLinks } from '@/lib/documents/actions';
-import type { OrganizationDocument } from '@/lib/documents/types';
+import type { OrganizationDocument, UpdateDocumentLinksResult } from '@/lib/documents/types';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -107,14 +107,12 @@ function formatChangeCount(count: number): string {
   return count === 1 ? '1 Änderung' : `${count} Änderungen`;
 }
 
-function getUpdateMessage(result: {
-  success: boolean;
-  addedCount?: number;
-  removedCount?: number;
-  error?: string;
-}): { variant: 'success' | 'error'; message: string } {
-  const addedCount = result.addedCount ?? 0;
-  const removedCount = result.removedCount ?? 0;
+function getUpdateMessage(result: UpdateDocumentLinksResult): {
+  variant: 'success' | 'error';
+  message: string;
+} {
+  const addedCount = result.success ? result.addedCount : 0;
+  const removedCount = result.success ? result.removedCount : 0;
 
   if (result.success) {
     if (addedCount === 0 && removedCount === 0) {

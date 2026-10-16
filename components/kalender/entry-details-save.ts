@@ -3,13 +3,13 @@
 // time, and every applied step is rolled back when a later one is refused.
 
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
-import { addManualEntry, deleteEntry, updateEntry } from '@/lib/time-tracking/actions';
+import { addManualEntry, deleteEntry, updateEntry } from '@/lib/time-tracking/entry-write-actions';
 import {
   isDateInClosedPeriod,
   isEntryInClosedPeriod,
   type ClosedTimePeriod,
 } from '@/lib/time-tracking/closed-period-dates';
-import { getLocalDayKey } from '@/lib/time-tracking/day-utils';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import { closeEntryDetailsWithRequest, type EntryDetailsCommandContext } from './entry-details-commands';
 import { formatActionError } from './entry-details-labels';
@@ -151,7 +151,7 @@ function touchesClosedPeriod(
   return (
     snapshot.sessionEntriesForReview.some((entry) => isEntryInClosedPeriod(entry, closedPeriods)) ||
     [...movedTo, ...newBreakTimes].some((instant) =>
-      isDateInClosedPeriod(getLocalDayKey(instant), closedPeriods),
+      isDateInClosedPeriod(formatBerlinLocalDate(instant), closedPeriods),
     )
   );
 }
@@ -168,7 +168,7 @@ async function applyEntryTimestampUpdates(
     });
 
     if (!result.success) {
-      setError(formatActionError(result.error));
+      setError(formatActionError(result));
       return false;
     }
 
@@ -220,7 +220,7 @@ async function createNewEntryBreaks(
     });
 
     if (!result.success) {
-      setError(formatActionError(result.error));
+      setError(formatActionError(result));
       return false;
     }
 
@@ -253,7 +253,7 @@ async function deleteRemovedEntryBreaks(
       });
 
       if (!convertedResult.success) {
-        setError(formatActionError(convertedResult.error));
+        setError(formatActionError(convertedResult));
         return false;
       }
 

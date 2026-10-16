@@ -208,7 +208,7 @@ rowsByTable.organization_members = {
     },
   ],
 };
-const { getCurrentClockState } = await import('@/lib/time-tracking/actions');
+const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
 failing.add('organization_settings');
 const settingsReadsBefore = reads.get('organization_settings') ?? 0;
 const clockState = await getCurrentClockState(otherOrganization);

@@ -13,6 +13,8 @@ import { z } from '@/lib/zod';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { Constants } from '@/lib/supabase/database.types';
+import type { OrgRole } from '@/lib/roles';
+import { strandedResponsibilityOf, type OrganizationResponsibility } from '@/lib/responsibilities/types';
 
 const memberRoleChangeSchema = z.object({
   memberId: uuidSchema,
@@ -29,17 +31,14 @@ const ROLE_HIERARCHY: Record<OrgRole, number> = {
   employee: 3,
 };
 
-export type OrgRole = 'admin' | 'buero' | 'employee';
+export type UpdateRoleResult = ActionResult;
 
-export type UpdateRoleResult = {
-  success: boolean;
-  error?: string;
+/** A removal that would leave a responsibility without an effective holder names every such responsibility. */
+export type StrandedResponsibilityFailure = ActionFailure<'last_responsibility_holder'> & {
+  responsibilities: OrganizationResponsibility[];
 };
 
-export type RemoveMemberResult = {
-  success: boolean;
-  error?: string;
-};
+export type RemoveMemberResult = ActionResult | StrandedResponsibilityFailure;
 
 /**
  * Update a member's role within an organization.
@@ -79,7 +78,7 @@ export async function updateMemberRole(
       return { success: false, error: 'not_a_member' };
     }
 
-    const callerRole = callerMembership.role as OrgRole;
+    const callerRole = callerMembership.role;
 
     // Only admins and managers can change roles
     if (callerRole !== 'admin' && callerRole !== 'buero') {
@@ -97,7 +96,7 @@ export async function updateMemberRole(
       return { success: false, error: 'member_not_found' };
     }
 
-    const targetRole = targetMember.role as OrgRole;
+    const targetRole = targetMember.role;
 
     if (targetMember.user_id === callerId) {
       return { success: false, error: 'cannot_change_own_role' };
@@ -179,7 +178,7 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
       return { success: false, error: 'not_a_member' };
     }
 
-    const callerRole = callerMembership.role as OrgRole;
+    const callerRole = callerMembership.role;
 
     // Only admins and managers can remove members
     if (callerRole !== 'admin' && callerRole !== 'buero') {
@@ -197,7 +196,7 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
       return { success: false, error: 'member_not_found' };
     }
 
-    const targetRole = targetMember.role as OrgRole;
+    const targetRole = targetMember.role;
 
     // Cannot remove self
     if (targetMember.user_id === callerId) {
@@ -228,7 +227,8 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
     if (strandedResponsibilities.length > 0) {
       return {
         success: false,
-        error: `last_responsibility_holders:${strandedResponsibilities.join(',')}`,
+        error: 'last_responsibility_holder',
+        responsibilities: strandedResponsibilities,
       };
     }
 
@@ -252,13 +252,12 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
       if (deleteError.message.includes('member_removal_exit_before_entry')) {
         return { success: false, error: 'exit_before_entry' };
       }
-      if (deleteError.message.includes('last_responsibility_holder:')) {
-        const responsibility = deleteError.message.includes('leave_approval')
-          ? 'leave_approval'
-          : 'time_approval';
+      const strandedResponsibility = strandedResponsibilityOf(deleteError.message);
+      if (strandedResponsibility) {
         return {
           success: false,
-          error: `last_responsibility_holder:${responsibility}`,
+          error: 'last_responsibility_holder',
+          responsibilities: [strandedResponsibility],
         };
       }
       return { success: false, error: 'delete_failed' };
@@ -397,7 +396,7 @@ export async function getMemberDetail(userIdInput: string): Promise<ActionResult
         firstName: profile.first_name ?? '',
         lastName: profile.last_name ?? '',
         email: profile.email ?? '',
-        role: membership.role as OrgRole,
+        role: membership.role,
         joinedAt: membership.joined_at,
       },
     };

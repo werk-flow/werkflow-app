@@ -85,7 +85,8 @@ export function DeleteAccountButton() {
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
-              handleDelete();
+              // handleDelete shows its own failures in the dialog.
+              void handleDelete();
             }}
             disabled={isDeleting}
             variant="destructive"

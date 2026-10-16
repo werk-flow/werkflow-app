@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 
-import { getEasterSunday, getHolidayName, getPublicHolidaysForYear } from './holidays';
+import { getHolidayName, getPublicHolidaysForYear } from './holidays';
 
 // These fixed reference lists catch changes to the in-code calculation.
 // They do not detect legislative changes; review official sources before
 // updating both the holiday dataset and its expected lists.
 
-describe('getEasterSunday', () => {
+describe('Easter Sunday', () => {
   test('matches the published Easter dates', () => {
-    expect(getEasterSunday(2026)).toEqual({ month: 4, day: 5 });
-    expect(getEasterSunday(2027)).toEqual({ month: 3, day: 28 });
-    expect(getEasterSunday(2028)).toEqual({ month: 4, day: 16 });
+    // Brandenburg keeps Ostersonntag as a public holiday.
+    expect(getHolidayName('BB', '2026-04-05')).toBe('Ostersonntag');
+    expect(getHolidayName('BB', '2027-03-28')).toBe('Ostersonntag');
+    expect(getHolidayName('BB', '2028-04-16')).toBe('Ostersonntag');
   });
 });
 

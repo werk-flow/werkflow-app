@@ -41,7 +41,7 @@ async function getUserSubscription(userId: string): Promise<Subscription | null>
     throw new SubscriptionReadError('subscription_read_failed');
   }
 
-  return data as Subscription;
+  return data;
 }
 
 /**

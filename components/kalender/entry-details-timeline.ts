@@ -2,6 +2,7 @@
 // derivation, the editable break draft, default break placement and the
 // validation of an edited work block.
 
+import { sortTimeEntries } from '@/lib/time-tracking/effective-entries';
 import type { TimeEntry, WorkSessionBreak } from '@/lib/time-tracking/types';
 
 export type EditableBreak = {
@@ -12,14 +13,6 @@ export type EditableBreak = {
   breakEnd: Date | null;
   isNew?: boolean;
 };
-
-export function sortTimeEntries(entries: TimeEntry[]): TimeEntry[] {
-  return [...entries].sort((a, b) => {
-    const diff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-    if (diff !== 0) return diff;
-    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-  });
-}
 
 export function deriveBreaksFromEntries(entries: TimeEntry[]): WorkSessionBreak[] {
   const breaks: WorkSessionBreak[] = [];

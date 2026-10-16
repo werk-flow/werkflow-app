@@ -1,5 +1,5 @@
 /** The part of a DOM element the guard reads. */
-export interface ShortcutTarget {
+interface ShortcutTarget {
   closest(selector: string): unknown;
 }
 

@@ -9,8 +9,9 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { describeFailure } from '@/lib/action-messages';
 import { deleteEmploymentCondition } from '@/lib/personnel/actions';
-import { getBusinessTodayIso, getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
-import { EmploymentConditionDeleteDialog } from './employment-condition-delete-dialog';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
+import { VersionDeleteDialog } from './version-delete-dialog';
 import { EmploymentConditionDialog } from './employment-condition-dialog';
 import { CONDITION_ERROR_MESSAGES } from './employment-condition-format';
 import { EmploymentConditionListItem } from './employment-condition-list-item';
@@ -117,7 +118,9 @@ export function EmploymentConditionsSection({
         />
       )}
 
-      <EmploymentConditionDeleteDialog
+      <VersionDeleteDialog
+        title="Kondition löschen?"
+        subject="Die Kondition"
         deleteTarget={deleteTarget}
         deleteError={deleteError}
         isDeleting={isDeleting}

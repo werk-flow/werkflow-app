@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { createCroppedAvatarBlob } from '@/components/settings/profile-avatar-crop';
 import { useBanner } from '@/components/ui/banner';
-import { useUserProfile, type UserProfile } from '@/components/user/user-profile-context';
+import { useUserProfile } from '@/components/user/user-profile-context';
+import type { UserProfile } from '@/lib/profile-reference';
 import { usePendingTask } from '@/hooks/use-server-action';
 import {
   PROFILE_AVATAR_ALLOWED_MIME_TYPES,

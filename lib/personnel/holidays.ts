@@ -84,7 +84,7 @@ function isoDateFromParts(year: number, month: number, day: number): string {
  * Easter Sunday (Gregorian) via the Meeus/Jones/Butcher algorithm.
  * Returns { month, day } (1-based month).
  */
-export function getEasterSunday(year: number): { month: number; day: number } {
+function getEasterSunday(year: number): { month: number; day: number } {
   const a = year % 19;
   const b = Math.floor(year / 100);
   const c = year % 100;

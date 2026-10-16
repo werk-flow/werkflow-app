@@ -1,5 +1,5 @@
+import type { OrgRole } from '@/lib/roles';
 import type {
-  OrgRole,
   OrganizationResponsibility,
   ResponsibilityAssignmentSource,
   ResponsibilityConfigurationMode,

@@ -7,7 +7,7 @@ import { toLocalDateString } from '@/lib/utils';
 /**
  * The registry's date-plus-time pair (DatePicker + TimeInput) over one
  * combined `YYYY-MM-DDTHH:mm` string value ('' = unset), the same shape the
- * Berlin wall-time helpers in lib/customer-relationships/date-time use.
+ * Berlin wall-time helpers in lib/date-time/berlin use.
  * Setting only one half fills the other with a sensible default (today /
  * 00:00) so the combined value is always parseable.
  */

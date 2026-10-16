@@ -2,6 +2,7 @@ import { describeFailure } from '@/lib/action-messages';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { formatResponsibilityPersonName, type ResponsibilityPerson } from '@/lib/responsibilities/types';
 import { ROLE_LABELS } from '@/lib/roles';
+import { formatBerlin } from '@/lib/utils';
 
 export const ERROR_MESSAGES = {
   not_authorized: 'Nur der Admin kann Verantwortlichkeiten ändern.',
@@ -33,7 +34,7 @@ export function personName(people: ResponsibilityPerson[], employeeRecordId: str
 }
 
 export function formatDelegationDate(value: string): string {
-  return new Date(`${value}T12:00:00`).toLocaleDateString('de-DE');
+  return formatBerlin(value, 'numericDate');
 }
 
 export function holderSourceLabel(holder: EffectiveResponsibilityHolder): string {

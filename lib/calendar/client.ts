@@ -3,7 +3,7 @@ import type { CalendarBoardInput, CalendarBoardResult } from './board-actions';
 import { calendarBoardResponseSchema, calendarWindowResponseSchema } from './window-response';
 
 /** Fetch starts immediately, independently of the browser's serialized Server Action queue. */
-export async function getCalendarWindow(
+export async function fetchCalendarWindow(
   input: CalendarWindowInput,
   signal?: AbortSignal,
 ): Promise<CalendarWindowResult> {

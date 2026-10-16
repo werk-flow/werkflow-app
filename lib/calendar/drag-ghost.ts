@@ -4,12 +4,13 @@
  * drop zone the pointer is over. The engine writes the results to the DOM.
  */
 
-type GhostVerdict = { ok: true; label?: string } | { ok: false; message: string };
+/** A drop target's verdict: valid with an optional label, or refused with the message. */
+export type DragVerdict = { ok: true; label?: string } | { ok: false; message: string };
 
 /** The ghost's state and message: idle without a target, the refusal or the valid label otherwise. */
 export function ghostPaint(
   hasTarget: boolean,
-  verdict: GhostVerdict | null,
+  verdict: DragVerdict | null,
 ): { state: 'idle' | 'valid' | 'refused'; text: string } {
   const state = !hasTarget ? 'idle' : verdict?.ok ? 'valid' : 'refused';
   const text = hasTarget && verdict && !verdict.ok ? verdict.message : (verdict?.ok && verdict.label) || '';

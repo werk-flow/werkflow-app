@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { parseBerlinDateTimeInput } from '@/lib/customer-relationships/date-time';
+import { parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
 import {
   setPersonnelAccessTransition,
   setPersonnelEmploymentTransition,

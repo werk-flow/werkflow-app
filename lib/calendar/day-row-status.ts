@@ -1,5 +1,5 @@
 import type { CalendarBoardDay } from './board';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 
@@ -32,7 +32,7 @@ export function isDayRowOff(boardDay: CalendarBoardDay | undefined): boolean {
 }
 
 /** True when one of the block's entries lies in a closed period, so the server refuses every change to it. */
-export function isBlockInClosedPeriod(
+function isBlockInClosedPeriod(
   block: Pick<CalendarWorkBlock, 'sourceEntries'>,
   closedPeriods: readonly ClosedTimePeriod[],
 ): boolean {

@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo } from 'react';
-import { getActiveJobIdsForOrg } from '@/lib/time-tracking/state-client';
+import { fetchActiveJobIdsForOrg } from '@/lib/time-tracking/state-client';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 
@@ -36,7 +36,7 @@ export function useActiveJobsProvider({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'jobs'],
     read: async ({ signal }): Promise<LiveViewResult<{ jobIds: string[]; projectIds: string[] }>> => {
       if (!activeOrgId) return { ok: true, data: { jobIds: [], projectIds: [] } };
-      const result = await getActiveJobIdsForOrg(activeOrgId, signal);
+      const result = await fetchActiveJobIdsForOrg(activeOrgId, signal);
       return result.success
         ? { ok: true, data: { jobIds: result.activeJobIds, projectIds: result.activeProjectIds } }
         : { ok: false };

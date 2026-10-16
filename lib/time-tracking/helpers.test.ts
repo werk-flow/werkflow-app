@@ -1,6 +1,21 @@
 import { describe, expect, test } from 'bun:test';
 
-import { formatDuration, formatSignedDuration } from './helpers';
+import { formatDuration, formatSignedDuration, liveMinutes } from './helpers';
+
+describe('liveMinutes', () => {
+  const nowMs = Date.parse('2026-09-03T10:30:00.000Z');
+
+  test('adds the minutes a running status has added since it started', () => {
+    expect(liveMinutes(120, '2026-09-03T10:00:00.000Z', nowMs)).toBe(150);
+    expect(liveMinutes(0, '2026-09-03T10:29:30.000Z', nowMs)).toBe(0.5);
+  });
+
+  test('adds nothing when nothing runs, the start is unreadable or lies ahead of the clock', () => {
+    expect(liveMinutes(120, null, nowMs)).toBe(120);
+    expect(liveMinutes(120, 'kein Zeitpunkt', nowMs)).toBe(120);
+    expect(liveMinutes(120, '2026-09-03T10:31:00.000Z', nowMs)).toBe(120);
+  });
+});
 
 describe('formatDuration', () => {
   test('renders minutes, hours, or both in German units', () => {

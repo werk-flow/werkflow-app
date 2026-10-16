@@ -5,7 +5,7 @@ import 'server-only';
 // admin client from an authorized caller in actions.ts and must never be
 // exported from a 'use server' module.
 
-import { toProfileReference, type ProfileReferenceRow } from '@/lib/profile-reference';
+import { toProfileReference } from '@/lib/profile-reference';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -201,6 +201,10 @@ async function readDocumentLinkTargets(
   };
 }
 
+function rowsById<Row extends { id: string }>(rows: readonly Row[]): Map<string, Row> {
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
 function indexDocumentLinkTargets(results: Awaited<ReturnType<typeof readDocumentLinkTargets>>) {
   const {
     jobsResult,
@@ -212,77 +216,14 @@ function indexDocumentLinkTargets(results: Awaited<ReturnType<typeof readDocumen
     serviceCasesResult,
     maintenanceCoveragesResult,
   } = results;
-  const jobsById = new Map(
-    (
-      (jobsResult.data ?? []) as Array<{
-        id: string;
-        title: string;
-        job_number: string | null;
-      }>
-    ).map((job) => [job.id, job]),
-  );
-  const projectsById = new Map(
-    (
-      (projectsResult.data ?? []) as Array<{
-        id: string;
-        name: string;
-        project_number: string | null;
-      }>
-    ).map((project) => [project.id, project]),
-  );
-  const clientsById = new Map(
-    (
-      (clientsResult.data ?? []) as Array<{
-        id: string;
-        name: string;
-      }>
-    ).map((client) => [client.id, client]),
-  );
-  const employeesById = new Map(
-    (
-      (employeesResult.data ?? []) as Array<{
-        id: string;
-        first_name: string | null;
-        last_name: string | null;
-        email: string | null;
-      }>
-    ).map((employee) => [employee.id, employee]),
-  );
-  const requestsById = new Map(
-    (
-      (requestsResult.data ?? []) as Array<{
-        id: string;
-        request_number: string | null;
-        summary: string;
-      }>
-    ).map((request) => [request.id, request]),
-  );
-  const equipmentById = new Map(
-    (
-      (equipmentResult.data ?? []) as Array<{
-        id: string;
-        equipment_number: string;
-        name: string;
-      }>
-    ).map((equipment) => [equipment.id, equipment]),
-  );
-  const serviceCasesById = new Map(
-    (
-      (serviceCasesResult.data ?? []) as Array<{
-        id: string;
-        case_number: string;
-        summary: string;
-      }>
-    ).map((serviceCase) => [serviceCase.id, serviceCase]),
-  );
-  const maintenanceCoveragesById = new Map(
-    (
-      (maintenanceCoveragesResult.data ?? []) as Array<{
-        id: string;
-        coverage_number: string;
-      }>
-    ).map((coverage) => [coverage.id, coverage]),
-  );
+  const jobsById = rowsById(jobsResult.data);
+  const projectsById = rowsById(projectsResult.data);
+  const clientsById = rowsById(clientsResult.data);
+  const employeesById = rowsById(employeesResult.data);
+  const requestsById = rowsById(requestsResult.data);
+  const equipmentById = rowsById(equipmentResult.data);
+  const serviceCasesById = rowsById(serviceCasesResult.data);
+  const maintenanceCoveragesById = rowsById(maintenanceCoveragesResult.data);
   return {
     jobsById,
     projectsById,
@@ -452,7 +393,7 @@ export async function hydrateDocuments(
 
   if (linksResult.error || profilesResult.error)
     throw new Error('Dokumentverknüpfungen konnten nicht vollständig geladen werden.');
-  const linkRows = (linksResult.data ?? []) as DocumentLinkRow[];
+  const linkRows = linksResult.data;
   const targetResults = await readDocumentLinkTargets(
     admin,
     organizationIds,
@@ -460,9 +401,7 @@ export async function hydrateDocuments(
   );
   const linksByDocumentId = buildDocumentLinksByDocumentId(linkRows, indexDocumentLinkTargets(targetResults));
 
-  const profilesById = new Map(
-    ((profilesResult.data ?? []) as ProfileReferenceRow[]).map((profile) => [profile.id, profile]),
-  );
+  const profilesById = rowsById(profilesResult.data);
 
   return rows.map((row) =>
     toOrganizationDocument({
@@ -519,9 +458,7 @@ export async function hydrateFolders(
   );
   if (error) throw new Error('Ordnerinformationen konnten nicht vollständig geladen werden.');
 
-  const profilesById = new Map(
-    ((profiles ?? []) as ProfileReferenceRow[]).map((profile) => [profile.id, profile]),
-  );
+  const profilesById = rowsById(profiles);
 
   return rows.map((row) => toDocumentFolder(row, toProfileReference(profilesById.get(row.created_by))));
 }
@@ -545,7 +482,7 @@ export async function hydrateDocumentVersions(
     return null;
   }
 
-  const profilesById = new Map((profiles as ProfileReferenceRow[]).map((profile) => [profile.id, profile]));
+  const profilesById = rowsById(profiles);
 
   return rows.map((row) =>
     toDocumentVersion({
@@ -576,7 +513,7 @@ export async function hydrateDocumentAuditEvents(
     return null;
   }
 
-  const profilesById = new Map((profiles as ProfileReferenceRow[]).map((profile) => [profile.id, profile]));
+  const profilesById = rowsById(profiles);
 
   return rows.map((row) =>
     toDocumentAuditEvent({

@@ -8,10 +8,11 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { deleteWorkSchedule } from '@/lib/personnel/actions';
-import { getBusinessTodayIso, getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
 import { getEffectiveSchedule, getWeeklyScheduleMinutes, type WorkSchedule } from '@/lib/personnel/schedule';
 import { formatDuration } from '@/lib/time-tracking/helpers';
-import { WorkScheduleDeleteDialog } from './work-schedule-delete-dialog';
+import { VersionDeleteDialog } from './version-delete-dialog';
 import { WorkScheduleDialog } from './work-schedule-dialog';
 import { getScheduleErrorMessage } from './work-schedule-format';
 import { WorkScheduleListItem } from './work-schedule-list-item';
@@ -128,7 +129,9 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
         />
       )}
 
-      <WorkScheduleDeleteDialog
+      <VersionDeleteDialog
+        title="Wochenplan löschen?"
+        subject="Der Wochenplan"
         deleteTarget={deleteTarget}
         deleteError={deleteError}
         isDeleting={isDeleting}

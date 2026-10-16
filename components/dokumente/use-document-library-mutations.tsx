@@ -7,6 +7,7 @@ import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
+import type { ActionResult } from '@/lib/action-result';
 import { deleteDocument, restoreDocument } from '@/lib/documents/actions';
 import type { DocumentMutationResult, OrganizationDocument } from '@/lib/documents/types';
 
@@ -61,7 +62,7 @@ export function useDocumentLibraryMutations(serverDocuments: OrganizationDocumen
   }
 
   /** Runs one mutation under the row's busy id; a thrown action counts as a failure. */
-  function runMutation(id: string, mutation: () => Promise<{ success: boolean }>): Promise<boolean> {
+  function runMutation(id: string, mutation: () => Promise<ActionResult>): Promise<boolean> {
     return busy
       .run(id, mutation)
       .then((result) => result.success)

@@ -7,11 +7,9 @@ import { logReadErrors } from '@/lib/data/read-request-cache';
 import type {
   InventoryBarcodeRow,
   InventoryCategory,
-  InventoryCategoryRow,
   InventoryItem,
   InventoryItemRow,
   InventoryLocation,
-  InventoryLocationRow,
   InventoryMovementListItem,
   InventoryMovementRow,
   InventoryOverviewItem,
@@ -19,7 +17,6 @@ import type {
   InventoryStockLevelRow,
   InventoryStockStatus,
   InventorySupplier,
-  InventorySupplierRow,
   JobMaterialLineRow,
   InventoryAssetInstanceRow,
 } from './types';
@@ -27,6 +24,7 @@ import {
   toInventoryCategory,
   toInventoryItem,
   toInventoryLocation,
+  toInventoryMovementType,
   toInventorySupplier,
   toNumber,
 } from './types';
@@ -36,10 +34,6 @@ import {
 // organization filter as the tenant boundary.
 
 export type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
-
-export function asRows<T>(data: unknown): T[] {
-  return Array.isArray(data) ? (data as T[]) : [];
-}
 
 function getStockStatus(item: InventoryItem, totalOnHand: number): InventoryStockStatus {
   if (!item.trackQuantity) return 'in_stock';
@@ -282,12 +276,12 @@ export async function loadInventoryOverviewLists(
     return { success: false, error: 'inventory_failed' };
   }
 
-  const categories = asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory);
-  const locations = asRows<InventoryLocationRow>(locationsResult.data).map(toInventoryLocation);
-  const suppliers = asRows<InventorySupplierRow>(suppliersResult.data).map(toInventorySupplier);
-  const items = asRows<InventoryItemRow>(itemsResult.data).map(toInventoryItem);
-  const jobs = asRows<{ id: string; job_number: string | null; title: string }>(jobsResult.data);
-  const projects = asRows<{ id: string; project_number: string | null; name: string }>(projectsResult.data);
+  const categories = (categoriesResult.data ?? []).map(toInventoryCategory);
+  const locations = (locationsResult.data ?? []).map(toInventoryLocation);
+  const suppliers = (suppliersResult.data ?? []).map(toInventorySupplier);
+  const items = (itemsResult.data ?? []).map(toInventoryItem);
+  const jobs = jobsResult.data ?? [];
+  const projects = projectsResult.data ?? [];
 
   const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const locationMap = new Map(locations.map((location) => [location.id, location]));
@@ -302,10 +296,10 @@ export async function loadInventoryOverviewLists(
     categoryMap,
     locationMap,
     supplierMap,
-    asRows<InventoryBarcodeRow>(barcodesResult.data),
-    asRows<InventoryStockLevelRow>(stockLevelsResult.data),
-    asRows<JobMaterialLineRow>(materialLinesResult.data),
-    asRows<InventoryAssetInstanceRow>(assetInstancesResult.data),
+    barcodesResult.data ?? [],
+    stockLevelsResult.data ?? [],
+    materialLinesResult.data ?? [],
+    assetInstancesResult.data ?? [],
   );
 
   const movementItems: InventoryMovementListItem[] = movements.map((movement) => ({
@@ -314,7 +308,7 @@ export async function loadInventoryOverviewLists(
     itemName: itemMap.get(movement.item_id)?.name ?? 'Unbekannter Artikel',
     locationId: movement.location_id,
     locationName: locationMap.get(movement.location_id)?.name ?? 'Unbekanntes Lager',
-    movementType: movement.movement_type,
+    movementType: toInventoryMovementType(movement.movement_type),
     quantityDelta: toNumber(movement.quantity_delta),
     quantityBefore: toNumber(movement.quantity_before),
     quantityAfter: toNumber(movement.quantity_after),
@@ -477,10 +471,10 @@ async function readInventoryPickerSupportRows(
 
   return {
     success: true,
-    categories: asRows<InventoryCategoryRow>(categoriesResult.data).map(toInventoryCategory),
-    suppliers: asRows<InventorySupplierRow>(suppliersResult.data).map(toInventorySupplier),
-    stockRows: asRows<InventoryStockLevelRow>(stockResult.data),
-    barcodeRows: asRows<InventoryBarcodeRow>(barcodesResult.data),
+    categories: (categoriesResult.data ?? []).map(toInventoryCategory),
+    suppliers: (suppliersResult.data ?? []).map(toInventorySupplier),
+    stockRows: stockResult.data ?? [],
+    barcodeRows: barcodesResult.data ?? [],
   };
 }
 
@@ -554,7 +548,7 @@ export async function loadActiveInventoryLocations(
     logReadErrors('loadActiveInventoryLocations: read failed', error);
     return { success: false, error: 'locations_failed' };
   }
-  return { success: true, locations: asRows<InventoryLocationRow>(data).map(toInventoryLocation) };
+  return { success: true, locations: (data ?? []).map(toInventoryLocation) };
 }
 
 /** One bounded page of the picker catalog: the first `itemLimit` items, the matches of a search, or one item. */
@@ -598,7 +592,7 @@ export async function loadInventoryPickerOptions(
   }
   if (!locationsResult.success) return locationsResult;
 
-  const itemRows = asRows<InventoryItemRow>(itemsResult.data);
+  const itemRows = itemsResult.data ?? [];
   const support = await readInventoryPickerSupportRows(admin, orgId, itemRows, includeOfficeDetails);
   if (!support.success) return support;
 

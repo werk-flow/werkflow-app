@@ -64,7 +64,7 @@ export function getDragSelectionLabel(selection: DocumentTableDragSelection): st
   return documentCount === 1 ? '1 Dokument' : `${documentCount} Dokumente`;
 }
 
-function getSortValue(item: DocumentLibraryTableItem, column: DocumentTableSortColumn): string | number {
+function documentSortValue(item: DocumentLibraryTableItem, column: DocumentTableSortColumn): string | number {
   if (column === 'name') return getItemName(item).toLocaleLowerCase('de-DE');
   if (column === 'uploadedBy') {
     return item.kind === 'folder'
@@ -83,8 +83,8 @@ export function compareItems(
   column: DocumentTableSortColumn,
   direction: SortDirection,
 ): number {
-  const firstValue = getSortValue(firstItem, column);
-  const secondValue = getSortValue(secondItem, column);
+  const firstValue = documentSortValue(firstItem, column);
+  const secondValue = documentSortValue(secondItem, column);
   const multiplier = direction === 'asc' ? 1 : -1;
 
   let result =

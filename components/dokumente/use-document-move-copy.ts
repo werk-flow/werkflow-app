@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useBatchProgress } from '@/hooks/use-batch-progress';
+import type { ActionResult } from '@/lib/action-result';
 import { copyDocument, copyDocumentFolder, moveDocument, moveDocumentFolder } from '@/lib/documents/actions';
 import type { DocumentFolder, DocumentLibraryView, OrganizationDocument } from '@/lib/documents/types';
 import {
@@ -24,7 +25,7 @@ type MoveCopyDialogState = {
 } | null;
 
 /** One step of a client-iterated bulk operation; a failed result throws so the batch counts it. */
-type BulkStep = () => Promise<{ success: boolean }>;
+type BulkStep = () => Promise<ActionResult>;
 
 export type DocumentMoveCopyItem =
   | { kind: 'document'; document: OrganizationDocument }

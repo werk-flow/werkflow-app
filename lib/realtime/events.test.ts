@@ -52,6 +52,15 @@ describe('authorized deletion transport', () => {
       old: { id: row, organization_id: organization },
     });
   });
+  test('accepts a hand-made production row id whose version and variant nibbles are zero', () => {
+    const handMade = 'b2000001-0000-0000-0000-000000000001';
+    expect(
+      normalizeRealtimeDeletion(
+        { table_name: 'clients', row_id: handMade, organization_id: organization },
+        organization,
+      )?.old,
+    ).toEqual({ id: handMade, organization_id: organization });
+  });
   test('rejects wrong organizations, unknown tables and malformed identities', () => {
     for (const value of [
       null,

@@ -202,7 +202,8 @@ export function CreateClientDialog({
         <form
           onSubmit={(e) => {
             e.stopPropagation();
-            handleSubmit(e);
+            // handleSubmit reports its own failures in the dialog or a banner.
+            void handleSubmit(e);
           }}
           noValidate
         >

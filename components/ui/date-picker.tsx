@@ -5,18 +5,12 @@ import { de } from 'react-day-picker/locale';
 
 import { cn } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
+import { clickedSegment } from '@/components/ui/clicked-segment';
 import { useFieldContext } from '@/components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useDatePickerSegments } from '@/components/ui/use-date-picker-segments';
 
 const DATE_SEGMENTS = ['day', 'month', 'year'] as const;
-
-/** The segment under a click inside the field, read from its `data-segment`. */
-function clickedDateSegment(target: EventTarget): (typeof DATE_SEGMENTS)[number] | undefined {
-  const name =
-    target instanceof Element ? target.closest<HTMLElement>('[data-segment]')?.dataset.segment : undefined;
-  return DATE_SEGMENTS.find((segment) => segment === name);
-}
 
 interface DatePickerProps {
   value: Date | undefined;
@@ -86,7 +80,7 @@ export function DatePicker({
       onBlur={handleBlur}
       onKeyDown={handleKeyDown}
       onClick={(event) => {
-        const segment = clickedDateSegment(event.target);
+        const segment = clickedSegment(event.target, DATE_SEGMENTS);
         if (segment) handleSegmentClick(segment);
       }}
       className={cn(

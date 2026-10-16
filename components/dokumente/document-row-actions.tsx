@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
 
-type DocumentActionHandlers = {
+export type DocumentActionHandlers = {
   onOpen: () => void;
   onDetails: () => void;
   onRename: () => void;
@@ -36,7 +36,7 @@ type DocumentActionHandlers = {
   onPermanentDelete: () => void;
 };
 
-type FolderActionHandlers = {
+export type FolderActionHandlers = {
   onOpen: () => void;
   onMove: () => void;
   onCopy: () => void;

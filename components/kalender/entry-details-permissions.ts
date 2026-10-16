@@ -1,6 +1,6 @@
 // Who may edit or review the work block shown in the entry details dialog.
 
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { EntryDetailsSnapshot } from './use-entry-details-session';

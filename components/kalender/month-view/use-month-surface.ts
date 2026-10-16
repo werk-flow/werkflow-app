@@ -13,7 +13,8 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { JobParkingContext } from '@/lib/parking/types';
 import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import type { DragSurface } from '../drag-engine/drag-engine';
-import type { CalendarDragPayload, CalendarDragTarget, DragVerdict } from '../drag-engine/payload';
+import type { CalendarDragPayload, CalendarDragTarget } from '../drag-engine/payload';
+import type { DragVerdict } from '@/lib/calendar/drag-ghost';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 
 type CellRect = { date: string; top: number; bottom: number; left: number; right: number };

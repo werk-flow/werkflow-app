@@ -6,9 +6,10 @@ import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { getBusinessTodayIso } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { getCapabilityKindLabel, type OwnQualificationProfile } from '@/lib/qualifications/types';
+import { formatBerlin } from '@/lib/utils';
 
 export function OwnQualificationOverview({ profile }: { profile: OwnQualificationProfile | null }) {
   const router = useRouter();
@@ -18,7 +19,7 @@ export function OwnQualificationOverview({ profile }: { profile: OwnQualificatio
     tables: ['teams', 'team_memberships', 'organization_capabilities', 'employee_capabilities'],
   });
   const today = getBusinessTodayIso();
-  const formatDate = (value: string) => new Date(`${value}T00:00:00`).toLocaleDateString('de-DE');
+  const formatDate = (value: string) => formatBerlin(value, 'numericDate');
   if (!profile) {
     return (
       <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">

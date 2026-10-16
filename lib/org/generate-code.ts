@@ -11,7 +11,7 @@ const UNBIASED_BYTE_LIMIT = 256 - (256 % ORGANIZATION_CODE_CHARSET.length);
  * code is the only secret a person needs to join a company, so it must not be
  * predictable from earlier codes.
  */
-export function generateRandomCode(length: number = ORGANIZATION_CODE_LENGTH): string {
+function generateRandomCode(length: number = ORGANIZATION_CODE_LENGTH): string {
   let code = '';
   while (code.length < length) {
     for (const byte of crypto.getRandomValues(new Uint8Array(length))) {

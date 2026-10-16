@@ -1,10 +1,9 @@
-import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
-import { getCachedUser, getCachedMemberships } from '@/lib/data/cached';
+import { resolvePageMembership } from '@/lib/org/page-context';
+import { isManagerRole } from '@/lib/roles';
 import { formatSiteAddress } from '@/lib/clients/types';
 import { toClientRequest, toClientRequestEvent } from '@/lib/requests/types';
 import { getRequestDocuments } from '@/lib/documents/actions';
@@ -14,7 +13,6 @@ import {
   type RequestEventEntry,
 } from '@/components/anfragen/request-detail-content';
 import { RegionLoadError } from '@/components/shared/region-load-error';
-import type { OrgRole } from '@/lib/members/actions';
 import { formatProfileName, getManagerAssigneeOptions } from '@/lib/members/profile-name';
 
 /**
@@ -28,31 +26,14 @@ function anyReadFailed(results: ReadonlyArray<object>): boolean {
 export default async function AnfrageDetailPage({ params }: { params: Promise<{ requestId: string }> }) {
   const { requestId } = await params;
 
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { membership } = await resolvePageMembership();
 
-  if (!user) {
-    redirect('/login');
-  }
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-
-  if (!activeOrgId) {
+  if (!membership) {
     redirect('/anfragen');
   }
 
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
-
-  if (!isAdminOrManager) {
+  const activeOrgId = membership.orgId;
+  if (!isManagerRole(membership.role)) {
     redirect('/dashboard');
   }
 

@@ -13,9 +13,9 @@ import type { ActionResult } from '@/lib/action-result';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
-import { getBusinessTodayIso, toBusinessIsoDate } from '@/lib/personnel/types';
+import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatProfileName } from '@/lib/members/profile-name';
-import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/actions';
+import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
 import { getTimeCorrectionRequests } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -24,8 +24,7 @@ import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { getOwnVacationOverview, getPendingVacationRequestsForApprover } from '@/lib/vacation/actions';
-import type { VacationDayPortion, VacationRequestStatus } from '@/lib/vacation/types';
-import type { RequestStatus, RequestUrgency } from '@/lib/requests/types';
+import { toVacationDayPortion, toVacationRequestStatus } from '@/lib/vacation/types';
 import { loadCertificationExpiryNotifications } from '@/lib/qualifications/server';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import { deriveWorkArtifactTasks, deriveWorkHandoverTasks } from './work-tasks';
@@ -208,10 +207,10 @@ async function deriveOpenRequestTasks(
       sourceId: row.id,
       requestNumber: row.request_number,
       summary: row.summary,
-      status: row.status as RequestStatus,
-      urgency: row.urgency as RequestUrgency,
+      status: row.status,
+      urgency: row.urgency,
       receivedAt: row.received_at,
-      openSinceDays: computeOpenSinceDays(toBusinessIsoDate(new Date(row.received_at)), businessToday),
+      openSinceDays: computeOpenSinceDays(formatBerlinLocalDate(row.received_at), businessToday),
       assigneeName: assignee ? formatProfileName(assignee) : null,
       assignedToMe: row.assigned_to === context.userId,
     };
@@ -885,7 +884,7 @@ async function deriveOwnNotifications(
   const notifications: AttentionNotification[] = [];
   for (const row of requestsResult.data ?? []) {
     const facts = resolveVacationDecisionFacts({
-      status: row.status as VacationRequestStatus,
+      status: toVacationRequestStatus(row.status),
       decidedAt: row.decided_at,
       cancelledAt: row.cancelled_at,
     });
@@ -897,7 +896,7 @@ async function deriveOwnNotifications(
       status: facts.status,
       startDate: row.start_date,
       endDate: row.end_date,
-      dayPortion: row.day_portion as VacationDayPortion,
+      dayPortion: toVacationDayPortion(row.day_portion),
       comment: resolveDecisionReason(facts.status, row.decision_comment, row.cancellation_reason),
       stateVersion: facts.stateVersion,
       occurredAt: facts.occurredAt,
@@ -1049,7 +1048,7 @@ async function deriveSicknessNotifications(
       status: row.status as 'reported' | 'cancelled',
       startDate: row.start_date,
       endDate: row.end_date,
-      dayPortion: row.day_portion as VacationDayPortion,
+      dayPortion: toVacationDayPortion(row.day_portion),
       updatedAt: row.updated_at,
       cancelledAt: row.cancelled_at,
     });
@@ -1064,7 +1063,7 @@ async function deriveSicknessNotifications(
       status: facts.status,
       startDate: row.start_date,
       endDate: row.end_date,
-      dayPortion: row.day_portion as VacationDayPortion,
+      dayPortion: toVacationDayPortion(row.day_portion),
       stateVersion: facts.stateVersion,
       occurredAt: facts.occurredAt,
       unread: isNotificationUnread(facts.stateVersion, readVersionBySourceId.get(row.id) ?? null),

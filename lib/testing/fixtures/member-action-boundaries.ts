@@ -239,15 +239,21 @@ assert.deepEqual(await actions.updateMemberRole(workerId, 'buero'), { success: t
 assert.deepEqual([roleOf(ORGANIZATION_A, workerId), roleOf(ORGANIZATION_B, workerId)], ['buero', 'employee']);
 
 // Database refusals of a removal reach the caller as stable codes.
-for (const [databaseMessage, expectedError] of [
-  ['time_member_removal_has_history', 'has_time_history'],
-  ['member_removal_exit_before_entry', 'exit_before_entry'],
-  ['last_responsibility_holder:leave_approval', 'last_responsibility_holder:leave_approval'],
-  ['last_responsibility_holder:time_approval', 'last_responsibility_holder:time_approval'],
-  ['deadlock detected', 'delete_failed'],
+for (const [databaseMessage, expectedFailure] of [
+  ['time_member_removal_has_history', { success: false, error: 'has_time_history' }],
+  ['member_removal_exit_before_entry', { success: false, error: 'exit_before_entry' }],
+  [
+    'last_responsibility_holder:leave_approval',
+    { success: false, error: 'last_responsibility_holder', responsibilities: ['leave_approval'] },
+  ],
+  [
+    'last_responsibility_holder:time_approval',
+    { success: false, error: 'last_responsibility_holder', responsibilities: ['time_approval'] },
+  ],
+  ['deadlock detected', { success: false, error: 'delete_failed' }],
 ] as const) {
   world.rpc = () => ({ data: null, error: { message: databaseMessage } });
-  assert.deepEqual(await actions.removeMember(workerId), { success: false, error: expectedError });
+  assert.deepEqual(await actions.removeMember(workerId), expectedFailure);
 }
 
 // A removal is one database call naming organization, target and actor. The

@@ -5,7 +5,7 @@ import { logError } from '@/lib/logging';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { isDateInClosedPeriod } from './closed-period-dates';
-import { getLocalDayKey } from './day-utils';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 
 /**
  * The SQLSTATE the database raises, with the message `period_closed`, for a
@@ -66,7 +66,7 @@ export async function touchesClosedTimePeriod(
   organizationId: string,
   timestamps: readonly string[],
 ): Promise<boolean> {
-  const dates = [...new Set(timestamps.map((timestamp) => getLocalDayKey(new Date(timestamp))))].sort();
+  const dates = [...new Set(timestamps.map((timestamp) => formatBerlinLocalDate(timestamp)))].sort();
   const earliest = dates[0];
   const latest = dates.at(-1);
   if (!earliest || !latest) return false;

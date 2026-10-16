@@ -1,11 +1,11 @@
 // Rule test: a mutation step helper that returns a value returns the persisted row.
 import { describe, expect, test } from 'bun:test';
-import { ESLint } from 'eslint';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
 
 import { MEASUREMENT_DIGEST_SUPPORT_FILES } from '../../../eslint-rules/playwright-spec-rules.mjs';
+import { createProbeLinter } from '../../../eslint-rules/probe-linter.mjs';
 
 // The screen or the URL can show what the UI echoed before the write
 // persisted; the database cannot. A helper therefore returns nothing, a
@@ -237,10 +237,14 @@ describe('persisted returns', () => {
   });
 
   test('ESLint refuses a cast to Persisted and an import of persisted outside db/', async () => {
-    const eslint = new ESLint();
+    const eslint = createProbeLinter();
+    // The general assertion ban (consistent-type-assertions) refuses the cast
+    // as well; these probes check the Persisted-specific messages.
     const ruleIds = async (source: string, filePath: string): Promise<string[]> => {
       const [result] = await eslint.lintText(source, { filePath });
-      return (result?.messages ?? []).map(({ ruleId, message }) => `${ruleId}: ${message.slice(0, 22)}`);
+      return (result?.messages ?? [])
+        .filter(({ ruleId }) => ruleId !== '@typescript-eslint/consistent-type-assertions')
+        .map(({ ruleId, message }) => `${ruleId}: ${message.slice(0, 22)}`);
     };
     expect(
       await ruleIds(

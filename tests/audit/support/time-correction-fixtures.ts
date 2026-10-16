@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { uuidSchema } from '../../../lib/validation/uuid';
 import type { Database } from '../../../lib/supabase/database.types';
 import type { TimeCorrectionSnapshot } from '../../../lib/time-corrections/types';
-import { resolveBerlinWallTime } from '../../../lib/planning/date-time';
+import { resolveBerlinWallTime } from '../../../lib/date-time/berlin';
 import { requireEnv } from '../../golden/support/env';
 import { testSupabaseClientOptions } from '../../golden/support/client-options';
 import { getEmployeeRecordStateByUser } from '../../golden/support/db/personnel';

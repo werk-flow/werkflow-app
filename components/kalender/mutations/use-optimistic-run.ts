@@ -9,8 +9,7 @@ import {
 } from '@/lib/calendar/messages';
 import type { MutationFeedback } from './use-mutation-feedback';
 import type { UseCalendarMutationsOptions } from './use-calendar-mutations';
-
-export type ActionResult = { success: boolean; error?: string | undefined };
+import type { ActionResult } from '@/lib/action-result';
 
 export type OptimisticOperation = {
   apply: () => void;
@@ -54,7 +53,7 @@ export function useOptimisticRun({
         if (!isScopeActive()) return false;
         if (!result.success) {
           operation.revert();
-          const message = calendarRefusalMessage(result.error ?? 'unexpected_error', operation.context);
+          const message = calendarRefusalMessage(result.error, operation.context);
           if (message) {
             showFailure(message);
             announce(message);
@@ -82,10 +81,7 @@ export function useOptimisticRun({
             const undoResult = await calendarActionResult(undo);
             if (!isScopeActive()) return;
             if (!undoResult.success) {
-              const message = calendarUndoFailureMessage(
-                undoResult.error ?? 'unexpected_error',
-                operation.context,
-              );
+              const message = calendarUndoFailureMessage(undoResult.error, operation.context);
               showFailure(message);
               announce(message);
               silentRefresh();

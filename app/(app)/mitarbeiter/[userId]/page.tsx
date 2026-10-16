@@ -1,15 +1,10 @@
 import { redirect } from 'next/navigation';
-import { cookies } from 'next/headers';
 
-import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { resolvePageMembership } from '@/lib/org/page-context';
 import { getEmployeeDocuments } from '@/lib/documents/actions';
-import {
-  getCachedMemberships,
-  getCachedOrganizationSettings,
-  getCachedUser,
-  getOrganizationUserPreferencesForView,
-} from '@/lib/data/cached';
-import { getMemberDetail, getProfilesByIds, type OrgRole } from '@/lib/members/actions';
+import { getCachedOrganizationSettings, getOrganizationUserPreferencesForView } from '@/lib/data/cached';
+import { getMemberDetail, getProfilesByIds } from '@/lib/members/actions';
+import { isManagerRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
@@ -45,24 +40,12 @@ interface MitarbeiterDetailPageProps {
 }
 
 async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string }) {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/mitarbeiter');
 
-  if (!user) redirect('/login');
-
-  const [activeOrgId, memberships] = await Promise.all([
-    resolveActiveOrgId(cookieStore, user.id),
-    getCachedMemberships(user.id),
-  ]);
-  if (!activeOrgId) redirect('/mitarbeiter');
-
-  const currentMembership = memberships.find((m) => m.orgId === activeOrgId);
-  const currentUserRole = currentMembership?.role as OrgRole | undefined;
-  const isAdminOrManager = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const activeOrgId = membership.orgId;
+  const currentUserRole = membership.role;
+  const isAdminOrManager = isManagerRole(currentUserRole);
 
   if (!isAdminOrManager) {
     redirect('/dashboard');

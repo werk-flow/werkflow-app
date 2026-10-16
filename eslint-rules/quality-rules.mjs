@@ -1,6 +1,9 @@
 // Code-quality lint rules (docs/technical/code-quality.md). Each rule names
 // the defect that motivated it so the why travels with the no (decision 0005).
 
+import { relative } from 'node:path';
+import { measureFunctions } from './function-size.mjs';
+
 const BEST_EFFORT_ANNOTATION = /^\s*best-effort: \S/;
 const EMPTY_VALUE_TYPES = new Set(['ArrayExpression', 'ObjectExpression']);
 
@@ -80,8 +83,61 @@ const noSilentCatchRule = {
   },
 };
 
+/**
+ * Functions stay under the cap of eslint-rules/size-caps.mjs. The 200-line cap
+ * let eleven functions cluster just below it, each holding several concerns
+ * (audit of 2026-10-15). A function that predates the 80-line cap is listed
+ * in eslint-rules/size-cap-exceptions.json with its size as its ceiling: it
+ * may shrink, never grow. The size and the key come from
+ * eslint-rules/function-size.mjs, the measurement the stale-entry check of
+ * lib/conventions/module-caps.test.ts uses as well.
+ */
+const functionSizeRule = {
+  meta: {
+    type: 'suggestion',
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          max: { type: 'integer', minimum: 1 },
+          exceptions: { type: 'object' },
+        },
+        required: ['max'],
+        additionalProperties: false,
+      },
+    ],
+    messages: {
+      tooLong:
+        'Function "{{key}}" has {{lines}} lines without blank and comment lines; the cap is {{max}} (eslint-rules/size-caps.mjs). Split it by concern: pure steps into named module-level functions, independent JSX sections into child components.',
+      grown:
+        'Function "{{key}}" has {{lines}} lines, above its ceiling of {{ceiling}} in eslint-rules/size-cap-exceptions.json. A listed function may only shrink: split it instead of raising the ceiling.',
+    },
+  },
+  create(context) {
+    const [{ max, exceptions = {} }] = context.options;
+    const file = relative(context.cwd, context.filename).replaceAll('\\', '/');
+    // Own keys only: a function named like an Object.prototype member is not listed.
+    const listed = Object.hasOwn(exceptions, file) ? exceptions[file] : {};
+    return {
+      'Program:exit'() {
+        for (const { key, lines, node } of measureFunctions(context.sourceCode)) {
+          if (lines <= max) continue;
+          const ceiling = Object.hasOwn(listed, key) ? listed[key] : undefined;
+          if (ceiling === undefined) {
+            context.report({ node, messageId: 'tooLong', data: { key, lines, max } });
+          } else if (lines > ceiling) {
+            context.report({ node, messageId: 'grown', data: { key, lines, ceiling } });
+          }
+        }
+      },
+    };
+  },
+};
+
+/** @type {import('eslint').ESLint.Plugin} */
 export const qualityRules = {
   rules: {
+    'function-size': functionSizeRule,
     'no-silent-catch': noSilentCatchRule,
   },
 };

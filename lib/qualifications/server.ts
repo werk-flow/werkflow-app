@@ -1,7 +1,8 @@
 import { logReadErrors } from '@/lib/data/read-request-cache';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
-import { getBusinessTodayIso, type EmploymentType } from '@/lib/personnel/types';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { toEmploymentType, type EmploymentType } from '@/lib/personnel/types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import {
   resolveAssignmentEvaluation,
@@ -16,6 +17,8 @@ import type {
   JobCapabilityRequirement,
 } from './types';
 import { logError } from '@/lib/logging';
+import { constrainedValue } from '@/lib/validation/constrained-value';
+import { CAPABILITY_KINDS, CONFIRMATION_STATUSES, EVIDENCE_STATES } from './types';
 import type { ActionFailure } from '@/lib/action-result';
 
 export function toCapabilityDefinition(row: {
@@ -30,7 +33,7 @@ export function toCapabilityDefinition(row: {
   return {
     id: row.id,
     organizationId: row.organization_id,
-    kind: row.kind as CapabilityDefinition['kind'],
+    kind: constrainedValue(CAPABILITY_KINDS, row.kind, 'capability kind'),
     name: row.name,
     description: row.description,
     defaultExpiryWarningDays: row.default_expiry_warning_days,
@@ -57,13 +60,17 @@ export function toEmployeeCapability(row: {
     id: row.id,
     employeeRecordId: row.employee_record_id,
     capabilityId: row.capability_id,
-    capabilityKind: row.capability_kind as EmployeeCapabilityRecord['capabilityKind'],
+    capabilityKind: constrainedValue(CAPABILITY_KINDS, row.capability_kind, 'capability kind'),
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     issuer: row.issuer,
     renewalDueDate: row.renewal_due_date,
-    confirmationStatus: row.confirmation_status as EmployeeCapabilityRecord['confirmationStatus'],
-    evidenceState: row.evidence_state as EmployeeCapabilityRecord['evidenceState'],
+    confirmationStatus: constrainedValue(
+      CONFIRMATION_STATUSES,
+      row.confirmation_status,
+      'confirmation_status',
+    ),
+    evidenceState: constrainedValue(EVIDENCE_STATES, row.evidence_state, 'evidence_state'),
     operationalNote: row.operational_note,
     supersedesId: row.supersedes_id,
     supersededAt: row.superseded_at,
@@ -205,7 +212,7 @@ function toAssignmentCandidates(
   const currentConditionByRecord = new Map<string, EmploymentType>();
   for (const row of conditionRows.sort(newestFirst)) {
     if (!currentConditionByRecord.has(row.employee_record_id)) {
-      currentConditionByRecord.set(row.employee_record_id, row.employment_type as EmploymentType);
+      currentConditionByRecord.set(row.employee_record_id, toEmploymentType(row.employment_type));
     }
   }
   const profileNames = new Map(

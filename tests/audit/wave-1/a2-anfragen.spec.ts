@@ -45,7 +45,7 @@ import {
 } from '../../golden/support/steps/requests';
 import { SHARED_COPY, testData, textInDom, visibleText } from '../../golden/support/steps/shared';
 import { lifecycleBadge } from '../../golden/support/steps/work';
-import { formatBerlinDateTimeInput } from '../../../lib/customer-relationships/date-time';
+import { formatBerlinDateTimeInput } from '../../../lib/date-time/berlin';
 import { JOB_PRIORITY_LABELS } from '../../../lib/jobs/types';
 import {
   REQUEST_CATEGORY_LABELS,

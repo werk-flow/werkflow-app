@@ -16,22 +16,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  EMPLOYMENT_TYPES,
-  EMPLOYMENT_TYPE_LABELS,
-  type EmploymentCondition,
-  type EmploymentType,
-} from '@/lib/personnel/types';
+import { EMPLOYMENT_TYPES, EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '@/lib/personnel/types';
 import { toLocalDateString } from '@/lib/utils';
-import { useEmploymentConditionForm } from './use-employment-condition-form';
+import {
+  useEmploymentConditionForm,
+  type EmploymentConditionFormInput,
+} from './use-employment-condition-form';
 
-type EmploymentConditionDialogProps = {
-  recordId: string;
-  condition: EmploymentCondition | null;
-  onClose: (saved: boolean) => void;
-};
-
-export function EmploymentConditionDialog({ recordId, condition, onClose }: EmploymentConditionDialogProps) {
+export function EmploymentConditionDialog({ recordId, condition, onClose }: EmploymentConditionFormInput) {
   const {
     validFrom,
     setValidFrom,

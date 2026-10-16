@@ -20,7 +20,7 @@ import {
   SERVICE_CASE_ERRORS,
   SERVICE_CASE_REQUIRED_FIELD_IDS,
   fromDetail,
-  missingFields,
+  missingServiceCaseFields,
   type ServiceCaseFormState,
   type ServiceCaseRequiredField,
 } from './service-case-form-state';
@@ -146,12 +146,12 @@ export function useServiceCaseForm({
       : undefined,
   );
   const terminal = ['resolved', 'closed_without_visit', 'duplicate'].includes(form.status);
-  const fieldErrors = attempted ? missingFields(form, Boolean(initial), terminal) : {};
+  const fieldErrors = attempted ? missingServiceCaseFields(form, Boolean(initial), terminal) : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errors = missingFields(form, Boolean(initial), terminal);
+    const errors = missingServiceCaseFields(form, Boolean(initial), terminal);
     const firstInvalid = SERVICE_CASE_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
     if (firstInvalid) {
       document.getElementById(firstInvalid[1])?.focus();

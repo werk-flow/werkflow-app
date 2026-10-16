@@ -2,11 +2,13 @@
  * Bounded id-list reads. PostgREST receives `.in('id', ids)`
  * as a GET query string; the API gateway rejects long ones ("URI too long"),
  * which a typical calendar window reaches. A batch of 100 UUIDs is about
- * 3.7 KB and stays under that limit.
+ * 3.7 KB and stays under that limit. The batching tests build their
+ * boundary inputs from this constant.
+ * @internal
  */
 export const ID_BATCH_SIZE = 100;
 
-export function chunkIds(ids: readonly string[], size = ID_BATCH_SIZE): string[][] {
+function chunkIds(ids: readonly string[], size = ID_BATCH_SIZE): string[][] {
   if (!Number.isInteger(size) || size < 1) throw new Error('A batch size must be a positive integer.');
   const unique = [...new Set(ids)];
   const chunks: string[][] = [];
@@ -16,7 +18,11 @@ export function chunkIds(ids: readonly string[], size = ID_BATCH_SIZE): string[]
   return chunks;
 }
 
-/** Batches in flight at once; 2,500 ids are 25 batches, not 25 parallel connections. */
+/**
+ * Batches in flight at once; 2,500 ids are 25 batches, not 25 parallel connections.
+ * The unit test measures the peak against this constant.
+ * @internal
+ */
 export const BATCH_CONCURRENCY = 8;
 
 /**
@@ -45,7 +51,9 @@ export async function readInBatches<Row, ReadError extends { message: string }>(
  * PostgREST caps every response at the project's `max_rows` (1,000 on the
  * local stack and on hosted projects by default) and truncates silently, so
  * an unpaged organization read of 2,500 jobs returns 1,000 rows and no error.
- * Page size equals the cap: a shorter page is the true end.
+ * Page size equals the cap: a shorter page is the true end. The paging tests
+ * build their boundary inputs from this constant.
+ * @internal
  */
 export const ROW_PAGE_SIZE = 1_000;
 

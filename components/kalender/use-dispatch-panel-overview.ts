@@ -12,7 +12,7 @@ import {
   type DispatchOverviewOccurrence,
   type DispatchRecipientView,
 } from '@/lib/dispatch/types';
-import { getBusinessTodayIso, shiftIsoDateByDays } from '@/lib/personnel/types';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
 export type DispatchPanelOpenChallenge = {
   entry: DispatchOverviewOccurrence;
@@ -47,7 +47,7 @@ export function useDispatchPanelOverview(): {
     read: async ({ signal }): Promise<LiveViewResult<DispatchOverview>> => {
       const result = await readInBackground(
         'dispatch-overview',
-        { from: today, to: shiftIsoDateByDays(today, DISPATCH_OVERVIEW_MAX_OFFSET_DAYS) },
+        { from: today, to: addLocalDays(today, DISPATCH_OVERVIEW_MAX_OFFSET_DAYS) },
         signal,
       );
       return result.success

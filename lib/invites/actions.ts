@@ -1,5 +1,6 @@
 'use server';
 
+import type { ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { cookies } from 'next/headers';
@@ -15,12 +16,8 @@ const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(320));
 const inviteRoleSchema = z.enum(['buero', 'employee']);
 export type InviteRole = z.infer<typeof inviteRoleSchema>;
 
-export type SendInviteResult = {
-  success: boolean;
-  error?: string;
-  // Present on success so the invitations list can confirm its draft row.
-  inviteId?: string;
-};
+/** A success names the invite, so the invitations list can confirm its draft row. */
+export type SendInviteResult = ActionResult<{ inviteId: string }>;
 
 export async function sendOrgInvite(email: string, role: InviteRole = 'employee'): Promise<SendInviteResult> {
   try {

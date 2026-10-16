@@ -7,8 +7,13 @@ import {
   type OrganizationTimeTrackingSettings,
 } from './settings';
 import { calculateBreakSessions, calculateWorkSessions } from './validation';
-import { getLocalDayEnd, getLocalDayKey, getLocalDayStart } from './day-utils';
-import { shiftIsoDateByDays } from '@/lib/personnel/types';
+import {
+  addLocalDays,
+  formatBerlinLocalDate,
+  getLocalDayEnd,
+  getLocalDayStart,
+  getLocalWeekday,
+} from '@/lib/date-time/berlin';
 
 const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -21,32 +26,26 @@ function berlinNoon(dateKey: string): Date {
   return new Date(`${dateKey}T12:00:00Z`);
 }
 
-/** Monday-first index (0 = Montag) of a Berlin calendar date. */
-function weekdayIndex(dateKey: string): number {
-  const day = berlinNoon(dateKey).getUTCDay();
-  return day === 0 ? 6 : day - 1;
-}
-
 /** Monday 00:00 and Sunday 23:59:59.999 of the Berlin week that contains `baseDate`. */
 export function getWeekBounds(baseDate = new Date()): {
   monday: Date;
   sunday: Date;
 } {
-  const todayKey = getLocalDayKey(baseDate);
-  const mondayKey = shiftIsoDateByDays(todayKey, -weekdayIndex(todayKey));
+  const todayKey = formatBerlinLocalDate(baseDate);
+  const mondayKey = addLocalDays(todayKey, -getLocalWeekday(todayKey));
   return {
     monday: getLocalDayStart(berlinNoon(mondayKey)),
-    sunday: getLocalDayEnd(berlinNoon(shiftIsoDateByDays(mondayKey, 6))),
+    sunday: getLocalDayEnd(berlinNoon(addLocalDays(mondayKey, 6))),
   };
 }
 
 export function getTodayIndex(baseDate = new Date()): number {
-  return weekdayIndex(getLocalDayKey(baseDate));
+  return getLocalWeekday(formatBerlinLocalDate(baseDate));
 }
 
 export function computeWeekLabel(monday: Date): WeeklyTimeLabel {
-  const mondayKey = getLocalDayKey(monday);
-  const fridayKey = shiftIsoDateByDays(mondayKey, 4);
+  const mondayKey = formatBerlinLocalDate(monday);
+  const fridayKey = addLocalDays(mondayKey, 4);
   const dayMonth = (dateKey: string): string => `${dateKey.slice(8, 10)}.${dateKey.slice(5, 7)}.`;
 
   const isoWeekDate = new Date(`${mondayKey}T00:00:00Z`);
@@ -71,10 +70,10 @@ export function buildWeeklyTimeData(
   const grouped = groupEntriesByDate(entries);
   const days: WeeklyTimeDataPoint[] = [];
 
-  const mondayKey = getLocalDayKey(monday);
+  const mondayKey = formatBerlinLocalDate(monday);
   for (const [i, label] of DAY_LABELS.entries()) {
     // The same Berlin day key that groupEntriesByDate assigns.
-    const key = shiftIsoDateByDays(mondayKey, i);
+    const key = addLocalDays(mondayKey, i);
     const dayEntries = grouped[key] || [];
     const workSessions = calculateWorkSessions(dayEntries);
     const breakSessions = calculateBreakSessions(dayEntries);

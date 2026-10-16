@@ -44,7 +44,8 @@ export type ActionPrecheck = {
 };
 
 const PLANNING_ACTIONS = 'lib/planning/actions.ts';
-const TIME_ACTIONS = 'lib/time-tracking/actions.ts';
+const TIME_ENTRY_WRITES = 'lib/time-tracking/entry-write-actions.ts';
+const TIME_REVIEWS = 'lib/time-tracking/review-actions.ts';
 const CORRECTION_ACTIONS = 'lib/time-corrections/actions.ts';
 const CLOSED_PERIOD_DATES = 'lib/time-tracking/closed-period-dates.ts';
 const RESPONSIBILITY_PREDICATE: ExportReference = {
@@ -123,10 +124,10 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
       },
     ],
     actions: [
-      { module: TIME_ACTIONS, exportName: 'addManualEntry' },
-      { module: TIME_ACTIONS, exportName: 'updateEntry' },
-      { module: TIME_ACTIONS, exportName: 'deleteEntry' },
-      { module: TIME_ACTIONS, exportName: 'deleteEntriesBatch' },
+      { module: TIME_ENTRY_WRITES, exportName: 'addManualEntry' },
+      { module: TIME_ENTRY_WRITES, exportName: 'updateEntry' },
+      { module: TIME_ENTRY_WRITES, exportName: 'deleteEntry' },
+      { module: TIME_ENTRY_WRITES, exportName: 'deleteEntriesBatch' },
     ],
     screenedReads: [],
     props: [],
@@ -155,7 +156,7 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     serverCodes: ['not_responsible', 'self_approval_not_allowed'],
     predicate: RESPONSIBILITY_PREDICATE,
     wrappers: [{ module: 'lib/time-tracking/helpers.ts', exportName: 'canApproveEntries' }],
-    actions: [{ module: TIME_ACTIONS, exportName: 'reviewEntries' }],
+    actions: [{ module: TIME_REVIEWS, exportName: 'reviewEntries' }],
     screenedReads: ['pending-sessions'],
     props: ['canApprove'],
     server: { kind: 'typescript', guards: [RESPONSIBILITY_GUARD] },

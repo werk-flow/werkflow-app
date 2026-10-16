@@ -5,11 +5,12 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
+import { formatBerlin } from '@/lib/utils';
 import { WORK_BLOCKER_REASON_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
 
 function formatReviewDate(value: string | null): string {
-  return value ? new Intl.DateTimeFormat('de-DE').format(new Date(`${value}T00:00:00`)) : 'Ohne Datum';
+  return value ? formatBerlin(value, 'numericDate') : 'Ohne Datum';
 }
 
 type WorkLifecycleBlockersSectionProps = {

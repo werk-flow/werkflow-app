@@ -1,5 +1,5 @@
 import type { TimeEntryRow } from './types';
-import { getLocalDayKey } from './day-utils';
+import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 
 /**
  * Pending time entries reach the database in one insert per manual submission
@@ -80,14 +80,14 @@ function walkSubmission(rows: TimeEntryRow[], userId: string, date: string): Pen
 export function groupPendingEntries(rows: TimeEntryRow[]): PendingEntryGroup[] {
   const byUserAndDay = new Map<string, TimeEntryRow[]>();
   for (const row of rows) {
-    const key = `${row.user_id}:${getLocalDayKey(new Date(row.timestamp))}`;
+    const key = `${row.user_id}:${formatBerlinLocalDate(new Date(row.timestamp))}`;
     byUserAndDay.set(key, [...(byUserAndDay.get(key) ?? []), row]);
   }
   const groups: PendingEntryGroup[] = [];
   for (const dayRows of byUserAndDay.values()) {
     const first = dayRows[0];
     if (!first) continue;
-    const date = getLocalDayKey(new Date(first.timestamp));
+    const date = formatBerlinLocalDate(new Date(first.timestamp));
     for (const submission of splitSubmissions(dayRows)) {
       groups.push(...walkSubmission(submission, first.user_id, date));
     }

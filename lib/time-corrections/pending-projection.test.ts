@@ -1,15 +1,19 @@
 import { describe, expect, test } from 'bun:test';
 
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
+import { LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 
 import {
   loadPendingCorrectionProjection,
-  PENDING_CORRECTION_LIMIT,
   type PendingProjectionPort,
-  type PendingRequestRow,
-  type RevisionRow,
   type SourceRow,
 } from './pending-projection';
+
+type PortRows<Read extends keyof PendingProjectionPort> = NonNullable<
+  Awaited<ReturnType<PendingProjectionPort[Read]>>
+>[number];
+type PendingRequestRow = PortRows<'listPendingRequests'>;
+type RevisionRow = PortRows<'listCurrentRevisions'>;
 
 const snapshot = { schemaVersion: 1 as const, facts: [] };
 
@@ -73,7 +77,7 @@ describe('pending correction projection (PF-19)', () => {
       organizationId: 'org',
       caller: { userId: 'greta', role: 'admin', holder: null },
     });
-    expect(calls).toEqual([`requests:*:${PENDING_CORRECTION_LIMIT}`, 'revisions:2', 'sources:2']);
+    expect(calls).toEqual([`requests:*:${LIST_ROW_CAP}`, 'revisions:2', 'sources:2']);
     expect(result?.requests.map((entry) => entry.id)).toEqual(['r1', 'r2']);
     expect(result?.requests[0]?.proposedSnapshot).toEqual(snapshot);
     expect(result?.sources).toHaveLength(2);
@@ -86,7 +90,7 @@ describe('pending correction projection (PF-19)', () => {
       subjectUserId: 'emil',
       caller: { userId: 'emil', role: 'employee', holder: null },
     });
-    expect(calls[0]).toBe(`requests:emil:${PENDING_CORRECTION_LIMIT}`);
+    expect(calls[0]).toBe(`requests:emil:${LIST_ROW_CAP}`);
     expect(result?.requests.map((entry) => entry.id)).toEqual(['r1']);
     expect(calls.some((call) => call.startsWith('roles'))).toBe(false);
   });
@@ -119,7 +123,7 @@ describe('pending correction projection (PF-19)', () => {
       organizationId: 'org',
       caller: { userId: 'emil', role: 'employee', holder },
     });
-    expect(calls).toEqual([`requests:*:${PENDING_CORRECTION_LIMIT}`, 'roles:2', 'revisions:3', 'sources:3']);
+    expect(calls).toEqual([`requests:*:${LIST_ROW_CAP}`, 'roles:2', 'revisions:3', 'sources:3']);
     // A direct assignment may review anyone except the holder; the role read is still one query.
     expect(result?.requests.map((entry) => entry.id)).toEqual(['own', 'reviewable', 'manager']);
   });

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 import type { ActionFailure } from '@/lib/action-result';
 import { getAuthenticatedUser, getCachedMemberships } from '@/lib/data/cached';
-import type { OrgRole } from '@/lib/members/actions';
+import type { OrgRole } from '@/lib/roles';
 import type { UserOrg } from '@/lib/org/types';
 import { isManagerRole } from '@/lib/roles';
 

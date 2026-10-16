@@ -18,13 +18,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { setInstalledEquipmentWorkLink } from '@/lib/installed-equipment/actions';
-import type { EquipmentDetailActions } from './use-equipment-detail-actions';
-
-type EquipmentWorkLinkDialogProps = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  actions: EquipmentDetailActions;
-};
+import type { EquipmentActionDialogProps } from './use-equipment-detail-actions';
 
 /**
  * Links a job or project of the same customer and site to the equipment. The
@@ -35,7 +29,7 @@ export function EquipmentWorkLinkDialog({
   open,
   onOpenChange,
   actions,
-}: EquipmentWorkLinkDialogProps): ReactElement {
+}: EquipmentActionDialogProps): ReactElement {
   const { busy, item, attempted, errorFor, perform, rejectInvalid } = actions;
   const [workTargetType, setWorkTargetType] = useState<'job' | 'project'>('job');
   const [workTargetId, setWorkTargetId] = useState('');

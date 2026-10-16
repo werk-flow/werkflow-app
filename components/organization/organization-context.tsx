@@ -14,13 +14,11 @@ import {
 import { usePathname, useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import { setActiveOrgCookie } from '@/lib/org/actions';
-import type { Database } from '@/lib/supabase/database.types';
 import type { UserOrg } from '@/lib/org/types';
-
-// Types
-type OrgRole = Database['public']['Enums']['org_role'];
+import type { OrgRole } from '@/lib/roles';
 
 export type { UserOrg };
 
@@ -33,6 +31,11 @@ export type OrgContextValue = {
   isLoading: boolean;
   isSwitchingOrg: boolean;
 };
+
+/** A refused cookie write rejects, so it takes the same failure path as a transport error. */
+function rejectRefusal(result: ActionResult): void {
+  if (!result.success) throw new Error(result.error);
+}
 
 type MembershipRow = {
   organization_id: string;
@@ -110,13 +113,15 @@ export function OrganizationProvider({
   useEffect(() => {
     if (initialActiveOrgCookieNeedsSync && initialActiveOrgId && !hasSetCookieRef.current) {
       hasSetCookieRef.current = true;
-      setActiveOrgCookie(initialActiveOrgId).catch((error: unknown) => {
-        logError('OrganizationProvider: active organization sync failed', error);
-        showBanner({
-          variant: 'error',
-          message: 'Die aktive Organisation konnte nicht synchronisiert werden.',
+      setActiveOrgCookie(initialActiveOrgId)
+        .then(rejectRefusal)
+        .catch((error: unknown) => {
+          logError('OrganizationProvider: active organization sync failed', error);
+          showBanner({
+            variant: 'error',
+            message: 'Die aktive Organisation konnte nicht synchronisiert werden.',
+          });
         });
-      });
     }
   }, [initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner]);
 
@@ -190,7 +195,7 @@ export function OrganizationProvider({
         if (generation !== refreshGenerationRef.current) return;
         const newActiveId = newMemberships[0]?.orgId ?? null;
         if (newActiveId) {
-          await setActiveOrgCookie(newActiveId);
+          await setActiveOrgCookie(newActiveId).then(rejectRefusal);
         }
         if (generation !== refreshGenerationRef.current) return;
         setActiveOrgId(newActiveId);
@@ -217,7 +222,7 @@ export function OrganizationProvider({
       refreshGenerationRef.current += 1;
 
       try {
-        await setActiveOrgCookie(orgId);
+        await setActiveOrgCookie(orgId).then(rejectRefusal);
         // GET readers authorize against this cookie. Publish the new scope only
         // after its response commits, otherwise their first read is denied.
         setActiveOrgId(orgId);

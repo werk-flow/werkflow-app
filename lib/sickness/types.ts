@@ -1,5 +1,6 @@
 import type { Database } from '@/lib/supabase/database.types';
-import type { VacationDayPortion } from '@/lib/vacation/types';
+import { toVacationDayPortion, type VacationDayPortion } from '@/lib/vacation/types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import { formatGermanDate, formatGermanDateRange } from '@/lib/utils';
 
 // ============================================
@@ -15,14 +16,17 @@ export type SicknessReportRow = Database['public']['Tables']['sickness_reports']
 // lifecycle. 'reported' is effective immediately; 'cancelled' is the
 // recorded-in-error correction. Everything else (end date set, dates changed)
 // is a correction on the same row, traceable through sickness_report_events.
-type SicknessReportStatus = 'reported' | 'cancelled';
+const SICKNESS_REPORT_STATUSES = ['reported', 'cancelled'] as const;
+type SicknessReportStatus = (typeof SICKNESS_REPORT_STATUSES)[number];
 
 // Neutral operational absence-type vocabulary.
 // These are labels for planning and paperwork, never legal categories, and no
 // field anywhere may invite diagnosis detail.
-export type SicknessAbsenceType = 'krankheit' | 'kind_krank' | 'sonstige';
+const SICKNESS_ABSENCE_TYPES = ['krankheit', 'kind_krank', 'sonstige'] as const;
+export type SicknessAbsenceType = (typeof SICKNESS_ABSENCE_TYPES)[number];
 
-export type SicknessEvidenceStatus = 'not_required' | 'pending' | 'received';
+const SICKNESS_EVIDENCE_STATUSES = ['not_required', 'pending', 'received'] as const;
+export type SicknessEvidenceStatus = (typeof SICKNESS_EVIDENCE_STATUSES)[number];
 
 export const SICKNESS_TYPE_LABELS: Record<SicknessAbsenceType, string> = {
   krankheit: 'Krankheit',
@@ -88,13 +92,13 @@ export function toSicknessReport(row: SicknessReportRow): SicknessReport {
     id: row.id,
     organizationId: row.organization_id,
     employeeRecordId: row.employee_record_id,
-    absenceType: row.absence_type as SicknessAbsenceType,
+    absenceType: constrainedValue(SICKNESS_ABSENCE_TYPES, row.absence_type, 'absence_type'),
     startDate: row.start_date,
     endDate: row.end_date,
-    dayPortion: row.day_portion as VacationDayPortion,
-    status: row.status as SicknessReportStatus,
+    dayPortion: toVacationDayPortion(row.day_portion),
+    status: constrainedValue(SICKNESS_REPORT_STATUSES, row.status, 'sickness status'),
     evidenceRequired: row.evidence_required,
-    evidenceStatus: row.evidence_status as SicknessEvidenceStatus,
+    evidenceStatus: constrainedValue(SICKNESS_EVIDENCE_STATUSES, row.evidence_status, 'evidence_status'),
     reportedBy: row.reported_by,
     cancelledBy: row.cancelled_by,
     cancelledAt: row.cancelled_at,

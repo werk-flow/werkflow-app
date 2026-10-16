@@ -19,10 +19,9 @@ import {
 import {
   DocumentLibraryTableDocumentRow,
   DocumentLibraryTableFolderRow,
-  type DocumentActionHandlers,
   type DocumentLibraryTableRowProps,
-  type FolderActionHandlers,
 } from './document-library-table-rows';
+import type { DocumentActionHandlers, FolderActionHandlers } from './document-row-actions';
 import { useDocumentLibraryTableClickSelection } from './use-document-library-table-click-selection';
 import { useDocumentLibraryTableRectangleSelection } from './use-document-library-table-rectangle-selection';
 import { useDocumentLibraryTableRowDrag } from './use-document-library-table-row-drag';
