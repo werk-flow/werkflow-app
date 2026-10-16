@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { previewVacationRequest } from '@/lib/vacation/actions';
+import { useOrganization } from '@/components/organization/organization-context';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { VacationDayPortion } from '@/lib/vacation/types';
 
 type VacationDaysPreviewInput = {
@@ -26,6 +27,7 @@ export function useVacationDaysPreview({
   endDate,
   dayPortion,
 }: VacationDaysPreviewInput): VacationDaysPreview {
+  const { activeOrgId } = useOrganization();
   const [previewDays, setPreviewDays] = useState<number | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -42,31 +44,26 @@ export function useVacationDaysPreview({
   useEffect(() => {
     if (!startDate || !endDate || endDate < startDate) return;
     const generation = ++previewGenerationRef.current;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setIsPreviewing(true);
       setPreviewError(null);
-      void previewVacationRequest({ startDate, endDate, dayPortion })
-        .then((result) => {
-          if (generation !== previewGenerationRef.current) return;
-          if (result.success) {
-            setPreviewDays(result.totalDays);
-          } else {
-            setPreviewError(result.error);
-          }
-        })
-        .catch(() => {
-          if (generation === previewGenerationRef.current) {
-            setPreviewError('unexpected_error');
-          }
-        })
-        .finally(() => {
-          if (generation === previewGenerationRef.current) {
-            setIsPreviewing(false);
-          }
-        });
+      const input = { organizationId: activeOrgId ?? '', startDate, endDate, dayPortion };
+      // The background read never rejects; its transport failure keeps the retry of an unexpected error.
+      void readInBackground('vacation-days-preview', input, controller.signal).then((result) => {
+        if (generation !== previewGenerationRef.current) return;
+        setIsPreviewing(false);
+        // A read cancelled by a range change that started no new preview shows nothing.
+        if (controller.signal.aborted) return;
+        if (result.success) setPreviewDays(result.totalDays);
+        else setPreviewError(result.error === 'background_read_failed' ? 'unexpected_error' : result.error);
+      });
     }, 150);
-    return () => clearTimeout(timer);
-  }, [dayPortion, endDate, previewRefreshKey, startDate]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [activeOrgId, dayPortion, endDate, previewRefreshKey, startDate]);
 
   const retryPreview = () => setPreviewRefreshKey((value) => value + 1);
 

@@ -273,7 +273,7 @@ test('the baseline is the latest passing automatic plan, or the explicit run tha
   );
 });
 
-test('the plan names a measured group whose scope owns a changed product file, without selecting it', () => {
+test('the plan names a wall-clock group whose scope owns a changed product file, without selecting it', () => {
   const changedFiles = [
     'components/kalender/board/board-row.tsx',
     'lib/inventory/actions.ts',
@@ -286,6 +286,41 @@ test('the plan names a measured group whose scope owns a changed product file, w
   expect(measuredGroupsForChange(groups, ['lib/inventory/actions.ts', 'tests/golden/gg-00.spec.ts'])).toEqual(
     [],
   );
+});
+
+test('a change plan selects the lab group whose scope owns a changed product file, and judges it as lab counts', () => {
+  const lab = browser('audit:lab:office', ['planning'], ['tests/audit/lab/office.spec.ts']);
+  const withLab = [...groups, lab];
+  const plan = groupSelections({
+    mode: 'change',
+    groups: withLab,
+    changedFiles: ['components/kalender/board/board-row.tsx'],
+    unresolvedGroupIds: [],
+  });
+  expect(plan.get('audit:lab:office')).toEqual({
+    reason: 'Lab counts; Declared scope: planning',
+    changedFiles: ['components/kalender/board/board-row.tsx'],
+  });
+  expect(plan.has('audit:performance:calendar')).toBe(false);
+  // A lab group is no wall-clock group: the plan selects it, so it is never only named.
+  expect(
+    measuredGroupsForChange(withLab, ['components/kalender/board/board-row.tsx']).map((g) => g.id),
+  ).toEqual(['audit:performance:calendar']);
+  const unrelated = groupSelections({
+    mode: 'change',
+    groups: withLab,
+    changedFiles: ['lib/inventory/actions.ts'],
+    unresolvedGroupIds: [],
+  });
+  expect(unrelated.has('audit:lab:office')).toBe(false);
+  // A failed lab group is repaired like any browser group.
+  const repair = groupSelections({
+    mode: 'change',
+    groups: withLab,
+    changedFiles: [],
+    unresolvedGroupIds: ['audit:lab:office'],
+  });
+  expect(browserOnly([...repair.keys()])).toEqual(['audit:lab:office']);
 });
 
 test('changed-spec-first: a group whose own spec or test support changed is tier 0; harness and product changes decide no order', () => {

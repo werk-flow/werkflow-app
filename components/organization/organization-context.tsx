@@ -2,13 +2,13 @@
 
 import {
   createContext,
+  startTransition,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
-  useTransition,
   type ReactNode,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
@@ -82,7 +82,6 @@ export function OrganizationProvider({
   const router = useRouter();
   const pathname = usePathname();
   const { showBanner } = useBanner();
-  const [, startTransition] = useTransition();
   const [memberships, setMemberships] = useState<UserOrg[]>(initialMemberships);
   const [activeOrgId, setActiveOrgId] = useState<string | null>(initialActiveOrgId);
   const [isSwitchingOrg, setIsSwitchingOrg] = useState(false);
@@ -233,7 +232,8 @@ export function OrganizationProvider({
         // current UI (with the overlay) until the server finishes rendering
         // the new org data. This prevents the hydration mismatch that occurs
         // when PPR serves a stale static shell while dynamic data is still
-        // streaming for the new org.
+        // streaming for the new org. The overlay's pending state is
+        // isSwitchingOrg, never the transition's.
         startTransition(() => {
           if (parentPath) {
             router.push(parentPath);
@@ -252,7 +252,7 @@ export function OrganizationProvider({
         });
       }
     },
-    [activeOrgId, router, pathname, showBanner, startTransition],
+    [activeOrgId, router, pathname, showBanner],
   );
 
   // Reset switching state when server data arrives for the target org

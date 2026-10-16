@@ -8,6 +8,7 @@ import { createNewEmailStepHandlers } from '@/components/settings/email-change-n
 import {
   applyResultError,
   deriveEmailChangeTimers,
+  countdownEnd,
   newEmailSchema,
   type CompletionState,
   type EmailChangeTimers,
@@ -77,7 +78,7 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
   const { run: runVerifyNewEmailOtp, isPending: isNewEmailOtpSubmitting } = usePendingTask();
   const { run: runResendNewEmailOtp, isPending: isNewEmailOtpResending } = usePendingTask();
   const { run: runReset, isPending: isResetting } = useServerAction(resetEmailChangeWizard);
-  const now = useWallClockTick(1000);
+  const now = useWallClockTick(1000, true, countdownEnd(wizardState));
 
   const emailForm = useForm<NewEmailValues>({
     resolver: zodResolver(newEmailSchema),

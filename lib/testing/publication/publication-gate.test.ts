@@ -37,7 +37,37 @@ const ready = {
   pushed: [head],
   pushedFiles: ['docs/technical/testing.md', 'lib/calendar/window.ts', 'scripts/verify.ts'],
   reviews: [review],
+  measuredGroups: [],
+  measuredPasses: [],
 };
+
+test('a pushed product file a wall-clock group measures needs a passing run of that group on its current content', () => {
+  const measured = {
+    ...ready,
+    measuredGroups: [{ id: 'audit:performance:calendar', changedFiles: ['lib/calendar/window.ts'] }],
+  };
+  expect(publicationGateProblems(measured)).toEqual([
+    expect.stringContaining('bun run test:verify --group audit:performance:calendar'),
+  ]);
+  // A pass of the group on the current content opens the gate.
+  expect(
+    publicationGateProblems({
+      ...measured,
+      measuredPasses: [{ groupId: 'audit:performance:calendar', snapshot: current }],
+    }),
+  ).toEqual([]);
+  // A pass on an older content of the file, or a pass of another group, covers nothing.
+  const older = { ...current, files: { ...current.files, 'lib/calendar/window.ts': hashValue('older') } };
+  expect(
+    publicationGateProblems({
+      ...measured,
+      measuredPasses: [
+        { groupId: 'audit:performance:calendar', snapshot: older },
+        { groupId: 'audit:performance:lists', snapshot: current },
+      ],
+    }),
+  ).toHaveLength(1);
+});
 
 test('a passing automatic report and a completed review on the pushed tree open the gate', () => {
   expect(publicationGateProblems(ready)).toEqual([]);

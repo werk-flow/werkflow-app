@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import { BannerProvider, useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,6 +57,9 @@ function PresentationControls(): React.JSX.Element {
   const [pendingLocation, setPendingLocation] = useState<PendingLocationDraft | null>(null);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [soleControlDisabled, setSoleControlDisabled] = useState(false);
+  // The app shell owns the page-body keyboard scroll; the fixture mounts the same hook around its PageBody.
+  const mainRef = useRef<HTMLDivElement>(null);
+  usePageBodyKeyboardScroll(mainRef);
   return (
     <main className="space-y-4 p-6" style={{ paddingTop: 96 }}>
       <section aria-label="Seitenkopf">
@@ -113,7 +117,7 @@ function PresentationControls(): React.JSX.Element {
       <Button onClick={() => setOpen(true)}>Formular öffnen</Button>
       <section aria-label="Seitenkörper">
         <Button onClick={() => setSoleControlDisabled((current) => !current)}>Knopf umschalten</Button>
-        <div style={{ height: 160, display: 'flex', flexDirection: 'column' }}>
+        <div ref={mainRef} style={{ height: 160, display: 'flex', flexDirection: 'column' }}>
           <PageBody>
             <div hidden>
               <Button>Versteckter Knopf</Button>

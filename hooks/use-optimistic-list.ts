@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { expireOptimisticOverlay, type OptimisticOverlayEntry } from '@/lib/ui/optimistic-overlay';
 import { markUnconfirmedLayer } from '@/lib/ui/unconfirmed';
 
@@ -40,6 +40,23 @@ export interface OptimisticListItem<Item> {
   tempId: string | null;
 }
 
+/**
+ * Self-expiry against the authoritative list, adopted during render with the
+ * previous list tracked in state: an effect would cost a second commit and can
+ * starve under hydration scheduling (realtime-and-caching.md, Checklist).
+ */
+function useOverlayExpiry<Item>(
+  setOverlay: Dispatch<SetStateAction<ReadonlyMap<string, OptimisticOverlayEntry<Item>>>>,
+  serverItems: readonly Item[],
+  getId: (item: Item) => string,
+): void {
+  const [expiredAgainst, setExpiredAgainst] = useState(serverItems);
+  if (serverItems === expiredAgainst) return;
+  setExpiredAgainst(serverItems);
+  // An updater, so an overlay change queued in the same batch is expired too, never overwritten.
+  setOverlay((current) => expireOptimisticOverlay(current, serverItems, getId));
+}
+
 export function useOptimisticList<Item>({
   items: serverItems,
   getId,
@@ -66,10 +83,7 @@ export function useOptimisticList<Item>({
     getIdRef.current = getId;
   });
 
-  // Self-expiry against the authoritative list.
-  useEffect(() => {
-    setOverlay((current) => expireOptimisticOverlay(current, serverItems, getIdRef.current));
-  }, [serverItems]);
+  useOverlayExpiry(setOverlay, serverItems, getId);
 
   const hasPending = overlay.size > 0;
   useEffect(() => {

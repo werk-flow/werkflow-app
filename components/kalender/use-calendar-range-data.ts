@@ -35,7 +35,8 @@ import {
   type WindowReadPurpose,
 } from '@/lib/calendar/window-read-plan';
 import type { CalendarJob } from '@/lib/jobs/types';
-import { REALTIME_DEBOUNCE_MS } from '@/lib/realtime/events';
+import { REALTIME_DEBOUNCE_MS, REALTIME_MAX_DEFER_MS } from '@/lib/realtime/events';
+import { createTrailingScheduler } from '@/lib/realtime/scheduler';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { EntryChangeRequestMap, TimeEntry } from '@/lib/time-tracking/types';
 import { EMPTY_HOLIDAY_CALENDAR, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
@@ -157,8 +158,18 @@ function windowDatasets(
 class CalendarMutationOwnership {
   active = true;
   count = 0;
-  timer: ReturnType<typeof setTimeout> | null = null;
   waiting: Array<(outcome: WindowReadOutcome) => void> = [];
+  // The settlement read waits for the shared debounce and its maximum deferral.
+  scheduled: (() => void) | null = null;
+  readonly settlementRead = createTrailingScheduler({
+    delayMs: REALTIME_DEBOUNCE_MS,
+    maxWaitMs: REALTIME_MAX_DEFER_MS,
+    run: () => {
+      const callback = this.scheduled;
+      this.scheduled = null;
+      callback?.();
+    },
+  });
 
   constructor(readonly scopeKey: string) {}
   begin(): void {
@@ -169,15 +180,12 @@ class CalendarMutationOwnership {
     this.count = Math.max(0, this.count - 1);
   }
   cancelTimer(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
+    this.settlementRead.cancel();
+    this.scheduled = null;
   }
   schedule(callback: () => void): void {
-    this.cancelTimer();
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      callback();
-    }, REALTIME_DEBOUNCE_MS);
+    this.scheduled = callback;
+    this.settlementRead.schedule();
   }
   activate(): void {
     this.active = true;

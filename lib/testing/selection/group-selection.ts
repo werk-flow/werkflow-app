@@ -1,3 +1,4 @@
+import { isLabSpec } from '../lab-steps';
 import { DEPENDENCY_GATE_INPUTS } from '../publication/dependency-audit';
 import { SURFACE_GROUPS } from './surface-groups';
 import { scopeEntryOwns, TEST_SCOPE_PREFIXES } from './test-groups';
@@ -8,7 +9,7 @@ type SelectableGroup = {
   /** A browser group's spec files and the test support they import. */
   executionInputs?: readonly string[];
   scopes?: readonly string[];
-  /** Measured performance groups run in release mode and on explicit request only. */
+  /** Wall-clock performance and visual reference groups run in release mode and on explicit request only. */
   releaseOnly?: boolean;
 };
 
@@ -158,7 +159,9 @@ export function groupSelections(input: {
         .map((file) => [file, browserSelection(file, group)] as const)
         .filter(([, reason]) => reason !== undefined);
       const first = reasons[0]?.[1];
-      if (first) selections.set(group.id, { reason: first, changedFiles: reasons.map(([file]) => file) });
+      // A lab group judges its ceilings, budgets and floors in every plan (lib/testing/lab-evidence.ts).
+      const judged = first && group.executionInputs?.some(isLabSpec) ? `Lab counts; ${first}` : first;
+      if (judged) selections.set(group.id, { reason: judged, changedFiles: reasons.map(([file]) => file) });
     }
   }
   return selections;
@@ -176,19 +179,24 @@ export function changedTestTier(
   return executionInputs?.some((file) => file.startsWith('tests/') && changedFiles.includes(file)) ? 0 : 1;
 }
 
-const MEASURED_GROUP_PREFIXES = ['audit:performance:', 'audit:lab:'];
+const MEASURED_GROUP_PREFIX = 'audit:performance:';
 
 /**
- * The measured performance and lab groups whose declared scopes own a changed product
- * file. The plan prints them for information only: change mode never selects
- * them, so an agent runs one explicitly while it works on that scope.
+ * The wall-clock groups (`audit:performance:*`) whose declared scopes own a
+ * changed product file. A change plan never selects them: their medians follow
+ * the machine's load (docs/technical/test-incident-log.md, 2026-10-09), so they
+ * run on a quiet machine with an explicit `--group`, which enforces their
+ * deadlines. The plan names them, and the publication gate refuses a push of
+ * such a file until a passing run saw its current content
+ * (lib/testing/publication/publication-gate.ts). The lab groups count work,
+ * which repeats exactly, so a change plan selects them by scope instead.
  */
 export function measuredGroupsForChange(
   groups: readonly SelectableGroup[],
   changedFiles: readonly string[],
 ): { id: string; changedFiles: string[] }[] {
   return groups.flatMap((group) => {
-    if (!MEASURED_GROUP_PREFIXES.some((prefix) => group.id.startsWith(prefix))) return [];
+    if (!group.id.startsWith(MEASURED_GROUP_PREFIX)) return [];
     const owned = changedFiles.filter(
       (file) => isProductFile(file) && scopeOwners(file).some((owner) => group.scopes?.includes(owner)),
     );

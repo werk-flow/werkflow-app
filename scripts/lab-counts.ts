@@ -10,11 +10,15 @@ import {
   compareLabStep,
   findLabReference,
   formatLabTable,
+  gateLabMetric,
   initialLabReference,
   labCarryoverSchema,
   labReferenceProblems,
   labReferencesSchema,
+  legacyLabReferencesSchema,
+  migrateLabReferences,
   ratchetLabReference,
+  rejectLabMetric,
   ungateLabMetric,
   stabilityOfCounts,
   type LabReferences,
@@ -38,6 +42,10 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 //   bun scripts/lab-counts.ts ratchet --run <key>
 //   bun scripts/lab-counts.ts accept --run <key> --step <id> --target <metric or shape> --reason "<what changed>"
 //   bun scripts/lab-counts.ts ungate --runs <keys> --step <id> --metric <m> --reason "<the two values it took>"
+//   bun scripts/lab-counts.ts migrate-history --reason "<why the stored values are the reviewed ones>"   (once)
+//
+// Every command records the full bounds it writes in the step's history, and
+// the file is written only when that history replays to the stored bounds.
 
 const root = resolve(import.meta.dir, '..');
 const REFERENCE_PATH = resolve(root, 'lib/testing/lab-count-references.json');
@@ -188,8 +196,25 @@ function report(runs: readonly QualifiedRun[]): void {
   }
 }
 
+/**
+ * One time: the first file version recorded no values in its history. The
+ * migration records each step's stored bounds as a `migrated` snapshot, which
+ * keeps the replaced entries, and refuses a file that is already replayable.
+ */
+async function migrateHistory(): Promise<void> {
+  const raw: unknown = JSON.parse(readFileSync(REFERENCE_PATH, 'utf8'));
+  const legacy = legacyLabReferencesSchema.safeParse(raw);
+  if (!legacy.success)
+    throw new Error('The reference file is not a version 1 file; its history is already replayable.');
+  await writeReferences(migrateLabReferences(legacy.data, required('--reason')));
+}
+
 await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () => {
   loadEnvLocal();
+  if (command === 'migrate-history') {
+    await migrateHistory();
+    return;
+  }
   const references = readReferences();
   switch (command) {
     case 'report':
@@ -200,14 +225,14 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const keys = runKeys('--runs');
       // Gate and reject evidence comes from passing runs of one build.
       oneBuild(qualifiedRuns(keys));
-      await writeReferences({
-        ...references,
-        gatedMetrics: [
-          ...references.gatedMetrics.filter((entry) => entry.metric !== metric),
-          { metric, stability: required('--stability'), relevance: required('--relevance'), runKeys: keys },
-        ],
-        rejectedMetrics: references.rejectedMetrics.filter((entry) => entry.metric !== metric),
-      });
+      await writeReferences(
+        gateLabMetric(references, {
+          metric,
+          stability: required('--stability'),
+          relevance: required('--relevance'),
+          runKeys: keys,
+        }),
+      );
       return;
     }
     case 'reject': {
@@ -217,26 +242,16 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
       const keys = runKeys('--runs');
       // Gate and reject evidence comes from passing runs of one build.
       oneBuild(qualifiedRuns(keys));
-      await writeReferences({
-        ...references,
-        gatedMetrics: references.gatedMetrics.filter((entry) => entry.metric !== metric),
-        rejectedMetrics: [
-          ...references.rejectedMetrics.filter((entry) => entry.metric !== metric),
-          { metric, job, evidence: required('--evidence'), runKeys: keys },
-        ],
-        steps: references.steps.map((step) => {
-          const counts = { ...step.counts };
-          delete counts[metric];
-          return { ...step, counts };
-        }),
-      });
+      await writeReferences(
+        rejectLabMetric(references, { metric, job, evidence: required('--evidence'), runKeys: keys }),
+      );
       return;
     }
     case 'calibrate': {
       const keys = runKeys('--runs');
       const runs = qualifiedRuns(keys);
       const buildId = oneBuild(runs);
-      required('--reason');
+      const reason = required('--reason');
       const gated = references.gatedMetrics.map((entry) => entry.metric);
       const stepIds = [...new Set(runs.flatMap((run) => run.observations.map((entry) => entry.stepId)))];
       let steps = references.steps;
@@ -248,6 +263,7 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
           runKeys: keys,
           buildId,
           gated,
+          reason,
         });
         if (unstable.length) console.log(`${stepId} left ungated: ${unstable.join('; ')}`);
         steps = [
@@ -326,7 +342,7 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
     }
     default:
       throw new Error(
-        'Use report, gate, reject, calibrate, ungate, ratchet or accept; see scripts/lab-counts.ts.',
+        'Use report, gate, reject, calibrate, ungate, ratchet, accept or migrate-history; see scripts/lab-counts.ts.',
       );
   }
 });

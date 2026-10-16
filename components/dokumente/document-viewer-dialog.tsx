@@ -9,7 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getDocumentSignedUrl, getDocumentViewSignedUrl } from '@/lib/documents/actions';
+import { useOrganization } from '@/components/organization/organization-context';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { getDocumentSignedUrl } from '@/lib/documents/actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { cn } from '@/lib/utils';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -52,6 +54,7 @@ function DocumentPreviewError({ error, onRetry }: { error: string; onRetry: () =
 }
 
 export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentViewerDialogProps) {
+  const { activeOrgId } = useOrganization();
   const [preview, setPreview] = useState<{
     documentId: string;
     signedUrl: string | null;
@@ -67,34 +70,27 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
       return;
     }
 
-    let cancelled = false;
+    const controller = new AbortController();
     const previewError = {
       documentId: document.id,
       signedUrl: null,
       error: 'Die Vorschau konnte nicht geladen werden.',
     };
 
-    getDocumentViewSignedUrl(document.id)
-      .then((result) => {
-        if (cancelled) return;
-        if (!result.success) {
-          setPreview(previewError);
-          return;
-        }
-        setPreview({
-          documentId: document.id,
-          signedUrl: result.signedUrl,
-          error: null,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) setPreview(previewError);
-      });
+    // The background read never rejects; a failed read shows the error with its retry.
+    void readInBackground(
+      'document-view-url',
+      { organizationId: activeOrgId ?? '', documentId: document.id },
+      controller.signal,
+    ).then((result) => {
+      if (controller.signal.aborted) return;
+      setPreview(
+        result.success ? { documentId: document.id, signedUrl: result.signedUrl, error: null } : previewError,
+      );
+    });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [document, open, previewReloadCount]);
+    return () => controller.abort();
+  }, [activeOrgId, document, open, previewReloadCount]);
 
   // The download error sits beside its button; the preview pane keeps showing
   // the file (feedback canon: failure at the point of action).

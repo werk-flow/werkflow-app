@@ -7,7 +7,7 @@ import { listProductSources, repositoryRoot } from './product-sources';
 // Tier 2 for bounded id-list reads. PostgREST receives `.in(column, list)` in
 // the query string and the gateway rejects a long one: the calendar board
 // answered 414 for 205 employee records on 2026-09-30. A `.in(` call in
-// product `lib/` code passes when its list is
+// product code (app/, components/, hooks/ and lib/) passes when its list is
 //   1. a literal array or a SCREAMING_CASE constant (a fixed status set),
 //   2. the batch parameter of a `readInBatches` callback, or
 //   3. a reviewed site in BOUNDED_LISTS, whose reason names the bound.
@@ -77,13 +77,11 @@ function mentions(node: ts.Node, name: string): boolean {
   return ts.forEachChild(node, (child) => mentions(child, name)) ?? false;
 }
 
-function unbatchedListCalls(file: string): ListCall[] {
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(resolve(repositoryRoot, file), 'utf8'),
-    ts.ScriptTarget.Latest,
-    true,
-  );
+function unbatchedListCalls(
+  file: string,
+  text = readFileSync(resolve(repositoryRoot, file), 'utf8'),
+): ListCall[] {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const calls: ListCall[] = [];
   function visit(node: ts.Node): void {
     ts.forEachChild(node, visit);
@@ -106,8 +104,24 @@ function unbatchedListCalls(file: string): ListCall[] {
   return calls;
 }
 
+test('the scan flags an unbatched id list in a route, a component or a hook, and accepts a batched one', () => {
+  const unbatched = `export default async function Page({ ids }: { ids: string[] }) {
+  return admin.from('profiles').select('id').in('id', ids);
+}`;
+  const batched = `export default async function Page({ ids }: { ids: string[] }) {
+  return readInBatches(ids, (batch) => admin.from('profiles').select('id').in('id', batch));
+}`;
+  expect(unbatchedListCalls('app/(app)/probe/page.tsx', unbatched).map((call) => call.key)).toEqual([
+    'id <- ids',
+  ]);
+  expect(unbatchedListCalls('app/(app)/probe/page.tsx', batched)).toEqual([]);
+  // Every product root is scanned, not lib/ alone.
+  const scanned = new Set(listProductSources().map((file) => file.split('/')[0]));
+  expect([...scanned].sort()).toEqual(['app', 'components', 'hooks', 'lib']);
+});
+
 test('every id list sent to PostgREST is fixed, batched, or a reviewed bounded site', () => {
-  const calls = listProductSources(['lib']).flatMap(unbatchedListCalls);
+  const calls = listProductSources().flatMap((file) => unbatchedListCalls(file));
   const unreviewed = calls.filter((call) => BOUNDED_LISTS[call.file]?.[call.key] === undefined);
   expect(
     unreviewed.map((call) => `${call.file}:${call.line} ${call.key}`),

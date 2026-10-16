@@ -131,9 +131,11 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       markIntercepted = resolveIntercept;
     });
     let held = false;
-    await bueroPage.route('**/anfragen', async (route) => {
-      const request = route.request();
-      if (!held && request.method() === 'POST' && Boolean(request.headers()['next-action'])) {
+    // The suggestion is the background read `next-request-number` (GET /api/background-read).
+    const isSuggestion = (url: string): boolean =>
+      new URL(url).searchParams.get('kind') === 'next-request-number';
+    await bueroPage.route('**/api/background-read?*', async (route) => {
+      if (!held && isSuggestion(route.request().url())) {
         held = true;
         markIntercepted();
         await suggestionGate;
@@ -147,18 +149,14 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       try {
         await waitForRouteIntercept(intercepted);
       } catch {
-        throw new Error('The request-number suggestion server action was not intercepted within 15 seconds.');
+        throw new Error('The request-number suggestion read was not intercepted within 15 seconds.');
       }
       const dialog = bueroPage.getByRole('dialog');
       await dialog.locator('#request-summary').fill(summary);
       await dialog.locator('#request-number').fill(requestNumber);
-      const suggestionResponse = bueroPage.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' &&
-          new URL(response.url()).pathname === '/anfragen' &&
-          Boolean(response.request().headers()['next-action']),
-        { timeout: 15_000 },
-      );
+      const suggestionResponse = bueroPage.waitForResponse((response) => isSuggestion(response.url()), {
+        timeout: 15_000,
+      });
       releaseSuggestion();
       await suggestionResponse;
       await expect(dialog.locator('#request-number')).toHaveValue(requestNumber, {
@@ -170,7 +168,7 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       });
     } finally {
       releaseSuggestion();
-      await bueroPage.unroute('**/anfragen');
+      await bueroPage.unroute('**/api/background-read?*');
     }
     expect((await getRequestAuditState(world.orgId, requestNumber)).status).toBe('offen');
 

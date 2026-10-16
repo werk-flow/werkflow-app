@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getProjectJobPage, type ProjectJobPageResult } from '@/lib/jobs/list-actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import type { ProjectJobPageResult } from '@/lib/jobs/list-actions';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import { describeFailure } from '@/lib/action-messages';
 
@@ -31,23 +32,19 @@ export function useProjectJobPage(
   const busy = expanded && enabled && !isCurrentResponse;
   useEffect(() => {
     if (!expanded || !enabled) return;
-    let cancelled = false;
-    void getProjectJobPage({ projectId: project.id, page })
-      .then((response) => {
-        if (!cancelled) setResponse({ project, page, attempt, result: response });
-      })
-      .catch(() => {
-        if (!cancelled)
-          setResponse({
-            project,
-            page,
-            attempt,
-            result: { success: false, error: 'project_jobs_load_failed' },
-          });
-      });
-    return () => {
-      cancelled = true;
-    };
+    const controller = new AbortController();
+    // The background read never rejects; its transport failure reads as a failed page.
+    void readInBackground('project-job-page', { projectId: project.id, page }, controller.signal).then(
+      (response) => {
+        if (controller.signal.aborted) return;
+        const result: ProjectJobPageResult =
+          !response.success && response.error === 'background_read_failed'
+            ? { success: false, error: 'project_jobs_load_failed' }
+            : response;
+        setResponse({ project, page, attempt, result });
+      },
+    );
+    return () => controller.abort();
   }, [project, expanded, enabled, page, attempt]);
   return {
     jobs: enabled && result?.success ? result.jobs : initialJobs,

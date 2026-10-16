@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { listProductSources, parseProductSource, repositoryRoot } from './product-sources';
+import { isReadAction, READ_CALLS, staleReviewedReads } from './server-action-reads';
 
 // Tier 2 for immediate feedback (AGENTS.md "2. Performance and immediate
 // feedback": never wait for the network before you acknowledge an action).
@@ -13,9 +14,9 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 //
 // A use is a call of a Server Action or its value passed on: a value import
 // from a module that starts with 'use server' (type-only imports and
-// type-only specifiers do not count). A use is a write unless the action's
-// name starts with one of READ_ACTION_PREFIXES; the background-read registry
-// (lib/data/background-reads.ts) holds only such readers.
+// type-only specifiers do not count). A use is a write unless the action is a
+// read by lib/conventions/server-action-reads.ts: the background-read registry
+// imports it or reviewed-read-actions.json names it. A name never decides.
 //
 // A write is acknowledged in its first frame when the use sits
 //   1. inside an argument of an owner call: a FEEDBACK_OWNER_HOOKS hook, a
@@ -48,21 +49,6 @@ export const FEEDBACK_OWNER_HOOKS: Readonly<Record<string, string>> = {
   useOptimisticList: 'insert, update and remove show the change before the caller awaits',
   useTimeAccountForm: 'binds the form submit to useServerAction',
 };
-
-/** Action names that only read. Every other action writes. */
-const READ_ACTION_PREFIXES = [
-  'get',
-  'list',
-  'search',
-  'read',
-  'load',
-  'fetch',
-  'preview',
-  'suggest',
-  'evaluate',
-  'expand',
-];
-const READ_ACTION_NAME = new RegExp(`^(${READ_ACTION_PREFIXES.join('|')})[A-Z]`);
 
 /** The name an owner's runner carries, bound here or received from the caller. */
 const RUNNER_NAME = /^run([A-Z]\w*)?$/;
@@ -578,18 +564,24 @@ function invokesParameterInOwner(fn: ts.SignatureDeclaration, analysis: Analysis
 
 type Use = { key: string; location: string; call: boolean; write: boolean; acknowledged: boolean };
 
+/** The file's imports of Server Actions by local name. */
+function actionImports(file: string): Map<string, ModuleImport> {
+  return new Map(
+    moduleImports(file)
+      .filter(({ module }) => directive(sourceOf(module)) === 'use server')
+      .map((entry) => [entry.local, entry]),
+  );
+}
+
 function serverActionUses(file: string): Use[] {
-  const actions = new Map<string, string>();
-  for (const { local, imported, module } of moduleImports(file)) {
-    if (directive(sourceOf(module)) === 'use server') actions.set(local, imported);
-  }
+  const actions = actionImports(file);
   if (actions.size === 0) return [];
   const analysis = analysisOf(file);
   const uses: Use[] = [];
-  for (const [local, imported] of actions) {
+  for (const [local, { imported, module }] of actions) {
     for (const reference of analysis.identifiers.get(local) ?? []) {
       if (!isValueReference(reference)) continue;
-      const write = !READ_ACTION_NAME.test(imported);
+      const write = !isReadAction(module, imported);
       const line =
         analysis.source.getLineAndCharacterOfPosition(reference.getStart(analysis.source)).line + 1;
       uses.push({
@@ -632,7 +624,7 @@ test('every Server Action write in client code shows feedback in its first frame
 // `.then` that is not only a read is pending state written by hand: route the
 // write through useServerAction, usePendingTask or useBusyIds instead. A
 // setter that names a read (HAND_READ_SETTER) and an awaited call that only
-// reads (READ_ACTION_NAME, `readInBackground`) stay out, and so do the modules
+// reads (isReadAction, `readInBackground`) stay out, and so do the modules
 // that implement a FEEDBACK_OWNER_HOOKS hook. HAND_PENDING_STATE holds the
 // reasoned exceptions; it may only shrink: an entry that matches no site fails.
 
@@ -654,9 +646,6 @@ const HAND_PENDING_STATE: Readonly<Record<string, string>> = {
 
 /** A setter of a read's loading state: `setIsLoadingOptions`, `setIsRefreshing`; a bare `setIsLoading` may name a write. */
 const HAND_READ_SETTER = /Loading[A-Z]|Refresh|Preview|Search|Settl/;
-
-/** Background reads that start without a Server Action (lib/data/background-reads.ts). */
-const READ_CALLS = new Set(['readInBackground']);
 
 function isOwnerImplementation(source: ts.SourceFile): boolean {
   return source.statements.some(
@@ -713,9 +702,15 @@ function awaitedCall(node: ts.Node): ts.CallExpression | null {
   return expression && ts.isCallExpression(expression) ? expression : null;
 }
 
-function isReadCall(call: ts.CallExpression): boolean {
+/**
+ * A call that only reads: a read Server Action, or a background read. Any other
+ * call, a local helper included, may write: a name like `loadX` never decides.
+ */
+function isReadCall(call: ts.CallExpression, actions: ReadonlyMap<string, ModuleImport>): boolean {
   const name = calleeName(call);
-  return name !== null && (READ_ACTION_NAME.test(name) || READ_CALLS.has(name));
+  if (name === null) return false;
+  const action = ts.isIdentifier(call.expression) ? actions.get(name) : undefined;
+  return action ? isReadAction(action.module, action.imported) : READ_CALLS.has(name);
 }
 
 /** The nodes of a function body that run in its own call: nested functions only when invoked at once. */
@@ -735,6 +730,7 @@ type HandPendingSite = { key: string; location: string };
 function handPendingSites(file: string): HandPendingSite[] {
   const source = sourceOf(file);
   if (isOwnerImplementation(source)) return [];
+  const actions = actionImports(file);
   const sites: HandPendingSite[] = [];
   function visit(node: ts.Node): void {
     if (ts.isFunctionLike(node) && 'body' in node && node.body) {
@@ -746,7 +742,7 @@ function handPendingSites(file: string): HandPendingSite[] {
         const waitsForWrite = nodes.some((later) => {
           if (later.getStart(source) <= raisedAt) return false;
           const awaited = awaitedCall(later);
-          return awaited !== null && !isReadCall(awaited);
+          return awaited !== null && !isReadCall(awaited, actions);
         });
         if (!waitsForWrite) continue;
         const line = source.getLineAndCharacterOfPosition(raisedAt).line + 1;
@@ -814,6 +810,10 @@ test('the scan accepts owner hooks and earlier pending flags and rejects a bare 
     ),
   ).toEqual([]);
   expect(fixtureFindings('read', `export async function load() { return getJobDetails('j'); }`)).toEqual([]);
+  // A write named like a read is a write: only the registry and REVIEWED_READS name reads.
+  const renamed = `import { getArchivedJob } from '@/lib/jobs/actions';\nexport const run = () => getArchivedJob();`;
+  expect(fixtureFindings('renamed', renamed)).toEqual(['components/fixtures/renamed.tsx::getArchivedJob']);
+  expect(staleReviewedReads(), 'Remove these stale REVIEWED_READS entries.').toEqual([]);
 });
 
 /** The hand-written pending sites of a fixture client module. */

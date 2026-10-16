@@ -19,6 +19,7 @@ import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-trackin
 import { getTimeCorrectionRequests } from '@/lib/time-corrections/actions';
 import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { readPendingDispatchRecipients } from '@/lib/attention/pending-sets';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -358,24 +359,13 @@ async function deriveDispatchAcknowledgementTasks(
   }
   if (!record) return { tasks: [], failed: false };
 
-  // Scope to the viewer from the start: their recipient rows, then only the
-  // referenced revisions/dispatches. An unrelated large dispatch volume can
-  // never turn this viewer's attention into a failure.
-  const { data: myRecipients, error: recipientError } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('planning_dispatch_recipients')
-        .select('revision_id, dispatch_id')
-        .eq('organization_id', context.orgId)
-        .eq('employee_record_id', record.id)
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (recipientError) {
-    logError('Failed to load dispatch recipients for tasks', recipientError);
+  // Only the viewer's unacknowledged current-revision rows (never their history), then what they reference.
+  const recipients = await readPendingDispatchRecipients(admin, context.orgId, record.id);
+  if (recipients.error) {
+    logError('Failed to load dispatch recipients for tasks', recipients.error);
     return { tasks: [], failed: true };
   }
+  const myRecipients = recipients.data;
   if (!myRecipients.length) return { tasks: [], failed: false };
   const myDispatchIds = [...new Set(myRecipients.map((row) => row.dispatch_id))];
   const myRevisionIds = new Set(myRecipients.map((row) => row.revision_id));

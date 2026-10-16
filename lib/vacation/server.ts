@@ -1,7 +1,7 @@
 import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
@@ -59,20 +59,103 @@ export async function loadVacationCountingContext(
 export async function loadVacationRequestsForRecord(
   organizationId: string,
   employeeRecordId: string,
+  years?: { from: number; to: number },
 ): Promise<VacationRequest[] | null> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
+  const query = admin
     .from('vacation_requests')
     .select('*')
     .eq('organization_id', organizationId)
-    .eq('employee_record_id', employeeRecordId)
-    .order('start_date', { ascending: false });
+    .eq('employee_record_id', employeeRecordId);
+  // A balance of year Y counts only the days of Y, which lie inside requests that overlap Y.
+  const { data, error } = await (
+    years ? query.lte('start_date', `${years.to}-12-31`).gte('end_date', `${years.from}-01-01`) : query
+  ).order('start_date', { ascending: false });
 
   if (error) {
     logError('Failed to load vacation requests:', error);
     return null;
   }
   return (data ?? []).map(toVacationRequest);
+}
+
+/** The years whose balance the pending requests of one record show: the start year of each. */
+export function balanceYears(
+  pendingRows: ReadonlyArray<{ employee_record_id: string; start_date: string }>,
+  recordId: string,
+): { from: number; to: number } {
+  const years = pendingRows
+    .filter((row) => row.employee_record_id === recordId)
+    .map((row) => Number(row.start_date.slice(0, 4)));
+  return { from: Math.min(...years), to: Math.max(...years) };
+}
+
+/**
+ * The jobs each user is assigned to that are planned inside the span, for the
+ * approver's conflict hint. Only assignments to jobs planned in the span are
+ * read, never a user's assignment history. Null when a read fails.
+ */
+export async function loadPlannedAssignedJobs(
+  organizationId: string,
+  userIds: readonly string[],
+  span: { from: string; to: string },
+): Promise<{
+  jobIdsByUserId: Map<string, string[]>;
+  plannedJobById: Map<string, { title: string; plannedDate: string }>;
+} | null> {
+  const admin = createSupabaseAdminClient();
+  const { data: assignmentRows, error: assignmentError } = await readInBatches(userIds, (batch) =>
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('job_assignments')
+          .select('job_id, user_id, jobs!inner(planned_date)')
+          .eq('organization_id', organizationId)
+          .in('user_id', [...batch])
+          .gte('jobs.planned_date', span.from)
+          .lte('jobs.planned_date', span.to)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  );
+  if (assignmentError) {
+    logError('Error fetching job assignments for vacation approvals:', assignmentError);
+    return null;
+  }
+  const jobIdsByUserId = new Map<string, string[]>();
+  for (const assignment of assignmentRows) {
+    jobIdsByUserId.set(assignment.user_id, [
+      ...(jobIdsByUserId.get(assignment.user_id) ?? []),
+      assignment.job_id,
+    ]);
+  }
+  const assignedJobIds = [...new Set(assignmentRows.map((assignment) => assignment.job_id))];
+  const { data: jobRows, error: jobError } = await readInBatches(assignedJobIds, (batch) =>
+    readCompleteRows(
+      (from, to) =>
+        admin
+          .from('jobs')
+          .select('id, title, planned_date')
+          .eq('organization_id', organizationId)
+          .in('id', [...batch])
+          .gte('planned_date', span.from)
+          .lte('planned_date', span.to)
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+  );
+  if (jobError) {
+    logError('Error fetching assigned jobs for vacation approvals:', jobError);
+    return null;
+  }
+  const plannedJobById = new Map<string, { title: string; plannedDate: string }>();
+  for (const job of jobRows) {
+    if (job.planned_date !== null)
+      plannedJobById.set(job.id, { title: job.title, plannedDate: job.planned_date });
+  }
+  return { jobIdsByUserId, plannedJobById };
 }
 
 /**

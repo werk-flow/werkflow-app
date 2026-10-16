@@ -2,6 +2,10 @@
 // names the incident or canon rule that motivated it so the why travels with
 // the no (decision 0005).
 
+import { relative, resolve } from 'node:path';
+
+const REPOSITORY_ROOT = resolve(import.meta.dirname, '..');
+
 const SPACED_CONTAINER_CLASS = /(?:^|\s)(?:gap-|space-y-|space-x-|items-center|flex-row|sr-only)/;
 
 function jsxElementName(node) {
@@ -872,6 +876,7 @@ const PURE_GLOBALS = new Set([
   'Map',
   'NaN',
   'Infinity',
+  'Date',
 ]);
 
 function calledHookName(callee) {
@@ -917,6 +922,50 @@ function isPropertyName(node) {
   return false;
 }
 
+function isCurrentRead(node) {
+  return (
+    node.type === 'MemberExpression' &&
+    !node.computed &&
+    node.property.type === 'Identifier' &&
+    node.property.name === 'current'
+  );
+}
+
+// `Date.now()` and `new Date()`: the wall clock, read during the effect.
+function isClockRead(node) {
+  if (node.type === 'NewExpression')
+    return node.callee.type === 'Identifier' && node.callee.name === 'Date' && node.arguments.length === 0;
+  return (
+    node.type === 'CallExpression' &&
+    node.callee.type === 'MemberExpression' &&
+    !node.callee.computed &&
+    node.callee.object.type === 'Identifier' &&
+    node.callee.object.name === 'Date' &&
+    node.callee.property.type === 'Identifier' &&
+    node.callee.property.name === 'now'
+  );
+}
+
+// `const ref = useRef(value)` whose `.current` is only read or given `value`
+// again: the latest-callback ref, a mirror of one render value.
+function isMirrorRef(variable) {
+  const declarator = hookCallDefinition(variable, 'useRef');
+  if (!declarator || declarator.init.arguments.length !== 1) return false;
+  const [initial] = declarator.init.arguments;
+  if (initial.type !== 'Identifier') return false;
+  return variable.references.every((reference) => {
+    if (reference.init) return true;
+    const member = reference.identifier.parent;
+    if (member?.type !== 'MemberExpression' || member.object !== reference.identifier) return false;
+    if (!isCurrentRead(member)) return false;
+    const use = member.parent;
+    if (use?.type === 'UpdateExpression') return false;
+    if (use?.type === 'UnaryExpression' && use.operator === 'delete') return false;
+    if (use?.type !== 'AssignmentExpression' || use.left !== member) return true;
+    return use.operator === '=' && use.right.type === 'Identifier' && use.right.name === initial.name;
+  });
+}
+
 /**
  * An effect that only copies props or state into state (`useEffect(() =>
  * setLiveJob(job), [job])`) renders twice for every change, and inside a
@@ -930,53 +979,86 @@ function isPropertyName(node) {
  * throw also skips every other compiler check of that component. The compiler
  * also skips a whole component that suppresses a `react-hooks` rule. Derive the
  * value during render, or adopt a changed prop during render with a tracked
- * previous value. Setter calls behind `if` guards count; a constant reset is
- * left to `set-state-in-effect`.
+ * previous value. Setter calls behind `if` guards count, and so do local
+ * `const` declarations that feed them and updater functions
+ * (`setX((current) => f(current, job))`); a constant reset is left to
+ * `set-state-in-effect`.
+ *
+ * Refs: a ref whose `.current` only ever receives the value it was created
+ * with (`const getIdRef = useRef(getId)`, `getIdRef.current = getId`) mirrors
+ * a render value, the latest-callback pattern, so reading it is reading props.
+ * Any other ref (a DOM node, a timer, a value an event or a fetch wrote, a ref
+ * handed to JSX or a function) holds external state and makes the effect real
+ * synchronisation.
+ *
+ * The clock: an effect that seeds state from `Date.now()` or `new Date()`
+ * shows a false value in the first frame. Seed in render with a lazy
+ * `useState` initializer, or read `useMountedWallClockTick`, and tick in an
+ * effect; a timer callback that sets the clock is external synchronisation and
+ * passes.
+ *
+ * `exceptions` names an effect that cannot change yet by its file and its
+ * setters, with the reason. The list only shrinks: an entry whose effect no
+ * longer reports is itself reported as stale.
  */
 const noDerivedStateEffectRule = {
   meta: {
     type: 'problem',
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          exceptions: {
+            type: 'array',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['file', 'setters', 'reason'],
+              properties: {
+                file: { type: 'string', minLength: 1 },
+                setters: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } },
+                reason: { type: 'string', minLength: 20 },
+              },
+            },
+          },
+        },
+      },
+    ],
     messages: {
+      staleException:
+        'The no-derived-state-effect exception for {{setters}} in this file no longer matches an effect: remove it from the rule options in eslint.config.mjs.',
       derived:
         'This effect only copies props or state into state ({{setters}}). Derive the value during render, or adopt a changed prop during render with a tracked previous value (docs/technical/realtime-and-caching.md, Checklist): an effect update can starve under hydration scheduling and loop.',
+      clockSeed:
+        'This effect seeds state from the clock ({{setters}}), so the first frame shows a false value. Seed it in render (a lazy useState initializer, or useMountedWallClockTick from hooks/use-wall-clock-tick.ts) and tick in an effect.',
     },
   },
   create(context) {
     const { sourceCode } = context;
     const { visitorKeys } = sourceCode;
-    // A value fed by the owner's props or state: no ref, no external read, no async work.
-    function feedsFromRender(argument, owner) {
-      let readsOwner = false;
-      let pure = true;
+    const file = relative(REPOSITORY_ROOT, context.filename).replaceAll('\\', '/');
+    const exceptions = (context.options[0]?.exceptions ?? [])
+      .filter((exception) => exception.file === file)
+      .map((exception) => ({ key: exception.setters.join(','), used: false }));
+    // An excepted effect is matched by its setters; true when the report is excepted.
+    function excepted(setterNames) {
+      const exception = exceptions.find(({ key, used }) => !used && key === setterNames.join(','));
+      if (exception) exception.used = true;
+      return exception !== undefined;
+    }
+    // A value fed by the owner's props or state or by the clock: no external
+    // ref, no external read, no async work. `local` holds the effect's own
+    // declarations, whose initializers are judged on their own.
+    function feedsFromRender(argument, owner, local) {
+      const found = { pure: true, readsOwner: false, readsClock: false };
       const visit = (node) => {
-        if (!pure || !node || typeof node.type !== 'string') return;
-        if (['AwaitExpression', 'YieldExpression', 'NewExpression'].includes(node.type)) {
-          pure = false;
-          return;
-        }
-        if (
-          node.type === 'MemberExpression' &&
-          !node.computed &&
-          node.property.type === 'Identifier' &&
-          node.property.name === 'current'
-        ) {
-          pure = false;
-          return;
-        }
-        if (node.type === 'Identifier' && !isPropertyName(node)) {
-          const variable = findScopeVariable(sourceCode.getScope(node), node.name);
-          if (!variable || variable.defs.length === 0) {
-            if (!PURE_GLOBALS.has(node.name)) pure = false;
-            return;
-          }
-          if (hookCallDefinition(variable, 'useRef')) {
-            pure = false;
-            return;
-          }
-          const declaration = variable.defs[0].node;
-          if (rangeWithin(owner, declaration) && !rangeWithin(argument, declaration)) readsOwner = true;
-        }
+        if (!found.pure || !node || typeof node.type !== 'string') return;
+        const verdict = judgeNode(node, argument, owner, local);
+        if (verdict === 'impure') found.pure = false;
+        if (verdict === 'owner') found.readsOwner = true;
+        if (verdict === 'clock') found.readsClock = true;
+        if (verdict !== 'descend') return;
         for (const key of visitorKeys[node.type] ?? []) {
           const child = node[key];
           if (Array.isArray(child)) child.forEach(visit);
@@ -984,8 +1066,34 @@ const noDerivedStateEffectRule = {
         }
       };
       visit(argument);
-      // null: impure; true: reads the owner's props or state; false: a constant.
-      return pure ? readsOwner : null;
+      return found;
+    }
+    // 'descend' visits the children; every other verdict ends the branch.
+    function judgeNode(node, argument, owner, local) {
+      if (node.type === 'AwaitExpression' || node.type === 'YieldExpression') return 'impure';
+      if (isClockRead(node)) return 'clock';
+      if (node.type === 'NewExpression') {
+        const constructs = node.callee.type === 'Identifier' ? node.callee.name : '';
+        return PURE_GLOBALS.has(constructs) && isGlobalName(node.callee) ? 'descend' : 'impure';
+      }
+      if (isCurrentRead(node)) {
+        const variable =
+          node.object.type === 'Identifier'
+            ? findScopeVariable(sourceCode.getScope(node), node.object.name)
+            : null;
+        return variable && isMirrorRef(variable) ? 'owner' : 'impure';
+      }
+      if (node.type !== 'Identifier' || isPropertyName(node)) return 'descend';
+      const variable = findScopeVariable(sourceCode.getScope(node), node.name);
+      if (!variable || variable.defs.length === 0) return PURE_GLOBALS.has(node.name) ? 'end' : 'impure';
+      if (hookCallDefinition(variable, 'useRef')) return 'impure';
+      const declaration = variable.defs[0].node;
+      if (rangeWithin(argument, declaration) || rangeWithin(local, declaration)) return 'end';
+      return rangeWithin(owner, declaration) ? 'owner' : 'end';
+    }
+    function isGlobalName(identifier) {
+      const variable = findScopeVariable(sourceCode.getScope(identifier), identifier.name);
+      return !variable || variable.defs.length === 0;
     }
     return {
       CallExpression(node) {
@@ -1001,15 +1109,20 @@ const noDerivedStateEffectRule = {
           );
         if (!owner) return;
         const calls = [];
-        const tests = [];
-        // Setter calls, optionally behind `if` guards and early returns; anything else is real work.
+        const values = [];
+        // Setter calls, optionally behind `if` guards, early returns and local
+        // declarations that feed them; anything else is real work.
         const collect = (statement) => {
           if (!statement) return true;
           if (statement.type === 'BlockStatement') return statement.body.every(collect);
           if (statement.type === 'ReturnStatement') return statement.argument === null;
           if (statement.type === 'IfStatement') {
-            tests.push(statement.test);
+            values.push(statement.test);
             return collect(statement.consequent) && collect(statement.alternate);
+          }
+          if (statement.type === 'VariableDeclaration') {
+            values.push(...statement.declarations.map((declarator) => declarator.init));
+            return statement.declarations.every((declarator) => declarator.init);
           }
           const expression = statement.type === 'ExpressionStatement' ? statement.expression : statement;
           if (expression.type !== 'CallExpression' || expression.callee.type !== 'Identifier') return false;
@@ -1017,15 +1130,23 @@ const noDerivedStateEffectRule = {
           if (!isStateSetter(findScopeVariable(sourceCode.getScope(expression), expression.callee.name)))
             return false;
           calls.push(expression);
+          values.push(expression.arguments[0]);
           return true;
         };
         if (!collect(effect.body) || calls.length === 0) return;
-        const reads = [...calls.map((call) => call.arguments[0]), ...tests].map((value) =>
-          feedsFromRender(value, owner),
-        );
-        if (reads.includes(null) || !reads.includes(true)) return;
-        const setters = calls.map((call) => `\`${call.callee.name}\``).join(', ');
-        context.report({ node, messageId: 'derived', data: { setters } });
+        const reads = values.map((value) => feedsFromRender(value, owner, effect));
+        if (reads.some((read) => !read.pure)) return;
+        const messageId = reads.some((read) => read.readsClock) ? 'clockSeed' : 'derived';
+        if (messageId === 'derived' && !reads.some((read) => read.readsOwner)) return;
+        const setterNames = calls.map((call) => call.callee.name);
+        if (excepted(setterNames)) return;
+        const setters = setterNames.map((name) => `\`${name}\``).join(', ');
+        context.report({ node, messageId, data: { setters } });
+      },
+      'Program:exit'(program) {
+        for (const { key, used } of exceptions) {
+          if (!used) context.report({ node: program, messageId: 'staleException', data: { setters: key } });
+        }
       },
     };
   },

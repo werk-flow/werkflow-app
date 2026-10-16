@@ -14918,6 +14918,12 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_handover_candidate_projects: {
+        Args: { p_organization_id: string };
+        Returns: {
+          project_id: string;
+        }[];
+      };
       list_inventory_page: {
         Args: { p_organization_id: string; p_query?: Json };
         Returns: Json;
@@ -14942,6 +14948,13 @@ export type Database = {
           p_search?: string;
         };
         Returns: Json;
+      };
+      list_pending_dispatch_recipients: {
+        Args: { p_employee_record_id: string; p_organization_id: string };
+        Returns: {
+          dispatch_id: string;
+          revision_id: string;
+        }[];
       };
       list_project_job_page: {
         Args: {

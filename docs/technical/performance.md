@@ -1,6 +1,6 @@
 # Performance
 
-Status: living — last reviewed 2026-10-09
+Status: living — last reviewed 2026-10-16
 
 This doc owns how WerkFlow measures speed and feel: the journeys people repeat, the lab counts and payload budgets that guard them, layout stability, and the procedure for making a flow faster. [Realtime and caching](realtime-and-caching.md) owns feedback, freshness and the latency targets. [Testing](testing.md#deadlines-and-measured-scenarios) owns how wall-clock scenarios are recorded and calibrated.
 
@@ -63,12 +63,13 @@ A metric earns its gate by two jobs: it repeats across five runs within its tole
 ## Rules for references
 
 - A count reference moves down without review. Only `ratchet` and `calibrate` write it.
+- Every reference replays from its history: the opening entry records every bound it set, and each later entry the whole bound it wrote. A stored value that the replay does not reach fails, so a hand edit fails.
 - A count above its reference plus its tolerance fails. A count above the step's absolute budget fails even without a reference.
 - A count of ten or more keeps a tolerance of one or 2 %, whichever is larger: an echo that lands one read later on a slower machine is not a regression.
 - A payload is judged by its decoded bytes and its rows. The request count of one shape, the encoded size of a streamed text response and every prefetch shape print only, because they follow timing, not work.
 - A payload above its ceiling or below its floor fails. Both directions need `accept` with a reason.
 - A reference never exceeds its budget, and a ratchet entry never raises a value.
-- Ceilings, budgets and floors fail a lab group in release mode and on an explicit `--group`. An improvement that was not lowered fails in release mode. A change plan never selects a lab group; it names each one whose scopes own a changed product file.
+- Ceilings, budgets and floors fail a lab group in every run, and a change plan selects each lab group whose scopes own a changed product file, so a count regression cannot reach a push. An improvement that was not lowered fails in release mode.
 - Missing, duplicated or malformed records fail in every mode.
 
 ## Prefetch
@@ -97,8 +98,8 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 
 - Every journey names its role, start action, usable result and catalog flows, and has a lab step that a lab spec records. [test `lib/testing/journeys.test.ts`]
 - A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. [code `tests/audit/support/lab-recorder.ts`, group `audit:lab:field`, group `audit:lab:office`]
-- Every required lab step has a reference at the digest of its measured test, within its budgets, with a reason for every raise and every accepted floor. The recorder never reads the reference file, so lowering a reference keeps the lab groups' passes. [code `lib/testing/lab-count-context.ts`, test `lib/testing/lab-count-references.test.ts`, test `lib/testing/lab-count-reference-carryover.test.ts`]
-- The runner judges lab evidence: missing or malformed records fail in every mode, ceilings, budgets and floors in release mode and on explicit request, and an improvement that was not lowered in release mode. [test `lib/testing/lab-evidence.test.ts`, code `scripts/verify.ts`]
+- Every required lab step has a reference at the digest of its measured test, within its budgets, with a reason for every raise and every accepted floor, and its history replays to its stored bounds. The recorder never reads the reference file, so lowering a reference keeps the lab groups' passes. [code `lib/testing/lab-count-context.ts`, test `lib/testing/lab-count-references.test.ts`, test `lib/testing/lab-count-reference-carryover.test.ts`]
+- The runner judges lab evidence: missing or malformed records, ceilings, budgets and floors fail in every mode, and an improvement that was not lowered in release mode. A change plan runs each lab group whose scopes own a changed product file. [test `lib/testing/lab-evidence.test.ts`, code `scripts/verify.ts`, test `lib/testing/selection/group-selection.test.ts`]
 - References change only through the lab command, which refuses failed, uncleaned, diagnostic and stale runs. [code `scripts/lab-counts.ts`, test `lib/testing/lab-counts.test.ts`]
 - A request shape is named by its route pattern or its background-read kind, never by ids or query values. [test `lib/testing/lab-shapes.test.ts`]
 - Nothing on an audited page moves after it is usable. [code `tests/audit/support/layout-shifts.ts`, group `audit:layout`]
@@ -110,16 +111,17 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 
 - Lower a count by removing, delaying or throttling a read that keeps shown data current. [group `ui:contracts`, group `audit:performance:calendar-live`, judgment]
 - Raise a reference, a ceiling, a budget or a tolerance to make a run pass. [test `lib/testing/lab-count-references.test.ts`, judgment]
-- Edit `lib/testing/lab-count-references.json` by hand. [code `scripts/lab-counts.ts`, judgment]
+- Edit `lib/testing/lab-count-references.json` by hand. [code `scripts/lab-counts.ts`, test `lib/testing/lab-count-references.test.ts`]
 - Gate on a metric that failed the stability or the relevance job. [test `lib/testing/lab-count-references.test.ts`]
 - Add a client cache of server data that outlives a navigation without an unconfirmed marker and a read on every load. [judgment]
 - Enable viewport prefetch for a sidebar link, or prefetch a route's dynamic data on intent. [test `lib/ui/sidebar-prefetch.test.ts`, judgment]
 - Report a speedup as a percentage alone. [judgment]
+- Render a client component inside a server primitive that every page uses (`PageShell`, `PageBody`, the page headers): its client reference, with the route's chunk list, rides in every route payload. Run page-wide client behaviour once in the app shell. [test `lib/conventions/server-primitive-client-refs.test.ts`]
 
 ## Verify your work
 
 1. Run `bun run test:unit lib/testing lib/conventions`.
-2. Serve the build with `bun run test:server local` and run each lab group whose scopes own a changed file: `bun run test:verify --group audit:lab:<name>`. `bun run test:plan` names them.
+2. Serve the build with `bun run test:server local`. While you iterate, run each lab group whose scopes own a changed file with `bun run test:verify --group audit:lab:<name>`; the change plan runs it again on the final tree. For a wall-clock group that `bun run test:plan` names, pass `--group audit:performance:<name>` on a quiet machine: the publication gate requires it.
 3. For a change to a page, a skeleton or a shared control, run `bun run test:verify --group audit:layout`.
 4. Lower or accept the references and commit `lib/testing/lab-count-references.json` with the change.
 5. Record the journey decision, the absolute numbers and the person's verdict in the slice record.

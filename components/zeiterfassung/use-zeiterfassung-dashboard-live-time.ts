@@ -16,19 +16,37 @@ function formatLiveTime(baseMinutes: number, runningSince: string | null, nowMs:
     .padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
-// Today's running clock: the formatted total and its minutes, refreshed
-// every second while the dashboard is mounted. The server and the hydrating
-// render show 00:00:00.
+/** Shown for a running clock before the client knows the time. */
+const RUNNING_CLOCK_PLACEHOLDER = '—';
+
+/**
+ * Today's running clock, refreshed every second: the formatted total, its
+ * minutes, and the instant they were computed for (null before the client
+ * knows the time). A client mount reads the clock in its first render. The
+ * server and the hydrating render cannot know the client's time: they show
+ * the recorded minutes, which are exact while nothing runs, and a placeholder
+ * instead of a running clock, never a false zero.
+ */
 export function useZeiterfassungLiveTime(effectiveState: LiveClockState): {
   liveTime: string;
   liveTotalMinutes: number;
+  nowMs: number | null;
 } {
   const nowMs = useMountedWallClockTick(1000);
-  if (nowMs === null) return { liveTime: '00:00:00', liveTotalMinutes: 0 };
-
   const runningSince = effectiveState.isClockedIn ? effectiveState.statusStartedAt : null;
+  if (nowMs === null) {
+    return {
+      liveTime:
+        runningSince === null
+          ? formatLiveTime(effectiveState.todayMinutes, null, 0)
+          : RUNNING_CLOCK_PLACEHOLDER,
+      liveTotalMinutes: effectiveState.todayMinutes,
+      nowMs,
+    };
+  }
   return {
     liveTime: formatLiveTime(effectiveState.todayMinutes, runningSince, nowMs),
     liveTotalMinutes: liveMinutes(effectiveState.todayMinutes, runningSince, nowMs),
+    nowMs,
   };
 }

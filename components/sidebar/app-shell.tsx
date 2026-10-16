@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, createContext, useContext, useMemo } from 'react';
+import { useState, useEffect, useRef, createContext, useContext, useMemo } from 'react';
 import { SidebarLink as Link } from './sidebar-link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useOrganization } from '@/components/organization/organization-context';
 import { SidebarProfileCard } from '@/components/sidebar/sidebar-profile-card';
+import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
 import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { OrgSwitchOverlay } from './org-switch-overlay';
@@ -338,6 +339,8 @@ export function AppShell({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { isSwitchingOrg } = useOrganization();
+  const mainRef = useRef<HTMLElement>(null);
+  usePageBodyKeyboardScroll(mainRef);
 
   return (
     <SidebarContext.Provider value={useMemo(() => ({ isOpen, setIsOpen }), [isOpen])}>
@@ -351,6 +354,7 @@ export function AppShell({
           <MobileDrawer isOpen={isOpen} onClose={() => setIsOpen(false)} />
           <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
             <main
+              ref={mainRef}
               aria-hidden={isSwitchingOrg}
               className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
             >

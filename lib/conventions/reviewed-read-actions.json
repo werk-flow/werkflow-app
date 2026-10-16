@@ -1,0 +1,18 @@
+{
+  "lib/customer-relationships/actions.ts#evaluateCustomerCommunicationGuidance": "evaluates the contact rules for a planned message from the stored consents; writes nothing",
+  "lib/customer-relationships/actions.ts#getCustomerRelationshipBundle": "reads one customer's timeline sources; writes nothing",
+  "lib/dispatch/actions.ts#previewBatchReschedule": "computes the moves of a batch reschedule without saving them; batchReschedule saves",
+  "lib/documents/actions.ts#getDocumentDetails": "reads one document with its versions and links; writes nothing",
+  "lib/documents/actions.ts#getDocumentSignedUrl": "signs a download URL for a document the caller may see; writes nothing",
+  "lib/documents/actions.ts#getDocumentVersionSignedUrl": "signs a download URL for one document version; writes nothing",
+  "lib/documents/actions.ts#getJobDocuments": "reads the documents linked to one job for the field work pack; writes nothing",
+  "lib/installed-equipment/actions.ts#getAssignedEquipmentForJob": "reads the equipment of a job the caller is assigned to; writes nothing",
+  "lib/jobs/actions.ts#getJobByNumber": "reads one job by its number for the field work pack; writes nothing",
+  "lib/maintenance/actions.ts#getAssignedMaintenanceContextForJob": "reads the maintenance context of an assigned job; writes nothing",
+  "lib/personnel/lifecycle-actions.ts#getPersonnelDocumentSignedUrl": "signs a download URL for a personnel document the caller may see; writes nothing",
+  "lib/qualifications/actions.ts#expandTeamForAssignment": "reads a team's members and their qualifications to fill the picker; writes nothing",
+  "lib/responsibilities/actions.ts#previewResponsibilityConfiguration": "computes the effect of a responsibility change without saving it; applyResponsibilityConfiguration saves",
+  "lib/service-cases/actions.ts#getAssignedServiceContextForJob": "reads the service case context of an assigned job; writes nothing",
+  "lib/work-handover/actions.ts#getWorkHandoverFieldStatus": "reads the handover state a field worker sees on the work pack; writes nothing",
+  "lib/work-handover/actions.ts#previewWorkHandover": "reads the gate snapshot (get_work_handover_gate_snapshot) and the frozen summaries; releaseWorkHandover saves"
+}

@@ -61,7 +61,7 @@ A group is one executable check in `lib/testing/selection/test-groups.ts`. The k
 
 ## Quality of tests and the runner
 
-A useful test fails when the intended behavior breaks, survives an equivalent implementation, and names the failed invariant. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`, and `docs:check` requires an owner doc to name it. A credible report separates product, environment, blocked and missing evidence.
+A useful test also survives an equivalent implementation. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`, and `docs:check` requires an owner doc to name it.
 
 ## When a proof is valid
 
@@ -101,17 +101,18 @@ A failed browser group may run again as soon as any source file changed (`direct
 
 ### Release mode
 
-`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran. The `audit:performance:*` and `audit:lab:*` groups and `audit:visual` run in release mode only, and an explicit `--group` runs them in change mode. A change plan never selects them, but it names each measured or lab group whose scopes own a changed product file. Latency deadlines, budgets, lab ceilings and reference comparisons fail a group in release mode only. In change mode the runner records them in the report's `measurements` and in `overTarget`, and the group passes. Missing, malformed, or incorrect evidence fails in every mode. An explicit `--group audit:performance:<name>` run enforces its deadlines, so you can prove a performance repair.
+`bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran. The `audit:performance:*` groups and `audit:visual` run in release mode only; an explicit `--group` runs them in change mode and enforces their deadlines. A change plan selects an `audit:lab:*` group like any browser group whose scopes own a changed file, and fails it on its budgets, ceilings and floors, because counts repeat on a loaded machine and wall-clock medians do not. It names each `audit:performance:*` group whose scopes own a changed product file, and the publication gate requires that group's pass. Other latency deadlines fail in release mode only; in change mode the runner records them in `measurements` and `overTarget`. Missing, malformed, or incorrect evidence fails in every mode.
 
 After a failed release run, pass every failed group with `--group` before the next release plan. After two consecutive failed release runs, write the diagnosis into the incident log first (`lib/testing/publication/release-breaker.ts`).
 
 ## Publication gate
 
-`.githooks/pre-push` is the one gate before publication. Enable it once per clone with `git config core.hooksPath .githooks`. The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all three conditions hold:
+`.githooks/pre-push` is the one gate before publication. Enable it once per clone with `git config core.hooksPath .githooks`. The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all four conditions hold:
 
 1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, and no input file is uncommitted.
 2. A CodeRabbit review completed on the tree being pushed. `bun run review` writes a record under `.agent-logs/review/` with the content digest of every changed file its scope covered. A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
 3. Every commit that no remote has yet carries a `Deletion pass:` line in its body.
+4. A pushed product file that an `audit:performance:*` group's scopes own has a passing run of that group on its current content.
 
 The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`.
 
@@ -123,7 +124,6 @@ bun run test:plan                              # what would run, in change mode
 bun run test:plan --mode release               # the complete release selection
 bun run test:server local                      # build and serve the recorded production build
 bun run test:verify                            # run the plan
-bun run test:verify --group golden:p1-06,audit:wave-2:p1-16   # an explicit subset
 bun run test:verify --group <ids> --fresh      # run even when a proof exists; --jobs 2 adds a second browser worker
 bun run test:campaign                          # verification cost since the last commit
 bun run test:runs list|classify|cleanup|prune|recover-interrupted|cleanup-local-relocated
@@ -144,7 +144,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"   # acceptance captures
 
 `scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`). The run writes `.agent-logs/verification/<id>/report.json`.
 
-Browser groups run against the recorded production build on port 3000 and a disposable organization in the local Supabase stack. `--jobs N` runs independent groups on N workers. Groups that measure freshness, readiness, or a scenario always run alone, after a Realtime probe. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`). Every run ends with the informational [campaign line](../plans/phase-1/protocol.md#campaign-line).
+Browser groups run against the recorded production build on port 3000 and a disposable organization in the local Supabase stack. `--jobs N` runs independent groups on N workers. Groups that measure freshness, readiness, or a scenario always run alone, after a Realtime probe. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`).
 
 ## Specs
 
@@ -156,9 +156,9 @@ A helper goes into the domain module of its product area under `tests/golden/sup
 
 Items marked Tier 2 fail `bun run test:unit` (`spec-conventions.test.ts` with `lib/testing/spec-support/spec-independence.ts`) or ESLint; the others are review duties.
 
-- [ ] **Independent.** Each test prepares its own preconditions: setup through the admin-client helpers in `tests/golden/support/db/`, the claimed operation through its real UI. It passes alone (`--grep` on its title) and in any order. A connected workflow is one test with named `test.step` stages. Records carry a test-specific name, and a count or "latest row" check covers only the test's own records. Tier 2 refuses a test that depends on another. A measured test prepares the typical profile through `ensureTypicalProfile`, which seeds it once per world.
+- [ ] **Independent.** Each test prepares its own preconditions: setup through the admin-client helpers in `tests/golden/support/db/`, the claimed operation through its real UI. It passes alone (`--grep` on its title) and in any order. A count or "latest row" check covers only the test's own records. Tier 2 refuses a test that depends on another. A measured test prepares the typical profile through `ensureTypicalProfile`, which seeds it once per world.
 - [ ] **One proof per behavior.** For a slice with a golden and an audit file, the golden file holds the journey a user walks, including the second-session and live checks. The audit file holds the edge cases, denials, and role variants the journey does not reach. Delete a duplicate; a second browser proof needs a distinct risk or role.
-- [ ] **No wall clock.** Dates come from the `businessDate` fixture or `berlinDateAtOffset` inside the test. Seed "yesterday" or "a completed time today" relative to that date, never from the current minute. Tier 2: no `new Date()` or `Date.now()` at module scope.
+- [ ] **No wall clock.** Seed "yesterday" or "a completed time today" relative to that date, never from the current minute. Tier 2: no `new Date()` or `Date.now()` at module scope.
 - [ ] **Bounded group.** A group's expected duration stays at about four minutes, including about one minute of world setup. Split a growing file by catalog area into its own group with its scopes and date window.
 
 ## Deadlines and measured scenarios
@@ -167,9 +167,9 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. `exp
 
 Scenario measurements use the ids, budgets, and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. [Performance](performance.md) owns journeys, lab counts and payload budgets.
 
-- **Budget.** A new scenario takes the budget of the registered scenarios with its boundary, and a cross-session scenario takes the live target. A budget never follows what a build happens to do.
+- **Budget.** A new scenario takes the budget of the registered scenarios with its boundary, and a cross-session scenario takes the live target.
 - **Comparison basis.** The sample median is compared with the reference, without the provider's delivery time; the budget judges the whole interval (`comparableMs` in `lib/testing/latency-evidence.ts`).
-- **References.** Every required scenario has a reviewed reference at its current measurement digest. Calibration refuses failed, diagnostic, stale or undersampled runs and never replaces a reviewed reference by itself. To calibrate, pass the measured groups, then run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it into the references.
+- **References.** Every required scenario has a reviewed reference at its current measurement digest. Calibration refuses failed, diagnostic, stale or undersampled runs and never replaces a reviewed reference by itself. To calibrate, pass the measured groups, then run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it into the references. An edit to a measurement support file that cannot change what a scenario measures, such as a new target kind, re-keys the references in `lib/testing/performance-reference-carryover.json` with its reason; any other support-file edit recalibrates.
 
 ### Visual references
 
@@ -216,7 +216,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
 - Unit tests assert no duration; the preload and the runner set one hang guard for every file. [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
-- A push passes the publication gate: a passing report, review records whose per-file digests cover every changed file of the pushed tree, and a `Deletion pass:` line in every commit no remote has yet. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`]
+- A push passes the publication gate: a passing report, review records whose per-file digests cover every changed file of the pushed tree, a `Deletion pass:` line in every commit no remote has yet, and a pass of each `audit:performance:*` group whose scopes own a pushed product file. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`]
 
 ## Never
 

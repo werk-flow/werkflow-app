@@ -3,7 +3,7 @@
 import { useClientRead } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useState, useEffect, useRef } from 'react';
-import { getJobDetails } from '@/lib/jobs/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { Job, JobPriority } from '@/lib/jobs/types';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
@@ -51,7 +51,7 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
 
   // The current crew is read each time the dialog opens and adopted during render.
   const assignments = useClientRead({
-    read: () => getJobDetails(job.id),
+    read: (signal) => readInBackground('job-details', { jobId: job.id }, signal),
     deps: [job.id],
     enabled: open,
     failureMessage: 'Die aktuellen Zuweisungen konnten nicht geladen werden.',

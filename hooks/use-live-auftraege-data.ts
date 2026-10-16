@@ -105,8 +105,9 @@ export function useLiveAuftraegeData({
   // Adopted during render, never in a mount effect: inside a hydrated Suspense
   // boundary that effect runs at idle priority, its update starves behind a
   // pending route transition, and React then rebases every later functional
-  // update into a new array on each render, which the optimistic list's
-  // effect turns into an endless commit loop.
+  // update into a new array on each render; any effect keyed on that array
+  // (the optimistic list once expired its overlay in one) then commits
+  // forever.
   const [adoptedProps, setAdoptedProps] = useState({
     initialJobs,
     initialProjects,

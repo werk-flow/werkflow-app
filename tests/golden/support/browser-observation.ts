@@ -20,7 +20,8 @@ export type BrowserObservationTarget =
   | { kind: 'standalone-calendar-visit'; title: string; dateIso: string }
   | { kind: 'clock-state'; state: 'in' | 'out' }
   | { kind: 'pending-clock-action'; label: string }
-  | { kind: 'time-entry'; entryId: string; status: 'pending' | 'approved' | 'rejected' };
+  | { kind: 'time-entry'; entryId: string; status: 'pending' | 'approved' | 'rejected' }
+  | { kind: 'job-row-assignee'; jobNumber: string; employeeName: string };
 
 export type MeasuredTarget = { locator: Locator; observation: BrowserObservationTarget };
 
@@ -108,6 +109,25 @@ export function timeEntryTarget(
   };
 }
 
+/**
+ * The assigned person on one job's row of the job list
+ * (`components/auftraege/list/unified-auftraege-row-cells.tsx`): the avatar
+ * named by the person inside the row whose cell shows the job number. A row
+ * that shows or holds optimistic content (`data-unconfirmed`) never matches.
+ */
+export function jobRowAssigneeTarget(page: Page, jobNumber: string, employeeName: string): MeasuredTarget {
+  if (!jobNumber.trim() || !employeeName.trim())
+    throw new Error('A measured job row needs its number and the assigned person.');
+  return {
+    locator: page
+      .locator('tr:not([data-unconfirmed]):not([data-unconfirmed] *)')
+      .filter({ has: page.getByRole('cell', { name: jobNumber, exact: true }) })
+      .filter({ hasNot: page.locator('[data-unconfirmed]') })
+      .getByLabel(employeeName, { exact: true }),
+    observation: { kind: 'job-row-assignee', jobNumber, employeeName },
+  };
+}
+
 export function calendarEventTarget(page: Page, title: string, index = 0): MeasuredTarget {
   if (!Number.isInteger(index) || index < 0 || !title.trim())
     throw new Error('A measured calendar event needs a title and nonnegative index.');
@@ -183,6 +203,19 @@ export function firstVisibleBrowserTimestamp(target: BrowserObservationTarget): 
         element.getAttribute('data-time-entry-status') === target.status &&
         element.checkVisibility(),
     );
+  } else if (target.kind === 'job-row-assignee') {
+    candidates = Array.from(document.querySelectorAll('tr'))
+      .filter(
+        (row) =>
+          !row.closest('[data-unconfirmed]') &&
+          !row.querySelector('[data-unconfirmed]') &&
+          Array.from(row.children).some((cell) => (cell.textContent ?? '').trim() === target.jobNumber),
+      )
+      .flatMap((row) =>
+        Array.from(row.querySelectorAll('[aria-label]')).filter(
+          (element) => element.getAttribute('aria-label') === target.employeeName,
+        ),
+      );
   } else {
     const normalize = (value: string): string =>
       value

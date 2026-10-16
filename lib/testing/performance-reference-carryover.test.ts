@@ -17,6 +17,21 @@ import { performanceContextFixture } from './fixtures/performance';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
+const BROWSER_OBSERVATION_FILE = 'tests/golden/support/browser-observation.ts';
+
+/**
+ * The content digest of browser-observation.ts that every carried reference was
+ * reviewed with. The job-row-assignee target kind is the only change since; it
+ * adds a union member, a factory and one branch that no carried scenario reaches.
+ */
+const REVIEWED_BROWSER_OBSERVATION_DIGEST =
+  '12a336a5ea3d2e85ae47d0f9f56827d57d1a9c4773b3b67bbcf485ad075083ec';
+
+function reviewedSupportDigest(file: string): string {
+  if (file === BROWSER_OBSERVATION_FILE) return REVIEWED_BROWSER_OBSERVATION_DIGEST;
+  return contentDigest(file, readFileSync(resolve(repositoryRoot, file)));
+}
+
 /** The retired whole-file measurement digest, kept here only to repeat the carry-over proof. */
 function fileMeasurementDigest(scenario: MeasuredScenario): string {
   const digest = createHash('sha256').update(
@@ -32,17 +47,25 @@ function fileMeasurementDigest(scenario: MeasuredScenario): string {
   for (const file of [
     scenario.file,
     'tests/golden/support/scenario-measurement.ts',
-    'tests/golden/support/browser-observation.ts',
+    BROWSER_OBSERVATION_FILE,
     'tests/golden/support/sessions.ts',
     'lib/testing/live-observation.ts',
     'tests/audit/support/performance-steps.ts',
   ])
-    digest
-      .update(file)
-      .update('\0')
-      .update(contentDigest(file, readFileSync(resolve(repositoryRoot, file))))
-      .update('\0');
+    digest.update(file).update('\0').update(reviewedSupportDigest(file)).update('\0');
   return digest.digest('hex');
+}
+
+/** Entries whose reviewed tree is still present but which name another digest than the current one. */
+function carryoverProofProblems(entries: ReturnType<typeof readReferenceCarryover>['entries']): string[] {
+  return entries.flatMap((entry) => {
+    const scenario = MEASURED_SCENARIOS.find((candidate) => candidate.id === entry.scenarioId);
+    if (!scenario) return [`${entry.scenarioId}: unknown scenario`];
+    if (fileMeasurementDigest(scenario) !== entry.fileDigest) return [];
+    return measurementDigest(repositoryRoot, scenario) === entry.measuredTestDigest
+      ? []
+      : [`${entry.scenarioId}: measured-test digest differs on the carried-over tree`];
+  });
 }
 
 test('every carry-over entry re-keys a reviewed reference; a stale entry is deleted', () => {
@@ -55,20 +78,26 @@ test('every carry-over entry re-keys a reviewed reference; a stale entry is dele
   expect(stale).toEqual([]);
 });
 
-// The proof: on a tree where the whole-file digest still equals the one the
-// reference was recorded under, the measured code is the code the review saw,
-// and the entry must name the measured-test digest of that same tree. Entries
-// whose spec changed since carry-over were proven in the change that added them.
+// The proof: on a tree where the whole-file digest (with browser-observation.ts
+// at its reviewed content) still equals the one the reference was recorded
+// under, the measured code is the code the review saw apart from the job-row
+// target kind, and the entry must name the measured-test digest of the current
+// tree. Entries whose spec changed since carry-over were proven in the change
+// that added them.
 test('a carry-over entry names the measured-test digest of the tree its file digest identifies', () => {
-  const wrong = readReferenceCarryover().entries.flatMap((entry) => {
+  expect(carryoverProofProblems(readReferenceCarryover().entries)).toEqual([]);
+});
+
+test('the proof still covers entries and refuses one that names a stale digest', () => {
+  const entries = readReferenceCarryover().entries;
+  const proven = entries.filter((entry) => {
     const scenario = MEASURED_SCENARIOS.find((candidate) => candidate.id === entry.scenarioId);
-    if (!scenario) return [`${entry.scenarioId}: unknown scenario`];
-    if (fileMeasurementDigest(scenario) !== entry.fileDigest) return [];
-    return measurementDigest(repositoryRoot, scenario) === entry.measuredTestDigest
-      ? []
-      : [`${entry.scenarioId}: measured-test digest differs on the carried-over tree`];
+    return scenario !== undefined && fileMeasurementDigest(scenario) === entry.fileDigest;
   });
-  expect(wrong).toEqual([]);
+  // Without a covered entry the proof above would pass vacuously.
+  expect(proven.length).toBeGreaterThan(0);
+  const planted = proven.slice(0, 1).map((entry) => ({ ...entry, measuredTestDigest: 'f'.repeat(64) }));
+  expect(carryoverProofProblems(planted)).toHaveLength(1);
 });
 
 test('carry-over re-keys only the matching scenario and digest and keeps every reviewed value', () => {

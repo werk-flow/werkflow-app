@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 import { describeFailure } from '@/lib/action-messages';
-import { getNextJobNumber } from '@/lib/jobs/actions';
-import { getNextProjectNumber } from '@/lib/projects/actions';
 import { convertRequestToJob, convertRequestToProject } from '@/lib/requests/actions';
 import { requestUrgencyToJobPriority, type ClientRequest } from '@/lib/requests/types';
 import type { JobPriority } from '@/lib/jobs/types';
@@ -81,30 +80,17 @@ function useSuggestedConversionNumber(
     if (open) setNumber('');
   }
 
-  useEffect(() => {
-    if (!open) return;
-    let isCurrent = true;
-    const fetchNumber = target === 'job' ? getNextJobNumber() : getNextProjectNumber();
-    fetchNumber
-      .then((result) => {
-        if (!isCurrent || !result.success) return;
-        const suggestion = 'jobNumber' in result ? result.jobNumber : result.projectNumber;
-        // Apply the suggestion only when the field is empty or still holds a
-        // previous suggestion — never overwrite a number the user typed.
-        setNumber((current) => {
-          if (current && current !== lastSuggestedNumberRef.current) {
-            return current;
-          }
-          lastSuggestedNumberRef.current = suggestion;
-          return suggestion;
-        });
-      })
-      // eslint-disable-next-line no-restricted-syntax -- the number suggestion is a convenience; the field stays empty and manual entry works
-      .catch(() => undefined);
-    return () => {
-      isCurrent = false;
-    };
-  }, [open, target]);
+  // Apply the suggestion only when the field is empty or still holds a
+  // previous suggestion — never overwrite a number the user typed.
+  useSuggestedRecordNumber(target === 'job' ? 'next-job-number' : 'next-project-number', open, (suggestion) =>
+    setNumber((current) => {
+      if (current && current !== lastSuggestedNumberRef.current) {
+        return current;
+      }
+      lastSuggestedNumberRef.current = suggestion;
+      return suggestion;
+    }),
+  );
 
   return { number, setNumber };
 }

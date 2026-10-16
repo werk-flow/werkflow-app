@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 
 import { useMemberStatus, type MemberStatus } from '@/hooks/use-member-status';
-import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
+import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
@@ -84,17 +84,15 @@ export function useMitarbeiterDetailLiveTime({
     autoBreakDurationMinutes,
   });
 
-  // 0 on the server and in the hydrating render, then today's minutes with the
-  // running ones, refreshed every minute.
-  const nowMs = useMountedWallClockTick(60_000);
-  const liveTotalMinutes =
-    nowMs === null
-      ? 0
-      : liveMinutes(
-          status?.todayMinutes ?? 0,
-          status?.isClockedIn ? (status.statusStartedAt ?? null) : null,
-          nowMs,
-        );
+  // Today's minutes with the running ones, from the first render that knows
+  // the status, refreshed every minute. The status is a client read, so the
+  // server and the hydrating render have none and show no clock-dependent value.
+  const nowMs = useWallClockTick(60_000);
+  const liveTotalMinutes = liveMinutes(
+    status?.todayMinutes ?? 0,
+    status?.isClockedIn ? (status.statusStartedAt ?? null) : null,
+    nowMs,
+  );
 
   // This member's resolved target for today (P1-04); the legacy 8h value only
   // appears as the visibly labeled `default` source.

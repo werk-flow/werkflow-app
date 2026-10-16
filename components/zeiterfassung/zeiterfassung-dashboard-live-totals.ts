@@ -13,18 +13,18 @@ export type ZeiterfassungLiveTotals = {
   liveInternalMinutes: number;
 };
 
-// Today's totals including the still-running activity. Reads the wall clock,
-// so the dashboard calls it on every render of its one-second tick.
+// Today's totals including the still-running activity at `nowMs`, the
+// dashboard's one-second tick. Before the client knows the time (null) the
+// totals hold the recorded minutes only, like the clock itself.
 export function computeZeiterfassungLiveTotals(
   effectiveState: LiveClockState,
   liveTotalMinutes: number,
   todayTargetMinutes: number | undefined,
+  nowMs: number | null,
 ): ZeiterfassungLiveTotals {
+  const runningSince = nowMs !== null && effectiveState.isClockedIn ? effectiveState.statusStartedAt : null;
   // The minutes of the still-running activity; 0 when nothing runs.
-  const currentActivityMinutes = liveMinutes(
-    0,
-    effectiveState.isClockedIn ? effectiveState.statusStartedAt : null,
-  );
+  const currentActivityMinutes = liveMinutes(0, runningSince, nowMs ?? 0);
 
   const liveTimelineSegments: ClockTimelineSegment[] = (() => {
     const segments = [...(effectiveState.timelineSegments ?? [])];
@@ -43,7 +43,8 @@ export function computeZeiterfassungLiveTotals(
     effectiveState.breakMode === 'manual'
       ? liveMinutes(
           effectiveState.breakMinutes,
-          effectiveState.status === 'on_break' ? effectiveState.statusStartedAt : null,
+          effectiveState.status === 'on_break' ? runningSince : null,
+          nowMs ?? 0,
         )
       : effectiveState.breakMinutes;
 

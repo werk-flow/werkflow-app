@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { getNextJobNumber } from '@/lib/jobs/actions';
-import { logError } from '@/lib/logging';
+import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 
 type CreateJobNumberOptions = {
   initialJobNumber: string | null | undefined;
@@ -31,23 +30,10 @@ export function useCreateJobNumber({ initialJobNumber, isActive }: CreateJobNumb
     previousInitialJobNumberRef.current = nextInitialJobNumber || previousInitialJobNumber;
   }, [initialJobNumber]);
 
-  useEffect(() => {
-    if (!isActive || initialJobNumber || jobNumber) return;
-    let isCurrent = true;
-
-    // Without a suggestion the field stays empty for the user to fill; the log keeps the failure.
-    getNextJobNumber()
-      .then((result) => {
-        if (!isCurrent || !result.success) return;
-
-        setJobNumber((currentJobNumber) => currentJobNumber || result.jobNumber);
-      })
-      .catch((error: unknown) => logError('jobs.next_number_failed', error));
-
-    return () => {
-      isCurrent = false;
-    };
-  }, [initialJobNumber, isActive, jobNumber]);
+  // An emptied field asks for a fresh suggestion; one the user typed stays.
+  useSuggestedRecordNumber('next-job-number', isActive && !initialJobNumber && !jobNumber, (suggestion) =>
+    setJobNumber((currentJobNumber) => currentJobNumber || suggestion),
+  );
 
   return { jobNumber, setJobNumber };
 }

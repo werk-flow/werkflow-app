@@ -2,10 +2,12 @@
 
 import { useState, type FormEvent } from 'react';
 
+import { useOrganization } from '@/components/organization/organization-context';
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
 import { usePendingTask } from '@/hooks/use-server-action';
+import { readInBackground } from '@/lib/data/background-read-client';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { saveWorkDependency, searchWorkPredecessors } from '@/lib/work-lifecycle/actions';
+import { saveWorkDependency } from '@/lib/work-lifecycle/actions';
 import type {
   WorkDeclaredDependencyKind,
   WorkDependencyEffect,
@@ -49,6 +51,34 @@ type WorkLifecycleDependencyForm = {
   submit: (event: FormEvent) => void;
 };
 
+/**
+ * The predecessor search: from two typed characters the server searches over
+ * the background-read route after a short pause, and a newer keystroke
+ * cancels the waiting read. The last answer stays listed while the next runs.
+ */
+function usePredecessorSearch(type: WorkDependencyPredecessorType, search: string) {
+  const { activeOrgId } = useOrganization();
+  return useClientRead({
+    read: async (signal) => {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, PREDECESSOR_SEARCH_DELAY_MS);
+        signal.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      // A declared condition is never searched; `enabled` keeps the read off for it.
+      if (signal.aborted || type === 'declared') return { success: false as const, error: 'superseded' };
+      const input = { organizationId: activeOrgId ?? '', type, query: search };
+      return readInBackground('work-predecessor-search', input, signal);
+    },
+    deps: [activeOrgId, type, search],
+    enabled: type !== 'declared' && search.trim().length >= 2,
+    failureMessage: PREDECESSOR_SEARCH_FAILED_MESSAGE,
+    keepPreviousData: true,
+  });
+}
+
 /** State, debounced predecessor search, validation and save of the dependency dialog. */
 export function useWorkLifecycleDependencyForm({
   snapshot,
@@ -62,26 +92,7 @@ export function useWorkLifecycleDependencyForm({
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { run: runDependencyTask, isPending: pending } = usePendingTask();
-  // From two characters the server searches; a newer keystroke cancels the waiting read.
-  const predecessorSearch = useClientRead({
-    read: async (signal) => {
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, PREDECESSOR_SEARCH_DELAY_MS);
-        signal.addEventListener('abort', () => {
-          clearTimeout(timer);
-          resolve();
-        });
-      });
-      // A declared condition is never searched; `enabled` keeps the read off for it.
-      if (signal.aborted || type === 'declared') return { success: false as const, error: 'superseded' };
-      return searchWorkPredecessors({ type, query: search });
-    },
-    deps: [type, search],
-    enabled: type !== 'declared' && search.trim().length >= 2,
-    failureMessage: PREDECESSOR_SEARCH_FAILED_MESSAGE,
-    // The last answer stays listed while the next search runs.
-    keepPreviousData: true,
-  });
+  const predecessorSearch = usePredecessorSearch(type, search);
   const [attempted, setAttempted] = useState(false);
   const fieldErrors = {
     'dependency-target': predecessor ? undefined : 'Bitte wähle eine Voraussetzung.',

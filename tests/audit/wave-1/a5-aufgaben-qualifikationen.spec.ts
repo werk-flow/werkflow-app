@@ -11,6 +11,7 @@ import { getCapabilityHistoryState, getJobQualificationState } from '../../golde
 import { createAdminClient } from '../../golden/support/db/shared';
 import { getLatestManualTimeEntryState } from '../../golden/support/db/time-tracking';
 import { getVacationRequestIdsByStartDate } from '../../golden/support/db/vacation';
+import { getJobAssignmentUserIds } from '../../golden/support/db/work';
 import {
   attentionNotificationRow,
   decisionReason,
@@ -200,22 +201,6 @@ async function getTeamStateByName(
     })),
     eventTypes: (eventsResult.data ?? []).map((row) => row.event_type as string),
   };
-}
-
-async function getJobAssignmentUserIds(orgId: string, jobNumber: string): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data: job, error: jobError } = await admin
-    .from('jobs')
-    .select('id')
-    .eq('organization_id', orgId)
-    .eq('job_number', jobNumber)
-    .single();
-  if (jobError || !job) {
-    throw new Error(`Job lookup failed for ${jobNumber}: ${jobError?.message}`);
-  }
-  const { data, error } = await admin.from('job_assignments').select('user_id').eq('job_id', job.id);
-  if (error) throw new Error(`Assignment lookup failed: ${error.message}`);
-  return (data ?? []).map((row) => row.user_id as string).sort();
 }
 
 // ---------------------------------------------------------------------------

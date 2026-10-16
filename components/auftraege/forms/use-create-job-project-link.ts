@@ -3,8 +3,8 @@
 import { useState } from 'react';
 
 import { useClientRead } from '@/hooks/use-client-read';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
-import { getProjectDetails } from '@/lib/projects/actions';
 import type { ClientSelectItem } from '../shared/client-select-with-create';
 import { useJobProjectOptions } from './job-form-options';
 
@@ -39,7 +39,7 @@ export function useCreateJobProjectLink({
   });
 
   const projectDefaults = useClientRead({
-    read: () => getProjectDetails(projectChoice.projectId),
+    read: (signal) => readInBackground('project-details', { projectId: projectChoice.projectId }, signal),
     deps: [projectChoice.projectId, projectChoice.count],
     enabled: projectChoice.projectId !== '' && projectChoice.projectId === projectId,
     failureMessage: 'Die Projektvorgaben konnten nicht geladen werden.',

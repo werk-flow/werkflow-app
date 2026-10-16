@@ -44,7 +44,8 @@ export function useJobDetailTimeSummary({
     [allSessions, jobId],
   );
 
-  const nowTick = useWallClockTick(1000, activeWorkSessions.length > 0);
+  // The durations are whole minutes: a minute tick keeps them less than a minute behind.
+  const nowTick = useWallClockTick(60_000, activeWorkSessions.length > 0);
 
   const getSessionDurationMinutes = useCallback(
     (session: { clockIn: TimeEntry | null; clockOut: TimeEntry | null; durationMinutes: number | null }) => {

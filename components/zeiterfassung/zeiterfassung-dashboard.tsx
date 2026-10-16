@@ -48,14 +48,14 @@ export function ZeiterfassungDashboard({
     initialWeekTargets: initialOverview.weekTargets,
   });
 
-  const { liveTime, liveTotalMinutes } = useZeiterfassungLiveTime(effectiveState);
+  const { liveTime, liveTotalMinutes, nowMs } = useZeiterfassungLiveTime(effectiveState);
 
   // Today's resolved target (P1-04): schedule → derived → labeled default.
   const todayTarget = weekTargets?.[todayIndex];
   const todayTargetMinutes = todayTarget?.targetMinutes;
   const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
 
-  const totals = computeZeiterfassungLiveTotals(effectiveState, liveTotalMinutes, todayTargetMinutes);
+  const totals = computeZeiterfassungLiveTotals(effectiveState, liveTotalMinutes, todayTargetMinutes, nowMs);
 
   return (
     <div className="space-y-6 pb-32">

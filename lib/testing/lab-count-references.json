@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "steps": [
     {
       "stepId": "lab.field.cold-start",
@@ -103,10 +103,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -114,7 +111,109 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "2fbb4f1e817fa4ca4b15ef76c1ff2e93d72f4ece1e7720617d1da7954f793186",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 72, "tolerance": 1 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 1, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 68, "tolerance": 1 }
+          },
+          "payloads": {
+            "api:/api/attention-counts": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2296, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 188, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 4, "tolerance": 0 },
+              "encodedBytes": { "reference": 5748, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "direct:/auth/v1/user": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 3088, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 2354, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "direct:/rest/v1/organization_members": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 1844, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 546, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "document:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 17675, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 124668, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 1, "tolerance": 0 }
+            },
+            "font": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 54514, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "image": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 8429, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "prefetch:/auftraege/[jobNumber]": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 12194, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 53103, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 11618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 44291, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 49, "tolerance": 1 },
+              "encodedBytes": { "reference": 799618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "stylesheet": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -167,10 +266,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -178,7 +274,56 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "835c02b82e983531e6c1ceeb1f4093212311ffa798dfef3974fd6c4f0057371d",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 46, "tolerance": 1 },
+            "componentRenders": { "reference": 504, "tolerance": 10 }
+          },
+          "payloads": {
+            "prefetch:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 4619, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 16473, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/auftraege/[jobNumber]": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 11852, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 30998, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -242,10 +387,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -253,7 +395,67 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "cf85df5725df9d68ea0406c86646b5906383388ecd7b398f3cb8a08c7437cffc",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 5, "tolerance": 1 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 1, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 1, "tolerance": 0 },
+            "backendRequests": { "reference": 116, "tolerance": 2 }
+          },
+          "payloads": {
+            "action:/auftraege/[jobNumber]": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 74490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "background:work-lifecycle-snapshot": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 3083, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 2028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 8, "tolerance": 0 }
+            },
+            "prefetch:/auftraege": {
+              "requests": { "reference": 2, "tolerance": 1 },
+              "encodedBytes": { "reference": 6125, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 17167, "tolerance": { "relative": 1, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/auftraege/[jobNumber]": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 21178, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 73408, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -305,10 +507,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -316,7 +515,55 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "91f1fe032a1289d0d33a946bc6392879edb84c9c8d0ee76fe6e933d90d785694",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 68, "tolerance": 1 }
+          },
+          "payloads": {
+            "action:/auftraege/[jobNumber]": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 22707, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 77005, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "prefetch:/auftraege": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 6125, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 17167, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -366,10 +613,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -377,7 +621,53 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "210d2690647679f657ce1c43ae2718955d89b77e3c7cb723f4a3677ad8a8e64d",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 }
+          },
+          "payloads": {
+            "action:/dashboard": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 10652, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 40122, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 3, "tolerance": 1 },
+              "encodedBytes": { "reference": 5108, "tolerance": { "relative": 0.4346, "absolute": 512 } },
+              "decodedBytes": { "reference": 1944, "tolerance": { "relative": 0.0576, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -417,10 +707,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -428,7 +715,43 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "e8743deb39f1cce253993ec6704c1124a6fff1932b73851afc98fe02482cf17c",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 0, "tolerance": 0 },
+            "routeRenders": { "reference": 0, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 0, "tolerance": 0 },
+            "componentRenders": { "reference": 0, "tolerance": 0 }
+          },
+          "payloads": {},
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -481,10 +804,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-cb9a2d",
             "2026-10-09T042614244Z-31dfb2",
@@ -492,7 +812,56 @@
             "2026-10-09T043834499Z-378019",
             "2026-10-09T044333153Z-394b90"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "59d23c068e791f846b8f5d70cbde15493f1aed61ae4f6468439e6c9ff3963765",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 375, "height": 812 },
+            "cpuThrottle": 4,
+            "role": "employee",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 18, "tolerance": 1 },
+            "componentRenders": { "reference": 663, "tolerance": 13 }
+          },
+          "payloads": {
+            "action:/dashboard": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 10649, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 40121, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 4638, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-cb9a2d",
+                "2026-10-09T042614244Z-31dfb2",
+                "2026-10-09T043219324Z-486fa8",
+                "2026-10-09T043834499Z-378019",
+                "2026-10-09T044333153Z-394b90"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -569,8 +938,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 692102, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 44, "tolerance": 1 },
+          "encodedBytes": { "reference": 701537, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -593,34 +962,155 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
             "2026-10-09T043219324Z-11a835",
             "2026-10-09T043834499Z-e9e693",
-            "2026-10-09T044333153Z-fb1af9"
+            "2026-10-09T044333153Z-fb1af9",
+            "2026-10-09T115522582Z-43cc06"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "c347dd1973dbe86bc60bbee9a87558da74b6a34a9c3a82ecf70ce8d40bab7bff",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 63, "tolerance": 1 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 1, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 94, "tolerance": 1 },
+            "componentRenders": { "reference": 22298, "tolerance": 445 }
+          },
+          "payloads": {
+            "api:/api/attention-counts": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2296, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 188, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 4, "tolerance": 0 },
+              "encodedBytes": { "reference": 5748, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "direct:/auth/v1/user": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 3072, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 2338, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "direct:/rest/v1/organization_members": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 1839, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 540, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "document:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 27643, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 534131, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 50, "tolerance": 1 }
+            },
+            "font": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 54514, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "image": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 8429, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "route:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 15510, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+              "decodedBytes": { "reference": 93034, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 43, "tolerance": 1 },
+              "encodedBytes": { "reference": 692102, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            },
+            "stylesheet": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            },
+            {
+              "kind": "floor-accept",
+              "target": "document:/auftraege",
+              "from": 554195,
+              "to": 534131,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
+            },
+            {
+              "kind": "floor-accept",
+              "target": "route:/auftraege",
+              "from": 111238,
+              "to": 93034,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
+            }
+          ]
         },
         {
-          "kind": "floor-accept",
-          "target": "document:/auftraege",
-          "from": 554195,
-          "to": 534131,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
+          "kind": "shape-accept",
+          "target": "script#encodedBytes",
+          "from": null,
+          "to": null,
+          "runKeys": ["2026-10-16T100324580Z-0edce6"],
+          "reason": "Client code of the a11y (7d305e2: return focus, dialog initial focus, tab-strip reveal, scroll regions), security (9fb58cd: input checks) and quality (0165de5: failure codes) packages and of the performance package (keyboard scroll once in the app shell, background-read kinds, the record-number hook, the wall-clock tick); no duplicated module (labdiag 2026-10-16)"
         },
         {
-          "kind": "floor-accept",
-          "target": "route:/auftraege",
-          "from": 111238,
-          "to": 93034,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "server search replaced the serialized customer list: the Aufträge list sends only the names of the listed rows' customers"
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 692102, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 44, "tolerance": 1 },
+            "encodedBytes": { "reference": 701537, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-16T101241400Z-cfbbd7"],
+          "reason": "Client code of the a11y (7d305e2: return focus, dialog initial focus, tab-strip reveal, scroll regions), security (9fb58cd: input checks) and quality (0165de5: failure codes) packages and of the performance package (keyboard scroll once in the app shell, background-read kinds, the record-number hook, the wall-clock tick); no duplicated module (diagnosis 2026-10-16)"
         }
       ]
     },
@@ -697,34 +1187,105 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
             "2026-10-09T043219324Z-11a835",
             "2026-10-09T043834499Z-e9e693",
-            "2026-10-09T044333153Z-fb1af9"
+            "2026-10-09T044333153Z-fb1af9",
+            "2026-10-09T115522582Z-43cc06"
           ],
-          "reason": null
-        },
-        {
-          "kind": "floor-accept",
-          "target": "route:/auftraege/[jobNumber]",
-          "from": 378518,
-          "to": 14086,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "server search replaced the serialized customer list: the job detail no longer serializes every customer of the organization"
-        },
-        {
-          "kind": "ratchet",
-          "target": "backendRequests",
-          "from": 77,
-          "to": 75,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "56e6d9808b3fd8ce969d76e397f04bc721da4463d3eac57332ed117b3d55dac5",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 7, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 3, "tolerance": 0 },
+            "backendRequests": { "reference": 75, "tolerance": 1 },
+            "componentRenders": { "reference": 1523, "tolerance": 31 }
+          },
+          "payloads": {
+            "background:job-dispatch-cards": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1081, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 27, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "background:job-qualification-detail": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1546, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 491, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 1, "tolerance": 0 }
+            },
+            "background:time-entries-for-job": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1101, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 47, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "prefetch:/auftraege/[jobNumber]/uebergabe": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 7210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 32348, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/auftraege/[jobNumber]": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 5944, "tolerance": { "relative": 0.4698, "absolute": 512 } },
+              "decodedBytes": { "reference": 14086, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 9340, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            },
+            {
+              "kind": "floor-accept",
+              "target": "route:/auftraege/[jobNumber]",
+              "from": 378518,
+              "to": 14086,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "server search replaced the serialized customer list: the job detail no longer serializes every customer of the organization"
+            },
+            {
+              "kind": "ratchet",
+              "target": "backendRequests",
+              "from": 77,
+              "to": 75,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -764,10 +1325,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -775,7 +1333,43 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "5c92562aa0a1fd4ce4e373192a3c1282881d33a4afff5fd75aad9bdd77751526",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 0, "tolerance": 0 },
+            "routeRenders": { "reference": 0, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 0, "tolerance": 0 },
+            "componentRenders": { "reference": 791, "tolerance": 15 }
+          },
+          "payloads": {},
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -822,10 +1416,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -833,7 +1424,50 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "d2f614aeca8d56fe1bb85d5194a91efa22a62477ed37685c35f3c5aba80964c8",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 3, "tolerance": 0 },
+            "componentRenders": { "reference": 5662, "tolerance": 113 }
+          },
+          "payloads": {
+            "route:/kunden": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 3906, "tolerance": { "relative": 0.9519, "absolute": 512 } },
+              "decodedBytes": { "reference": 8832, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -921,50 +1555,133 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
             "2026-10-09T043219324Z-11a835",
             "2026-10-09T043834499Z-e9e693",
-            "2026-10-09T044333153Z-fb1af9"
+            "2026-10-09T044333153Z-fb1af9",
+            "2026-10-09T065557645Z-4a338c",
+            "2026-10-09T115522582Z-43cc06"
           ],
-          "reason": null
-        },
-        {
-          "kind": "ungate",
-          "target": "componentRenders",
-          "from": 36902,
-          "to": null,
-          "runKeys": ["2026-10-09T065557645Z-4a338c"],
-          "reason": "took two values: 36902-37045 in the five calibration runs, 33121 in this run, 33026-37065 across the baseline runs; the two echo renders of the new row sometimes coalesce into one"
-        },
-        {
-          "kind": "floor-accept",
-          "target": "action:/auftraege",
-          "from": 110803,
-          "to": 92968,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "server search replaced the serialized customer list: the list render in the create response carries only the listed rows' customer names"
-        },
-        {
-          "kind": "floor-accept",
-          "target": "route:/auftraege",
-          "from": 220570,
-          "to": 184900,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "server search replaced the serialized customer list: the list render carries only the listed rows' customer names"
-        },
-        {
-          "kind": "floor-accept",
-          "target": "script",
-          "from": 107516,
-          "to": 106378,
-          "runKeys": ["2026-10-09T115522582Z-43cc06"],
-          "reason": "the create dialog and the list lost the props and lookups that carried the customer array"
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "7232aff153f1abf110bf36a737ce8c9480ddd5431691e4fa2912a9977fcbf8af",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 18, "tolerance": 1 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 2, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 97, "tolerance": 1 }
+          },
+          "payloads": {
+            "action:/auftraege": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 16927, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 92968, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/attention-counts": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2296, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 188, "tolerance": { "relative": 1, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 3984, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 821, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "direct:/auth/v1/user": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1536, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1168, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 1, "tolerance": 0 }
+            },
+            "direct:/rest/v1/organization_members": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 1, "tolerance": 0 }
+            },
+            "prefetch:/auftraege/[jobNumber]": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 6860, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 26964, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/auftraege": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 25132, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+              "decodedBytes": { "reference": 184900, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 6, "tolerance": 0 },
+              "encodedBytes": { "reference": 106378, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            },
+            {
+              "kind": "ungate",
+              "target": "componentRenders",
+              "from": 36902,
+              "to": null,
+              "runKeys": ["2026-10-09T065557645Z-4a338c"],
+              "reason": "took two values: 36902-37045 in the five calibration runs, 33121 in this run, 33026-37065 across the baseline runs; the two echo renders of the new row sometimes coalesce into one"
+            },
+            {
+              "kind": "floor-accept",
+              "target": "action:/auftraege",
+              "from": 110803,
+              "to": 92968,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "server search replaced the serialized customer list: the list render in the create response carries only the listed rows' customer names"
+            },
+            {
+              "kind": "floor-accept",
+              "target": "route:/auftraege",
+              "from": 220570,
+              "to": 184900,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "server search replaced the serialized customer list: the list render carries only the listed rows' customer names"
+            },
+            {
+              "kind": "floor-accept",
+              "target": "script",
+              "from": 107516,
+              "to": 106378,
+              "runKeys": ["2026-10-09T115522582Z-43cc06"],
+              "reason": "the create dialog and the list lost the props and lookups that carried the customer array"
+            }
+          ]
         }
       ]
     },
@@ -1004,10 +1721,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -1015,7 +1729,43 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "5f79d527bf5ea4c604e5a9b4e608c8ae48fbd15f7c0b4f8fdb92ac8cb277056d",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 0, "tolerance": 0 },
+            "routeRenders": { "reference": 0, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 0, "tolerance": 0 },
+            "componentRenders": { "reference": 2084, "tolerance": 41 }
+          },
+          "payloads": {},
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -1089,10 +1839,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -1100,7 +1847,77 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "8dfd9e6d8ca38020b167991ad7035fcf1b48bccae3b762164116ed9f050e5824",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "routeRenders": { "reference": 0, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 2, "tolerance": 0 }
+          },
+          "payloads": {
+            "action:/kalender": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1321, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 128, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/attention-counts": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1148, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 94, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/calendar-board": {
+              "requests": { "reference": 1, "tolerance": 1 },
+              "encodedBytes": { "reference": 42076, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 39964, "tolerance": { "relative": 1, "absolute": 512 } },
+              "rows": { "reference": 90, "tolerance": 1 }
+            },
+            "api:/api/calendar-window": {
+              "requests": { "reference": 1, "tolerance": 1 },
+              "encodedBytes": { "reference": 230218, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 228104, "tolerance": { "relative": 1, "absolute": 512 } },
+              "rows": { "reference": 121, "tolerance": 2 }
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1110, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 56, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "background:parked-jobs": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2160, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 52, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     },
@@ -1125,7 +1942,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 2, "tolerance": 0 },
         "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1084, "tolerance": 21 }
+        "componentRenders": { "reference": 966, "tolerance": 21 }
       },
       "payloads": {
         "action:/zeiterfassung": {
@@ -1165,10 +1982,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -1176,6 +1990,75 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "1565ad50d1ad24e4d3d212ac9a897523106a1f3c902379055c06f4372388dc6e",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "buero",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 6, "tolerance": 0 },
+            "routeRenders": { "reference": 0, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 1, "tolerance": 0 },
+            "backgroundReads": { "reference": 2, "tolerance": 0 },
+            "backendRequests": { "reference": 72, "tolerance": 1 },
+            "componentRenders": { "reference": 1084, "tolerance": 21 }
+          },
+          "payloads": {
+            "action:/zeiterfassung": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1324, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 127, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/attention-counts": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 1148, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 94, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "api:/api/time-tracking-state": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2874, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 765, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "background:pending-sessions": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 15190, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 13078, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 5, "tolerance": 0 }
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 1084, "tolerance": 21 },
+          "to": { "reference": 966, "tolerance": 21 },
+          "runKeys": ["2026-10-16T100324580Z-0edce6"],
           "reason": null
         }
       ]
@@ -1235,7 +2118,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 32212, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 33639, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -1252,10 +2135,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -1263,7 +2143,105 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "308e23ec12b99abc494fee7a14f187e65db722fc8739fd361d61134381b9a0de",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "admin",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 13, "tolerance": 1 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 3, "tolerance": 0 },
+            "backendRequests": { "reference": 46, "tolerance": 1 }
+          },
+          "payloads": {
+            "background:attention-overview": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 2083, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 5, "tolerance": 0 }
+            },
+            "background:own-personnel-actions": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 2486, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 378, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": { "reference": 0, "tolerance": 0 }
+            },
+            "prefetch:/aufgaben": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 5698, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 14644, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "prefetch:/zeiterfassung": {
+              "requests": { "reference": 3, "tolerance": 0 },
+              "encodedBytes": { "reference": 7562, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 18093, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "route:/aufgaben": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 2205, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 5580, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 4, "tolerance": 0 },
+              "encodedBytes": { "reference": 32212, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
+        },
+        {
+          "kind": "shape-accept",
+          "target": "script#encodedBytes",
+          "from": null,
+          "to": null,
+          "runKeys": ["2026-10-16T100324580Z-0edce6"],
+          "reason": "The /zeiterfassung chunks that the in-view link on /aufgaben prefetches grew with 0165de5 (codes and form validation) and 7d305e2"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32212, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 33639, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-16T101241400Z-cfbbd7"],
+          "reason": "The /zeiterfassung chunks that the in-view link on /aufgaben prefetches grew with 0165de5 (codes and form validation) and 7d305e2"
         }
       ]
     },
@@ -1316,10 +2294,7 @@
       },
       "history": [
         {
-          "kind": "initial",
-          "target": "*",
-          "from": null,
-          "to": null,
+          "kind": "migrated",
           "runKeys": [
             "2026-10-09T041927828Z-d33901",
             "2026-10-09T042614244Z-a97056",
@@ -1327,7 +2302,56 @@
             "2026-10-09T043834499Z-e9e693",
             "2026-10-09T044333153Z-fb1af9"
           ],
-          "reason": null
+          "reason": "The first file version recorded no values in its history. These are the bounds every lab run since the 2026-10-09 calibration was judged against (report 2026-10-16T073805293Z-4cef316c prints them as its reference column); each step keeps its earlier entries under superseded.",
+          "context": {
+            "measurementDigest": "5b8ac564f17010dfdbdaec0ca86f31e30fb1998e51de0cd9a4daaadcde8c0089",
+            "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+            "browser": "chromium",
+            "browserVersion": "151.0.7922.34",
+            "viewport": { "width": 1440, "height": 900 },
+            "cpuThrottle": 1,
+            "role": "admin",
+            "backend": "local"
+          },
+          "counts": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "routeRenders": { "reference": 1, "tolerance": 0 },
+            "echoRenders": { "reference": 0, "tolerance": 0 },
+            "actionRoundTrips": { "reference": 0, "tolerance": 0 },
+            "backgroundReads": { "reference": 0, "tolerance": 0 },
+            "backendRequests": { "reference": 10, "tolerance": 1 },
+            "componentRenders": { "reference": 488, "tolerance": 9 }
+          },
+          "payloads": {
+            "route:/einstellungen/mitarbeiter": {
+              "requests": { "reference": 1, "tolerance": 0 },
+              "encodedBytes": { "reference": 4504, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 12565, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "rows": null
+            },
+            "script": {
+              "requests": { "reference": 2, "tolerance": 0 },
+              "encodedBytes": { "reference": 10783, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": null,
+              "rows": null
+            }
+          },
+          "superseded": [
+            {
+              "kind": "initial",
+              "target": "*",
+              "from": null,
+              "to": null,
+              "runKeys": [
+                "2026-10-09T041927828Z-d33901",
+                "2026-10-09T042614244Z-a97056",
+                "2026-10-09T043219324Z-11a835",
+                "2026-10-09T043834499Z-e9e693",
+                "2026-10-09T044333153Z-fb1af9"
+              ],
+              "reason": null
+            }
+          ]
         }
       ]
     }

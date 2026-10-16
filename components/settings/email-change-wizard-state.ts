@@ -104,6 +104,23 @@ export type EmailChangeTimers = {
   currentEmailVerificationWindowExpired: boolean;
 };
 
+/**
+ * The last deadline of the wizard in epoch milliseconds, 0 without one: the
+ * countdowns and locks change by themselves only until then.
+ */
+export function countdownEnd(wizardState: EmailChangeWizardState): number {
+  const deadlines = [
+    wizardState.currentOtpResendAvailableAt,
+    wizardState.newEmailResendAvailableAt,
+    wizardState.currentOtpExpiresAt,
+    wizardState.currentEmailVerifiedExpiresAt,
+    wizardState.newEmailOtpExpiresAt,
+  ]
+    .map((deadline) => (deadline === null ? Number.NaN : new Date(deadline).getTime()))
+    .filter(Number.isFinite);
+  return Math.max(0, ...deadlines);
+}
+
 /** Every countdown and lock the wizard shows, derived from the server state and the wall clock. */
 export function deriveEmailChangeTimers(wizardState: EmailChangeWizardState, now: number): EmailChangeTimers {
   const currentOtpResendLocked = !isExpired(wizardState.currentOtpResendAvailableAt, now);

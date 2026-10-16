@@ -10,7 +10,9 @@ import {
  * The one gate before publication (decision 0007, amendment 2026-10-01): a
  * push needs a passing automatic verification report and completed CodeRabbit
  * reviews, both on the source tree being pushed, and the reviews together cover
- * every changed file the push adds or modifies. The pre-push hook
+ * every changed file the push adds or modifies. A pushed product file that a
+ * wall-clock group measures also needs a passing run of that group on its
+ * current content. The pre-push hook
  * (.githooks/pre-push) runs scripts/check-publication-gate.ts, which reads the
  * evidence and calls `publicationGateProblems`.
  */
@@ -84,6 +86,43 @@ export const publicationReportSchema = z.object({
 });
 type PublicationReport = z.infer<typeof publicationReportSchema>;
 
+/** A verification report with its group results, read for the passes of the wall-clock groups. */
+export const measuredPassReportSchema = publicationReportSchema.extend({
+  results: z.array(z.object({ groupId: z.string(), status: z.string() })),
+});
+
+/** A passing run of a wall-clock group, with the input snapshot of its report. */
+type MeasuredPass = { groupId: string; snapshot: InputSnapshot };
+
+/**
+ * A change plan never runs the wall-clock groups (`measuredGroupsForChange`),
+ * so a push of a product file one of them measures needs a passing run of that
+ * group on the file's current content. Any run of such a group enforces its
+ * deadlines: an explicit `--group` or a release plan.
+ */
+function measuredGroupProblems(input: {
+  current: InputSnapshot;
+  measuredGroups: readonly { id: string; changedFiles: readonly string[] }[];
+  measuredPasses: readonly MeasuredPass[];
+}): string[] {
+  return input.measuredGroups.flatMap((group) => {
+    const covered = input.measuredPasses.some(
+      (pass) =>
+        pass.groupId === group.id &&
+        group.changedFiles.every(
+          (file) =>
+            input.current.files[file] !== undefined &&
+            pass.snapshot.files[file] === input.current.files[file],
+        ),
+    );
+    return covered
+      ? []
+      : [
+          `${group.id} measures ${group.changedFiles.length} pushed product file(s) whose current content no passing run of it saw: ${sample(group.changedFiles)}. A change plan never runs it. On a quiet machine run: bun run test:server local (own terminal), then bun run test:verify --group ${group.id}`,
+        ];
+  });
+}
+
 function sample(files: readonly string[]): string {
   return `${files.slice(0, 5).join(', ')}${files.length > 5 ? `, and ${files.length - 5} more` : ''}`;
 }
@@ -101,6 +140,10 @@ export function publicationGateProblems(input: {
   /** Files the push adds or modifies since the remote state; deleted files are not listed. */
   pushedFiles: readonly string[];
   reviews: readonly ReviewRecord[];
+  /** The wall-clock groups whose scopes own a pushed product file (`measuredGroupsForChange`). */
+  measuredGroups: readonly { id: string; changedFiles: readonly string[] }[];
+  /** The passing local runs of those groups. */
+  measuredPasses: readonly MeasuredPass[];
 }): string[] {
   const problems: string[] = [];
   const foreign = input.pushed.filter((commit) => commit !== input.head);
@@ -131,6 +174,7 @@ export function publicationGateProblems(input: {
         `Verification report ${report.id} passed on a different tree; ${drift.length} file(s) changed since: ${sample(drift)}. Run: bun run test:verify`,
       );
   }
+  problems.push(...measuredGroupProblems(input));
   // A file counts as reviewed while its content equals what a completed review saw;
   // a file without a current digest has no content a review can match.
   const reviewed = (file: string): boolean => {

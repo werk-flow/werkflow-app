@@ -134,8 +134,10 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     const privateEmail = goldenTestEmail('a3-personal', world.runId);
     const note = `A3 Personalakte ${world.runId}`;
     const conditionNote = `A3 Kondition ${world.runId}`;
-    // Hold the number-suggestion server action so the manual number is typed
-    // first: the late suggestion must not overwrite it.
+    // Hold the number-suggestion background read (`next-personnel-number`) so
+    // the manual number is typed first: the late suggestion must not overwrite it.
+    const isSuggestion = (url: string): boolean =>
+      new URL(url).searchParams.get('kind') === 'next-personnel-number';
     let releaseSuggestion: () => void = () => undefined;
     let markIntercepted: () => void = () => undefined;
     const suggestionGate = new Promise<void>((resolve) => {
@@ -146,9 +148,8 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
     let held = false;
 
-    await adminPage.route('**/mitarbeiter', async (route) => {
-      const request = route.request();
-      if (!held && request.method() === 'POST' && Boolean(request.headers()['next-action'])) {
+    await adminPage.route('**/api/background-read?*', async (route) => {
+      if (!held && isSuggestion(route.request().url())) {
         held = true;
         markIntercepted();
         await suggestionGate;
@@ -162,23 +163,18 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       try {
         await waitForRouteIntercept(intercepted);
       } catch (error) {
-        throw new Error(
-          'The personnel-number suggestion server action was not intercepted within 15 seconds.',
-          { cause: error },
-        );
+        throw new Error('The personnel-number suggestion read was not intercepted within 15 seconds.', {
+          cause: error,
+        });
       }
 
       const dialog = adminPage.getByRole('dialog');
       await dialog.locator('#personnel-first-name').fill('Alina');
       await dialog.locator('#personnel-last-name').fill(`Personal-A3-${world.runId}`);
       await dialog.locator('#personnel-number').fill(employeeNumber);
-      const suggestionResponse = adminPage.waitForResponse(
-        (response) =>
-          response.request().method() === 'POST' &&
-          new URL(response.url()).pathname === '/mitarbeiter' &&
-          Boolean(response.request().headers()['next-action']),
-        { timeout: 15_000 },
-      );
+      const suggestionResponse = adminPage.waitForResponse((response) => isSuggestion(response.url()), {
+        timeout: 15_000,
+      });
       releaseSuggestion();
       await suggestionResponse;
       await expect(dialog.locator('#personnel-number')).toHaveValue(employeeNumber, {
@@ -192,7 +188,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       });
     } finally {
       releaseSuggestion();
-      await adminPage.unroute('**/mitarbeiter');
+      await adminPage.unroute('**/api/background-read?*');
     }
 
     const a3RecordId = adminPage.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];

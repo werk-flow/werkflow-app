@@ -1,17 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 import { describeFailure } from '@/lib/action-messages';
 import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
-import {
-  createClientRequest,
-  getNextRequestNumber,
-  type CreateClientRequestInput,
-} from '@/lib/requests/actions';
+import { createClientRequest, type CreateClientRequestInput } from '@/lib/requests/actions';
 import type { RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
 
 const ERROR_MESSAGES = {
@@ -93,21 +90,9 @@ export function useCreateRequestForm(): CreateRequestForm {
   // Suggest the next free number when the dialog opens; the field stays
   // editable. The suggestion must never overwrite a number the user has
   // already typed while the fetch was in flight.
-  useEffect(() => {
-    if (!open) return;
-    let isCurrent = true;
-    getNextRequestNumber()
-      .then((result) => {
-        if (isCurrent && result.success && !requestNumberEditedRef.current) {
-          setRequestNumber((current) => current || result.requestNumber);
-        }
-      })
-      // eslint-disable-next-line no-restricted-syntax -- the number suggestion is a convenience; the field stays empty and manual entry works
-      .catch(() => undefined);
-    return () => {
-      isCurrent = false;
-    };
-  }, [open]);
+  useSuggestedRecordNumber('next-request-number', open, (suggestion) => {
+    if (!requestNumberEditedRef.current) setRequestNumber((current) => current || suggestion);
+  });
 
   const resetForm = () => {
     requestNumberEditedRef.current = false;

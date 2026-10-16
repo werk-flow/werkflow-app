@@ -84,6 +84,11 @@ export function performanceProtocol(
       protocol: 'typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1',
       role: 'buero',
     };
+  if (scenario.id === 'jobs.list.assignment.cross-session')
+    return {
+      protocol: 'typical-profile-buero-assigns-three-own-jobs-admin-searched-job-list-browser-raf-v1',
+      role: 'admin',
+    };
   if (scenario.file.endsWith('field.spec.ts'))
     return {
       protocol:

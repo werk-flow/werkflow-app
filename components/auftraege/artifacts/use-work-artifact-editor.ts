@@ -6,7 +6,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
 import { describeFailure } from '@/lib/action-messages';
 import type { ActionResult } from '@/lib/action-result';
-import { getWorkArtifactDetail } from '@/lib/work-artifacts/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type {
   WorkArtifactDetail,
   WorkArtifactKind,
@@ -80,7 +80,7 @@ export function useWorkArtifactEditor({
 
   const targetId = readTarget.id;
   const artifactRead = useClientRead({
-    read: () => getWorkArtifactDetail(targetId ?? ''),
+    read: (signal) => readInBackground('work-artifact-detail', { artifactId: targetId ?? '' }, signal),
     deps: [targetId, readTarget.revision],
     enabled: targetId !== null,
     failureMessage: 'Der Arbeitsnachweis konnte nicht geladen werden.',

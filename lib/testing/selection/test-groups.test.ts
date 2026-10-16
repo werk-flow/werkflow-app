@@ -120,11 +120,24 @@ describe('independent group registry', () => {
     expect(groups.some((entry) => entry.id === 'golden:integrated')).toBe(false);
   });
 
-  test('a lab group runs alone, in release mode and on request only, and must record each of its steps', () => {
+  test('a lab group runs alone, a change plan selects it by scope, and it must record each of its steps', () => {
     const root = resolve(import.meta.dir, '../../..');
+    const groups = getTestGroups(root);
+    const plan = groupSelections({
+      mode: 'change',
+      // The runner passes each group's spec files among its execution inputs.
+      groups: groups.map((candidate) => ({
+        ...candidate,
+        executionInputs: candidate.files,
+        releaseOnly: candidate.files.some(isReleaseOnlySpec),
+      })),
+      changedFiles: ['lib/attention/actions.ts'],
+      unresolvedGroupIds: [],
+    });
     for (const id of ['audit:lab:field', 'audit:lab:office']) {
-      const group = expectDefined(getTestGroups(root).find((entry) => entry.id === id));
-      expect(group.files.every(isReleaseOnlySpec)).toBe(true);
+      const group = expectDefined(groups.find((entry) => entry.id === id));
+      expect(group.files.some(isReleaseOnlySpec)).toBe(false);
+      expect(plan.get(id)?.reason).toStartWith('Lab counts; ');
       const timing = getGroupTimingRequirements(group, root);
       expect(timing.exclusive).toBe(true);
       expect(timing.requiredLabSteps).toEqual(labStepsForFiles(group.files).map((step) => step.id));

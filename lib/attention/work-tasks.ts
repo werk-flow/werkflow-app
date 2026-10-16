@@ -11,6 +11,7 @@ import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import { resolveProjectHandoverExecutionState } from '@/lib/work-handover/project-state';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { readHandoverCandidateProjects } from '@/lib/attention/pending-sets';
 import type { Tables } from '@/lib/supabase/database.types';
 import { logError } from '@/lib/logging';
 import type { AttentionTask } from './types';
@@ -446,21 +447,9 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
           .range(from, to),
       LIST_ROW_CAP,
     ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('jobs')
-          .select('project_id')
-          .eq('organization_id', context.orgId)
-          .not('project_id', 'is', null)
-          .or(
-            'execution_state.in.(execution_complete,handed_over,cancelled),and(execution_state.is.null,status.eq.fertig)',
-          )
-          .order('updated_at', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
+    // The projects without an explicit state that have a terminal child job; a
+    // handed-over project and its children are never read.
+    readHandoverCandidateProjects(admin, context.orgId),
     readCompleteRows(
       (from, to) =>
         admin

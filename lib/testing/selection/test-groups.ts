@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join, posix } from 'node:path';
 import ts from 'typescript';
-import { isLabSpec, labStepsForFiles } from '../lab-steps';
+import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
 
 export interface TestGroup {
@@ -303,6 +303,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['people', ['people_boundaries.sql'], ['personnel', 'attention', 'time']],
   ['join-requests', ['organization_join_requests.sql'], ['personnel', 'attention']],
   ['attention-read-writes', ['attention_read_writes.sql'], ['attention', 'personnel']],
+  ['attention-pending-sets', ['attention_pending_sets.sql'], ['attention', 'planning', 'work']],
   ['people-atomic-writes', ['people_atomic_writes.sql'], ['personnel']],
   ['qualification-history-writes', ['qualification_history_writes.sql'], ['personnel']],
   ['employee-capability-history-writes', ['employee_capability_history_writes.sql'], ['personnel']],
@@ -360,9 +361,13 @@ export function isPerformanceSpec(file: string): boolean {
   return file.startsWith('tests/audit/performance/');
 }
 
-/** Performance, lab and visual reference specs run in release mode and on explicit request only. */
+/**
+ * Wall-clock performance and visual reference specs run in release mode and on
+ * explicit request only. Lab specs count work, which repeats exactly, so a
+ * change plan selects them by scope like any browser group.
+ */
 export function isReleaseOnlySpec(file: string): boolean {
-  return isPerformanceSpec(file) || isLabSpec(file) || file.startsWith('tests/audit/visual/');
+  return isPerformanceSpec(file) || file.startsWith('tests/audit/visual/');
 }
 
 export function listTestFiles(repositoryRoot: string, directory: string, pattern: RegExp): string[] {

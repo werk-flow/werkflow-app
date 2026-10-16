@@ -7,8 +7,10 @@ import referenceFile from './lab-count-references.json';
 import {
   carryOverLabReferences,
   labCarryoverSchema,
+  labReferenceProblems,
   labReferencesSchema,
   type LabReferences,
+  type LabStepReference,
 } from './lab-counts';
 import { labMeasurementDigest } from './lab-count-context';
 import { getLabStep } from './lab-steps';
@@ -29,30 +31,32 @@ test('every carry-over entry names a recorded reference and the current digest o
   expect(problems).toEqual([]);
 });
 
-test('carry-over re-keys only the matching step and digest and keeps every reviewed value', () => {
-  const step = {
+test('carry-over re-keys only the matching step and digest, keeps every reviewed value and records the entry', () => {
+  const context = {
+    measurementDigest: 'a'.repeat(64),
+    workloadDigest: 'b'.repeat(64),
+    browser: 'chromium',
+    browserVersion: '140',
+    viewport: { width: 375, height: 812 },
+    cpuThrottle: 4 as const,
+    role: 'employee' as const,
+    backend: 'local' as const,
+  };
+  const counts = { requests: { reference: 4, tolerance: 0 } };
+  const step: LabStepReference = {
     stepId: 'lab.field.clock-in',
     stepVersion: 1,
     labMeasurementVersion: 1,
-    context: {
-      measurementDigest: 'a'.repeat(64),
-      workloadDigest: 'b'.repeat(64),
-      browser: 'chromium',
-      browserVersion: '140',
-      viewport: { width: 375, height: 812 },
-      cpuThrottle: 4 as const,
-      role: 'employee' as const,
-      backend: 'local' as const,
-    },
-    counts: { requests: { reference: 4, tolerance: 0 } },
+    context,
+    counts,
     payloads: {},
     source: { runKeys: ['r1'], buildId: 'build' },
-    history: [{ kind: 'initial' as const, target: '*', from: null, to: null, runKeys: ['r1'], reason: null }],
+    history: [{ kind: 'initial', runKeys: ['r1'], reason: 'five runs', context, counts, payloads: {} }],
   };
   const references: LabReferences = {
-    version: 1,
+    version: 2,
     steps: [step, { ...step, stepId: 'lab.field.clock-out' }],
-    gatedMetrics: [],
+    gatedMetrics: [{ metric: 'requests', stability: 's', relevance: 'r', runKeys: ['r1'] }],
     rejectedMetrics: [],
   };
   const carried = carryOverLabReferences(references, {
@@ -63,7 +67,18 @@ test('carry-over re-keys only the matching step and digest and keeps every revie
   });
   expect(carried.steps[0]).toEqual({
     ...step,
-    context: { ...step.context, measurementDigest: 'c'.repeat(64) },
+    context: { ...context, measurementDigest: 'c'.repeat(64) },
+    history: [
+      ...step.history,
+      { kind: 'carry-over', fromDigest: 'a'.repeat(64), toDigest: 'c'.repeat(64), reason: 'r' },
+    ],
   });
   expect(carried.steps[1]).toEqual({ ...step, stepId: 'lab.field.clock-out' });
+  const steps = [getLabStep('lab.field.clock-in'), getLabStep('lab.field.clock-out')];
+  expect(labReferenceProblems(carried, steps)).toEqual([]);
+  // A digest moved by hand, without the carry-over entry, does not replay.
+  const moved = { ...step, context: { ...context, measurementDigest: 'c'.repeat(64) } };
+  expect(labReferenceProblems({ ...references, steps: [moved] }, steps)).toEqual([
+    `lab.field.clock-in: context.measurementDigest is "${'c'.repeat(64)}", but its history replays "${'a'.repeat(64)}"`,
+  ]);
 });

@@ -1,22 +1,31 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { captureInputSnapshot, isDocumentationInput } from '../lib/testing/evidence/group-evidence';
+import {
+  captureInputSnapshot,
+  isDocumentationInput,
+  type InputSnapshot,
+} from '../lib/testing/evidence/group-evidence';
 import { deletionPassProblems, parsePublishedCommits } from '../lib/testing/publication/deletion-pass';
 import {
+  measuredPassReportSchema,
   publicationGateProblems,
   publicationReportSchema,
   REVIEW_RECORD_DIRECTORY,
   reviewRecordSchema,
   type ReviewRecord,
 } from '../lib/testing/publication/publication-gate';
+import { measuredGroupsForChange } from '../lib/testing/selection/group-selection';
+import { getTestGroups } from '../lib/testing/selection/test-groups';
 
 /**
  * The pre-push gate (.githooks/pre-push pipes git's ref list into this
  * script): exits 1 and prints what is missing unless the newest local
- * verification report passed on the tree being pushed, a CodeRabbit review
- * completed on it, and every commit the push publishes records its deletion
- * pass. It reads evidence only; the hook owns the owner override.
+ * verification report passed on the tree being pushed, every wall-clock group
+ * that measures a pushed product file passed on its current content, a
+ * CodeRabbit review completed on it, and every commit the push publishes
+ * records its deletion pass. It reads evidence only; the hook owns the owner
+ * override.
  */
 const repository = resolve(import.meta.dir, '..');
 
@@ -34,6 +43,23 @@ function newestLocalReport(): ReturnType<typeof publicationReportSchema.parse> |
     if (report.success && report.data.target === 'local') return report.data;
   }
   return undefined;
+}
+
+/** The passing local runs of the named wall-clock groups, each with the snapshot of its report. */
+function measuredPasses(groupIds: ReadonlySet<string>): { groupId: string; snapshot: InputSnapshot }[] {
+  const archive = resolve(repository, '.agent-logs/verification');
+  if (!groupIds.size || !existsSync(archive)) return [];
+  return readdirSync(archive).flatMap((directory) => {
+    const file = resolve(archive, directory, 'report.json');
+    if (!existsSync(file)) return [];
+    const text = readFileSync(file, 'utf8');
+    if (![...groupIds].some((groupId) => text.includes(`"${groupId}"`))) return [];
+    const report = measuredPassReportSchema.safeParse(JSON.parse(text));
+    if (!report.success || report.data.target !== 'local') return [];
+    return report.data.results
+      .filter((result) => result.status === 'passed' && groupIds.has(result.groupId))
+      .map((result) => ({ groupId: result.groupId, snapshot: report.data.snapshot }));
+  });
 }
 
 function reviewRecords(): ReviewRecord[] {
@@ -90,14 +116,18 @@ const publishedCommits = parsePublishedCommits(
     : '',
 );
 
+const publishedFiles = [...new Set(pushedFiles.filter(Boolean))].sort();
+const measuredGroups = measuredGroupsForChange(getTestGroups(repository), publishedFiles);
 const problems = publicationGateProblems({
   newestReport: newestLocalReport(),
   current: captureInputSnapshot(repository),
   uncommitted: [...new Set(uncommitted)].sort(),
   head: git('rev-parse', 'HEAD').trim(),
   pushed,
-  pushedFiles: [...new Set(pushedFiles.filter(Boolean))].sort(),
+  pushedFiles: publishedFiles,
   reviews: reviewRecords(),
+  measuredGroups,
+  measuredPasses: measuredPasses(new Set(measuredGroups.map((group) => group.id))),
 }).concat(deletionPassProblems(publishedCommits));
 if (problems.length) {
   console.error(`[publication-gate] Push refused; ${problems.length} requirement(s) missing:`);

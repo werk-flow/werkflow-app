@@ -34,7 +34,8 @@ mock.module('@/lib/supabase/admin', () => ({
                   : [];
             return { data, error: null };
           };
-          const page = { order: () => page, range: read };
+          // The delegation read also narrows to delegations that have not ended (gte).
+          const page = { order: () => page, gte: () => page, range: read };
           return page;
         },
         in: async () => {

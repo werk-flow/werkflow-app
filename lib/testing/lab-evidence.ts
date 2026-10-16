@@ -67,7 +67,8 @@ export type LabEvidenceCheck = z.infer<typeof labEvidenceSchema>;
 /**
  * Judges the lab records of one group run. Missing, duplicated or malformed
  * records fail in every mode. Ceilings, budgets, floors and shape changes fail
- * when `enforceCeilings` (release mode or an explicit `--group`); elsewhere
+ * when `enforceCeilings` (the runner sets it in every plan: release, explicit
+ * `--group` and a change plan that selected the group by scope); otherwise
  * they are notes. An improvement that was not ratcheted fails in release mode.
  */
 export function checkLabEvidence(input: {

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
+import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 import { describeFailure } from '@/lib/action-messages';
-import { createPersonnelRecord, suggestPersonnelNumber } from '@/lib/personnel/actions';
+import { createPersonnelRecord } from '@/lib/personnel/actions';
 
 const LAST_NAME_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Nachnamen an.';
 const CREATE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
@@ -35,24 +36,9 @@ export function useCreatePersonnelDialogForm() {
   // pattern; CodeRabbit caught the unguarded variant as a real defect).
   const numberTouchedRef = useRef(false);
 
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-
-    suggestPersonnelNumber()
-      .then((result) => {
-        if (cancelled || numberTouchedRef.current) return;
-        if (result.success) {
-          setEmployeeNumber(result.number);
-        }
-      })
-      // eslint-disable-next-line no-restricted-syntax -- the suggestion is a convenience; manual entry stays possible
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
+  useSuggestedRecordNumber('next-personnel-number', open, (suggestion) => {
+    if (!numberTouchedRef.current) setEmployeeNumber(suggestion);
+  });
 
   const resetForm = () => {
     setFirstName('');

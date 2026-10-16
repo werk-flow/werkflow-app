@@ -50,12 +50,12 @@ test('a gated metric carries its stability and relevance evidence, and a rejecte
   expect(gatedRejected).toEqual([]);
 });
 
-test('every raise, accepted floor and accepted shape names a reason and a run', () => {
+test('every history entry but a lowering ratchet names its reason, and every entry from a run names the run', () => {
   const unexplained = readLabReferences().steps.flatMap((step) =>
     step.history
-      .filter((entry) => entry.kind !== 'initial' && entry.kind !== 'ratchet')
-      .filter((entry) => !entry.reason?.trim() || !entry.runKeys.length)
-      .map((entry) => `${step.stepId}: ${entry.kind} ${entry.target}`),
+      .filter((entry) => entry.kind !== 'ratchet')
+      .filter((entry) => !entry.reason.trim() || ('runKeys' in entry && !entry.runKeys.length))
+      .map((entry) => `${step.stepId}: ${entry.kind}`),
   );
   expect(unexplained).toEqual([]);
 });

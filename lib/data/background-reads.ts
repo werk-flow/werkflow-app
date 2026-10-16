@@ -6,7 +6,12 @@ import { getAttentionOverview } from '@/lib/attention/actions';
 import { getClientRelations } from '@/lib/clients/actions';
 import { getDispatchOverview, getJobDispatchCards, previewDispatchReadiness } from '@/lib/dispatch/actions';
 import { attachableDocumentsInputSchema } from '@/lib/documents/action-schemas';
-import { getAttachableDocuments, getMaintenanceCoverageDocuments } from '@/lib/documents/actions';
+import {
+  getAttachableDocuments,
+  getDocumentLinkEmployees,
+  getDocumentViewSignedUrl,
+  getMaintenanceCoverageDocuments,
+} from '@/lib/documents/actions';
 import { pickerSearchSchema } from '@/lib/inventory/action-schemas';
 import {
   getInventoryPickerOptionsForJob,
@@ -18,21 +23,30 @@ import { getInstalledEquipmentDetailByNumber } from '@/lib/installed-equipment/a
 import { getInstalledEquipmentPage } from '@/lib/installed-equipment/list-page-server';
 import { getEquipmentSourceOptions } from '@/lib/installed-equipment/source-options-server';
 import { getOrgMembersAction, getProfilesByIds } from '@/lib/members/actions';
-import { getParkedJobs } from '@/lib/jobs/actions';
+import { getJobDetails, getNextJobNumber, getParkedJobs } from '@/lib/jobs/actions';
+import { getJobInstructionItems, getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
+import { getProjectJobPage } from '@/lib/jobs/list-actions';
 import { readEntityOptions } from '@/lib/jobs/option-server';
 import { jobOptionRequestSchema } from '@/lib/jobs/option-types';
 import { getJobParkingContexts, getParkingResponsibleOptions } from '@/lib/parking/actions';
 import { getPlanningOptions } from '@/lib/planning/actions';
 import { planningOptionRequestSchema } from '@/lib/planning/option-types';
+import { suggestPersonnelNumber } from '@/lib/personnel/actions';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
+import { getNextProjectNumber, getProjectDetails } from '@/lib/projects/actions';
+import { getNextRequestNumber } from '@/lib/requests/actions';
 import { getServiceCaseDetailByNumber, getServiceClientOption } from '@/lib/service-cases/actions';
 import { serviceCaseListQuerySchema } from '@/lib/service-cases/list-page';
 import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
-import { getAssignmentTeamOptions, getJobQualificationDetail } from '@/lib/qualifications/actions';
+import {
+  getAssignmentTeamOptions,
+  getJobQualificationDetail,
+  getProjectCapabilityRequirements,
+} from '@/lib/qualifications/actions';
 import {
   getProvisionalTimeSummary,
   getTimeCorrectionFormOptions,
@@ -52,10 +66,15 @@ import {
   getDecidableApprovedVacationRequests,
   getOwnVacationOverview,
   getPendingVacationRequestsForApprover,
+  previewVacationRequest,
 } from '@/lib/vacation/actions';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
-import { getApprovedArtifactActionsForTarget, getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
+import { getWorkArtifactDetail, getWorkArtifacts } from '@/lib/work-artifacts/actions';
+import {
+  getApprovedArtifactActionsForTarget,
+  getWorkLifecycleSnapshot,
+  searchWorkPredecessors,
+} from '@/lib/work-lifecycle/actions';
 import {
   getPublishedWorkTemplates,
   getWorkTemplate,
@@ -75,6 +94,7 @@ import { workTemplatePreviewInputSchema, workTemplateTargetTypeSchema } from '@/
 const isoTimestamp = z.string().datetime({ offset: true });
 const organizationInput = z.object({ organizationId: uuidSchema });
 const jobInput = z.object({ jobId: uuidSchema });
+const projectInput = z.object({ projectId: uuidSchema });
 const employeeRecordInput = z.object({ employeeRecordId: uuidSchema });
 const targetInput = z.object({ targetType: z.enum(['job', 'project']), targetId: uuidSchema });
 const noInput = z.object({});
@@ -248,6 +268,62 @@ export const BACKGROUND_READS = {
     getMaintenanceCoverageDocuments(input.maintenanceCoverageId),
   ),
   'maintenance-evidence-options': defineRead(jobInput, (input) => getMaintenanceEvidenceOptions(input.jobId)),
+  // A create dialog suggests the next free number when it opens. Each
+  // generator selects the highest number of the organization and writes
+  // nothing; the input names the organization, so a switch refuses the stale
+  // suggestion.
+  'next-job-number': defineRead(organizationInput, () => getNextJobNumber()),
+  'next-project-number': defineRead(organizationInput, () => getNextProjectNumber()),
+  'next-request-number': defineRead(organizationInput, () => getNextRequestNumber()),
+  'next-personnel-number': defineRead(organizationInput, () => suggestPersonnelNumber()),
+  // Reads a dialog or section starts when it opens or when its input changes.
+  // A read that names no record, or hands out access to a file, names its
+  // organization, so a switch refuses it. A read of one record by its id
+  // relies on the reader's organization filter, as the other id reads above.
+  'document-view-url': defineRead(z.object({ organizationId: uuidSchema, documentId: uuidSchema }), (input) =>
+    getDocumentViewSignedUrl(input.documentId),
+  ),
+  'document-link-employees': defineRead(organizationInput, () => getDocumentLinkEmployees()),
+  'vacation-days-preview': defineRead(
+    z.object({
+      organizationId: uuidSchema,
+      startDate: isoDate,
+      endDate: isoDate,
+      dayPortion: z.enum(['full', 'half_day']),
+    }),
+    (input) =>
+      previewVacationRequest({
+        startDate: input.startDate,
+        endDate: input.endDate,
+        dayPortion: input.dayPortion,
+      }),
+  ),
+  'project-job-page': defineRead(
+    z.object({ projectId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
+    (input) => getProjectJobPage(input),
+  ),
+  'job-details': defineRead(jobInput, (input) => getJobDetails(input.jobId)),
+  'project-details': defineRead(projectInput, (input) => getProjectDetails(input.projectId)),
+  'project-capability-requirements': defineRead(projectInput, (input) =>
+    getProjectCapabilityRequirements(input.projectId),
+  ),
+  'work-artifact-detail': defineRead(z.object({ artifactId: uuidSchema }), (input) =>
+    getWorkArtifactDetail(input.artifactId),
+  ),
+  'instruction-items': defineRead(targetInput, (input) =>
+    input.targetType === 'project'
+      ? getProjectInstructionItems(input.targetId)
+      : getJobInstructionItems(input.targetId),
+  ),
+  // The predecessor search of the dependency dialog, from two typed characters on.
+  'work-predecessor-search': defineRead(
+    z.object({
+      organizationId: uuidSchema,
+      type: z.enum(['job', 'project', 'instruction']),
+      query: z.string().trim().min(2).max(100),
+    }),
+    (input) => searchWorkPredecessors({ type: input.type, query: input.query }),
+  ),
 } as const;
 
 export type BackgroundReadKind = keyof typeof BACKGROUND_READS;

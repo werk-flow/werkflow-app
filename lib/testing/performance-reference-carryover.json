@@ -1,130 +1,130 @@
 {
-  "reason": "The measurement digest narrowed from the whole spec file to the tests that record the scenario. Each reference was re-keyed on one unchanged tree on which its file digest matched; performance-reference-carryover.test.ts repeats that proof while the files stay unchanged.",
+  "reason": "The measurement digest narrowed from the whole spec file to the tests that record the scenario. Each reference was re-keyed on one unchanged tree on which its file digest matched; performance-reference-carryover.test.ts repeats that proof while the files stay unchanged. browser-observation.ts then gained the job-row-assignee target kind, which no carried scenario observes: each entry was re-keyed again to the digest that differs from the previous one only in that file's content, and the test repeats the file-digest proof with the content the references were reviewed with.",
   "entries": [
     {
       "scenarioId": "customers.list.open",
       "fileDigest": "cc83f56e36d1739a38076f3771fd303d385add805d211a57ed363c440cb8b66f",
-      "measuredTestDigest": "0ddc03f49a40f1f45eda134e6a8d4e7f020229666e8c3005c2284c75f3ec90a7"
+      "measuredTestDigest": "bc625c107a5d6aeac14431dafbf8f9ed8d35ba2ca16d4cc57ab607a7ea32c2d5"
     },
     {
       "scenarioId": "jobs.list.open",
       "fileDigest": "7135262d9a6972cba61be3b87a2a03ba738aad7a566333107dadaf5b9c0aa640",
-      "measuredTestDigest": "5c2893008364ea6b670d32749460db42a1bc68afd5f387c7a1e6b2e62baeb76c"
+      "measuredTestDigest": "468f767f45913e1f679f30bf50f58583caf61db78c34a7550f65537ef9e54534"
     },
     {
       "scenarioId": "jobs.detail.open",
       "fileDigest": "1171b208dd465f6ea7e3b4dcbb8939eb4fb384dcbbbde503349c82842dbd64c8",
-      "measuredTestDigest": "8dd7f2ccd99598ae04edd83231a678753ba11eba09c8c176c43cd243eb75bca1"
+      "measuredTestDigest": "1a1f722c3c564178e6c9790c2f84738a448b9f8e800a28f91a4ae5ab3f160c04"
     },
     {
       "scenarioId": "equipment.list.open",
       "fileDigest": "0c4cef0d2f66cb03ea1efc5ac20ec4966875b1c85a6486ab082346f8429a96a3",
-      "measuredTestDigest": "c303b1edda9105f47b12fcde0be0427444b7554166a0f1af91bbd0e7989902a7"
+      "measuredTestDigest": "23a1bcaadf9aab005a7d93213ca851f7609703b1ac492d90e49180851b569f8a"
     },
     {
       "scenarioId": "tasks.list.open",
       "fileDigest": "d3e92c9edd2911e9b5a447296eb88ff927c45e7c201b429e4ed582f7ddb19f28",
-      "measuredTestDigest": "f37a6d97f009da13664bafa19b16c22b260b9e43b3e9830aa3e957db4711fc07"
+      "measuredTestDigest": "4727edac0bdeaaa39081f2306262c2d4b15334f184d1fbdf6007b8bc18eb68d9"
     },
     {
       "scenarioId": "calendar.board.cold-open",
       "fileDigest": "18ddd30355a8373d4b7307a1e4b3ef7ffd4ff4d065a500d37698f73ab18b31cc",
-      "measuredTestDigest": "c9373806b53f80ab5a4382056a3b4f13c58e2bc1547ede6b16f7660429a423a0"
+      "measuredTestDigest": "0123b6697740bb60ed5b485265dfa0ed2e0241cbe2a0fa9bb3452cf9db08d823"
     },
     {
       "scenarioId": "calendar.board.reassign.visible",
       "fileDigest": "12057d4c920c6a60d23ee4ceb222e76aa84e6f71fc8929851cd91224dd4547be",
-      "measuredTestDigest": "0c18ab39a21e7f3b75353e3867b99b335e048fa53c38daed10d481ff962baf6a"
+      "measuredTestDigest": "76ad09a0faba683537083f6e206f6a080ad55126ba047e173374c30af2dec014"
     },
     {
       "scenarioId": "calendar.board.reassign.settled",
       "fileDigest": "0a79c00cef8261bec8c971a54b7fcb7a2e1f38740d01227aabbaccc668ebedbb",
-      "measuredTestDigest": "f1333ff3202a728e4d0fd3fc5ac94c62b80d49ffd57ec4b63f448ba4277cb8dc"
+      "measuredTestDigest": "6e7ff5f118baa9b9f632d78631414c98bab9a03002803a4049eaa146c1c974fc"
     },
     {
       "scenarioId": "calendar.board-to-day.covered",
       "fileDigest": "c698268982ee8f32fa215458acfd1e4b555156d811f14ec4dff965d4e802cee5",
-      "measuredTestDigest": "c86a5711e6c0d408966f86d2c0e9b41fddbf9ff3e19a15a666f8a13ff207ed10"
+      "measuredTestDigest": "3bb856ef26eeefeec6c18f3e486af45c6a2385fb2a51996bf01249c7b9949826"
     },
     {
       "scenarioId": "calendar.day.resize.settled",
       "fileDigest": "e87a907e8fd4f85961bafcb66be8d4b9d0f260b5070faf9c5d05ea9e500e2712",
-      "measuredTestDigest": "4098e68f1ebca89c4df430ddf02fe755b6d0ebc211b8cca7b146f346f1eab7d3"
+      "measuredTestDigest": "64f1a6b31b1a0f88e35f65d3422af4ce6588bd10daf597e2231025f079f30531"
     },
     {
       "scenarioId": "calendar.day-to-board.covered",
       "fileDigest": "7799a4d7f8dc6426087e5815918ab37fab691c52092218c4c5b52d3596e28665",
-      "measuredTestDigest": "048556780ec93ed4a044342188792e3f54d27c8251b8d8efdca7e9e579213e9c"
+      "measuredTestDigest": "416d5b8cbe03cbd1fd2bfab65a22002aecb6309ccd91842964763b88b25575f1"
     },
     {
       "scenarioId": "calendar.board.six-weeks",
       "fileDigest": "3edcfa80dbc1349f5963dba677633b719c316ede27b6db0033b291b915b2a627",
-      "measuredTestDigest": "5b83791aed045e7638dc67a9e12196e7354c4ffefb68227f65d865739e065cb4"
+      "measuredTestDigest": "eb65fa19ae860418ed862f65ae6669ec0e7e46c7a1bad2cadfe5d62dc41fc938"
     },
     {
       "scenarioId": "calendar.board-to-month.uncovered",
       "fileDigest": "f5965876744d3db9c34c63df7c4dfc5092f303adfa4f545423ad3f7033072a86",
-      "measuredTestDigest": "d4c9aef9f45cd1b287366695e1216e5bb818844450b9cf458c5f2891b9a51151"
+      "measuredTestDigest": "1c9972922e7e125a33dab858d6b64f8c6227b2b471b8e33c2733f09b27b3f350"
     },
     {
       "scenarioId": "calendar.month.move.visible",
       "fileDigest": "0cc7a85fc0a829e2f8e0f90988c752053b67ab84d9670bad8615b7596eac2d35",
-      "measuredTestDigest": "67d38038b9e3f875ad0debd1ad51eeff41fd06cc310267babe447e70dc2025cc"
+      "measuredTestDigest": "5d06f7022da56880c634c3d296c2063e2d362e6d68dbe54611fa705dd93f3d64"
     },
     {
       "scenarioId": "calendar.month.move.settled",
       "fileDigest": "3e0bff2e01472c1caf672da7a6a9d9533b2cff24b97990c21ba112ed0ac3f6fc",
-      "measuredTestDigest": "a04dfb4d90d81bf832a12a34a69468c102342d9ad1ecea0428bfc0d122dee8e2"
+      "measuredTestDigest": "adb397ba7b3384b8014e351243ba8c68216cfcaeb70f5652d7a7f263ee085c04"
     },
     {
       "scenarioId": "calendar.month-next.uncovered",
       "fileDigest": "52a7b2ea175e9106d2e079ee98d66dcfc217c32b7403d0f29c069770cf642085",
-      "measuredTestDigest": "632f143d70bd39e5d6c8c648bc67170ac2a55b18b3874a2eba61a5800b4dbadc"
+      "measuredTestDigest": "c3de1d814942e85e2277a68e007c199a6949fea219f38faff710597a7921b229"
     },
     {
       "scenarioId": "calendar.month-to-board.covered",
       "fileDigest": "3934d1e345c2e4a50e9a42f7fea20df36968de0f4cbe99211de4e901a1cb62a3",
-      "measuredTestDigest": "7f2a0bb3f44fb674e8cda7e9b988f94bdbf606d3365a6af906b7aa1176900bc9"
+      "measuredTestDigest": "497831766676a284597a793fb5fb6e960b8fe23655c1755a02781d100d816e02"
     },
     {
       "scenarioId": "planning.occurrence.cross-session",
       "fileDigest": "428ca5232235274916c4387639d77f3bc30393be7f8a451a1b1580e6059d1bea",
-      "measuredTestDigest": "b2ea84dd91228e339b0d0c652a62f03d57a1573ddd3f9377ad9f0460f3534f50"
+      "measuredTestDigest": "04f68216240b096c676848f72ba58febc28d2ce1e582b68c650f1941b40ba0c7"
     },
     {
       "scenarioId": "calendar.month.employee-open-to-event",
       "fileDigest": "4a7ae613252ac1faa76c28d0f5b105dd2be09182297f3f742682ba7aa316fe35",
-      "measuredTestDigest": "f749bcea871de16a34d465549aa6f08b640c3a9c29746dc36f904e7fda283cac"
+      "measuredTestDigest": "cad3f96ff4bfb5299df7a354f6c86a40e6a208f708a7c507173f5d605b2f00de"
     },
     {
       "scenarioId": "calendar.month.admin-open-to-legacy-event",
       "fileDigest": "4f021b308b698a58a431e3d83d9bec6bc22c01d06d38fa1955d2ac4d2d432084",
-      "measuredTestDigest": "fbfa98f1054ee594e3638ee3ca1481819b773ecfd3ff14fa96117acb5679fef4"
+      "measuredTestDigest": "263fca12a2dbcd46d0bebf42fb0607eab25e0ddd4dd4e50df27f13130658b9d0"
     },
     {
       "scenarioId": "time.clock-in.visible",
       "fileDigest": "811c75ba5eb3c67f1527cbcadbaf16203270739eadbbb8a5547e492173433f37",
-      "measuredTestDigest": "62c17daba42794884dc057e8ac2b1141885de299fc6fae4a60783ada49ef779b"
+      "measuredTestDigest": "86d411fd9ee869ebb264891a2241cdea5c06eddbc60a02c25b0d02d2d3087f3b"
     },
     {
       "scenarioId": "time.clock-out.visible",
       "fileDigest": "63b5d294d2f6d5b00ab25d86861da32df3f45ffd1492d25d6cc0d29b459d137d",
-      "measuredTestDigest": "538848611bc7a398f78953b0d9fdb598e1bbd317dfec8caec408f3aa1874185d"
+      "measuredTestDigest": "f8ee5a3a0a09cc413e318321b1ff80fa8a5e9b2ca4dcfbfed24e58cebd2ad658"
     },
     {
       "scenarioId": "time.clock-in.settled",
       "fileDigest": "362a3aca98ca0165644f323e4f099d1c355b59aa83f6c2b0e74d3d7bca3a8fcf",
-      "measuredTestDigest": "9d62eba8b1b9872350adb45fc2264b2a015cbb57b115bc29d02c48e5983ac3f0"
+      "measuredTestDigest": "ff392e815fbe8be864a99b700170c134d0de7b01a04a20ab95054f16fa206508"
     },
     {
       "scenarioId": "time.clock-out.settled",
       "fileDigest": "0a46fe332413b9579454272219a79cdabc9937ac50527aec8225a9321a2ada00",
-      "measuredTestDigest": "9ade4c110c0575a89088f0af9608eb68abdfbfa821265bdc17c003def3cf266f"
+      "measuredTestDigest": "67b7a42aa5071e8bfaea710b9d436f1213e54d28f366bba924bf6ac1ea5bb4c1"
     },
     {
       "scenarioId": "time.approval.cross-session",
       "fileDigest": "3196c90e43d21f6ee9d600368542f2cf4f3174f4bd34da8e03b6837238c17653",
-      "measuredTestDigest": "e2082a4aac92774df67034a042c0c96581202fae5acd70a7dbda122570ee3f8c"
+      "measuredTestDigest": "6a039472b9f7047a5c6ff42919ccaa1afa8147e16938dec51cf329bb3884b88b"
     }
   ]
 }

@@ -218,9 +218,10 @@ function commandForGroup(group: TestGroup, target: 'local' | 'cloud'): string[] 
 
 /** The manifest of a run the parent named itself; a missing file means Playwright never started. */
 /**
- * The lab evidence of a lab group's run; undefined for any other group. A lab
- * group runs in release mode or on explicit request only, so its ceilings,
- * budgets and floors always apply; an unratcheted improvement fails in release mode.
+ * The lab evidence of a lab group's run; undefined for any other group. Its
+ * ceilings, budgets and floors apply in every plan, so a change plan that
+ * selects the group by scope blocks a count or payload regression; an
+ * unratcheted improvement fails in release mode only.
  */
 function labEvidenceOf(
   timing: { requiredLabSteps?: readonly string[] | undefined },
@@ -414,7 +415,7 @@ async function main(): Promise<void> {
       changed,
     ))
       console.log(
-        `[verify] Measured group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). Run it while you work: bun run test:verify --group ${measured.id}`,
+        `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). The publication gate requires its pass on the current content; on a quiet machine run: bun run test:verify --group ${measured.id}`,
       );
   // The breaker and the archive guard refuse in run mode and only warn in plan mode, so the plan still lists what a focused run must prove.
   const refusals = [

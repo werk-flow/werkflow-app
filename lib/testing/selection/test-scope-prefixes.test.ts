@@ -52,6 +52,8 @@ test('every hook is either registered under one feature scope or listed as share
     'use-report-pending.ts',
     'use-server-action.ts',
     'use-settle-on-change.ts',
+    // The next-number suggestion of the request, job, project and personnel create dialogs: three features, no single owner.
+    'use-suggested-record-number.ts',
     // The sign-out hook belongs to the authentication row of the core set (group-selection.ts).
     'use-sign-out.ts',
     // The render tick of the calendar, time tracking, job detail, personnel and settings surfaces.

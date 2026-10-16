@@ -52,7 +52,12 @@ export type LiveViewResult<T> = { ok: true; data: T } | { ok: false; error?: str
 export type UseLiveViewOptions<T> = {
   /** Tables whose events invalidate this view. */
   tables: readonly RealtimeTable[];
-  /** The authoritative reader; usually wraps one server action. */
+  /**
+   * The authoritative reader: a `readInBackground` call of a kind registered in
+   * lib/data/background-reads.ts, given the request's `signal`. Never a Server
+   * Action: the view reads on mount, on every event and beside a save, and a
+   * Server Action read would queue ahead of the user's next save.
+   */
   read: (request: { invalidatedAt: number; signal: AbortSignal }) => Promise<LiveViewResult<T>>;
   /**
    * Server-rendered data for the initial paint. When present, the mount read

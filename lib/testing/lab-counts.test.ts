@@ -3,13 +3,18 @@ import { describe, expect, test } from 'bun:test';
 import {
   acceptLabChange,
   byteTolerance,
+  carryOverLabReferences,
   compareLabStep,
   countTolerance,
   formatLabTable,
+  gateLabMetric,
   initialLabReference,
   isFailingRow,
   labReferenceProblems,
+  legacyLabReferencesSchema,
+  migrateLabReferences,
   ratchetLabReference,
+  rejectLabMetric,
   ungateLabMetric,
   type LabReferences,
   type LabStepReference,
@@ -87,6 +92,7 @@ function observation(
 }
 
 const FIVE_RUNS = ['r1', 'r2', 'r3', 'r4', 'r5'];
+const REASON = 'five test runs on one build';
 
 function reference(gated: LabMetric[] = ['requests', 'routeRenders']): LabStepReference {
   return initialLabReference({
@@ -95,6 +101,7 @@ function reference(gated: LabMetric[] = ['requests', 'routeRenders']): LabStepRe
     runKeys: FIVE_RUNS,
     buildId: 'build',
     gated,
+    reason: REASON,
   }).reference;
 }
 
@@ -178,7 +185,14 @@ describe('lab counts', () => {
     const base = reference();
     const lowered = ratchetLabReference(base, observation({ counts: { requests: 2 } }), 'run-6');
     expect(lowered.counts.requests?.reference).toBe(2);
-    expect(lowered.history.at(-1)).toMatchObject({ kind: 'ratchet', target: 'requests', from: 3, to: 2 });
+    expect(lowered.history.at(-1)).toEqual({
+      kind: 'ratchet',
+      target: 'requests',
+      from: { reference: 3, tolerance: 0 },
+      to: { reference: 2, tolerance: 0 },
+      runKeys: ['run-6'],
+      reason: null,
+    });
     expect(
       ratchetLabReference(base, observation({ counts: { requests: 9 } }), 'run-7').counts.requests?.reference,
     ).toBe(3);
@@ -204,6 +218,16 @@ describe('lab counts', () => {
       reason: 'server search',
     });
     expect(smaller.history.at(-1)?.kind).toBe('floor-accept');
+    // A table row name such as `script#encodedBytes` is not a shape: refused, never a silent no-op entry.
+    expect(() =>
+      acceptLabChange({
+        reference: base,
+        observation: observation({ bytes: 5_000 }),
+        target: 'action:/auftraege/[jobNumber]#decodedBytes',
+        runKey: 'r',
+        reason: 'typo',
+      }),
+    ).toThrow('neither a gated metric nor a request shape');
   });
 
   test('a reference needs five runs, and an unstable metric stays ungated', () => {
@@ -214,6 +238,7 @@ describe('lab counts', () => {
         runKeys: ['r1'],
         buildId: 'b',
         gated: ['requests'],
+        reason: REASON,
       }),
     ).toThrow();
     const noisy = initialLabReference({
@@ -222,6 +247,7 @@ describe('lab counts', () => {
       runKeys: FIVE_RUNS,
       buildId: 'b',
       gated: ['requests', 'routeRenders'],
+      reason: REASON,
     });
     expect(noisy.reference.counts.requests).toBeUndefined();
     expect(noisy.unstable[0]).toContain('requests');
@@ -240,25 +266,44 @@ describe('lab counts', () => {
 
   test('the committed references refuse a reference above its budget, an ungated reference and a raising ratchet', () => {
     const base = reference();
+    const overBudget = {
+      ...base.counts,
+      routeRenders: { reference: 2, tolerance: 0 },
+      domMutations: { reference: 1, tolerance: 0 },
+    };
+    const raisingRatchet: LabStepReference = {
+      ...base,
+      counts: { ...base.counts, requests: { reference: 4, tolerance: 0 } },
+      history: [
+        ...base.history,
+        {
+          kind: 'ratchet',
+          target: 'requests',
+          from: { reference: 3, tolerance: 0 },
+          to: { reference: 4, tolerance: 0 },
+          runKeys: ['r'],
+          reason: null,
+        },
+      ],
+    };
     const references: LabReferences = {
-      version: 1,
+      version: 2,
       steps: [
         {
           ...base,
-          counts: {
-            ...base.counts,
-            routeRenders: { reference: 2, tolerance: 0 },
-            domMutations: { reference: 1, tolerance: 0 },
-          },
-        },
-        {
-          ...base,
-          context: { ...base.context, measurementDigest: 'c'.repeat(64) },
+          counts: overBudget,
           history: [
-            ...base.history,
-            { kind: 'ratchet', target: 'requests', from: 2, to: 3, runKeys: ['r'], reason: null },
+            {
+              kind: 'initial',
+              runKeys: FIVE_RUNS,
+              reason: REASON,
+              context: base.context,
+              counts: overBudget,
+              payloads: base.payloads,
+            },
           ],
         },
+        { ...raisingRatchet, context: { ...base.context, measurementDigest: 'c'.repeat(64) } },
       ],
       gatedMetrics: [
         { metric: 'requests', stability: 's', relevance: 'r', runKeys: ['r'] },
@@ -292,6 +337,7 @@ describe('lab payload rules', () => {
       runKeys: FIVE_RUNS,
       buildId: 'build',
       gated: ['requests'],
+      reason: REASON,
     }).reference;
     const gone = compareLabStep({ step: STEP, observation: observation(), reference: base });
     expect(
@@ -333,6 +379,235 @@ test('a shape that only some runs carried is reported as unstable', () => {
     runKeys: FIVE_RUNS,
     buildId: 'b',
     gated: ['requests'],
+    reason: REASON,
   });
   expect(unstable.some((entry) => entry.startsWith('background:time-entries appeared in 1 of 5'))).toBe(true);
+});
+
+// Rule test: the reference history replays to the stored bounds, so a hand edit of the reference file fails.
+describe('lab reference history', () => {
+  const SHAPE = 'action:/auftraege/[jobNumber]';
+  const GATED: LabReferences['gatedMetrics'] = [
+    { metric: 'requests', stability: 's', relevance: 'r', runKeys: ['r1'] },
+    { metric: 'routeRenders', stability: 's', relevance: 'r', runKeys: ['r1'] },
+  ];
+  const file = (...steps: LabStepReference[]): LabReferences => ({
+    version: 2,
+    steps,
+    gatedMetrics: GATED,
+    rejectedMetrics: [],
+  });
+  const problemsOf = (step: LabStepReference): string[] => labReferenceProblems(file(step), [STEP]);
+
+  test('calibrate records every count and payload bound it sets in the initial entry', () => {
+    const base = reference();
+    expect(base.history).toEqual([
+      {
+        kind: 'initial',
+        runKeys: FIVE_RUNS,
+        reason: REASON,
+        context: CONTEXT,
+        counts: base.counts,
+        payloads: base.payloads,
+      },
+    ]);
+    expect(Object.keys(base.payloads)).toEqual([SHAPE]);
+    expect(problemsOf(base)).toEqual([]);
+  });
+
+  test('ratchet, accept, ungate, reject, gate and carry-over each record the full bound they wrote, and the result replays', () => {
+    let step = ratchetLabReference(reference(), observation({ counts: { requests: 2 } }), 'r6');
+    step = acceptLabChange({
+      reference: step,
+      observation: observation({ counts: { requests: 3 } }),
+      target: 'requests',
+      runKey: 'r7',
+      reason: 'a read the user needs',
+    });
+    step = acceptLabChange({
+      reference: step,
+      observation: observation({ bytes: 30_000 }),
+      target: SHAPE,
+      runKey: 'r8',
+      reason: 'the detail carries the checklist',
+    });
+    step = acceptLabChange({
+      reference: step,
+      observation: observation({ shape: 'route:/auftraege' }),
+      target: 'route:/auftraege',
+      runKey: 'r9',
+      reason: 'the save now refreshes the list',
+    });
+    step = ungateLabMetric({
+      reference: step,
+      metric: 'routeRenders',
+      runKeys: ['r10'],
+      reason: 'took 1 and 2',
+    });
+    let references = rejectLabMetric(file(step), {
+      metric: 'requests',
+      job: 'relevance',
+      evidence: 'moved no waiting time',
+      runKeys: ['r11'],
+    });
+    references = gateLabMetric(references, {
+      metric: 'requests',
+      stability: 's',
+      relevance: 'r',
+      runKeys: ['r12'],
+    });
+    references = carryOverLabReferences(references, {
+      reason: 'carry-over',
+      entries: [
+        { stepId: STEP.id, fromDigest: 'a'.repeat(64), toDigest: 'd'.repeat(64), reason: 'a comment moved' },
+      ],
+    });
+    const [written] = references.steps;
+    expect(written?.history.map((entry) => entry.kind)).toEqual([
+      'initial',
+      'ratchet',
+      'raise',
+      'ceiling-accept',
+      'shape-accept',
+      'ungate',
+      'reject',
+      'carry-over',
+    ]);
+    expect(written?.history[2]).toEqual({
+      kind: 'raise',
+      target: 'requests',
+      from: { reference: 2, tolerance: 0 },
+      to: { reference: 3, tolerance: 0 },
+      runKeys: ['r7'],
+      reason: 'a read the user needs',
+    });
+    expect(written?.history[3]).toMatchObject({
+      kind: 'ceiling-accept',
+      target: SHAPE,
+      from: reference().payloads[SHAPE],
+      to: written?.payloads[SHAPE],
+    });
+    expect(written?.history[4]).toMatchObject({
+      kind: 'shape-accept',
+      from: null,
+      to: written?.payloads['route:/auftraege'],
+    });
+    expect(written?.history[6]).toEqual({
+      kind: 'reject',
+      target: 'requests',
+      from: { reference: 3, tolerance: 0 },
+      to: null,
+      runKeys: ['r11'],
+      reason: 'moved no waiting time',
+    });
+    expect(written?.counts).toEqual({});
+    expect(labReferenceProblems(references, [STEP])).toEqual([]);
+  });
+
+  test('the one-time migration snapshots the stored bounds and keeps the entries it replaced', () => {
+    const base = reference();
+    const superseded = [
+      { kind: 'initial', target: '*', from: null, to: null, runKeys: FIVE_RUNS, reason: null },
+      {
+        kind: 'floor-accept',
+        target: SHAPE,
+        from: 30_000,
+        to: 20_000,
+        runKeys: ['r6'],
+        reason: 'server search',
+      },
+    ];
+    const legacy = legacyLabReferencesSchema.parse({
+      version: 1,
+      steps: [{ ...base, history: superseded }],
+      gatedMetrics: GATED,
+      rejectedMetrics: [],
+    });
+    const [legacyStep] = legacy.steps;
+    if (!legacyStep) throw new Error('the legacy file lost its step');
+    expect(JSON.stringify(legacyStep.history)).toBe(JSON.stringify(superseded));
+    expect(() => migrateLabReferences(legacy, ' ')).toThrow();
+    const migrated = migrateLabReferences(legacy, 'the bounds the last lab runs were judged against');
+    expect(migrated.version).toBe(2);
+    expect(migrated.steps[0]?.history).toEqual([
+      {
+        kind: 'migrated',
+        runKeys: [...FIVE_RUNS, 'r6'],
+        reason: 'the bounds the last lab runs were judged against',
+        context: base.context,
+        counts: base.counts,
+        payloads: base.payloads,
+        superseded: legacyStep.history,
+      },
+    ]);
+    expect(labReferenceProblems(migrated, [STEP])).toEqual([]);
+  });
+
+  test('a raised count, a widened tolerance, a widened payload ceiling and a dropped entry are each named by step and field', () => {
+    const base = ratchetLabReference(reference(), observation({ counts: { requests: 2 } }), 'r6');
+    expect(problemsOf(base)).toEqual([]);
+    const payload = base.payloads[SHAPE];
+    if (!payload) throw new Error('the calibrated payload is missing');
+    expect(
+      problemsOf({ ...base, counts: { ...base.counts, requests: { reference: 5, tolerance: 0 } } }),
+    ).toEqual([
+      `${STEP.id}: counts.requests is {"reference":5,"tolerance":0}, but its history replays {"reference":2,"tolerance":0}`,
+    ]);
+    expect(
+      problemsOf({ ...base, counts: { ...base.counts, routeRenders: { reference: 1, tolerance: 1 } } }),
+    ).toEqual([
+      `${STEP.id}: counts.routeRenders is {"reference":1,"tolerance":1}, but its history replays {"reference":1,"tolerance":0}`,
+    ]);
+    const widened = { reference: 20_000, tolerance: { relative: 0.5, absolute: 512 } };
+    expect(problemsOf({ ...base, payloads: { [SHAPE]: { ...payload, decodedBytes: widened } } })).toEqual([
+      `${STEP.id}: payloads.${SHAPE}.decodedBytes is ${JSON.stringify(widened)}, but its history replays ${JSON.stringify(payload.decodedBytes)}`,
+    ]);
+    expect(problemsOf({ ...base, history: base.history.slice(0, 1) })).toEqual([
+      `${STEP.id}: counts.requests is {"reference":2,"tolerance":0}, but its history replays {"reference":3,"tolerance":0}`,
+    ]);
+    expect(problemsOf({ ...base, history: base.history.slice(1) })[0]).toBe(
+      `${STEP.id}: the history does not open with an initial or migrated snapshot, so it cannot be replayed`,
+    );
+  });
+
+  test('a forged ratchet that widens the tolerance and an entry that does not start from the replayed bound fail', () => {
+    const base = reference();
+    const widened = { reference: 3, tolerance: 2 };
+    const forged: LabStepReference = {
+      ...base,
+      counts: { ...base.counts, requests: widened },
+      history: [
+        ...base.history,
+        {
+          kind: 'ratchet',
+          target: 'requests',
+          from: { reference: 3, tolerance: 0 },
+          to: widened,
+          runKeys: ['r6'],
+          reason: null,
+        },
+      ],
+    };
+    expect(problemsOf(forged)).toEqual([
+      `${STEP.id}: history[1] ratchet raised requests from {"reference":3,"tolerance":0} to {"reference":3,"tolerance":2}; a ratchet only lowers the reference`,
+    ]);
+    const detached: LabStepReference = {
+      ...base,
+      counts: { ...base.counts, requests: { reference: 9, tolerance: 0 } },
+      history: [
+        ...base.history,
+        {
+          kind: 'raise',
+          target: 'requests',
+          from: { reference: 7, tolerance: 0 },
+          to: { reference: 9, tolerance: 0 },
+          runKeys: ['r6'],
+          reason: 'invented',
+        },
+      ],
+    };
+    expect(problemsOf(detached)[0]).toBe(
+      `${STEP.id}: history[1] raise requests starts from {"reference":7,"tolerance":0}, but the history replays {"reference":3,"tolerance":0}`,
+    );
+  });
 });

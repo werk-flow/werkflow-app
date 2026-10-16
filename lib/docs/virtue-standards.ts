@@ -168,7 +168,7 @@ export type EnforcedByReference = { line: number; token: string; problem: string
 
 const GROUP_ID_PATTERN = /^(?:static|sql|ui|unit|canary|audit|golden):[a-z0-9:<>*-]+$/;
 const LINT_NAME_PATTERN =
-  /^(?:ui|quality|playwright-spec|jsx-a11y|@typescript-eslint|@eslint-community\/eslint-comments)\/[a-z-]+$/;
+  /^(?:ui|quality|realtime|playwright-spec|jsx-a11y|@typescript-eslint|@eslint-community\/eslint-comments)\/[a-z-]+$/;
 
 const JSX_A11Y_PREFIX = 'jsx-a11y/';
 

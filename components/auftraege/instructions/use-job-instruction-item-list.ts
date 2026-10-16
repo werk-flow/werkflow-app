@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { getJobInstructionItems, getProjectInstructionItems } from '@/lib/jobs/instruction-items-actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import type { BackgroundReadInput } from '@/lib/data/background-reads';
 import type { InstructionListOwner, JobInstructionItemWithDetails } from '@/lib/jobs/types';
 
 export type RenderedInstructionItem = JobInstructionItemWithDetails & {
@@ -46,12 +47,13 @@ export function useJobInstructionItemList({
 
   /** Never throws: a failed refresh keeps the rows, and the caller's own feedback still runs. */
   async function syncItemsFromServer(): Promise<void> {
-    const result = await (
+    // A background read, so the refresh never queues behind the user's next save.
+    const target: BackgroundReadInput<'instruction-items'> =
       owner.projectId !== undefined
-        ? getProjectInstructionItems(owner.projectId)
-        : getJobInstructionItems(owner.jobId)
-    ).catch(() => null);
-    if (!result?.success) return;
+        ? { targetType: 'project', targetId: owner.projectId }
+        : { targetType: 'job', targetId: owner.jobId };
+    const result = await readInBackground('instruction-items', target);
+    if (!result.success) return;
 
     // A create still in flight keeps its optimistic row, so its success can
     // replace that row; the read never contains the row's temporary id.

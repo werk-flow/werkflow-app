@@ -22,6 +22,76 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-16: audit:wave-2:p1-14 environment failure
+
+<!-- incident-run: 2026-10-16T154711103Z-9a0c70 -->
+
+- Run: run `2026-10-16T154711103Z-9a0c70`, group `audit:wave-2:p1-14`, target local, fingerprint `8edece68e1a8`, world `443b27c94d934ee782d96c2a51c6b0bf`.
+- Failure point:  >  > wave-2\p1-14.spec.ts > P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2 > work prerequisites block start, follow predecessor state, reject cycles, and retain history: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: The browser's work-lifecycle-snapshot read failed with net::ERR_NETWORK_CHANGED (trace 0-trace.network; the same error hit time-tracking-state and the browser's auth read at the same moment): the host network changed during the test, the live view correctly kept its data stale and inert, and the stale region intercepted the click
+- Prevention: Tier 3: a host network change is outside the product and the harness; the stale region did what realtime-and-caching.md requires
+- Evidence: the same test passed in plan `2026-10-16T103827263Z-5597749f` with the same read code. The diagnostic replay on the retained world (`2026-10-16T163246990Z-45296f`) could not observe anything: the source run's writes persisted (one open prerequisite), so the test met another state from its first step. A focused fresh-world run passed (`2026-10-16T163452340Z-0e14b7`), but the runner accepts only a passing replay on the retained world, so the group stays blocked on this tree (backlog row "Replay of a test that mutates its world").
+
+## 2026-10-16: audit:wave-1:a2-anfragen harness failure
+
+<!-- incident-run: 2026-10-16T105850330Z-ba97ac -->
+
+- Run: run `2026-10-16T105850330Z-ba97ac`, group `audit:wave-1:a2-anfragen`, target local, fingerprint `607eb59f8a66`, world `e8953c0775464abbaa8f2902328400dd`.
+- Failure point:  >  > wave-1\a2-anfragen.spec.ts > A2 Anfragen @AUDIT-W1-A2 > A2-10/A2-11: Eigene Anfragenummer überlebt späten Vorschlag; Klärung und Wiederöffnung bleiben bestehen: Error: The request-number suggestion server action was not intercepted within 15 seconds.
+- Root cause: A2-10 holds the request-number suggestion by intercepting a Server Action POST on /anfragen; the suggestion is now the background read next-request-number (GET /api/background-read), so the hold never matched
+- Prevention: Tier 2: the spec holds the background-read kind it waits for, and lib/data/background-read-http.test.ts lists the migrated reader, so a spec intercepting the old transport fails on its own first run
+- Correction and proof: A2-10 and A3's personnel-number case hold the `next-request-number` and `next-personnel-number` reads; the same plan's `ui:contracts` failure (harness: the presentation fixture rendered `PageBody` without the app shell that now runs `usePageBodyKeyboardScroll`) was fixed by mounting the hook in the fixture. Repair report `2026-10-16T122357711Z-eb3499b9` passed 79 of 79 groups.
+
+## 2026-10-16: audit:lab:field environment failure
+
+<!-- incident-run: 2026-10-16T101241400Z-4e7882 -->
+
+- Run: run `2026-10-16T101241400Z-4e7882`, group `audit:lab:field`, target local, fingerprint `da6f42206133`, world `ba4d217d24e743f0a24d3ff543e0a95c`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: LAB-F4 clock-in recorded three extra shapes (attention counts, browser auth user, browser membership read) at 841-957 ms: exactly the reads a Realtime synthetic catch-up dispatches, which only a channel rejoin sends; clock-in writes no membership row, and the same step on the same build recorded none of them in run 2026-10-16T100324580Z-a96dd9; every count stayed within its reference
+- Prevention: Tier 3: a socket rejoin of the local stack is outside the product; the lab keeps gating shapes, and a repeat needs a passing diagnostic replay first
+- Evidence and proof: the run cleaned its world at its end, so no diagnostic replay was possible; the tree had changed (lab reference acceptance, `lib/testing/lab-counts.ts`), and the rerun in report `2026-10-16T102856474Z-ddd4e324` passed with no extra clock-in shape.
+
+## 2026-10-16: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-16T101241400Z-cfbbd7 -->
+
+- Run: run `2026-10-16T101241400Z-cfbbd7`, group `audit:lab:office`, target local, fingerprint `5bc9c002e4b8`, world `1125236b83374f77b1ee0ef8897863e8`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: Same script-byte residue as 2026-10-16T100324580Z-0edce6: the accept commands named the table row script#encodedBytes instead of the shape script, so lab-counts recorded a no-op entry and the references stayed at 692,102 and 32,212 B
+- Prevention: Tier 2: acceptLabChange now refuses a target that is neither a gated metric nor a request shape of the step (probe in lib/testing/lab-counts.test.ts); accepted again with the shape name
+- Correction and proof: the two no-op `shape-accept` entries stay in the reference history (the file is written only by the script); the accepts on shape `script` and the rerun in report `2026-10-16T102856474Z-ddd4e324` passed.
+
+## 2026-10-16: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-16T100324580Z-0edce6 -->
+
+- Run: run `2026-10-16T100324580Z-0edce6`, group `audit:lab:office`, target local, fingerprint `5bc9c002e4b8`, world `31498d384c7644baa42c9533d782cc29`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: The route-bound reference of the cold-start and tasks-open script bytes predates the client code of 7d305e2, 9fb58cd, 0165de5 and this package (keyboard-scroll hook in the app shell, background-read kinds, the record-number hook, the wall-clock tick): +9,435 B and +1,427 B encoded; no duplicated module; every count and payload is within its reference after the PageBodyKeyboardScroll fix
+- Prevention: Tier 2: accepted with lab-counts accept and its reason; the change plan now runs the lab groups, so script growth is judged in the change that adds it
+- Correction and proof: see the entry of `2026-10-16T101241400Z-cfbbd7`; report `2026-10-16T102856474Z-ddd4e324` passed.
+
+## 2026-10-16: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-16T073820023Z-67ee65 -->
+
+- Run: run `2026-10-16T073820023Z-67ee65`, group `audit:lab:office`, target local, fingerprint `e16a3039caa2`, world `a7b8a3df07804718b72baf15307f0986`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: PageBodyKeyboardScroll (7d305e2) inside the server PageBody added its client reference (1.2-1.3 KB) to every office route payload (/auftraege, /kunden, /aufgaben, job-create) and four renders to job-open; the remaining script growth and one ListRowActions render are intended client code of 7d305e2, 9fb58cd and 0165de5; the job-open componentRenders reference is bimodal (1523/1551 on its calibration build)
+- Prevention: Tier 2: the keyboard-scroll behaviour runs once in the app shell; lib/conventions/server-primitive-client-refs.test.ts refuses a client module imported by a server page primitive; the script residue is accepted with lab-counts accept; the audit:lab:office ceilings now gate before publication
+- Evidence and proof: payload captures from the HEAD build reproduced every byte value; after the fix every route and action payload is within its reference (run `2026-10-16T100324580Z-0edce6`), and report `2026-10-16T102856474Z-ddd4e324` passed.
+
+## 2026-10-16: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-16T073820023Z-c85988 -->
+
+- Run: run `2026-10-16T073820023Z-c85988`, group `audit:lab:field`, target local, fingerprint `05b272ede455`, world `01c1153219224385afa66987e55595cf`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: PageBodyKeyboardScroll (7d305e2), a client component inside the server PageBody, added its client reference with the route chunk list (1.2-1.5 KB) to every route and action payload and pushed the [jobNumber] loading segment past the 2 KB prefetch-inlining size of Next, so each job-link prefetch split into two requests (cold-start 72 -> 74)
+- Prevention: Tier 2: the keyboard-scroll behaviour runs once in the app shell (usePageBodyKeyboardScroll); lib/conventions/server-primitive-client-refs.test.ts refuses a client module imported by a server page primitive; the audit:lab:field ceilings now gate before publication
+- Evidence and proof: after the fix the field run `2026-10-16T100324580Z-a96dd9` passed with the cold-start requests and every payload within their references.
+
 ## 2026-10-16: audit:layout:planning environment failure
 
 <!-- incident-run: 2026-10-16T033909166Z-262188 -->

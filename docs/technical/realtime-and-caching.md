@@ -1,6 +1,6 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-09
+Status: living — last reviewed 2026-10-16
 
 This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability.
 
@@ -41,7 +41,7 @@ Wrong turn: one `.select()` without pages. PostgREST cuts the response at its ca
 
 1. Read per request. Wrap repeated work of one render in `react.cache()`; a GET handler uses `withReadRequest` ([security](security.md#read-request-authorization-reuse)).
 2. Cache across requests only when every condition under [cross-request caching](#cross-request-caching) holds. Tag the reader with a `CACHE_TAGS` entry, and throw through `failCachedRead` on a failed read.
-3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first.
+3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first. A kind that names no record, or signs a file address, carries `organizationId`; a read of one record by id relies on the reader's organization filter.
 4. Run `bun run test:unit lib/data lib/conventions/live-view-reads.test.ts`.
 
 Wrong turn: a Server Action for a background read. One client's actions run one after another, so the read delays the next save.
@@ -59,7 +59,7 @@ Wrong turn: a channel, an interval or a focus listener of your own. It races the
 ### Check for a regression while you work
 
 1. After each change to an action, a reader or a live view, run its pending-feedback contract with `bun run test:ui`.
-2. Run `bun run test:plan`. It names each measured and lab group whose scopes own a changed file. Before the change is done, serve the build with `bun run test:server local` and run that group with `bun run test:verify --group <id>`. [Performance](performance.md#how-to-work) owns journeys and the procedure to make a flow faster.
+2. Run `bun run test:plan`. It selects each lab group and names each wall-clock group whose scopes own a changed file. Before the change is done, serve the build with `bun run test:server local` and run that group with `bun run test:verify --group <id>`. [Performance](performance.md#how-to-work) owns journeys and the procedure to make a flow faster.
 3. Open the change in two signed-in sessions and watch the second one.
 
 Wrong turn: leaving the measurement to the release run. By then other changes hide the cause.
@@ -72,7 +72,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - One save is one route render: no client refresh follows a revalidating Server Action, and each counted save stays at its entry in `tests/golden/route-renders.json`. [test `lib/conventions/route-render-owner.test.ts`, test `lib/testing/route-render-count.test.ts`, group `golden:p1-01`, group `audit:wave-1:a1-inventar`]
 - A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. Until then its row, card or surface carries `data-unconfirmed` and `aria-busy` from the registry primitive, and `<html data-unconfirmed-layer>` covers a removal. Content that is not confirmed never looks confirmed to a test or a screen reader. [code `hooks/use-optimistic-list.ts`, code `lib/ui/unconfirmed.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`, test `lib/conventions/unconfirmed-marker.test.ts`, group `ui:contracts`]
 - Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
-- A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar and the time approval; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, judgment]
+- A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar, the time approval and the job list; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, group `audit:performance:lists`, judgment]
 - A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
 - A failed refresh keeps the data, marks it stale and makes its dependent actions inert until a retry succeeds. [code `components/shared/stale-region.tsx`, test `lib/conventions/live-view-stale.test.ts`]
 - A new published table is registered in the migration and in `REALTIME_TABLES`, with its deletion trigger. [script `realtime:check`, group `sql:security`]
@@ -83,30 +83,28 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - A picker of customers, jobs, projects, equipment, service cases, inventory items or coverages searches on the server one page at a time, keeps the selected records, offers „Erneut laden“ after a failed read, and selects by number in natural order in the database. [test `lib/conventions/entity-pickers.test.ts`, group `sql:list-pagination`, group `ui:contracts`]
 - A reader cached across requests meets every condition under [cross-request caching](#cross-request-caching). A failed read, in any product module, goes through `failCachedRead` and throws `CachedReadError`, so it is never stored. [judgment, test `lib/data/membership-freshness.test.ts`, test `lib/data/cached-read-failures.test.ts`]
 - An invalidation names a `CACHE_TAGS` entry that a cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
-- A read that starts on mount, in an effect or beside a save goes through the background-read registry or comes with the server props, never the Server Action queue. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
-- Client state adopts new server props during render, never in an effect: inside a hydrated Suspense boundary such an effect can starve behind a route transition and then commit forever. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
+- A read that starts on mount, in an effect, in a `useClientRead` read or beside a save goes through the background-read registry or comes with the server props, never the Server Action queue. The scan follows wrappers across files; an effect starts a Server Action only for a reviewed write. Every kind answers 401 without identity and 403 for a foreign organization. [test `lib/data/background-read-http.test.ts`, test `lib/conventions/live-view-reads.test.ts`]
+- Client state adopts new server props during render, never in an effect: inside a hydrated Suspense boundary such an effect can starve behind a route transition and then commit forever. An effect never seeds state from the clock: seed in render and tick in an effect, so the first frame shows no false value. After a page settles, its main thread goes idle. [lint `ui/no-derived-state-effect`, test `tests/ui-contracts/hydration-settle.spec.ts`, group `audit:layout`, judgment]
 - The authenticated layout waits for identity, organization and profile only. Optional shell reads load in their own providers. [test `lib/ui/app-layout-runtime.test.ts`]
-- A reader that runs on every event of every session pins its queries per role, and a page runs one derivation. [test `lib/attention/count-reads.test.ts`]
+- A reader that runs on every event of every session pins its queries per role, reads rows in proportion to the pending work and none of the closed history, and a page runs one derivation. [test `lib/attention/count-reads.test.ts`, test `lib/attention/count-volume.test.ts`]
 - Sidebar links prefetch on intent only ([performance](performance.md#prefetch)). [test `lib/ui/sidebar-prefetch.test.ts`, group `ui:contracts`]
 - A step that people repeat many times a day is a journey with a lab step ([performance](performance.md#checklist)); a view switch over a large window or a change another session waits for gets a measured scenario. [test `lib/testing/journeys.test.ts`, judgment]
 
 ## Never
 
-- Wait for the network before you acknowledge an action, or write pending state by hand. The shared hooks show feedback at once, and a held-write contract proves it for each mutation that has one. A client write outside an owner hook or an optimistic change fails a convention test, and so does a hand-raised pending flag outside `HAND_PENDING_STATE`. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
-- Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback in product code. [lint `transitionSelectors`, lint `asyncTransitionSelectors`]
-- Poll. `setInterval` is banned in product code. [lint `pollingSelectors`]
+- Wait for the network before you acknowledge an action, or write pending state by hand. A client write outside an owner hook or an optimistic change fails a convention test, and so does a hand-raised pending flag outside `HAND_PENDING_STATE`. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
+- Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback in product code. Recorded exceptions: `RefreshButton`, and the document library's navigation, whose pending flag gates its controls until the new route props commit. [lint `transitionSelectors`, lint `asyncTransitionSelectors`]
+- Poll. The one interval in product code is the wall-clock tick in `hooks/use-wall-clock-tick.ts`, and no inline disable lifts the rule. [lint `realtime/no-interval`, lint `@eslint-community/eslint-comments/no-restricted-disable`]
 - Show a toast. Feedback goes through `Banner` and the inline states. [lint `sonnerImportPath`]
 - Truncate a list silently, or turn an overflow or a failed related read into an empty list. [code `lib/supabase/query-batches.ts`, test `lib/conventions/read-error-visibility.test.ts`, judgment]
 - Pass an organization-sized list to `.in()`. [test `lib/conventions/id-list-batches.test.ts`]
 - Call `updateTag` or `revalidateTag` on a tag that no cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
 - Cache a permission fact across requests. [test `lib/data/membership-freshness.test.ts`]
-- Shorten `REALTIME_DEBOUNCE_MS` or give a surface its own debounce. [lint `realtimeSelectors`, judgment]
+- Shorten `REALTIME_DEBOUNCE_MS` or give a surface its own debounce. A trailing read goes through `createTrailingScheduler` with `REALTIME_DEBOUNCE_MS` and `REALTIME_MAX_DEFER_MS`. [test `lib/realtime/debounce-ownership.test.ts`, judgment]
 - Raise a budget, a reference, a ceiling or a timeout to make a slow build pass. [group `audit:performance:<name>`, group `audit:lab:<name>`, judgment]
 - Reopen a rejected performance hypothesis without new measured evidence. The rejected ones are: widening `REALTIME_DEBOUNCE_MS` or the two-second target, pointing HTTP clients at pooler URLs, treating `async` as CPU offload, indexing every filter, caching every read, removing fallbacks, and adding Broadcast, polling or read replicas without a measured need. [judgment]
 
 ## Verify your work
-
-These steps run once, on the final code. The in-work checks, including the measured group and the second session, belong to [check for a regression while you work](#check-for-a-regression-while-you-work).
 
 1. Run `bun run test:unit` and `bun run test:ui`.
 2. For a change to a list reader or a paging function, run `bun run test:verify --group sql:list-pagination`.
@@ -135,7 +133,7 @@ The caller establishes identity and current permission before it uses the data. 
 
 ### Backend request capacity
 
-One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. Page rendering, Server Actions and calendar window reads run at foreground priority. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`. The fetch timeout includes time in the queue. The scheduler limits one process. It is not a connection pool, a rate limit or a provider capacity guarantee.
+One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. Page rendering, Server Actions and calendar window reads run at foreground priority. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`. The fetch timeout includes time in the queue.
 
 ## Complete reads and id lists
 
@@ -176,11 +174,11 @@ Each feature chooses the mutable rows that signal a new authoritative read. Most
 
 Every live surface consumes Realtime through one of the two hooks that [add a live view](#add-a-live-view) names.
 
-The recorded exception to the raw-event ban is the project-detail delete-exit watcher, which needs the event itself. Both hooks schedule through one trailing scheduler: a burst produces one read, and `REALTIME_MAX_DEFER_MS` caps how long a stream can postpone it.
+The recorded exception to the raw-event ban is the project-detail delete-exit watcher, which needs the event itself.
 
 ### Reads outside the Server Action queue
 
-One browser client's Server Actions and router refreshes run one after another. A read that starts on mount, on channel join or beside a save must not occupy that queue. It goes through a GET handler:
+One browser client's Server Actions and router refreshes run one after another, so a read that starts on mount, on channel join or beside a save goes through a GET handler:
 
 - `lib/data/background-reads.ts` is the closed registry of readers a page may run in the background. Each kind pairs an input schema with a reader that keeps its own membership and subject checks. Adding a kind adds a public read endpoint. Follow [security](security.md#read-request-authorization-reuse) first.
 - Every such GET authenticates the session, requires the requested organization to equal the active organization, and returns a private, non-cacheable response.
@@ -205,7 +203,7 @@ The user's own calendar mutations show pending feedback before the write resolve
 
 The contract is the behavior of the two live-view hooks. A surface does not re-implement it. ESLint messages cite these rules by number.
 
-1. **The provider owns subscriptions.** Components consume the hooks and open no channels. Each hook owns one shared debounce across its tables. Shorter waits raced server cache invalidation. The recorded `onAuthStateChange` exception is `app/**/reset-password-form.tsx`, which must react to `PASSWORD_RECOVERY`.
+1. **The provider owns subscriptions.** Components consume the hooks and open no channels. Each hook owns one shared debounce across its tables. The recorded `onAuthStateChange` exception is `app/**/reset-password-form.tsx`, which must react to `PASSWORD_RECOVERY`.
 2. **Focus and visibility catch-up belong to the provider.** A return to the tab after a minimum absence dispatches one coalesced catch-up to every subscriber. A shorter absence dispatches nothing, because the open socket delivered every event. A reconnect always catches up.
 3. **Server props are mount-time data for live components.** `initialData` seeds the first paint. After mount, the reader is authoritative. Key a live component by entity id, or pass `resetKey` where a remount is not an option.
 4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with `view.refresh()`. In the reverse order a stale server payload overwrites the fresh read.
@@ -218,8 +216,6 @@ Connection catch-up runs after database readiness, not after channel join: the d
 
 ## Latency targets
 
-Correctness and responsiveness are separate results. A correct value that appears too late fails the responsiveness check.
-
 - A change made in one session is visible in another signed-in session within two seconds (`LIVE_TARGET_MS` in `lib/testing/responsiveness-tolerance.ts`).
 - The time-correction dialog reaches usable form options within five seconds of opening (`TIME_CORRECTION_READY_MS`). This target applies to that dialog only.
 
@@ -227,11 +223,11 @@ Correctness and responsiveness are separate results. A correct value that appear
 
 ### Shared layout and clock readiness
 
-The authenticated layout waits for identity, organization and profile checks only. Optional shell reads, such as the clock, active jobs and attention counts, belong to their own providers and never block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. The clock provider is ready only after a successful read for the current organization, and its controls stay disabled with retry until then.
+Optional shell reads, such as the clock, active jobs and attention counts, never block page content or a route refresh. An absent clock response is unknown state, not a clocked-out session. The clock provider is ready only after a successful read for the current organization, and its controls stay disabled with retry until then.
 
 ## Organization switch confirmation
 
-The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure. GET readers compare the requested organization with the authenticated cookie. `tests/ui-contracts/organization.spec.ts` covers held and rejected writes.
+The organization provider publishes a new active organization only after the cookie write completes, and keeps its switch lock until matching server props arrive. A rejected write keeps the current scope with visible failure. `tests/ui-contracts/organization.spec.ts` covers held and rejected writes.
 
 ## Examples
 

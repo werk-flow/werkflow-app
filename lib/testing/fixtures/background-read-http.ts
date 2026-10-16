@@ -104,7 +104,20 @@ mock.module('@/lib/vacation/actions', () => ({
   getOwnVacationOverview: seam('own-vacation-overview'),
   getPendingVacationRequestsForApprover: seam('pending-vacation-for-approver'),
   getDecidableApprovedVacationRequests: seam('decidable-approved-vacation'),
+  previewVacationRequest: seam('vacation-days-preview'),
 }));
+mock.module('@/lib/jobs/instruction-items-actions', () => ({
+  // The job reader answers the same kind; its own name proves the dispatch below.
+  getJobInstructionItems: seam('instruction-items:job'),
+  getProjectInstructionItems: seam('instruction-items'),
+}));
+mock.module('@/lib/jobs/list-actions', () => ({ getProjectJobPage: seam('project-job-page') }));
+mock.module('@/lib/projects/actions', () => ({
+  getNextProjectNumber: seam('next-project-number'),
+  getProjectDetails: seam('project-details'),
+}));
+mock.module('@/lib/requests/actions', () => ({ getNextRequestNumber: seam('next-request-number') }));
+mock.module('@/lib/personnel/actions', () => ({ suggestPersonnelNumber: seam('next-personnel-number') }));
 mock.module('@/lib/sickness/actions', () => ({
   getOwnSicknessReports: seam('own-sickness-reports'),
   getSicknessReportsForRecord: seam('sickness-reports-for-record'),
@@ -134,7 +147,11 @@ mock.module('@/lib/members/actions', () => ({
     return { success: true, profiles: {} };
   },
 }));
-mock.module('@/lib/jobs/actions', () => ({ getParkedJobs: seam('parked-jobs') }));
+mock.module('@/lib/jobs/actions', () => ({
+  getParkedJobs: seam('parked-jobs'),
+  getNextJobNumber: seam('next-job-number'),
+  getJobDetails: seam('job-details'),
+}));
 mock.module('@/lib/parking/actions', () => ({
   getJobParkingContexts: seam('job-parking-contexts'),
   getParkingResponsibleOptions: seam('parking-responsible-options'),
@@ -149,6 +166,7 @@ mock.module('@/lib/dispatch/actions', () => ({
 mock.module('@/lib/qualifications/actions', () => ({
   getJobQualificationDetail: seam('job-qualification-detail'),
   getAssignmentTeamOptions: seam('assignment-team-options'),
+  getProjectCapabilityRequirements: seam('project-capability-requirements'),
 }));
 mock.module('@/lib/inventory/actions', () => ({
   getJobMaterialLines: seam('job-material-lines'),
@@ -159,11 +177,17 @@ mock.module('@/lib/clients/actions', () => ({ getClientRelations: seam('client-r
 mock.module('@/lib/documents/actions', () => ({
   getAttachableDocuments: seam('attachable-documents'),
   getMaintenanceCoverageDocuments: seam('maintenance-coverage-documents'),
+  getDocumentViewSignedUrl: seam('document-view-url'),
+  getDocumentLinkEmployees: seam('document-link-employees'),
 }));
-mock.module('@/lib/work-artifacts/actions', () => ({ getWorkArtifacts: seam('work-artifacts') }));
+mock.module('@/lib/work-artifacts/actions', () => ({
+  getWorkArtifacts: seam('work-artifacts'),
+  getWorkArtifactDetail: seam('work-artifact-detail'),
+}));
 mock.module('@/lib/work-lifecycle/actions', () => ({
   getWorkLifecycleSnapshot: seam('work-lifecycle-snapshot'),
   getApprovedArtifactActionsForTarget: seam('approved-artifact-actions'),
+  searchWorkPredecessors: seam('work-predecessor-search'),
 }));
 mock.module('@/lib/installed-equipment/list-page-server', () => ({
   getInstalledEquipmentPage: seam('equipment-page'),
@@ -375,6 +399,25 @@ const inputs: Record<string, unknown> = {
   'dispatch-readiness': { occurrenceId: jobId },
   'maintenance-coverage-documents': { maintenanceCoverageId: jobId },
   'maintenance-evidence-options': { jobId },
+  'next-job-number': { organizationId },
+  'next-project-number': { organizationId },
+  'next-request-number': { organizationId },
+  'next-personnel-number': { organizationId },
+  'document-view-url': { organizationId, documentId: jobId },
+  'document-link-employees': { organizationId },
+  'vacation-days-preview': {
+    organizationId,
+    startDate: '2026-10-19',
+    endDate: '2026-10-23',
+    dayPortion: 'full',
+  },
+  'project-job-page': { projectId: jobId, page: 2 },
+  'job-details': { jobId },
+  'project-details': { projectId: jobId },
+  'project-capability-requirements': { projectId: jobId },
+  'work-artifact-detail': { artifactId: jobId },
+  'instruction-items': { targetType: 'project', targetId: jobId },
+  'work-predecessor-search': { organizationId, type: 'job', query: '  Heiz ' },
 };
 // What each reader receives: some take the bare identifier, the rest the validated object.
 const readerArguments: Record<string, unknown> = {
@@ -413,6 +456,20 @@ const readerArguments: Record<string, unknown> = {
   'parking-responsible-options': undefined,
   'maintenance-coverage-documents': jobId,
   'maintenance-evidence-options': jobId,
+  'next-job-number': undefined,
+  'next-project-number': undefined,
+  'next-request-number': undefined,
+  'next-personnel-number': undefined,
+  'document-view-url': jobId,
+  'document-link-employees': undefined,
+  // The readers never receive the organization: they take it from the session.
+  'vacation-days-preview': { startDate: '2026-10-19', endDate: '2026-10-23', dayPortion: 'full' },
+  'job-details': jobId,
+  'project-details': jobId,
+  'project-capability-requirements': jobId,
+  'work-artifact-detail': jobId,
+  'instruction-items': jobId,
+  'work-predecessor-search': { type: 'job', query: 'Heiz' },
 };
 for (const kind of Object.keys(BACKGROUND_READS)) {
   reads = [];
@@ -422,6 +479,40 @@ for (const kind of Object.keys(BACKGROUND_READS)) {
   assert.equal(reads.length, 1, kind);
   assert.equal(reads[0]?.kind, kind);
   assert.deepEqual(reads[0]?.input, kind in readerArguments ? readerArguments[kind] : input, kind);
+}
+reads = [];
+await GET(request('instruction-items', { targetType: 'job', targetId: jobId }));
+assert.deepEqual(reads, [{ kind: 'instruction-items:job', input: jobId }]);
+
+// Every registered kind, with its valid input: no reader runs for a caller
+// without identity, and none for an input that names another organization.
+reads = [];
+identity = { user: null, error: null };
+for (const kind of Object.keys(BACKGROUND_READS)) {
+  await check(request(kind, inputs[kind]), 401, failure('not_authenticated'));
+}
+identity = { user: { id: 'caller' }, error: null };
+const organizationNamingKinds: string[] = [];
+for (const kind of Object.keys(BACKGROUND_READS)) {
+  const input = inputs[kind];
+  if (typeof input !== 'object' || input === null || !('organizationId' in input)) continue;
+  organizationNamingKinds.push(kind);
+  await check(request(kind, { ...input, organizationId: foreignOrg }), 403, failure('organization_changed'));
+}
+assert.equal(reads.length, 0);
+// The moved effect reads that name no record, or sign a file address, name
+// their organization; the id reads rely on their reader's organization filter.
+for (const kind of [
+  'next-job-number',
+  'next-project-number',
+  'next-request-number',
+  'next-personnel-number',
+  'document-view-url',
+  'document-link-employees',
+  'vacation-days-preview',
+  'work-predecessor-search',
+]) {
+  assert.ok(organizationNamingKinds.includes(kind), `${kind} names its organization`);
 }
 
 // A thrown reader never leaks its message.

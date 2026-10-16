@@ -79,6 +79,30 @@ const migratedReaders: Record<string, readonly string[]> = {
   'components/service/maintenance-coverage-documents-dialog.tsx': ['getMaintenanceCoverageDocuments'],
   'components/service/use-maintenance-due-action.ts': ['getMaintenanceEvidenceOptions'],
   'components/use-manual-entry-form-members.ts': ['getOrgMembersAction'],
+  // Reads an effect or useClientRead starts when a dialog or section opens.
+  // The number suggestion of every create dialog.
+  'hooks/use-suggested-record-number.ts': [
+    'getNextJobNumber',
+    'getNextProjectNumber',
+    'getNextRequestNumber',
+    'suggestPersonnelNumber',
+  ],
+  'components/dokumente/document-viewer-dialog.tsx': ['getDocumentViewSignedUrl'],
+  'components/dokumente/use-document-link-employees.ts': ['getDocumentLinkEmployees'],
+  'components/zeiterfassung/use-vacation-section-days-preview.ts': ['previewVacationRequest'],
+  'components/auftraege/list/use-project-job-page.ts': ['getProjectJobPage'],
+  'components/auftraege/artifacts/use-work-artifact-editor.ts': ['getWorkArtifactDetail'],
+  'components/auftraege/instructions/use-job-instruction-item-list.ts': [
+    'getProjectInstructionItems',
+    'getJobInstructionItems',
+  ],
+  'components/auftraege/forms/use-edit-job-form.ts': ['getJobDetails'],
+  'components/auftraege/forms/use-edit-project-form.ts': ['getProjectDetails'],
+  'components/auftraege/forms/use-create-job-project-link.ts': ['getProjectDetails'],
+  'components/auftraege/project-detail/project-qualification-section.tsx': [
+    'getProjectCapabilityRequirements',
+  ],
+  'components/auftraege/lifecycle/use-work-lifecycle-dependency-form.ts': ['searchWorkPredecessors'],
 };
 
 test('migrated background readers use the GET client and no longer queue as Server Actions', () => {

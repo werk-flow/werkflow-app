@@ -15,7 +15,11 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Effect-started reads behind `useClientRead` | `lib/conventions/live-view-reads.test.ts` lists Server Action reads that start from an effect (`useClientRead` counts as an effect start): they wait in the Server Action queue behind saves. | Tier 2: move each to a kind in `lib/data/background-reads.ts` until the list is empty. |
+| Set-returning function reads | `lib/conventions/unpaged-reads.test.ts` checks `.from()` reads; a `.rpc()` that returns an unbounded set is cut at the PostgREST row cap without an error. The two attention functions page through `readCompleteRows` (`lib/attention/pending-sets.ts`); the `list_*_page` functions bound their own page. | Tier 2: the test reads each called function's return shape from `lib/supabase/database.types.ts` and requires a page argument or `readCompleteRows` for a set. |
+| Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` follows names across files, not values: a Server Action passed as a prop or parameter, or returned by a hook, and called from an effect is not found. | Tier 1: a branded type on Server Action references that an effect callback or a live-view `read` cannot call. |
+| Calendar draft reset in an effect | `components/kalender/use-entry-details-draft.ts` resets its draft when the dialog opens from an effect; the calendar has recorded render behaviour, so `derivedStateEffectExceptions` in `eslint.config.mjs` lists it. | Tier 2: in the run that recalibrates the calendar references, adopt the open key during render and delete the exception. |
+| Document library navigation transition | `components/dokumente/document-library-content.tsx` keeps `useTransition` for its folder and search navigation (`transitionExemptFiles` in `eslint.config.mjs`). | Tier 2: bind the pending flag to its `pendingNavigation` state, delete the exemption, and prove it in the documents browser groups. |
+| Delayed refresh after the invite dialog | `components/mitarbeiter/personnel-invite-dialog.tsx` shows success inside the dialog for 1.5 s, then closes and refreshes; `DELAYED_REFRESH_SITES` in `lib/realtime/debounce-ownership.test.ts` lists it. | Tier 2: close at once with a banner, refresh through the settle path, and delete the entry. |
 
 ## Security
 
@@ -40,6 +44,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
+| Replay of a test that mutates its world | `recoveredEnvironmentRuns` in `lib/testing/runner/group-recovery.ts` accepts only a passing diagnostic replay on the retained world. A test whose first step writes (the prerequisite flow of P1-14) meets another state there, so an environment failure of it can never be replayed, and the group stays blocked on an unchanged tree. | Tier 2: accept a passing focused fresh-world run of the failed test on the same build as its replay when the retained replay reports persisted writes before its first stage. |
 | Classification of a repaired group | `bun run test:runs classify` refuses a group whose latest attempt passed, and a `ui:contracts` attempt inside a verification run has no run manifest, so a failure that was repaired before it was classified leaves no incident row and no classification. | Tier 2: `classify` accepts the report id and group of a past failed attempt, reads its log, and records the row. |
 
 ## Documentation

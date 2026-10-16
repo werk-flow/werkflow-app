@@ -14,10 +14,8 @@ import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
-import {
-  getProjectCapabilityRequirements,
-  setProjectCapabilityRequirements,
-} from '@/lib/qualifications/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
+import { setProjectCapabilityRequirements } from '@/lib/qualifications/actions';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
@@ -41,7 +39,7 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
   const [saveError, setSaveError] = useState<string | null>(null);
   const { run: runSave, isBusy, anyBusy: saving } = useBusyIds();
   const planned = useClientRead({
-    read: () => getProjectCapabilityRequirements(projectId),
+    read: (signal) => readInBackground('project-capability-requirements', { projectId }, signal),
     deps: [projectId],
     failureMessage: 'Die Qualifikationen konnten nicht geladen werden.',
   });

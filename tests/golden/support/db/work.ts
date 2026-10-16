@@ -883,6 +883,23 @@ export async function seedJobAssignment(input: {
     .throwOnError();
 }
 
+/** The sorted user ids assigned to the job with this number. */
+export async function getJobAssignmentUserIds(orgId: string, jobNumber: string): Promise<string[]> {
+  const admin = createAdminClient();
+  const { data: job, error: jobError } = await admin
+    .from('jobs')
+    .select('id')
+    .eq('organization_id', orgId)
+    .eq('job_number', jobNumber)
+    .single();
+  if (jobError || !job) {
+    throw new Error(`Job lookup failed for ${jobNumber}: ${jobError?.message}`);
+  }
+  const { data, error } = await admin.from('job_assignments').select('user_id').eq('job_id', job.id);
+  if (error) throw new Error(`Assignment lookup failed: ${error.message}`);
+  return (data ?? []).map((row) => row.user_id).sort();
+}
+
 /** Records a draft work report on a seeded job through the artifact RPC the field action calls. */
 export async function seedWorkReportDraft(input: {
   orgId: string;

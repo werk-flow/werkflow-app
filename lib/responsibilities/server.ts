@@ -2,6 +2,7 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import 'server-only';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Tables } from '@/lib/supabase/database.types';
 import { logReadFailure, memoizeRequestRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -104,6 +105,8 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
             .from('organization_responsibility_delegations')
             .select('*')
             .eq('organization_id', organizationId)
+            // An ended delegation is never effective (isDelegationEffective); its history is a settings read.
+            .gte('valid_until', businessDate)
             .order('id')
             .range(from, to),
         LIST_ROW_CAP,
@@ -214,19 +217,49 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
         createdAt: configuration.created_at,
         assignments: assignmentsByConfigurationId.get(configuration.id) ?? [],
       })),
-      delegations: (delegationsResult.data ?? []).map((delegation) => ({
-        id: delegation.id,
-        responsibility: delegation.responsibility,
-        delegatorEmployeeRecordId: delegation.delegator_employee_record_id,
-        substituteEmployeeRecordId: delegation.substitute_employee_record_id,
-        validFrom: delegation.valid_from,
-        validUntil: delegation.valid_until,
-        revokedFrom: delegation.revoked_from,
-      })),
+      delegations: (delegationsResult.data ?? []).map(toResponsibilityDelegation),
     };
   },
   { outsideRequest: 'fresh' },
 );
+
+function toResponsibilityDelegation(
+  delegation: Tables<'organization_responsibility_delegations'>,
+): ResponsibilityDelegation {
+  return {
+    id: delegation.id,
+    responsibility: delegation.responsibility,
+    delegatorEmployeeRecordId: delegation.delegator_employee_record_id,
+    substituteEmployeeRecordId: delegation.substitute_employee_record_id,
+    validFrom: delegation.valid_from,
+    validUntil: delegation.valid_until,
+    revokedFrom: delegation.revoked_from,
+  };
+}
+
+/**
+ * Every delegation of the organization, ended ones included: the settings
+ * page lists the history. The runtime state holds only the delegations that
+ * have not ended, the only ones that can be effective.
+ */
+async function readDelegationHistory(organizationId: string): Promise<ResponsibilityDelegation[] | null> {
+  const admin = createSupabaseAdminClient();
+  const result = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('organization_responsibility_delegations')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (result.error) {
+    logReadFailure('Failed to load the delegation history:', result.error);
+    return null;
+  }
+  return result.data.map(toResponsibilityDelegation);
+}
 
 export async function getResponsibilitySettingsData(): Promise<
   ActionResult<{ data: ResponsibilitySettingsData }>
@@ -236,11 +269,12 @@ export async function getResponsibilitySettingsData(): Promise<
 
   const { orgId, userId, role } = auth.context;
   const admin = createSupabaseAdminClient();
-  const [state, organizationResult] = await Promise.all([
+  const [state, delegations, organizationResult] = await Promise.all([
     loadResponsibilityRuntimeState(orgId),
+    readDelegationHistory(orgId),
     admin.from('organizations').select('admin_id').eq('id', orgId).single(),
   ]);
-  if (!state || organizationResult.error || !organizationResult.data) {
+  if (!state || !delegations || organizationResult.error || !organizationResult.data) {
     logReadErrors('getResponsibilitySettingsData: read failed', organizationResult.error);
     return { success: false, error: 'load_failed' };
   }
@@ -251,8 +285,8 @@ export async function getResponsibilitySettingsData(): Promise<
     state.members.find((member) => member.userId === userId)?.employeeRecordId ?? null;
   const isManager = role === 'admin' || role === 'buero';
   const visibleDelegations = isManager
-    ? state.delegations
-    : state.delegations.filter(
+    ? delegations
+    : delegations.filter(
         (delegation) =>
           delegation.delegatorEmployeeRecordId === currentEmployeeRecordId ||
           delegation.substituteEmployeeRecordId === currentEmployeeRecordId,

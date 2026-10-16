@@ -23,7 +23,12 @@ import {
   resolveVacationEntitlementForYear,
   type VacationBalance,
 } from './balance';
-import { loadVacationCountingContext, loadVacationRequestsForRecord } from './server';
+import {
+  balanceYears,
+  loadPlannedAssignedJobs,
+  loadVacationCountingContext,
+  loadVacationRequestsForRecord,
+} from './server';
 import {
   sumApprovedDays,
   toVacationDayPortion,
@@ -678,6 +683,11 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       return { success: false, error: 'fetch_failed' };
     }
 
+    // One span over every pending request; each row filters its own range below.
+    const earliestStart = pendingRows
+      .map((row) => row.start_date)
+      .reduce((min, date) => (date < min ? date : min));
+    const latestEnd = pendingRows.map((row) => row.end_date).reduce((max, date) => (date > max ? date : max));
     // One batched assignment lookup instead of one query per pending row.
     const pendingUserIds = [
       ...new Set(
@@ -686,63 +696,13 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
           .filter((id): id is string => Boolean(id)),
       ),
     ];
-    const jobIdsByUserId = new Map<string, string[]>();
-    const { data: assignmentRows, error: assignmentError } = await readInBatches(pendingUserIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('job_assignments')
-            .select('job_id, user_id')
-            .eq('organization_id', orgId)
-            .in('user_id', [...batch])
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    );
+    const planned = await loadPlannedAssignedJobs(orgId, pendingUserIds, {
+      from: earliestStart,
+      to: latestEnd,
+    });
     // A failed conflict read must not tell the approver there are no conflicts.
-    if (assignmentError) {
-      logError('Error fetching job assignments for vacation approvals:', assignmentError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    for (const assignment of assignmentRows) {
-      const jobIds = jobIdsByUserId.get(assignment.user_id) ?? [];
-      jobIds.push(assignment.job_id);
-      jobIdsByUserId.set(assignment.user_id, jobIds);
-    }
-
-    // One jobs read over the whole pending span; each row filters its own range below.
-    const earliestStart = pendingRows
-      .map((row) => row.start_date)
-      .reduce((min, date) => (date < min ? date : min));
-    const latestEnd = pendingRows.map((row) => row.end_date).reduce((max, date) => (date > max ? date : max));
-    const assignedJobIds = [...new Set(assignmentRows.map((assignment) => assignment.job_id))];
-    const { data: jobRows, error: jobError } = await readInBatches(assignedJobIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('jobs')
-            .select('id, title, planned_date')
-            .eq('organization_id', orgId)
-            .in('id', [...batch])
-            .gte('planned_date', earliestStart)
-            .lte('planned_date', latestEnd)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    );
-    if (jobError) {
-      logError('Error fetching assigned jobs for vacation approvals:', jobError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    const plannedJobById = new Map(
-      jobRows
-        .filter(
-          (job): job is { id: string; title: string; planned_date: string } => job.planned_date !== null,
-        )
-        .map((job) => [job.id, { title: job.title, plannedDate: job.planned_date }]),
-    );
+    if (!planned) return { success: false, error: 'fetch_failed' };
+    const { jobIdsByUserId, plannedJobById } = planned;
 
     // Authorization filter: per pending request, keep it only when the actor
     // may decide it right now (self-approval denied by the shared helper).
@@ -781,7 +741,11 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
 
       let requests = requestsByRecordId.get(record.id);
       if (requests === undefined) {
-        requests = await loadVacationRequestsForRecord(orgId, record.id);
+        requests = await loadVacationRequestsForRecord(
+          orgId,
+          record.id,
+          balanceYears(pendingRows, record.id),
+        );
         requestsByRecordId.set(record.id, requests);
       }
 

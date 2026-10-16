@@ -5,7 +5,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import { useState, useEffect, useRef } from 'react';
 import { describeFailure } from '@/lib/action-messages';
-import { getProjectDetails } from '@/lib/projects/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 
 export const ERROR_MESSAGES = {
@@ -43,7 +43,7 @@ export function useEditProjectForm({ project, open, jobs }: EditProjectFormInput
 
   // The linked jobs are read each time the dialog opens; a closed dialog drops the read.
   const projectJobs = useClientRead({
-    read: () => getProjectDetails(project.id),
+    read: (signal) => readInBackground('project-details', { projectId: project.id }, signal),
     deps: [project.id],
     enabled: open,
     failureMessage: (code) =>

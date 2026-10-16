@@ -1,14 +1,26 @@
 import { expect, test } from '../support/fixtures';
-import { expectUsableWithin } from '../../golden/support/scenario-measurement';
-import { usableContentTarget } from '../../golden/support/browser-observation';
+import {
+  expectScenarioLiveWithin,
+  expectUsableWithin,
+  watchRealtimeSignals,
+} from '../../golden/support/scenario-measurement';
+import { jobRowAssigneeTarget, usableContentTarget } from '../../golden/support/browser-observation';
+import { getJobAssignmentUserIds, seedJob } from '../../golden/support/db/work';
 import { customerListPager, customerSearchField } from '../../golden/support/steps/customers';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
 import {
+  confirmed,
+  employeeAssignmentHeading,
+  employeeAssignmentPicker,
+  employeeAssignmentSave,
+  employeeAssignmentSearch,
   jobPickerSearch,
+  openEmployeeAssignmentDialog,
   pagerButton,
   pagerCount,
   pagerRange,
   pagerRangeStart,
+  testData,
   visibleText,
 } from '../../golden/support/steps/shared';
 import {
@@ -19,15 +31,22 @@ import {
   workCreateDialog,
   workCreateTab,
   workListPager,
+  workListSection,
 } from '../../golden/support/steps/work';
 import { ensureTypicalProfile, TYPICAL_PROFILE } from '../support/performance-profile';
-import { createPerformancePage, loadingList, usableListCount } from '../support/performance-steps';
+import {
+  createPerformancePage,
+  loadingList,
+  settleLiveShell,
+  usableListCount,
+} from '../support/performance-steps';
 import { LIST_PAGE_SIZE } from '../../../lib/ui/list-pagination';
 
 // Measures a usable first page under the full organization workload, the
-// soft navigation from the job list into one job, and the Anlagen and
-// Aufgaben pages of the office. Separate untimed checks below prove global
-// search and page navigation. Every test prepares the profile it reads.
+// soft navigation from the job list into one job, the Anlagen and Aufgaben
+// pages of the office, and an office assignment reaching a second session's
+// open job list. Separate untimed checks below prove global search and page
+// navigation. Every test prepares the profile it reads.
 
 test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
   test("PERF-L1 seeds the typical profile into the group's organization @AUDIT-PERFORMANCE-L1", async ({
@@ -131,6 +150,61 @@ test.describe('Performance profile lists @AUDIT-PERFORMANCE', () => {
     }
   });
   /* eslint-enable playwright-spec/no-copy-in-spec-locator -- the measured test ends here */
+
+  test("PERF-L4 an assignment reaches the administrator's open job list within the live target @AUDIT-PERFORMANCE-L4", async ({
+    adminPage,
+    bueroPage,
+    world,
+  }) => {
+    await ensureTypicalProfile(world);
+    const employee = world.users.employee;
+    const employeeName = `${employee.firstName} ${employee.lastName}`;
+    const prefix = `PERF-ZUW-${world.runId.slice(0, 6)}`;
+    // Three own unassigned jobs; the list search narrows the open list to exactly these rows.
+    const jobNumbers = await Promise.all(
+      [1, 2, 3].map(async (sample) => {
+        const jobNumber = `${prefix}-${sample}`;
+        await seedJob({
+          orgId: world.orgId,
+          actorId: world.users.admin.id,
+          jobNumber,
+          title: testData`Zuweisung live ${sample} ${world.runId.slice(0, 6)}`,
+        });
+        return jobNumber;
+      }),
+    );
+    watchRealtimeSignals(adminPage);
+    await adminPage.goto('/auftraege');
+    await visibleJobSearch(adminPage).fill(prefix);
+    await expect(pagerCount(workListPager(adminPage))).toHaveText(pagerRange(1, 3, 3));
+    await settleLiveShell(adminPage);
+    for (const jobNumber of jobNumbers) {
+      await expect(
+        confirmed(workListSection(adminPage).getByRole('row').filter({ hasText: jobNumber })),
+      ).toHaveCount(1);
+      await bueroPage.goto(`/auftraege/${jobNumber}`);
+      await settleLiveShell(bueroPage);
+      const dialog = await openEmployeeAssignmentDialog(bueroPage);
+      await employeeAssignmentPicker(dialog).click();
+      await employeeAssignmentSearch(bueroPage).fill(employeeName);
+      await bueroPage.getByRole('listbox').getByRole('option').filter({ hasText: employeeName }).click();
+      // The heading closes the picker popover; the dialog's footer sits underneath it.
+      await employeeAssignmentHeading(dialog).click();
+      await expect(employeeAssignmentPicker(dialog, 1)).toBeVisible();
+      await expectScenarioLiveWithin(
+        'jobs.list.assignment.cross-session',
+        jobRowAssigneeTarget(adminPage, jobNumber, employeeName),
+        {
+          mutation: async (beforeSubmit) => {
+            await beforeSubmit();
+            await employeeAssignmentSave(dialog).click();
+            await expect(dialog).toHaveCount(0);
+          },
+        },
+      );
+      expect(await getJobAssignmentUserIds(world.orgId, jobNumber)).toEqual([employee.id]);
+    }
+  });
 
   test('PERF-L3 pages and global search retain access to records beyond the initial page @AUDIT-PERFORMANCE-L3', async ({
     adminPage,

@@ -2,8 +2,9 @@
 
 import { useMemo } from 'react';
 
+import { useOrganization } from '@/components/organization/organization-context';
 import { useClientRead, type ReadFailure } from '@/hooks/use-client-read';
-import { getDocumentLinkEmployees } from '@/lib/documents/actions';
+import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 
 type DocumentLinkEmployees = {
@@ -14,9 +15,11 @@ type DocumentLinkEmployees = {
 
 // Loads the complete staff list once each time the dialog shows a document.
 export function useDocumentLinkEmployees(isDialogShowingDocument: boolean): DocumentLinkEmployees {
+  const { activeOrgId } = useOrganization();
   const staff = useClientRead({
-    read: () => getDocumentLinkEmployees(),
-    deps: [],
+    read: (signal) =>
+      readInBackground('document-link-employees', { organizationId: activeOrgId ?? '' }, signal),
+    deps: [activeOrgId],
     enabled: isDialogShowingDocument,
     failureMessage: 'Die Mitarbeiter konnten nicht geladen werden.',
   });

@@ -50,7 +50,7 @@ function observation(overrides: Partial<Record<LabMetric, number>> = {}): LabObs
 function references(): LabReferences {
   const runs = ['r1', 'r2', 'r3', 'r4', 'r5'];
   return {
-    version: 1,
+    version: 2,
     steps: [
       initialLabReference({
         step: STEP,
@@ -58,6 +58,7 @@ function references(): LabReferences {
         runKeys: runs,
         buildId: 'build',
         gated: ['requests', 'routeRenders'],
+        reason: 'five test runs',
       }).reference,
     ],
     gatedMetrics: [

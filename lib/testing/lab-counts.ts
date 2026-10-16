@@ -1,8 +1,18 @@
 import { z } from 'zod';
 
 import {
+  byteToleranceSchema,
+  labCountsSchema,
+  labHistoryEntrySchema,
+  labPayloadsSchema,
+  legacyHistoryEntrySchema,
+  replayProblems,
+  type CountReference,
+  type LabHistoryEntry,
+  type PayloadReference,
+} from './lab-history';
+import {
   labContextSchema,
-  labCount as count,
   labMetricSchema as metricSchema,
   LAB_MEASUREMENT_VERSION,
   type LabObservation,
@@ -17,47 +27,21 @@ const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
 /**
  * Lab counts (docs/technical/performance.md): the reviewed references and the pure rules that compare, ratchet, accept
  * and judge stability. Only scripts/lab-counts.ts writes the reference file,
- * through these functions.
+ * through these functions. Each function records the full bounds it wrote in
+ * the step's history, which `labReferenceProblems` replays (lib/testing/lab-history.ts).
  */
 
-const countReferenceSchema = z.object({ reference: count, tolerance: count }).strict();
-const byteToleranceSchema = z.object({ relative: z.number().min(0).max(1), absolute: count }).strict();
-const byteReferenceSchema = z.object({ reference: count, tolerance: byteToleranceSchema }).strict();
-const payloadReferenceSchema = z
-  .object({
-    requests: countReferenceSchema,
-    encodedBytes: byteReferenceSchema,
-    decodedBytes: byteReferenceSchema.nullable(),
-    rows: countReferenceSchema.nullable(),
-  })
-  .strict();
-
-const historySchema = z
-  .object({
-    kind: z.enum(['initial', 'ratchet', 'raise', 'floor-accept', 'shape-accept', 'ungate']),
-    /** A count metric, or `<shape>#<field>` for a payload. */
-    target: z.string().min(1),
-    from: count.nullable(),
-    to: count.nullable(),
-    runKeys: z.array(z.string().min(1)).min(1),
-    reason: z.string().min(1).nullable(),
-  })
-  .strict()
-  .refine((entry) => entry.kind === 'initial' || entry.kind === 'ratchet' || entry.reason !== null, {
-    message: 'a raise, an accepted floor or an accepted shape needs a reason',
-  });
-
+const labStepReferenceFields = {
+  stepId: z.string().min(1),
+  stepVersion: z.number().int().positive(),
+  labMeasurementVersion: z.number().int().positive(),
+  context: labContextSchema,
+  counts: labCountsSchema,
+  payloads: labPayloadsSchema,
+  source: z.object({ runKeys: z.array(z.string().min(1)).min(1), buildId: z.string().min(1) }).strict(),
+};
 const labStepReferenceSchema = z
-  .object({
-    stepId: z.string().min(1),
-    stepVersion: z.number().int().positive(),
-    labMeasurementVersion: z.number().int().positive(),
-    context: labContextSchema,
-    counts: z.partialRecord(metricSchema, countReferenceSchema),
-    payloads: z.record(z.string(), payloadReferenceSchema),
-    source: z.object({ runKeys: z.array(z.string().min(1)).min(1), buildId: z.string().min(1) }).strict(),
-    history: z.array(historySchema).min(1),
-  })
+  .object({ ...labStepReferenceFields, history: z.array(labHistoryEntrySchema).min(1) })
   .strict();
 export type LabStepReference = z.infer<typeof labStepReferenceSchema>;
 
@@ -81,15 +65,59 @@ const metricEvidenceSchema = z
   })
   .strict();
 
+/** Version 2: every history entry records the full bounds it wrote, so the history replays to the stored bounds. */
 export const labReferencesSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     steps: z.array(labStepReferenceSchema),
     gatedMetrics: z.array(metricEvidenceSchema),
     rejectedMetrics: z.array(rejectedMetricSchema),
   })
   .strict();
 export type LabReferences = z.infer<typeof labReferencesSchema>;
+
+/** Version 1 of the file, whose history recorded no values; read only by `migrateLabReferences`. */
+export const legacyLabReferencesSchema = z
+  .object({
+    version: z.literal(1),
+    steps: z.array(
+      z.object({ ...labStepReferenceFields, history: z.array(legacyHistoryEntrySchema).min(1) }).strict(),
+    ),
+    gatedMetrics: z.array(metricEvidenceSchema),
+    rejectedMetrics: z.array(rejectedMetricSchema),
+  })
+  .strict();
+
+/**
+ * Makes a version 1 file replayable once: each step's history becomes one
+ * `migrated` snapshot of its stored bounds, which keeps the replaced entries.
+ * The stored bounds are the ones the last lab runs were judged against.
+ */
+export function migrateLabReferences(
+  legacy: z.infer<typeof legacyLabReferencesSchema>,
+  reason: string,
+): LabReferences {
+  if (!reason.trim())
+    throw new Error('Migrating the lab history needs the reason its values are the reviewed ones.');
+  return {
+    ...legacy,
+    version: 2,
+    steps: legacy.steps.map((step) => ({
+      ...step,
+      history: [
+        {
+          kind: 'migrated',
+          runKeys: [...new Set([...step.source.runKeys, ...step.history.flatMap((entry) => entry.runKeys)])],
+          reason,
+          context: step.context,
+          counts: step.counts,
+          payloads: step.payloads,
+          superseded: step.history,
+        },
+      ],
+    })),
+  };
+}
 
 /** Re-keys one reference to a new measurement digest; the same rule as the wall-clock references. */
 export const labCarryoverSchema = z
@@ -109,6 +137,7 @@ export const labCarryoverSchema = z
   .strict();
 export type LabCarryover = z.infer<typeof labCarryoverSchema>;
 
+/** Re-keys each step a carry-over entry names, and records the entry in the step's history. */
 export function carryOverLabReferences(references: LabReferences, carryover: LabCarryover): LabReferences {
   return {
     ...references,
@@ -117,7 +146,20 @@ export function carryOverLabReferences(references: LabReferences, carryover: Lab
         (candidate) =>
           candidate.stepId === step.stepId && candidate.fromDigest === step.context.measurementDigest,
       );
-      return entry ? { ...step, context: { ...step.context, measurementDigest: entry.toDigest } } : step;
+      if (!entry) return step;
+      return {
+        ...step,
+        context: { ...step.context, measurementDigest: entry.toDigest },
+        history: [
+          ...step.history,
+          {
+            kind: 'carry-over',
+            fromDigest: entry.fromDigest,
+            toDigest: entry.toDigest,
+            reason: entry.reason,
+          },
+        ],
+      };
     }),
   };
 }
@@ -159,7 +201,9 @@ export type LabRow = {
   status: LabRowStatus;
 };
 
-function byteBounds(reference: z.infer<typeof byteReferenceSchema>): { ceiling: number; floor: number } {
+type ByteReference = PayloadReference['encodedBytes'];
+
+function byteBounds(reference: ByteReference): { ceiling: number; floor: number } {
   const { relative, absolute } = reference.tolerance;
   return {
     ceiling: Math.ceil(Math.max(reference.reference * (1 + relative), reference.reference + absolute)),
@@ -173,7 +217,7 @@ function byteBounds(reference: z.infer<typeof byteReferenceSchema>): { ceiling: 
 function countRow(
   target: string,
   measured: number,
-  reference: z.infer<typeof countReferenceSchema>,
+  reference: CountReference,
   budget: number | undefined,
 ): LabRow {
   const ceiling = reference.reference + reference.tolerance;
@@ -192,7 +236,7 @@ function countRow(
 function payloadRows(
   observed: LabPayload | undefined,
   shape: string,
-  reference: z.infer<typeof payloadReferenceSchema> | undefined,
+  reference: PayloadReference | undefined,
 ): LabRow[] {
   // A prefetch is timing-dependent and fewer is not better (the rejected `prefetches`
   // metric): its shapes print and never fail.
@@ -233,7 +277,7 @@ function payloadRows(
       status: 'ungated',
     },
   ];
-  const bytes: [string, number | null, z.infer<typeof byteReferenceSchema> | null, boolean][] = [
+  const bytes: [string, number | null, ByteReference | null, boolean][] = [
     [
       'encodedBytes',
       observed.encodedBytes,
@@ -342,12 +386,13 @@ export function ratchetLabReference(
     const bound = counts[metric];
     const measured = observation.counts[metric];
     if (!bound || measured >= bound.reference - bound.tolerance) continue;
-    counts[metric] = { ...bound, reference: measured };
+    const lowered = { ...bound, reference: measured };
+    counts[metric] = lowered;
     history.push({
       kind: 'ratchet',
       target: metric,
-      from: bound.reference,
-      to: measured,
+      from: bound,
+      to: lowered,
       runKeys: [runKey],
       reason: null,
     });
@@ -415,8 +460,10 @@ export function initialLabReference(input: {
   runKeys: readonly string[];
   buildId: string;
   gated: readonly LabMetric[];
+  reason: string;
 }): { reference: LabStepReference; unstable: string[] } {
-  const { step, observations, runKeys, buildId, gated } = input;
+  const { step, observations, runKeys, buildId, gated, reason } = input;
+  if (!reason.trim()) throw new Error(`${step.id}: a calibration needs the basis the reviewer can check.`);
   const [first] = observations;
   if (!first || observations.length < 5)
     throw new Error(`${step.id}: a reference needs five runs on one build.`);
@@ -438,6 +485,27 @@ export function initialLabReference(input: {
       );
     counts[metric] = { reference: row.min, tolerance: row.tolerance };
   }
+  const payloads = initialPayloads(observations, unstable);
+  return {
+    unstable,
+    reference: {
+      stepId: step.id,
+      stepVersion: step.version,
+      labMeasurementVersion: LAB_MEASUREMENT_VERSION,
+      context: first.context,
+      counts,
+      payloads,
+      source: { runKeys: [...runKeys], buildId },
+      history: [{ kind: 'initial', runKeys: [...runKeys], reason, context: first.context, counts, payloads }],
+    },
+  };
+}
+
+/** The payload bounds of a calibration; a shape some runs lacked or whose request count varied goes to `unstable`. */
+function initialPayloads(
+  observations: readonly LabObservation[],
+  unstable: string[],
+): LabStepReference['payloads'] {
   const payloads: LabStepReference['payloads'] = {};
   // Every shape any run carried: one missing from some runs is reported, never silently dropped.
   const shapes = new Set(
@@ -474,22 +542,9 @@ export function initialLabReference(input: {
       rows: rowTolerance === null ? null : { reference: Math.min(...rowValues), tolerance: rowTolerance },
     };
   }
-  return {
-    unstable,
-    reference: {
-      stepId: step.id,
-      stepVersion: step.version,
-      labMeasurementVersion: LAB_MEASUREMENT_VERSION,
-      context: first.context,
-      counts,
-      payloads,
-      source: { runKeys: [...runKeys], buildId },
-      history: [{ kind: 'initial', target: '*', from: null, to: null, runKeys: [...runKeys], reason: null }],
-    },
-  };
+  return payloads;
 }
 
-/** Accepts a deliberate change of one count or payload field from a passing run, with the reviewer's reason. */
 /**
  * Removes one count from one step's reference when later runs showed it takes
  * two values on that step (an echo that sometimes coalesces). The metric stays
@@ -513,8 +568,48 @@ export function ungateLabMetric(input: {
     counts,
     history: [
       ...reference.history,
-      { kind: 'ungate', target: metric, from: bound.reference, to: null, runKeys: [...runKeys], reason },
+      { kind: 'ungate', target: metric, from: bound, to: null, runKeys: [...runKeys], reason },
     ],
+  };
+}
+
+/** Records a metric's stability and relevance evidence. No step bound changes: `calibrate` adds the counts. */
+export function gateLabMetric(
+  references: LabReferences,
+  evidence: z.infer<typeof metricEvidenceSchema>,
+): LabReferences {
+  return {
+    ...references,
+    gatedMetrics: [...references.gatedMetrics.filter((entry) => entry.metric !== evidence.metric), evidence],
+    rejectedMetrics: references.rejectedMetrics.filter((entry) => entry.metric !== evidence.metric),
+  };
+}
+
+/** Rejects a metric for every step: each step that gated it records the removed bound with the evidence. */
+export function rejectLabMetric(
+  references: LabReferences,
+  rejection: z.infer<typeof rejectedMetricSchema>,
+): LabReferences {
+  const { metric, evidence, runKeys } = rejection;
+  return {
+    ...references,
+    gatedMetrics: references.gatedMetrics.filter((entry) => entry.metric !== metric),
+    rejectedMetrics: [...references.rejectedMetrics.filter((entry) => entry.metric !== metric), rejection],
+    steps: references.steps.map((step) => {
+      const bound = step.counts[metric];
+      if (!bound) return step;
+      const counts = { ...step.counts };
+      delete counts[metric];
+      const entry: LabHistoryEntry = {
+        kind: 'reject',
+        target: metric,
+        from: bound,
+        to: null,
+        runKeys,
+        reason: evidence,
+      };
+      return { ...step, counts, history: [...step.history, entry] };
+    }),
   };
 }
 
@@ -531,72 +626,82 @@ export function acceptLabChange(input: {
   if (metric.success) {
     const bound = reference.counts[metric.data];
     if (!bound) throw new Error(`${reference.stepId}: ${target} is not gated on this step.`);
-    const measured = observation.counts[metric.data];
+    const accepted = { ...bound, reference: observation.counts[metric.data] };
+    const entry: LabHistoryEntry =
+      accepted.reference > bound.reference
+        ? { kind: 'raise', target: metric.data, from: bound, to: accepted, runKeys: [runKey], reason }
+        : { kind: 'ratchet', target: metric.data, from: bound, to: accepted, runKeys: [runKey], reason };
     return {
       ...reference,
-      counts: { ...reference.counts, [metric.data]: { ...bound, reference: measured } },
-      history: [
-        ...reference.history,
-        {
-          kind: measured > bound.reference ? 'raise' : 'ratchet',
-          target,
-          from: bound.reference,
-          to: measured,
-          runKeys: [runKey],
-          reason,
-        },
-      ],
+      counts: { ...reference.counts, [metric.data]: accepted },
+      history: [...reference.history, entry],
     };
   }
-  const shape = target;
+  return acceptPayloadChange({ reference, observation, shape: target, runKey, reason });
+}
+
+/** The payload bound a run's observation sets, keeping the tolerances the shape already had. */
+function acceptedPayload(observed: LabPayload, existing: PayloadReference | undefined): PayloadReference {
+  return {
+    requests: { reference: observed.requests, tolerance: existing?.requests.tolerance ?? 0 },
+    encodedBytes: {
+      reference: observed.encodedBytes,
+      tolerance: existing?.encodedBytes.tolerance ?? { relative: 0.05, absolute: 512 },
+    },
+    decodedBytes:
+      observed.decodedBytes === null
+        ? null
+        : {
+            reference: observed.decodedBytes,
+            tolerance: existing?.decodedBytes?.tolerance ?? { relative: 0.05, absolute: 512 },
+          },
+    rows:
+      observed.rows === null ? null : { reference: observed.rows, tolerance: existing?.rows?.tolerance ?? 0 },
+  };
+}
+
+function acceptPayloadChange(input: {
+  reference: LabStepReference;
+  observation: LabObservation;
+  shape: string;
+  runKey: string;
+  reason: string;
+}): LabStepReference {
+  const { reference, observation, shape, runKey, reason } = input;
   const observed = observation.payloads.find((payload) => payload.shape === shape);
   const existing = reference.payloads[shape];
+  // A target that is neither a gated metric nor a shape of the reference or the run is a typo
+  // (`script#encodedBytes` names a table row, the shape is `script`): accepting it would record nothing.
+  if (!observed && !existing)
+    throw new Error(
+      `${reference.stepId}: ${shape} is neither a gated metric nor a request shape of this step.`,
+    );
+  const accepted = observed ? acceptedPayload(observed, existing) : null;
   const payloads = { ...reference.payloads };
-  if (!observed) delete payloads[shape];
-  else
-    payloads[shape] = {
-      requests: { reference: observed.requests, tolerance: existing?.requests.tolerance ?? 0 },
-      encodedBytes: {
-        reference: observed.encodedBytes,
-        tolerance: existing?.encodedBytes.tolerance ?? { relative: 0.05, absolute: 512 },
-      },
-      decodedBytes:
-        observed.decodedBytes === null
-          ? null
-          : {
-              reference: observed.decodedBytes,
-              tolerance: existing?.decodedBytes?.tolerance ?? { relative: 0.05, absolute: 512 },
-            },
-      rows:
-        observed.rows === null
-          ? null
-          : { reference: observed.rows, tolerance: existing?.rows?.tolerance ?? 0 },
-    };
+  if (accepted) payloads[shape] = accepted;
+  else delete payloads[shape];
   const kind =
     !existing || !observed
       ? 'shape-accept'
       : (observed.decodedBytes ?? observed.encodedBytes) <
           (existing.decodedBytes?.reference ?? existing.encodedBytes.reference)
         ? 'floor-accept'
-        : 'raise';
+        : 'ceiling-accept';
   return {
     ...reference,
     payloads,
     history: [
       ...reference.history,
-      {
-        kind,
-        target: shape,
-        from: existing ? (existing.decodedBytes?.reference ?? existing.encodedBytes.reference) : null,
-        to: observed ? (observed.decodedBytes ?? observed.encodedBytes) : null,
-        runKeys: [runKey],
-        reason,
-      },
+      { kind, target: shape, from: existing ?? null, to: accepted, runKeys: [runKey], reason },
     ],
   };
 }
 
-/** Structural problems of the committed references that a schema cannot express. */
+/**
+ * Structural problems of the committed references that a schema cannot
+ * express, and every difference between the stored bounds and the bounds the
+ * history replays to (a hand edit).
+ */
 export function labReferenceProblems(references: LabReferences, steps: readonly LabStep[]): string[] {
   const problems: string[] = [];
   const gated = new Set(references.gatedMetrics.map((entry) => entry.metric));
@@ -621,9 +726,7 @@ export function labReferenceProblems(references: LabReferences, steps: readonly 
       if (budget !== undefined && bound.reference > budget)
         problems.push(`${step.id}: the ${metric} reference ${bound.reference} exceeds its budget ${budget}`);
     }
-    for (const entry of reference.history)
-      if (entry.kind === 'ratchet' && entry.from !== null && entry.to !== null && entry.to > entry.from)
-        problems.push(`${step.id}: a ratchet entry raised ${entry.target} from ${entry.from} to ${entry.to}`);
+    for (const problem of replayProblems(reference)) problems.push(`${step.id}: ${problem}`);
   }
   return problems;
 }

@@ -272,6 +272,18 @@ export const MEASURED_SCENARIOS: readonly MeasuredScenario[] = [
     comparison: 'required',
     description: 'Navigate to /aufgaben as the administrator until the derived tasks are usable.',
   },
+  {
+    id: 'jobs.list.assignment.cross-session',
+    version: 1,
+    boundary: 'before-submit-to-visible',
+    budgetMs: 2_000,
+    profile: 'typical',
+    file: 'tests/audit/performance/lists.spec.ts',
+    samples: 3,
+    comparison: 'required',
+    description:
+      "The office assigns a worker to a job; the administrator's open job list shows the worker on its row.",
+  },
   // The field worker's clock: the tap is acknowledged in the first frames, and
   // the clock then shows the state the server saved.
   {
