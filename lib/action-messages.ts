@@ -21,18 +21,32 @@ function isSharedFailureCode(code: string): code is SharedFailureCode {
   return Object.hasOwn(SHARED_FAILURE_MESSAGES, code);
 }
 
+/** A failure as an action answers it: the code, and the facts beside it. */
+export type FailureFacts = { readonly error: string } & Readonly<Record<string, unknown>>;
+
 /**
- * The sentence for a failure code: the area's own wording first, then the
- * shared sentence, then the caller's fallback. A component lists only the
- * codes its area owns; the shared codes reach every surface from here.
+ * An area's sentence built from the facts a failure carries beside its code;
+ * null when a fact it names is missing, so the shared sentence or the
+ * fallback answers instead.
+ */
+export type FailureSentence = (failure: FailureFacts) => string | null;
+
+/**
+ * The sentence for a failure: the area's own wording first, then the shared
+ * sentence, then the caller's fallback. A component lists only the codes its
+ * area owns; the shared codes reach every surface from here. Pass the whole
+ * failure when an area sentence names facts beside the code.
  */
 export function describeFailure(
-  code: string,
-  areaMessages: Readonly<Partial<Record<string, string>>>,
+  failure: string | FailureFacts,
+  areaMessages: Readonly<Partial<Record<string, string | FailureSentence>>>,
   fallback: string,
 ): string {
+  const facts: FailureFacts = typeof failure === 'string' ? { error: failure } : failure;
+  const code = facts.error;
   const areaMessage = Object.hasOwn(areaMessages, code) ? areaMessages[code] : undefined;
-  if (areaMessage !== undefined) return areaMessage;
+  const areaSentence = typeof areaMessage === 'function' ? areaMessage(facts) : areaMessage;
+  if (areaSentence !== undefined && areaSentence !== null) return areaSentence;
   if (isSharedFailureCode(code)) return SHARED_FAILURE_MESSAGES[code];
   return fallback;
 }

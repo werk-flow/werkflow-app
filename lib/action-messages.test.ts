@@ -2,17 +2,15 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import ts from 'typescript';
-import { SHARED_FAILURE_CODES } from '@/lib/action-result';
-import { SHARED_FAILURE_MESSAGES, describeFailure } from '@/lib/action-messages';
+import { SHARED_FAILURE_MESSAGES, describeFailure, type FailureFacts } from '@/lib/action-messages';
 import { listProductSources, parseProductSource, repositoryRoot } from '@/lib/conventions/product-sources';
 
+// The map's type, a Record over SharedFailureCode, makes a missing or extra code a compile error.
 test('every shared failure code has one German sentence', () => {
-  for (const code of SHARED_FAILURE_CODES) {
-    const message = SHARED_FAILURE_MESSAGES[code];
+  for (const [code, message] of Object.entries(SHARED_FAILURE_MESSAGES)) {
     expect(message, code).toMatch(/^\p{Lu}.*[.!?]$/u);
     expect(message, `${code} must not echo the code`).not.toContain(code);
   }
-  expect(Object.keys(SHARED_FAILURE_MESSAGES).sort()).toEqual([...SHARED_FAILURE_CODES].sort());
 });
 
 test('the area wording wins, then the shared sentence, then the fallback', () => {
@@ -25,6 +23,22 @@ test('the area wording wins, then the shared sentence, then the fallback', () =>
   expect(describeFailure('insert_failed', areaMessages, 'Fehler.')).toBe('Fehler.');
   // An inherited object key is not a message.
   expect(describeFailure('toString', {}, 'Fehler.')).toBe('Fehler.');
+});
+
+test('an area sentence can name the facts a failure carries beside its code', () => {
+  const areaMessages = {
+    name_taken: (failure: FailureFacts) =>
+      typeof failure['name'] === 'string' ? `Der Name „${failure['name']}“ ist vergeben.` : null,
+    invalid_input: () => null,
+  };
+  expect(describeFailure({ error: 'name_taken', name: 'Mia' }, areaMessages, 'Fehler.')).toBe(
+    'Der Name „Mia“ ist vergeben.',
+  );
+  // A missing fact, or only the code, falls back to the shared sentence and then the fallback.
+  expect(describeFailure('name_taken', areaMessages, 'Fehler.')).toBe('Fehler.');
+  expect(describeFailure({ error: 'invalid_input' }, areaMessages, 'Fehler.')).toBe(
+    SHARED_FAILURE_MESSAGES.invalid_input,
+  );
 });
 
 // Tier 2 against dead failure mappings: a code that a message map translates

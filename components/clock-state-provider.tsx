@@ -5,9 +5,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, typ
 import { useOrganization } from '@/components/organization/organization-context';
 import { useLiveView } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
-import { getCurrentClockState } from '@/lib/time-tracking/state-client';
+import { fetchCurrentClockState } from '@/lib/time-tracking/state-client';
 import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
-import { getNonNegativeElapsedMs } from '@/lib/time-tracking/helpers';
+import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { transitionTimeActivity, type TimeTransitionInput } from '@/lib/time-tracking/segment-actions';
 import { createActivitySelection } from '@/lib/time-tracking/segments';
 import type { LiveClockState, TimeActivitySelection, TimeTransitionResult } from '@/lib/time-tracking/types';
@@ -28,10 +28,7 @@ function applyTransitionEcho(
 ): LiveClockState {
   if (result.outcome !== 'active' && result.outcome !== 'ended') return previous;
   const now = new Date().toISOString();
-  const elapsedMinutes =
-    previous.isClockedIn && previous.statusStartedAt
-      ? getNonNegativeElapsedMs(previous.statusStartedAt) / 60_000
-      : 0;
+  const elapsedMinutes = liveMinutes(0, previous.isClockedIn ? previous.statusStartedAt : null);
   const wasBreak = previous.status === 'on_break';
   const previousKind = previous.currentActivity?.kind;
   const countIf = (kind: typeof previousKind) => (previousKind === kind ? elapsedMinutes : 0);
@@ -125,7 +122,7 @@ export function ClockStateProvider({
     eventFilter: (event) => isClockStateEventRelevant(event, activeJobIdRef.current),
     read: async ({ signal }) => {
       if (!activeOrgId) return { ok: true, data: null };
-      const result = await getCurrentClockState(activeOrgId, signal);
+      const result = await fetchCurrentClockState(activeOrgId, signal);
       return result.success ? { ok: true, data: result.state } : { ok: false, error: result.error };
     },
     initialData: initialState && initialState.organizationId === activeOrgId ? initialState : undefined,

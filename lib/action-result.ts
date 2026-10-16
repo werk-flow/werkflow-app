@@ -7,19 +7,16 @@
  * complete, and the last-resort catch. `lib/action-messages.ts` gives each one
  * German sentence, so a component never repeats them.
  */
-export const SHARED_FAILURE_CODES = [
-  'not_authenticated',
-  'no_active_org',
-  'not_a_member',
-  'not_authorized',
-  'invalid_input',
-  'period_closed',
-  'load_failed',
-  'responsibility_load_failed',
-  'unexpected_error',
-] as const;
-
-export type SharedFailureCode = (typeof SHARED_FAILURE_CODES)[number];
+export type SharedFailureCode =
+  | 'not_authenticated'
+  | 'no_active_org'
+  | 'not_a_member'
+  | 'not_authorized'
+  | 'invalid_input'
+  | 'period_closed'
+  | 'load_failed'
+  | 'responsibility_load_failed'
+  | 'unexpected_error';
 
 /**
  * The failure arm of every Server Action and reader result: a stable error

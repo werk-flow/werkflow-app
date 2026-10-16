@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { relative } from 'node:path';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
@@ -13,6 +15,7 @@ import {
   COMPONENT_FILE_LINE_LIMIT,
   FUNCTION_LINE_LIMIT,
   MODULE_LINE_LIMIT,
+  SIZE_CAP_EXCEPTIONS,
 } from './eslint-rules/size-caps.mjs';
 
 // ENFORCEMENT LADDER TIER 2 (docs/decisions/0005-enforcement-ladder.md).
@@ -37,8 +40,11 @@ const authSelectors = [
 
 // The strict zod uuid check (RFC 4122 version and variant nibbles) rejects the
 // hand-made production organization ids, so a validator that used it returned
-// invalid_input for those tenants without logging. The app-wide validator is uuidSchema in lib/validation/uuid.ts, the one file
-// exempt from this rule.
+// invalid_input for those tenants without logging. A hand-written uuid regex
+// drifts the same way (a strict one refused production timeline cursors). The
+// app-wide validator is uuidSchema or isUuid in lib/validation/uuid.ts, whose
+// named exception follows the product block; the Deno edge functions, which
+// cannot import it, keep only the zod bans.
 const uuidSelectors = [
   {
     selector:
@@ -50,6 +56,12 @@ const uuidSelectors = [
     selector: 'CallExpression[callee.object.name="z"][callee.property.name="uuid"]',
     message:
       "z.uuid() is strict RFC 4122 and rejects real production ids. Import { uuidSchema } from '@/lib/validation/uuid'.",
+  },
+  {
+    // A regex literal with an eight-character group followed by a dash, in any spelling of the hex class.
+    selector: 'Literal[regex.pattern=/\\{8\\}(?:\\(\\?:)?-/]',
+    message:
+      "A hand-written uuid pattern drifts from the app-wide rule and can refuse real production ids. Use isUuid or uuidSchema from '@/lib/validation/uuid'.",
   },
 ];
 
@@ -536,13 +548,34 @@ const dateTextSelectors = [
   },
 ];
 
-// A clock time has one home: an inline toLocaleTimeString copy drifts to the
-// browser's time zone and renders differently on the server (code-quality.md).
+// Dates and clock times have two homes: lib/date-time/berlin.ts owns the
+// Europe/Berlin zone and its date arithmetic, lib/utils.ts the German labels.
+// An inline toLocale*String or Intl.DateTimeFormat copy drifts to the
+// browser's or the server's time zone and from the other copies
+// (code-quality.md). A toLocaleString call counts when it passes a date
+// option; number formatting stays free. The zone may appear as a type.
+const dateTimeHomes = ['lib/utils.ts', 'lib/date-time/berlin.ts'];
+const dateTimeLabelMessage =
+  'Format a date or time with formatBerlin(value, style), formatBerlinTime or formatGermanDate (lib/utils), or formatLocalCalendarDay for a local calendar day; toLocalTimeOfDay for a time input value. One home per formatter (code-quality.md).';
 const timeOfDaySelectors = [
   {
-    selector: 'CallExpression[callee.property.name="toLocaleTimeString"]',
+    selector: 'CallExpression[callee.property.name=/^toLocale(Date|Time)String$/]',
+    message: dateTimeLabelMessage,
+  },
+  {
+    selector:
+      'CallExpression[callee.property.name="toLocaleString"]:has(Property[key.name=/^(era|year|month|day|weekday|hour|minute|second|dateStyle|timeStyle|timeZone|timeZoneName|hour12|hourCycle)$/])',
+    message: dateTimeLabelMessage,
+  },
+  {
+    selector:
+      ':matches(NewExpression, CallExpression)[callee.object.name="Intl"][callee.property.name="DateTimeFormat"]',
+    message: dateTimeLabelMessage,
+  },
+  {
+    selector: ':not(TSLiteralType) > Literal[value="Europe/Berlin"]',
     message:
-      'Format a clock time with formatBerlinTime (lib/utils), or toLocalTimeOfDay for a time input value; one home per formatter (code-quality.md).',
+      'The zone has one home: BERLIN_TIME_ZONE and the Berlin date helpers in lib/date-time/berlin.ts (getBusinessTodayIso, formatBerlinLocalDate, resolveBerlinWallTime, addLocalDays).',
   },
 ];
 
@@ -895,6 +928,19 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
   ];
 }
 
+// Type assertions (`value as T`, `<T>value`) are banned; `as const` stays
+// allowed. The files that still carry assertions are listed with their count
+// in eslint-rules/type-assertion-ratchet.json: the rule is off for them, and
+// lib/conventions/type-assertions.test.ts fails when a listed count grows, when
+// it falls without the file being lowered, or when a listed file has none left.
+const typeAssertionRatchet = JSON.parse(
+  readFileSync(new URL('./eslint-rules/type-assertion-ratchet.json', import.meta.url), 'utf8'),
+);
+const ratchetedAssertionFiles = new Set(Object.keys(typeAssertionRatchet));
+// A function matcher: the listed paths hold glob characters such as (app) and [jobId].
+const isRatchetedAssertionFile = (filePath) =>
+  ratchetedAssertionFiles.has(relative(import.meta.dirname, filePath).replaceAll('\\', '/'));
+
 const eslintConfig = defineConfig([
   // `bun run lint` fails on any warning (--max-warnings 0), so a preset
   // warning is a gate failure. Next's preset reports some rules as warnings, among them
@@ -932,6 +978,18 @@ const eslintConfig = defineConfig([
       'no-useless-escape': 'error',
     },
   },
+  // The Deno edge functions have their own module graph and cannot import
+  // lib/validation/uuid.ts; mail-delivery checks a mail provider's message id,
+  // not a database id. They keep every other always-on selector.
+  {
+    files: ['supabase/functions/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...alwaysOnSelectors.filter(({ selector }) => !selector.startsWith('Literal[regex')),
+      ],
+    },
+  },
   // Lint suppressions name their rule and carry a `-- reason`; a directive
   // that no longer suppresses anything is an error.
   {
@@ -953,10 +1011,54 @@ const eslintConfig = defineConfig([
       '@typescript-eslint/explicit-module-boundary-types': 'error',
     },
   },
-  // Size limits (eslint-rules/size-caps.mjs): modules stay under 2,000 raw
-  // lines, component and route files under 500, functions under 200 lines
-  // without blanks and comments. No file is exempt;
-  // lib/conventions/module-caps.test.ts refuses a directive that disables them.
+  // Type-aware rules (the TypeScript project service reads tsconfig.json), for
+  // product code, tests and scripts alike. The Deno edge functions under
+  // supabase/functions have their own module graph outside tsconfig.json.
+  // - switch-exhaustiveness-check: a switch over a union names every member;
+  //   a `default` does not count, so a new member fails where it is not handled.
+  // - no-floating-promises: an unawaited promise loses its rejection. Bun's
+  //   `mock.module` returns a promise only for an async factory, which no test uses.
+  {
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['supabase/functions/**'],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: {
+      '@typescript-eslint/switch-exhaustiveness-check': [
+        'error',
+        {
+          allowDefaultCaseForExhaustiveSwitch: true,
+          considerDefaultExhaustiveForUnions: false,
+          requireDefaultForNonUnion: false,
+        },
+      ],
+      '@typescript-eslint/no-floating-promises': [
+        'error',
+        { allowForKnownSafeCalls: [{ from: 'package', package: 'bun:test', name: 'module' }] },
+      ],
+    },
+  },
+  {
+    files: ['**/*.{ts,tsx}'],
+    rules: {
+      '@typescript-eslint/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
+    },
+  },
+  ...(ratchetedAssertionFiles.size
+    ? [
+        {
+          files: [isRatchetedAssertionFile],
+          rules: { '@typescript-eslint/consistent-type-assertions': 'off' },
+        },
+      ]
+    : []),
+  // Size limits (eslint-rules/size-caps.mjs): modules stay under 800 raw
+  // lines, component and route files under 500, functions under 80 lines
+  // without blanks and comments (quality/function-size). The modules and
+  // functions that predate these caps are listed with their ceiling in
+  // eslint-rules/size-cap-exceptions.json; lib/conventions/module-caps.test.ts
+  // fails on a stale entry and refuses a directive that disables a size rule.
   {
     files: productFiles,
     ignores: ['lib/supabase/database.types.ts'],
@@ -970,13 +1072,22 @@ const eslintConfig = defineConfig([
       'max-lines': ['error', { max: COMPONENT_FILE_LINE_LIMIT, skipBlankLines: false, skipComments: false }],
     },
   },
+  // A listed module keeps its recorded ceiling (a function matcher: the paths
+  // hold glob characters such as (app) and [jobId]).
+  ...Object.entries(SIZE_CAP_EXCEPTIONS.modules).map(([file, ceiling]) => ({
+    files: [(filePath) => relative(import.meta.dirname, filePath).replaceAll('\\', '/') === file],
+    rules: {
+      'max-lines': ['error', { max: ceiling, skipBlankLines: false, skipComments: false }],
+    },
+  })),
   {
     files: productFiles,
     ignores: ['**/*.test.*'],
+    plugins: { quality: qualityRules },
     rules: {
-      'max-lines-per-function': [
+      'quality/function-size': [
         'error',
-        { max: FUNCTION_LINE_LIMIT, skipBlankLines: true, skipComments: true },
+        { max: FUNCTION_LINE_LIMIT, exceptions: SIZE_CAP_EXCEPTIONS.functions },
       ],
     },
   },
@@ -987,13 +1098,6 @@ const eslintConfig = defineConfig([
     files: [...productFiles, 'proxy.ts', 'tests/**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'error',
-    },
-  },
-  // The one home of the permissive uuid validator may use zod's primitives.
-  {
-    files: ['lib/validation/uuid.ts'],
-    rules: {
-      'no-restricted-syntax': ['error', ...authSelectors],
     },
   },
   // Tests: auth scope + prod-ref quarantine (scripts stay exempt from the
@@ -1083,6 +1187,13 @@ const eslintConfig = defineConfig([
       'no-restricted-imports': importRestrictions({ realtimeHooks: false }),
     },
   },
+  // The one home of the permissive uuid validator spells its pattern and uses zod's primitives.
+  {
+    files: ['lib/validation/uuid.ts'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({ allow: uuidSelectors }),
+    },
+  },
   // Logs without personal data (AGENTS.md "3. Security"). A provider or
   // Postgres error object carries messages, details and request data that can
   // quote row values or email addresses. Product code logs only through
@@ -1111,11 +1222,12 @@ const eslintConfig = defineConfig([
       'quality/no-silent-catch': 'error',
     },
   },
-  // Test doubles under lib/ may build partial fixtures through a double cast.
+  // Test doubles under lib/ may build partial fixtures through a double cast,
+  // and pin the zone or rebuild a replaced formatter as a reference value.
   {
     files: ['lib/**/*.test.{ts,tsx}'],
     rules: {
-      'no-restricted-syntax': productRestrictions({ allow: doubleCastSelectors }),
+      'no-restricted-syntax': productRestrictions({ allow: [...doubleCastSelectors, ...timeOfDaySelectors] }),
     },
   },
   // Product JSX outside the registry itself additionally carries the registry
@@ -1217,6 +1329,13 @@ const eslintConfig = defineConfig([
     ],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: shellSelectors }),
+    },
+  },
+  // The two date and time homes keep every other product rule.
+  {
+    files: dateTimeHomes,
+    rules: {
+      'no-restricted-syntax': productRestrictions({ allow: timeOfDaySelectors }),
     },
   },
   // No product surface registers its own catch-up listeners. Named

@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  formatBerlin,
   formatBerlinDateTime,
   formatBerlinTime,
+  formatLocalCalendarDay,
   formatGermanDate,
   formatGermanDateRange,
   formatGermanDateTime,
@@ -9,6 +11,7 @@ import {
   parseIsoLocalDate,
   toLocalDateString,
   toLocalTimeOfDay,
+  type BerlinLabelStyle,
 } from './utils';
 
 // The component copies these helpers replaced on 2026-10-01, kept here as the
@@ -128,6 +131,102 @@ describe('formatBerlinTime', () => {
   test('keeps the Berlin hour across the daylight-saving switch', () => {
     expect(formatBerlinTime('2026-03-29T00:59:00.000Z')).toBe('01:59');
     expect(formatBerlinTime('2026-03-29T01:00:00.000Z')).toBe('03:00');
+  });
+});
+
+describe('formatBerlin', () => {
+  const instants = [
+    '2026-09-03T08:15:00.000Z',
+    '2026-09-03T22:30:00.000Z',
+    '2026-03-29T00:59:00.000Z',
+    '2026-03-29T01:00:00.000Z',
+    '2026-10-25T00:30:00.000Z',
+    '2026-12-31T23:30:00.000Z',
+  ];
+  // The inline copies the styles replaced on 2026-10-16, pinned to Berlin:
+  // each style renders the same text for every instant.
+  const replacedOptions: Record<BerlinLabelStyle, Intl.DateTimeFormatOptions> = {
+    numericDate: {},
+    date: { day: '2-digit', month: '2-digit', year: 'numeric' },
+    shortYearDate: { day: '2-digit', month: '2-digit', year: '2-digit' },
+    compactDate: { day: 'numeric', month: 'numeric', year: '2-digit' },
+    longDate: { dateStyle: 'long' },
+    weekdayDayMonth: { weekday: 'short', day: '2-digit', month: '2-digit' },
+    weekdayDate: { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' },
+    longWeekdayDate: { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' },
+    monthYear: { month: 'long', year: 'numeric' },
+    shortMonthYear: { month: 'short', year: 'numeric' },
+    shortMonth: { month: 'short' },
+    time: { hour: '2-digit', minute: '2-digit' },
+    dayMonthTime: { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' },
+    shortDateTime: { dateStyle: 'short', timeStyle: 'short' },
+    dateTime: { dateStyle: 'medium', timeStyle: 'short' },
+    weekdayDateTime: {
+      weekday: 'short',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+    longWeekdayDateTime: {
+      weekday: 'long',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    },
+  };
+
+  test('every style renders the Berlin wall clock like the replaced copy', () => {
+    const isStyle = (key: string): key is BerlinLabelStyle => key in replacedOptions;
+    for (const style of Object.keys(replacedOptions).filter(isStyle)) {
+      const reference = new Intl.DateTimeFormat('de-DE', {
+        ...replacedOptions[style],
+        timeZone: 'Europe/Berlin',
+      });
+      for (const instant of instants) {
+        expect(formatBerlin(instant, style), `${style} ${instant}`).toBe(reference.format(new Date(instant)));
+        expect(formatBerlin(new Date(instant), style)).toBe(reference.format(new Date(instant)));
+      }
+    }
+  });
+
+  test('renders the sample text of each style', () => {
+    const instant = '2026-09-03T08:15:00.000Z';
+    expect(formatBerlin(instant, 'numericDate')).toBe('3.9.2026');
+    expect(formatBerlin(instant, 'date')).toBe('03.09.2026');
+    expect(formatBerlin(instant, 'shortYearDate')).toBe('03.09.26');
+    expect(formatBerlin(instant, 'longDate')).toBe('3. September 2026');
+    expect(formatBerlin(instant, 'weekdayDate')).toBe('Do., 03.09.2026');
+    expect(formatBerlin(instant, 'longWeekdayDateTime')).toBe('Donnerstag, 03.09.2026, 10:15');
+    expect(formatBerlin(instant, 'dayMonthTime')).toBe('03.09., 10:15');
+  });
+
+  test('a calendar date renders as that date, like the noon and local-midnight copies', () => {
+    for (const date of ['2026-01-01', '2026-03-29', '2026-09-03', '2026-10-25', '2026-12-31']) {
+      expect(formatBerlin(date, 'numericDate')).toBe(
+        new Intl.DateTimeFormat('de-DE', { timeZone: 'Europe/Berlin' }).format(new Date(`${date}T12:00:00Z`)),
+      );
+      expect(formatBerlin(date, 'date')).toBe(formatGermanDate(date));
+      expect(formatBerlin(date, 'monthYear')).toBe(
+        new Intl.DateTimeFormat('de-DE', {
+          month: 'long',
+          year: 'numeric',
+          timeZone: 'Europe/Berlin',
+        }).format(new Date(`${date}T12:00:00.000Z`)),
+      );
+    }
+  });
+
+  test('a local calendar day keeps its own day', () => {
+    const localMidnight = new Date(2026, 8, 3);
+    expect(formatLocalCalendarDay(localMidnight, 'compactDate')).toBe(
+      localMidnight.toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric', year: '2-digit' }),
+    );
+    expect(formatLocalCalendarDay(localMidnight, 'shortMonthYear')).toBe('Sept. 2026');
+    expect(formatLocalCalendarDay(new Date(2026, 8, 3, 23, 59), 'numericDate')).toBe('3.9.2026');
   });
 });
 

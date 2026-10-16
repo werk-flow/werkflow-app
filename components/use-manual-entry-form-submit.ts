@@ -4,15 +4,21 @@ import { useState } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
-import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
-import { addManualEntry, getTimeEntries } from '@/lib/time-tracking/actions';
+import { describeFailure, SHARED_FAILURE_MESSAGES, type FailureSentence } from '@/lib/action-messages';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import { addManualEntry } from '@/lib/time-tracking/entry-write-actions';
 import { isDateInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 import { validateManualEntries } from '@/lib/time-tracking/validation';
+import {
+  describeTimeValidationFailure,
+  TIME_VALIDATION_MESSAGES,
+} from '@/lib/time-tracking/validation-messages';
 import type { ManualEntryInput, TimeEntry } from '@/lib/time-tracking/types';
 import { toLocalDateString } from '@/lib/utils';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 
-const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Record<string, string>> = {
+const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | FailureSentence>>> = {
+  ...TIME_VALIDATION_MESSAGES,
   target_not_a_member: 'Der ausgewählte Mitarbeiter ist kein Mitglied dieser Organisation.',
   validation_failed: 'Die Validierung ist fehlgeschlagen.',
   insert_failed: 'Der Eintrag konnte nicht gespeichert werden.',
@@ -126,7 +132,7 @@ export function useManualEntrySubmit({
           allowFutureTimestamps: isAdmin,
         });
         if (!validationResult.valid) {
-          setError(validationResult.error || 'Validierung fehlgeschlagen.');
+          setError(describeTimeValidationFailure(validationResult.failure));
           return;
         }
 
@@ -166,7 +172,7 @@ export function useManualEntrySubmit({
           } else {
             setError(
               describeFailure(
-                result.error,
+                result,
                 MANUAL_ENTRY_ERROR_MESSAGES,
                 'Der Eintrag konnte nicht gespeichert werden.',
               ),

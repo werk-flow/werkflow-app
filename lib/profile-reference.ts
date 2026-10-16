@@ -15,6 +15,16 @@ export type ProfileReference = {
   avatarPath: string | null;
 };
 
+/** The signed-in user's own profile, as the app shell reads it and the profile context holds it. */
+export type UserProfile = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarPath: string | null;
+  avatarUrl: string | null;
+};
+
 /** The reference for a loaded profile row; a missing row (deleted or unreadable profile) is null. */
 export function toProfileReference(profile?: ProfileReferenceRow | null): ProfileReference | null {
   if (!profile) return null;
