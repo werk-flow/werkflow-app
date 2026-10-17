@@ -22,7 +22,6 @@ import {
   JobPickerOptionList,
   type PickerJob,
 } from '@/components/job-picker-modal-options';
-import { Spinner } from '@/components/ui/spinner';
 import { PICKER_PAGE_SIZE } from '@/lib/time-tracking/picker-types';
 
 const NO_JOBS: PickerJob[] = [];
@@ -149,8 +148,8 @@ export function JobPickerModal({
       <DialogContent size="md">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
-              <Briefcase className="h-4 w-4 text-primary" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Briefcase className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             </div>
             <div>
               <DialogTitle>{title}</DialogTitle>
@@ -222,16 +221,13 @@ export function JobPickerModal({
             <Button
               type="submit"
               className="flex-1 select-none sm:flex-initial"
+              pending={isPending}
               // eslint-disable-next-line ui/submit-disabled-only-while-pending -- no field to fill: switching to the job that is already running is not an action
               disabled={
-                isPending ||
-                isStatusLoading ||
-                (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))
+                isStatusLoading || (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))
               }
             >
-              {isPending ? (
-                <Spinner className="mr-2 h-4 w-4" />
-              ) : mode === 'switch' ? (
+              {mode === 'switch' ? (
                 <ArrowLeftRight className="mr-2 h-4 w-4" />
               ) : (
                 <Play className="mr-2 h-4 w-4" />

@@ -14,6 +14,7 @@ import {
   TIME_VALIDATION_MESSAGES,
 } from '@/lib/time-tracking/validation-messages';
 import type { ManualEntryInput, TimeEntry } from '@/lib/time-tracking/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 
@@ -23,6 +24,10 @@ const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | Fail
   validation_failed: 'Die Validierung ist fehlgeschlagen.',
   insert_failed: 'Der Eintrag konnte nicht gespeichert werden.',
 };
+
+type ManualEntryFieldErrors = { member: string | undefined; date: string | undefined };
+
+const NO_MANUAL_ENTRY_FIELD_ERRORS: ManualEntryFieldErrors = { member: undefined, date: undefined };
 
 /** Validates the manual entry form, saves the entries and reports the outcome. */
 export function useManualEntrySubmit({
@@ -58,28 +63,34 @@ export function useManualEntrySubmit({
   handleSubmit: (e: React.FormEvent) => Promise<void>;
   isPending: boolean;
   error: string | null;
-  fieldErrors: { member?: string; date?: string };
+  fieldErrors: ManualEntryFieldErrors;
 } {
   const { run: runPendingTask, isPending } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{ member?: string; date?: string }>({});
+  const [fieldErrors, setFieldErrors] = useState<ManualEntryFieldErrors>(NO_MANUAL_ENTRY_FIELD_ERRORS);
   const { showBanner } = useBanner();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setFieldErrors({});
+    setFieldErrors(NO_MANUAL_ENTRY_FIELD_ERRORS);
 
     if (!activeOrgId) {
       setError('Keine Organisation ausgewählt.');
       return;
     }
 
-    if (isAdminOrManager && !selectedUserId) {
-      setFieldErrors({ member: 'Bitte wähle einen Mitarbeiter aus.' });
-      document.getElementById('manual-entry-member')?.focus();
-      return;
-    }
+    const memberError =
+      isAdminOrManager && !selectedUserId ? 'Bitte wähle einen Mitarbeiter aus.' : undefined;
+    const dateIso = selectedDate ? toLocalDateString(selectedDate) : null;
+    const dateError = !dateIso
+      ? 'Bitte wähle ein gültiges Datum.'
+      : isDateInClosedPeriod(dateIso, closedPeriods)
+        ? SHARED_FAILURE_MESSAGES.period_closed
+        : undefined;
+    setFieldErrors({ member: memberError, date: dateError });
+    const errorsById = { 'manual-entry-member': memberError, 'manual-entry-date': dateError };
+    if (focusFirstInvalidField(errorsById) || !dateIso) return;
 
     const targetUserId = isAdminOrManager ? selectedUserId : currentUserId;
     if (!targetUserId) {
@@ -87,18 +98,6 @@ export function useManualEntrySubmit({
       return;
     }
 
-    if (!selectedDate) {
-      setFieldErrors({ date: 'Bitte ein gültiges Datum wählen.' });
-      document.getElementById('manual-entry-date')?.focus();
-      return;
-    }
-
-    const dateIso = toLocalDateString(selectedDate);
-    if (isDateInClosedPeriod(dateIso, closedPeriods)) {
-      setFieldErrors({ date: SHARED_FAILURE_MESSAGES.period_closed });
-      document.getElementById('manual-entry-date')?.focus();
-      return;
-    }
     const entries: ManualEntryInput[] = [];
 
     if (entryMode === 'clock_in' || entryMode === 'both') {

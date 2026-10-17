@@ -20,7 +20,6 @@ import {
 import { useManualEntryMembers } from '@/components/use-manual-entry-form-members';
 import { useManualEntrySubmit } from '@/components/use-manual-entry-form-submit';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
-import { Spinner } from '@/components/ui/spinner';
 
 type OrgMember = CalendarEntryDialogMember;
 type JobOption = CalendarEntryDialogJobOption;
@@ -166,15 +165,8 @@ export function ManualEntryFormContent({
         ) : null}
       </DialogBody>
       <DialogFooter>
-        <Button type="submit" className="h-11 sm:h-9" disabled={isPending}>
-          {isPending ? (
-            <>
-              <Spinner className="mr-2 h-4 w-4" />
-              Speichern…
-            </>
-          ) : (
-            'Speichern'
-          )}
+        <Button type="submit" className="h-11 sm:h-9" pending={isPending}>
+          {isPending ? 'Speichern…' : 'Speichern'}
         </Button>
       </DialogFooter>
     </form>

@@ -1,6 +1,10 @@
 import { test } from '../support/fixtures';
 import { ACCEPTANCE_SETS } from '../support/acceptance-sets';
-import { captureAcceptance, settleAcceptanceEntries } from '../support/acceptance-captures';
+import {
+  captureAcceptance,
+  captureStandalone,
+  settleAcceptanceEntries,
+} from '../support/acceptance-captures';
 
 // Rendered acceptance captures (docs/technical/standards-audit.md, "Rendered
 // design acceptance"): one test per capture of an open set, run on request
@@ -21,6 +25,10 @@ for (const set of ACCEPTANCE_SETS) {
     for (const capture of set.captures.filter((spec) => spec.role === 'employee'))
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ employeePage, world, businessDate }, testInfo) => {
         await captureAcceptance({ page: employeePage, world, businessDate, testInfo }, set.id, capture);
+      });
+    for (const capture of set.standalone)
+      test(`@ACCEPT ${set.id} ${capture.id}`, async ({ browser, baseURL, world }, testInfo) => {
+        await captureStandalone({ browser, baseURL, world, testInfo }, set.id, capture);
       });
   });
 }

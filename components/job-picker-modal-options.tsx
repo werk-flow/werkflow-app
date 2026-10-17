@@ -4,6 +4,7 @@ import { Fragment } from 'react';
 import { Check } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,6 +24,17 @@ export function JobPickerLoadingRows() {
         </div>
       ))}
     </div>
+  );
+}
+
+function JobPickerEmptyState({ searchQuery }: { searchQuery: string }) {
+  return searchQuery ? (
+    <EmptyState title="Keine Aufträge gefunden" description="Prüfe die Schreibweise oder leere die Suche." />
+  ) : (
+    <EmptyState
+      title="Noch keine Aufträge verfügbar"
+      description="Sobald dir ein Auftrag zur Verfügung steht, kannst du ihn hier wählen."
+    />
   );
 }
 
@@ -123,11 +135,7 @@ export function JobPickerOptionList({
           Aufträge konnten nicht geladen werden.
         </SectionError>
       ) : filteredJobs.length === 0 && !isLoading ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-muted-foreground">
-            {searchQuery ? 'Keine Aufträge gefunden' : 'Keine Aufträge verfügbar'}
-          </p>
-        </div>
+        <JobPickerEmptyState searchQuery={searchQuery} />
       ) : null}
       {onLoadMore && !loadFailed ? (
         <Button

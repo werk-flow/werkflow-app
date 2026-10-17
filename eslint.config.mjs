@@ -359,6 +359,45 @@ const headingSelectors = [
   },
 ];
 
+// One main landmark per screen (axe landmark-no-duplicate-main): the app
+// shell and StandaloneScreen render it, a page renders its content inside.
+// A service case detail and the prestart onboarding page each nested a
+// second <main> (UI audit of 2026-10-15).
+const landmarkSelectors = [
+  {
+    selector: 'JSXOpeningElement[name.name="main"]',
+    message:
+      'The app shell and StandaloneScreen own the one <main> landmark of a screen; render a <div> or <section> inside (werkflow-design skill: Density and layout).',
+  },
+];
+
+// An invalid submit marks its fields and focuses the first through
+// focusFirstInvalidField (lib/ui/field-validation.ts), the one home of focus
+// by control id. 63 validation paths focused a control by hand, one of them a
+// recipient picker whose message showed in the submit error instead of its
+// Field (UI audit of 2026-10-15).
+const validationFocusSelectors = [
+  {
+    selector:
+      'CallExpression[callee.property.name="focus"][callee.object.callee.property.name=/^(getElementById|querySelector)$/]',
+    message:
+      'Focus a field through focusFirstInvalidField (lib/ui/field-validation) with the error on its Field; the submit stays enabled (werkflow-design skill: Forms).',
+  },
+];
+
+// A running action is `Button pending` (components/ui/button), which disables
+// the button, sets aria-busy and puts the spinner in the leading icon's place.
+// A Spinner swapped in by hand drifts from it (the field work pack's clock
+// button, UI audit of 2026-10-15).
+const buttonSpinnerSelectors = [
+  {
+    selector:
+      'JSXElement[openingElement.name.name=/^(Button|PlainButton|AlertDialogAction|AlertDialogCancel)$/] JSXOpeningElement[name.name="Spinner"]',
+    message:
+      'A running action is `Button pending={flag}` with its plain icon: the button shows the spinner in the icon place itself (werkflow-design skill: Loading states).',
+  },
+];
+
 // Dialog widths are the `size` prop of DialogContent (components/ui/dialog),
 // so dialogs cannot drift into arbitrary widths. The two full-window viewers override the width with
 // `!max-w-none`, which this pattern leaves alone.
@@ -443,37 +482,42 @@ const scrollSelectors = [
   },
 ];
 
+// Class-string bans of the styling canon, each in its Literal and its
+// TemplateElement spelling, for every product file (the registry included):
+// - viewport heights: `h-screen` and any `vh` length (`max-h-[80vh]`,
+//   `calc(100vh-3rem)`) crop a phone page behind the browser chrome; the
+//   dynamic units (`dvh`) follow it. A bottom sheet at `max-h-[80vh]` and the
+//   document library's `100vh` floor were found by the UI audit of 2026-10-15.
+// - radius: the scale stops at rounded-lg for every corner (`rounded-t-xl`,
+//   `rounded-[4px]` and the 2xl/3xl spellings were all in use).
+// - hex: an arbitrary hex value under any utility (`shadow-[#…]`,
+//   `from-[#…]`) or arbitrary property (`[color:#…]`).
+// - type scale: an arbitrary font size (`text-[10px]`, 88 sites below 12 px)
+//   leaves the scale, whose smallest step is text-xs.
+// - focus: the field border stays neutral while the ring shows focus, so no
+//   `focus…:border-ring` or `border-primary` on focus.
+const viewportHeightMessage =
+  'Viewport-height layouts use dynamic viewport units (h-dvh, min-h-dvh, max-h-[80dvh]) so mobile browser chrome cannot crop or extend the page (werkflow-design skill: Density and layout).';
+const radiusMessage =
+  'The radius scale stops at rounded-lg for containers and rounded-md for controls, on every corner; rounded-full stays for avatars, dots and count badges (werkflow-design skill: Shape, depth, and focus).';
+const hexClassMessage =
+  'Arbitrary hex color classes are banned — use the tokens in app/globals.css (werkflow-design skill: color system).';
+const typeScaleMessage =
+  'An arbitrary font size leaves the type scale: the smallest step is text-xs (12 px); hierarchy comes from weight and muted color (werkflow-design skill: Shape, depth, and focus).';
+const focusBorderMessage =
+  'Focus is one 2px ring with a neutral field border: drop the focus border color (werkflow-design skill: Shape, depth, and focus).';
+const classBans = [
+  [String.raw`h-screen|[0-9]vh\b`, viewportHeightMessage],
+  [String.raw`(^|[\s:!])rounded(-[a-z]{1,2})?-([2-4]?xl|\[)`, radiusMessage],
+  [String.raw`-\[#|\[[a-z-]+:#`, hexClassMessage],
+  [String.raw`(^|[\s:!])text-\[[0-9.]+(px|rem|em)?\]`, typeScaleMessage],
+  [String.raw`(focus|focus-visible|focus-within|has-focus):border-(ring|primary)`, focusBorderMessage],
+];
 const stylingSelectors = [
-  {
-    selector: 'Literal[value=/h-screen/]',
-    message:
-      'Viewport-height layouts use h-dvh/min-h-dvh so mobile browser chrome cannot crop or extend the page (werkflow-design skill: Density and layout).',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/h-screen/]',
-    message:
-      'Viewport-height layouts use h-dvh/min-h-dvh so mobile browser chrome cannot crop or extend the page (werkflow-design skill: Density and layout).',
-  },
-  {
-    selector: 'Literal[value=/rounded-(2xl|3xl)/]',
-    message:
-      'The radius scale stops at rounded-lg for containers (werkflow-design skill: shape and depth). rounded-2xl+ is off-canon.',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/rounded-(2xl|3xl)/]',
-    message:
-      'The radius scale stops at rounded-lg for containers (werkflow-design skill: shape and depth). rounded-2xl+ is off-canon.',
-  },
-  {
-    selector: 'Literal[value=/(bg|text|border|ring|fill|stroke)-\\[#/]',
-    message:
-      'Arbitrary hex color classes are banned — use the tokens in app/globals.css (werkflow-design skill: color system).',
-  },
-  {
-    selector: 'TemplateElement[value.raw=/(bg|text|border|ring|fill|stroke)-\\[#/]',
-    message:
-      'Arbitrary hex color classes are banned — use the tokens in app/globals.css (werkflow-design skill: color system).',
-  },
+  ...classBans.flatMap(([pattern, message]) => [
+    { selector: `Literal[value=/${pattern}/]`, message },
+    { selector: `TemplateElement[value.raw=/${pattern}/]`, message },
+  ]),
   {
     selector: 'Literal[value=/bg-gradient-/]',
     message:
@@ -902,6 +946,9 @@ function productRestrictions({ jsx = false, allow = [] } = {}) {
             ...focusRingSelectors,
             ...paletteSelectors,
             ...headingSelectors,
+            ...landmarkSelectors,
+            ...validationFocusSelectors,
+            ...buttonSpinnerSelectors,
             ...dialogSizeSelectors,
             ...dialogFocusSelectors,
             ...textLinkSelectors,
@@ -1269,11 +1316,15 @@ const eslintConfig = defineConfig([
   },
   // Product JSX outside the registry itself additionally carries the registry
   // bans (the ui/ primitives legitimately implement what others must not).
+  // The class-string modules beside the components (`status-classes.ts`, the
+  // form hooks) carry the same set: a palette class or a hand-rolled focus in
+  // a .ts module reaches the screen like one in a .tsx file.
   {
-    files: ['app/**/*.tsx', 'components/**/*.tsx'],
+    files: ['app/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}'],
     ignores: ['components/ui/**', 'components/shared/page-shell.tsx'],
     plugins: { ui: uiRules },
     rules: {
+      'ui/no-raw-code-fallback': 'error',
       'ui/label-in-spaced-container': 'error',
       'ui/no-lucide-stroke-width': 'error',
       'ui/submit-disabled-only-while-pending': 'error',
@@ -1318,18 +1369,13 @@ const eslintConfig = defineConfig([
       'ui/no-derived-state-effect': ['error', { exceptions: derivedStateEffectExceptions }],
     },
   },
-  // The page title's one home, the calendar header (it stays inside its data
-  // boundary and renders the canonical title style itself), and the
-  // full-screen states that render outside the app shell and its PageHeader.
+  // The page title's one home and the calendar header (it stays inside its
+  // data boundary and renders the canonical title style itself). A screen
+  // outside the app shell takes its title from StandaloneTitle
+  // (components/shared/standalone-screen.tsx, below): five title styles had
+  // drifted apart there (UI audit of 2026-10-15).
   {
-    files: [
-      'components/shared/page-header.tsx',
-      'components/kalender/calendar-header.tsx',
-      'app/not-found.tsx',
-      'app/invite-error/**/*.tsx',
-      'app/onboarding/**/*.tsx',
-      'app/upgrade/**/*.tsx',
-    ],
+    files: ['components/shared/page-header.tsx', 'components/kalender/calendar-header.tsx'],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: headingSelectors }),
     },
@@ -1349,23 +1395,45 @@ const eslintConfig = defineConfig([
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: transitionSelectors }),
     },
   },
-  // The named floating layers keep every other product rule.
+  // The named floating layers keep every other product rule. The app shell
+  // also owns the main landmark of every authenticated page.
   {
     files: floatingLayerFiles,
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: floatingSelectors }),
     },
   },
-  // The page-shell primitive is the one home of the column literals the
-  // shellSelectors ban; it keeps every other product rule.
   {
-    files: [
-      'components/shared/page-shell.tsx',
-      'components/shared/standalone-screen.tsx',
-      'components/shared/section-title.tsx',
-    ],
+    files: ['components/sidebar/app-shell.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({
+        jsx: true,
+        allow: [...floatingSelectors, ...landmarkSelectors],
+      }),
+    },
+  },
+  {
+    files: ['components/sidebar/app-shell-skeleton.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({ jsx: true, allow: landmarkSelectors }),
+    },
+  },
+  // The page-shell primitive is the one home of the column literals the
+  // shellSelectors ban; it keeps every other product rule. StandaloneScreen
+  // also owns the main landmark and the title of a screen outside the shell.
+  {
+    files: ['components/shared/page-shell.tsx', 'components/shared/section-title.tsx'],
     rules: {
       'no-restricted-syntax': productRestrictions({ jsx: true, allow: shellSelectors }),
+    },
+  },
+  {
+    files: ['components/shared/standalone-screen.tsx'],
+    rules: {
+      'no-restricted-syntax': productRestrictions({
+        jsx: true,
+        allow: [...shellSelectors, ...headingSelectors, ...landmarkSelectors],
+      }),
     },
   },
   // The two date and time homes keep every other product rule.

@@ -29,7 +29,6 @@ import {
 } from '@/lib/time-tracking/clock-actions';
 import type { TimeTransitionResult } from '@/lib/time-tracking/types';
 import { cn } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
 
 const ICONS: Record<ClockActionIcon, typeof Play> = {
   work: BriefcaseBusiness,
@@ -188,10 +187,10 @@ export function ClockActionList({
                 action.kind === 'more' && 'text-muted-foreground',
               )}
               disabled={busy}
-              aria-busy={pendingId === action.id || undefined}
+              pending={pendingId === action.id}
               onClick={() => activate(action)}
             >
-              {pendingId === action.id ? <Spinner className="size-5" /> : <Icon className="size-5" />}
+              <Icon className="size-5" />
               <span className="min-w-0 flex-1 truncate">{action.label}</span>
             </Button>
           );

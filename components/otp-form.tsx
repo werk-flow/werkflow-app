@@ -5,7 +5,8 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
@@ -103,7 +104,7 @@ export function OTPForm({ email, inviteCode, className, ...props }: OTPFormProps
   return (
     <Card className={className} {...props}>
       <CardHeader>
-        <CardTitle>Verifizierungscode eingeben</CardTitle>
+        <StandaloneTitle>Verifizierungscode eingeben</StandaloneTitle>
         <CardDescription>Wir haben einen sechsstelligen Code an {maskedEmail} gesendet.</CardDescription>
       </CardHeader>
       <CardContent>

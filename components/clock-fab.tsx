@@ -21,7 +21,6 @@ import {
 } from '@/lib/time-tracking/clock-actions';
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
 
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
@@ -135,20 +134,19 @@ export function ClockFAB() {
         <Button
           size="icon"
           className={cn(
-            'size-14 rounded-full shadow-lg',
+            'size-14 rounded-full shadow-lg [&>[data-slot=spinner]]:size-6',
             isClockedIn &&
               !isOnBreak &&
               'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
             isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow',
           )}
           onClick={() => openSheet()}
-          disabled={!isReady || isPending}
+          pending={isLoading || isPending}
+          disabled={!isReady}
           aria-label={isClockedIn ? 'Laufende Zeiterfassung öffnen' : 'Zeiterfassung starten'}
           title={isClockedIn ? 'Zeiterfassung öffnen' : 'Zeiterfassung starten'}
         >
-          {isLoading || isPending ? (
-            <Spinner className="size-6" />
-          ) : isOnBreak ? (
+          {isOnBreak ? (
             <Coffee className="size-6" />
           ) : isClockedIn ? (
             <Clock3 className="size-6" />
