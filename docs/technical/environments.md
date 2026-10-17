@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
 
@@ -106,4 +106,4 @@ Between releases, migrations wait on DEV. Read the two migration ledgers before 
 - Preview: when the owner asks for a push, run `git push origin main:partner-preview`. Vercel builds a preview on DEV data. `origin/main` does not move.
 - Release: `origin/main` advances only on the owner's explicit release request, after the pending migrations and edge functions reached PROD in the order of the migration rule. [Decision 0008](../decisions/0008-development-workflow.md) owns the flow.
 - A production-local session: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
-- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable.
+- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable. For a manual look at `bun run dev`, which runs against DEV through `.env.local`, sign in with a demo member's address and the fixture password from that script.

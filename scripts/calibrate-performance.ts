@@ -21,8 +21,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 const root = resolve(import.meta.dir, '..');
 const argumentsLeft = process.argv.slice(2);
 const values = new Map<string, string>();
-while (argumentsLeft.length) {
-  const name = argumentsLeft.shift()!;
+for (let name = argumentsLeft.shift(); name !== undefined; name = argumentsLeft.shift()) {
   const value = argumentsLeft.shift();
   if (
     !['--runs', '--reason', '--scenarios'].includes(name) ||
@@ -62,7 +61,9 @@ await withWorkspaceTestLock({ operation: 'draft reviewed performance baselines' 
       .filter(Boolean)
       .map((line) => scenarioObservationSchema.parse(JSON.parse(line)));
     for (const observation of observations) {
-      const scenario = MEASURED_SCENARIOS.find((entry) => entry.id === observation.scenarioId)!;
+      const scenario = MEASURED_SCENARIOS.find((entry) => entry.id === observation.scenarioId);
+      if (scenario === undefined)
+        throw new Error(`${runKey} records the unknown scenario ${observation.scenarioId}`);
       const protocol = performanceProtocol(scenario);
       if (
         observation.context.workloadDigest !== workloadDigest(root, scenario, runDirectory(runKey)) ||
@@ -83,9 +84,11 @@ await withWorkspaceTestLock({ operation: 'draft reviewed performance baselines' 
       observations,
     };
   });
-  const scenarioIds = values.has('--scenarios')
-    ? values.get('--scenarios')!.split(',')
-    : [...new Set(runs.flatMap((run) => run.observations.map((record) => record.scenarioId)))];
+  const listedScenarios = values.get('--scenarios');
+  const scenarioIds =
+    listedScenarios !== undefined
+      ? listedScenarios.split(',')
+      : [...new Set(runs.flatMap((run) => run.observations.map((record) => record.scenarioId)))];
   const recordedAt = new Date().toISOString();
   const draft = draftPerformanceBaselines({
     runs,

@@ -20,7 +20,7 @@ type Ban = {
 const DENYLIST: readonly Ban[] = [
   {
     names: ['sonner', 'react-hot-toast', 'react-toastify', '@radix-ui/react-toast', 'notistack'],
-    doc: '.claude/skills/werkflow-design/SKILL.md',
+    doc: '.claude/skills/werkflow-design/canon/feedback-and-loading.md',
     evidence: 'There are no toasts. Sonner is banned.',
     reason: 'Feedback goes through Banner and the inline states.',
   },
@@ -33,7 +33,7 @@ const DENYLIST: readonly Ban[] = [
       '@fortawesome/',
       '@radix-ui/react-icons',
     ],
-    doc: '.claude/skills/werkflow-design/SKILL.md',
+    doc: '.claude/skills/werkflow-design/canon/visual-language.md',
     evidence: 'Icons: Lucide only.',
     reason: 'Icons come from lucide-react with the global stroke.',
   },
@@ -128,7 +128,9 @@ test('the check flags a planted name in every dependency field', () => {
     'peerDependencies: better-auth',
     'overrides: @clerk/nextjs',
   ]);
-  expect(deniedDependencies(planted)[0]).toContain('.claude/skills/werkflow-design/SKILL.md');
+  expect(deniedDependencies(planted)[0]).toContain(
+    '.claude/skills/werkflow-design/canon/feedback-and-loading.md',
+  );
 });
 
 test('no lockfile of another package manager sits beside bun.lock', () => {

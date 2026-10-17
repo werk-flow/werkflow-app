@@ -1,6 +1,6 @@
 # Inventory Management
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Inventory is WerkFlow's operational system for SHK materials, consumables, tools, assets, Lager locations, stock movements, and job material usage. This spec separates the current baseline from the complete product direction. It defines outcomes and domain boundaries, not a database design.
 

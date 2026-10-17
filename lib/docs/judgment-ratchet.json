@@ -1,0 +1,9 @@
+{
+  ".claude/skills/werkflow-design/SKILL.md": { "judgment": 12 },
+  "docs/technical/realtime-and-caching.md": { "judgment": 9 },
+  "docs/technical/performance.md": { "judgment": 7 },
+  "docs/technical/security.md": { "judgment": 8 },
+  "docs/technical/code-quality.md": { "judgment": 10 },
+  "docs/technical/testing.md": { "judgment": 9 },
+  "docs/README.md": { "judgment": 6 }
+}

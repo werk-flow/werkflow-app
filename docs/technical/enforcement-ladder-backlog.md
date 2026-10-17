@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-16
+Status: living — last reviewed 2026-10-17
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -51,4 +51,8 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 ## Documentation
 
-No open candidates.
+| Candidate | Gap today | Target tier and mechanism |
+| --- | --- | --- |
+| Documents named in prose | A doc that names another doc in prose without a link ("the closed incident archive") escapes the link check, so a reference to a document that never existed passed. Maintenance rule 3 requires a link; only review sees the prose name. | Tier 2 if a reliable pattern for document names appears in `lib/docs/living-doc-rules.ts`; Tier 3 until then. |
+| Provenance notes in four catalog flows | `P1-21-F01`, `F09`, `F10` and `F19` end with a dated change note. Each flow's text is hashed in `lib/testing/selection/coverage-map.json`, so removing the note is a coverage change. The catalog keeps a "Dated lines" exemption in decision 0004 for flow lines meanwhile. | Remove the notes and recompute the four hashes with the next change to `P1-21` coverage, then drop the exemption (Tier 2: the date check covers the whole catalog). |
+| Paraphrased second homes | `docs:check` fails on an identical sentence of twelve or more words in two living docs or skills; a reworded copy of a rule passes. | Tier 3 review under virtue 6; no mechanical similarity measure has earned its false positives. |

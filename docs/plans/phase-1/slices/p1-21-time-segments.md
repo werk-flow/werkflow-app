@@ -78,7 +78,7 @@ The additive migration is proved locally, applied to DEV, verified, then applied
 
 ## User Flows (Catalog IDs)
 
-The owner confirmed provisional flows `P1-21-F01` through `P1-21-F64`. They cover capture, every switch kind, allocation, travel qualifiers, manual and automatic breaks, standby/call-out, internal activity, explicit end, split and overnight days, totals, duplicate and stale requests, concurrent devices, Realtime, long and invalid recovery, legacy compatibility, roles, isolation, connected projections, historical identity, deferral to P1-22/P1-23, accessibility, and the absence of automatic downstream effects. The [catalog section for P1-21](../../../product/user-flow-catalog.md#p1-21--explizite-zeitsegmente-2026-09-01) received the complete German bullets before verification.
+The owner confirmed provisional flows `P1-21-F01` through `P1-21-F64`. They cover capture, every switch kind, allocation, travel qualifiers, manual and automatic breaks, standby/call-out, internal activity, explicit end, split and overnight days, totals, duplicate and stale requests, concurrent devices, Realtime, long and invalid recovery, legacy compatibility, roles, isolation, connected projections, historical identity, deferral to P1-22/P1-23, accessibility, and the absence of automatic downstream effects. The [catalog section for P1-21](../../../product/user-flow-catalog.md#p1-21--explizite-zeitsegmente) received the complete German bullets before verification.
 
 ## Acceptance Criteria
 

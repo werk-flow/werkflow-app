@@ -1,6 +1,6 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-16
+Status: living — last reviewed 2026-10-17
 
 This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability.
 
@@ -10,14 +10,14 @@ Decide the feedback, the freshness and the read shape before you write the compo
 
 ### Add a mutation
 
-1. Write the Server Action in its domain's `actions.ts` in this order: parse the input, then [establish the caller and the permission](security.md#add-a-server-action-or-route-handler), then write. Rows that change together change in one database function call ([write related rows](code-quality.md#write-related-rows)). Use the admin client only when RLS cannot express the write.
+1. Write the Server Action in its domain's `actions.ts` in this order: parse the input, then [establish the caller and the permission](security.md#add-a-server-action-or-route-handler), then write ([related rows in one call](code-quality.md#write-related-rows)). Use the admin client only when RLS cannot express the write.
 2. Call `updateTag()` only for a `CACHE_TAGS` entry that a cached reader of the changed data carries. Otherwise call no tag function.
 3. Pick the first-frame feedback from the pending-feedback matrix in the `werkflow-design` skill: `useOptimisticList` for a list edit, `InlinePending` with `useBusyIds` for a row action, `usePendingTask` for a flow of several steps, the `isPending` of `useServerAction` otherwise. A flow that leaves the page ends with `untilPageLeaves()`.
 4. Name every view that shows the changed rows. An action that revalidates (`revalidatePath`, `updateTag`, a cookie) renders the route into its own response: await the new props with `useSettleOnChange`, never a `router.refresh()`. Otherwise start `router.refresh()`. Finish with `view.refresh()`, or pass the view's read as the `settle` option of `useServerAction`. The own write never waits for Realtime.
 5. Name the sessions that must see the change. The changed table is published, or the mutation touches a published owning root.
 6. Write a contract that holds the write open with `holdWrite` and checks the screen before and after the answer, as `tests/ui-contracts/team-qualifications.spec.ts` does. Run `bun run test:ui tests/ui-contracts/<file>.spec.ts` and `bun run test:unit lib/conventions/cache-tags.test.ts`.
 
-Wrong turn: a button that waits for the server, or pending state from `useTransition`. The user sees nothing for a round trip, and a transition stays pending through unrelated refreshes.
+Wrong turn: a button that waits for the server, or pending state from a router transition ([Never](#never)). The user sees nothing for a round trip, and a transition stays pending through unrelated refreshes.
 
 ### Add Realtime data
 
@@ -66,10 +66,10 @@ Wrong turn: leaving the measurement to the release run. By then other changes hi
 
 ## Checklist
 
-A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - An action shows pending feedback in its first frame through an owner hook: `useServerAction` for one action, `usePendingTask` for several steps, `useBusyIds` for a row, `untilPageLeaves()` when the page leaves. The field worker's clock tap is measured. [code `hooks/use-server-action.ts`, code `hooks/use-busy-id.ts`, test `lib/conventions/server-action-feedback.test.ts`, test `lib/ui/until-page-leaves.test.ts`, group `ui:contracts`, group `audit:performance:field`]
-- One save is one route render: no client refresh follows a revalidating Server Action, and each counted save stays at its entry in `tests/golden/route-renders.json`. [test `lib/conventions/route-render-owner.test.ts`, test `lib/testing/route-render-count.test.ts`, group `golden:p1-01`, group `audit:wave-1:a1-inventar`]
+- One save is one route render: no client refresh follows a revalidating Server Action, and each counted save stays at its entry in `tests/golden/route-renders.json`. [test `lib/conventions/route-render-owner.test.ts`, test `lib/testing/route-render-count.test.ts`, code `tests/golden/route-renders.json`, group `golden:p1-01`, group `audit:wave-1:a1-inventar`]
 - A list edit appears at once through `useOptimisticList` and leaves the list only after an authoritative read confirms it. Until then its row, card or surface carries `data-unconfirmed` and `aria-busy` from the registry primitive, and `<html data-unconfirmed-layer>` covers a removal. Content that is not confirmed never looks confirmed to a test or a screen reader. [code `hooks/use-optimistic-list.ts`, code `lib/ui/unconfirmed.ts`, test `lib/ui/optimistic-overlay.test.ts`, test `lib/ui/change-settlement.test.ts`, test `lib/conventions/unconfirmed-marker.test.ts`, group `ui:contracts`]
 - Success shows only after the write is accepted. Failure keeps the user's input and offers retry. [group `ui:contracts`, judgment]
 - A saved result reaches every view that shows it, and another signed-in session within the live target. The measured scenarios cover the calendar, the time approval and the job list; for any other flow the reviewer checks a second session in the browser. [group `audit:performance:calendar-live`, group `audit:performance:field`, group `audit:performance:lists`, judgment]
@@ -98,7 +98,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - Show a toast. Feedback goes through `Banner` and the inline states. [lint `sonnerImportPath`]
 - Truncate a list silently, or turn an overflow or a failed related read into an empty list. [code `lib/supabase/query-batches.ts`, test `lib/conventions/read-error-visibility.test.ts`, judgment]
 - Pass an organization-sized list to `.in()`. [test `lib/conventions/id-list-batches.test.ts`]
-- Call `updateTag` or `revalidateTag` on a tag that no cached reader carries. [test `lib/conventions/cache-tags.test.ts`]
+- An invalidated tag without a cached reader (`AGENTS.md`, virtue 2). [test `lib/conventions/cache-tags.test.ts`]
 - Cache a permission fact across requests. [test `lib/data/membership-freshness.test.ts`]
 - Shorten `REALTIME_DEBOUNCE_MS` or give a surface its own debounce. A trailing read goes through `createTrailingScheduler` with `REALTIME_DEBOUNCE_MS` and `REALTIME_MAX_DEFER_MS`. [test `lib/realtime/debounce-ownership.test.ts`, judgment]
 - Raise a budget, a reference, a ceiling or a timeout to make a slow build pass. [group `audit:performance:<name>`, group `audit:lab:<name>`, judgment]

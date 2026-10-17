@@ -1,6 +1,6 @@
 # Technical architecture
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 This document describes the runtime shape of WerkFlow and the reasons behind it. For exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards live in `AGENTS.md`.
 

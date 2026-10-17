@@ -1,6 +1,6 @@
 # Golden-Gate Run Log
 
-Status: living — last reviewed 2026-09-13; append-only, newest first
+Status: living — last reviewed 2026-10-17; append-only, newest first
 
 **2026-09-12: Owner-requested stop; Step 2 remains unaccepted.** Fresh DEV report `2026-09-12T212053236Z-1476922e` passes security 3/3 but provider run `2026-09-12T212115796Z-8f0f70` fails C3 at 2,729.5 ms after confirmed database subscription readiness. The final retained diagnostic measured 1,864 ms; it does not supersede the failure. The failed world is classified as product and cleaned. All disposable worlds are closed, the server is stopped, the operation lock is absent, and local routing is DEV. The handoff checkpoint records the unresolved variance, current verification requirements and preserved implementation. No further application repair or acceptance campaign was started.
 

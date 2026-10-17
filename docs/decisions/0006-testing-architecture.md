@@ -62,3 +62,15 @@ A candidate digest identifies inputs. It does not prove which behaviors a change
 ## Amendment 2026-09-13: local invite mail
 
 The September 2026 security follow-up replaced the invite function's original log-only local simulation with explicit Mailpit delivery through the local capture transport. [Environments](../technical/environments.md#the-local-test-stack) owns the current local mail configuration and failure behavior; the consequence bullet above keeps its 2026-08-28 wording as history.
+
+## Amendment 2026-10-17: accepted text restored
+
+A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2026-10-05 rewrote four accepted lines of this record in place, because their links pointed at records that Git alone keeps. The rewritten lines above supersede them; the accepted text was, with each dead link target in backticks:
+
+> - **Owner:** Product owner (Tamay), designed in the platform-hardening sessions (plan: `../plans/phase-1/consolidation-2026-08/platform-hardening.md`)
+
+> Execution detail, stage history, and the work ledger live in `docs/plans/phase-1/consolidation-2026-08/platform-hardening.md`. Operational setup for the local stack lives in [environments.md](../technical/environments.md); running instructions live in [testing.md](../technical/testing.md).
+
+> The UI/UX Phase 6 retrospective (`../plans/phase-1/hardening-2026-09/02-uiux-hardening.md#phase-6-retrospective-and-corrected-closure-method`) showed two different outcomes. The audit found real product defects, while repeated complete runs spent hours rediscovering stale selectors and coupled setup. The following mechanisms change how tests establish evidence. They preserve the local/cloud split, business assertions, stable flow IDs, security checks, and existing acceptance scope.
+
+> After the owner challenged the repeated verification cost, the UI/UX and test-reliability review (`../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md#task-specific-closure-amendment-2026-09-05`) adopted a bounded closure record: the completed 149-case local audit baseline, explicitly attributed Golden results, fresh evidence for subsequent affected behavior, component and static checks, and the DEV canary. Its change table owns the exact obligations and remaining limits. This exception applies only to that review; it changes no slice acceptance, wave-end, or production-release gate above.

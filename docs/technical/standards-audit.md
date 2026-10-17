@@ -1,6 +1,6 @@
 # Audit a wave and accept a rendered design
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 The six virtues in `AGENTS.md` define quality for every change. Each virtue's owner doc holds its checklist, its prohibitions, its verification steps and its examples. This page holds the two procedures that the virtues refer to: how to accept a rendered design, and how to audit a wave.
 

@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import {
   countWords,
+  findBacktickedDocPaths,
+  findCommitHashLines,
   findDatedLines,
   findDocumentReferences,
   findMismatchedGermanQuotes,
@@ -30,6 +32,53 @@ describe('dates in a living doc', () => {
       'A migration named 20260928095752_explicit.sql is not a date.',
     ].join('\r\n');
     expect(findDatedLines(markdown)).toEqual([5, 6, 7]);
+  });
+});
+
+describe('allowed dated lines and commit hashes', () => {
+  test('a line the exemption pattern matches may carry a date', () => {
+    const markdown = [
+      '# Roadmap',
+      '',
+      'Status: living — last reviewed 2026-10-17',
+      '| `P1-01` | `complete` | Accepted 2026-08-04 |',
+      'Decided 2026-09-17.',
+    ].join('\n');
+    expect(findDatedLines(markdown, /^\| `P1-\d{2}` \| `complete` \|/)).toEqual([5]);
+    // A global pattern keeps no state between lines.
+    expect(findDatedLines(`${markdown}\n${markdown.split('\n')[3] ?? ''}`, /^\| `P1-\d{2}` \|/g)).toEqual([
+      5,
+    ]);
+  });
+
+  test('probe: a commit hash in backticks or after "commit" fails, a word or a number does not', () => {
+    const markdown = [
+      'Read at commit `3e6b450`.',
+      'Fixed in commit 20c9ca8cc13ed.',
+      'The `deadbeef` constant and `1234567` and the word decade.',
+      'A link [here](../x.md#3e6b450abc) carries no hash in its prose.',
+    ].join('\n');
+    expect(findCommitHashLines(markdown)).toEqual([1, 2]);
+  });
+});
+
+describe('backticked doc paths', () => {
+  test('probe: a backticked doc outside link text, quotes and fences is found', () => {
+    const markdown = [
+      'See `technical/security.md` and [`testing.md`](technical/testing.md).',
+      '> Quoted `technical/security.md`.',
+      '```',
+      '`technical/security.md`',
+      '```',
+      '~~~',
+      '`technical/security.md` inside a tilde fence, which a backtick line does not close:',
+      '```',
+      '~~~',
+      'Not a doc: `error-context.md`.',
+    ].join('\n');
+    expect(findBacktickedDocPaths(markdown, (name) => name !== 'error-context.md')).toEqual([
+      { line: 1, reference: 'technical/security.md' },
+    ]);
   });
 });
 

@@ -1,6 +1,6 @@
 # AI Automations
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 AI automations are WerkFlow's second product phase: assistants, recommendations, workflows and bounded agents that use the operational context of the business to reduce repetitive work inside and outside the app.
 
@@ -246,7 +246,7 @@ This subsection records the owner's direction for the global chat. It is not pla
 
 The quality bar is T3 Chat and T3 Code by Ping Labs: moving between threads never waits for the server, a long answer never stalls the page, and nothing is lost on a reload. The performance rules of [realtime and caching](../technical/realtime-and-caching.md) apply to the chat as to every other surface. The chat adds measured scenarios of its own: the client's share of send to first token, a thread switch, the frame budget while an answer streams, and resume after a reload.
 
-**What a first reading of the T3 Code source showed.** T3 Code is open source (`github.com/pingdotgg/t3code`, read at commit `3e6b450`). It is single-user software for one machine, with no tenant, role or row-level model, so its code does not carry over. Its patterns do:
+**What a first reading of the T3 Code source showed.** T3 Code is open source (`github.com/pingdotgg/t3code`). It is single-user software for one machine, with no tenant, role or row-level model, so its code does not carry over. Its patterns do:
 
 1. One ordered list of typed turn items is the only render model: user message, assistant message, reasoning, each kind of tool call, approval request, plan, notice and error. Each item carries a streaming flag or a status. Reasoning and tool calls are items of their own, not fields of a message.
 2. The conversation is an append-only event log with a rising sequence number per thread. The screen reads projections of it. A command is acknowledged when its intent is committed, and side effects run afterwards from an outbox, each with an idempotent command id.

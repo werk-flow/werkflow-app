@@ -1,6 +1,6 @@
 # Phase 1 Progress Log
 
-Status: living — last reviewed 2026-10-03; append-only, newest first, existing entries are never rewritten
+Status: living — last reviewed 2026-10-17; append-only, newest first, existing entries are never rewritten
 
 Keep newest entries first. Link commits, pull requests, implementation plans, decision records, migration identifiers, and verification artifacts where available.
 

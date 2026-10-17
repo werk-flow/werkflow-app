@@ -126,3 +126,35 @@ This amendment corrects two statements above. It records changes that already la
 
 - **The slice budget is gone.** The owner revoked the 240-minute and eight-failure bounds on 2026-10-01 ([protocol](../plans/phase-1/protocol.md#campaign-budget)). The last bullet of the 2026-09-25 execution model and the last sentence of the "Superseded" paragraph of the 2026-10-01 amendment still call the slice budget a closure rule. That rule no longer exists. The campaign line reports cost. It never blocks a run and never holds a slice open.
 - **No test depends on another test.** The legacy within-file chains, their producer metadata and their chained preconditions are removed. `lib/testing/spec-support/spec-independence.ts`, run by `lib/testing/spec-support/spec-conventions.test.ts`, rejects a declared producer, a chained value, a checkpoint handoff, module state that one test writes and another reads, and a wall-clock date read at module load. The two measured performance specs keep their seeded-profile handoff, because their files are measurement-digest inputs. The [enforcement-ladder backlog](../technical/enforcement-ladder-backlog.md) tracks that exception.
+
+## Amendment 2026-10-17: accepted text restored
+
+A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2026-10-05 rewrote fourteen accepted lines of this record in place: moved module paths, links to records that Git alone keeps, and rules that later amendments had superseded. The rewritten lines above supersede them; the accepted text was, in the order of the record, with each dead link target in backticks:
+
+> - **Status:** accepted (2026-09-06)
+
+> The preceding hardening review fixed concrete defects but did not resolve those structural costs. Its qualified closure (`../plans/phase-1/hardening-2026-09/03-uiux-and-test-reliability.md`) remains historical evidence, not a new acceptance standard.
+
+> `lib/testing/coverage-map.json` owns the mapping from flows to evidence. Its validator checks catalog identities and hashes, reference validity, and executable group ownership. A reviewer checks that the assertions prove the complete behavior. A title, file reference, or copied catalog identifier is insufficient.
+
+> `lib/testing/test-groups.ts` owns executable groups, source scopes, producer prerequisites, and isolation requirements. Each application browser group owns its disposable data, role sessions, checkpoints, and output files. Separate groups do not inherit mutable state. A genuinely connected business journey retains ordered stages and verifies its producer preconditions.
+
+> Normal change acceptance uses the complete selected change plan. Selection combines explicit domain relationships, imported code dependencies, shared inputs, and test definitions. Unknown executable ownership selects broadly. Selection must not assume a directory name proves independence.
+
+> Release and wave acceptance use all local audit groups, the integrated Golden journey, domain and mechanism units, component browser checks, SQL checks, static checks, and the cloud canary. They do not repeat separate Golden groups already included in the integrated journey. Full cloud application batteries are no longer routine wave gates. Additional provider-specific cloud checks require a named risk and scope.
+
+> Each result records the selected group, relevant input fingerprint, environment identity, execution times, result, and underlying run evidence. Input additions and deletions count. A group remains reusable only when its own and shared inputs match. A later failure for those inputs invalidates an earlier pass.
+
+> Independent passing groups may accumulate across separate executions on qualifying inputs. This does not waive a connected journey's ordering. The integrated Golden journey must pass from beginning to end in one owned world. Diagnostic reuse of a failed world's records cannot qualify as fresh acceptance proof.
+
+> The default change plan and the complete release plan define their scopes. Explicit `--group` selection proves only the named subset. It must not be presented as full change or release acceptance. The practical commands and evidence paths live in [testing.md](../technical/testing.md).
+
+> Amendment 2026-09-18 (pre-Wave-3 step 5): the environment-recovery retry compares the retained diagnostic with the failed run by the served build id and the target, no longer by the repository-wide candidate hash. The build id already proves the application unchanged (the preflight refuses a server whose receipt no longer matches), and the retry check proves the group's own inputs unchanged; the candidate hash also changed on a harness edit outside the group, which made a correct diagnostic stop counting after such an edit. Mechanism: `lib/testing/group-recovery.ts`.
+
+> An unchanged failed group cannot be retried as acceptance until its cause is addressed. One environment-recovery retry is allowed after classification, a later matching retained diagnostic pass on the same served build and target (amendment 2026-09-18), and owned-world cleanup. Two same-input failures remain blocked. A preflight failure with no run or world is blocked verification and can be retried after environment repair without fabricating business evidence. Investigate the smallest relevant failure, classify it from evidence, add prevention, and rerun the affected group. Unexplained repetition stays blocked. Do not manufacture progress through complete-battery reruns, timeout increases, or repeated budget extensions. Preserve cumulative campaign cost and historical failures.
+
+> The implementation plan (`../plans/phase-1/hardening-2026-09/04-testing-system-restructure.md`) owned the 2026-09 rollout. Acceptance of this policy is not a claim of a fixed speedup, a zero-flake guarantee, a security certification or a production release.
+
+> The P1-24a campaign (2026-09-23 to 2026-09-24) cost fourteen hours of verification and thirty-five browser failures for six product defects, with the account in the incident log (`../technical/test-incident-log.md#2026-09-24-p1-24a-full-change-plan-three-attempts`, an entry that the log no longer holds). The cost came from the execution model, which no earlier repair had touched: every group repeated the preflight, two Playwright discoveries and two archive scans (about a minute per group); two support monoliths of nine thousand lines made every helper edit rerun every browser group; every spec ran in serial mode and revealed one failure per run; per-user preferences persisted between the tests of a file; and a lagging local Realtime service was diagnosed after the fact, never before a measurement. The owner ruled that the model changes, not the guidance.
+
+> - Specs run their tests in file order and continue after a failure; a dependent test guards its producer with a chained precondition and fails fast. Serial mode and `maxFailures` are gone; a convention test refuses `test.describe.configure` in a spec and the browser-server contract test pins one worker, no retries and no failure cap in the configs.

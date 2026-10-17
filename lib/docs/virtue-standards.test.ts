@@ -1,15 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  classifyMechanismToken,
   countMechanisms,
   declaredLintRuleNames,
   declaredSelectorSetNames,
   findEnforcedByProblems,
   findStandardProblems,
   findUnreferencedMechanisms,
+  findVirtueAgreementProblems,
   isRuleTest,
-  jsxA11yNameExists,
   parseMechanismTag,
   readStandardSections,
+  readVirtueBlocks,
   TEST_FILE_PATTERN,
   type MechanismResolver,
 } from './virtue-standards';
@@ -19,6 +21,7 @@ const resolver: MechanismResolver = {
   pathExists: (path) => ['lib/ui/field-validation.ts', 'components/ui/', 'lib/a.test.ts'].includes(path),
   groupExists: (id) => ['static:lint', 'sql:security'].includes(id),
   scriptExists: (name) => ['lint', 'test:unit', 'docs:check'].includes(name),
+  linkExists: (target) => target === 'technical/security.md',
 };
 
 function standard(overrides: Partial<Record<string, string[]>> = {}): string {
@@ -104,18 +107,24 @@ describe('standard sections', () => {
     expect(problems[4]).toContain('mechanism tag');
   });
 
-  test('an example must start with an existing path and a command must name a script', () => {
+  test('an example starts with an existing path or a resolving link, and a command names a script', () => {
     const problems = findStandardProblems(
       standard({
-        Examples: ['- `lib/gone.ts`: copy nothing.', '- A sentence without a path.'],
+        Examples: [
+          '- `lib/gone.ts`: copy nothing.',
+          '- A sentence without a path.',
+          '- [security.md](technical/security.md): a link to a doc.',
+          '- [gone.md](technical/gone.md#rules): a dead link.',
+        ],
         'Verify your work': ['1. Run `bun run no-such-script`.'],
       }),
       resolver,
     );
     expect(problems).toEqual([
       'line 19: bun run no-such-script is not a package.json script',
-      'line 23: an example starts with the backticked path of an existing file',
-      'line 24: an example starts with the backticked path of an existing file',
+      'line 23: lib/gone.ts does not exist',
+      'line 24: an example starts with the backticked path of an existing file or a link to an existing document',
+      'line 26: technical/gone.md does not resolve',
     ]);
   });
 });
@@ -161,7 +170,7 @@ describe('Enforced by lines', () => {
     ]);
   });
 
-  test('reads a jsx-a11y name as a lint rule, not as a path', () => {
+  test('reads a jsx-a11y name and a selector set as lint names, and a bare script name as a script', () => {
     const asked: string[] = [];
     const recording: MechanismResolver = {
       ...resolver,
@@ -171,27 +180,80 @@ describe('Enforced by lines', () => {
       },
       pathExists: () => true,
     };
-    const markdown = '- **Enforced by.** Tier 2: `jsx-a11y/recommended`, `jsx-a11y/no-such-rule`.';
+    const markdown =
+      '- **Enforced by.** Tier 2: `jsx-a11y/recommended`, `jsx-a11y/no-such-rule`, `goneSelectors`, `docs:check`, `gone:check`.';
     expect(findEnforcedByProblems(markdown, recording).map((problem) => problem.token)).toEqual([
       'jsx-a11y/no-such-rule',
+      'goneSelectors',
+      'gone:check',
     ]);
-    expect(asked).toEqual(['jsx-a11y/recommended', 'jsx-a11y/no-such-rule']);
+    expect(asked).toEqual(['jsx-a11y/recommended', 'jsx-a11y/no-such-rule', 'goneSelectors']);
+  });
+
+  test('classifies tokens by kind and ignores symbols', () => {
+    expect(classifyMechanismToken('bun run docs:check')).toEqual({ kind: 'script', target: 'docs:check' });
+    expect(classifyMechanismToken('audit:layout*')).toEqual({ kind: 'group', target: 'audit:layout*' });
+    expect(classifyMechanismToken('timeOfDaySelectors')).toEqual({
+      kind: 'lint',
+      target: 'timeOfDaySelectors',
+    });
+    expect(classifyMechanismToken('lib/docs/')).toEqual({ kind: 'code', target: 'lib/docs/' });
+    expect(classifyMechanismToken('useServerAction')).toBeNull();
   });
 });
 
-describe('jsx-a11y lint names', () => {
-  const corpus = 'rules: { ...jsxA11y.flatConfigs.recommended.rules }';
-  const ruleNames = ['no-autofocus', 'click-events-have-key-events'];
+describe('agreement of an "Enforced by" line with its owner docs', () => {
+  const agents = [
+    '### 1. UI and UX',
+    '',
+    '- **Enforced by.** Tier 1: `components/ui/`. Tier 2: `static:lint`, the tests under `lib/ui/`, `audit:layout*`.',
+    '- **Owner doc.** The skill (`.claude/skills/x/SKILL.md`), with the `unslop` skill. Start from its [How to work](.claude/skills/x/SKILL.md#how-to-work).',
+    '',
+    '### 2. Performance',
+    '',
+    '- **Owner doc.** [Realtime](docs/technical/realtime-and-caching.md) and [performance](docs/technical/performance.md), with [CodeRabbit](docs/technical/coderabbit.md).',
+    '',
+    '### Keep the blocks in step',
+  ].join('\n');
+  const owner = (checklist: string[]): string =>
+    standard({ Checklist: checklist, Never: ['- Never. [judgment]'] });
 
-  test('resolve the recommended set and its rules when the configuration spreads it', () => {
-    expect(jsxA11yNameExists('jsx-a11y/recommended', corpus, ruleNames)).toBe(true);
-    expect(jsxA11yNameExists('jsx-a11y/no-autofocus', corpus, ruleNames)).toBe(true);
+  test('reads each block, its tokens and only the docs before ", with"', () => {
+    expect(readVirtueBlocks(agents).map((block) => [block.virtue, block.ownerDocs])).toEqual([
+      [1, ['.claude/skills/x/SKILL.md']],
+      [2, ['docs/technical/realtime-and-caching.md', 'docs/technical/performance.md']],
+    ]);
   });
 
-  test('refuse an unknown rule, another plugin and a configuration without the set', () => {
-    expect(jsxA11yNameExists('jsx-a11y/no-such-rule', corpus, ruleNames)).toBe(false);
-    expect(jsxA11yNameExists('ui/no-autofocus', corpus, ruleNames)).toBe(false);
-    expect(jsxA11yNameExists('jsx-a11y/recommended', 'rules: {}', ruleNames)).toBe(false);
+  test('agrees when every token is tagged and every tag is named or covered by a folder, a family or static:lint', () => {
+    const [block] = readVirtueBlocks(agents);
+    if (block === undefined) throw new Error('no block');
+    const markdown = owner([
+      '- Controls. [lint `ui/no-raw-controls`, code `components/ui/button.tsx`]',
+      '- Fields. [test `lib/ui/field.test.ts`, group `audit:layout:work`]',
+    ]);
+    expect(findVirtueAgreementProblems(block, [markdown])).toEqual([]);
+  });
+
+  test('probe: a retagged item and an untagged line token both fail', () => {
+    const [block] = readVirtueBlocks(agents);
+    if (block === undefined) throw new Error('no block');
+    const markdown = owner([
+      '- Controls. [lint `ui/no-raw-controls`, code `components/ui/button.tsx`]',
+      '- A new rule. [test `lib/conventions/new.test.ts`]',
+    ]);
+    expect(findVirtueAgreementProblems(block, [markdown])).toEqual([
+      'virtue 1 (AGENTS.md:3) names `lib/ui/`, which no item of its owner docs tags',
+      'virtue 1 (AGENTS.md:3) names `audit:layout*`, which no item of its owner docs tags',
+      'virtue 1: its owner docs tag test lib/conventions/new.test.ts, which the "Enforced by" line (AGENTS.md:3) neither names nor covers',
+    ]);
+  });
+
+  test('probe: a plain group covers only itself and its colon family', () => {
+    const block = { virtue: 4, line: 9, tokens: ['unit:form'], ownerDocs: [] };
+    const tagged = (group: string): string => owner([`- A rule. [group \`${group}\`]`]);
+    expect(findVirtueAgreementProblems(block, [tagged('unit:form:fields')])).toEqual([]);
+    expect(findVirtueAgreementProblems(block, [tagged('unit:format')])).toHaveLength(2);
   });
 });
 

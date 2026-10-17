@@ -1,6 +1,6 @@
 # Document storage and access
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do, the planned scope and the open decisions. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
 

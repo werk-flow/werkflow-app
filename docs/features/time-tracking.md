@@ -1,6 +1,6 @@
 # Time Tracking
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Time tracking (`Zeiterfassung`) covers attendance, working time, travel, breaks, job and project allocation, on-call work, overtime, time accounts, corrections, approvals, absence effects, and payroll and accounting handoffs.
 
@@ -294,4 +294,4 @@ The baseline above holds the accepted capture, approval, correction, account, an
 - How is a forgotten clock-out closed? Competitors either cut the session at a fixed time or after a set number of hours, or send schedule-based reminders; it is the top complaint in their forums. The 24-hour recovery state is the flag today. Reminders and a configurable cut are open.
 - Is location evidence necessary for specific customers, and can less intrusive evidence achieve the same outcome?
 
-The [product capability map](../product/product-capability-map.md) owns cross-feature handoffs, and the [Phase 1 roadmap](../plans/phase-1/roadmap.md) owns slice order and status.
+Cross-feature handoffs: [product capability map](../product/product-capability-map.md). Slice order and status: [Phase 1 roadmap](../plans/phase-1/roadmap.md).

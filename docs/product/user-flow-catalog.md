@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 ## Purpose And Rules (for agents)
 
@@ -98,13 +98,13 @@ Diese Abschnitte beschreiben, was die App bereits konnte, bevor der Phase-1-Fahr
 
 ## Wave 0 — Baseline und Infrastruktur
 
-### `P1-00` — Baseline-Verifikation (2026-08-04)
+### `P1-00` — Baseline-Verifikation
 
 Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand geprüft und abgesichert. Eine Verbesserung ist trotzdem spürbar:
 
 - `P1-00-F01` — Alle: mehrere Seiten (u. a. Dokumente und Lager), die sich vorher nur nach manuellem Neuladen aktualisierten, aktualisieren sich jetzt live, sobald jemand anderes etwas ändert.
 
-### `P1-00a` — Dateispeicher (2026-08-04)
+### `P1-00a` — Dateispeicher
 
 - `P1-00a-F01` — Alle: große Dateien (auch deutlich über 4–5 MB, z. B. Foto-Serien oder Pläne) lassen sich jetzt zuverlässig hochladen. Der Upload zeigt einen echten Fortschrittsbalken statt vorher bei großen Dateien kommentarlos zu scheitern.
 - `P1-00a-F02` — Alle: Downloads öffnen sich über kurzlebige signierte Links direkt aus dem geschützten Speicher.
@@ -115,7 +115,7 @@ Dieser Slice hat bewusst fast keine neuen Bedienflächen — er hat den Bestand 
 
 Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from Wave 2 onward every slice enumerates its flows at acceptance.
 
-### `P1-01` — Ansprechpartner und Einsatzorte (2026-08-04)
+### `P1-01` — Ansprechpartner und Einsatzorte
 
 - `P1-01-F01` — Büro/Admin: können je Kunde mehrere **Ansprechpartner** anlegen (Name, frei wählbare Rollenbezeichnung mit Vorschlägen, E-Mail, Telefon, Notizen), einen als „Hauptansprechpartner“ markieren und Kontakte archivieren. Archivierte bleiben in einer eigenen Liste sichtbar, können wiederhergestellt werden und tauchen in Auswahl-Pickern nicht mehr auf.
 - `P1-01-F02` — Büro/Admin: können je Kunde mehrere dauerhafte **Einsatzorte** anlegen (Name, strukturierte Adresse, Zugangshinweise wie Schlüssel/Parken, Notizen, optionaler Vor-Ort-Kontakt), einen als Standard markieren und Orte archivieren. Ein Klick übernimmt die Kundenadresse als ersten Einsatzort.
@@ -125,7 +125,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-01-F06` — Handwerker: sehen auf dem zugewiesenen Auftrag den Einsatzort (Name, Adresse, Zugangshinweise) und den Ansprechpartner mit antippbarer Telefonnummer.
 - `P1-01-F07` — Büro/Admin: die Suche auf `/kunden` findet Kunden jetzt auch über Namen ihrer Ansprechpartner und Adressen ihrer Einsatzorte.
 
-### `P1-02` — Anfragen (2026-08-05)
+### `P1-02` — Anfragen
 
 - `P1-02-F01` — Büro/Admin: können unter `/anfragen` während eines Telefonats eine **Anfrage** erfassen: Pflicht ist nur die Zusammenfassung; dazu optional Details, Kategorie (Notfall, Störung/Reparatur, Wartung, Angebotsanfrage, Installation/Umbau, Garantie/Mangel, Allgemeine Frage, Sonstiges), Dringlichkeit, Quelle (Telefon, E-Mail, Vor Ort, Sonstiges), Eingangszeit, eine automatisch vorgeschlagene Nummer (`ANF-JJJJ-NNN`, überschreibbar) und eine zuständige Büro-Person.
 - `P1-02-F02` — Büro/Admin: können unbekannte Anrufer mit Freitextfeldern (Name, Telefon, E-Mail, Adresse) festhalten und die Anfrage später einem bestehenden Kunden **zuordnen** oder den Anrufer mit einem Klick als neuen Kunden **anlegen** — alle Felder sind vorbefüllt, nichts wird neu getippt, die erfassten Anruferdaten bleiben als Historie auf der Anfrage.
@@ -134,7 +134,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-02-F05` — Büro/Admin: wandeln eine Anfrage **genau einmal** in einen neuen Auftrag oder ein Projekt um. Der Dialog ist komplett vorbefüllt (Titel ← Zusammenfassung, Beschreibung ← Details, Kunde/Kontakt/Einsatzort übernommen, Dringlichkeit → Priorität) und bleibt editierbar. Nichts wird dabei terminiert oder versendet; ein Auftrag ohne Datum bleibt ungeplante offene Arbeit (seit `P1-12`/`P1-14` entsteht kein passiver Park-Zustand mehr, siehe `BASE-WORK-F03` und `P1-12-F08`). Auftrag und Anfrage verlinken sich gegenseitig („Entstanden aus Anfrage …“).
 - `P1-02-F06` — Büro/Admin: die Anfragenliste filtert nach Aktiv/Umgewandelt/Geschlossen/Alle und durchsucht Zusammenfassung, Kunde, Anrufer, Nummer und Zuständige; die Detailseite zeigt alle Fakten, Anhänge und eine lückenlose Ereignis-Historie. Handwerker sehen den Bereich überhaupt nicht.
 
-### `P1-03` — Personalakte und Beschäftigung (2026-08-05)
+### `P1-03` — Personalakte und Beschäftigung
 
 - `P1-03-F01` — Büro/Admin: pflegen auf dem Mitarbeiter-Detail den neuen Abschnitt **Personalien**: Personalnummer (Vorschlag `MA-NNN`, manuell überschreibbar, organisationsweit eindeutig), Telefon, private E-Mail, Adresse, Notfallkontakt, Eintritts-/Austrittsdatum, Notizen.
 - `P1-03-F02` — Büro/Admin: pflegen unter **Beschäftigung** datumswirksame Versionen der Beschäftigungsbedingungen (Gültig-ab-Datum; Art: Vollzeit/Teilzeit/Ausbildung/Minijob/Sonstiges; Wochenstunden; Urlaubstage pro Jahr; Notiz). Aktuelle, frühere und geplante Versionen bleiben gleichzeitig sichtbar und sind als „Aktuell“ / „Früher“ / „Geplant“ markiert.
@@ -143,7 +143,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-03-F05` — Wird ein Mitglied aus der Organisation entfernt, verschwindet die Person nicht mehr: die Personalakte bleibt als „Ausgeschieden“ erhalten.
 - `P1-03-F06` — Büro/Admin: sehen unter **Verlauf** jede Änderung an Akte und Bedingungen mit Zeitpunkt, handelnder Person und Vorher/Nachher-Werten.
 
-### `P1-04` — Arbeitszeitmodelle, Feiertage, Betriebsruhe (2026-08-05)
+### `P1-04` — Arbeitszeitmodelle, Feiertage, Betriebsruhe
 
 - `P1-04-F01` — Büro/Admin: hinterlegen je Person unter **Arbeitszeitmodell** einen Wochenplan mit Minuten pro Wochentag (0 = kein Arbeitstag), wieder als Gültig-ab-Versionen — historische Tage behalten immer das damals gültige Modell.
 - `P1-04-F02` — Admin: wählt in den Einstellungen das Bundesland für den **Feiertagskalender** (Bayern in zwei Varianten); Büro sieht die Auswahl. Admin und Büro pflegen zusätzlich **Betriebsruhe**-Tage (nur heute/zukünftig, Vergangenes wird nie umgeschrieben).
@@ -151,7 +151,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-04-F04` — Wo kein Modell hinterlegt ist, rechnet die App mit dem sichtbar gekennzeichneten Fallback **„Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden“** weiter; dieses Standardziel bleibt ausdrücklich unkonfiguriertes Verhalten und wird nicht als hinterlegtes Arbeitszeitmodell dargestellt.
 - `P1-04-F05` — Alle: die Kalender-Monatsansicht zeigt Feiertage und Betriebsruhe als beschriftete, nicht anklickbare Ganztages-Hinweise.
 
-### `P1-05` — Verantwortlichkeiten und Vertretungen (2026-08-06)
+### `P1-05` — Verantwortlichkeiten und Vertretungen
 
 - `P1-05-F01` — Admin (Inhaber): konfiguriert unter **Einstellungen → Mitarbeiter** die Verantwortlichkeiten **Zeitfreigaben** und **Urlaubsfreigaben**: entweder bleibt der Rollen-Standard (Admin und Büro entscheiden wie bisher) oder es werden benannte Personen ausgewählt, die den Standard ersetzen — auch normale Handwerker, ohne dass sie sonst mehr Rechte bekommen. Büro sieht die Konfiguration nur lesend.
 - `P1-05-F02` — Admin (Inhaber): sieht vor dem Speichern eine **„Auswirkung vor dem Speichern“**-Vorschau: wer gewinnt, behält oder verliert die Zuständigkeit. Erst die Bestätigung speichert.
@@ -159,7 +159,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-05-F04` — Alle: sehen in den eigenen Einstellungen **„Meine Verantwortlichkeiten und Vertretungen“**, sofern sie betroffen sind; Mitglied-Details zeigen Managern eine Zusammenfassung.
 - `P1-05-F05` — Neu spürbar in der Zeiterfassung: eigene manuelle Nachträge von Büro-Nutzern werden jetzt „ausstehend“ statt still selbst genehmigt (Vier-Augen-Prinzip); niemand kann je den eigenen Eintrag freigeben. Nachträge des Admins bleiben als Wiederherstellungsweg direkt wirksam.
 
-### `P1-06` — Urlaub (2026-08-06)
+### `P1-06` — Urlaub
 
 - `P1-06-F01` — Handwerker (alle Mitarbeiter): beantragen im Bereich **Urlaub & Abwesenheit** der Zeiterfassung eigenen Urlaub (Zeitraum; bei einem einzelnen Tag auch halbtags) und ziehen offene Anträge selbst zurück. Die App zeigt vor dem Absenden die berechneten Urlaubstage — Wochenenden, Feiertage, Betriebsruhe und freie Wochenplantage kosten nichts.
 - `P1-06-F02` — Alle: der Urlaubssaldo ist echte Arithmetik: Anspruch (aus den Urlaubstagen der Beschäftigungsbedingung) − genommen = Rest, mit offenen Anträgen als separater Vorschau. Ohne hinterlegten Anspruch zeigt die App ehrlich „Kein Urlaubsanspruch hinterlegt“ statt einer erfundenen Zahl; beantragen geht trotzdem.
@@ -168,13 +168,13 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-06-F05` — Alle: genehmigter Urlaub senkt das Tagessoll (ganzer Tag → 0, halber Tag → halbes Soll) und erscheint im Kalender als ruhiger lila Eintrag „Urlaub – Name“; beantragter, noch nicht entschiedener Urlaub ist gestrichelt und mit „(angefragt)“ markiert. Manager sehen alle, Mitarbeiter nur sich selbst.
 - `P1-06-F06` — Wer an einem eigenen genehmigten Urlaubstag einstempeln will, wird mit verständlicher Meldung abgelehnt („Heute ist Urlaub genehmigt“); der Korrekturweg ist die Stornierung des Urlaubs.
 
-### `P1-07` — Aufgaben und Benachrichtigungen (2026-08-07)
+### `P1-07` — Aufgaben und Benachrichtigungen
 
 - `P1-07-F01` — Alle: die neue Seite **`/aufgaben`** bündelt, was einen selbst angeht: **Aufgaben** (nur Dinge, die man selbst jetzt entscheiden kann — ausstehende Zeitfreigaben, Urlaubsanträge, offene Anfragen mit Zuständigem und Alter), **Benachrichtigungen** (Entscheidungen über die eigenen Anträge) und **Meine Anträge** (eigene Urlaubsanträge mit Status und Gründen).
 - `P1-07-F02` — Alle: jedes Element verlinkt direkt in die zuständige Oberfläche; entschieden wird weiterhin nur dort. Benachrichtigungen lassen sich einzeln oder alle auf einmal als gelesen markieren; wird eine Genehmigung später storniert, wird dieselbe Benachrichtigung wieder ungelesen statt doppelt zu erscheinen.
 - `P1-07-F03` — Alle: die Seitenleisten-Badges stimmen jetzt: das Aufgaben-Badge zählt handlungsrelevante Punkte plus ungelesene Benachrichtigungen, das Zeiterfassungs-Badge zählt Zeit- **und** Urlaubsfreigaben — und nie etwas, das der Betrachter gar nicht entscheiden darf. Vertretungen sehen Aufgaben nur innerhalb ihres Vertretungsfensters.
 
-### `P1-08` — Krankmeldung (2026-08-08)
+### `P1-08` — Krankmeldung
 
 - `P1-08-F01` — Alle Mitarbeiter: melden sich im Bereich **Krankmeldung** der Zeiterfassung selbst krank — auch rückwirkend, auch „bis auf Weiteres“ ohne Enddatum, bei einem einzelnen Tag auch halbtags; Typ neutral: Krankheit, Kind krank, Sonstige Abwesenheit. Ein Diagnose-Feld gibt es bewusst nirgends.
 - `P1-08-F02` — Alle Mitarbeiter: setzen/korrigieren das eigene Enddatum („wieder gesund ab …“) und stornieren eine eigene irrtümliche Meldung.
@@ -184,7 +184,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-08-F06` — Wer an einem Kranktag einstempelt, wird **nicht** blockiert: das Einstempeln gelingt mit sichtbarem Hinweis („Für heute liegt eine Krankmeldung vor …“) — wer früher gesund ist, arbeitet real; die Korrektur ist das Enddatum.
 - `P1-08-F07` — Beide Seiten werden benachrichtigt: Manager erfahren von Meldungen, die sie nicht selbst erfasst haben; die Person erfährt von Büro-Erfassungen und -Stornierungen der eigenen Meldung.
 
-### `P1-09` — Teams, Qualifikationen, Eignung (2026-08-09)
+### `P1-09` — Teams, Qualifikationen, Eignung
 
 - `P1-09-F01` — Büro/Admin: legen **Teams** an und pflegen ihre Mitglieder datumswirksam; Teams sind reine Planungs-Abkürzungen und geben niemandem Rechte. In Zuweisungs-Pickern (Auftragsdialoge und Kalender) wählt ein Klick auf ein Team alle zum jeweiligen Datum aktiven Mitglieder auf einmal aus; in Auftragsdialogen werden Mitglieder ohne Login dabei ausgewiesen übersprungen, während die Kalenderplanung sie seit `P1-11` als planbares Personal mit einplant.
 - `P1-09-F02` — Büro/Admin: pflegen einen Organisations-Katalog aus **Fähigkeiten und Zertifikaten** und ordnen Personen Einträge mit Gültigkeitsdaten und Nachweis-Status zu. Mitarbeiter sehen die eigenen Einträge nur lesend.
@@ -193,14 +193,14 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-09-F05` — Admin: kann eine optionale **Azubi-Warnung** einschalten (standardmäßig aus), die allein zugewiesene Auszubildende markiert.
 - `P1-09-F06` — Zuständige: ablaufende Zertifikate erscheinen rechtzeitig als Aufgabe auf `/aufgaben`.
 
-### `P1-10` — Kundenbeziehung, Follow-ups, Kommunikationspräferenzen (2026-08-10)
+### `P1-10` — Kundenbeziehung, Follow-ups, Kommunikationspräferenzen
 
 - `P1-10-F01` — Büro/Admin: das Kundendetail zeigt eine **Chronik** aus allem, was zu diesem Kunden wirklich passiert ist — Anfragen mit ihren Ereignissen, Aufträge/Projekte, Dokumente, Follow-ups, Präferenz-Änderungen — filterbar (Arbeit / Dokumente / Interne Aktivität), mit handelnder Person und je Eintrag einem direkten Sprung zur Quelle (Dokumente öffnen direkt im Viewer). Nichts wird doppelt gespeichert.
 - `P1-10-F02` — Büro/Admin: legen **Follow-ups** („Wiedervorlagen“) am Kunden an — mit Fälligkeitszeitpunkt, verantwortlicher Büro-Person und optionalem Bezug (Kontakt, Einsatzort, Anfrage, Auftrag, Projekt) — und erledigen oder verwerfen sie mit Attribution. Fällige und überfällige Follow-ups erscheinen dem Verantwortlichen als Aufgabe auf `/aufgaben`; verliert ein Follow-up seinen Verantwortlichen, sehen es alle Manager zur Neuzuweisung.
 - `P1-10-F03` — Büro/Admin: hinterlegen **Kommunikationspräferenzen** je Kunde und je Ansprechpartner: pro Kanal (Telefon, E-Mail, SMS, Brief, persönlich) und Zweck (Termin/Service, Marketing, Notwendiges) erlaubt / nicht erlaubt / unbekannt, dazu bevorzugter Kontakt, Kontaktzeiten, Sprache, Barrierefreiheit und Kontaktsperren. Nicht Gepflegtes bleibt sichtbar „unbekannt“.
 - `P1-10-F04` — Büro/Admin: Telefon-/E-Mail-Aktionen im Kundenkontext warnen bei falscher Person, unerwünschtem Kanal oder Kontaktsperre; wer trotzdem fortfährt, erfasst eine begründete, zugeordnete Ausnahme. Die App verschickt weiterhin selbst nichts und behauptet keine rechtliche Bewertung.
 
-### `P1-11` — Serien-, Mehrtages- und Besuchsplanung (2026-08-13)
+### `P1-11` — Serien-, Mehrtages- und Besuchsplanung
 
 - `P1-11-F01` — Büro/Admin: planen im Kalender **Besuche** für Aufträge und **interne Einträge** (Interne Arbeit, Besprechung, Schulung, Sonstiges) — mit Uhrzeit oder ganztägig, mehrtägig, über Mitternacht, einmalig oder als Serie (täglich, wöchentlich, monatlich). Ein Auftrag kann mehrere Besuche haben, ohne dupliziert zu werden.
 - `P1-11-F02` — Büro/Admin: Serien reichen zunächst 18 Monate in die Zukunft und lassen sich per Klick um je sechs Monate verlängern. Ungültige Monatstermine (z. B. 31. im Februar) fallen aus statt zu verrutschen.
@@ -208,7 +208,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-11-F04` — Büro/Admin: jede Planung prüft **Kapazität** (Wochenplan, Feiertage, Betriebsruhe, genehmigter Urlaub, Krankheit, schwebende Urlaubsanträge, Überschneidungen mit anderer geplanter Arbeit) und **Qualifikation** zum Termindatum. Warnungen erklären jede betroffene Person und jedes Datum; fortfahren geht nur mit Grund, und wenn sich die Fakten seit der Warnung geändert haben, verlangt die App eine neue Entscheidung.
 - `P1-11-F05` — Handwerker: sehen im Kalender genau die Termine, die ihnen zugewiesen sind — auch Personal ohne Login kann verplant werden (sichtbar für Manager). Geplante Termine erzeugen niemals automatisch Ist-Arbeitszeit.
 
-### `P1-12` — Einsätze, Bestätigung, Parkplatz-Kontext, Kundenzusagen, Batch-Umplanung (2026-08-14)
+### `P1-12` — Einsätze, Bestätigung, Parkplatz-Kontext, Kundenzusagen, Batch-Umplanung
 
 **Einsätze senden und bestätigen:**
 
@@ -239,7 +239,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-12-F16` — Vor der Ausführung zeigt eine **Vorschau** je Termin den alten und neuen Zeitpunkt, entstehende Kapazitäts-/Qualifikationskonflikte, wie viele Bestätigungen ungültig würden und welche Kundenzusagen betroffen wären. Konflikte lassen sich wie überall nur mit Grund übersteuern.
 - `P1-12-F17` — Die Ausführung ist **alles oder nichts**: entweder werden alle gewählten Termine verschoben oder keiner. Ausgewählte Serientermine werden dabei zu Einzel-Ausnahmen ihrer Serie; die Historie jedes Termins bleibt erhalten.
 
-### `P1-13` — Versionierte Arbeitsvorlagen (2026-08-23)
+### `P1-13` — Versionierte Arbeitsvorlagen
 
 - `P1-13-F01` — Büro/Admin: öffnen **Arbeitsvorlagen**, sehen in einer Organisation ohne Vorlagen den leeren Zustand „Erste Arbeitsvorlage anlegen“ und erhalten keine automatisch angelegten Produktvorlagen.
 - `P1-13-F02` — Büro/Admin: legen einen Entwurf für Aufträge oder Projekte mit Name und optionaler Beschreibung an; zum Veröffentlichen ist mindestens ein gültiger Arbeits- oder Checklistenpunkt erforderlich.
@@ -269,7 +269,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-13-F26` — Handwerker sehen keine Vorlagenverwaltung und können keine Vorlage erstellen, ändern, veröffentlichen, archivieren oder anwenden; ein direkter Routen- oder Aktionsaufruf wird abgewiesen und Organisationsgrenzen bleiben dicht.
 - `P1-13-F27` — Änderungen an Vorlagen und Anwendungen aktualisieren offene Manageransichten per Realtime; ein offener Dialog verliert keine Eingabe und erhält nach dem Schließen genau eine nachgeholte Aktualisierung.
 
-### `P1-14` — Arbeitsstand, Blocker, Voraussetzungen und Einsatzbereitschaft (2026-08-23)
+### `P1-14` — Arbeitsstand, Blocker, Voraussetzungen und Einsatzbereitschaft
 
 - `P1-14-F01` — Alle berechtigten Nutzer sehen am Auftrag den kanonischen Arbeitsstand getrennt von Planung, Einsatzbereitschaft, Blockern und Parkplatz; mehrere gleichzeitig wahre Fakten überschreiben einander nicht.
 - `P1-14-F02` — Alle berechtigten Nutzer sehen aus dem aktuellen Arbeitsstand, offenen Blockern und Voraussetzungen genau einen klaren nächsten Schritt.
@@ -335,7 +335,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-14-F62` — Ein Lebenszykluswechsel reserviert, entnimmt, verbraucht oder retourniert kein Material und erstellt oder verändert keinen Termin, Versand, Zeiteintrag, kein Dokument und keine Unterschrift.
 - `P1-14-F63` — P1-14 sendet keine Nachricht, erzeugt kein Kundenpaket und baut weder eine zweite Checkliste, Planung, Inbox noch einen konfigurierbaren Workflow; spätere Slices bleiben die Eigentümer dieser Funktionen.
 
-### `P1-15` — Strukturierte Arbeitsnachweise, Freigaben und Unterschriften (2026-08-24)
+### `P1-15` — Strukturierte Arbeitsnachweise, Freigaben und Unterschriften
 
 - `P1-15-F01` — Berechtigte Nutzer finden Arbeitsnachweise direkt am Auftrag oder Projekt zwischen Arbeitsanweisungen und allgemeinen Dokumenten; es entsteht keine zusätzliche Hauptnavigation.
 - `P1-15-F02` — Berechtigte Nutzer wählen beim Erstellen genau eine der fünf Arten Bautagebuch, Arbeitsbericht, Aufmaß, Mangel oder Regie-/Änderungsnachweis.
@@ -416,7 +416,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-15-F77` — Erstellen, Ändern, Entscheiden, Signieren, Verknüpfen und Exportieren eines Arbeitsnachweises verändert weder Planung, Versand, Ist-Zeit, Bestand, Preis, Rechnung, Kundenpaket noch Nachricht.
 - `P1-15-F78` — P1-15 baut weder einen vollständigen Außendienst-Arbeitspack noch Übergabepaket, Geräteakte, Abrechnung, Dokumenten-Pipeline, Rechtsarchiv, Kundenportal oder generischen Formular-/Workflow-Designer; die vorgesehenen späteren Slices bleiben Eigentümer.
 
-### `P1-16` — Fokussierter Arbeitspack für zugewiesene Handwerker (2026-08-25)
+### `P1-16` — Fokussierter Arbeitspack für zugewiesene Handwerker
 
 - `P1-16-F01` — Ein zugewiesener Handwerker öffnet am Auftrag einen fokussierten Arbeitspack mit den für den Einsatz nötigen Informationen und Aktionen.
 - `P1-16-F02` — Einzelauftrag und Projekt-Unterauftrag verwenden dieselbe rollenabhängige Arbeitspack-Komposition ohne doppelte Lader oder Fachlogik.
@@ -513,7 +513,7 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-16-F93` — P1-16 sendet keine Nachricht oder Kundenaktualisierung und baut weder Geräte-/Servicehistorie, kaufmännische Freigabe noch kundenöffentliche Übergabe vor.
 - `P1-16-F94` — Jede sichtbare Aktion bleibt beim zuständigen Fachgebiet; Rendern und Ausführen erzeugen keine fachfremde Mutation und der Arbeitspack bleibt eine Projektion statt einer neuen Domäne.
 
-### `P1-17` — Bürogeprüfte Übergabe und Kundenpaket (2026-08-28)
+### `P1-17` — Bürogeprüfte Übergabe und Kundenpaket
 
 - `P1-17-F01` — Büro/Admin öffnen für einen Einzelauftrag den eigenen Übergabestand unter `/auftraege/[Auftragsnummer]/uebergabe`.
 - `P1-17-F02` — Büro/Admin öffnen für einen Projekt-Unterauftrag denselben fachlichen Übergabestand unter der verschachtelten Auftragsroute.
@@ -625,9 +625,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-17-F108` — Primäre Aktionen, Auswahl, Dialoge und Verlauf besitzen logische Tastaturreihenfolge, sichtbaren Fokus, deutsche Screenreader-Namen, Live-Rückmeldung und mindestens 44 Pixel Touchhöhe.
 - `P1-17-F109` — Jede sichtbare P1-17-Aktion bleibt auf Paket, Review, Readiness und den gekoppelten Lebenszyklus begrenzt; Rendering und Nachladen sind nebenwirkungsfrei und erzeugen keine spätere Fachdomäne vorzeitig.
 
-**Acceptance invariant:** `109/109 mapped; 109/109 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-28).
+**Acceptance invariant:** `109/109 mapped; 109/109 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-18` — Installierte Anlagen und Geräte (2026-08-29)
+### `P1-18` — Installierte Anlagen und Geräte
 
 - `P1-18-F01` — Büro/Admin öffnen unter `/service/anlagen` eine organisationsweite, nach Anlage, Kunde, Einsatzort, Hersteller, Modell und Kennung durchsuchbare Anlagenliste.
 - `P1-18-F02` — Büro/Admin registrieren eine Anlage an genau einem vorhandenen Einsatzort eines vorhandenen Kunden.
@@ -678,9 +678,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-18-F47` — P1-18 erzeugt weder Serviceannahme, Disposition, Wartungsplan, Vertrag, Wiederholung, Fälligkeit, Zeitsegment, Bestandsbewegung, Verbrauch, Preis, Rechnung, Nachricht, öffentlichen Link noch Offline-Warteschlange.
 - `P1-18-F48` — P1-18 führt weder Herstellerregelwerk, Rechts- oder Compliance-Behauptung, IoT/Telemetrie, Ferndiagnose, Kundenportal, externen Anbieter noch generische EAV-/CMDB-/Workflow-Plattform ein.
 
-**Acceptance invariant:** `48/48 mapped; 48/48 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-29).
+**Acceptance invariant:** `48/48 mapped; 48/48 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-19` — Reaktiver Service und vermutete Gewährleistung (2026-08-30)
+### `P1-19` — Reaktiver Service und vermutete Gewährleistung
 
 - `P1-19-F01` — Büro/Admin öffnen unter `/service/faelle` eine organisationsweite Liste reaktiver Servicefälle.
 - `P1-19-F02` — Die Liste lässt sich nach Fallnummer, Kurzbeschreibung, Kunde, Einsatzort, Auftragsnummer und exakt verknüpfter Anlage durchsuchen.
@@ -779,9 +779,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-19-F95` — P1-19 erzeugt weder Preis, Angebot, Vertrag, Rechnung, Buchung, endgültige Abrechenbarkeit noch ausgehende Kundennachricht.
 - `P1-19-F96` — P1-19 führt weder Offline-Warteschlange, native mobile Hülle, externen Connector, Herstellerregelwerk, Telemetrie, Ferndiagnose, automatische Diagnose noch rechtliche Gewährleistungsklassifikation ein.
 
-**Acceptance invariant:** `96/96 mapped; 96/96 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-30).
+**Acceptance invariant:** `96/96 mapped; 96/96 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-20` — Wartungspläne und operative Abdeckung (2026-08-31)
+### `P1-20` — Wartungspläne und operative Abdeckung
 
 - `P1-20-F01` — Büro/Admin öffnen unter `/service/wartung` eine gemeinsame Wartungsübersicht; Mitarbeiter werden von der managerweiten Route weggeleitet.
 - `P1-20-F02` — Die Übersicht trennt fällige Arbeit, Wartungspläne und operative Abdeckungen in klar benannte Ansichten.
@@ -889,9 +889,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-20-F104` — Erstes Laden, Fehler, veralteter letzter Stand, Dialogaufschub, Fokus-/Sichtbarkeitsrückkehr, Tastatur, sichtbarer Fokus, deutsche Namen und ausreichend große Ziele folgen den vorhandenen gemeinsamen UI-Primitiven.
 - `P1-20-F105` — P1-20 erzeugt ohne bewusste Fachaktion weder Altbestands-Backfill, Auftrag, Termin, Disposition, Nachricht, Zeitsegment, Bestand, Verbrauch, Bestellung, Preis, Vertrag, Rechnung, Rechtsbehauptung, Offline-Warteschlange, Connector, Herstellerregelwerk, Telemetrie noch automatische Diagnose.
 
-**Acceptance invariant:** `105/105 mapped; 105/105 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).
+**Acceptance invariant:** `105/105 mapped; 105/105 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-21` — Explizite Zeitsegmente (2026-09-01)
+### `P1-21` — Explizite Zeitsegmente
 
 - `P1-21-F01` — Ein Mitarbeiter startet seine eigene Zeiterfassung über eine eindeutige, touchfreundliche Hauptaktion: Die Stempeluhr-Schaltfläche öffnet eine Liste der nächsten Aktionen („Arbeit starten“, „Arbeit an Auftrag …“, „Fahrt starten“, „Weitere Aktivitäten …“), jede Aktion startet mit einem Tipp; WerkFlow zeigt die laufende Aktivität und den Auftrag in der Anzeige über der Schaltfläche, die während der Arbeit grün und in der Pause gelb mit Tassensymbol erscheint; die verstrichene Zeit zeigt die Uhr auf der Zeiterfassungsseite. Über der Schaltfläche liegen während der Erfassung zwei Schnelltasten für die zwei wahrscheinlichsten nächsten Schritte (geändert in Pre-Wave-3 Schritt 3, 2026-09-15).
 - `P1-21-F02` — Admin und Büro verwenden für die eigene Zeit dieselbe Erfassung; P1-21 erlaubt ihnen keine spontane Live-Steuerung fremder Sitzungen.
@@ -958,9 +958,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-21-F63` — P1-21 erzeugt keine Korrekturfreigabe, Zeitkonto-, Zuschlags-, Compliance-, Periodenabschluss-, Lohn-, Rechnungs- oder Billability-Entscheidung.
 - `P1-21-F64` — P1-21 erzeugt ohne bewusste Zeitaktion weder Termin, Disposition, Wartungsarbeit, Dokument, Bestand, Verbrauch, Bestellung, Nachricht, Offline-Warteschlange noch externen Provideraufruf.
 
-**Acceptance invariant:** `64/64 mapped; 64/64 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-08-31).
+**Acceptance invariant:** `64/64 mapped; 64/64 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-22` — Einheitliche Zeitkorrekturen und Freigaben (2026-09-01)
+### `P1-22` — Einheitliche Zeitkorrekturen und Freigaben
 
 - `P1-22-F01` — Mitarbeiter öffnen aus ihrem persönlichen Verlauf eine geführte Zeitkorrektur; Kalender und Verlauf führen in dieselbe Korrekturdomäne.
 - `P1-22-F02` — Admin und Büro verwenden für Korrekturen dieselbe Oberfläche und denselben nachvollziehbaren Datenpfad wie Mitarbeiter.
@@ -1013,9 +1013,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-22-F49` — Eine Zeitkorrektur plant keinen Termin um und erzeugt weder Disposition, Bestand, Dokument, Nachricht, kommerzielle Entscheidung, Abrechnung, Lohnlauf, Offline-Warteschlange noch Provideraufruf.
 - `P1-22-F50` — P1-22 reserviert den verständlichen Fehler `period_closed` für den späteren Periodenbesitzer, führt aber selbst weder Periodenabschluss noch Wiedereröffnung, Zeitkonto oder Export ein.
 
-**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).
+**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-23` — Zeitkonten, Periodenabschluss und Lohnexport (2026-09-01)
+### `P1-23` — Zeitkonten, Periodenabschluss und Lohnexport
 
 - `P1-23-F01` — Die Organisation verwendet zunächst vollständige Kalendermonate in `Europe/Berlin`; jede Periode bewahrt ihre ausdrücklichen Grenzen für eine spätere, separat entschiedene Stichtagslogik.
 - `P1-23-F02` — Eine datierte, bestätigte Standardregel gilt organisationsweit, solange keine datierte Mitarbeiterzuordnung sie ersetzt.
@@ -1068,9 +1068,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-23-F49` — Das ZIP trennt Lohnwerte, Auftrags-/Projektzuordnungen, Korrekturverlauf und Kontrollsummen, neutralisiert Tabellenformeln und speichert die genaue Abschluss-, Mapping- und Generatorversion privat in R2/Dokumenten.
 - `P1-23-F50` — P1-23 erzeugt weder Lohnberechnung, Steuer, Rechtsbestätigung, PDF-Nachweis, Providerübertragung, Buchungssatz, Rechnung noch automatische Folgeaktion; Realtime aktualisiert nur die freigegebenen veränderlichen Wurzeln.
 
-**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-01).
+**Acceptance invariant:** `50/50 mapped; 50/50 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-24` — Kontrollierter Personenlebenszyklus (2026-09-02)
+### `P1-24` — Kontrollierter Personenlebenszyklus
 
 - `P1-24-F01` — Eine Organisation ohne P1-24-Konfiguration sieht „Bisheriger Zugang – nicht gesteuert“ und „Kein Onboardingplan“, niemals einen erfundenen vollständigen oder regelkonformen Zustand.
 - `P1-24-F02` — Unvollständige Anforderungen zeigen ihren konkreten fehlenden, ausstehenden oder blockierten Zustand mit verantwortlicher Person, Termin und Grund, soweit diese Angaben erfasst wurden.
@@ -1139,9 +1139,9 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-24-F65` — Der Personenexport liefert ein begrenztes nachvollziehbares Manifest und vorhandene autorisierte Downloads, aber keine Behauptung zu Signatur, Rechtskonformität, Aufbewahrungsfrist, Legal Hold oder vollständiger Portabilität.
 - `P1-24-F66` — P1-24 deaktiviert kein globales Auth-Konto, nutzt keinen neuen externen Dienst und erzeugt kein zweites Dokument-, Qualifikations-, Verantwortungs-, Aufgaben-, Auftrags-, Zeit-, Lohn-, Anlagenrückgabe- oder Aufbewahrungssystem.
 
-**Acceptance invariant:** `66/66 mapped; 66/66 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-02).
+**Acceptance invariant:** `66/66 mapped; 66/66 fully evidenced; 0 partial; 0 unmapped`.
 
-### `P1-24a` — Plantafel und Kalender-Überarbeitung (2026-09-18)
+### `P1-24a` — Plantafel und Kalender-Überarbeitung
 
 - `P1-24a-F01` — Büro/Admin: Der Reiter „Woche“ heißt für Büro und Admin „Plantafel“ und zeigt eine Zeile je aktivem Mitarbeiter, Spalten je Tag. Handwerker sehen denselben Reiter als „Woche“ mit genau ihrer eigenen Zeile.
 - `P1-24a-F02` — Alle: Der Horizont der Plantafel ist 1, 2, 4 oder 6 Wochen (Auswahl in der Kopfzeile); „Zurück“ und „Weiter“ springen um den Horizont, „Diese Woche“ (bei längeren Horizonten „Aktueller Zeitraum“) kehrt zum aktuellen Zeitraum zurück, und der heutige Tag ist in der Kopfzeile markiert.
@@ -1179,4 +1179,4 @@ Wave 0 and Wave 1 flows were enumerated retroactively at a coarser grain; from W
 - `P1-24a-F34` — Alle: Bei 1280 px Breite scrollt keine Ansicht seitlich (Plantafel bei einer Woche, Monat); Tag und längere Horizonte scrollen nur innerhalb des Kalenders; bei 2560 px wachsen Spalten und Karten; auf dem Telefon zeigt die Woche eine Tagesliste, nie ein beschnittenes Raster: die eigene Woche für Handwerker, für Büro und Admin die Termine aller Personen mit Namen je Karte.
 - `P1-24a-F35` — Alle: Jeder Zustand (heute, jetzt, Abwesenheit, Feiertag, Betriebsruhe, provisorische Zeit, Ziehen, Ziel, Ablehnung) ist im hellen und dunklen Modus lesbar; Text in Karten ist nie kleiner als 11 px.
 
-**Acceptance invariant:** `35/35 mapped; 35/35 fully evidenced; 0 partial; 0 unmapped` (accepted 2026-09-24).
+**Acceptance invariant:** `35/35 mapped; 35/35 fully evidenced; 0 partial; 0 unmapped`.

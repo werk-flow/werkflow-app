@@ -1,6 +1,6 @@
 # Recovery and incident runbook
 
-Status: living — last reviewed 2026-10-01
+Status: living — last reviewed 2026-10-17
 
 This runbook states what a backup can restore, what loss the owner accepted, and who acts in an incident. [Environments](environments.md) owns provider identities, plans and access paths.
 

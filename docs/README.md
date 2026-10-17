@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-08; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-17; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
@@ -25,7 +25,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 - **Remove** a sentence when it is derivable from code, when its rule no longer holds, or when another doc owns it. Remove a whole doc when nothing in it passes the table above. Deleting is a normal edit, and Git keeps the old text.
 - **Close** a plan or record when its work has ended. Before it closes, move every fact a later agent needs into its living home and list the homes under `## Durable homes`. Nobody opens a closed record unprompted.
 - **Delete** a closed record once nothing requires it: no living doc or check needs its acceptance evidence, and no fact in it still constrains future work. Slice records and decision records stay. Git keeps everything else.
-- **Budget.** Routine reading stays small because a task reads the procedures and items it touches, not whole owner docs. `docs:check` measures the word budget of each living technical doc and of `AGENTS.md`. Feature specs, product docs and plans have no budget: a task reads a spec's Current Product Baseline and only the planned sections it reaches. A budget changes only by the owner's decision, recorded as an amendment to [decision 0004](decisions/0004-documentation-structure.md). A living technical doc states rules as they are now: no dates outside its status line, no counters, no build or report ids. The decision records the reasons.
+- **Budget.** Routine reading stays small because a task reads the procedures and items it touches, not whole owner docs. `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs, product docs and plans have no budget: a task reads a spec's Current Product Baseline and only the planned sections it reaches. A living doc states rules as they are now: no dates outside its status line, no commit hashes, no counters, no build or report ids. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
 
 ## Index
 
@@ -47,7 +47,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | [recovery-and-incidents.md](technical/recovery-and-incidents.md) | Something is lost, leaked or down: backups, restore procedures, incident steps. |
 | [standards-audit.md](technical/standards-audit.md) | You accept a rendered design or audit a wave. |
 | [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You plan a Tier 1 or Tier 2 conversion, or a finding needs a backlog row. Not part of routine reading. |
-| [test-incident-log.md](technical/test-incident-log.md) | A browser failure needs its record, or you investigate a failure from 2026-09-25 on. Not part of routine reading. |
+| [test-incident-log.md](technical/test-incident-log.md) | A browser failure needs its record, or you investigate a recorded failure. Not part of routine reading. |
 
 ### Feature specifications (`docs/features/`)
 
@@ -94,7 +94,7 @@ Closed record. Open it only to investigate a named decision or claim: [Wave 3, W
 
 ### Decision records (`docs/decisions/`)
 
-A decision record states why a durable choice was made. It is immutable once accepted. Amendments are dated.
+A decision record states why a durable choice was made. It is immutable once accepted and grows only by dated amendments ([maintenance rule 8](#maintenance-rules)).
 
 | Doc | Decision |
 | --- | --- |
@@ -127,15 +127,16 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 
 `bun run docs:check` enforces the mechanical part of these rules. Run it after every docs change.
 
-1. **Status line.** Line 3 of every doc, under the H1 and one blank line, is its status. A living doc uses `Status: living — last reviewed YYYY-MM-DD`, optionally followed by `; <clause>`. A closed doc uses `Status: closed (YYYY-MM-DD) — <what it remains useful for>`. A decision record uses its metadata block that starts with `- **Status:** accepted (YYYY-MM-DD)`.
+1. **Status line.** Line 3 of every doc, under the H1 and one blank line, is its status. A living doc uses `Status: living — last reviewed YYYY-MM-DD`, optionally followed by `; <clause>`. Every change to a living doc reviews it, so the date moves to the day of the change: `docs:check` fails while the doc's last commit, or today for an uncommitted change, is newer than the date. A closed doc uses `Status: closed (YYYY-MM-DD) — <what it remains useful for>`. A decision record uses its metadata block that starts with `- **Status:** accepted (YYYY-MM-DD)`.
 2. **One home per fact.** See "Add, change and remove docs" above.
 3. **Link syntax.** A reference from one doc to another inside `docs/` is a relative markdown link, so that the check can resolve it. Backtick paths are for code and config files and for references from outside `docs/`. A bare id ("decision 0002") carries a link on its first mention in a doc.
 4. **The index is exhaustive.** Every Markdown file under `docs/` has a row above, except this index and the slice records, which the roadmap links.
 5. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `plans/phase-1/` holds sequencing, with one document per slice under `slices/` and cross-slice records in `audits/` and `pre-wave-3/`. `decisions/` holds numbered decision records.
-6. **A closed record is history.** A slice record or a cross-slice record is read again only when someone is sent there. A bare "see the record" pointer is not a home: the living doc states the substance. `docs:check` rejects a record closed from 2026-09-17 on without a `## Durable homes` section.
+6. **A closed record is history.** A slice record or a cross-slice record is read again only when someone is sent there. A bare "see the record" pointer is not a home: the living doc states the substance. `docs:check` rejects a closed plan record without a `## Durable homes` section; records closed before the rule are exempt.
 7. **Sibling repositories.** `docs:check` needs the sibling clones of the [workspace setup](../../werkflow-business/docs/workflow.md#prepare-a-new-machine). It reads them and never edits them. A missing clone fails the check once, with the number of links it left unchecked.
+8. **Decision record growth.** An accepted decision record changes only by a section appended at its end under the heading `## Amendment YYYY-MM-DD: <title>`. `docs:check` fails while the committed or the published text of a record is not a prefix of its current text.
 
-`docs:check` cannot judge meaning. Whether a sentence is derivable from code, whether a fact has a second home, and whether a living doc carries history are review judgments under virtue 6 in `AGENTS.md`.
+`docs:check` cannot judge meaning. Whether a sentence is derivable from code, whether a paraphrase gives a fact a second home, and whether a living doc carries history are review judgments under virtue 6 in `AGENTS.md`.
 
 ## How to work
 
@@ -164,44 +165,44 @@ Wrong turn: a new paragraph under the old one. The doc grows a layer per change 
 
 ## Checklist
 
-This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechanism. A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechanism. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - Every sentence holds something the code and the database cannot say: intent, a decision, a rule with its mechanism, a procedure, or an accepted limit. [judgment]
-- Each fact has one home. Other docs and skills link to it. [judgment]
-- The owning doc changes in the same change as the behavior or rule it describes. [judgment]
-- Every doc under `docs/` has its status line on line 3 in its genre's shape (maintenance rule 1). [script `docs:check`]
-- Every doc has an index row on this page (maintenance rule 4). [script `docs:check`]
-- A reference between docs is a relative markdown link that resolves, including its heading anchor (maintenance rule 3). [script `docs:check`, test `lib/docs/heading-anchors.test.ts`]
+- Each fact has one home, and other docs and skills link to it: no sentence of twelve or more words stands in two living docs, `AGENTS.md` or skills unless decision 0004 lists it. A paraphrase is review. [script `docs:check`, test `lib/docs/one-home.test.ts`, judgment]
+- The owning doc changes in the same change as the behavior or rule it describes, and its status date moves with the change (maintenance rule 1). [script `docs:check`, test `lib/docs/review-stamps.test.ts`, judgment]
+- Every doc under `docs/` has its status line on line 3 in its genre's shape (maintenance rule 1). [script `docs:check`, test `lib/docs/status-lines.test.ts`]
+- Every doc has an index row on this page (maintenance rule 4), and a row's status prefix agrees with its doc. [script `docs:check`, test `lib/docs/doc-index.test.ts`]
+- A reference between docs is a relative markdown link that resolves, including its heading anchor (maintenance rule 3). [script `docs:check`, test `lib/docs/doc-links.test.ts`, test `lib/docs/heading-anchors.test.ts`]
+- A decision record grows only by dated amendment sections (maintenance rule 8). [script `docs:check`, test `lib/docs/decision-records.test.ts`]
 - `AGENTS.md` and the skills link only to files that exist. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
 - A `docs/` path that a code comment, a lint message or a thrown string cites names a document and heading that exist. Applied migrations are exempt. [script `docs:check`, test `lib/docs/code-citations.test.ts`]
-- A living technical doc carries no date outside its status line and stays at or under 4,000 words. `AGENTS.md` stays at or under 2,800 words. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
-- Each virtue's owner doc carries "How to work", "Checklist", "Never", "Verify your work" and "Examples", each with at least one list item. Every checklist and "Never" item ends with a mechanism tag that names something real. Every custom lint rule, every selector set in `eslint.config.mjs` and every test under `lib/conventions/`, `lib/ui/` and `lib/security/`, and every rule test under `lib/testing/`, is named by `AGENTS.md` or an owner doc. [test `lib/docs/virtue-standards.test.ts`]
-- The "Enforced by" lines of `AGENTS.md` name paths, lint rules, groups and scripts that exist. [test `lib/docs/virtue-standards.test.ts`]
+- A living doc carries no date outside its status line and no commit hash, except where the settings table of decision 0004 exempts it with a reason. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
+- Living technical docs, `AGENTS.md`, this index and every skill file stay within their word budgets, and the checker's budgets and exemptions equal the latest settings table of decision 0004. [script `docs:check`, test `lib/docs/doc-policy.test.ts`]
+- Each virtue's owner doc carries "How to work", "Checklist", "Never", "Verify your work" and "Examples", each with at least one list item. Every checklist and "Never" item ends with a mechanism tag that names something real, and a lint tag names a rule the configuration enables or a set it declares and uses. Every custom lint rule, every selector set in `eslint.config.mjs` and every test under `lib/conventions/`, `lib/ui/` and `lib/security/`, and every rule test under `lib/testing/`, is named by `AGENTS.md` or an owner doc. [test `lib/docs/virtue-standards.test.ts`, test `lib/docs/lint-config.test.ts`]
+- The "Enforced by" lines of `AGENTS.md` name mechanisms that exist, each one tagged by the virtue's owner docs, and they name or cover by folder, group family or `static:lint` every mechanism those docs tag. [test `lib/docs/virtue-standards.test.ts`]
+- An owner doc's `[judgment]` tags never outnumber its entry in `lib/docs/judgment-ratchet.json`, which falls with them and rises only with the owner's reason. [script `docs:check`, test `lib/docs/judgment-ratchet.test.ts`]
 - A slice has one document, under `slices/`. [test `lib/docs/slice-records.test.ts`]
-- A closed slice record carries its deletion pass and review, and a closed plan record names its durable homes. [script `docs:check`]
-- The roadmap counter, the ready set and the record links agree, and the flow catalog's ids are unique and sequential. [script `docs:check`]
+- A closed slice record carries its deletion pass and review, and a closed plan record names its durable homes. [script `docs:check`, test `lib/docs/record-sections.test.ts`]
+- The roadmap counter, the ready set and the record links agree, and the flow catalog's ids are unique and sequential. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`, test `lib/docs/flow-catalog.test.ts`]
 - A roadmap row uses a status of the protocol's status model, and every accepted slice has its entry in the progress log. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`]
 - A feature spec's status line is dated on or after the acceptance of every slice that names it as primary spec. The date lives only in the status line. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`]
 - Every closed record opens with the fixed history banner under its status line, so an agent does not carry out an old instruction. [script `docs:check`, test `lib/docs/closed-records.test.ts`]
-- In living docs, `AGENTS.md` and the skills, a backticked route handler names a folder under `app/api/`, and a repository path in a skill resolves. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
-- Every incident-log entry names the tier where its prevention landed. [script `docs:check`]
+- In living docs, `AGENTS.md` and the skills, a backticked route handler names a folder under `app/api/`, and a backticked repository path resolves. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
+- Every incident-log entry names the tier where its prevention landed. [script `docs:check`, test `lib/docs/incident-tiers.test.ts`]
 - In living docs, `AGENTS.md` and the skills, a German quotation that opens with „ closes with “. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
 - Links between the app and its sibling clones resolve in both directions, each sibling's `AGENTS.md` links back to the app's, and every copy of a shared skill equals its canonical copy in the business repository. [script `docs:check`, test `lib/docs/workspace-links.test.ts`]
-- The `.claude` and `.agents` skill trees are byte-identical, except `coderabbit-review`. [script `docs:check`]
+- The `.claude` and `.agents` skill trees are byte-identical, except `coderabbit-review`. [script `docs:check`, test `lib/docs/skill-mirror.test.ts`]
 - Agent-facing instructions route CodeRabbit through `bun run review`. [test `lib/testing/publication/coderabbit-review-command.test.ts`]
 - Prose follows the `unslop` skill, and the `technical-writing` or `writing-for-agents` skill for its genre. [judgment]
 - A divergence from a Tier 3 default is recorded where `AGENTS.md` says. [judgment]
 
 ## Never
 
-- Restate a schema, a file list, a handler list, a function inventory, a count or a current value. [judgment]
-- Write dated narrative, report ids or build ids into a living doc. [test `lib/docs/living-doc-rules.test.ts`, judgment]
-- Copy a rule into a second doc. [judgment]
+- The prohibitions of virtue 6 in `AGENTS.md`, which owns their wording; dates, commit hashes and copied sentences fail the check, the rest is review. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`, test `lib/docs/one-home.test.ts`, judgment]
 - Reference a doc inside `docs/` by a backticked path instead of a link. [script `docs:check`]
 - Cite a rule by a number ("testing rule" with a number) in a living doc, a skill or code. Only this index numbers its rules; link the heading that states the rule. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
-- Change a word budget without the owner's decision recorded as an amendment to [decision 0004](decisions/0004-documentation-structure.md). To fit new text, cut text that restates code. [judgment]
-- Create a report or summary file that nobody asked for. [judgment]
-- Store repository facts in agent memory. [judgment]
+- Change a word budget or an exemption without the owner's decision recorded as an amendment to [decision 0004](decisions/0004-documentation-structure.md). To fit new text, cut text that restates code. [test `lib/docs/doc-policy.test.ts`]
+- Rewrite an accepted decision record in place. [script `docs:check`, test `lib/docs/decision-records.test.ts`]
 
 ## Verify your work
 
@@ -212,6 +213,6 @@ This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechan
 
 ## Examples
 
-- `docs/technical/security.md`: invariants and rules, each with the mechanism and the check that fails on a regression, and no inventory of handlers.
-- `docs/decisions/0005-enforcement-ladder.md`: a decision with its reason, amended by dated sections instead of rewritten.
-- `docs/technical/environments.md`: the migration rule lives here once, and the skills and decisions link to it.
+- [technical/security.md](technical/security.md): invariants and rules, each with the mechanism and the check that fails on a regression, and no inventory of handlers.
+- [decisions/0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md): a decision with its reason, amended by dated sections instead of rewritten.
+- [technical/environments.md](technical/environments.md): the migration rule lives here once, and the skills and decisions link to it.

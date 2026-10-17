@@ -1,6 +1,6 @@
 # Document Management
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Document management gives SHK businesses one digital place for job photos, contracts, invoices, offers, reports, and general business files. It replaces paper folders and scattered files. Office staff get a practical library, and field workers get a very simple flow. [Document storage and access](../technical/document-storage-and-access.md) owns storage, upload, access, and audit mechanics.
 

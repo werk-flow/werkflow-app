@@ -60,3 +60,11 @@ Correction recorded 2026-09-25: the setup below was completed with the September
 - [Decision 0003](0003-dev-prod-environment-split.md) — the two-project model this flow runs on.
 - [Decision 0001](0001-infrastructure-stack.md) — the stack.
 - The pre-Wave-3 step 5 record, kept in Git history, holds the release that adopted this flow.
+
+## Amendment 2026-10-17: accepted text restored
+
+A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2026-10-05 rewrote two accepted lines of this record in place: the Vercel line after the 2026-09-18 release made it stale, and a link to a record that Git alone keeps. The rewritten lines above supersede them; the accepted text was, with the dead link target in backticks:
+
+> - Vercel: the Supabase URL, publishable key and every other Supabase and R2 variable scoped per environment, Preview to DEV and Production to PROD (the owner does this in the Vercel dashboard before the step 5 preview). Today every environment points at PROD.
+
+> - Pre-Wave-3 step 5 (`../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md`) — the release that adopts this flow.

@@ -1,6 +1,6 @@
 # Conceptual data model
 
-Status: living — last reviewed 2026-10-03
+Status: living — last reviewed 2026-10-17
 
 This page states which domain owns which concept, the invariants between domains, and the rules that keep the meaning of history. `lib/supabase/database.types.ts` and live Supabase inspection show the schema. Update this page only when the conceptual model changes.
 

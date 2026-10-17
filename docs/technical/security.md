@@ -1,6 +1,6 @@
 # Security control map
 
-Status: living — last reviewed 2026-10-15
+Status: living — last reviewed 2026-10-17
 
 Read this before you add a route handler, Server Action, privileged call, table, storage path or provider setting. It names each security invariant, the mechanism that enforces it, and the check that fails on a regression.
 
@@ -21,7 +21,7 @@ Wrong turn: a policy that checks membership but not the role. Every member can t
 
 ### Add a Server Action or route handler
 
-1. Put the action in its domain's `'use server'` module, and export only actions. A helper that needs the admin client or a trusted user id lives in a `server-only` module.
+1. Put the action in its domain's `'use server'` module, and export only actions. A helper that needs the admin client or a trusted user id lives in a `server-only` module. A module a Bun script imports (`lib/storage/r2.ts`) cannot import `server-only`, which throws outside Next; the storage import boundary test keeps it out of browser bundles.
 2. Parse every parameter with a schema before its first use. An id goes through `uuidSchema`.
 3. Establish the caller through `lib/org/action-context.ts`: `resolveActionContext` for the active organization, `resolveActionContextFor` for an organization taken from a parsed argument or a loaded row, `lib/org/self-service-context.ts` for a person's own records, or a wrapper named in `lib/security/server-action-authorization.test.ts`. Check its failure before the first admin call or write. Take the user, organization and role from it. An action without an organization joins the test's identity-only list with a reason.
 4. Check the role. Then load the target inside the caller's organization and check object permission and lifecycle.
@@ -48,7 +48,7 @@ Wrong turn: granting `authenticated` so that the browser can call the function. 
 2. Authorize the target on the server, then sign a short-lived URL. The browser moves the bytes. [Document storage and access](document-storage-and-access.md) owns the access classes.
 3. Run `bun run test:unit lib/storage lib/security/storage-import-boundary.test.ts`.
 
-Wrong turn: sending the bytes through a Server Action. The body limit breaks large files, and the server holds every upload in memory.
+Wrong turn: bytes through a Server Action. The body limit breaks large files, and the server holds uploads in memory.
 
 ### Log a failure
 
@@ -85,7 +85,7 @@ Wrong turn: `console.error(error)`. A database or provider message can quote row
 
 The tag names the mechanism that fails on a violation. A `[judgment]` item here is a hard rule that review enforces, not a default. Only the two Tier 3 defaults of virtue 3 in `AGENTS.md` admit a recorded divergence.
 
-- Every export of a `'use server'` module calls an owner function of `lib/org/action-context.ts` or `lib/org/self-service-context.ts`, a named wrapper or a reviewed identity-only function, unconditionally, and checks its failure before the first admin call or write. A helper that needs the admin client or a trusted user id lives in a `server-only` module. [test `lib/security/server-action-authorization.test.ts`]
+- Every export of a `'use server'` module calls an owner function of `lib/org/action-context.ts` or `lib/org/self-service-context.ts`, a named wrapper or a reviewed identity-only function, unconditionally, and checks its failure before the first admin call or write. A helper that needs the admin client or a trusted user id lives in a `server-only` module. [code `lib/org/action-context.ts`, test `lib/security/server-action-authorization.test.ts`]
 - Every parameter of an exported Server Action, inline ones included, goes through a Zod schema parse or a named validator before its first use. [test `lib/conventions/server-action-input.test.ts`]
 - Role, lifecycle and object permission are the right ones for the operation. [judgment]
 - Every action module has a boundary fixture that drives its real actions with a foreign id or a lower role; the shrink-only list names each module without one and why. [test `lib/security/boundary-coverage.test.ts`]
@@ -95,7 +95,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - A new authenticated route area is routed by `proxy.ts`. [test `lib/security/proxy-prefixes.test.ts`]
 - An identity check that cannot complete is a failure, never a signed-out caller and never access. A page shows the error page, a route handler answers with a private 500 or 503, and the proxy lets the request through. [test `lib/security/proxy-session.test.ts`, test `lib/data/background-read-http.test.ts`, test `lib/security/auth-callback-http.test.ts`, test `lib/security/redeem-invite-http.test.ts`]
 - The migration that creates a table enables RLS, adds the policies its client access needs, revokes everything from `public`, `anon`, `authenticated` and `service_role`, and grants exactly the needed operations to exactly the needed roles. The migration role's default grants are revoked for tables and functions, so a new object has no Data API access until its migration grants it. A client grant without a policy for its command fails, and a client write joins the reviewed inventory. Grant to `anon` never without the owner's approval. Grant sequence privileges when an intended insert needs them: the service role bypasses RLS, not SQL privileges. [group `sql:security`, group `canary:security`]
-- A SELECT policy applies the role and assignment limits of the server readers. `supabase/tests/client_read_boundaries.sql` proves that an employee reads only their own jobs, assignments and projects; extend it for a new role-limited table. [group `sql:security`]
+- A SELECT policy applies the role and assignment limits of the server readers. `supabase/tests/client_read_boundaries.sql` proves that an employee reads only their own jobs, assignments and projects; extend it for a new role-limited table. [group `sql:security`, test `supabase/tests/client_read_boundaries.sql`]
 - A public function is executable by `service_role` only. An RLS helper that client roles must execute lives in `app_private`, is granted to `authenticated` only, and joins the definer-execution inventory in `supabase/tests/security_boundaries.sql` with the policy that needs it. [group `sql:security`]
 - A new table that feeds the period calculation gets the closed-period trigger. [group `sql:closed-period-writes`]
 - A new ledger table refuses direct rewriting, also by privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule. [group `sql:security`]
@@ -122,7 +122,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 ## Never
 
 - Restrict an operation only in the UI. [judgment]
-- Trust an id, an organization or a role that the client sent. [judgment]
+- Client-sent identity: an id, organization or role (`AGENTS.md`, virtue 3). [judgment]
 - Export a helper from a `'use server'` module. [test `lib/security/server-action-authorization.test.ts`]
 - Grant to `anon`, or leave a table without RLS or a client grant without a policy. [group `sql:security`]
 - Call `signOut()` without an explicit scope. [lint `authSelectors`]
@@ -149,7 +149,6 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with the payment slice.
 - A person's own address still travels in three URLs: the invite link (`/signup?email=`), the code step (`/verify?email=`) and the password reset from settings. Request logs keep it. The owner decides whether to move it server-side.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
-- Production runs the Next.js version of the last release until the release before Wave 3 ships the patched version that `main` already pins.
 - A reviewed dependency exception is open for the lint toolchain; `lib/security/dependency-exceptions.json` holds its reason and expiry.
 - Two provider facts are unverified: the full CORS configuration of the R2 buckets, and the scoping of the Vercel environment variables. The runtime credentials cannot read either.
 

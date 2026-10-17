@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations and materials needed to deliver it.
 

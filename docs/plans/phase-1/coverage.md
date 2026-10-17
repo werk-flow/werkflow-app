@@ -1,12 +1,12 @@
 # Phase 1 Coverage Matrices
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Routing aids: the starting-foundation snapshot and the feature-to-slice and cross-cutting coverage matrices. They change only when slice scope or feature routing changes. The slice index lives in [roadmap.md](roadmap.md).
 
 ## Starting Foundation Snapshot
 
-This table describes the foundation at the roadmap's start on 2026-08-04, before the numbered slices extended it. It is an orientation aid, not the current product baseline. Read feature baselines and current code for implemented behavior.
+This table describes the foundation at the roadmap's start (`P1-00`), before the numbered slices extended it. It is an orientation aid, not the current product baseline. Read feature baselines and current code for implemented behavior.
 
 | Area | Starting position | Roadmap consequence |
 | --- | --- | --- |

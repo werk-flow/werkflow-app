@@ -1,8 +1,8 @@
 # Code quality and maintainability
 
-Status: living — last reviewed 2026-10-16
+Status: living — last reviewed 2026-10-17
 
-This doc owns virtue 4 in `AGENTS.md`. Good code here is the smallest amount of clear code that delivers the confirmed outcome. A domain rule has one owner module with precise types and focused tests. The `typescript-best-practices` skill owns the type patterns. This page owns the checklist, the prohibitions, the deletion pass and the independent review.
+This doc owns virtue 4 in `AGENTS.md`. `AGENTS.md` states what good code is; this doc says how to reach it and what checks it. The `typescript-best-practices` skill owns the type patterns. This page owns the checklist, the prohibitions, the deletion pass and the independent review.
 
 ## How to work
 
@@ -56,7 +56,7 @@ Wrong turn: code kept for possible future scope. Every later agent reads it, mai
 
 ## Checklist
 
-A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - The change delivers the confirmed outcome with the least code that stays clear. [judgment]
 - Each domain rule has one owner module, and other files import it. [test `lib/conventions/duplicate-helpers.test.ts`]
@@ -83,7 +83,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 - Every promise is awaited, returned or handled with `.catch`, or marked `void` with a comment where it cannot reject or handles its failure inside. [lint `@typescript-eslint/no-floating-promises`, test `lib/conventions/typed-lint.test.ts`]
 - A text column with a check constraint is narrowed by `constrainedValue`, and a `jsonb` payload by `isJsonRecord` or `jsonRecordOrEmpty`, never by an `as` cast. [lint `@typescript-eslint/consistent-type-assertions`, test `lib/conventions/type-assertions.test.ts`]
 - A React `key` names a stable identity. A remount for fresh data uses a `resetKey`. [test `lib/conventions/collection-keys.test.ts`]
-- A module, a component or route file, and a function each stay under their line limit in `eslint-rules/size-caps.mjs`. A module or function that predates the limits is listed in `eslint-rules/size-cap-exceptions.json` with its size as its ceiling, and the entry only shrinks. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `quality/function-size`, test `lib/conventions/module-caps.test.ts`]
+- A module, a component or route file, and a function each stay under their line limit in `eslint-rules/size-caps.mjs`. A module or function that predates the limits is listed in `eslint-rules/size-cap-exceptions.json` with its size as its ceiling, and the entry only shrinks. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `quality/function-size`, code `eslint-rules/size-cap-exceptions.json`, test `lib/conventions/module-caps.test.ts`]
 - `lib/` imports nothing from `components/`. [lint `libToComponentsPattern`]
 - Every lint suppression names its rule and carries a `-- reason`. [lint `@eslint-community/eslint-comments/require-description`, lint `reportUnusedDisableDirectives`]
 - Nothing is left unused: no file, export, dependency, local or parameter, and no export that only a unit test imports. A deliberate test seam carries `@internal` with its reason. [group `static:unused`, test `lib/conventions/test-only-exports.test.ts`, group `static:typecheck`]
@@ -94,7 +94,7 @@ A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS
 ## Never
 
 - Use `any`. [lint `@typescript-eslint/no-explicit-any`]
-- Use a non-null assertion `!`, in product code or in any test. [lint `@typescript-eslint/no-non-null-assertion`]
+- Use a non-null assertion `!` in any TypeScript file: product code, tests, scripts or hooks. [lint `@typescript-eslint/no-non-null-assertion`]
 - Cast through `unknown` (`value as unknown as T`) in product code. [lint `doubleCastSelectors`]
 - Assert a type with `as` or `<T>`; `as const` stays allowed. Parse, narrow or type the value instead. A file on `eslint-rules/type-assertion-ratchet.json` keeps at most its recorded count. [lint `@typescript-eslint/consistent-type-assertions`, test `lib/conventions/type-assertions.test.ts`]
 - Pass `undefined` into an optional property, or silence a strict flag with a cast or `@ts-expect-error`. [group `static:typecheck`, judgment]

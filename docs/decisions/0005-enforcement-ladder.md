@@ -45,3 +45,11 @@ A mechanically checked rule proves only its named invariant. Radius, token, over
 ## Amendment 2026-10-02: hard rules and defaults
 
 The owner decided this on 2026-10-02. A Tier 1 or Tier 2 rule is a hard rule: its mechanism enforces it, and changing it means changing the mechanism in the same change, with the owner. A Tier 3 rule is a verified default. An agent may diverge when the default clearly does not fit, and records the default, the reason, what it did instead and whether the default should change. Each virtue's owner doc lists its rules as a checklist with one mechanism per item, and `docs:check` verifies that every named mechanism exists. `AGENTS.md` owns the wording and names the place where a divergence is recorded.
+
+## Amendment 2026-10-17: accepted text restored
+
+A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2026-10-05 rewrote one accepted line of this record in place, because its link pointed at a record that Git alone keeps. The rewritten line under "Initial adoption" supersedes it; the accepted text was, with the dead link target in backticks:
+
+> The consolidation named above completed in the platform-hardening phase (`../plans/phase-1/consolidation-2026-08/platform-hardening.md`). Remaining conversions stay in the living backlog for later work.
+
+From this amendment on, `docs:check` refuses any change to a decision record other than a new dated amendment section at its end ([decision record growth](../README.md#maintenance-rules)).

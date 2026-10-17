@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-16
+Status: living — last reviewed 2026-10-17
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -180,7 +180,7 @@ Testing authorizes no commit, push, deployment, or schema change.
 
 ## Checklist
 
-The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - Each rule sits at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for a permission, `ui:contracts` for a shared control, a browser journey for a connected outcome. [judgment]
 - A new or rewritten browser case prepares its own prerequisites and runs alone in a fresh world. [test `lib/testing/spec-support/spec-conventions.test.ts`]
@@ -194,7 +194,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Describe and checkpoint ownership follow the spec convention. [test `lib/testing/spec-support/spec-checkpoint-conventions.test.ts`]
 - Expectations name semantic tokens, never palette classes. [test `lib/conventions/palette-classes-in-tests.test.ts`]
 - Every catalog flow maps to evidence that names its proving test titles; a renamed, deleted or ambiguous title fails, a reference without a proving test states its reason, and a changed catalog clause reopens its mapping. Whether a mapped assertion proves its clause is the reviewer's reading. [group `static:coverage`, test `lib/testing/selection/coverage-map.test.ts`, test `lib/testing/selection/test-titles.test.ts`, judgment]
-- A new spec file is a registered group with its scopes, and every scope prefix exists. A measured or freshness group runs alone. [test `lib/testing/selection/test-groups.test.ts`, test `lib/testing/selection/test-scope-prefixes.test.ts`, test `lib/testing/selection/group-selection.test.ts`]
+- A new spec file is a registered group with its scopes, and every scope prefix exists. A measured or freshness group runs alone. [code `scripts/verify.ts`, test `lib/testing/selection/test-groups.test.ts`, test `lib/testing/selection/test-scope-prefixes.test.ts`, test `lib/testing/selection/group-selection.test.ts`]
 - A complete roadmap slice has a browser title with its tag or its gate's tag. [code `lib/docs/slice-browser-proof.ts`, test `lib/docs/slice-browser-proof.test.ts`]
 - Every required measured scenario has a reviewed reference at the digest of its measured tests, and a baseline never exceeds its budget. [test `lib/testing/performance-references.test.ts`, test `lib/testing/performance-reference-carryover.test.ts`, test `lib/testing/performance-baselines.test.ts`]
 - An accepted screen keeps its look and visible text, and only a focused update run rewrites a reference. [group `audit:visual`, test `lib/testing/runner/visual-reference-updates.test.ts`]
@@ -211,7 +211,6 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 
 - Commit `test.only`, `test.skip`, `test.fixme`, `test.slow` or a per-test timeout. [lint `specSelectors`]
 - Add a fixed sleep, or mint a golden cleanup marker outside the seed module. [lint `specSelectors`]
-- Use a `!` assertion in a spec. [lint `@typescript-eslint/no-non-null-assertion`]
 - Locate a control in a spec by its copy, a parent hop, a CSS class, an id or an attribute. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-structural-locator`]
 - Compare `count()` reads taken once; poll them together with `expect.poll`. [lint `playwright-spec/no-one-shot-count-comparison`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`]
 - Weaken an assertion, or retry until green. [lint `playwright-spec/no-retried-action`, judgment]

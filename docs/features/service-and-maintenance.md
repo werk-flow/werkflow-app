@@ -1,6 +1,6 @@
 # Service And Maintenance
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Service and maintenance covers recurring maintenance, reactive customer service, faults, inspections, emergency work, and the long-term history of installed customer equipment.
 
@@ -199,4 +199,4 @@ Predictive-maintenance claims need enough reliable history and domain validation
 - Which report and signature rules vary by service type or customer?
 - What evidence is required before the product may suggest predictive maintenance?
 
-The [product capability map](../product/product-capability-map.md) owns cross-feature handoffs, and the [Phase 1 roadmap](../plans/phase-1/roadmap.md) owns slice order and status.
+Cross-feature handoffs: [product capability map](../product/product-capability-map.md). Slice order and status: [Phase 1 roadmap](../plans/phase-1/roadmap.md).

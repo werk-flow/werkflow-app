@@ -1,6 +1,6 @@
 # CodeRabbit reviews
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 CodeRabbit gives a second review of local changes and slice diffs before acceptance. Treat it as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 

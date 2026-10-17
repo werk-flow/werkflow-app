@@ -174,7 +174,7 @@ function area(s: Shape): number {
 
 ## Type guards
 
-A guard must actually verify the claim. A lying guard is worse than `as` because the bug hides behind a name that says it's safe.
+A guard must actually verify the claim (the SKILL.md table says why a lying guard is the worst cast).
 
 ```ts
 function isCircle(s: Shape): s is Shape & { kind: "circle" } {

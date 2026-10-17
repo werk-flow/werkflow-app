@@ -23,6 +23,8 @@ if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
   );
   process.exit(1);
 }
+// The guard above narrowed both values to strings; the client reads this object.
+const credentials = { accessKeyId, secretAccessKey };
 
 function buildClient(jurisdiction: string | null): S3Client {
   const segment = jurisdiction ? `${jurisdiction}.` : '';
@@ -30,7 +32,7 @@ function buildClient(jurisdiction: string | null): S3Client {
     region: 'auto',
     endpoint: `https://${accountId}.${segment}r2.cloudflarestorage.com`,
     forcePathStyle: true,
-    credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
+    credentials,
   });
 }
 

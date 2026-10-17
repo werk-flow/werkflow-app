@@ -1,6 +1,6 @@
 # Performance
 
-Status: living — last reviewed 2026-10-16
+Status: living — last reviewed 2026-10-17
 
 This doc owns how WerkFlow measures speed and feel: the journeys people repeat, the lab counts and payload budgets that guard them, layout stability, and the procedure for making a flow faster. [Realtime and caching](realtime-and-caching.md) owns feedback, freshness and the latency targets. [Testing](testing.md#deadlines-and-measured-scenarios) owns how wall-clock scenarios are recorded and calibrated.
 
@@ -94,7 +94,7 @@ These are Tier 3 defaults. Diverge with the note that `AGENTS.md` describes, aft
 
 ## Checklist
 
-A `[judgment]` item is a Tier 3 default: diverge only with the note that `AGENTS.md` describes under "How to read the virtues".
+A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - Every journey names its role, start action, usable result and catalog flows, and has a lab step that a lab spec records. [test `lib/testing/journeys.test.ts`]
 - A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. [code `tests/audit/support/lab-recorder.ts`, group `audit:lab:field`, group `audit:lab:office`]

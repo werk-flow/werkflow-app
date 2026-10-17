@@ -113,3 +113,48 @@ Decided:
 3. A budget changes only by the owner's decision, recorded as a dated amendment to this record.
 
 [The docs index](../README.md) owns the reading rule. This amendment supersedes the reading definition and the 10,000-word limit of rule 4 in the 2026-10-01 amendment.
+
+## Amendment 2026-10-17: budgets and exemptions in one table, and the checks of the documentation review
+
+The owner's program to close every review finding asked on 2026-10-15 that each documentation rule have a mechanism. The documentation review of that day found budgets and exemptions that changed without a failing check, dates and a commit hash in living docs outside `docs/technical/`, "last reviewed" dates older than the docs' last commits, rewritten decision records, rules copied word for word between docs, an 11,000-word design skill with no budget, and a reference to an incident archive that never existed.
+
+Decided:
+
+1. The settings table below holds every word budget and every exemption of `docs:check`, each with its reason. `lib/docs/doc-policy.ts` holds the same settings for the checker, and `lib/docs/doc-policy.test.ts` fails while the two differ. A later amendment that changes a setting restates the whole table; the last table rules.
+2. The date rule covers every living doc, not only technical docs, and a living doc names no commit hash. Git holds history.
+3. A living doc's status date moves with every change to it; `docs:check` compares it with Git.
+4. A decision record grows only by dated amendment sections at its end. The rewritten lines of 0005, 0006, 0007 and 0008 are restored there as accepted text.
+5. A sentence of twelve or more words stands in only one living doc, `AGENTS.md` or skill file. Shared sentences need a row below.
+6. The docs index and every skill file have a budget. The design skill was split into its owner file and canon files under `.claude/skills/werkflow-design/canon/`.
+7. An owner doc's `[judgment]` tags may only fall, recorded in `lib/docs/judgment-ratchet.json`.
+
+Correction to rule 6 of the 2026-10-01 amendment: the incident entries before 2026-09-25 did not move to a closed archive. They were deleted, and Git history keeps them.
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| Word budget: living technical doc | 4000 | The 2026-10-03 amendment, unchanged. |
+| Word budget: AGENTS.md | 2800 | The 2026-10-01 amendment, unchanged. |
+| Word budget: docs index | 3600 | Routine reading includes the index in full; it holds the index, the doc rules and virtue 6's owner sections. |
+| Word budget: skill file | 4000 | A skill is read in full when it loads; the same size as an owner doc. |
+| Unbudgeted doc | docs/technical/test-incident-log.md | A log by purpose that no routine task reads. |
+| Dated doc | docs/technical/test-incident-log.md | A dated log by purpose. |
+| Dated doc | docs/plans/phase-1/log.md | The append-only progress log. |
+| Dated doc | docs/plans/phase-1/audits/golden-gate-log.md | The append-only gate-run log. |
+| Dated doc | docs/product/competitive-landscape.md | Market figures mean something only with their snapshot date. |
+| Dated doc | docs/features/commercial-and-finance.md | Statutory e-invoice dates and the research date of provider facts. |
+| Dated lines | docs/plans/phase-1/roadmap.md | A complete slice row names its acceptance date, which the roadmap check matches with the slice record. |
+| Dated lines | docs/product/user-flow-catalog.md | A flow's text is pinned by its hash in the coverage map and changes only with its evidence. |
+| Append-only log | docs/plans/phase-1/log.md | Historical entries keep the references they were written with. |
+| Append-only log | docs/plans/phase-1/audits/golden-gate-log.md | As above. |
+| Append-only log | docs/technical/test-incident-log.md | As above. |
+| Unmirrored skill | `coderabbit-review` | Codex ships its own CodeRabbit skill. |
+| Living plan | docs/plans/phase-1/roadmap.md | The living roadmap family never closes, so it needs no durable-homes section. |
+| Living plan | docs/plans/phase-1/protocol.md | As above. |
+| Living plan | docs/plans/phase-1/gates.md | As above. |
+| Living plan | docs/plans/phase-1/coverage.md | As above. |
+| Living plan | docs/plans/phase-1/log.md | As above. |
+| Dead citation | lib/testing/evidence/build-identity.test.ts -> docs/note.md | A fixture file name inside a test, not a citation. |
+| Dead citation | lib/testing/evidence/candidate-identity.test.ts -> docs/testing.md | As above. |
+| Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
+| Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
+| Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |

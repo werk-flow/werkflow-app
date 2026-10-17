@@ -163,8 +163,7 @@ function parseArguments(): {
     throw new Error('Use bun run test:plan or bun run test:verify.');
   const values: Record<string, string> = {};
   let fresh = false;
-  while (args.length) {
-    const name = args.shift()!;
+  for (let name = args.shift(); name !== undefined; name = args.shift()) {
     // `--fresh` runs the selected groups even when a proof exists: harness measurement and calibration need real executions.
     if (name === '--fresh') {
       fresh = true;
@@ -289,9 +288,8 @@ async function main(): Promise<void> {
     );
   if (options.mode === 'release' && options.groupIds)
     throw new Error('Release verification cannot omit groups. Use change mode for focused work.');
-  const selected = options.groupIds
-    ? candidates.filter((group) => options.groupIds!.includes(group.id))
-    : candidates;
+  const { groupIds } = options;
+  const selected = groupIds ? candidates.filter((group) => groupIds.includes(group.id)) : candidates;
   const qualified = selected
     .map((group) => ({
       group,
@@ -559,7 +557,6 @@ async function main(): Promise<void> {
             discoveries[suite] = tests;
             console.log(`[verify] discovered ${tests.length} ${suite} tests`);
           }
-          for (const entry of freshBrowserEntries) runKeys.set(entry.group.id, createRunKey());
           const buildId = readBuildReceipt(repository).buildId;
           const preparedPath = resolve(directory, 'prepared-plan.json');
           writePreparedPlan(preparedPath, {
@@ -569,14 +566,14 @@ async function main(): Promise<void> {
             buildId,
             discoveries,
             groups: Object.fromEntries(
-              freshBrowserEntries.map((entry) => [
-                entry.group.id,
-                {
-                  fingerprint: entry.fingerprint,
-                  runKey: runKeys.get(entry.group.id)!,
-                  enforceDeadlines: entry.enforceDeadlines,
-                },
-              ]),
+              freshBrowserEntries.map((entry) => {
+                const runKey = createRunKey();
+                runKeys.set(entry.group.id, runKey);
+                return [
+                  entry.group.id,
+                  { fingerprint: entry.fingerprint, runKey, enforceDeadlines: entry.enforceDeadlines },
+                ];
+              }),
             ),
           });
           process.env[PREPARED_PLAN_ENV] = preparedPath;

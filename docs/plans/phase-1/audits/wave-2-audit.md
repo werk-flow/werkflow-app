@@ -1,10 +1,10 @@
 # Wave 2 Flow Audit (per-slice model)
 
-Status: living — last reviewed 2026-10-05; all Wave 2 slices accepted, formal wave-end certification remains unrecorded
+Status: living — last reviewed 2026-10-17; all Wave 2 slices accepted, formal wave-end certification remains unrecorded
 
 Wave 2 audits work differently from Wave 1: **every slice ships its own exhaustive flow coverage as part of slice acceptance.** There are no wave-end discovery sessions. This document is the wave's coverage ledger and the certification-gate record; current process rules live in [`phase-1/protocol.md`](../protocol.md), [testing.md](../../../technical/testing.md), and [decision 0007](../../../decisions/0007-independent-test-groups.md). Historical acceptance rows below keep the evidence recorded at that time.
 
-## Why the model changed (decision, 2026-08-21)
+## Why the model changed
 
 Wave 1 enumerated and tested catalog flows after all twelve slices were done, and its defects surfaced weeks after the context that produced them was gone. From Wave 2 on, the flow inventory is part of the slice itself. The [protocol](../protocol.md) owns the steps: the pre-implementation report proposes the flow list ("Before Starting A Slice", step 5), and acceptance closes the catalog, the coverage map and the slice's ledger rows below with `X/X mapped; X/X fully evidenced; 0 partial; 0 unmapped` ("Before Marking A Slice Complete"). Evidence can combine browser, domain, SQL, and component tests as the contract requires. A catalog flow remains required when its assertion moves to a cheaper layer.
 

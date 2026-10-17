@@ -1,6 +1,6 @@
 # Customers And CRM
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Customer relationship management in WerkFlow is the operational customer context an SHK business needs to receive requests, plan visits, do the work, communicate reliably, and understand a relationship's history.
 

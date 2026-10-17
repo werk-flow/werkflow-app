@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Employee management covers the operational relationship between an organization and its people: membership, access, personnel data, employment conditions, availability, qualifications, assignments, leave, personnel documents, and handoffs to time tracking and payroll.
 

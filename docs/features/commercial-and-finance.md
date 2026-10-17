@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Commercial and finance capabilities connect the operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation. Native accounting, payroll, and tax filing are separate product decisions. This scope does not imply them.
 

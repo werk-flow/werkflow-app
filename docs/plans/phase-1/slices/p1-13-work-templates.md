@@ -62,7 +62,7 @@ Organizations can create and publish versioned SHK work templates for either an 
 
 ### Where the confirmed flow contract lives
 
-The 27 confirmed flows `P1-13-F01` through `P1-13-F27` live in the [user-flow catalog](../../../product/user-flow-catalog.md#p1-13--versionierte-arbeitsvorlagen-2026-08-23).
+The 27 confirmed flows `P1-13-F01` through `P1-13-F27` live in the [user-flow catalog](../../../product/user-flow-catalog.md#p1-13--versionierte-arbeitsvorlagen).
 
 ### Data and authorization plan
 

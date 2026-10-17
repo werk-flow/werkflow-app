@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  checkRoadmapRows,
+  findRoadmapCounterProblems,
   findStaleSpecReviews,
   logRecordsAcceptance,
   primarySpecsOf,
@@ -116,6 +118,49 @@ describe('spec review date against slice acceptance', () => {
     ).toEqual([
       expect.stringContaining('docs/features/inventory.md was last reviewed 2026-08-01, before P1-25'),
       'P1-99 names features/gone.md as its primary spec, which does not exist',
+    ]);
+  });
+});
+
+describe('roadmap counter and rows', () => {
+  const rows = readRoadmapRows(
+    [
+      header,
+      '| `P1-01` | `complete` | Sites | `P1-00` | Customers/CRM | Accepted `complete` 2026-08-04 ([record](slices/p1-01-sites.md)) |',
+      '| `P1-02` | `planned` | Requests | `P1-01` | Customers/CRM | Open |',
+      '| `P1-03` | `ready` | People | `P1-02` | Employee management | Open |',
+    ].join('\n'),
+  ).rows;
+
+  test('probe: a counter that disagrees with the rows fails', () => {
+    expect(findRoadmapCounterProblems('**Formally accepted roadmap slices:** 1 of 3 accepted', rows)).toEqual(
+      [],
+    );
+    expect(findRoadmapCounterProblems('**Formally accepted roadmap slices:** 2 of 4 accepted', rows)).toEqual(
+      [
+        'the counter says 2 accepted but the slice index has 1 complete rows',
+        'the counter says 4 slices but the slice index has 3 rows',
+      ],
+    );
+    expect(findRoadmapCounterProblems('no counter', rows)).toEqual([
+      'the accepted-slices counter line is missing',
+    ]);
+  });
+
+  test('probe: a stale ready set, a record closed on another day and a missing log entry fail', () => {
+    const { problems, accepted } = checkRoadmapRows(rows, {
+      statuses: new Map([['plans/phase-1/slices/p1-01-sites.md', { kind: 'closed', date: '2026-08-05' }]]),
+      logEntries: [],
+      featureSpecs: ['features/customers-and-crm.md'],
+    });
+    expect(problems).toEqual([
+      'P1-01 row says accepted 2026-08-04 but slices/p1-01-sites.md is closed (2026-08-05)',
+      expect.stringContaining('P1-01 is complete but docs/plans/phase-1/log.md has no entry'),
+      'P1-02 is planned but every direct prerequisite is complete; recompute the ready set (protocol.md status model)',
+      'P1-03 is ready but a direct prerequisite is not complete',
+    ]);
+    expect(accepted).toEqual([
+      { id: 'P1-01', acceptedOn: '2026-08-05', primarySpecs: ['features/customers-and-crm.md'] },
     ]);
   });
 });

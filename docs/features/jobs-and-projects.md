@@ -1,6 +1,6 @@
 # Jobs And Projects
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 Jobs (`Aufträge`) and projects (`Projekte`) are WerkFlow's central work objects. A job is work a team plans, performs, documents, and completes. A project groups related work when the business needs a larger delivery context. A simple service visit or small order never needs a project.
 

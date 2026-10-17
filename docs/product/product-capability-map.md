@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-10-05
+Status: living — last reviewed 2026-10-17
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
