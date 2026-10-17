@@ -4,11 +4,14 @@ import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { uploadDocumentDirect } from '@/lib/documents/upload-client';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { discardUnlinkedWorkArtifactSignature, recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
 import { WORK_ARTIFACT_LEGAL_NOTICE } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import type { WorkArtifactTarget } from './work-artifact-content';
+
+const CUSTOMER_NAME_REQUIRED = 'Bitte gib den Namen der unterzeichnenden Person an.';
 
 type WorkArtifactCustomerActionsOptions = WorkArtifactTarget & {
   editor: WorkArtifactEditor;
@@ -25,7 +28,7 @@ export function useWorkArtifactCustomerActions({
   onClose,
 }: WorkArtifactCustomerActionsOptions) {
   const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
-  const { actionReason, setActionReason, hasActionReason } = review;
+  const { actionReason, setActionReason, checkActionReason } = review;
   const { showBanner } = useBanner();
   const [customerName, setCustomerName] = useState('');
   const [customerRole, setCustomerRole] = useState('');
@@ -34,20 +37,19 @@ export function useWorkArtifactCustomerActions({
   const [pendingSignatureDocumentId, setPendingSignatureDocumentId] = useState<string | null>(null);
   const [customerNameError, setCustomerNameError] = useState<string | null>(null);
 
-  function hasCustomerName(): boolean {
-    const valid = customerName.trim().length >= 2;
-    setCustomerNameError(valid ? null : 'Bitte gib den Namen der unterzeichnenden Person an.');
-    if (!valid) document.getElementById('artifact-customer-name')?.focus();
-    return valid;
+  /** Marks the name field and returns its message, or undefined when the name is valid. */
+  function checkCustomerName(): string | undefined {
+    const message = customerName.trim().length >= 2 ? undefined : CUSTOMER_NAME_REQUIRED;
+    setCustomerNameError(message ?? null);
+    return message;
   }
 
   function customerAction(actionType: 'customer_acknowledged' | 'customer_refused' | 'customer_reserved') {
     if (!detail || !currentRevision) return;
-    // Refusal and reservation also need the reason. The reason check runs last
-    // so focus lands on the reason field, which sits above the name.
-    const nameValid = hasCustomerName();
-    const reasonValid = actionType === 'customer_acknowledged' || hasActionReason();
-    if (!nameValid || !reasonValid) return;
+    // Refusal and reservation also need the reason, which sits above the name.
+    const reasonError = actionType === 'customer_acknowledged' ? undefined : checkActionReason();
+    const errors = { 'artifact-action-reason': reasonError, 'artifact-customer-name': checkCustomerName() };
+    if (focusFirstInvalidField(errors)) return;
     setError(null);
     void runArtifactTask(actionType, async () => {
       const result = await recordWorkArtifactAction({
@@ -74,7 +76,8 @@ export function useWorkArtifactCustomerActions({
   }
 
   function captureSignature() {
-    if (!detail || !currentRevision || !hasCustomerName()) return;
+    if (!detail || !currentRevision) return;
+    if (focusFirstInvalidField({ 'artifact-customer-name': checkCustomerName() })) return;
     if (!signatureFile) {
       setError('Bitte erfasse zuerst die Unterschrift im Feld oben.');
       return;

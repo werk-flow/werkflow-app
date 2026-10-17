@@ -32,11 +32,8 @@ type ApplyWorkTemplateCardProps = {
   onApplied?: () => void;
 };
 
-export function ApplyWorkTemplateCard({
-  targetType,
-  targetId,
-  onApplied,
-}: ApplyWorkTemplateCardProps): ReactElement {
+export function ApplyWorkTemplateCard(props: ApplyWorkTemplateCardProps): ReactElement {
+  const { targetType } = props;
   const {
     open,
     setOpen,
@@ -47,6 +44,7 @@ export function ApplyWorkTemplateCard({
     previewFailure,
     allowAdditional,
     setAllowAdditional,
+    versionError,
     error,
     qualificationWarning,
     setQualificationWarning,
@@ -55,7 +53,7 @@ export function ApplyWorkTemplateCard({
     selectVersion,
     submit,
     openDialog,
-  } = useApplyWorkTemplate({ targetType, targetId, onApplied });
+  } = useApplyWorkTemplate(props);
 
   return (
     <>
@@ -83,7 +81,7 @@ export function ApplyWorkTemplateCard({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Arbeitsvorlage" htmlFor="apply-work-template-version" required>
+            <Field label="Arbeitsvorlage" htmlFor="apply-work-template-version" required error={versionError}>
               {optionsFailure ? (
                 // A failed read must not read as „no template published“.
                 <SectionError failure={optionsFailure} />

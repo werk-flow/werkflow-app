@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { cn } from '@/lib/utils';
 import { SectionTitle } from '@/components/shared/section-title';
-import { Spinner } from '@/components/ui/spinner';
 
 /** The section heading with the plan and take commands. */
 export function JobMaterialsHeader({
@@ -51,6 +50,7 @@ export function JobMaterialsHeader({
             size="sm"
             className="h-8 gap-1 text-xs"
             onClick={onPlan}
+            // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: the stock holds no item to plan
             disabled={inventoryItemCount === 0}
           >
             <Plus className="size-3.5" />
@@ -63,14 +63,11 @@ export function JobMaterialsHeader({
             size="sm"
             className={cn('gap-1 text-xs', isAdminOrManager ? 'h-8' : 'min-h-11')}
             onClick={onTake}
-            aria-busy={isPickerLoading}
-            disabled={isPickerLoading || (isAdminOrManager && inventoryItemCount === 0)}
+            pending={isPickerLoading}
+            // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: the stock holds no item to take
+            disabled={isAdminOrManager && inventoryItemCount === 0}
           >
-            {isPickerLoading ? (
-              <Spinner className="size-3.5" />
-            ) : (
-              <PackagePlus className="size-3.5" aria-hidden="true" />
-            )}
+            <PackagePlus className="size-3.5" aria-hidden="true" />
             {isPickerLoading ? 'Material wird geladen…' : 'Aus Lager entnehmen'}
           </Button>
         )}

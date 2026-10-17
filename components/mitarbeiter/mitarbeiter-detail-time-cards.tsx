@@ -2,6 +2,7 @@
 
 import { Clock, BarChart3 } from 'lucide-react';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { Progress } from '@/components/ui/progress';
 import { SectionError } from '@/components/ui/section-error';
 import { StatusBadge } from './status-badge';
@@ -12,6 +13,12 @@ import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
 import { SectionTitle } from '@/components/shared/section-title';
 import { StaleRegion } from '@/components/shared/stale-region';
+
+function NoWeekData() {
+  return (
+    <EmptyState size="compact" className="py-4 text-center text-xs" title="Keine Daten für diese Woche" />
+  );
+}
 
 type MitarbeiterDetailTimeCardsProps = {
   liveTime: MitarbeiterDetailLiveTime;
@@ -99,7 +106,7 @@ export function MitarbeiterDetailTimeCards({
                 indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
               />
               {todayTarget && todayTarget.targetMinutes === 0 && (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {todayTarget.isHoliday
                     ? `Feiertag: ${todayTarget.holidayName} – keine Sollarbeitszeit.`
                     : todayTarget.isClosureDay
@@ -107,11 +114,11 @@ export function MitarbeiterDetailTimeCards({
                       : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'}
                 </p>
               )}
-              {todayTargetHint && <p className="text-[11px] text-muted-foreground">{todayTargetHint}</p>}
+              {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
             </div>
 
             {/* Time breakdown indicators */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-[11px]">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-xs">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-success" />
                 <span className="text-muted-foreground">Arbeit</span>
@@ -161,7 +168,7 @@ export function MitarbeiterDetailTimeCards({
             />
           </StaleRegion>
         ) : (
-          <p className="py-4 text-center text-xs text-muted-foreground">Keine Daten für diese Woche</p>
+          <NoWeekData />
         )}
       </div>
     </>

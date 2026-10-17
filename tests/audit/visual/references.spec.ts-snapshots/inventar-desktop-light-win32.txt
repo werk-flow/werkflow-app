@@ -45,6 +45,7 @@ Bestand
 Geplant
 Verfügbar
 Status
+Aktionen
 Kupferrohr 15 mm
 Material
 Hauptlager

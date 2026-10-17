@@ -23,6 +23,7 @@ import { formatVacationDays } from '@/lib/vacation/balance';
 import { cn, toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useVacationDaysPreview } from './use-vacation-section-days-preview';
 import { getVacationRequestErrorMessage, REQUEST_ERROR_MESSAGES } from './vacation-section-messages';
 import { Spinner } from '@/components/ui/spinner';
@@ -196,19 +197,14 @@ export function OwnVacationRequestDialog({
     if (isSaving) return;
     setError(null);
 
-    const nextDateErrors = {
-      start: startDate ? undefined : 'Bitte wähle ein Startdatum aus.',
-      end: !endDate
-        ? 'Bitte wähle ein Enddatum aus.'
-        : endDate < startDate
-          ? REQUEST_ERROR_MESSAGES.invalid_range
-          : undefined,
-    };
-    setDateErrors(nextDateErrors);
-    if (nextDateErrors.start || nextDateErrors.end) {
-      document.getElementById(nextDateErrors.start ? 'vacation-start-date' : 'vacation-end-date')?.focus();
-      return;
-    }
+    const startError = startDate ? undefined : 'Bitte wähle ein Startdatum aus.';
+    const endError = !endDate
+      ? 'Bitte wähle ein Enddatum aus.'
+      : endDate < startDate
+        ? REQUEST_ERROR_MESSAGES.invalid_range
+        : undefined;
+    setDateErrors({ start: startError, end: endError });
+    if (focusFirstInvalidField({ 'vacation-start-date': startError, 'vacation-end-date': endError })) return;
 
     const saveFailedMessage = 'Der Antrag konnte nicht gespeichert werden.';
     try {

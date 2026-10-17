@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
@@ -18,6 +19,7 @@ import {
   type QualificationWorkspace,
 } from '@/lib/qualifications/types';
 import { parseDecimalInput } from '@/lib/ui/decimal';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { describeFailure } from '@/lib/action-messages';
 
 type QualificationManagementDefinitionFormProps = {
@@ -97,12 +99,11 @@ export function QualificationManagementDefinitionForm({
                 : undefined,
           };
           setDefinitionFieldErrors(nextFieldErrors);
-          if (nextFieldErrors.name || nextFieldErrors.warningDays) {
-            document
-              .getElementById(nextFieldErrors.name ? 'capability-name' : 'capability-warning-days')
-              ?.focus();
-            return;
-          }
+          const invalid = focusFirstInvalidField({
+            'capability-name': nextFieldErrors.name,
+            'capability-warning-days': nextFieldErrors.warningDays,
+          });
+          if (invalid) return;
           await runAction('create-definition', async () => {
             try {
               const result = await createCapability({
@@ -157,9 +158,11 @@ export function QualificationManagementDefinitionList({
   return (
     <div className="divide-y rounded-lg border">
       {activeCapabilities.length === 0 ? (
-        <p className="p-6 text-center text-sm text-muted-foreground">
-          Noch keine Fähigkeiten oder Zertifizierungen angelegt.
-        </p>
+        <EmptyState
+          size="compact"
+          className="p-4"
+          title="Noch keine Fähigkeiten oder Zertifizierungen angelegt."
+        />
       ) : (
         activeCapabilities.map((capability) => (
           <div

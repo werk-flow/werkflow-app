@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -28,6 +29,7 @@ import {
   type PersonnelOnboardingTemplateSummary,
 } from '@/lib/personnel/lifecycle-actions';
 import type { PersonnelRequirementType } from '@/lib/personnel/lifecycle';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const REQUIREMENT_OPTIONS: Array<{ value: PersonnelRequirementType; label: string }> = [
   { value: 'document', label: 'Dokument' },
@@ -63,15 +65,11 @@ export function PersonnelOnboardingTemplateSettings({
 
   async function submit(): Promise<void> {
     setError(null);
-    const nextFieldErrors = {
-      name: name.trim() ? undefined : 'Bitte gib einen Namen an.',
-      itemTitle: itemTitle.trim() ? undefined : 'Bitte gib den ersten Punkt an.',
-    };
-    setFieldErrors(nextFieldErrors);
-    if (nextFieldErrors.name || nextFieldErrors.itemTitle) {
-      document.getElementById(nextFieldErrors.name ? 'template-name' : 'template-item-title')?.focus();
-      return;
-    }
+    const nameError = name.trim() ? undefined : 'Bitte gib einen Namen an.';
+    const itemTitleError = itemTitle.trim() ? undefined : 'Bitte gib den ersten Punkt an.';
+    setFieldErrors({ name: nameError, itemTitle: itemTitleError });
+    const templateErrors = { 'template-name': nameError, 'template-item-title': itemTitleError };
+    if (focusFirstInvalidField(templateErrors)) return;
     try {
       const result = await run({
         templateId: null,
@@ -136,9 +134,7 @@ export function PersonnelOnboardingTemplateSettings({
       {templates === null ? (
         <RegionLoadError>Die Onboardingvorlagen konnten nicht geladen werden.</RegionLoadError>
       ) : templates.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          Noch keine Vorlage eingerichtet.
-        </p>
+        <EmptyState size="compact" title="Noch keine Vorlage eingerichtet." />
       ) : (
         <ul className="divide-y rounded-md border">
           {templates.map((template) => (

@@ -30,7 +30,7 @@ export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkSchedule
     isSaving,
     error,
     validFromError,
-    setValidFromError,
+    dayErrors,
     weeklyMinutes,
     handleSubmit,
   } = useWorkScheduleForm({ recordId, schedule, onClose });
@@ -50,10 +50,7 @@ export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkSchedule
               <DatePicker
                 ariaLabel="Gültig ab"
                 value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
-                onChange={(date) => {
-                  setValidFromError(null);
-                  setValidFrom(date ? toLocalDateString(date) : '');
-                }}
+                onChange={(date) => setValidFrom(date ? toLocalDateString(date) : '')}
                 disabled={isSaving}
               />
             </Field>
@@ -65,6 +62,7 @@ export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkSchedule
                     key={label}
                     label={<span className="text-xs font-normal text-muted-foreground">{label}</span>}
                     htmlFor={`schedule-day-${index}`}
+                    error={dayErrors[index]}
                     className="gap-1"
                   >
                     <Input

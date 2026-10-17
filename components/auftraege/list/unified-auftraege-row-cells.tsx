@@ -240,7 +240,7 @@ export function UnifiedAuftraegeProjectRowCells({
                 label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
                 className="h-1.5 w-12"
               />
-              <span className="text-[10px] tabular-nums text-muted-foreground">
+              <span className="text-xs tabular-nums text-muted-foreground">
                 {project.completedJobCount}/{project.jobCount}
               </span>
             </div>

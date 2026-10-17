@@ -11,6 +11,12 @@ import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readTimeAccountManagement, requireAuth } from './access';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import type {
+  PayrollExportState,
+  TimeFindingDecision,
+  TimeFindingKind,
+  TimePeriodState,
+} from './presentation';
 
 type SupabaseAdmin = ReturnType<typeof createSupabaseAdminClient>;
 
@@ -34,7 +40,7 @@ export type TimeAccountOverview = {
     id: string;
     startDate: string;
     endDate: string;
-    state: string;
+    state: TimePeriodState;
     targetMinutes: number;
     creditedMinutes: number;
     deltaMinutes: number;
@@ -54,7 +60,7 @@ export type TimePeriodListItem = {
   id: string;
   startDate: string;
   endDate: string;
-  state: string;
+  state: TimePeriodState;
   calculationVersion: number | null;
   employeeCount: number;
   findingCount: number;
@@ -71,7 +77,7 @@ export type OpenPeriodSession = {
 };
 
 export type TimePeriodDetail = {
-  period: { id: string; startDate: string; endDate: string; state: string };
+  period: { id: string; startDate: string; endDate: string; state: TimePeriodState };
   calculation: {
     id: string;
     version: number;
@@ -90,17 +96,17 @@ export type TimePeriodDetail = {
     id: string;
     employeeRecordId: string | null;
     employeeName: string | null;
-    kind: string;
+    kind: TimeFindingKind;
     severity: string;
     explanation: Record<string, unknown>;
-    decision: string | null;
+    decision: TimeFindingDecision | null;
   }>;
   /** Live, not from the calculation: the database refuses the close while one exists. */
   openSessions: OpenPeriodSession[];
   exports: Array<{
     id: string;
     version: number;
-    state: string;
+    state: PayrollExportState;
     documentId: string | null;
     createdAt: string;
   }>;
@@ -180,6 +186,17 @@ function mapEmployeeNames(
           .join(' ') || 'Unbekannt';
       return [employee.id, name];
     }),
+  );
+}
+
+/** Rows ordered by their employee's name, so every settings list reads alike in every organization. */
+function byEmployeeName<Row>(
+  rows: readonly Row[],
+  employeeIdOf: (row: Row) => string,
+  nameOf: (employeeRecordId: string) => string,
+): Row[] {
+  return [...rows].sort((left, right) =>
+    nameOf(employeeIdOf(left)).localeCompare(nameOf(employeeIdOf(right)), 'de'),
   );
 }
 
@@ -553,7 +570,7 @@ export async function getTimePeriodDetail(
           PERIOD_SOURCE_ROW_CAP,
         ),
     ).then(requirePeriodRows);
-    const decisionByFinding = new Map<string, string>();
+    const decisionByFinding = new Map<string, TimeFindingDecision>();
     for (const decision of decisions)
       if (!decisionByFinding.has(decision.finding_id))
         decisionByFinding.set(decision.finding_id, decision.decision);
@@ -711,6 +728,9 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
         : Promise.resolve(null),
     ]);
     const employeeNameById = mapEmployeeNames(employees, profiles);
+    const nameOf = (id: string): string => employeeNameById.get(id) ?? 'Unbekannt';
+    const employeesByName = byEmployeeName(employees, (employee) => employee.id, nameOf);
+    const accountsByName = byEmployeeName(accounts, (account) => account.employee_record_id, nameOf);
     const openEmployeeIds = new Set(accounts.map((account) => account.employee_record_id));
     const assignedPolicyByEmployee = new Map<string, string>();
     for (const assignment of assignments)
@@ -730,27 +750,24 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
       employeeCount: employees.length,
       openAccountCount: accounts.length,
       mappingVersion,
-      missingAccounts: employees
+      missingAccounts: employeesByName
         .filter((employee) => !openEmployeeIds.has(employee.id))
-        .map((employee) => ({
-          employeeRecordId: employee.id,
-          employeeName: employeeNameById.get(employee.id) ?? 'Unbekannt',
-        })),
-      employees: employees.map((employee) => ({
+        .map((employee) => ({ employeeRecordId: employee.id, employeeName: nameOf(employee.id) })),
+      employees: employeesByName.map((employee) => ({
         employeeRecordId: employee.id,
-        employeeName: employeeNameById.get(employee.id) ?? 'Unbekannt',
+        employeeName: nameOf(employee.id),
         assignedPolicyId: assignedPolicyByEmployee.get(employee.id) ?? null,
       })),
-      accounts: accounts.map((account) => ({
+      accounts: accountsByName.map((account) => ({
         id: account.id,
         employeeRecordId: account.employee_record_id,
-        employeeName: employeeNameById.get(account.employee_record_id) ?? 'Unbekannt',
+        employeeName: nameOf(account.employee_record_id),
         currentBalanceMinutes: account.current_balance_minutes,
         version: Number(account.version),
       })),
       pendingAdjustments: pending.data.map((request) => ({
         id: request.id,
-        employeeName: employeeNameById.get(request.employee_record_id) ?? 'Unbekannt',
+        employeeName: nameOf(request.employee_record_id),
         kind: request.adjustment_kind,
         minutes: request.minutes,
         effectiveDate: request.effective_date,

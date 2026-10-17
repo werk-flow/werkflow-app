@@ -4,7 +4,7 @@ import { useCallback, useState, type FormEvent } from 'react';
 
 import type { challengeDispatch } from '@/lib/dispatch/actions';
 import { dispatchErrorMessage, type EmployeeDispatchCard } from '@/lib/dispatch/types';
-import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
+import { focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 
 type JobDispatchChallengeOptions = {
   readOnly: boolean;
@@ -21,12 +21,9 @@ export function useJobDispatchChallenge({ readOnly, refresh, runChallenge }: Job
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (readOnly || !challengeTarget) return;
-      if (challengeReason.trim().length < 8) {
-        setChallengeError(REASON_MIN_8_MESSAGE);
-        document.getElementById('dispatch-challenge-reason')?.focus();
-        return;
-      }
-      setChallengeError(null);
+      const reasonError = challengeReason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
+      setChallengeError(reasonError ?? null);
+      if (focusFirstInvalidField({ 'dispatch-challenge-reason': reasonError })) return;
       try {
         const result = await runChallenge(
           challengeTarget.dispatchId,

@@ -1,0 +1,36 @@
+Haustechnik Krämer GmbH
+Organisation beitreten
+Dashboard
+Aufgaben
+Kalender
+Zeiterfassung
+Qualifikationen
+Aufträge
+KS
+Kevin Schmid
+kevin.schmid@haustechnik-kraemer.de
+Zeiterfassung
+Manuelle Eintragung
+Zeiterfassung
+Zeitkonto
+Übersicht
+Verlauf
+08:00:00
+Gesamtzeit
+Du bist nicht eingestempelt.
+Tagesziel:
+8 Std.
+Arbeitszeit
+(0% erreicht)
+Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.
+Arbeitszeit
+0 Min.
+Pause
+0 Min.
+Überstunden heute
+0 Min.
+Schnellzugriff
+Arbeit starten
+Arbeit an Auftrag …
+Fahrt starten
+Weitere Aktivitäten …

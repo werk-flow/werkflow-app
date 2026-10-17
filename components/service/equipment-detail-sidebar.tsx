@@ -5,6 +5,7 @@ import type { ReactElement } from 'react';
 import { ArrowRight, ExternalLink, LinkIcon, MapPin, RefreshCw, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { setInstalledEquipmentWorkLink } from '@/lib/installed-equipment/actions';
@@ -47,7 +48,7 @@ function EquipmentIdentifiersSection({ item }: { item: EquipmentDetail }): React
           ))}
         </dl>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">Keine Kennung erfasst.</p>
+        <EmptyState size="compact" className="mt-2" title="Keine Kennung erfasst." />
       )}
     </section>
   );
@@ -157,7 +158,7 @@ function EquipmentWorkLinksSection({
           ))}
         </div>
       ) : (
-        <p className="mt-2 text-sm text-muted-foreground">Noch kein Auftrag oder Projekt verknüpft.</p>
+        <EmptyState size="compact" className="mt-2" title="Noch kein Auftrag oder Projekt verknüpft." />
       )}
     </section>
   );
@@ -183,7 +184,7 @@ export function EquipmentDetailSidebar({
 }: EquipmentDetailSidebarProps): ReactElement {
   const { item } = actions;
   return (
-    <aside className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <EquipmentClientSection item={item} />
       <EquipmentIdentifiersSection item={item} />
       {(item.parent || item.components.length || item.predecessor || item.successor) && (
@@ -209,6 +210,6 @@ export function EquipmentDetailSidebar({
       >
         {item.archivedAt ? 'Aus Archiv wiederherstellen' : 'Archivieren'}
       </Button>
-    </aside>
+    </div>
   );
 }

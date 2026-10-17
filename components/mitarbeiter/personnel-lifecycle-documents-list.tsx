@@ -3,6 +3,7 @@
 import { Download, FileLock2, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 
 import type { PersonnelLifecycleDocuments } from './use-personnel-lifecycle-documents';
@@ -49,9 +50,7 @@ export function PersonnelLifecycleDocumentsList({
         ) : null}
       </div>
       {data.documents.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          Keine geschützten Personalunterlagen vorhanden.
-        </p>
+        <EmptyState size="compact" title="Keine geschützten Personalunterlagen vorhanden." />
       ) : (
         <ul className="divide-y rounded-md border">
           {data.documents.map((document) => (

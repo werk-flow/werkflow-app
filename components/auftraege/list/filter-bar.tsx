@@ -119,7 +119,7 @@ export function FilterBar({
           <SlidersHorizontal className="size-4" />
           <span className="sr-only sm:not-sr-only">Filter</span>
           {activeCount > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-primary-foreground text-[10px] font-bold text-primary">
+            <span className="flex size-5 items-center justify-center rounded-full bg-primary-foreground text-xs font-bold text-primary">
               {activeCount}
             </span>
           )}
@@ -135,7 +135,7 @@ export function FilterBar({
 
       {/* Mobile filter sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto rounded-t-xl pb-8">
+        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto rounded-t-lg pb-8">
           <SheetHeader className="mb-4">
             <SheetTitle>Filter</SheetTitle>
             <SheetDescription>Filtere Aufträge und Projekte</SheetDescription>

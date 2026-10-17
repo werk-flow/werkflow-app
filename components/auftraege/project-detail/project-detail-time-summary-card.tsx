@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, Clock } from 'lucide-react';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -50,9 +51,11 @@ export function ProjectDetailTimeSummaryCard({
           Die Arbeitszeiten für dieses Projekt konnten nicht geladen werden.
         </SectionError>
       ) : projectTimeSummary.totalMinutes === 0 ? (
-        <p className="py-4 text-center text-sm text-muted-foreground">
-          Noch keine Arbeitszeiten für dieses Projekt erfasst.
-        </p>
+        <EmptyState
+          size="compact"
+          className="py-4 text-center"
+          title="Noch keine Arbeitszeiten für dieses Projekt erfasst."
+        />
       ) : (
         <StaleRegion stale={timeStale} onRetry={onRetry} className="space-y-4">
           <div className="rounded-md bg-muted/50 p-3">

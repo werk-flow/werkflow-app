@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { AttentionOverview } from '@/lib/attention/types';
 import { VACATION_STATUS_LABELS } from '@/lib/vacation/types';
 import { formatVacationDays } from '@/lib/vacation/balance';
@@ -23,7 +24,7 @@ export function AufgabenOwnRequestsSection({
       </div>
 
       {ownRequests.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine eigenen Urlaubsanträge.</p>
+        <EmptyState size="compact" title="Keine eigenen Urlaubsanträge." />
       ) : (
         <Card className="gap-0 divide-y py-0" data-testid="attention-own-requests">
           {ownRequests.map((request) => (

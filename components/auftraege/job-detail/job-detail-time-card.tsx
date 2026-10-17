@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, Clock } from 'lucide-react';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -31,7 +32,7 @@ function JobDetailActiveWorkers({ activeWorkers }: Pick<JobDetailTimeSummary, 'a
             <PersonAvatar
               person={worker.person}
               className="size-8"
-              fallbackClassName="bg-success-soft text-[10px] font-medium text-success-soft-foreground"
+              fallbackClassName="bg-success-soft text-xs font-medium text-success-soft-foreground"
             />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{worker.name}</p>
@@ -92,7 +93,7 @@ function JobDetailEmployeeMinutes({ perEmployeeMinutes }: Pick<JobDetailTimeSumm
               <PersonAvatar
                 person={emp.person}
                 className="size-7"
-                fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary-text"
+                fallbackClassName="bg-primary/10 text-xs font-medium text-primary-text"
               />
               <span className="truncate font-medium">{emp.name}</span>
               {emp.isLive && (
@@ -149,7 +150,7 @@ function JobDetailSessionTimeline({
                 <PersonAvatar
                   person={member}
                   className="size-7"
-                  fallbackClassName="bg-primary/10 text-[10px] font-medium text-primary-text"
+                  fallbackClassName="bg-primary/10 text-xs font-medium text-primary-text"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{getSessionPersonName(member)}</p>
@@ -209,13 +210,11 @@ export function JobDetailTimeCard({
           <Skeleton className="h-8 w-1/2" />
         </div>
       ) : !hasAnyTimeData ? (
-        <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-          <p className="text-sm font-medium">Noch keine Arbeitszeiten für diesen Auftrag erfasst.</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Sobald ein Mitarbeiter auf diesen Auftrag arbeitet, erscheinen die Summen und Einträge hier
-            automatisch.
-          </p>
-        </div>
+        <EmptyState
+          size="compact"
+          title="Noch keine Arbeitszeiten für diesen Auftrag erfasst."
+          description="Sobald ein Mitarbeiter auf diesen Auftrag arbeitet, erscheinen die Summen und Einträge hier automatisch."
+        />
       ) : (
         <StaleRegion stale={isTimeStale} onRetry={refreshTime} className="space-y-4">
           {activeWorkers.length > 0 && <JobDetailActiveWorkers activeWorkers={activeWorkers} />}

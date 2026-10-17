@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
 import { useReturnFocus } from '@/components/ui/return-focus';
+import { Spinner } from '@/components/ui/spinner';
 
 /** True while the confirmation's request runs; see `AlertDialog`'s `pending`. */
 const AlertDialogPendingContext = React.createContext(false);
@@ -144,18 +145,45 @@ function AlertDialogDescription({
   );
 }
 
+/**
+ * The confirming action of an AlertDialog. `pending` works as on `Button`: the
+ * action turns busy and disabled, and a spinner takes the place of its leading
+ * icon, so a running deletion never swaps in a spinner by hand.
+ */
 function AlertDialogAction({
   className,
   variant,
+  pending = false,
+  disabled,
+  asChild,
+  children,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Action> &
-  Pick<VariantProps<typeof buttonVariants>, 'variant'>) {
+  Pick<VariantProps<typeof buttonVariants>, 'variant'> & { pending?: boolean }) {
+  // A slotted child renders its own content, so it cannot take the spinner.
+  const busy = pending && !asChild;
   return (
     <AlertDialogPrimitive.Action
       data-slot="alert-dialog-action"
-      className={cn(buttonVariants({ variant }), className)}
+      className={cn(
+        buttonVariants({ variant }),
+        busy && '[&>svg:not([data-slot=spinner])]:hidden',
+        className,
+      )}
+      disabled={disabled || busy || undefined}
+      aria-busy={busy || undefined}
+      {...(asChild === undefined ? {} : { asChild })}
       {...props}
-    />
+    >
+      {busy ? (
+        <>
+          <Spinner />
+          {children}
+        </>
+      ) : (
+        children
+      )}
+    </AlertDialogPrimitive.Action>
   );
 }
 

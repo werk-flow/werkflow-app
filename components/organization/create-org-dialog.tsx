@@ -19,7 +19,6 @@ import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages'
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
-import { Spinner } from '@/components/ui/spinner';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -108,16 +107,10 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             <Button
               type="submit"
               // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: a form with one required field enables on completeness
-              disabled={!isValid || isLoading}
+              disabled={!isValid}
+              pending={isLoading}
             >
-              {isLoading ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Wird erstellt…
-                </>
-              ) : (
-                'Erstellen'
-              )}
+              {isLoading ? 'Wird erstellt…' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>

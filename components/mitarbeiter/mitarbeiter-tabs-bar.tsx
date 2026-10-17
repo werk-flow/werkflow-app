@@ -16,14 +16,14 @@ export function MitarbeiterTabsBar({ memberCount, pendingCount, onRefreshStatus 
       <TabsList className="min-w-0 shrink gap-1">
         <TabsTrigger value="members" className="group">
           Mitglieder
-          <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-[10px] font-semibold text-muted-foreground group-data-[state=active]:text-foreground">
+          <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-xs font-semibold text-muted-foreground group-data-[state=active]:text-foreground">
             {memberCount}
           </span>
         </TabsTrigger>
         <TabsTrigger value="invitations" className="group">
           Einladungen
           {pendingCount > 0 && (
-            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary-text group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
+            <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary-text group-data-[state=active]:bg-primary group-data-[state=active]:text-primary-foreground">
               {pendingCount}
             </span>
           )}

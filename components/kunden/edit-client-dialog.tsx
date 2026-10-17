@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
   { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
@@ -55,7 +56,6 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { showBanner } = useBanner();
 
@@ -81,13 +81,9 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setNameError(null);
-
-    if (!name.trim()) {
-      setNameError('Bitte gib einen Namen ein.');
-      nameInputRef.current?.focus();
-      return;
-    }
+    const nextNameError = name.trim() ? undefined : 'Bitte gib einen Namen ein.';
+    setNameError(nextNameError ?? null);
+    if (focusFirstInvalidField({ 'edit-client-name': nextNameError })) return;
 
     try {
       const input: UpdateClientInput = {
@@ -127,7 +123,6 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
           <div className="grid gap-4 py-4">
             <Field label="Name" htmlFor="edit-client-name" required error={showNameError || undefined}>
               <Input
-                ref={nameInputRef}
                 placeholder="Kundenname"
                 value={name}
                 onChange={(e) => {

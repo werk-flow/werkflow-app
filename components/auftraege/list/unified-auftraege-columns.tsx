@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { SkeletonColumn } from '@/components/ui/skeleton-table';
+import { hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import {
   JOB_PRIORITY_LABELS,
   getJobDisplayTitle,
@@ -33,7 +33,12 @@ export interface AuftraegeTableColumn extends SkeletonColumn {
 // responsive visibility, and placeholder shapes cannot drift apart. The
 // header of a sortable column still renders through `SortableHeader`.
 const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
-  { id: 'selection', header: null, className: 'w-[36px]', skeleton: <Skeleton className="size-4" /> },
+  {
+    id: 'selection',
+    header: hiddenHeader('Auswahl'),
+    className: 'w-[36px]',
+    skeleton: <Skeleton className="size-4" />,
+  },
   { id: 'nr', header: 'Nr', className: 'w-[120px]', skeleton: <Skeleton className="h-5 w-24" /> },
   {
     id: 'bezeichnung',
@@ -60,7 +65,12 @@ const AUFTRAEGE_COLUMNS: readonly AuftraegeTableColumn[] = [
     skeleton: <Skeleton className="h-5 w-20" />,
   },
   { id: 'datum', header: 'Datum', className: 'w-[170px]', skeleton: <Skeleton className="h-5 w-20" /> },
-  { id: 'actions', header: null, className: 'w-[50px]', skeleton: <Skeleton className="h-8 w-8 rounded" /> },
+  {
+    id: 'actions',
+    header: hiddenHeader('Aktionen'),
+    className: 'w-[50px]',
+    skeleton: <Skeleton className="h-8 w-8 rounded" />,
+  },
 ];
 
 /** The columns a table with these preferences renders, in order. */

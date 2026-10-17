@@ -22,7 +22,6 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { deleteOrganization } from '@/lib/org/delete-action';
-import { Spinner } from '@/components/ui/spinner';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   org_not_found: 'Organisation nicht gefunden.',
@@ -133,10 +132,10 @@ export function DeleteOrgDialog({ orgName, disabled = false }: DeleteOrgDialogPr
               event.preventDefault();
               void handleDelete();
             }}
-            disabled={isLoading || !isNameMatch}
+            pending={isLoading}
+            disabled={!isNameMatch}
             variant="destructive"
           >
-            {isLoading && <Spinner />}
             {isLoading ? 'Wird gelöscht…' : 'Endgültig löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>

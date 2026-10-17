@@ -7,6 +7,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { createPlanningEntry } from '@/lib/planning/actions';
 import { usePlanningOptions } from '@/hooks/use-planning-options';
 import type { PlanningConflict } from '@/lib/planning/types';
+import { errorsByControlId, focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { calendarRefusalMessage } from '@/lib/calendar/messages';
@@ -120,7 +121,7 @@ export function PlanningEntryForm({
     });
     if (draftCheck.kind === 'missing') {
       setFieldErrors(Object.fromEntries(draftCheck.inputs.map(({ field, message }) => [field, message])));
-      document.getElementById(draftCheck.inputs[0].elementId)?.focus();
+      focusFirstInvalidField(errorsByControlId(draftCheck.inputs));
       return;
     }
     if (draftCheck.kind === 'invalid') {

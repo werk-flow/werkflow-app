@@ -1,5 +1,7 @@
 import type { ReactElement } from 'react';
 
+import { EmptyState } from '@/components/ui/empty-state';
+
 import type { ContextualDocumentLinkContext } from './contextual-documents-context';
 
 type ContextualDocumentsEmptyStateProps = {
@@ -18,10 +20,11 @@ export function ContextualDocumentsEmptyState({
   contextLabel,
 }: ContextualDocumentsEmptyStateProps): ReactElement {
   return (
-    <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-      <p className="text-sm font-medium">Noch keine Dokumente vorhanden.</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {canUpload
+    <EmptyState
+      size="compact"
+      title="Noch keine Dokumente vorhanden."
+      description={
+        canUpload
           ? canAttach
             ? 'Lade Dateien hoch oder verknüpfe vorhandene Dokumente aus der Dokumentenablage.'
             : context.jobId
@@ -33,8 +36,8 @@ export function ContextualDocumentsEmptyState({
                   : contextLabel
                     ? `Lade Dateien direkt zu ${contextLabel} hoch.`
                     : 'Lade Dateien direkt in diesem Bereich hoch.'
-          : 'Sobald Dokumente vorhanden sind, erscheinen sie hier.'}
-      </p>
-    </div>
+          : 'Sobald Dokumente vorhanden sind, erscheinen sie hier.'
+      }
+    />
   );
 }

@@ -41,7 +41,7 @@ Wrong turn: one `.select()` without pages. PostgREST cuts the response at its ca
 
 1. Read per request. Wrap repeated work of one render in `react.cache()`; a GET handler uses `withReadRequest` ([security](security.md#read-request-authorization-reuse)).
 2. Cache across requests only when every condition under [cross-request caching](#cross-request-caching) holds. Tag the reader with a `CACHE_TAGS` entry, and throw through `failCachedRead` on a failed read.
-3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first. A kind that names no record, or signs a file address, carries `organizationId`; a read of one record by id relies on the reader's organization filter.
+3. A read that starts on mount, on channel join or beside a save is a kind in `lib/data/background-reads.ts`. Read [read-request authorization reuse](security.md#read-request-authorization-reuse) first. A kind that names no record, or signs a file address, carries `organizationId`; a read by id relies on the reader's organization filter. A prestart member's own-item read sits in `SELF_SERVICE_READS`: the route checks identity, the reader its self-service caller.
 4. Run `bun run test:unit lib/data lib/conventions/live-view-reads.test.ts`.
 
 Wrong turn: a Server Action for a background read. One client's actions run one after another, so the read delays the next save.

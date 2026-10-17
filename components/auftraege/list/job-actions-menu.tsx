@@ -24,7 +24,6 @@ import { JOB_DELETE_FAILED_MESSAGE, JOB_DELETE_HISTORY_MESSAGE } from '@/lib/job
 import { getJobDisplayTitle, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import { knownProjectOption } from '../forms/job-form-options';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
-import { Spinner } from '@/components/ui/spinner';
 
 const JOB_DELETE_ERROR_MESSAGES = {
   planning_history_exists: JOB_DELETE_HISTORY_MESSAGE,
@@ -158,17 +157,10 @@ export function JobActionsMenu({
                 event.preventDefault();
                 void handleDelete();
               }}
-              disabled={isDeleting}
+              pending={isDeleting}
               variant="destructive"
             >
-              {isDeleting ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Wird gelöscht…
-                </>
-              ) : (
-                'Löschen'
-              )}
+              {isDeleting ? 'Wird gelöscht…' : 'Löschen'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

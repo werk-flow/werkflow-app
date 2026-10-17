@@ -271,11 +271,11 @@ function InventoryTable({
           <TableBody>
             {isEmpty ? (
               <TableRow>
-                <TableCell
-                  colSpan={INVENTORY_ITEM_COLUMNS.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  Keine Artikel gefunden.
+                <TableCell colSpan={INVENTORY_ITEM_COLUMNS.length}>
+                  <EmptyState
+                    title="Keine Artikel gefunden"
+                    description="Ändere die Suche oder die Filter, oder lege über „Artikel anlegen“ einen Artikel an."
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -368,11 +368,11 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
           <TableBody>
             {movements.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={INVENTORY_MOVEMENT_COLUMNS.length}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  Noch keine Bewegungen erfasst.
+                <TableCell colSpan={INVENTORY_MOVEMENT_COLUMNS.length}>
+                  <EmptyState
+                    title="Noch keine Bewegungen"
+                    description="Zugänge, Entnahmen und Umlagerungen erscheinen hier, sobald Bestand gebucht wird."
+                  />
                 </TableCell>
               </TableRow>
             ) : (

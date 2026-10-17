@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { formatBerlinDateTime } from '@/lib/utils';
 import { WORK_EXECUTION_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
@@ -27,7 +28,7 @@ export function WorkLifecycleGatesAndHistory({ snapshot }: { snapshot: WorkLifec
         </div>
         <div className="space-y-2">
           {snapshot.history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Noch keine Änderung protokolliert.</p>
+            <EmptyState size="compact" title="Noch keine Änderung protokolliert." />
           ) : (
             snapshot.history.map((event) => (
               <div key={event.id} className="border-l-2 pl-3 text-sm">

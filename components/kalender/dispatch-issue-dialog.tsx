@@ -28,6 +28,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { issueDispatch } from '@/lib/dispatch/actions';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+
+// A missing recipient shows on the „Empfänger“ field. It is kept in the submit
+// error state, so the calendar dialog adds no hook for it.
+const RECIPIENT_MISSING_MESSAGE = 'Bitte wähle mindestens eine Person als Empfänger aus.';
 
 export function DispatchIssueDialog({
   target,
@@ -69,20 +74,17 @@ export function DispatchIssueDialog({
   const { run: runIssue, isPending: isSubmitting } = useServerAction(issueDispatch);
   const [requestId] = useState(() => crypto.randomUUID());
 
-  // Disabled only while the readiness check or the send is in flight; a
-  // missing recipient is reported on submit, not by greying the button.
+  // Disabled only while readiness loads or the send runs; a missing recipient is a field error.
   const canSubmit = useMemo(
     () => readiness !== null && !isSubmitting && !employeeSearch.resolvingDefaults,
     [readiness, isSubmitting, employeeSearch.resolvingDefaults],
   );
+  const recipientMissing = submitError === RECIPIENT_MISSING_MESSAGE && selectedRecordIds.length === 0;
 
   const handleSubmit = async () => {
-    setSubmitError(null);
-    if (isJobTarget && selectedRecordIds.length === 0) {
-      setSubmitError('Bitte wähle mindestens eine Person als Empfänger aus.');
-      document.querySelector<HTMLElement>('#dispatch-recipients')?.focus();
-      return;
-    }
+    const recipientError = isJobTarget && selectedRecordIds.length === 0 ? RECIPIENT_MISSING_MESSAGE : null;
+    setSubmitError(recipientError);
+    if (focusFirstInvalidField({ 'dispatch-recipients': recipientError ?? undefined })) return;
     try {
       const result = await runIssue({
         occurrenceId,
@@ -174,7 +176,7 @@ export function DispatchIssueDialog({
               <Field
                 label="Empfänger"
                 htmlFor="dispatch-recipients"
-                error={employeeSearch.select.loadFailure?.message}
+                error={recipientMissing ? submitError : employeeSearch.select.loadFailure?.message}
               >
                 <SearchableMultiSelect
                   {...employeeSearch.select}
@@ -198,7 +200,7 @@ export function DispatchIssueDialog({
           </>
         )}
 
-        <ErrorText>{submitError}</ErrorText>
+        <ErrorText>{recipientMissing ? null : submitError}</ErrorText>
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isSubmitting}>

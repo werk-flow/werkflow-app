@@ -4,8 +4,8 @@ import { CreditCard, Check } from 'lucide-react';
 
 import { getCachedUser } from '@/lib/data/cached';
 import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
-import { StandaloneScreen } from '@/components/shared/standalone-screen';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneScreen, StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
 import { SimulatePaymentButton } from './simulate-payment-button';
 
@@ -41,16 +41,16 @@ export default async function UpgradePage() {
     <StandaloneScreen>
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">WerkFlow Pro</h1>
+          <StandaloneTitle>WerkFlow Pro</StandaloneTitle>
           <p className="text-muted-foreground">Erstelle deine Organisation und starte durch</p>
         </div>
 
         <Card>
           <CardHeader className="text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary/10">
-              <CreditCard className="size-6 text-primary" />
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+              <CreditCard className="size-6 text-muted-foreground" aria-hidden="true" />
             </div>
-            <CardTitle className="text-2xl">Pro Plan</CardTitle>
+            <h2 className="text-lg font-semibold">Pro Plan</h2>
             <CardDescription>Alles was du brauchst, um dein Team zu verwalten</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">

@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { SearchInput } from '@/components/ui/search-input';
@@ -173,9 +174,7 @@ export function AttachDocumentDialog({
             {listFailure ? (
               <SectionError className="m-3" failure={listFailure} />
             ) : documents.length === 0 ? (
-              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                Keine verknüpfbaren Dokumente gefunden.
-              </div>
+              <EmptyState title="Keine verknüpfbaren Dokumente gefunden" />
             ) : (
               <div className="divide-y">
                 {documents.map((document) => {

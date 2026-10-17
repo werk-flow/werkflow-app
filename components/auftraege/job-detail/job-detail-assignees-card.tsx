@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Users, UserPlus, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { JobAssignmentWithProfile } from '@/lib/jobs/types';
 import { PersonAvatar, getSessionPersonName } from './job-detail-person';
@@ -36,7 +37,7 @@ export function JobDetailAssigneesCard({
         )}
       </div>
       {assignments.length === 0 ? (
-        <p className="py-2 text-center text-sm text-muted-foreground">Keine Mitarbeiter zugewiesen.</p>
+        <EmptyState size="compact" className="py-2 text-center" title="Keine Mitarbeiter zugewiesen." />
       ) : (
         <div className="divide-y">
           {assignments.map((a) => (

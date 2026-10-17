@@ -79,7 +79,7 @@ export function DocumentLibraryToolbar({
           <SlidersHorizontal className="size-4" />
           <span className="sr-only sm:not-sr-only">Filter</span>
           {activeFilterCount > 0 && (
-            <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+            <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">
               {activeFilterCount}
             </span>
           )}

@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { ListRow } from '@/components/ui/list-row';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { getJobDisplayTitle, type Job, type Project, JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 import { jobDetailHref } from '@/lib/jobs/routes';
-import { cn, formatGermanDate } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import { ActiveWorkIndicator } from '../list/unified-auftraege-display';
 import { PRIORITY_CLASSES } from '../job-detail/job-detail-format';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
@@ -42,9 +43,7 @@ export function ProjectDetailChildJobsCard({
       </div>
 
       {jobs.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-          Noch keine Aufträge in diesem Projekt.
-        </div>
+        <EmptyState size="compact" className="p-4" title="Noch keine Aufträge in diesem Projekt." />
       ) : (
         <div className="space-y-2 p-3">
           {jobs.map((job) => (
@@ -74,10 +73,10 @@ function ChildJobRow({ job, project }: { job: Job; project: Pick<Project, 'id' |
             </span>
           </div>
           <div className="mt-0.5 flex items-center gap-2">
-            <Badge variant="secondary" className={cn('text-[10px]', getJobStatusClass(job))}>
+            <Badge variant="secondary" className={getJobStatusClass(job)}>
               {getJobStatusLabel(job)}
             </Badge>
-            <Badge variant="secondary" className={cn('text-[10px]', PRIORITY_CLASSES[job.priority])}>
+            <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
               {JOB_PRIORITY_LABELS[job.priority]}
             </Badge>
             {job.plannedDate && (

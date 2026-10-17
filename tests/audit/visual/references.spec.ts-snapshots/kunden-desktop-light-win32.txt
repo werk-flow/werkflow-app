@@ -26,6 +26,7 @@ Name
 Typ
 E-Mail
 Telefon
+Aktionen
 Bäckerei Sommer GmbH
 Gewerblich
 —

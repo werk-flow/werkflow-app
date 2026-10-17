@@ -2,6 +2,7 @@
 
 import { ErrorText } from '@/components/ui/error-text';
 
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -138,67 +139,63 @@ export function MitarbeiterDetailContent({
       ) : null}
 
       <PageBody>
-        {/* Columns follow the width of this content, not of the screen: the app sidebar takes
-            256 px, so a screen breakpoint turned the columns on where they did not fit. */}
-        <div className="@container/detail">
-          <div className="grid grid-cols-1 gap-6 @7xl/detail:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-            {/* Left Column: Profile + Status */}
-            <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
-              <MitarbeiterDetailProfileSection
-                member={member}
-                canManage={canManage}
-                roleOptions={roleOptions}
-                onRoleChange={handleRoleChange}
-              />
+        <DetailColumns layout="cards-and-table">
+          {/* Left Column: Profile + Status */}
+          <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
+            <MitarbeiterDetailProfileSection
+              member={member}
+              canManage={canManage}
+              roleOptions={roleOptions}
+              onRoleChange={handleRoleChange}
+            />
 
-              <MitarbeiterDetailPersonnelSections
-                personnel={personnel}
-                personnelLoadFailed={personnelLoadFailed}
-                actorNames={actorNames}
-                isAdminOrManager={isAdminOrManager}
-                responsibilitySettings={responsibilitySettings}
-                qualificationSummary={qualificationSummary}
-                lifecycle={lifecycle}
-                canAdministerAccess={canAdministerAccess}
-              />
+            <MitarbeiterDetailPersonnelSections
+              personnel={personnel}
+              personnelLoadFailed={personnelLoadFailed}
+              actorNames={actorNames}
+              isAdminOrManager={isAdminOrManager}
+              responsibilitySettings={responsibilitySettings}
+              qualificationSummary={qualificationSummary}
+              lifecycle={lifecycle}
+              canAdministerAccess={canAdministerAccess}
+            />
 
-              <div className="min-w-0 @[70rem]/detail:col-span-2 @7xl/detail:col-span-1">
-                {documents ? (
-                  <ContextualDocumentsSection
-                    title="Dokumente & Bilder"
-                    description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
-                    documents={documents}
-                    documentTarget={{ kind: 'employee', employeeId: member.userId }}
-                    contextLabel={fullName}
-                    canUpload={isAdminOrManager}
-                    canManage={isAdminOrManager}
-                  />
-                ) : (
-                  <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-                )}
-              </div>
-
-              <MitarbeiterDetailTimeCards
-                liveTime={liveTime}
-                breakMode={breakMode}
-                autoBreakThresholdMinutes={autoBreakThresholdMinutes}
-                autoBreakDurationMinutes={autoBreakDurationMinutes}
-              />
+            <div className="min-w-0 @[70rem]/detail:col-span-2 @7xl/detail:col-span-1">
+              {documents ? (
+                <ContextualDocumentsSection
+                  title="Dokumente & Bilder"
+                  description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
+                  documents={documents}
+                  documentTarget={{ kind: 'employee', employeeId: member.userId }}
+                  contextLabel={fullName}
+                  canUpload={isAdminOrManager}
+                  canManage={isAdminOrManager}
+                />
+              ) : (
+                <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+              )}
             </div>
 
-            {/* Right Column: Jobs Table */}
-            <MitarbeiterDetailAssignedJobs
-              member={member}
-              jobs={jobs}
-              projects={projects}
-              clientMap={clientMap}
-              jobAssignmentMap={jobAssignmentMap}
-              members={members}
-              isAdminOrManager={isAdminOrManager}
-              visibleColumns={visibleColumns}
+            <MitarbeiterDetailTimeCards
+              liveTime={liveTime}
+              breakMode={breakMode}
+              autoBreakThresholdMinutes={autoBreakThresholdMinutes}
+              autoBreakDurationMinutes={autoBreakDurationMinutes}
             />
           </div>
-        </div>
+
+          {/* Right Column: Jobs Table */}
+          <MitarbeiterDetailAssignedJobs
+            member={member}
+            jobs={jobs}
+            projects={projects}
+            clientMap={clientMap}
+            jobAssignmentMap={jobAssignmentMap}
+            members={members}
+            isAdminOrManager={isAdminOrManager}
+            visibleColumns={visibleColumns}
+          />
+        </DetailColumns>
       </PageBody>
 
       {/* Remove Dialog */}

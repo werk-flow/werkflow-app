@@ -5,6 +5,7 @@ import { Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -23,7 +24,6 @@ import {
   getUploaderName,
 } from './document-library-file-labels';
 import type { LoadedDocumentDetails } from './use-document-details-dialog';
-import { Spinner } from '@/components/ui/spinner';
 
 type DocumentDetailsMetadataProps = {
   document: OrganizationDocument;
@@ -95,9 +95,11 @@ function DocumentDetailsLinks({ document }: { document: OrganizationDocument }) 
     <div>
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Verknüpfungen</p>
       {getLinkBadges(document).length === 0 ? (
-        <p className="mt-1 text-muted-foreground">
-          Keine Verknüpfung zu Auftrag, Projekt, Kunde oder Mitarbeiter.
-        </p>
+        <EmptyState
+          size="compact"
+          className="mt-1"
+          title="Keine Verknüpfung zu Auftrag, Projekt, Kunde oder Mitarbeiter."
+        />
       ) : (
         <div className="mt-2 flex flex-wrap gap-1">
           {getLinkBadges(document).map((badge) => (
@@ -212,16 +214,16 @@ function DocumentDetailsVersions({
                   variant="ghost"
                   size="sm"
                   onClick={() => onDownloadVersion(version.id)}
-                  disabled={isItemBusy(version.id)}
+                  pending={isItemBusy(version.id)}
                 >
-                  {isItemBusy(version.id) ? <Spinner /> : <Download className="size-4" />}
+                  <Download className="size-4" />
                   Download
                 </Button>
               </div>
             ))}
           </div>
         ) : details ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">Noch keine älteren Versionen vorhanden.</p>
+          <EmptyState size="compact" className="px-3 py-2" title="Noch keine älteren Versionen vorhanden." />
         ) : (
           <SectionError className="m-2" onRetry={onRetryDetails}>
             Die Dateidetails konnten nicht geladen werden.
@@ -266,7 +268,7 @@ function DocumentDetailsHistory({ details, isLoading }: DocumentDetailsHistoryPr
           ))}
         </div>
       ) : (
-        <p className="mt-1 text-sm text-muted-foreground">Noch kein Verlauf vorhanden.</p>
+        <EmptyState size="compact" className="mt-1" title="Noch kein Verlauf vorhanden." />
       )}
     </div>
   );

@@ -3,6 +3,7 @@
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { formatBerlin } from '@/lib/utils';
@@ -44,7 +45,7 @@ export function WorkLifecycleBlockersSection({
         )}
       </div>
       {snapshot.blockers.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine offenen Blocker.</p>
+        <EmptyState size="compact" title="Keine offenen Blocker." />
       ) : (
         snapshot.blockers.map((blocker) => (
           <div key={blocker.id} className="rounded-md border p-3 text-sm">

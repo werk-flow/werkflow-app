@@ -136,7 +136,7 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
           <span className="truncate text-sm font-medium">Ohne Zuweisung</span>
         )}
         {row && !compact && (
-          <span className="truncate text-[11px] text-muted-foreground">
+          <span className="truncate text-xs text-muted-foreground">
             {row.role ? getRoleLabel(row.role) : 'Ohne App-Zugang'}
           </span>
         )}

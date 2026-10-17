@@ -120,7 +120,7 @@ export function EnterNewEmailStep({ wizard }: { wizard: EmailChangeWizard }) {
     <div className="space-y-4">
       <div className="space-y-1">
         <div className="flex items-center gap-2 text-foreground">
-          <ShieldCheck className="size-4 text-primary" />
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
           <p className="text-base font-semibold">Schritt 2: Neue E-Mail-Adresse eingeben</p>
         </div>
         <p className="text-sm text-muted-foreground">

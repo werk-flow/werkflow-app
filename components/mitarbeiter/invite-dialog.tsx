@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { sendOrgInvite, type InviteRole } from '@/lib/invites/actions';
 import type { Invite } from './invitations-table';
 import { SEND_INVITE_MESSAGES } from './invite-messages';
@@ -39,29 +40,21 @@ export function InviteDialog() {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<InviteRole>('employee');
-  const [emailError, setEmailError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const router = useRouter();
   const { showBanner } = useBanner();
+  const emailError = EMAIL_REGEX.test(email) ? undefined : 'Bitte gib eine gültige E-Mail-Adresse ein.';
 
   const resetForm = () => {
     setEmail('');
     setSelectedRole('employee');
-    setEmailError(null);
     setHasAttemptedSubmit(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setHasAttemptedSubmit(true);
-    setEmailError(null);
-
-    // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
-      setEmailError('Bitte gib eine gültige E-Mail-Adresse ein.');
-      document.getElementById('email')?.focus();
-      return;
-    }
+    if (focusFirstInvalidField({ email: emailError })) return;
 
     // The dialog closes at once; the invitations list shows the draft as a
     // pending row until the server confirms (feedback canon). The expiry is
@@ -114,9 +107,6 @@ export function InviteDialog() {
     if (!newOpen) resetForm();
   };
 
-  // Determine if we should show the email error (only after submit attempt)
-  const showEmailError = hasAttemptedSubmit && emailError;
-
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -138,18 +128,19 @@ export function InviteDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="E-Mail-Adresse" htmlFor="email" required error={showEmailError ? emailError : null}>
+            <Field
+              label="E-Mail-Adresse"
+              htmlFor="email"
+              required
+              error={hasAttemptedSubmit ? emailError : undefined}
+            >
               <Input
                 type="text"
                 inputMode="email"
                 autoComplete="email"
                 placeholder="mitarbeiter@firma.de"
                 value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  // Clear email error when user types
-                  if (emailError) setEmailError(null);
-                }}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </Field>
             <Field

@@ -82,7 +82,7 @@ export function DayTimelineRow(
             </PlainButton>
           )}
         </span>
-        {label && <span className="truncate text-[11px] text-muted-foreground">{label}</span>}
+        {label && <span className="truncate text-xs text-muted-foreground">{label}</span>}
       </div>
       <div
         role="gridcell"
@@ -110,7 +110,7 @@ export function DayTimelineRow(
           data-day-create-overlay=""
           aria-hidden="true"
           className={cn(
-            'pointer-events-none absolute top-1 bottom-1 rounded-md border border-dashed border-calendar-planning-strong bg-calendar-drop-valid px-1 text-[11px] tabular-nums text-calendar-planning-foreground',
+            'pointer-events-none absolute top-1 bottom-1 rounded-md border border-dashed border-calendar-planning-strong bg-calendar-drop-valid px-1 text-xs tabular-nums text-calendar-planning-foreground',
             CALENDAR_LAYER_CLASS.overlay,
           )}
         />
@@ -121,7 +121,7 @@ export function DayTimelineRow(
               <span
                 key={gap.startMinutes}
                 aria-hidden="true"
-                className="pointer-events-none absolute bottom-0.5 truncate text-center text-[10px] tabular-nums text-muted-foreground"
+                className="pointer-events-none absolute bottom-0.5 truncate text-center text-xs tabular-nums text-muted-foreground"
                 style={{
                   left: (gap.startMinutes / 60) * hourWidth,
                   width: ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth,

@@ -26,12 +26,12 @@ Start each UI task from the procedure below. It names the file to copy and the c
 
 ### Add a page
 
-1. Copy `app/(app)/qualifikationen/page.tsx`: `PageShell`, `PageHeader` with the German title, `PageBody`, and the data behind `Suspense`. A detail page with columns copies `components/auftraege/project-detail/project-detail-content.tsx`: a `@container/detail` wrapper sets the columns by the content width, not the screen width.
+1. Copy `app/(app)/qualifikationen/page.tsx`: `PageShell`, `PageHeader` with the German title, `PageBody`, and the data behind `Suspense`. A detail page with columns copies `components/auftraege/project-detail/project-detail-content.tsx`: `DetailColumns` sets the columns by the content width, not the screen width, and the skeleton names the same layout.
 2. In an area with subpages, render content under `SubpageHeader`. The area's `layout.tsx` owns `PageHeader` and `AreaNav`.
 3. Write the skeleton in `components/loading-states/` from the page's own column definitions, and render it from the route's `loading.tsx`. A new top-level route also gets its entry in `components/sidebar/org-switch-overlay.tsx`.
 4. Return `RegionLoadError` with natural German when a server read fails. A client section uses `SectionError`.
-5. Add the route to `lib/testing/selection/mobile-route-inventory.ts`, its group to `lib/testing/selection/surface-groups.ts`, and its in-page tabs by value to `lib/testing/selection/page-tab-inventory.ts`.
-6. Run `bun run test:unit lib/conventions/route-loading.test.ts lib/ui/skeleton-pairing.test.ts lib/testing/selection/mobile-route-inventory.test.ts lib/testing/selection/surface-groups.test.ts lib/testing/selection/page-tab-inventory.test.ts` and `bun run lint <files>`.
+5. Add the route to `lib/testing/selection/mobile-route-inventory.ts`, its group to `lib/testing/selection/surface-groups.ts`, its in-page tabs by value to `lib/testing/selection/page-tab-inventory.ts`, and its page family to `tests/audit/support/visual-families.ts`. A screen outside the app shell goes to `lib/testing/selection/standalone-route-inventory.ts` with the session it needs, takes `StandaloneScreen` and `StandaloneTitle`, and gets its own `loading.tsx` too.
+6. Run `bun run test:unit lib/conventions/route-loading.test.ts lib/ui/skeleton-pairing.test.ts lib/ui/detail-columns.test.ts lib/testing/selection/` and `bun run lint <files>`.
 
 Wrong turn: a spinner or a generic skeleton as the loading state. It does not mirror the page, so the layout jumps when the data lands.
 
@@ -80,22 +80,24 @@ Wrong turn: a reference rewritten because the comparison failed. A reference rec
 
 This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mechanism. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
-- Values come from the tokens in `app/globals.css`: no hex, `rgb()` or `hsl()` literal, no arbitrary hex class, no numbered palette class. [code `app/globals.css`, lint `colorLiteralSelectors`, lint `stylingSelectors`, lint `paletteSelectors`]
+- Values come from the tokens in `app/globals.css`: no hex, `rgb()` or `hsl()` literal, no arbitrary hex value under any utility, no numbered palette class, in a component or in a class module beside it. [code `app/globals.css`, lint `colorLiteralSelectors`, lint `stylingSelectors`, lint `paletteSelectors`, test `lib/ui/styling-lint.test.mjs`]
 - Text and controls keep readable contrast in both themes. [test `lib/ui/contrast-contracts.test.ts`]
-- Radius stops at `rounded-lg`, focus is one 2px ring without an offset, and Lucide icons keep the global stroke. [lint `stylingSelectors`, lint `focusRingSelectors`, lint `ui/no-lucide-stroke-width`]
-- A page renders `PageShell`, `PageHeader` and `PageBody`, and its title comes from `PageHeader`. An area with subpages has a `layout.tsx` with `AreaNav`. [code `components/shared/page-shell.tsx`, lint `shellSelectors`, lint `headingSelectors`]
-- A subpage title is `SubpageHeader`, a detail card title is `SectionTitle`, a screen outside the shell is `StandaloneScreen`. No `h2` copies the page title style. [lint `shellSelectors`, test `lib/ui/eslint-contracts.test.mjs`]
+- Radius stops at `rounded-lg` on every corner, focus is one 2px ring without an offset or a border color, and Lucide icons keep the global stroke. [lint `stylingSelectors`, lint `focusRingSelectors`, lint `ui/no-lucide-stroke-width`]
+- Text sizes come from the type scale; the smallest is `text-xs`. [lint `stylingSelectors`, test `lib/ui/styling-lint.test.mjs`]
+- A page renders `PageShell`, `PageHeader` and `PageBody`, and its title comes from `PageHeader`. An area with subpages has a `layout.tsx` with `AreaNav`. A screen has one main landmark, owned by the app shell or `StandaloneScreen`. [code `components/shared/page-shell.tsx`, lint `shellSelectors`, lint `headingSelectors`, lint `landmarkSelectors`]
+- A subpage title is `SubpageHeader`, a detail card title is `SectionTitle`, a screen outside the shell is `StandaloneScreen` with its `h1` from `StandaloneTitle`. No `h2` copies the page title style. [lint `shellSelectors`, lint `headingSelectors`, test `lib/ui/eslint-contracts.test.mjs`]
 - No control stays under the clock button: page actions are never fixed, and the page body scrolled to its end leaves every control clear. [lint `floatingSelectors`, group `audit:layout`]
 - A search field is `SearchInput`. [lint `registrySelectors`]
 - A Card does not stack its padding on a self-padded child. [test `lib/ui/card-padding.test.ts`]
 - A primitive styles its states once for both themes, so a caller's override works in dark mode too. [test `lib/ui/primitive-state-themes.test.ts`]
 - An empty list shows only its `EmptyState`, and one page shows no page buttons. [test `lib/ui/list-pagination-render.test.tsx`]
-- Full-height layouts use `h-dvh` or `min-h-dvh`. [lint `stylingSelectors`]
-- Nothing scrolls the page horizontally at 375 px, nor on a manager route or detail page at 768, 1024, 1280 and 1680 px, and a table has a `ListRow` card layout below the tablet breakpoint. A toolbar row with fixed-width controls wraps or stacks until it fits beside the sidebar. A page sets its columns by the width of its content (a `@container` wrapper and `@…/detail:` variants, as in `components/auftraege/project-detail/project-detail-content.tsx`), not by the screen, because the app sidebar takes 256 px; column tracks are `minmax(0, …)` so a long name cannot widen them, and a card header with a title and a button wraps. A new authenticated page is listed in the mobile route inventory. [group `audit:layout`, test `lib/testing/selection/mobile-route-inventory.test.ts`, test `lib/ui/row-contracts.test.ts`]
+- Full-height layouts use `h-dvh` or `min-h-dvh`, and no height is a `vh` length. [lint `stylingSelectors`, test `lib/ui/styling-lint.test.mjs`]
+- Nothing scrolls the page horizontally at 375 px, nor on a manager route or detail page at 768, 1024, 1280 and 1680 px, and a table has a `ListRow` card layout below the tablet breakpoint. A toolbar row with fixed-width controls wraps or stacks until it fits beside the sidebar. A page sets its columns by the width of its content, not by the screen, because the app sidebar takes 256 px: a detail page through `DetailColumns`, whose layout its skeleton names too; column tracks are `minmax(0, …)` so a long name cannot widen them, and a card header with a title and a button wraps. A new authenticated page is listed in the mobile route inventory, a screen outside the shell in the standalone inventory. [group `audit:layout`, group `audit:layout:standalone`, code `components/shared/detail-columns.tsx`, test `lib/ui/detail-columns.test.ts`, test `lib/testing/selection/mobile-route-inventory.test.ts`, test `lib/testing/selection/standalone-route-inventory.test.ts`, test `lib/ui/row-contracts.test.ts`]
 - Text uses a token color at full opacity; opacity modifiers belong to fills and borders. [lint `textOpacitySelectors`, test `lib/ui/eslint-contracts.test.mjs`, group `audit:layout:*`]
 - Only a named scroll region scrolls sideways: the calendar surfaces, tab strips, area navs and tables from the tablet breakpoint set the marker through `ScrollRegion` or `scrollRegion`, and a vertical list uses `overflow-y-auto`. [code `components/ui/scroll-region.tsx`, lint `scrollSelectors`, group `audit:layout`]
 - Every in-page tab is in the tab inventory and every dialog in the dialog inventory with an opener, or with the reason it cannot open in the audit world. The surface audit opens each tab at every width and each dialog at 1280, 768 and 375 px: it fits the viewport, scrolls vertically inside itself, no control leaves its box and its footer actions are reachable. Each surface group stays within four minutes, and every page, tab and dialog runs in exactly one of them. [test `lib/testing/selection/page-tab-inventory.test.ts`, test `lib/testing/selection/dialog-inventory.test.ts`, test `lib/testing/selection/surface-groups.test.ts`, group `audit:layout:*`]
-- Every inventoried page, tab and dialog passes axe's WCAG 2.1 A and AA rules in both themes; a rule is excluded only on a named third-party surface with its reason. The field worker's pages add WCAG 2.2 target sizes. [test `lib/testing/spec-support/axe-exceptions.test.ts`, group `audit:layout:*`, group `audit:layout:field`]
+- Every inventoried page, tab and dialog passes axe's WCAG 2.1 A and AA rules in both themes, and every whole page its landmark and heading rules (one main landmark, a level-one heading, headings in order); the screens outside the app shell are inventoried too. A rule is excluded only on a named third-party surface with its reason. The field worker's pages add WCAG 2.2's 24 px target size; their 44 px primary actions are review until the owner decides on a checked button size. [test `lib/testing/spec-support/axe-exceptions.test.ts`, group `audit:layout:*`, group `audit:layout:field`, group `audit:layout:standalone`, judgment]
+- Every table column has a header a screen reader names; a column without a visible title takes `hiddenHeader`. [code `components/ui/skeleton-table.tsx`, test `lib/ui/table-headers.test.ts`]
 - Markup passes jsx-a11y's recommended rules, the registry included; `Checkbox` counts as the control of its label. [lint `jsx-a11y/recommended`, test `lib/ui/eslint-contracts.test.mjs`]
 - A dialog, sheet or confirmation focuses its first control (a confirmation its cancel action), or itself while its fields load or with `initialFocus="dialog"`; Tab stays inside; Escape returns focus to the control that opened it, a row menu's button included. [lint `dialogFocusSelectors`, code `components/ui/return-focus.ts`, group `ui:contracts`, group `audit:layout:*`]
 - A Radix primitive is imported only by its registry wrapper. [lint `importRestrictions`, test `lib/ui/eslint-contracts.test.mjs`]
@@ -109,18 +111,18 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 - A raw `Select` holds a fixed enum with fewer than ten options. An entity list is searchable. [test `lib/ui/select-registry.test.ts`]
 - A picker of customers, jobs, projects, equipment, service cases, inventory items or coverages takes the whole `useJobEntityOptions` result: it searches on the server, pages with „Weitere Ergebnisse laden“, keeps the selection and retries a failed read with „Erneut laden“. Only a list under [complete lists](../../../docs/technical/realtime-and-caching.md#complete-lists) comes whole. [test `lib/conventions/entity-pickers.test.ts`, group `ui:contracts`]
 - Every field is a `Field`, so its label, required marker and error are wired. [lint `ui/label-in-spaced-container`, test `lib/ui/field-contracts.test.tsx`]
-- A submit stays enabled. An invalid submit marks the fields and focuses the first through `focusFirstInvalidField`. An action button that needs a choice or typed text works the same way. [lint `ui/submit-disabled-only-while-pending`, lint `ui/action-disabled-only-while-pending`, code `lib/ui/field-validation.ts`]
+- A submit stays enabled. An invalid submit marks the fields and focuses the first through `focusFirstInvalidField`. An action button that needs a choice or typed text works the same way. The disabled rules judge what a flag computes, at the call site of a `*Disabled` prop too. [lint `ui/submit-disabled-only-while-pending`, lint `ui/action-disabled-only-while-pending`, lint `validationFocusSelectors`, code `lib/ui/field-validation.ts`, test `lib/conventions/form-validation-focus.test.ts`]
 - An icon-only button has a German `aria-label`. [lint `ui/icon-button-needs-name`]
 - A dialog that waits for its server answer passes `pending` to its root, so Escape, an outside click and the close controls cannot close it before the result lands. [lint `ui/dialog-pending-while-waiting`, code `components/ui/dialog.tsx`, code `components/ui/alert-dialog.tsx`, group `ui:contracts`, judgment]
 - A page-wide keydown listener skips a key that a dialog, menu or drag already consumed (`event.defaultPrevented`). [lint `ui/global-key-handler-respects-consumed`]
 - Every authenticated route highlights exactly one sidebar entry. [test `lib/ui/sidebar-nav-coverage.test.ts`]
 - A number keeps its stored precision from prefill to save: a quantity keeps three fractional digits, and with a decimal comma a dot is a thousands separator. [test `lib/ui/decimal.test.ts`, code `components/ui/quantity-stepper.tsx`, judgment]
-- No database id or code reaches the screen or an export: a missing label falls back to neutral German such as „Änderung dokumentiert“, never to `?? id` or `LABELS[code] ?? code`. [judgment]
+- No database id or code reaches the screen or an export: a label map is typed by its union, and a value that arrives as plain text falls back to neutral German such as „Änderung dokumentiert“, never to `?? id` or `LABELS[code] ?? code`. [lint `ui/no-raw-code-fallback`, test `lib/ui/styling-lint.test.mjs`]
 - A non-destructive dialog is a form that submits on Enter. A destructive confirmation is an `AlertDialog`. A long dialog uses `DialogBody`, and its width comes from the `size` prop. [test `lib/ui/dialog-contracts.test.ts`, lint `dialogSizeSelectors`]
-- Every route has its own `loading.tsx` that mirrors its page. [test `lib/conventions/route-loading.test.ts`]
-- A placeholder is `Skeleton` and a running action is `Spinner` or `Button pending`, never a hand-built pulse or a `Loader2`; a live pulse is `animate-live`. [code `components/ui/spinner.tsx`, lint `busySignalSelectors`, test `lib/conventions/route-loading.test.ts`, test `lib/ui/eslint-contracts.test.mjs`]
+- Every route, inside the app shell and outside it, has its own `loading.tsx` that mirrors its page. [test `lib/conventions/route-loading.test.ts`]
+- A placeholder is `Skeleton` and a running action is `Spinner` or `Button pending`, never a hand-built pulse or a `Loader2`; a button never swaps in a `Spinner` by hand. A live pulse is `animate-live`. [code `components/ui/spinner.tsx`, lint `busySignalSelectors`, lint `buttonSpinnerSelectors`, test `lib/conventions/route-loading.test.ts`, test `lib/ui/eslint-contracts.test.mjs`]
 - A skeleton row shares the list's columns and its `interactive` flag, and a row hovers only through that flag. [test `lib/ui/skeleton-pairing.test.ts`, lint `hoverSelectors`, test `lib/ui/contextual-documents-layout.test.ts`]
-- An empty list renders `EmptyState` with a „Noch keine …“ or „Keine … gefunden“ title. A region that fails shows `RegionLoadError` or `SectionError` with retry. [code `components/ui/empty-state.tsx`, test `lib/ui/empty-state-copy.test.ts`, code `components/shared/region-load-error.tsx`, judgment]
+- An empty list or region renders `EmptyState` with a „Noch keine …“ or „Keine … gefunden“ title: the block where the rows would be, `size="compact"` inside a card section, never a hand-written note. A region that fails shows `RegionLoadError` or `SectionError` with retry. [code `components/ui/empty-state.tsx`, test `lib/ui/empty-state-copy.test.ts`, code `components/shared/region-load-error.tsx`, judgment]
 - A failure is visible at the point of action. Inline errors render through `ErrorText`, global feedback through `Banner`. A rejection never ends in an empty `.catch`, and a pending flag set before an await is reset when the call rejects. The reviewer checks that a failed write keeps the dialog open with its values. [lint `registrySelectors`, lint `swallowedRejectionSelectors`, lint `ui/pending-reset-on-failure`, judgment]
 - A failed read is a failure the screen shows, never an empty list or a missing row. [test `lib/conventions/read-error-visibility.test.ts`]
 - Every Server Action write in client code shows feedback in its first frame: the pending state of an owner hook (`useServerAction`, `usePendingTask`, `useBusyIds`), a progress banner or an optimistic row. A pending flag written by hand around a write fails the same test unless `HAND_PENDING_STATE` names its reason. [test `lib/conventions/server-action-feedback.test.ts`]
@@ -133,15 +135,18 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 - The lint configuration itself rejects every banned spelling. [test `lib/ui/eslint-contracts.test.mjs`]
 - German copy uses real umlauts and `ß`, says "du", uses the typographic ellipsis, closes „ with “, and names no slice or ticket code such as P1-14. A stored date reads 01.09.2026, never 2026-09-01. [test `lib/conventions/german-copy.test.ts`, test `lib/conventions/text-encoding.test.ts`, lint `dateTextSelectors`]
 - Shared controls hold their semantics, focus and pending states in the component suite. [group `ui:contracts`]
-- Orange marks only what deserves attention: no orange status badge, and a row action repeated per row is `outline`. Purple stays a quiet undertone for planning and parked work. [code `components/ui/badge.tsx`, judgment]
+- Orange marks only what deserves attention: no orange status badge, no orange icon or icon tile as decoration, and a row action repeated per row is `outline`. Purple stays a quiet undertone for planning and parked work. [code `components/ui/badge.tsx`, test `lib/ui/contrast-contracts.test.ts`, judgment]
 - A state is a label, an action is a button: a state renders as `Badge`, a lifecycle button names its step, never the state it ends in, and a reversible step is not a filled red button. [code `components/ui/badge.tsx`, test `lib/work-lifecycle/types.test.ts`, judgment]
 - A job, project or work state reads its color from `components/auftraege/status-classes.ts`; no other file maps such a state to a color. [test `lib/conventions/status-colors.test.ts`]
 - Hierarchy, density, shadows, natural German and fit for the role pass [rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance) for a major UI change. [judgment]
-- An accepted screen keeps its look: every page family has a visual reference, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, judgment]
+- An accepted screen keeps its look: every page of the inventories belongs to a page family with a desktop reference in both themes and a phone reference, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, test `lib/testing/selection/visual-families.test.ts`, judgment]
 
 ## Never
 
 - Hardcode a hex value, a radius above `rounded-lg` or a numbered palette class. [lint `colorLiteralSelectors`, lint `stylingSelectors`, lint `paletteSelectors`]
+- Write an arbitrary font size, a `vh` height or a focus border color. [lint `stylingSelectors`]
+- Nest a second `<main>`. [lint `landmarkSelectors`]
+- Focus an invalid field by id instead of through `focusFirstInvalidField`. [lint `validationFocusSelectors`]
 - Write a raw `<button>`, a raw text `<input>`, a native date, time, number or select control, or `<details>`. [lint `ui/no-raw-controls`, lint `registrySelectors`]
 - Write a raw `<h1>`, or a `max-w-*` class on `DialogContent`. [lint `headingSelectors`, lint `dialogSizeSelectors`]
 - Float a page action in a fixed button. [lint `floatingSelectors`]
@@ -156,7 +161,7 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 - Keep a dialog's first focus outside it: `autoFocus`, or an `onOpenAutoFocus` that only prevents the default. [lint `dialogFocusSelectors`, lint `jsx-a11y/recommended`]
 - Offer an edit or a transition the server will refuse. [test `lib/conventions/action-prechecks.test.ts`]
 - Switch off an axe rule in a spec. [test `lib/testing/spec-support/axe-exceptions.test.ts`]
-- Use orange as decoration, or purple as a loud accent. [judgment]
+- Use orange as decoration, or purple as a loud accent. [test `lib/ui/contrast-contracts.test.ts`, judgment]
 - Assert a palette class in a test instead of a semantic token. [test `lib/conventions/palette-classes-in-tests.test.ts`]
 - Keep a design the owner rejected as a test baseline or a reference image. [judgment]
 - Update a visual reference to pass a failing run. Only a focused update run can rewrite one; whether the owner accepted the new image is review. [test `lib/testing/runner/visual-reference-updates.test.ts`, judgment]
@@ -167,15 +172,15 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 2. Run `bun run test:unit`. The tests under `lib/ui/` and `lib/conventions/` pass.
 3. Run `bun run test:ui`. The component suite passes.
 4. Run `bun run test:verify`. The change plan selects `audit:layout` when a shared control or a token changed, and the surface groups `audit:layout:<area>` of the areas you changed. For a release, or after an accepted redesign, run `bun run test:verify --group audit:visual`. It compares each page family's image and its exact visible text, so a changed label fails. To accept a design change, follow the reference rules in `docs/technical/standards-audit.md`.
-5. Look at the screen yourself: both themes, 375 px and desktop, the keyboard path, and the empty, loading and error states. For each changed screen, add it to a set in `tests/audit/support/acceptance-sets.ts`, capture it before and after with `bun run test:audit:focused --grep "@ACCEPT <set>"`, and judge the pair. A screenshot does not prove an interaction.
+5. Look at the screen yourself: both themes, 375 px and desktop, the keyboard path, and the empty, loading and error states. For each changed screen, add it to a set in `tests/audit/support/acceptance-sets.ts` (a screen outside the shell as a standalone capture), capture it before and after with `bun run test:audit:focused --grep "@ACCEPT <set>"`, and judge the pair. A screenshot does not prove an interaction.
 6. For a major UI change, follow rendered design acceptance in `docs/technical/standards-audit.md` and record each visual finding with its disposition in the slice record.
 
 ## Examples
 
 - `app/(app)/qualifikationen/page.tsx`: `PageShell`, `PageHeader` and `PageBody`, the data behind `Suspense` with the page's own skeleton, and `RegionLoadError` with natural German when the read fails.
 - `components/auftraege/lifecycle/work-lifecycle-reason-dialog.tsx`: a dialog that is a form, an enabled submit with `focusFirstInvalidField`, pending state from `usePendingTask`, and the error in `ErrorText`.
-- `components/ui/empty-state.tsx`: the one empty state, with the two title patterns written down where every caller reads them.
-- `components/auftraege/project-detail/project-detail-content.tsx`: a detail page whose `@container/detail` columns follow the content width, and a failed section read that shows `RegionLoadError` in its own region.
+- `components/ui/empty-state.tsx`: the one empty state in its two sizes, with the two title patterns written down where every caller reads them.
+- `components/auftraege/project-detail/project-detail-content.tsx`: a detail page whose `DetailColumns` follow the content width, and a failed section read that shows `RegionLoadError` in its own region.
 
 ## Tweaking the design later
 

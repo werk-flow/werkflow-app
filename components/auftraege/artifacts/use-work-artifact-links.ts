@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   exportWorkArtifact,
   fulfillInstructionEvidence,
@@ -51,11 +52,9 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
 
   function linkDocument() {
     if (!detail || !currentRevision) return;
-    if (!documentId) {
-      setDocumentError('Bitte wähle ein Dokument aus.');
-      document.getElementById('artifact-link-document')?.focus();
-      return;
-    }
+    const documentMessage = documentId ? undefined : 'Bitte wähle ein Dokument aus.';
+    setDocumentError(documentMessage ?? null);
+    if (focusFirstInvalidField({ 'artifact-link-document': documentMessage })) return;
     void runArtifactTask('document', async () => {
       const result = await linkWorkArtifactDocument({
         artifactId: detail.id,
@@ -90,11 +89,9 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
 
   function linkTimeEntry() {
     if (!detail || !currentRevision) return;
-    if (!timeSourceId) {
-      setTimeSourceError('Bitte wähle einen Zeiteintrag aus.');
-      document.getElementById('artifact-link-time-source')?.focus();
-      return;
-    }
+    const timeSourceMessage = timeSourceId ? undefined : 'Bitte wähle einen Zeiteintrag aus.';
+    setTimeSourceError(timeSourceMessage ?? null);
+    if (focusFirstInvalidField({ 'artifact-link-time-source': timeSourceMessage })) return;
     const selectedTimeSource = timeEntryOptions.find((option) => option.id === timeSourceId);
     if (!selectedTimeSource) return;
     void runArtifactTask('time', async () => {

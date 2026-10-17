@@ -4,6 +4,7 @@ import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-d
 import type { ReactNode } from 'react';
 
 import { SERVICE_CASE_COLUMNS } from '@/components/service/service-case-list-content';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 
@@ -62,8 +63,8 @@ export function ServiceCaseDetailSkeleton() {
         <Skeleton className="h-7 w-2/3" />
         <Skeleton className="h-4 w-64 max-w-full" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="space-y-6">
+      <DetailColumns layout="main-and-aside">
+        <div className="min-w-0 space-y-6">
           <Skeleton className="h-32 rounded-lg" />
           <Skeleton className="h-48 rounded-lg" />
           <ContextualDocumentsSkeleton
@@ -76,7 +77,7 @@ export function ServiceCaseDetailSkeleton() {
           <Skeleton className="h-48 rounded-lg" />
         </div>
         <Skeleton className="h-72 rounded-lg" />
-      </div>
+      </DetailColumns>
     </div>
   );
 }

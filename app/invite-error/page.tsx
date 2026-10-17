@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { cookies } from 'next/headers';
 import { AlertCircle } from 'lucide-react';
 
-import { StandaloneScreen } from '@/components/shared/standalone-screen';
+import { StandaloneScreen, StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Button } from '@/components/ui/button';
 import { SignOutAndRedirectButton } from './sign-out-redirect-button';
 import { describeFailure } from '@/lib/action-messages';
@@ -70,8 +70,8 @@ export default async function InviteErrorPage({
             <AlertCircle className="size-12 text-destructive" />
           </div>
         </div>
-        <h1 className="mb-2 text-2xl font-bold">{title}</h1>
-        <p className="mb-8 text-muted-foreground">
+        <StandaloneTitle>{title}</StandaloneTitle>
+        <p className="mt-2 mb-8 text-muted-foreground">
           {description}
           {isEmailMismatch && inviteCode === null
             ? ' Öffne danach den Einladungslink aus deiner E-Mail erneut.'

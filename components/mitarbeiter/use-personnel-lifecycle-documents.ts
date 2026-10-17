@@ -10,7 +10,9 @@ import {
 } from '@/lib/personnel/lifecycle-actions';
 import type { PersonnelDocumentAccessClass } from '@/lib/personnel/lifecycle';
 
-import { ERROR_MESSAGES, focusFirstInvalid } from './personnel-lifecycle-errors';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+
+import { ERROR_MESSAGES } from './personnel-lifecycle-errors';
 import type { PersonnelLifecycleController } from './use-personnel-lifecycle-view';
 import { logError } from '@/lib/logging';
 
@@ -41,7 +43,7 @@ export function usePersonnelLifecycleDocuments(lifecycle: PersonnelLifecycleCont
     if (!file) nextErrors['personnel-file'] = 'Bitte wähle eine Datei aus.';
     if (documentType.trim().length < 2) nextErrors['document-type'] = 'Bitte gib die Dokumentart an.';
     setFieldErrors(nextErrors);
-    if (focusFirstInvalid(nextErrors) || !file) return;
+    if (focusFirstInvalidField(nextErrors) || !file) return;
     try {
       await run(async () => {
         const result = await uploadPersonnelDocumentDirect({

@@ -12,6 +12,7 @@ import type {
   MaintenanceTemplateOption,
 } from '@/lib/maintenance/types';
 import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useClientOption } from './use-client-option';
 import {
   EMPTY_MAINTENANCE_PLAN_FORM,
@@ -108,17 +109,16 @@ export function useMaintenancePlanForm({
       if (initial && onSaved) onSaved();
     },
   );
-  const fieldErrors = attempted ? missingMaintenancePlanFields(form, Boolean(initial)) : {};
+  const missingFields = missingMaintenancePlanFields(form, Boolean(initial));
+  const fieldErrors = attempted ? missingFields : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errors = missingMaintenancePlanFields(form, Boolean(initial));
-    const firstInvalid = MAINTENANCE_PLAN_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
+    const errorsById = Object.fromEntries(
+      MAINTENANCE_PLAN_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
+    );
+    if (focusFirstInvalidField(errorsById)) return;
     if (!initial && onSubmitted) {
       const createResult = createMaintenancePlan(buildInput());
       onSubmitted({

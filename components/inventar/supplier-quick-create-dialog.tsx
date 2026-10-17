@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 /** Selection value of a supplier that is created with the item on save. */
 export const NEW_SUPPLIER_VALUE = '__new_supplier__';
@@ -36,12 +37,9 @@ export function SupplierQuickCreateDialog({
     // surrounding ItemDialog form and saves the item prematurely.
     event.stopPropagation();
     const trimmed = name.trim();
-    if (!trimmed) {
-      setNameError('Bitte gib den Namen des Lieferanten ein.');
-      document.getElementById('inventory-new-supplier-name')?.focus();
-      return;
-    }
-    setNameError(null);
+    const nameMessage = trimmed ? undefined : 'Bitte gib den Namen des Lieferanten ein.';
+    setNameError(nameMessage ?? null);
+    if (focusFirstInvalidField({ 'inventory-new-supplier-name': nameMessage })) return;
     // The supplier row itself is created server-side when the item is saved
     // (upsertInventoryItem's supplierName path); this dialog only stages the
     // name as the pending selection.

@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { AttentionTask } from '@/lib/attention/types';
 import { TaskRow } from './aufgaben-task-row';
 
@@ -72,7 +73,7 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
         Offene Aufgaben
       </h2>
 
-      {tasks.length === 0 && <p className="text-sm text-muted-foreground">Keine offenen Aufgaben.</p>}
+      {tasks.length === 0 && <EmptyState size="compact" title="Keine offenen Aufgaben." />}
 
       {joinRequestTasks.length > 0 && (
         <TaskGroup

@@ -1,0 +1,23 @@
+Erstelle dein Konto
+Werde Teil von WerkFlow und verwalte deine Arbeitsbereiche nahtlos.
+Vorname
+*
+Pflichtfeld
+Nachname
+*
+Pflichtfeld
+E-Mail
+*
+Pflichtfeld
+Passwort
+*
+Pflichtfeld
+Passwortstärke
+Sehr schwach
+Mindestens 8 Zeichen
+Mindestens ein Großbuchstabe
+Mindestens ein Kleinbuchstabe
+Mindestens eine Zahl
+Registrieren
+Bereits ein Konto?
+Anmelden

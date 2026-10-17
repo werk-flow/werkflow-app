@@ -25,6 +25,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { createInventoryLocation } from '@/lib/inventory/actions';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 import { INVENTORY_LOCATION_TYPE_LABELS } from '@/lib/inventory/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type LocationSelectWithCreateProps = {
   id?: string;
@@ -118,12 +119,9 @@ function CreateLocationDialog({
   const { run: runCreateLocation, isPending } = useServerAction(createInventoryLocation);
 
   function handleSave() {
-    if (!name.trim()) {
-      setNameError('Bitte gib dem Lager einen Namen.');
-      document.getElementById('quick-location-name')?.focus();
-      return;
-    }
-    setNameError(null);
+    const nameMessage = name.trim() ? undefined : 'Bitte gib dem Lager einen Namen.';
+    setNameError(nameMessage ?? null);
+    if (focusFirstInvalidField({ 'quick-location-name': nameMessage })) return;
     setError(null);
     void (async () => {
       // A thrown call (network, aborted request) must surface like a failed one.

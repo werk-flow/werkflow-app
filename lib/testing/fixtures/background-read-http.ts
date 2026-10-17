@@ -90,6 +90,14 @@ function seam(kind: string) {
     return { success: true, kind, input };
   };
 }
+/** A self-service reader: the route checked the identity only; the reader resolves its own caller. */
+function selfSeam(kind: string) {
+  return async (...readerArguments: unknown[]) => {
+    assert.equal(getReadRequestPriority(), 'background');
+    reads.push({ kind, input: readerArguments[0] });
+    return { success: true, kind, input: readerArguments[0] };
+  };
+}
 mock.module('@/lib/time-tracking/entry-read-actions', () => ({
   getTimeEntries: seam('time-entries'),
   getTimeEntriesForJob: seam('time-entries-for-job'),
@@ -128,7 +136,7 @@ mock.module('@/lib/service-cases/actions', () => ({
 }));
 mock.module('@/lib/attention/actions', () => ({ getAttentionOverview: seam('attention-overview') }));
 mock.module('@/lib/personnel/lifecycle-actions', () => ({
-  getOwnPersonnelActions: seam('own-personnel-actions'),
+  getOwnPersonnelActions: selfSeam('own-personnel-actions'),
   getPersonnelLifecycle: seam('personnel-lifecycle'),
 }));
 mock.module('@/lib/time-corrections/actions', () => ({
@@ -234,6 +242,12 @@ await check(request('own-vacation-overview'), 401, failure('not_authenticated'))
 identity = { user: { id: 'caller' }, error: null };
 memberships = [];
 await check(request('own-vacation-overview'), 403, failure('no_active_org'));
+// A member whose access starts later has no operational membership, yet reads
+// their own personnel items: a self-service read checks the identity only.
+reads = [];
+await check(request('own-personnel-actions'), 200, { success: true, kind: 'own-personnel-actions' });
+assert.deepEqual(reads, [{ kind: 'own-personnel-actions', input: undefined }]);
+reads = [];
 memberships = [{ orgId: organizationId, role: 'employee' }];
 await check(
   request('time-correction-requests', { organizationId: foreignOrg, scope: 'approvals' }),

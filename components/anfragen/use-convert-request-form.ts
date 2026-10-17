@@ -10,6 +10,7 @@ import { convertRequestToJob, convertRequestToProject } from '@/lib/requests/act
 import { requestUrgencyToJobPriority, type ClientRequest } from '@/lib/requests/types';
 import type { JobPriority } from '@/lib/jobs/types';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen umzuwandeln.',
@@ -28,6 +29,47 @@ const ERROR_MESSAGES = {
 } satisfies Record<string, string>;
 
 export type ConversionTarget = 'job' | 'project';
+
+type ConversionFieldId = 'convert-title' | 'convert-number' | 'convert-client';
+
+// The server refusals that name a field show on that field.
+const FIELD_SERVER_MESSAGES: Record<ConversionFieldId, readonly string[]> = {
+  'convert-title': [ERROR_MESSAGES.title_or_description_required, ERROR_MESSAGES.name_required],
+  'convert-number': [
+    ERROR_MESSAGES.job_number_required,
+    ERROR_MESSAGES.job_number_taken,
+    ERROR_MESSAGES.project_number_taken,
+  ],
+  'convert-client': [ERROR_MESSAGES.client_required],
+};
+
+/** The dialog's field checks in visual order, keyed by control id. */
+function conversionFieldErrors(
+  target: ConversionTarget,
+  title: string,
+  number: string,
+  clientId: string,
+): Record<ConversionFieldId, string | undefined> {
+  const titleMessage =
+    target === 'job' ? ERROR_MESSAGES.title_or_description_required : ERROR_MESSAGES.name_required;
+  return {
+    'convert-title': title.trim() ? undefined : titleMessage,
+    'convert-number': target === 'job' && !number.trim() ? ERROR_MESSAGES.job_number_required : undefined,
+    'convert-client': clientId ? undefined : ERROR_MESSAGES.client_required,
+  };
+}
+
+/** A field's message: its own check after a submit attempt, else a server refusal that names it. */
+function conversionFieldError(
+  id: ConversionFieldId,
+  fieldErrors: Record<ConversionFieldId, string | undefined>,
+  attempted: boolean,
+  error: string | null,
+): string | null {
+  const ownMessage = attempted ? fieldErrors[id] : undefined;
+  if (ownMessage) return ownMessage;
+  return error !== null && FIELD_SERVER_MESSAGES[id].includes(error) ? error : null;
+}
 
 export interface ConvertRequestForm {
   target: ConversionTarget;
@@ -122,6 +164,7 @@ export function useConvertRequestForm({
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
 
   // Prefill from the request each time the dialog opens, during render and
   // never in an effect. Keyed on open and request.id only: Realtime refreshes
@@ -142,10 +185,13 @@ export function useConvertRequestForm({
       setLocation('');
       setTemplateVersionId('');
       setError(null);
+      setAttempted(false);
     }
   }
 
   const { number, setNumber } = useSuggestedConversionNumber(open, target);
+
+  const fieldErrors = conversionFieldErrors(target, title, number, clientId);
 
   // A template belongs to one target kind, so switching the target clears it.
   const changeTarget = (nextTarget: ConversionTarget) => {
@@ -160,25 +206,8 @@ export function useConvertRequestForm({
     // message, and over the closed form after a success.
     setQualificationWarning(null);
 
-    // Field-level checks in visual order; the first failing field gets the
-    // error and the focus.
-    if (!title.trim()) {
-      setError(
-        target === 'job' ? ERROR_MESSAGES.title_or_description_required : ERROR_MESSAGES.name_required,
-      );
-      document.getElementById('convert-title')?.focus();
-      return;
-    }
-    if (target === 'job' && !number.trim()) {
-      setError(ERROR_MESSAGES.job_number_required);
-      document.getElementById('convert-number')?.focus();
-      return;
-    }
-    if (!clientId) {
-      setError(ERROR_MESSAGES.client_required);
-      document.getElementById('convert-client')?.focus();
-      return;
-    }
+    setAttempted(true);
+    if (focusFirstInvalidField(fieldErrors)) return;
 
     await runConvert(async () => {
       try {
@@ -247,18 +276,11 @@ export function useConvertRequestForm({
     await submitConversion();
   };
 
-  const titleError =
-    error === ERROR_MESSAGES.title_or_description_required || error === ERROR_MESSAGES.name_required
-      ? error
-      : null;
-  const numberError =
-    error === ERROR_MESSAGES.job_number_required ||
-    error === ERROR_MESSAGES.job_number_taken ||
-    error === ERROR_MESSAGES.project_number_taken
-      ? error
-      : null;
-  const clientError = error === ERROR_MESSAGES.client_required ? error : null;
-  const formError = titleError || numberError || clientError ? null : error;
+  const titleError = conversionFieldError('convert-title', fieldErrors, attempted, error);
+  const numberError = conversionFieldError('convert-number', fieldErrors, attempted, error);
+  const clientError = conversionFieldError('convert-client', fieldErrors, attempted, error);
+  // A server refusal shows once: on the field it names, else above the actions.
+  const formError = [titleError, numberError, clientError].includes(error) ? null : error;
 
   return {
     target,

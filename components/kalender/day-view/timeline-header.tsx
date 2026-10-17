@@ -22,7 +22,7 @@ export const TimelineHeader = memo(function TimelineHeader({
       <div
         role="columnheader"
         className={cn(
-          'sticky left-0 flex shrink-0 items-end truncate border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground',
+          'sticky left-0 flex shrink-0 items-end truncate border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground',
           CALENDAR_LAYER_CLASS.sticky,
         )}
         style={{ width: DAY_NAME_COLUMN_PX }}
@@ -47,7 +47,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             </span>
             {showHalves && (
               <span
-                className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
+                className="absolute top-2.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
                 style={{ left: hourWidth / 2 + 2 }}
               >
                 :30
@@ -56,13 +56,13 @@ export const TimelineHeader = memo(function TimelineHeader({
             {showQuarters && (
               <>
                 <span
-                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
+                  className="absolute top-2.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
                   style={{ left: hourWidth / 4 + 2 }}
                 >
                   :15
                 </span>
                 <span
-                  className="absolute top-2.5 whitespace-nowrap text-[10px] tabular-nums text-muted-foreground"
+                  className="absolute top-2.5 whitespace-nowrap text-xs tabular-nums text-muted-foreground"
                   style={{ left: (hourWidth * 3) / 4 + 2 }}
                 >
                   :45

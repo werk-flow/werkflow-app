@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { AuthFlashCleanup } from '@/components/auth/auth-flash-cleanup';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { TextLink } from '@/components/ui/text-link';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -120,9 +121,9 @@ export default async function LoginPage({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-semibold tracking-tight">
+          <StandaloneTitle>
             {organizationName ? `Tritt ${organizationName} bei` : 'Einladung annehmen'}
-          </CardTitle>
+          </StandaloneTitle>
           <CardDescription>
             {organizationName
               ? `Du bist schon angemeldet. Nimm die Einladung an, um der Organisation ${organizationName} beizutreten.`
@@ -139,9 +140,9 @@ export default async function LoginPage({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl font-semibold tracking-tight">
+        <StandaloneTitle>
           {organizationName ? `Tritt ${organizationName} bei` : 'Willkommen zurück'}
-        </CardTitle>
+        </StandaloneTitle>
         <CardDescription>
           {organizationName
             ? `Melde dich an, um der Organisation ${organizationName} beizutreten.`

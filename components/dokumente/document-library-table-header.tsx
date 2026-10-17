@@ -4,7 +4,7 @@ import type { ReactElement } from 'react';
 
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { SkeletonColumn } from '@/components/ui/skeleton-table';
+import { hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DocumentTableSortColumn, SortDirection } from './document-library-table-items';
 import { SelectionCircle, SkeletonSelectionCircle } from './document-library-table-selection-circle';
@@ -70,7 +70,7 @@ export const DOCUMENT_COLUMNS: readonly DocumentColumn[] = [
   },
   {
     id: 'actions',
-    header: null,
+    header: hiddenHeader('Aktionen'),
     className: 'w-[50px]',
     skeleton: <Skeleton className="ml-auto size-8 rounded-md" />,
   },
@@ -113,7 +113,11 @@ export function DocumentLibraryTableHeader({
             );
           }
           if (column.id === 'actions') {
-            return <TableHead key={column.id} className={column.className} />;
+            return (
+              <TableHead key={column.id} className={column.className}>
+                {column.header}
+              </TableHead>
+            );
           }
           return (
             <SortableTableHead

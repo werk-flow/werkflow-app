@@ -1,0 +1,10 @@
+Willkommen bei WerkFlow
+Wie möchtest du starten?
+Organisation erstellen
+Werde Admin und erstelle deine eigene Organisation. Lade Mitarbeiter ein und verwalte dein Team.
+Admin werden
+Organisation beitreten
+Du hast einen Organisationscode? Tritt einer bestehenden Organisation bei.
+Beitreten
+Du kannst später weitere Organisationen erstellen oder beitreten.
+Konto löschen

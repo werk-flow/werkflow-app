@@ -12,7 +12,7 @@ export function isOrgRole(value: string): value is OrgRole {
 /**
  * German role labels with gender-inclusive format
  */
-export const ROLE_LABELS: Record<OrgRole, string> = {
+export const ROLE_LABELS: Readonly<Record<OrgRole, string>> = {
   admin: 'Admin',
   buero: 'Büro',
   employee: 'Handwerker/in',

@@ -4,6 +4,7 @@ import { useState, type ReactElement } from 'react';
 import { FileCheck2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { useServerAction } from '@/hooks/use-server-action';
@@ -102,6 +103,7 @@ export function ServiceCaseEvidenceLink({
               setError(null);
               setOpen(true);
             }}
+            // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: no job or no evidence to link
             disabled={isStale || busy || !serviceCase.jobId || options.length === 0}
           >
             <FileCheck2 className="size-4" />
@@ -116,10 +118,10 @@ export function ServiceCaseEvidenceLink({
           ))}
           {pendingShown && <EvidenceRow evidence={pendingShown} pending />}
         </div>
+      ) : serviceCase.jobId ? (
+        <EmptyState size="compact" className="mt-3" title="Noch kein Arbeitsnachweis verknüpft." />
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">
-          {serviceCase.jobId ? 'Noch kein Arbeitsnachweis verknüpft.' : 'Ordne zuerst einen Auftrag zu.'}
-        </p>
+        <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Auftrag zu.</p>
       )}
       {(open || link.isPending) && (
         <ServiceCaseEvidenceDialog

@@ -337,3 +337,15 @@ export type BackgroundReadResult<Kind extends BackgroundReadKind> = Awaited<
 export function isBackgroundReadKind(value: string): value is BackgroundReadKind {
   return Object.hasOwn(BACKGROUND_READS, value);
 }
+
+/**
+ * Reads of a caller's own personnel items, which a member whose access starts
+ * later (prestart) opens before any operational membership exists. The route
+ * checks only the identity for them; the reader resolves its self-service
+ * caller (lib/org/self-service-context.ts) and its own record. The prestart
+ * page's task list failed for every such member while the route asked for an
+ * operational membership first (standalone screen audit, 2026-10-17).
+ */
+export const SELF_SERVICE_READS: ReadonlySet<BackgroundReadKind> = new Set<BackgroundReadKind>([
+  'own-personnel-actions',
+]);

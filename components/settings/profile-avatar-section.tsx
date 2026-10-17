@@ -18,7 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Spinner } from '@/components/ui/spinner';
 
 export function ProfileAvatarSection() {
   const {
@@ -75,14 +74,12 @@ export function ProfileAvatarSection() {
               <Button
                 type="button"
                 onClick={openFileDialog}
-                disabled={isUploading || isRemoving}
+                disabled={isRemoving}
+                pending={isUploading}
                 className="cursor-pointer"
               >
                 {isUploading ? (
-                  <>
-                    <Spinner className="mr-2" />
-                    Wird hochgeladen…
-                  </>
+                  'Wird hochgeladen…'
                 ) : (
                   <>
                     <ImagePlus className="mr-2 size-4" />
@@ -96,13 +93,11 @@ export function ProfileAvatarSection() {
                   type="button"
                   variant="outline"
                   onClick={handleRemoveAvatar}
-                  disabled={isUploading || isRemoving}
+                  disabled={isUploading}
+                  pending={isRemoving}
                 >
                   {isRemoving ? (
-                    <>
-                      <Spinner className="mr-2" />
-                      Wird entfernt…
-                    </>
+                    'Wird entfernt…'
                   ) : (
                     <>
                       <Trash2 className="mr-2 size-4" />
@@ -155,15 +150,13 @@ export function ProfileAvatarSection() {
             <Button type="button" variant="outline" onClick={resetCropState} disabled={isUploading}>
               Abbrechen
             </Button>
-            <Button type="button" onClick={handleUploadAvatar} disabled={isUploading || !croppedAreaPixels}>
-              {isUploading ? (
-                <>
-                  <Spinner className="mr-2" />
-                  Speichert…
-                </>
-              ) : (
-                'Profilbild speichern'
-              )}
+            <Button
+              type="button"
+              onClick={handleUploadAvatar}
+              pending={isUploading}
+              disabled={!croppedAreaPixels}
+            >
+              {isUploading ? 'Speichert…' : 'Profilbild speichern'}
             </Button>
           </DialogFooter>
         </DialogContent>

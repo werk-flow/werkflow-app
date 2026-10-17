@@ -12,6 +12,7 @@ import type {
   QualificationWorkspace,
 } from '@/lib/qualifications/types';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type QualificationManagementRecordListState = ReturnType<
   typeof useOptimisticList<EmployeeCapabilityRecord>
@@ -133,19 +134,13 @@ export function useQualificationManagementGrantForm({
         validUntil && validUntil < validFrom ? '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.' : undefined,
     };
     setGrantFieldErrors(nextFieldErrors);
-    const firstInvalidId = nextFieldErrors.employee
-      ? 'qualification-employee'
-      : nextFieldErrors.capability
-        ? 'qualification-capability'
-        : nextFieldErrors.validFrom
-          ? 'qualification-valid-from'
-          : nextFieldErrors.validUntil
-            ? 'qualification-valid-until'
-            : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      'qualification-employee': nextFieldErrors.employee,
+      'qualification-capability': nextFieldErrors.capability,
+      'qualification-valid-from': nextFieldErrors.validFrom,
+      'qualification-valid-until': nextFieldErrors.validUntil,
+    });
+    if (invalid) return;
     const sharedInput = {
       validFrom,
       validUntil: validUntil || null,

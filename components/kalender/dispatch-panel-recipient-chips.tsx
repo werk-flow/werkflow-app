@@ -6,7 +6,7 @@ export function RecipientChips({ recipients }: { recipients: DispatchRecipientVi
       {recipients.map((recipient) => (
         <span
           key={recipient.employeeRecordId}
-          className="rounded-full bg-muted px-1.5 py-0.5 text-[10px]"
+          className="rounded-full bg-muted px-1.5 py-0.5 text-xs"
           data-recipient-state={recipient.state}
           title={`${recipient.displayName}: ${DISPATCH_RECIPIENT_STATE_LABELS[recipient.state]}${
             recipient.challengeReason ? ` – ${recipient.challengeReason}` : ''

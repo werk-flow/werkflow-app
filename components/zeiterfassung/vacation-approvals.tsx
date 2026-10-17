@@ -22,6 +22,7 @@ import { readInBackground } from '@/lib/data/background-read-client';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useVacationApprovalDecisions } from './use-vacation-approvals';
 import { VacationApprovalApprovedList, VacationApprovalPendingCard } from './vacation-approvals-cards';
 
@@ -116,10 +117,10 @@ export function VacationApprovals() {
 
   return (
     <div className="space-y-3">
-      <h3 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
+      <h2 className="flex items-center gap-1.5 px-1 text-sm font-medium text-muted-foreground">
         <Palmtree className="size-4" />
         Urlaubsanträge
-      </h3>
+      </h2>
 
       <ErrorText className="px-1">{actionError}</ErrorText>
 
@@ -179,17 +180,14 @@ function VacationDecisionReasonDialog({
   onClose: () => void;
 }) {
   const [reason, setReason] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const reasonError = reason.trim() ? undefined : 'Bitte gib einen Grund an.';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = reason.trim();
-    if (!trimmed) {
-      setError('Bitte gib einen Grund an.');
-      document.getElementById('vacation-decision-reason')?.focus();
-      return;
-    }
-    onConfirm(trimmed);
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'vacation-decision-reason': reasonError })) return;
+    onConfirm(reason.trim());
   };
 
   return (
@@ -201,15 +199,13 @@ function VacationDecisionReasonDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="Grund" htmlFor="vacation-decision-reason" required error={error}>
-              <Textarea
-                value={reason}
-                onChange={(e) => {
-                  setError(null);
-                  setReason(e.target.value);
-                }}
-                disabled={isBusy}
-              />
+            <Field
+              label="Grund"
+              htmlFor="vacation-decision-reason"
+              required
+              error={attempted ? reasonError : undefined}
+            >
+              <Textarea value={reason} onChange={(e) => setReason(e.target.value)} disabled={isBusy} />
             </Field>
           </div>
           <ErrorText className="pb-3">{submitError}</ErrorText>

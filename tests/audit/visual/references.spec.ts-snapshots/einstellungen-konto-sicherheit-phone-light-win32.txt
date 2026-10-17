@@ -1,0 +1,16 @@
+Menü öffnen
+Einstellungen
+Profil
+Konto & Sicherheit
+Abonnement & Abrechnung
+Konto & Sicherheit
+Kontobezogene Informationen sowie sicherheitsrelevante Einstellungen.
+Persönliche Einstellungen
+E-Mail-Adresse
+Verifiziere zuerst deine aktuelle Adresse, hinterlege danach die neue E-Mail-Adresse und bestätige sie mit einem zweiten Code.
+Aktuelle E-Mail-Adresse
+martin.kraemer@haustechnik-kraemer.de
+Diese Adresse ist aktuell mit deinem Konto verknüpft.
+E-Mail-Adresse ändern
+Passwort
+Bestätige zuerst dein aktuelles Passwort und hinterlege danach ein neues. Wenn du dein aktuelles Passwort nicht mehr kennst, kannst du den bestehenden Zurücksetzen-Flow verwenden.

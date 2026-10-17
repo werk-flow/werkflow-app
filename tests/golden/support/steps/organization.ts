@@ -96,7 +96,7 @@ export function memberJoinedMessage(memberName: string): string {
 }
 
 /** The login form's submit button. */
-export function loginSubmitButton(page: Page): Locator {
+function loginSubmitButton(page: Page): Locator {
   return page.getByRole('button', { name: ORGANIZATION_COPY.login.submit, exact: true });
 }
 

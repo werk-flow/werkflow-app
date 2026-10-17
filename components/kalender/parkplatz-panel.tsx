@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { Briefcase, CalendarPlus, ExternalLink, NotebookPen, ParkingSquare, Send, X } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { JOB_PRIORITY_LABELS, type CalendarJob } from '@/lib/jobs/types';
 import { PARKING_REASON_LABELS, type JobParkingContext } from '@/lib/parking/types';
@@ -83,11 +84,11 @@ export function ParkplatzPanel({
       {/* The bottom clearance keeps the last card's actions free of the clock button, which floats over the panel. */}
       <div className="flex-1 space-y-2 overflow-y-auto p-3 pb-24">
         {jobs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-            <ParkingSquare className="mb-3 size-10 opacity-30" aria-hidden="true" />
-            <p className="text-sm font-medium">Keine geparkten Aufträge</p>
-            <p className="mt-1 text-xs">Ziehe Aufträge hierher, um sie zu parken.</p>
-          </div>
+          <EmptyState
+            icon={ParkingSquare}
+            title="Noch keine geparkten Aufträge"
+            description="Ziehe Aufträge hierher, um sie zu parken."
+          />
         ) : (
           jobs.map((job) => {
             const context = parkingContexts?.get(job.jobId ?? job.id) ?? null;
@@ -138,11 +139,11 @@ export function ParkplatzPanel({
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {job.jobNumber && (
-                      <span className="font-mono text-[10px] text-muted-foreground">{job.jobNumber}</span>
+                      <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>
                     )}
                     <span
                       className={cn(
-                        'rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+                        'rounded-full px-1.5 py-0.5 text-xs font-medium',
                         PRIORITY_CLASSES[job.priority],
                       )}
                     >
@@ -150,20 +151,20 @@ export function ParkplatzPanel({
                     </span>
                   </div>
                   {job.clientName && (
-                    <p className="mt-1 truncate text-[11px] text-muted-foreground">{job.clientName}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">{job.clientName}</p>
                   )}
                   {job.assignedUserIds.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap items-center gap-1">
                       {job.assignedUserIds.slice(0, 3).map((userId) => (
                         <span
                           key={userId}
-                          className="max-w-[100px] truncate rounded-full bg-muted px-1.5 py-0.5 text-[10px]"
+                          className="max-w-[100px] truncate rounded-full bg-muted px-1.5 py-0.5 text-xs"
                         >
                           {memberNames[userId] ?? 'Mitarbeiter'}
                         </span>
                       ))}
                       {job.assignedUserIds.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           +{job.assignedUserIds.length - 3}
                         </span>
                       )}
@@ -173,12 +174,12 @@ export function ParkplatzPanel({
                     <div className="mt-1.5 space-y-0.5" data-parking-context={context ? 'set' : 'missing'}>
                       {context ? (
                         <>
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             {PARKING_REASON_LABELS[context.reason]}
                             {context.note ? ` · ${context.note}` : ''}
                           </p>
                           {(context.responsibleName || context.nextReviewDate) && (
-                            <p className="text-[11px] tabular-nums text-muted-foreground">
+                            <p className="text-xs tabular-nums text-muted-foreground">
                               {context.responsibleName ? `Zuständig: ${context.responsibleName}` : ''}
                               {context.responsibleName && context.nextReviewDate ? ' · ' : ''}
                               {context.nextReviewDate
@@ -188,7 +189,7 @@ export function ParkplatzPanel({
                           )}
                         </>
                       ) : (
-                        <p className="text-[11px] italic text-muted-foreground">Kontext fehlt (Altbestand)</p>
+                        <p className="text-xs italic text-muted-foreground">Kontext fehlt (Altbestand)</p>
                       )}
                     </div>
                   )}
@@ -197,7 +198,7 @@ export function ParkplatzPanel({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 gap-1 px-2 text-[11px]"
+                        className="h-7 gap-1 px-2 text-xs"
                         aria-label={`${job.title} einplanen`}
                         onClick={() => onScheduleJob(job)}
                       >
@@ -208,7 +209,7 @@ export function ParkplatzPanel({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
+                      className="h-7 gap-1 px-2 text-xs"
                       aria-label={`Parkplatz-Kontext für ${job.title} ${context ? 'bearbeiten' : 'ergänzen'}`}
                       onClick={() => onEditContext(job)}
                     >
@@ -218,7 +219,7 @@ export function ParkplatzPanel({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 gap-1 px-2 text-[11px]"
+                      className="h-7 gap-1 px-2 text-xs"
                       aria-label={`Einsatz für ${job.title} senden`}
                       onClick={() => onDispatchJob(job)}
                     >

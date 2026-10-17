@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { createJob } from '@/lib/jobs/actions';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { CreateJobFormContentProps } from './create-job-form-content';
@@ -47,19 +48,16 @@ export function useCreateJobSubmit({
     setContentError(null);
     setJobNumberError(null);
 
-    let hasValidationError = false;
-    if (!jobNumber.trim()) {
-      setJobNumberError('Bitte gib eine Auftragsnummer ein.');
-      hasValidationError = true;
-    }
-    if (!title.trim() && !description.trim()) {
-      setContentError('Bitte gib mindestens einen Titel oder eine Beschreibung ein.');
-      hasValidationError = true;
-    }
-    if (hasValidationError) {
-      document.getElementById(!jobNumber.trim() ? 'job-number' : 'job-title')?.focus();
-      return;
-    }
+    const fieldErrors = {
+      'job-number': jobNumber.trim() ? undefined : 'Bitte gib eine Auftragsnummer ein.',
+      'job-title':
+        title.trim() || description.trim()
+          ? undefined
+          : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
+    };
+    setJobNumberError(fieldErrors['job-number'] ?? null);
+    setContentError(fieldErrors['job-title'] ?? null);
+    if (focusFirstInvalidField(fieldErrors)) return;
 
     const input = buildCreateJobInput(values, approval);
 

@@ -13,6 +13,7 @@ import { DelegationList } from '@/components/settings/responsibility-delegation-
 import { holderSourceLabel, personName } from '@/components/settings/responsibility-display';
 import { useResponsibilityConfigurationForm } from '@/components/settings/use-responsibility-configuration-form';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -160,7 +161,7 @@ function ResponsibilityCard({
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Vertretungen</h3>
           {delegations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine Vertretung eingetragen.</p>
+            <EmptyState size="compact" title="Keine Vertretung eingetragen." />
           ) : (
             <DelegationList data={data} delegations={delegations} canEdit={canEdit} />
           )}

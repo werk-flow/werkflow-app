@@ -1,5 +1,9 @@
 import type { DialogOpenerId } from '../../../lib/testing/selection/dialog-inventory';
 import type { InventoriedRoute, SurfaceRole } from '../../../lib/testing/selection/mobile-route-inventory';
+import {
+  STANDALONE_SCREENS,
+  type StandaloneRoute,
+} from '../../../lib/testing/selection/standalone-route-inventory';
 import { SURFACE_GROUPS, surfaceTargets } from '../../../lib/testing/selection/surface-groups';
 
 /**
@@ -25,7 +29,19 @@ export type CaptureSpec = {
   schemes: readonly ('light' | 'dark')[];
 };
 
-export type AcceptanceSet = { id: string; captures: readonly CaptureSpec[] };
+/** A screen outside the app shell, opened with the session its inventory entry names. */
+export type StandaloneCaptureSpec = {
+  id: string;
+  screen: StandaloneRoute;
+  widths: CaptureSpec['widths'];
+  schemes: CaptureSpec['schemes'];
+};
+
+export type AcceptanceSet = {
+  id: string;
+  captures: readonly CaptureSpec[];
+  standalone: readonly StandaloneCaptureSpec[];
+};
 
 function slug(route: string): string {
   return route.replace(/^\//, '').replace(/[[\]]/g, '').replaceAll('/', '-') || 'root';
@@ -65,6 +81,32 @@ function inventoryCaptures(): CaptureSpec[] {
   );
 }
 
-export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
-  { id: 'rendered-2026-10', captures: inventoryCaptures() },
-];
+/** Detail pages whose columns follow the content width: the laptop width shows where they switch. */
+const CONTENT_COLUMN_DETAILS: ReadonlySet<InventoriedRoute> = new Set<InventoriedRoute>([
+  '/auftraege/[jobNumber]',
+  '/auftraege/projekt/[projectNumber]',
+  '/service/faelle/[caseNumber]',
+  '/service/anlagen/[equipmentNumber]',
+]);
+
+/** The UI round of 2026-10-17: the inventory, the detail columns at 1024 px and every standalone screen. */
+function uiRoundCaptures(): AcceptanceSet {
+  return {
+    id: 'ui-round-2026-10-17',
+    captures: inventoryCaptures().map((capture) =>
+      capture.view.kind === 'page' && CONTENT_COLUMN_DETAILS.has(capture.route)
+        ? { ...capture, widths: [1280, 1024, 375] }
+        : capture,
+    ),
+    standalone: STANDALONE_SCREENS.map(
+      (screen): StandaloneCaptureSpec => ({
+        id: `standalone-${slug(screen.route)}`,
+        screen: screen.route,
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+      }),
+    ),
+  };
+}
+
+export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [uiRoundCaptures()];

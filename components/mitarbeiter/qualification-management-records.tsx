@@ -3,6 +3,7 @@
 import { Award } from 'lucide-react';
 import type { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { updateEmployeeCapability } from '@/lib/qualifications/actions';
@@ -42,7 +43,7 @@ export function QualificationManagementRecordList({
       <h2 className="text-sm font-semibold">Aktuelle Einträge</h2>
       <div className="divide-y rounded-lg border">
         {recordList.items.length === 0 ? (
-          <p className="p-6 text-center text-sm text-muted-foreground">Noch keine Einträge zugeordnet.</p>
+          <EmptyState size="compact" className="p-4" title="Noch keine Einträge zugeordnet." />
         ) : (
           recordList.items.map(({ item: record, isOptimistic }) => {
             const definition = definitionById.get(record.capabilityId);

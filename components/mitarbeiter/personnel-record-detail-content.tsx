@@ -1,6 +1,7 @@
 'use client';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { PersonalienSection } from '@/components/mitarbeiter/personalien-section';
 import { EmploymentConditionsSection } from '@/components/mitarbeiter/employment-conditions-section';
@@ -89,7 +90,7 @@ export function PersonnelRecordDetailContent({
       />
 
       <PageBody>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 2xl:grid-cols-3">
+        <DetailColumns layout="cards">
           <PersonalienSection record={record} canEdit={canEdit} />
           <EmploymentConditionsSection recordId={record.id} conditions={conditions} canEdit={canEdit} />
           <WorkScheduleSection
@@ -111,7 +112,7 @@ export function PersonnelRecordDetailContent({
             <RegionLoadError>Der Personalprozess konnte nicht geladen werden.</RegionLoadError>
           )}
           <PersonnelHistorySection events={events} actorNames={actorNames} />
-        </div>
+        </DetailColumns>
       </PageBody>
     </PageShell>
   );

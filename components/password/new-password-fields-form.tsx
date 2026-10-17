@@ -19,7 +19,6 @@ import {
 
 import { PasswordRequirements } from './PasswordRequirements';
 import { PasswordStrengthMeter } from './PasswordStrengthMeter';
-import { Spinner } from '@/components/ui/spinner';
 
 type NewPasswordFieldsFormProps = {
   formError?: string | null;
@@ -133,16 +132,10 @@ export function NewPasswordFieldsForm({
             className={onBack ? undefined : 'w-full'}
             type="submit"
             // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: two fields, and the checklist above shows every unmet requirement live
-            disabled={isSubmitting || !requirements.allMet}
+            disabled={!requirements.allMet}
+            pending={isSubmitting}
           >
-            {isSubmitting ? (
-              <>
-                <Spinner className="mr-2" />
-                {submittingLabel}
-              </>
-            ) : (
-              submitLabel
-            )}
+            {isSubmitting ? submittingLabel : submitLabel}
           </Button>
         </div>
       </form>

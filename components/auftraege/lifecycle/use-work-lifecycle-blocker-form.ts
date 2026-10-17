@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 
 import { usePendingTask } from '@/hooks/use-server-action';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { parkWorkTarget, saveWorkBlocker } from '@/lib/work-lifecycle/actions';
 import type { WorkBlocker, WorkBlockerReason, WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import { workLifecycleErrorMessage } from './work-lifecycle-messages';
@@ -27,9 +28,13 @@ type WorkLifecycleBlockerForm = {
   reviewDate: Date | undefined;
   setReviewDate: (reviewDate: Date | undefined) => void;
   error: string | null;
+  /** Field errors, shown after the first submit. */
+  errors: Partial<WorkBlockerFieldErrors>;
   pending: boolean;
   submit: (event: FormEvent) => void;
 };
+
+type WorkBlockerFieldErrors = Record<'details' | 'owner' | 'review', string | undefined>;
 
 /** State, validation and save of the blocker and parking dialog. */
 export function useWorkLifecycleBlockerForm({
@@ -48,23 +53,25 @@ export function useWorkLifecycleBlockerForm({
   const savedReviewDate = blocker?.next_review_date ? parseIsoLocalDate(blocker.next_review_date) : undefined;
   const [reviewDate, setReviewDate] = useState(isManager ? savedReviewDate : new Date());
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const { run: runBlockerTask, isPending: pending } = usePendingTask();
+  // In visual order; a worker's review date is today.
+  const fieldErrors: WorkBlockerFieldErrors = {
+    details:
+      reason === 'other' && details.trim().length < 3 ? 'Beschreibe den Grund unter Details.' : undefined,
+    owner: ownerId ? undefined : 'Bitte wähle eine verantwortliche Person aus.',
+    review: reviewDate ? undefined : 'Bitte wähle ein Datum für die Wiedervorlage.',
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!ownerId || !reviewDate || (reason === 'other' && details.trim().length < 3)) {
-      const detailsMissing = reason === 'other' && details.trim().length < 3;
-      setError(
-        detailsMissing
-          ? 'Beschreibe den Grund unter Details.'
-          : 'Grund, verantwortliche Person und Wiedervorlage sind erforderlich.',
-      );
-      document
-        .getElementById(
-          detailsMissing ? 'work-blocker-details' : !ownerId ? 'work-blocker-owner' : 'work-blocker-review',
-        )
-        ?.focus();
-      return;
-    }
+    setAttempted(true);
+    setError(null);
+    const invalid = focusFirstInvalidField({
+      'work-blocker-details': fieldErrors.details,
+      'work-blocker-owner': fieldErrors.owner,
+      'work-blocker-review': fieldErrors.review,
+    });
+    if (invalid || !reviewDate) return;
     void runBlockerTask(async () => {
       const input = {
         targetType: snapshot.targetType,
@@ -102,6 +109,7 @@ export function useWorkLifecycleBlockerForm({
     reviewDate,
     setReviewDate,
     error,
+    errors: attempted ? fieldErrors : {},
     pending,
     submit,
   };

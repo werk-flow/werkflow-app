@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { StandaloneScreen } from '@/components/shared/standalone-screen';
+import { StandaloneScreen, StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Button } from '@/components/ui/button';
 
 export default function NotFoundPage() {
   return (
     <StandaloneScreen>
       <div className="w-full max-w-lg rounded-lg border bg-card p-8 text-center shadow-sm">
-        <h1 className="text-3xl font-semibold tracking-tight">Seite nicht gefunden</h1>
+        <StandaloneTitle>Seite nicht gefunden</StandaloneTitle>
         <p className="mt-3 text-muted-foreground">
           Die angeforderte Seite existiert nicht oder wurde verschoben. Überprüfe die eingegebene Adresse oder
           kehre zum Dashboard zurück.

@@ -15,7 +15,6 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { calculateWorkSessions } from '@/lib/time-tracking/validation';
 import { SectionTitle } from '@/components/shared/section-title';
-import { Spinner } from '@/components/ui/spinner';
 
 function formatDurationOrRunning(minutes: number | null): string {
   return minutes === null ? 'läuft' : formatDuration(Math.max(0, minutes));
@@ -150,16 +149,11 @@ export function FieldWorkPackTimeSection({
             <Button
               type="button"
               className="min-h-11"
-              disabled={isClockBusy || Boolean(statusError) || !state?.organizationId}
+              pending={isClockBusy}
+              disabled={Boolean(statusError) || !state?.organizationId}
               onClick={() => void runClockChange(changeClock)}
             >
-              {isClockBusy ? (
-                <Spinner />
-              ) : isClockedIntoThisJob ? (
-                <LogOut className="size-4" />
-              ) : (
-                <LogIn className="size-4" />
-              )}
+              {isClockedIntoThisJob ? <LogOut className="size-4" /> : <LogIn className="size-4" />}
               {isClockedIntoThisJob
                 ? 'Arbeitszeit beenden'
                 : isClockedIntoAnotherJob

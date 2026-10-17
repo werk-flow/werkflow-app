@@ -154,7 +154,7 @@ export const TimeBlock = memo(function TimeBlock(props: TimeBlockProps) {
           </span>
         )}
         {compact && (
-          <span className="min-w-0 text-[11px] leading-tight">
+          <span className="min-w-0 text-xs leading-tight">
             <span className="block truncate font-medium">{activityLabel}</span>
             <span className="block truncate tabular-nums">
               {block.isOpen ? 'läuft' : formatDuration(durationMinutes)}

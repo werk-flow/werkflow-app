@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { CalendarCheck, FileCheck, MoreVertical, Pencil, Plus, Thermometer, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
 import {
   DropdownMenu,
@@ -93,7 +94,7 @@ export function SicknessReportsSection({ recordId }: { recordId: string }) {
       ) : (
         <StaleRegion stale={view.isStale} onRetry={refresh}>
           {sorted.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Keine Krankmeldungen erfasst.</p>
+            <EmptyState size="compact" title="Keine Krankmeldungen erfasst." />
           ) : (
             <ul className="grid gap-2">
               {sorted.map((report) => (

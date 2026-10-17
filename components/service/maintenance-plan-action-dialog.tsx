@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { useServerAction } from '@/hooks/use-server-action';
 import { setMaintenancePlanArchived, transitionMaintenancePlan } from '@/lib/maintenance/actions';
 import type { MaintenancePlanItem, MaintenancePlanStatus } from '@/lib/maintenance/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export function MaintenancePlanActionDialog({
   open,
@@ -38,16 +39,12 @@ export function MaintenancePlanActionDialog({
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [reasonError, setReasonError] = useState<string | null>(null);
-  const reasonRef = useRef<HTMLInputElement>(null);
   const idempotencyKey = useRef(crypto.randomUUID());
   const { run, isPending } = useServerAction(async () => {
     setError(null);
-    setReasonError(null);
-    if (reason.trim().length < 3) {
-      setReasonError('Gib eine kurze Begründung ein.');
-      reasonRef.current?.focus();
-      return;
-    }
+    const nextReasonError = reason.trim().length < 3 ? 'Gib eine kurze Begründung ein.' : undefined;
+    setReasonError(nextReasonError ?? null);
+    if (focusFirstInvalidField({ 'maintenance-action-reason': nextReasonError })) return;
     const result = toStatus
       ? await transitionMaintenancePlan({
           planId: plan.id,
@@ -104,7 +101,7 @@ export function MaintenancePlanActionDialog({
           error={reasonError}
           className="py-2"
         >
-          <Input ref={reasonRef} value={reason} onChange={(event) => setReason(event.target.value)} />
+          <Input value={reason} onChange={(event) => setReason(event.target.value)} />
         </Field>
         <ErrorText>{error}</ErrorText>
         <DialogFooter>

@@ -9,6 +9,7 @@ import { MapPin, Plus, Siren } from 'lucide-react';
 
 import { useOrganization } from '@/components/organization/organization-context';
 import { ListPagination } from '@/components/shared/list-pagination';
+import { Badge } from '@/components/ui/badge';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -54,7 +55,12 @@ export const SERVICE_CASE_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'case', header: 'Servicefall', skeleton: TWO_LINE_CELL },
   { id: 'site', header: 'Kunde & Einsatzort', skeleton: TWO_LINE_CELL },
   { id: 'urgency', header: 'Dringlichkeit', className: 'w-36', skeleton: <Skeleton className="h-4 w-16" /> },
-  { id: 'status', header: 'Status', className: 'w-44', skeleton: <Skeleton className="h-6 w-24" /> },
+  {
+    id: 'status',
+    header: 'Status',
+    className: 'w-44',
+    skeleton: <Skeleton className="h-5 w-20 rounded-full" />,
+  },
 ];
 
 function serviceCaseHref(caseNumber: string): string {
@@ -88,9 +94,7 @@ function ServiceCaseMobileList({
               {draft.clientName} · {draft.siteName}
             </span>
           </span>
-          <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">
-            {SERVICE_CASE_STATUS_LABELS[draft.status]}
-          </span>
+          <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[draft.status]}</Badge>
         </ListRow>
       ))}
       {filtered.map((item) => (
@@ -102,9 +106,7 @@ function ServiceCaseMobileList({
                 {item.caseNumber} · {item.clientName} · {item.siteName}
               </span>
             </span>
-            <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium">
-              {SERVICE_CASE_STATUS_LABELS[item.status]}
-            </span>
+            <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[item.status]}</Badge>
           </Link>
         </ListRow>
       ))}
@@ -155,11 +157,7 @@ function ServiceCaseTable({
                   </span>
                 ),
                 urgency: SERVICE_CASE_URGENCY_LABELS[draft.urgency],
-                status: (
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
-                    {SERVICE_CASE_STATUS_LABELS[draft.status]}
-                  </span>
-                ),
+                status: <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[draft.status]}</Badge>,
               }}
             />
           ))}
@@ -193,9 +191,7 @@ function ServiceCaseTable({
                 </TableCell>
                 <TableCell>{SERVICE_CASE_URGENCY_LABELS[item.urgency]}</TableCell>
                 <TableCell>
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
-                    {SERVICE_CASE_STATUS_LABELS[item.status]}
-                  </span>
+                  <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[item.status]}</Badge>
                 </TableCell>
               </TableRow>
             );

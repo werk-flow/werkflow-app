@@ -3,7 +3,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
-import { formatMinutes, formatPeriod, PERIOD_STATE_LABELS } from '@/lib/time-accounts/presentation';
+import {
+  TimeAccountEventList,
+  TimeAccountPeriodList,
+} from '@/components/zeiterfassung/time-account-overview-lists';
+import { formatMinutes } from '@/lib/time-accounts/presentation';
 import { formatBerlin } from '@/lib/utils';
 import {
   getTimeAccountOverview,
@@ -66,34 +70,7 @@ function TimeAccountOverviewContent({ overview }: { overview: TimeAccountOvervie
       )}
       <section className="space-y-3">
         <h3 className="font-semibold">Monatsabschlüsse</h3>
-        <div className="overflow-hidden rounded-lg border bg-card">
-          {overview.periods.length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">
-              Noch keine abgeschlossenen oder vorbereiteten Perioden.
-            </p>
-          ) : (
-            overview.periods.map((period) => (
-              <div key={period.id} className="grid gap-2 border-b p-4 last:border-b-0 sm:grid-cols-5">
-                <div className="font-medium capitalize">{formatPeriod(period.startDate)}</div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Soll </span>
-                  {formatMinutes(period.targetMinutes)}
-                </div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Gewertet </span>
-                  {formatMinutes(period.creditedMinutes)}
-                </div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Differenz </span>
-                  {formatMinutes(period.deltaMinutes)}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {PERIOD_STATE_LABELS[period.state as keyof typeof PERIOD_STATE_LABELS] ?? period.state}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        <TimeAccountPeriodList periods={overview.periods} />
         {overview.hasMorePeriods ? (
           <p className="text-sm text-muted-foreground">
             Hier stehen die letzten {OVERVIEW_PERIOD_LIMIT} Monate. Ältere Monate sind im Saldo enthalten.
@@ -102,26 +79,7 @@ function TimeAccountOverviewContent({ overview }: { overview: TimeAccountOvervie
       </section>
       <section className="space-y-3">
         <h3 className="font-semibold">Kontobewegungen</h3>
-        <div className="overflow-hidden rounded-lg border bg-card">
-          {overview.events.length === 0 ? (
-            <p className="p-5 text-sm text-muted-foreground">Noch keine Kontobewegungen.</p>
-          ) : (
-            overview.events.map((event) => (
-              <div
-                key={event.id}
-                className="flex items-center justify-between gap-4 border-b p-4 last:border-b-0"
-              >
-                <div>
-                  <p className="font-medium">{event.reason}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatBerlin(event.effectiveDate, 'numericDate')}
-                  </p>
-                </div>
-                <span className="font-medium tabular-nums">{formatMinutes(event.minutes)}</span>
-              </div>
-            ))
-          )}
-        </div>
+        <TimeAccountEventList events={overview.events} />
         {overview.hasMoreEvents ? (
           <p className="text-sm text-muted-foreground">
             Hier stehen die letzten {OVERVIEW_EVENT_LIMIT} Kontobewegungen. Ältere Bewegungen sind im Saldo

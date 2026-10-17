@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
 import { boardArrowTarget } from '@/lib/calendar/board-row-filters';
@@ -95,6 +96,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
   const focusCard = useCallback((occurrenceId: string, employeeRecordId: string | null) => {
     requestAnimationFrame(() => {
       const selector = `[data-calendar-card][data-occurrence-id="${occurrenceId}"]${employeeRecordId ? `[data-employee-record-id="${employeeRecordId}"]` : ''}`;
+      // eslint-disable-next-line no-restricted-syntax -- focus return to a moved card on the board, not a validation path
       rootRef.current?.querySelector<HTMLElement>(selector)?.focus();
     });
   }, []);
@@ -223,9 +225,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
               );
             })}
             {rowModels.length === 0 && (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Keine Zeilen für diese Auswahl. Prüfe Filter und Suche.
-              </p>
+              <EmptyState title="Keine Zeilen für diese Auswahl" description="Prüfe Filter und Suche." />
             )}
           </div>
           <div

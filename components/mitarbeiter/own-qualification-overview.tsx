@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
@@ -54,9 +55,7 @@ export function OwnQualificationOverview({ profile }: { profile: OwnQualificatio
           <h2 className="text-sm font-semibold">Meine Qualifikationen</h2>
         </div>
         {profile.capabilities.length === 0 ? (
-          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Noch keine Qualifikationen hinterlegt.
-          </p>
+          <EmptyState size="compact" title="Noch keine Qualifikationen hinterlegt." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {profile.capabilities.map(({ definition, record }) => {

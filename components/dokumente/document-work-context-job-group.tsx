@@ -121,9 +121,7 @@ export function WorkContextJobGroupCard({
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
             {group.job.jobNumber && (
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-                {group.job.jobNumber}
-              </span>
+              <span className="shrink-0 font-mono text-xs text-muted-foreground">{group.job.jobNumber}</span>
             )}
             <p className="truncate text-sm font-medium">{getJobDisplayTitle(group.job)}</p>
           </div>

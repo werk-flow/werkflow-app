@@ -160,8 +160,8 @@ function MemberCard({
           >
             {memberName}
           </Link>
-          <span className="shrink-0 inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
-            {ROLE_LABELS[member.role] || member.role}
+          <span className="shrink-0 inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-foreground">
+            {ROLE_LABELS[member.role]}
           </span>
           <InlinePending active={isBusy} />
         </div>
@@ -261,7 +261,7 @@ function MemberTableRow({
       <TableCell>{member.email}</TableCell>
       <TableCell className="px-4">
         <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
-          {ROLE_LABELS[member.role] || member.role}
+          {ROLE_LABELS[member.role]}
         </span>
       </TableCell>
       <TableCell className="px-4">

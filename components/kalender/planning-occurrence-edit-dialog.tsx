@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
+import { errorsByControlId, focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
 import type { CalendarJob } from '@/lib/jobs/types';
 import {
@@ -118,7 +118,7 @@ export function PlanningOccurrenceEditDialog({
     });
     if (editCheck.kind === 'missing') {
       setFieldErrors(Object.fromEntries(editCheck.inputs.map(({ field, message }) => [field, message])));
-      document.getElementById(editCheck.inputs[0].elementId)?.focus();
+      focusFirstInvalidField(errorsByControlId(editCheck.inputs));
       return;
     }
     setSubmitError(null);

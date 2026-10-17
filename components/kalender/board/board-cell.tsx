@@ -95,7 +95,7 @@ export const BoardCell = memo(function BoardCell({
         <span
           aria-hidden="true"
           className={cn(
-            'pointer-events-none absolute bottom-0.5 right-1 rounded-sm px-1 text-[11px] tabular-nums leading-4',
+            'pointer-events-none absolute bottom-0.5 right-1 rounded-sm px-1 text-xs tabular-nums leading-4',
             CAPACITY_CLASS[state],
             compact && state !== 'overbooked' && state !== 'full' && 'hidden',
           )}
@@ -108,7 +108,7 @@ export const BoardCell = memo(function BoardCell({
         <span
           aria-hidden="true"
           className={cn(
-            'pointer-events-none absolute bottom-0.5 left-1 rounded-sm px-1 text-[11px] tabular-nums leading-4',
+            'pointer-events-none absolute bottom-0.5 left-1 rounded-sm px-1 text-xs tabular-nums leading-4',
             actual.pending
               ? 'bg-calendar-actual-pending text-calendar-actual-pending-foreground'
               : 'bg-calendar-actual text-calendar-actual-foreground',

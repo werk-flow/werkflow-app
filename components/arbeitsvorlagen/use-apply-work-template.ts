@@ -8,6 +8,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { applyWorkTemplate } from '@/lib/work-templates/actions';
 import type {
   PublishedWorkTemplateOption,
@@ -24,6 +25,8 @@ const APPLY_ERROR_MESSAGES = {
   work_template_reference_unavailable: 'Die Vorlage verweist auf nicht mehr aktive Stammdaten.',
   work_template_version_unavailable: 'Die Vorlage ist nicht mehr verfügbar.',
 } satisfies Record<string, string>;
+
+const VERSION_REQUIRED = 'Bitte wähle zuerst eine Arbeitsvorlage.';
 
 type ApplyWorkTemplateInput = {
   targetType: WorkTemplateTargetType;
@@ -42,6 +45,7 @@ type ApplyWorkTemplateState = {
   previewFailure: ReadFailure | null;
   allowAdditional: boolean;
   setAllowAdditional: (allowAdditional: boolean) => void;
+  versionError: string | undefined;
   error: string | null;
   qualificationWarning: AssignmentEvaluation | null;
   setQualificationWarning: (evaluation: AssignmentEvaluation | null) => void;
@@ -62,6 +66,7 @@ export function useApplyWorkTemplate({
   const [versionId, setVersionId] = useState('');
   const [allowAdditional, setAllowAdditional] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runPendingTask, isPending } = usePendingTask();
   const { showBanner } = useBanner();
@@ -90,11 +95,9 @@ export function useApplyWorkTemplate({
     Boolean(versionId) && preview === null && error === null && previewRead.failure === null;
 
   function submit(approval?: AssignmentApproval) {
-    if (!versionId) {
-      setError('Bitte wähle zuerst eine Arbeitsvorlage.');
-      document.getElementById('apply-work-template-version')?.focus();
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'apply-work-template-version': versionId ? undefined : VERSION_REQUIRED }))
       return;
-    }
     if (!preview || preview.hasSameVersionApplication) return;
     if (preview.hasExistingApplication && !allowAdditional) {
       setError('Bestätige zuerst, dass du eine weitere Vorlage ergänzen möchtest.');
@@ -155,17 +158,17 @@ export function useApplyWorkTemplate({
   }
 
   function openDialog(): void {
-    setVersionId('');
-    setAllowAdditional(false);
-    setError(null);
+    selectVersion('');
     setOpen(true);
   }
 
   function selectVersion(value: string): void {
     setVersionId(value);
-    // A new preview asks again whether to add a further template.
+    // A new preview asks again whether to add a further template, and a new
+    // choice starts without the previous attempt's field error.
     setAllowAdditional(false);
     setError(null);
+    setAttempted(false);
   }
 
   return {
@@ -178,6 +181,7 @@ export function useApplyWorkTemplate({
     previewFailure: previewRead.failure,
     allowAdditional,
     setAllowAdditional,
+    versionError: attempted && !versionId ? VERSION_REQUIRED : undefined,
     error,
     qualificationWarning,
     setQualificationWarning,

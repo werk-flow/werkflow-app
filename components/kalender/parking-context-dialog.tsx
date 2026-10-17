@@ -34,10 +34,14 @@ import {
   type JobParkingContext,
   type JobParkingReason,
 } from '@/lib/parking/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { parkWorkTarget } from '@/lib/work-lifecycle/actions';
 
 const NO_RESPONSIBLE_OPTIONS: ParkingResponsibleOption[] = [];
+
+/** Field errors keyed by control id in visual order (focusFirstInvalidField). */
+type ParkingFieldErrors = Partial<Record<'parking-responsible' | 'parking-review-date', string>>;
 
 export function ParkingContextDialog({
   jobId,
@@ -75,10 +79,7 @@ export function ParkingContextDialog({
   });
   const options = responsibleOptions.data?.options ?? NO_RESPONSIBLE_OPTIONS;
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<{
-    responsible?: string;
-    reviewDate?: string;
-  }>({});
+  const [fieldErrors, setFieldErrors] = useState<ParkingFieldErrors>({});
   const { run: runSave, isPending: isSaving } = usePendingTask();
 
   // A stored responsible person must remain selectable even when the option
@@ -97,17 +98,12 @@ export function ParkingContextDialog({
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (!responsibleId) {
-      setFieldErrors({ responsible: 'Bitte wähle eine verantwortliche Person aus.' });
-      document.getElementById('parking-responsible')?.focus();
-      return;
-    }
-    if (!reviewDate) {
-      setFieldErrors({ reviewDate: 'Bitte wähle ein Datum für die Wiedervorlage.' });
-      document.getElementById('parking-review-date')?.focus();
-      return;
-    }
-    setFieldErrors({});
+    const nextFieldErrors: ParkingFieldErrors = {
+      ...(responsibleId ? {} : { 'parking-responsible': 'Bitte wähle eine verantwortliche Person aus.' }),
+      ...(reviewDate ? {} : { 'parking-review-date': 'Bitte wähle ein Datum für die Wiedervorlage.' }),
+    };
+    setFieldErrors(nextFieldErrors);
+    if (focusFirstInvalidField(nextFieldErrors)) return;
     await runSave(async () => {
       const releaseOperation = onSaveStart?.();
       try {
@@ -196,7 +192,7 @@ export function ParkingContextDialog({
             label="Verantwortlich (Büro)"
             htmlFor="parking-responsible"
             required
-            error={fieldErrors.responsible}
+            error={fieldErrors['parking-responsible']}
           >
             <SearchableSelect
               options={selectableOptions.map((option) => ({
@@ -215,7 +211,12 @@ export function ParkingContextDialog({
           </Field>
           {responsibleOptions.failure && <SectionError failure={responsibleOptions.failure} />}
 
-          <Field label="Wiedervorlage" htmlFor="parking-review-date" required error={fieldErrors.reviewDate}>
+          <Field
+            label="Wiedervorlage"
+            htmlFor="parking-review-date"
+            required
+            error={fieldErrors['parking-review-date']}
+          >
             <DatePicker
               ariaLabel="Wiedervorlagedatum"
               value={reviewDate}

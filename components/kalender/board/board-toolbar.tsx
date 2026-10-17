@@ -73,7 +73,7 @@ export function BoardToolbar({
             <Filter className="size-4" aria-hidden="true" />
             <span className="sr-only sm:not-sr-only">Filter</span>
             {activeFilters > 0 && (
-              <span className="rounded-full bg-primary-foreground px-1.5 text-[11px] text-primary">
+              <span className="rounded-full bg-primary-foreground px-1.5 text-xs text-primary">
                 {activeFilters}
               </span>
             )}

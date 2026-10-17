@@ -25,7 +25,6 @@ import { EditProjectDialog } from '../forms/edit-project-dialog';
 import { knownProjectOption } from '../forms/job-form-options';
 import { ProjectJobsAssignmentDialog } from './project-jobs-assignment-dialog';
 import type { ProjectDetailDialogState } from './use-project-detail-dialog-state';
-import { Spinner } from '@/components/ui/spinner';
 
 type ProjectDetailDialogsProps = {
   project: Project;
@@ -266,10 +265,9 @@ function ProjectDetailDeleteDialog({
               event.preventDefault();
               handleDelete();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
-            {isDeleting && <Spinner className="mr-2" />}
             Löschen
           </AlertDialogAction>
         </AlertDialogFooter>

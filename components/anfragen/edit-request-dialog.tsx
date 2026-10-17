@@ -58,9 +58,9 @@ export function EditRequestDialog({
     receivedAt,
     setReceivedAt,
     isLoading,
-    error,
-    showSummaryError,
-    showReceivedAtError,
+    summaryError,
+    receivedAtError,
+    formError,
     handleSubmit,
   } = form;
 
@@ -73,12 +73,7 @@ export function EditRequestDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-2">
-            <Field
-              label="Anliegen"
-              htmlFor="edit-request-summary"
-              required
-              error={showSummaryError ? error : null}
-            >
+            <Field label="Anliegen" htmlFor="edit-request-summary" required error={summaryError}>
               <Input value={summary} onChange={(e) => setSummary(e.target.value)} disabled={isLoading} />
             </Field>
 
@@ -121,19 +116,15 @@ export function EditRequestDialog({
               </Field>
             </div>
 
-            <Field
-              label="Eingangszeit"
-              htmlFor="edit-request-received-at-date"
-              error={showReceivedAtError ? error : null}
-            >
+            <Field label="Eingangszeit" htmlFor="edit-request-received-at-date" error={receivedAtError}>
               <DateTimeField
                 idPrefix="edit-request-received-at"
                 value={receivedAt}
                 onChange={setReceivedAt}
                 disabled={isLoading}
                 dateAriaLabel="Eingangsdatum"
-                invalid={showReceivedAtError}
-                describedById={showReceivedAtError ? 'edit-request-received-at-date-error' : undefined}
+                invalid={receivedAtError !== null}
+                describedById={receivedAtError ? 'edit-request-received-at-date-error' : undefined}
               />
             </Field>
 
@@ -145,7 +136,7 @@ export function EditRequestDialog({
 
             <EditRequestRoutingFields assignees={assignees} form={form} />
 
-            <ErrorText>{showSummaryError || showReceivedAtError ? null : error}</ErrorText>
+            <ErrorText>{formError}</ErrorText>
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>

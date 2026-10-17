@@ -21,7 +21,6 @@ import {
 } from '@/lib/installed-equipment/actions';
 import type { EquipmentDetail } from '@/lib/installed-equipment/types';
 import type { EquipmentActionDialogProps, EquipmentDetailActions } from './use-equipment-detail-actions';
-import { Spinner } from '@/components/ui/spinner';
 
 type EquipmentCorrectionDialogProps = {
   open: boolean;
@@ -60,7 +59,7 @@ export function EquipmentCorrectionDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
-            disabled={busy.isBusy('correction')}
+            pending={busy.isBusy('correction')}
             onClick={(event) => {
               event.preventDefault();
               if (!terminalEvent) return;
@@ -80,7 +79,6 @@ export function EquipmentCorrectionDialog({
               );
             }}
           >
-            {busy.isBusy('correction') && <Spinner />}
             Korrektur festhalten
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -119,7 +117,7 @@ export function EquipmentArchiveDialog({
         <AlertDialogFooter>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
-            disabled={busy.isBusy('archive')}
+            pending={busy.isBusy('archive')}
             onClick={(event) => {
               event.preventDefault();
               if (rejectInvalid('archive', { 'equipment-archive-reason': reasonError })) return;
@@ -137,7 +135,6 @@ export function EquipmentArchiveDialog({
               );
             }}
           >
-            {busy.isBusy('archive') && <Spinner />}
             {item.archivedAt ? 'Wiederherstellen' : 'Archivieren'}
           </AlertDialogAction>
         </AlertDialogFooter>

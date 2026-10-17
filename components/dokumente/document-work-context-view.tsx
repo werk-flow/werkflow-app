@@ -9,6 +9,7 @@ import { ListRow } from '@/components/ui/list-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ColumnsTableHeader,
+  hiddenHeader,
   SkeletonList,
   SkeletonRows,
   type SkeletonColumn,
@@ -58,7 +59,7 @@ type DocumentWorkContextViewProps = {
 const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
   {
     id: 'expand',
-    header: null,
+    header: hiddenHeader('Aufklappen'),
     className: 'w-[44px]',
     skeleton: <Skeleton className="size-6 rounded-sm" />,
   },
@@ -90,7 +91,7 @@ const WORK_CONTEXT_COLUMNS: readonly SkeletonColumn[] = [
   },
   {
     id: 'actions',
-    header: null,
+    header: hiddenHeader('Aktionen'),
     className: 'w-[52px]',
     skeleton: <Skeleton className="ml-auto size-8 rounded-md" />,
   },

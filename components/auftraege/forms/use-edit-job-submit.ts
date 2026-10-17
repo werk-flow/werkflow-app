@@ -7,6 +7,9 @@ import type { AssignmentApproval } from '@/lib/qualifications/types';
 import type { Job } from '@/lib/jobs/types';
 import { buildEditJobInput } from './edit-job-input';
 import type { EditJobForm } from './use-edit-job-form';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+
+const CONTENT_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.';
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Aufträge zu verwalten.',
@@ -47,7 +50,8 @@ export function useEditJobSubmit({ job, form, onOpenChange, onSuccess }: EditJob
     setContentError(null);
 
     if (!title.trim() && !description.trim()) {
-      setContentError('Bitte gib mindestens einen Titel oder eine Beschreibung ein.');
+      setContentError(CONTENT_REQUIRED_MESSAGE);
+      focusFirstInvalidField({ 'edit-job-title': CONTENT_REQUIRED_MESSAGE });
       return;
     }
 

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { readOwnLatestJoinRequest } from '@/lib/org/join-requests';
 
@@ -25,7 +26,7 @@ export default async function JoinOrganizationPage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Organisation beitreten</CardTitle>
+        <StandaloneTitle>Organisation beitreten</StandaloneTitle>
         <CardDescription>
           Gib den Organisationscode ein, den du von deinem Admin erhalten hast. Ein Admin oder das Büro deiner
           Organisation gibt deine Anfrage frei.

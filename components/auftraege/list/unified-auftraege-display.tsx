@@ -45,7 +45,7 @@ export function AvatarStack({
             key={uid}
             title={fullName}
             aria-label={fullName}
-            className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground"
+            className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground"
           >
             {initials}
           </span>
@@ -61,7 +61,7 @@ export function AvatarStack({
             })
             .join(', ')}
           aria-label={`${overflow} weitere Mitarbeitende`}
-          className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-[9px] font-medium text-muted-foreground"
+          className="inline-flex size-6 items-center justify-center rounded-full border-2 border-background bg-muted text-xs font-medium text-muted-foreground"
         >
           +{overflow}
         </span>

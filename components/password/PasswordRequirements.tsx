@@ -28,7 +28,7 @@ export function PasswordRequirements({ requirements, className }: PasswordRequir
           <li key={item.key} className="flex items-center gap-2">
             <span
               className={cn(
-                'flex h-5 w-5 items-center justify-center rounded-full border text-[11px] font-semibold transition-colors',
+                'flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold transition-colors',
                 met
                   ? 'border-success/40 bg-success-soft text-success-soft-foreground'
                   : 'border-destructive/30 bg-destructive/10 text-destructive',

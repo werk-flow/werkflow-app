@@ -77,7 +77,7 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         {label && (
           <span
             data-calendar-holiday=""
-            className="pointer-events-none min-w-0 truncate pt-1 text-[11px] text-calendar-holiday-foreground"
+            className="pointer-events-none min-w-0 truncate pt-1 text-xs text-calendar-holiday-foreground"
             title={label}
           >
             {label}

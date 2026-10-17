@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
@@ -17,7 +18,7 @@ import { addClosureDay, removeClosureDay } from '@/lib/org/calendar-actions';
 import type { ClosureDay } from '@/lib/personnel/targets';
 import { formatBerlin, toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { Spinner } from '@/components/ui/spinner';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const CLOSURE_ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Betriebsruhe-Tage zu ändern.',
@@ -73,10 +74,10 @@ function ClosureDayList({
                   size="icon"
                   className="size-7 shrink-0 text-destructive hover:text-destructive"
                   aria-label={`Betriebsruhe am ${formatClosureDay(day.closureDate)} entfernen`}
-                  disabled={isRemoving(dayId)}
+                  pending={isRemoving(dayId)}
                   onClick={() => onRemove(dayId)}
                 >
-                  {isRemoving(dayId) ? <Spinner /> : <Trash2 className="size-4" />}
+                  <Trash2 className="size-4" />
                 </Button>
               </div>
             )}
@@ -107,11 +108,9 @@ export function ClosureDaysCard({
   const handleAddClosureDay = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEditClosureDays || isAddingClosure) return;
-    if (!closureDate) {
-      setClosureDateError(CLOSURE_ERROR_MESSAGES.invalid_date);
-      document.getElementById('closure-date')?.focus();
-      return;
-    }
+    const nextClosureDateError = closureDate ? undefined : CLOSURE_ERROR_MESSAGES.invalid_date;
+    setClosureDateError(nextClosureDateError ?? null);
+    if (focusFirstInvalidField({ 'closure-date': nextClosureDateError })) return;
     try {
       const result = await runAddClosure({
         closureDate,
@@ -177,7 +176,7 @@ export function ClosureDaysCard({
       </CardHeader>
       <CardContent className="space-y-4 pb-6">
         {closureDays.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Keine Betriebsruhe-Tage eingetragen.</p>
+          <EmptyState size="compact" title="Keine Betriebsruhe-Tage eingetragen." />
         ) : (
           <ClosureDayList
             closureDays={closureDays}

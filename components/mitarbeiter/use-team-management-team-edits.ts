@@ -7,6 +7,7 @@ import { createTeam, updateTeam } from '@/lib/qualifications/actions';
 import type { Team } from '@/lib/qualifications/types';
 import type { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type TeamOptimisticList = Pick<
   ReturnType<typeof useOptimisticList<Team>>,
@@ -36,12 +37,9 @@ export function useTeamManagementTeamEdits({ teamList, runAction, settle }: Team
   const [renameError, setRenameError] = useState<string | null>(null);
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      setNameError('Bitte gib einen Teamnamen an.');
-      document.getElementById('new-team-name')?.focus();
-      return;
-    }
-    setNameError(null);
+    const nextNameError = name.trim() ? undefined : 'Bitte gib einen Teamnamen an.';
+    setNameError(nextNameError ?? null);
+    if (focusFirstInvalidField({ 'new-team-name': nextNameError })) return;
     await runAction('create', async () => {
       setCreateError(null);
       const draftId = crypto.randomUUID();
@@ -81,12 +79,9 @@ export function useTeamManagementTeamEdits({ teamList, runAction, settle }: Team
 
   const handleRename = async (team: Team, value: string) => {
     const nextName = value.trim();
-    if (!nextName) {
-      setRenameError('Bitte gib einen Teamnamen an.');
-      document.getElementById(teamNameFieldId(team.id))?.focus();
-      return;
-    }
-    setRenameError(null);
+    const nextRenameError = nextName ? undefined : 'Bitte gib einen Teamnamen an.';
+    setRenameError(nextRenameError ?? null);
+    if (focusFirstInvalidField({ [teamNameFieldId(team.id)]: nextRenameError })) return;
     if (nextName === team.name) {
       setEditingTeamId(null);
       return;

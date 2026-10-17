@@ -2,6 +2,7 @@
 
 import type { ReactElement } from 'react';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { ErrorText } from '@/components/ui/error-text';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -124,16 +125,13 @@ export function JobMaterialsSection({
         notice="Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar."
       >
         {!hasDirectLines ? (
-          <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-            <p className="text-sm font-medium">
-              {isProjectContext
-                ? 'Noch kein direktes Projektmaterial erfasst.'
-                : 'Noch kein Material erfasst.'}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager.
-            </p>
-          </div>
+          <EmptyState
+            size="compact"
+            title={
+              isProjectContext ? 'Noch kein direktes Projektmaterial erfasst.' : 'Noch kein Material erfasst.'
+            }
+            description="Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager."
+          />
         ) : (
           <div className="space-y-3">
             {lines.items.map(({ item: line, isOptimistic }) => (

@@ -11,4 +11,5 @@ Monat
 *
 Pflichtfeld
 Periode vorbereiten
-Noch keine Periode vorbereitet.
+Noch keine Perioden
+Bereite oben den ersten Monat vor. Danach prüfst du ihn hier und schließt ihn für die Lohnabrechnung ab.

@@ -2,10 +2,11 @@
 
 import { History } from 'lucide-react';
 
-import { EMPLOYMENT_TYPE_LABELS, type EmployeeRecordEvent, type EmploymentType } from '@/lib/personnel/types';
+import { employmentTypeLabel, type EmployeeRecordEvent } from '@/lib/personnel/types';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SectionTitle } from '@/components/shared/section-title';
+import { EmptyState } from '@/components/ui/empty-state';
 import { formatBerlin, formatBerlinDateTime } from '@/lib/utils';
 
 const EVENT_LABELS: Record<string, string> = {
@@ -66,7 +67,7 @@ type HistoryDetail = {
 function formatValue(field: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   if (field === 'employment_type' && typeof value === 'string') {
-    return EMPLOYMENT_TYPE_LABELS[value as EmploymentType] ?? value;
+    return employmentTypeLabel(value);
   }
   if (DATE_FIELDS.has(field) && typeof value === 'string') {
     return Number.isNaN(new Date(value).getTime()) ? value : formatBerlin(value, 'numericDate');
@@ -136,7 +137,7 @@ export function PersonnelHistorySection({ events, actorNames }: PersonnelHistory
         </RegionLoadError>
       ) : null}
       {events.length === 0 ? (
-        <p className="py-3 text-sm text-muted-foreground">Noch keine Änderungen festgehalten.</p>
+        <EmptyState size="compact" className="py-3" title="Noch keine Änderungen festgehalten." />
       ) : (
         <ul className="grid gap-2">
           {events.map((event) => {

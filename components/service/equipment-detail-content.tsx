@@ -6,6 +6,7 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { Button } from '@/components/ui/button';
 import { StaleRegion } from '@/components/shared/stale-region';
 import { ErrorText } from '@/components/ui/error-text';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import {
   Dialog,
@@ -189,8 +190,8 @@ export function EquipmentDetailContent({
         )}
         <ErrorText>{actions.pageError}</ErrorText>
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-          <div className="space-y-6">
+        <DetailColumns layout="main-and-wide-aside">
+          <div className="min-w-0 space-y-6">
             <EquipmentDataSection item={item} detailsBusy={busy.isBusy('details')} />
 
             {documentsLoadFailed ? (
@@ -233,7 +234,7 @@ export function EquipmentDetailContent({
               setArchiveOpen(true);
             }}
           />
-        </div>
+        </DetailColumns>
       </StaleRegion>
 
       {editOpen && (

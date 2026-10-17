@@ -1,6 +1,7 @@
 'use client';
 
 import { PlainButton } from '@/components/ui/plain-button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { ListRow } from '@/components/ui/list-row';
 import { isStartedOccurrence } from '@/lib/calendar/board';
 import { dayRowLabel } from '@/lib/calendar/day-row-status';
@@ -48,7 +49,7 @@ export function DayViewList({
       {headerLabel && <p className="text-sm text-muted-foreground">{headerLabel}</p>}
       {rows.map(({ model, boardDay, items, untimed }) => (
         <section key={model.key} aria-label={model.name} className="space-y-2">
-          {actions.isManager && <h3 className="break-words text-sm font-medium">{model.name}</h3>}
+          {actions.isManager && <h2 className="break-words text-sm font-medium">{model.name}</h2>}
           {dayRowLabel(boardDay) && <p className="text-sm text-muted-foreground">{dayRowLabel(boardDay)}</p>}
           {untimed.map((job) => (
             <CalendarCard
@@ -110,13 +111,11 @@ export function DayViewList({
               ),
             )}
           {items.length === 0 && untimed.length === 0 && (
-            <p className="text-sm text-muted-foreground">Keine Einträge für diesen Tag.</p>
+            <EmptyState size="compact" title="Keine Einträge für diesen Tag." />
           )}
         </section>
       ))}
-      {rows.length === 0 && (
-        <p className="text-sm text-muted-foreground">Keine Mitarbeiter für diese Auswahl.</p>
-      )}
+      {rows.length === 0 && <EmptyState size="compact" title="Keine Mitarbeiter für diese Auswahl." />}
     </div>
   );
 }

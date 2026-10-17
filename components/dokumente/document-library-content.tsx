@@ -156,7 +156,7 @@ export function DocumentLibraryContent({
   return (
     <div
       className={cn(
-        'flex min-h-[calc(100vh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors',
+        'flex min-h-[calc(100dvh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors',
         upload.isDragActive && 'bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80',
       )}
       onDragOver={upload.handleDragOver}

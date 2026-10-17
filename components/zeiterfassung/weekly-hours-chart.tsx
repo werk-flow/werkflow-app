@@ -64,7 +64,7 @@ function WeeklyHoursChartBars({ data, todayIndex, narrowBars, minutesToPx }: Wee
           >
             <div
               className={cn(
-                'flex flex-col-reverse overflow-hidden rounded-t-[3px]',
+                'flex flex-col-reverse overflow-hidden rounded-t-sm',
                 narrowBars ? 'w-full max-w-[66px]' : 'w-[85%]',
                 isToday && 'ring-1 ring-foreground/15',
               )}
@@ -109,7 +109,7 @@ function WeeklyHoursChartDayLabels({ data, todayIndex }: { data: DayData[]; toda
           <div key={`lbl-${day.date}`} className="flex flex-1 items-start justify-center pt-1.5">
             <span
               className={cn(
-                'text-[10px] tabular-nums leading-none',
+                'text-xs tabular-nums leading-none',
                 isToday ? 'font-semibold text-foreground' : 'text-muted-foreground',
               )}
             >
@@ -125,7 +125,7 @@ function WeeklyHoursChartDayLabels({ data, todayIndex }: { data: DayData[]; toda
 /* Legend */
 function WeeklyHoursChartLegend() {
   return (
-    <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-muted-foreground">
+    <div className="mt-2 flex items-center justify-center gap-4 text-xs text-muted-foreground">
       <span className="flex items-center gap-1">
         <span className="inline-block h-2 w-2 rounded-full bg-success" />
         Arbeitszeit
@@ -205,7 +205,7 @@ export function WeeklyHoursChart({
   return (
     <div className={cn('isolate w-full overflow-hidden', className)}>
       {weekLabel && (
-        <div className="mb-6 flex items-baseline justify-between gap-2 text-[11px] font-medium tabular-nums text-muted-foreground">
+        <div className="mb-6 flex items-baseline justify-between gap-2 text-xs font-medium tabular-nums text-muted-foreground">
           <span>{weekLabel.dateRange}</span>
           <span className="flex items-baseline gap-3">
             {weeklyTargetMinutes !== null && <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>}
@@ -223,7 +223,7 @@ export function WeeklyHoursChart({
         {gridLines.map((h) => (
           <span
             key={`label-${h}`}
-            className="absolute left-0 z-20 translate-y-1/2 text-[10px] leading-none tabular-nums text-muted-foreground"
+            className="absolute left-0 z-20 translate-y-1/2 text-xs leading-none tabular-nums text-muted-foreground"
             style={{ bottom: LABEL_AREA + minutesToPx(h * 60) }}
           >
             {h}h

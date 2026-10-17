@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import { CalendarClock, ExternalLink, History, LinkIcon, MapPin, Wrench } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import {
@@ -14,7 +15,7 @@ import {
 import { formatGermanMediumDateTime } from '@/lib/utils';
 import { Fact } from './fact';
 
-const EVENT_LABELS: Record<string, string> = {
+const EVENT_LABELS: Readonly<Record<ServiceCaseDetail['events'][number]['eventType'], string>> = {
   created: 'Servicefall erfasst',
   triage_updated: 'Einschätzung geändert',
   status_changed: 'Status geändert',
@@ -127,7 +128,7 @@ export function ServiceCaseRelationsSection({
           ))}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Noch keine verwandten Servicefälle.</p>
+        <EmptyState size="compact" className="mt-3" title="Noch keine verwandten Servicefälle." />
       )}
     </section>
   );
@@ -144,7 +145,7 @@ export function ServiceCaseHistorySection({ item }: { item: ServiceCaseDetail })
         {item.events.map((event) => (
           <div key={event.id} className="py-3 first:pt-0 last:pb-0">
             <div className="flex items-start justify-between gap-3">
-              <span className="text-sm font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</span>
+              <span className="text-sm font-medium">{EVENT_LABELS[event.eventType]}</span>
               <time className="text-xs text-muted-foreground">
                 {formatGermanMediumDateTime(event.recordedAt)}
               </time>
@@ -171,7 +172,7 @@ export function ServiceCaseDetailSidebar({
 }): ReactElement {
   const item = workspace.serviceCase;
   return (
-    <aside className="space-y-4">
+    <div className="min-w-0 space-y-4">
       <section className="rounded-lg border p-4 shadow-xs">
         <h2 className="text-base font-semibold">Kunde & Einsatzort</h2>
         <Link
@@ -207,7 +208,7 @@ export function ServiceCaseDetailSidebar({
             ))}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-muted-foreground">Noch keine Anlage zugeordnet.</p>
+          <EmptyState size="compact" className="mt-2" title="Noch keine Anlage zugeordnet." />
         )}
       </section>
       <section className="rounded-lg border p-4 shadow-xs">
@@ -240,12 +241,13 @@ export function ServiceCaseDetailSidebar({
           variant="outline"
           className="mt-3 w-full"
           onClick={onFollowUpClick}
+          // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: no person can own a follow-up
           disabled={isStale || workspace.followUpOwners.length === 0}
         >
           <CalendarClock className="size-4" />
           Nachfassaktion anlegen
         </Button>
       </section>
-    </aside>
+    </div>
   );
 }

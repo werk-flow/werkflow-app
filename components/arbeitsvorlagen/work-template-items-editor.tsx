@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -93,9 +94,7 @@ export function ItemsEditor({
         )}
       </div>
       {draft.items.length === 0 && (
-        <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          Noch keine Aufgaben oder Checklistenpunkte.
-        </p>
+        <EmptyState size="compact" title="Noch keine Aufgaben oder Checklistenpunkte." />
       )}
       {draft.items.map((item, index) => (
         <WorkTemplateItemCard

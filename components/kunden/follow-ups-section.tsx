@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { CalendarClock, Check, ExternalLink, Pencil, Plus, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { isFollowUpOverdue } from '@/lib/customer-relationships/resolution';
@@ -51,9 +52,7 @@ export function FollowUpsSection({
       </div>
 
       {openFollowUps.length === 0 ? (
-        <p className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
-          Keine offenen Nachfassaktionen.
-        </p>
+        <EmptyState size="compact" title="Keine offenen Nachfassaktionen." />
       ) : (
         <div className="divide-y rounded-lg border bg-card" data-testid="customer-follow-ups">
           {openFollowUps.map((followUp) => {

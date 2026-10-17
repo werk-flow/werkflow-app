@@ -9,6 +9,7 @@ import { createResponsibilityDelegation } from '@/lib/responsibilities/actions';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import type { OrganizationResponsibility } from '@/lib/responsibilities/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type DelegationPersonErrors = {
   delegator?: string | undefined;
@@ -93,17 +94,12 @@ export function useResponsibilityDelegationForm({
       substitute: substituteId ? undefined : 'Bitte wähle eine Vertretung aus.',
     };
     setPersonErrors(nextPersonErrors);
-    const firstInvalidId = nextPersonErrors.delegator
-      ? `${responsibility}-delegator`
-      : nextPersonErrors.substitute
-        ? `${responsibility}-substitute`
-        : hasInvalidDateRange
-          ? `${responsibility}-valid-until`
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      [`${responsibility}-delegator`]: nextPersonErrors.delegator,
+      [`${responsibility}-substitute`]: nextPersonErrors.substitute,
+      [`${responsibility}-valid-until`]: dateRangeError ?? undefined,
+    });
+    if (invalid) return;
     setSaveError(null);
     try {
       const result = await runSave({

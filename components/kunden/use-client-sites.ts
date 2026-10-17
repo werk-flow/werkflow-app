@@ -9,6 +9,7 @@ import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { createClientSite, updateClientSite } from '@/lib/clients/actions';
 import { buildSiteEcho, withPendingPrimary } from '@/lib/clients/relation-echo';
 import type { ClientSite } from '@/lib/clients/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 import {
   EMPTY_SITE,
@@ -97,9 +98,9 @@ export function useClientSites({
 
   function saveSite(): void {
     if (!siteDialog) return;
-    if (!siteDialog.draft.name.trim()) {
-      setSiteDialog({ ...siteDialog, nameError: 'Bitte gib eine Bezeichnung ein.' });
-      document.getElementById('site-name')?.focus();
+    const nameError = siteDialog.draft.name.trim() ? undefined : 'Bitte gib eine Bezeichnung ein.';
+    if (focusFirstInvalidField({ 'site-name': nameError })) {
+      setSiteDialog({ ...siteDialog, nameError: nameError ?? null });
       return;
     }
     const { siteId, draft } = siteDialog;

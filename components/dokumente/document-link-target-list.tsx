@@ -4,6 +4,7 @@ import { type ReactElement } from 'react';
 import { Check, type LucideIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -53,9 +54,7 @@ export function DocumentLinkTargetList({
           ))}
         </div>
       ) : visibleTargets.length === 0 ? (
-        <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-          Keine passenden Einträge gefunden.
-        </div>
+        <EmptyState title="Keine passenden Einträge gefunden" />
       ) : (
         <div className="divide-y">
           {visibleTargets.map((target) => {

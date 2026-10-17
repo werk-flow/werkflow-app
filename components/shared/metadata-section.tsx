@@ -186,7 +186,7 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
         aria-labelledby={title ? titleId : undefined}
       >
         {title && (
-          <SectionTitle id={titleId} className="mb-3">
+          <SectionTitle as="h2" id={titleId} className="mb-3">
             {title}
           </SectionTitle>
         )}

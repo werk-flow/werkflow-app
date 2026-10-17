@@ -26,7 +26,7 @@ export function BoardTeamHeader({
         <PlainButton
           type="button"
           aria-expanded={!collapsed}
-          className="flex h-7 w-full items-center gap-1 border-b border-r border-calendar-grid-strong bg-calendar-gutter px-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="flex h-7 w-full items-center gap-1 border-b border-r border-calendar-grid-strong bg-calendar-gutter px-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           onClick={() =>
             setCollapsedTeams((previous) => {
               const next = new Set(previous);

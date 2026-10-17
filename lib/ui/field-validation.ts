@@ -12,5 +12,12 @@ export function focusFirstInvalidField(errors: Readonly<Record<string, string | 
   return true;
 }
 
+/** The error map of a check that lists its missing inputs in visual order. */
+export function errorsByControlId(
+  inputs: readonly { elementId: string; message: string }[],
+): Record<string, string> {
+  return Object.fromEntries(inputs.map(({ elementId, message }) => [elementId, message]));
+}
+
 export const REASON_MIN_3_MESSAGE = 'Bitte gib eine Begründung mit mindestens 3 Zeichen an.';
 export const REASON_MIN_8_MESSAGE = 'Bitte gib eine Begründung mit mindestens 8 Zeichen an.';

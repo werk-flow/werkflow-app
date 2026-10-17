@@ -6,6 +6,7 @@ import { useBanner } from '@/components/ui/banner';
 import { addWorkSchedule, updateWorkSchedule } from '@/lib/personnel/actions';
 import type { WorkSchedule } from '@/lib/personnel/schedule';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { SCHEDULE_ERROR_MESSAGES, getScheduleErrorMessage } from './work-schedule-format';
 
 // Default for a new schedule: the common full-time week; the office adjusts.
@@ -30,7 +31,7 @@ export function useWorkScheduleForm({ recordId, schedule, onClose }: WorkSchedul
   const [note, setNote] = useState<string>(schedule?.note ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [validFromError, setValidFromError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const { showBanner } = useBanner();
 
   const parsedDayMinutes: (number | null)[] = dayHours.map((value) => {
@@ -44,23 +45,21 @@ export function useWorkScheduleForm({ recordId, schedule, onClose }: WorkSchedul
   const weeklyMinutes = parsedDayMinutes.every((m) => m !== null)
     ? (parsedDayMinutes as number[]).reduce((total, m) => total + m, 0)
     : null;
+  const validFromError = validFrom ? undefined : SCHEDULE_ERROR_MESSAGES.invalid_valid_from;
+  const dayErrors = parsedDayMinutes.map((m) =>
+    m === null ? SCHEDULE_ERROR_MESSAGES.invalid_day_minutes : undefined,
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
-
-    if (!validFrom) {
-      setValidFromError(SCHEDULE_ERROR_MESSAGES.invalid_valid_from);
-      document.getElementById('schedule-valid-from')?.focus();
-      return;
-    }
-    const firstInvalidDay = parsedDayMinutes.findIndex((m) => m === null);
-    if (firstInvalidDay !== -1) {
-      setError(SCHEDULE_ERROR_MESSAGES.invalid_day_minutes);
-      document.getElementById(`schedule-day-${firstInvalidDay}`)?.focus();
-      return;
-    }
+    setAttempted(true);
+    const invalid = focusFirstInvalidField({
+      'schedule-valid-from': validFromError,
+      ...Object.fromEntries(dayErrors.map((dayError, index) => [`schedule-day-${index}`, dayError])),
+    });
+    if (invalid) return;
 
     setIsSaving(true);
     const input = {
@@ -97,8 +96,8 @@ export function useWorkScheduleForm({ recordId, schedule, onClose }: WorkSchedul
     setNote,
     isSaving,
     error,
-    validFromError,
-    setValidFromError,
+    validFromError: attempted ? validFromError : undefined,
+    dayErrors: attempted ? dayErrors : [],
     weeklyMinutes,
     handleSubmit,
   };

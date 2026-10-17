@@ -184,7 +184,7 @@ function DocumentLinkTargetTabs({
           <Icon className="size-4" />
           {tab}
           {selected[type].size > 0 && (
-            <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+            <span className="ml-1 rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold text-primary-foreground">
               {selected[type].size}
             </span>
           )}
@@ -294,6 +294,7 @@ export function DocumentLinkDialog({
     (count, { type }) => count + additions(type).length,
     removeLinkIds.length,
   );
+  const isDirty = changeCount > 0;
   const selectedCount = TARGETS.reduce((count, { type }) => count + selected[type].size, 0);
 
   function handleTargetTypeChange(nextTargetType: LinkTargetType) {
@@ -311,7 +312,7 @@ export function DocumentLinkDialog({
   }
 
   function handleSave() {
-    if (!document || changeCount === 0) return;
+    if (!document || !isDirty) return;
     setSaveError(null);
 
     void (async () => {
@@ -396,12 +397,7 @@ export function DocumentLinkDialog({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Abbrechen
           </Button>
-          <Button
-            pending={isSaving}
-            type="button"
-            onClick={handleSave}
-            disabled={isSaving || changeCount === 0}
-          >
+          <Button pending={isSaving} type="button" onClick={handleSave} disabled={isSaving || !isDirty}>
             <LinkIcon className="size-4" />
             Speichern
           </Button>

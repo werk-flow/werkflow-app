@@ -20,6 +20,7 @@ type InventoryCsvImport = {
   setMapping: (mapping: ImportColumnMapping) => void;
   error: string | null;
   isPending: boolean;
+  validationErrors: Readonly<Record<string, string | undefined>>;
   fileError: string | undefined;
   nameMappingError: string | undefined;
   setAttempted: (attempted: boolean) => void;
@@ -27,6 +28,19 @@ type InventoryCsvImport = {
   handleFile: (file: File | null) => void;
   handleImport: () => void;
 };
+
+/** The import form's checks in visual order, keyed by control id; shown after the first submit attempt. */
+function importValidationErrors(
+  rowCount: number,
+  mapping: ImportColumnMapping,
+): Record<'inventory-import-file' | 'inventory-import-name', string | undefined> {
+  return {
+    'inventory-import-file':
+      rowCount === 0 ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.' : undefined,
+    'inventory-import-name':
+      rowCount > 0 && !mapping.name ? 'Ordne die Spalte mit dem Artikelnamen zu.' : undefined,
+  };
+}
 
 /** The CSV import dialog's state: the parsed file, the column mapping, the import run. */
 export function useInventoryCsvImport({
@@ -42,10 +56,9 @@ export function useInventoryCsvImport({
   const [error, setError] = useState<string | null>(null);
   const { run: runImportTask, isPending } = usePendingTask();
   const [attempted, setAttempted] = useState(false);
-  const fileError =
-    attempted && rows.length === 0 ? 'Wähle eine CSV-Datei mit mindestens einer Datenzeile.' : undefined;
-  const nameMappingError =
-    attempted && rows.length > 0 && !mapping.name ? 'Ordne die Spalte mit dem Artikelnamen zu.' : undefined;
+  const validationErrors = importValidationErrors(rows.length, mapping);
+  const fileError = attempted ? validationErrors['inventory-import-file'] : undefined;
+  const nameMappingError = attempted ? validationErrors['inventory-import-name'] : undefined;
 
   function resetImportState() {
     setFileName('');
@@ -110,6 +123,7 @@ export function useInventoryCsvImport({
     setMapping,
     error,
     isPending,
+    validationErrors,
     fileError,
     nameMappingError,
     setAttempted,

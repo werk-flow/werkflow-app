@@ -5,6 +5,7 @@ import { useRef, useState } from 'react';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { createMaintenanceCoverage } from '@/lib/maintenance/actions';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import type { MaintenanceCoverageCreateSubmission } from './maintenance-coverage-dialog';
 import { useClientOption } from './use-client-option';
 
@@ -72,15 +73,12 @@ export function useMaintenanceCoverageForm({
     // The action's response renders the route with the new coverage.
     onOpenChange(false);
   });
-  const clientError = attempted && !clientId ? 'Bitte wähle einen Kunden.' : undefined;
-  const siteError = attempted && !siteId ? 'Bitte wähle einen Einsatzort.' : undefined;
+  const clientError = clientId ? undefined : 'Bitte wähle einen Kunden.';
+  const siteError = siteId ? undefined : 'Bitte wähle einen Einsatzort.';
 
   function submit(): void {
     setAttempted(true);
-    if (!clientId || !siteId) {
-      document.getElementById(clientId ? 'coverage-site' : 'coverage-client')?.focus();
-      return;
-    }
+    if (focusFirstInvalidField({ 'coverage-client': clientError, 'coverage-site': siteError })) return;
     if (onSubmitted) {
       onSubmitted({
         draft: {
@@ -133,8 +131,8 @@ export function useMaintenanceCoverageForm({
     isPending,
     client,
     clientOption,
-    clientError,
-    siteError,
+    clientError: attempted ? clientError : undefined,
+    siteError: attempted ? siteError : undefined,
     submit,
   };
 }

@@ -32,7 +32,7 @@ function clockedMinutes(clockIn: string, clockOut: string): number {
 function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
   if (type === 'session') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-medium text-warning-soft-foreground">
+      <span className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-soft-foreground">
         <Plus className="h-3 w-3" />
         Neuer Eintrag
       </span>
@@ -41,7 +41,7 @@ function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
 
   if (type === 'edit') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2 py-0.5 text-[10px] font-medium text-info-soft-foreground">
+      <span className="inline-flex items-center gap-1 rounded-full bg-info-soft px-2 py-0.5 text-xs font-medium text-info-soft-foreground">
         <Pencil className="h-3 w-3" />
         Änderung
       </span>
@@ -49,7 +49,7 @@ function RequestTypeBadge({ type }: { type: 'session' | 'edit' | 'delete' }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-destructive-soft px-2 py-0.5 text-[10px] font-medium text-destructive-soft-foreground">
+    <span className="inline-flex items-center gap-1 rounded-full bg-destructive-soft px-2 py-0.5 text-xs font-medium text-destructive-soft-foreground">
       <Trash2 className="h-3 w-3" />
       Löschung
     </span>

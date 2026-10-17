@@ -26,6 +26,7 @@ import {
   type CalendarTimeCorrectionDraft,
 } from '@/lib/time-corrections/calendar-draft';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatBerlin } from '@/lib/utils';
 
 // The correction sentences every surface shares, plus the ones that name the
@@ -71,12 +72,10 @@ export function CalendarTimeCorrectionDialog({
   const target = people.find((person) => person.userId === targetUserId);
   const submit = async () => {
     if (!subject || submitting) return;
-    if (reason.trim().length < 3) {
-      setReasonError('Bitte gib einen Grund mit mindestens drei Zeichen an.');
-      document.getElementById('calendar-correction-reason')?.focus();
-      return;
-    }
-    setReasonError(null);
+    const nextReasonError =
+      reason.trim().length < 3 ? 'Bitte gib einen Grund mit mindestens drei Zeichen an.' : undefined;
+    setReasonError(nextReasonError ?? null);
+    if (focusFirstInvalidField({ 'calendar-correction-reason': nextReasonError })) return;
     const boundaries = calendarCorrectionBoundaries(draft, people);
     if (!boundaries) {
       setError(

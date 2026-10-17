@@ -53,9 +53,9 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
     receivedAt,
     setReceivedAt,
     isLoading,
-    error,
-    showSummaryError,
-    showReceivedAtError,
+    summaryError,
+    receivedAtError,
+    formError,
     handleSubmit,
   } = form;
 
@@ -88,12 +88,7 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
           className="flex min-h-0 flex-1 flex-col"
         >
           <DialogBody className="grid gap-4 py-2">
-            <Field
-              label="Anliegen"
-              htmlFor="request-summary"
-              required
-              error={showSummaryError ? 'Bitte beschreibe kurz das Anliegen.' : null}
-            >
+            <Field label="Anliegen" htmlFor="request-summary" required error={summaryError}>
               <Input
                 placeholder="z. B. Heizung fällt aus, kein Warmwasser"
                 value={summary}
@@ -141,19 +136,15 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
               </Field>
             </div>
 
-            <Field
-              label="Eingangszeit"
-              htmlFor="request-received-at-date"
-              error={showReceivedAtError ? error : null}
-            >
+            <Field label="Eingangszeit" htmlFor="request-received-at-date" error={receivedAtError}>
               <DateTimeField
                 idPrefix="request-received-at"
                 value={receivedAt}
                 onChange={setReceivedAt}
                 disabled={isLoading}
                 dateAriaLabel="Eingangsdatum"
-                invalid={showReceivedAtError}
-                describedById={showReceivedAtError ? 'request-received-at-date-error' : undefined}
+                invalid={receivedAtError !== null}
+                describedById={receivedAtError ? 'request-received-at-date-error' : undefined}
               />
             </Field>
 
@@ -161,7 +152,7 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
 
             <CreateRequestFurtherFields assignees={assignees} form={form} />
 
-            <ErrorText>{showReceivedAtError ? null : error}</ErrorText>
+            <ErrorText>{formError}</ErrorText>
           </DialogBody>
           <DialogFooter>
             <Button pending={isLoading} type="submit" disabled={isLoading}>

@@ -72,7 +72,7 @@ export function ZeiterfassungDashboard({
 
       {/* Next clock actions: the same list the clock button's sheet renders. */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground px-1">Schnellzugriff</h3>
+        <h2 className="text-sm font-medium text-muted-foreground px-1">Schnellzugriff</h2>
         <ClockActionList organizationId={organizationId} />
       </div>
 
@@ -84,7 +84,7 @@ export function ZeiterfassungDashboard({
 
       {/* Working Time Status + Weekly Chart */}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium text-muted-foreground px-1">Status</h3>
+        <h2 className="text-sm font-medium text-muted-foreground px-1">Status</h2>
 
         <StaleRegion stale={weekStale} onRetry={refetchWeek}>
           <ZeiterfassungDashboardStatusCard

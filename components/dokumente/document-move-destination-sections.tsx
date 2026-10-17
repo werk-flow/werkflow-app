@@ -132,7 +132,7 @@ export function MoveDestinationFolderRow({
       }}
     >
       <span className={cn('flex min-w-0 items-center gap-2 font-medium', isDisabled && 'opacity-45')}>
-        <Folder className="size-4 shrink-0 text-primary" />
+        <Folder className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <PlainButton
           type="button"
           className="truncate text-left hover:underline"

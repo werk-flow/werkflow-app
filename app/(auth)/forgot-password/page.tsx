@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
 import { ForgotPasswordForm } from './forgot-password-form';
 
@@ -33,7 +34,7 @@ export default async function ForgotPasswordPage({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl font-semibold tracking-tight">Passwort zurücksetzen</CardTitle>
+        <StandaloneTitle>Passwort zurücksetzen</StandaloneTitle>
         <CardDescription>
           Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zurücksetzen deines Passworts.
         </CardDescription>

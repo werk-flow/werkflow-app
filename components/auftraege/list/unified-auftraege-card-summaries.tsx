@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { JOB_PRIORITY_LABELS, type Job, type ProjectStatus, type ProjectWithDetails } from '@/lib/jobs/types';
-import { cn, formatGermanDate } from '@/lib/utils';
+import { formatGermanDate } from '@/lib/utils';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { AvatarStack } from './unified-auftraege-display';
 import {
@@ -40,10 +40,10 @@ export function UnifiedAuftraegeJobCardSummary({
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <Badge variant="secondary" className={cn('text-[10px]', getJobStatusClass(job))}>
+          <Badge variant="secondary" className={getJobStatusClass(job)}>
             {getJobStatusLabel(job)}
           </Badge>
-          <Badge variant="secondary" className={cn('text-[10px]', PRIORITY_CLASSES[job.priority])}>
+          <Badge variant="secondary" className={PRIORITY_CLASSES[job.priority]}>
             {JOB_PRIORITY_LABELS[job.priority]}
           </Badge>
         </div>
@@ -93,10 +93,7 @@ export function UnifiedAuftraegeProjectCardSummary({
       </div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge
-            variant="secondary"
-            className={cn('text-[10px]', getProjectStatusClass(project, effectiveStatus))}
-          >
+          <Badge variant="secondary" className={getProjectStatusClass(project, effectiveStatus)}>
             {getProjectStatusLabel(project)}
           </Badge>
           <div className="flex items-center gap-1.5">
@@ -105,7 +102,7 @@ export function UnifiedAuftraegeProjectCardSummary({
               label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
               className="h-1.5 w-12"
             />
-            <span className="text-[10px] tabular-nums text-muted-foreground">
+            <span className="text-xs tabular-nums text-muted-foreground">
               {project.completedJobCount}/{project.jobCount}
             </span>
           </div>

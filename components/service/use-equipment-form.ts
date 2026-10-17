@@ -12,6 +12,7 @@ import {
   updateInstalledEquipment,
 } from '@/lib/installed-equipment/actions';
 import type { EquipmentDetail, EquipmentFormInput, EquipmentListItem } from '@/lib/installed-equipment/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   EQUIPMENT_REQUIRED_FIELD_IDS,
   GENERIC_EQUIPMENT_FORM_ERROR,
@@ -91,7 +92,8 @@ export function useEquipmentForm({
   const siteOptions = equipmentSiteOptions(sites, form, initial);
   const parentOptions = equipmentParentOptions(sites, form, initial);
   const isPending = isCreating || isUpdating || isReplacing;
-  const fieldErrors = attempted ? missingEquipmentFields(form, mode) : {};
+  const missingFields = missingEquipmentFields(form, mode);
+  const fieldErrors = attempted ? missingFields : {};
 
   const payload = useMemo<EquipmentFormInput>(() => toEquipmentFormPayload(form), [form]);
 
@@ -102,12 +104,10 @@ export function useEquipmentForm({
   async function handleSubmit(): Promise<void> {
     setError(null);
     setAttempted(true);
-    const errors = missingEquipmentFields(form, mode);
-    const firstInvalid = EQUIPMENT_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
+    const errorsById = Object.fromEntries(
+      EQUIPMENT_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
+    );
+    if (focusFirstInvalidField(errorsById)) return;
     const idempotencyKey = crypto.randomUUID();
     const effectiveAt = new Date().toISOString();
     if (mode === 'create' && onSubmitted) {

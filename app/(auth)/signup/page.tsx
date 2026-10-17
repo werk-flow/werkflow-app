@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { TextLink } from '@/components/ui/text-link';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -100,9 +101,9 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-2xl font-semibold tracking-tight">
+        <StandaloneTitle>
           {organizationName ? `Tritt ${organizationName} bei` : 'Erstelle dein Konto'}
-        </CardTitle>
+        </StandaloneTitle>
         <CardDescription>
           {organizationName
             ? `Du wurdest eingeladen, ${organizationName} beizutreten. Erstelle dein Konto, um fortzufahren.`

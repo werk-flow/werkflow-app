@@ -5,6 +5,7 @@ import { Check, CheckCheck } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { AttentionNotification } from '@/lib/attention/types';
 import type { useBusyIds } from '@/hooks/use-busy-id';
@@ -87,7 +88,7 @@ export function AufgabenNotificationsSection({
       </div>
 
       {notifications.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine Benachrichtigungen.</p>
+        <EmptyState size="compact" title="Keine Benachrichtigungen." />
       ) : (
         <Card className="gap-0 divide-y py-0">
           {notifications.map((notification) => (

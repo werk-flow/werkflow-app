@@ -12,7 +12,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { formatGermanDate } from '@/lib/utils';
-import { Spinner } from '@/components/ui/spinner';
 
 type VersionDeleteDialogProps = {
   /** The question in the title, such as „Kondition löschen?“. */
@@ -60,17 +59,10 @@ export function VersionDeleteDialog({
               e.preventDefault();
               onDelete();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
-            {isDeleting ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird gelöscht…
-              </>
-            ) : (
-              'Löschen'
-            )}
+            {isDeleting ? 'Wird gelöscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

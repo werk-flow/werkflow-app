@@ -27,6 +27,7 @@ import {
 import { cn, toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type OwnSicknessReportDateErrors = {
   start?: string | undefined;
@@ -167,20 +168,15 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
     if (isSaving) return;
     setError(null);
 
-    const nextDateErrors = {
-      start: startDate ? undefined : 'Bitte wähle ein Datum aus.',
-      end:
-        endKnown && !endDate
-          ? 'Bitte wähle ein Datum aus.'
-          : endKnown && endDate < startDate
-            ? SICKNESS_ERROR_MESSAGES.invalid_range
-            : undefined,
-    };
-    setDateErrors(nextDateErrors);
-    if (nextDateErrors.start || nextDateErrors.end) {
-      document.getElementById(nextDateErrors.start ? 'sickness-start-date' : 'sickness-end-date')?.focus();
-      return;
-    }
+    const startError = startDate ? undefined : 'Bitte wähle ein Datum aus.';
+    const endError =
+      endKnown && !endDate
+        ? 'Bitte wähle ein Datum aus.'
+        : endKnown && endDate < startDate
+          ? SICKNESS_ERROR_MESSAGES.invalid_range
+          : undefined;
+    setDateErrors({ start: startError, end: endError });
+    if (focusFirstInvalidField({ 'sickness-start-date': startError, 'sickness-end-date': endError })) return;
 
     try {
       const result = await runSave({

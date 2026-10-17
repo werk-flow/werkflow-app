@@ -48,7 +48,7 @@ export function BarSegment({
   return (
     <div
       className={cn(
-        'flex h-5 min-w-0 items-center px-1.5 text-[11px] font-medium leading-none',
+        'flex h-5 min-w-0 items-center px-1.5 text-xs font-medium leading-none',
         TONE_CLASS[tone],
         EDGE_CLASS[edge],
         className,

@@ -11,7 +11,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { Spinner } from '@/components/ui/spinner';
 
 type InviteConfirmDialogProps = {
   open: boolean;
@@ -50,17 +49,10 @@ export function InviteCancelConfirmDialog({
               event.preventDefault();
               void onConfirm();
             }}
-            disabled={isLoading}
+            pending={isLoading}
             variant="destructive"
           >
-            {isLoading ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird storniert…
-              </>
-            ) : (
-              'Stornieren'
-            )}
+            {isLoading ? 'Wird storniert…' : 'Stornieren'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -94,17 +86,10 @@ export function InviteDeleteConfirmDialog({
               event.preventDefault();
               void onConfirm();
             }}
-            disabled={isLoading}
+            pending={isLoading}
             variant="destructive"
           >
-            {isLoading ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird gelöscht…
-              </>
-            ) : (
-              'Löschen'
-            )}
+            {isLoading ? 'Wird gelöscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

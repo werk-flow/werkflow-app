@@ -46,8 +46,8 @@ export function OrgInfoCard({ initialMemberCount }: OrgInfoCardProps) {
     <Card>
       <CardHeader className="pb-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-            <Building2 className="size-5 text-primary" />
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <Building2 className="size-5 text-muted-foreground" aria-hidden="true" />
           </div>
           <div className="min-w-0">
             <CardTitle className="break-words text-lg">{activeOrg.name}</CardTitle>

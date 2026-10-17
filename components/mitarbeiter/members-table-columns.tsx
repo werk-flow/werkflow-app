@@ -1,5 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import type { SkeletonColumn } from '@/components/ui/skeleton-table';
+import { hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 
 // The status cells' skeletons double as their loading state in the live table.
 export const STATUS_SKELETON = <Skeleton className="h-[22px] w-24 rounded-full" />;
@@ -49,7 +49,7 @@ const MEMBER_COLUMNS: readonly SkeletonColumn[] = [
 
 const MEMBER_ACTIONS_COLUMN: SkeletonColumn = {
   id: 'actions',
-  header: '',
+  header: hiddenHeader('Aktionen'),
   className: 'w-[50px]',
   skeleton: <Skeleton className="size-8 rounded" />,
 };

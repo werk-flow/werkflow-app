@@ -4,6 +4,7 @@ import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
 import { useState } from 'react';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
@@ -98,7 +99,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         <div className="space-y-4">
           <RequestOutcomeNotices request={request} convertedLink={data.convertedLink} />
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <DetailColumns layout="pair">
             {/* Customer / caller context */}
             <RequestCustomerCard
               request={request}
@@ -112,7 +113,7 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
             {/* Request facts */}
             <RequestFactsCard request={request} assigneeName={data.assigneeName} />
-          </div>
+          </DetailColumns>
 
           {data.documents ? (
             <ContextualDocumentsSection

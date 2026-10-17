@@ -84,7 +84,7 @@ function JobCard({
             label={isPending ? 'Wird gespeichert' : SETTLING_LABEL}
           />
           {job.jobNumber && (
-            <span className="max-w-[55%] shrink-0 truncate font-mono text-[10px] text-muted-foreground">
+            <span className="max-w-[55%] shrink-0 truncate font-mono text-xs text-muted-foreground">
               {job.jobNumber}
             </span>
           )}
@@ -215,7 +215,7 @@ function ProjectCard({
           <div className="flex items-center gap-2">
             <SettlingIndicator active={rowFeedback.settlingIds.has(project.id)} />
             {project.projectNumber && (
-              <span className="max-w-[55%] shrink-0 truncate font-mono text-[10px] text-muted-foreground">
+              <span className="max-w-[55%] shrink-0 truncate font-mono text-xs text-muted-foreground">
                 {project.projectNumber}
               </span>
             )}

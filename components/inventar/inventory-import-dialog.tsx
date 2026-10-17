@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
 import { IMPORT_COLUMNS } from '@/lib/inventory/csv-import';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useInventoryCsvImport } from './use-inventory-csv-import';
 
 export function ImportDialog({
@@ -38,6 +39,7 @@ export function ImportDialog({
     setMapping,
     error,
     isPending,
+    validationErrors,
     fileError,
     nameMappingError,
     setAttempted,
@@ -62,14 +64,7 @@ export function ImportDialog({
           onSubmit={(event) => {
             event.preventDefault();
             setAttempted(true);
-            if (rows.length === 0) {
-              document.getElementById('inventory-import-file')?.focus();
-              return;
-            }
-            if (!mapping.name) {
-              document.getElementById('inventory-import-name')?.focus();
-              return;
-            }
+            if (focusFirstInvalidField(validationErrors)) return;
             handleImport();
           }}
           noValidate

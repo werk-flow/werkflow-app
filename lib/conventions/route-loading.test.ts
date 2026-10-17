@@ -12,18 +12,25 @@ import { Spinner } from '@/components/ui/spinner';
 // Loading canon (werkflow-design skill): every route segment ships its own
 // `loading.tsx` whose skeleton mirrors that page. Without one, a page inherits
 // the nearest ancestor's skeleton and shows another page's layout while it
-// loads (the four handover routes and ten settings subpages, 2026-10-01).
+// loads (the four handover routes and ten settings subpages, 2026-10-01). The
+// screens outside the app shell count too: sign-in shared one card skeleton
+// for five forms and onboarding one block for four screens (UI audit of
+// 2026-10-15). API routes render no page.
 
-const appRoot = resolve(import.meta.dir, '../../app/(app)');
+const appRoot = resolve(import.meta.dir, '../../app');
 
 // Pages that only redirect never render, so they have nothing to mirror.
-const REDIRECT_ONLY_PAGES: readonly string[] = ['service/page.tsx'];
+const REDIRECT_ONLY_PAGES: readonly string[] = ['(app)/service/page.tsx', 'page.tsx'];
 
-const pages = readdirSync(appRoot, { recursive: true, encoding: 'utf8' })
-  .map((name) => name.replaceAll('\\', '/'))
-  .filter((name) => name === 'page.tsx' || name.endsWith('/page.tsx'));
+const routeFiles = (fileName: string): string[] =>
+  readdirSync(appRoot, { recursive: true, encoding: 'utf8' })
+    .map((name) => name.replaceAll('\\', '/'))
+    .filter((name) => !name.startsWith('api/'))
+    .filter((name) => name === fileName || name.endsWith(`/${fileName}`));
 
-test('every authenticated page has a loading.tsx in its own folder', () => {
+const pages = routeFiles('page.tsx');
+
+test('every page, inside the app shell and outside it, has a loading.tsx in its own folder', () => {
   const missing = pages.filter(
     (page) =>
       !REDIRECT_ONLY_PAGES.includes(page) && !existsSync(resolve(appRoot, dirname(page), 'loading.tsx')),
@@ -35,18 +42,19 @@ test('the redirect-only exceptions still only redirect', () => {
   for (const page of REDIRECT_ONLY_PAGES) {
     const source = readFileSync(resolve(appRoot, page), 'utf8');
     expect(source, page).toMatch(/redirect\(/);
-    expect(source, page).not.toMatch(/return\s*[(<]/);
+    // No markup of their own: at most a component that redirects, under a Suspense without fallback.
+    expect(source, page).not.toMatch(/<[a-z]/);
+    expect(source, page).not.toMatch(/fallback=\{(?!null\})/);
   }
 });
 
 test('a loading file renders a skeleton instead of re-exporting another route', () => {
-  const reExports = readdirSync(appRoot, { recursive: true, encoding: 'utf8' })
-    .map((name) => name.replaceAll('\\', '/'))
-    .filter((name) => name.endsWith('loading.tsx'))
-    .filter((name) => /from ['"]@\/app\//.test(readFileSync(resolve(appRoot, name), 'utf8')));
+  const reExports = routeFiles('loading.tsx').filter((name) =>
+    /from ['"]@\/app\//.test(readFileSync(resolve(appRoot, name), 'utf8')),
+  );
   // The project-scoped job detail is the same page component as the
   // standalone job detail, so it shares that route's loading file.
-  expect(reExports).toEqual(['auftraege/projekt/[projectNumber]/[jobNumber]/loading.tsx']);
+  expect(reExports).toEqual(['(app)/auftraege/projekt/[projectNumber]/[jobNumber]/loading.tsx']);
 });
 
 // Busy signals (werkflow-design skill, "Loading states"): a placeholder is
@@ -76,11 +84,8 @@ async function renderDefault(path: string): Promise<string> {
 }
 
 test('every loading file renders registry skeletons only', async () => {
-  const loadingFiles = readdirSync(appRoot, { recursive: true, encoding: 'utf8' })
-    .map((name) => name.replaceAll('\\', '/'))
-    .filter((name) => name === 'loading.tsx' || name.endsWith('/loading.tsx'));
   const findings: string[] = [];
-  for (const name of loadingFiles) {
+  for (const name of routeFiles('loading.tsx')) {
     const markup = await renderDefault(resolve(appRoot, name));
     if (!markup.includes(SKELETON_SLOT)) findings.push(`${name}: no Skeleton`);
     for (const pulse of rawPulses(markup)) findings.push(`${name}: ${pulse}`);

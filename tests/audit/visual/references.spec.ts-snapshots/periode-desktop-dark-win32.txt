@@ -1,0 +1,46 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Zeiterfassung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Januar 2026
+01.01.2026 – 01.01.2026 · Vorbereitet
+Mitarbeitende
+0
+Freigaben offen
+0
+Abschluss blockiert
+0
+Monatswerte
+Mitarbeiter/in
+Soll
+Gewertet
+Differenz
+Schlusssaldo
+Sollquelle
+Prüfhinweise
+Keine Prüfhinweise.
+Periodenabschluss
+Monat abschließen
+Lohnexport
+Der Export wird nach dem Abschluss freigeschaltet.

@@ -15,6 +15,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import type { WorkTemplateTargetType } from '@/lib/work-templates/types';
 
 import type { CreateTemplateInput } from './work-template-editor-shared';
@@ -35,11 +36,9 @@ export function CreateTemplateDialog({
   const [error, setError] = useState<string | null>(null);
   function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!name.trim()) {
-      setError('Bitte gib einen Namen an.');
-      document.getElementById('new-template-name')?.focus();
-      return;
-    }
+    const nameError = name.trim() ? undefined : 'Bitte gib einen Namen an.';
+    setError(nameError ?? null);
+    if (focusFirstInvalidField({ 'new-template-name': nameError })) return;
     onCreate({ name, description, targetType });
     setName('');
     setDescription('');

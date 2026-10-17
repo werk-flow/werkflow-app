@@ -10,15 +10,65 @@ import { describeFailure } from '@/lib/action-messages';
 import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
 import { createClientRequest, type CreateClientRequestInput } from '@/lib/requests/actions';
 import type { RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+
+export const SUMMARY_REQUIRED_MESSAGE = 'Bitte beschreibe kurz das Anliegen.';
+export const INVALID_RECEIVED_AT_MESSAGE = 'Bitte gib eine gültige Eingangszeit ein.';
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu verwalten.',
-  summary_required: 'Bitte beschreibe kurz das Anliegen.',
+  summary_required: SUMMARY_REQUIRED_MESSAGE,
   request_number_taken: 'Diese Anfragenummer ist bereits vergeben.',
-  invalid_received_at: 'Bitte gib eine gültige Eingangszeit ein.',
+  invalid_received_at: INVALID_RECEIVED_AT_MESSAGE,
   client_not_found: 'Der Kunde wurde nicht gefunden.',
   create_failed: 'Fehler beim Speichern der Anfrage.',
 } satisfies Record<string, string>;
+
+type RequestFieldChecks = {
+  /** Keyed by control id in visual order, for focusFirstInvalidField. */
+  errors: Record<string, string | undefined>;
+  summaryError: string | null;
+  receivedAtError: string | null;
+  /** The submit-level message: `error` unless a field shows it. */
+  formError: string | null;
+  receivedAtDate: Date | null;
+};
+
+/**
+ * The summary and received-at checks of the create and edit dialogs. A field
+ * shows its own check after a submit attempt, else a server refusal with the
+ * same message. A date without a time is the only unparsable received-at
+ * value, so its error focuses the time control.
+ */
+export function checkRequestFields({
+  idPrefix,
+  summary,
+  receivedAt,
+  attempted,
+  error,
+}: {
+  idPrefix: 'request' | 'edit-request';
+  summary: string;
+  receivedAt: string;
+  attempted: boolean;
+  error: string | null;
+}): RequestFieldChecks {
+  const summaryMessage = summary.trim() ? undefined : SUMMARY_REQUIRED_MESSAGE;
+  const receivedAtDate = receivedAt ? parseBerlinDateTimeInput(receivedAt) : null;
+  const receivedAtMessage = receivedAt && !receivedAtDate ? INVALID_RECEIVED_AT_MESSAGE : undefined;
+  const isFieldMessage = error === SUMMARY_REQUIRED_MESSAGE || error === INVALID_RECEIVED_AT_MESSAGE;
+  return {
+    errors: {
+      [`${idPrefix}-summary`]: summaryMessage,
+      [`${idPrefix}-received-at-time`]: receivedAtMessage,
+    },
+    summaryError: (attempted && summaryMessage) || (error === SUMMARY_REQUIRED_MESSAGE ? error : null),
+    receivedAtError:
+      (attempted && receivedAtMessage) || (error === INVALID_RECEIVED_AT_MESSAGE ? error : null),
+    formError: isFieldMessage ? null : error,
+    receivedAtDate,
+  };
+}
 
 export interface CreateRequestForm {
   open: boolean;
@@ -55,9 +105,9 @@ export interface CreateRequestForm {
   assignedTo: string;
   setAssignedTo: (assignedTo: string) => void;
   isLoading: boolean;
-  error: string | null;
-  showSummaryError: boolean;
-  showReceivedAtError: boolean;
+  summaryError: string | null;
+  receivedAtError: string | null;
+  formError: string | null;
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
 
@@ -135,23 +185,19 @@ export function useCreateRequestForm(): CreateRequestForm {
     setRequestNumber(nextRequestNumber);
   };
 
+  const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
+    idPrefix: 'request',
+    summary,
+    receivedAt,
+    attempted: hasAttemptedSubmit,
+    error,
+  });
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-
-    if (!summary.trim()) {
-      document.getElementById('request-summary')?.focus();
-      return;
-    }
-
-    const receivedAtDate = receivedAt ? parseBerlinDateTimeInput(receivedAt) : null;
-    if (receivedAt && !receivedAtDate) {
-      setError(ERROR_MESSAGES.invalid_received_at);
-      // A date without a time is the only unparsable value the field can hold.
-      document.getElementById('request-received-at-time')?.focus();
-      return;
-    }
+    if (focusFirstInvalidField(errors)) return;
 
     try {
       const input: CreateClientRequestInput = {
@@ -187,9 +233,6 @@ export function useCreateRequestForm(): CreateRequestForm {
     }
   };
 
-  const showSummaryError = hasAttemptedSubmit && !summary.trim();
-  const showReceivedAtError = error === ERROR_MESSAGES.invalid_received_at;
-
   return {
     open,
     handleOpenChange,
@@ -224,9 +267,9 @@ export function useCreateRequestForm(): CreateRequestForm {
     assignedTo,
     setAssignedTo,
     isLoading,
-    error,
-    showSummaryError,
-    showReceivedAtError,
+    summaryError,
+    receivedAtError,
+    formError,
     handleSubmit,
   };
 }

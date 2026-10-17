@@ -396,3 +396,15 @@ export async function visualReplacements(world: TestWorld): Promise<[string, str
     [data.unique_code, 'KRH26X'],
   ];
 }
+
+/**
+ * The run-specific strings of a screen outside the app shell: the address the
+ * signup page created and the name of the organization the prestart member
+ * joins, with constant stand-ins.
+ */
+export function standaloneReplacements(world: TestWorld, email: string | null): [string, string][] {
+  return [
+    ...(email ? [[email, 'lena.neumann@beispiel.de'] satisfies [string, string]] : []),
+    [world.outsider.orgName, 'Sanitär Becker GmbH'],
+  ];
+}

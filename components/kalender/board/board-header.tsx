@@ -27,7 +27,7 @@ export function BoardHeader({
       <div
         role="columnheader"
         className={cn(
-          'sticky left-0 flex items-end border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground',
+          'sticky left-0 flex items-end border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground',
           CALENDAR_LAYER_CLASS.sticky,
         )}
       >
@@ -47,9 +47,7 @@ export function BoardHeader({
             )}
             title={label ?? undefined}
           >
-            <span className="text-[11px] uppercase text-muted-foreground">
-              {WEEKDAY_SHORT[column.weekday]}
-            </span>
+            <span className="text-xs uppercase text-muted-foreground">{WEEKDAY_SHORT[column.weekday]}</span>
             <span
               className={cn(
                 'flex size-6 items-center justify-center rounded-full text-sm tabular-nums',
@@ -62,7 +60,7 @@ export function BoardHeader({
             </span>
             {label && (
               <span
-                className="max-w-full truncate text-[11px] text-calendar-holiday-foreground"
+                className="max-w-full truncate text-xs text-calendar-holiday-foreground"
                 aria-label={`${formatRefusalDate(column.date)}: ${label}`}
               >
                 {label}

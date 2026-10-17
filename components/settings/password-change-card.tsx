@@ -43,7 +43,7 @@ export function PasswordChangeCard() {
           <p className="text-sm font-medium text-foreground">Sicherheit</p>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
+              <div className="rounded-full bg-muted p-2 text-muted-foreground">
                 <KeyRound className="size-4" />
               </div>
               <div>
@@ -88,7 +88,7 @@ export function PasswordChangeCard() {
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-foreground">
-                      <ShieldCheck className="size-4 text-primary" />
+                      <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
                       <p className="text-base font-semibold">Schritt 2: Neues Passwort festlegen</p>
                     </div>
                     <p className="text-sm text-muted-foreground">

@@ -1,0 +1,29 @@
+Menü öffnen
+Mitarbeiter
+Kevin Schmid
+Kevin Schmid
+Handwerker/in
+kevin.schmid@haustechnik-kraemer.de
+Profil
+Vorname
+Kevin
+Nachname
+Schmid
+E-Mail
+kevin.schmid@haustechnik-kraemer.de
+Rolle
+Handwerker/in
+Beigetreten
+01.01.2026
+Personalien
+Personalnummer
+—
+Telefon
+—
+Private E-Mail
+—
+Straße
+—
+PLZ
+—
+Ort

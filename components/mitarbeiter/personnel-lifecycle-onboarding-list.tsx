@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 import { REQUIREMENT_STATE_LABELS } from '@/lib/personnel/lifecycle';
@@ -74,9 +75,7 @@ export function PersonnelLifecycleOnboardingList({
           Nicht eingerichtet. Es wurde kein Plan aus Bestandsdaten abgeleitet.
         </p>
       ) : incompleteRequirements.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-          Keine offenen Anforderungen.
-        </p>
+        <EmptyState size="compact" title="Keine offenen Anforderungen." />
       ) : (
         <ul className="divide-y rounded-md border">
           {incompleteRequirements.map((requirement) => (

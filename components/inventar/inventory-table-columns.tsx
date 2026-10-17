@@ -1,5 +1,5 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import type { SkeletonColumn } from '@/components/ui/skeleton-table';
+import { hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 
 // One column definition for the item table and its route skeleton, so header
 // count, alignment, and widths cannot drift apart (design canon: skeletons
@@ -29,7 +29,7 @@ export const INVENTORY_ITEM_COLUMNS: readonly SkeletonColumn[] = [
   { id: 'status', header: 'Status', skeleton: <Skeleton className="h-5 w-20 rounded-full" /> },
   {
     id: 'actions',
-    header: null,
+    header: hiddenHeader('Aktionen'),
     className: 'w-10',
     skeleton: <Skeleton className="size-8 rounded-md" />,
   },

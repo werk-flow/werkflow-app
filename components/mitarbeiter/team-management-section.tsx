@@ -2,6 +2,7 @@
 
 import { Users } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { TeamManagementCreateForm } from './team-management-create-form';
 import { TeamManagementDissolveDialog } from './team-management-dissolve-dialog';
@@ -21,9 +22,7 @@ export function TeamManagementSection({ teams, teamMemberships, employees }: Tea
           Aktive Teams
         </h2>
         {activeTeams.length === 0 ? (
-          <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Noch keine Teams angelegt.
-          </p>
+          <EmptyState size="compact" title="Noch keine Teams angelegt." />
         ) : (
           <div className="grid gap-3 lg:grid-cols-2">
             {activeTeams.map(({ item: team, isOptimistic, tempId }) => {

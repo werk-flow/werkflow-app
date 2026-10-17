@@ -8,6 +8,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { useSuggestedRecordNumber } from '@/hooks/use-suggested-record-number';
 import { describeFailure } from '@/lib/action-messages';
 import { createPersonnelRecord } from '@/lib/personnel/actions';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const LAST_NAME_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Nachnamen an.';
 const CREATE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
@@ -61,11 +62,9 @@ export function useCreatePersonnelDialogForm() {
     if (isSaving) return;
     setError(null);
 
-    if (lastName.trim().length === 0) {
-      setLastNameError(LAST_NAME_REQUIRED_MESSAGE);
-      document.getElementById('personnel-last-name')?.focus();
-      return;
-    }
+    const nextLastNameError = lastName.trim().length === 0 ? LAST_NAME_REQUIRED_MESSAGE : undefined;
+    setLastNameError(nextLastNameError ?? null);
+    if (focusFirstInvalidField({ 'personnel-last-name': nextLastNameError })) return;
 
     // A rejected Server Action shows the fallback and releases the dialog.
     const result = await runSave({

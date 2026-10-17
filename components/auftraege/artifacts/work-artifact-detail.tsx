@@ -15,7 +15,7 @@ import {
   DEFECT_STATE_LABELS,
 } from './work-artifact-content';
 
-const ACTION_LABELS: Partial<Record<WorkArtifactActionType, string>> = {
+const ACTION_LABELS: Readonly<Record<WorkArtifactActionType, string>> = {
   review_requested: 'Zur Prüfung eingereicht',
   review_withdrawn: 'Prüfung zurückgezogen',
   internal_approved: 'Intern freigegeben',
@@ -171,7 +171,7 @@ export function ArtifactDetail({ detail, currentRevision, currentUserId, documen
             <div className="divide-y rounded-md border">
               {detail.actions.map((action) => (
                 <div key={action.id} className="p-3 text-sm">
-                  <p className="font-medium">{ACTION_LABELS[action.action_type] ?? action.action_type}</p>
+                  <p className="font-medium">{ACTION_LABELS[action.action_type]}</p>
                   <p className="text-xs text-muted-foreground">
                     {displayDateTime(action.created_at)}
                     {action.signer_name ? ` · ${action.signer_name}` : ''}

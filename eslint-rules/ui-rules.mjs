@@ -210,11 +210,43 @@ const CONDITION_TYPES = new Set([
   'ConditionalExpression',
 ]);
 
+function isHookCall(node, hookName) {
+  if (node?.type !== 'CallExpression') return false;
+  const { callee } = node;
+  if (callee.type === 'Identifier') return callee.name === hookName;
+  return (
+    callee.type === 'MemberExpression' &&
+    !callee.computed &&
+    callee.property.type === 'Identifier' &&
+    callee.property.name === hookName
+  );
+}
+
+// The value an arrow function computes: its expression body, or the argument
+// of a body that is a single `return`.
+function arrowResult(node) {
+  if (node?.type !== 'ArrowFunctionExpression') return null;
+  if (node.body.type !== 'BlockStatement') return node.body;
+  const [statement] = node.body.body;
+  return node.body.body.length === 1 && statement.type === 'ReturnStatement' ? statement.argument : null;
+}
+
+// What a const computes when the rules can read it: a condition, the result
+// of `useMemo(() => <condition>, deps)`, or an arrow's result (`const
+// canSubmit = () => ...` called as `canSubmit()`). The useMemo `canSubmit` of
+// the dispatch dialog hid its gate from both rules (UI audit of 2026-10-17).
+function computedCondition(init) {
+  if (CONDITION_TYPES.has(init?.type)) return init;
+  if (isHookCall(init, 'useMemo')) return arrowResult(init.arguments[0]);
+  return arrowResult(init);
+}
+
 // A flag computed in the same file (`const submitDisabled = submitting ||
-// reason.trim().length < 8`) is judged by the condition it computes, so a
-// `*Disabled` or neutral name cannot hide a validation hint. A pending name,
-// a named availability flag (canEdit, readOnly, hydrated, *Dirty), a prop, a
-// hook result and a destructured value keep their name.
+// reason.trim().length < 8`, a `useMemo` over the same condition) is judged
+// by the condition it computes, so a `*Disabled` or neutral name cannot hide
+// a validation hint. A pending name, a named availability flag (canEdit,
+// readOnly, hydrated, *Dirty), a prop, a hook result and a destructured value
+// keep their name; a `*Disabled` prop is judged where the parent passes it.
 function conditionResolver(context) {
   const seen = new Set();
   return (identifier) => {
@@ -229,15 +261,34 @@ function conditionResolver(context) {
         variable.defs.length !== 1 ||
         definition.type !== 'Variable' ||
         definition.parent.kind !== 'const' ||
-        definition.node.id.type !== 'Identifier' ||
-        !CONDITION_TYPES.has(definition.node.init?.type)
+        definition.node.id.type !== 'Identifier'
       )
         return null;
+      const condition = computedCondition(definition.node.init);
+      if (!condition) return null;
       seen.add(name);
-      return definition.node.init;
+      return condition;
     }
     return null;
   };
+}
+
+// The value of a local `const [value, setValue] = useState(...)`: what the
+// user typed or chose in this component.
+function isLocalStateValue(identifier, context) {
+  for (let scope = context.sourceCode.getScope(identifier); scope; scope = scope.upper) {
+    const variable = scope.set.get(identifier.name);
+    if (!variable) continue;
+    const [definition] = variable.defs;
+    return (
+      variable.defs.length === 1 &&
+      definition.type === 'Variable' &&
+      definition.node.id.type === 'ArrayPattern' &&
+      definition.node.id.elements[0] === definition.name &&
+      isHookCall(definition.node.init, 'useState')
+    );
+  }
+  return false;
 }
 
 function referencedFlagNames(node, resolve, names = []) {
@@ -297,30 +348,97 @@ const submitDisabledOnlyWhilePendingRule = {
     },
   },
   create(context) {
+    const report = (expression, node) => {
+      const offending = referencedFlagNames(expression, conditionResolver(context)).find(
+        (name) => !PENDING_FLAG.test(name) && !AVAILABILITY_FLAG.test(name),
+      );
+      if (offending) context.report({ node, messageId: 'validationHint', data: { name: offending } });
+    };
     return {
       JSXOpeningElement(node) {
+        // A form component's `submitDisabled` prop ends on its submit button:
+        // judge it where the parent computes it.
+        for (const attribute of disabledProps(node, /^submit[A-Z]?\w*Disabled$/))
+          report(attribute.value.expression, attribute);
         if (node.name.type !== 'JSXIdentifier' || !/^(Button|button|PlainButton)$/.test(node.name.name))
           return;
         if (staticAttributeValue(jsxAttribute(node, 'type')) !== 'submit') return;
-        for (const disabled of disablingExpressions(node)) {
-          const offending = referencedFlagNames(disabled.value.expression, conditionResolver(context)).find(
-            (name) => !PENDING_FLAG.test(name) && !AVAILABILITY_FLAG.test(name),
-          );
-          if (offending)
-            context.report({ node: disabled, messageId: 'validationHint', data: { name: offending } });
-        }
+        for (const disabled of disablingExpressions(node)) report(disabled.value.expression, disabled);
       },
     };
   },
 };
 
-// Form input the user still has to provide: typed text (`reason.trim()`) or a
-// choice (`selectedId`, `selectedDocumentIds.size`), also behind a local
-// condition (`const missingReason = !reason.trim()`).
-function validityInput(node, resolve) {
+// The `*Disabled` props a parent passes to a component (`<ReasonForm
+// submitDisabled={!reason.trim()} />`): the component trusts its prop name, so
+// the rules judge the value at the call site.
+function disabledProps(openingElement, pattern) {
+  const { name } = openingElement;
+  const isComponent =
+    (name.type === 'JSXIdentifier' && /^[A-Z]/.test(name.name)) || name.type === 'JSXMemberExpression';
+  if (!isComponent) return [];
+  return openingElement.attributes.filter(
+    (attribute) =>
+      attribute.type === 'JSXAttribute' &&
+      attribute.name.type === 'JSXIdentifier' &&
+      pattern.test(attribute.name.name) &&
+      attribute.value?.type === 'JSXExpressionContainer',
+  );
+}
+
+const COUNT_COMPARISON = new Set(['===', '==', '!==', '!=', '<', '<=', '>', '>=']);
+const COUNT_NAME = /(count|length|size)$/i;
+
+function countOperand(node) {
+  if (node?.type === 'Identifier') return node.name;
+  if (node?.type === 'MemberExpression' && !node.computed && node.property.type === 'Identifier')
+    return node.property.name;
+  return null;
+}
+
+function isInputCount(node) {
+  const name = countOperand(node);
+  return name !== null && COUNT_NAME.test(name) && !PENDING_FLAG.test(name);
+}
+
+// `items.length === 0`, `!items.length`, `ids.size < 1`, `changeCount === 0`,
+// and the positive spellings a `canSubmit` uses (`items.length > 0`): the
+// button waits for something to be chosen or entered. A running count
+// (`uploadingCount > 0`) is a pending flag.
+function emptinessCheck(node) {
+  if (node.type === 'UnaryExpression' && node.operator === '!') return isInputCount(node.argument);
+  if (node.type !== 'BinaryExpression' || !COUNT_COMPARISON.has(node.operator)) return false;
+  if (node.right.type !== 'Literal' || (node.right.value !== 0 && node.right.value !== 1)) return false;
+  return isInputCount(node.left);
+}
+
+// `!file`, `file === null`, `value === ''` over a local useState value: a
+// field the user still has to fill. The positive spelling a `canSubmit` uses
+// (`file !== null`) counts too, as `items.length > 0` does for counts.
+function missingStateValue(node, context) {
+  const operand =
+    node.type === 'UnaryExpression' && node.operator === '!'
+      ? node.argument
+      : node.type === 'BinaryExpression' &&
+          ['===', '==', '!==', '!='].includes(node.operator) &&
+          ((node.right.type === 'Literal' && (node.right.value === null || node.right.value === '')) ||
+            (node.right.type === 'Identifier' && node.right.name === 'undefined'))
+        ? node.left
+        : null;
+  if (operand?.type !== 'Identifier') return false;
+  if (PENDING_FLAG.test(operand.name) || AVAILABILITY_FLAG.test(operand.name)) return false;
+  return isLocalStateValue(operand, context);
+}
+
+// Form input the user still has to provide: typed text (`reason.trim()`), a
+// choice (`selectedId`, `selectedDocumentIds.size`), an empty collection or
+// count, or an unset local state value, also behind a local condition
+// (`const missingReason = !reason.trim()`) or a `useMemo`.
+function validityInput(node, resolve, context) {
   if (!node || typeof node !== 'object') return null;
   if (node.type === 'Identifier' && /^selected($|[A-Z])/.test(node.name)) return node.name;
-  if (node.type === 'Identifier') return validityInput(resolve(node), resolve);
+  if (node.type === 'Identifier') return validityInput(resolve(node), resolve, context);
+  if (emptinessCheck(node) || missingStateValue(node, context)) return context.sourceCode.getText(node);
   if (
     node.type === 'MemberExpression' &&
     !node.computed &&
@@ -337,11 +455,17 @@ function validityInput(node, resolve) {
   )
     return '.trim()';
   for (const key of ['object', 'callee', 'argument', 'left', 'right', 'test', 'consequent', 'alternate']) {
-    const found = validityInput(node[key], resolve);
+    // A value whose member is read (`activeRows.length`) is data, not a flag:
+    // only its own name can say it is a choice.
+    if (key === 'object' && node.object?.type === 'Identifier') {
+      if (/^selected($|[A-Z])/.test(node.object.name)) return node.object.name;
+      continue;
+    }
+    const found = validityInput(node[key], resolve, context);
     if (found) return found;
   }
   for (const argument of node.type === 'CallExpression' ? node.arguments : []) {
-    const found = validityInput(argument, resolve);
+    const found = validityInput(argument, resolve, context);
     if (found) return found;
   }
   return null;
@@ -367,15 +491,20 @@ const actionDisabledOnlyWhilePendingRule = {
     },
   },
   create(context) {
+    const report = (expression, node) => {
+      const input = validityInput(expression, conditionResolver(context), context);
+      if (input) context.report({ node, messageId: 'validationHint', data: { input } });
+    };
     return {
       JSXOpeningElement(node) {
+        // `saveDisabled`, `actionDisabled` and the like end on a component's
+        // action button; the submit rule judges `submit*Disabled`.
+        for (const attribute of disabledProps(node, /^(?!submit)[a-z]\w*Disabled$/))
+          report(attribute.value.expression, attribute);
         if (node.name.type !== 'JSXIdentifier' || !/^(Button|button|PlainButton)$/.test(node.name.name))
           return;
         if (staticAttributeValue(jsxAttribute(node, 'type')) === 'submit') return;
-        for (const disabled of disablingExpressions(node)) {
-          const input = validityInput(disabled.value.expression, conditionResolver(context));
-          if (input) context.report({ node: disabled, messageId: 'validationHint', data: { input } });
-        }
+        for (const disabled of disablingExpressions(node)) report(disabled.value.expression, disabled);
       },
     };
   },
@@ -1203,8 +1332,70 @@ const alertDialogFooterActionsRule = {
   },
 };
 
+/** The expression a type assertion or a non-null assertion wraps. */
+function withoutTypeWrappers(node) {
+  let current = node;
+  while (
+    current &&
+    ['TSAsExpression', 'TSTypeAssertion', 'TSNonNullExpression', 'TSSatisfiesExpression'].includes(
+      current.type,
+    )
+  )
+    current = current.expression;
+  return current;
+}
+
+/** The key a label lookup reads: `MAP[key]`, `MAP?.[key]` or `map.get(key)`; null for anything else. */
+function lookupKey(node) {
+  const lookup = node.type === 'ChainExpression' ? node.expression : node;
+  if (lookup.type === 'MemberExpression' && lookup.computed) return lookup.property;
+  if (
+    lookup.type === 'CallExpression' &&
+    lookup.callee.type === 'MemberExpression' &&
+    !lookup.callee.computed &&
+    lookup.callee.property.type === 'Identifier' &&
+    lookup.callee.property.name === 'get' &&
+    lookup.arguments.length === 1
+  )
+    return lookup.arguments[0];
+  return null;
+}
+
+/**
+ * "No database id or code reaches the screen" (werkflow-design, Checklist): a
+ * label lookup that falls back to the key it looks up (`LABELS[code] ?? code`,
+ * `LABELS[code as Kind] || code`, `labels.get(id) ?? id`) shows the raw code
+ * the moment a new value appears. Nine such fallbacks showed period states,
+ * finding kinds and event types as codes (UI audit 2026-10-15). The fallback
+ * is neutral German such as „Änderung dokumentiert“, or none when the value is
+ * typed by its union.
+ */
+const noRawCodeFallbackRule = {
+  meta: {
+    type: 'problem',
+    schema: [],
+    messages: {
+      rawCode:
+        'A label lookup falls back to the code `{{code}}` it looks up, so a raw code reaches the screen. Type the map by its union, or fall back to neutral German such as „Änderung dokumentiert“ (werkflow-design skill: Checklist).',
+    },
+  },
+  create(context) {
+    const text = (node) => context.sourceCode.getText(withoutTypeWrappers(node));
+    return {
+      LogicalExpression(node) {
+        if (node.operator !== '??' && node.operator !== '||') return;
+        const key = lookupKey(withoutTypeWrappers(node.left));
+        if (!key) return;
+        const code = text(node.right);
+        if (text(key) === code) context.report({ node, messageId: 'rawCode', data: { code } });
+      },
+    };
+  },
+};
+
 export const uiRules = {
   rules: {
+    'no-raw-code-fallback': noRawCodeFallbackRule,
     'label-in-spaced-container': labelInSpacedContainerRule,
     'no-lucide-stroke-width': noLucideStrokeWidthRule,
     'submit-disabled-only-while-pending': submitDisabledOnlyWhilePendingRule,

@@ -1,0 +1,23 @@
+Menü öffnen
+Einstellungen
+Dashboard
+Organisation
+Kalender
+Zeiterfassung
+Zeiterfassung
+Definiert Regeln für Zeitbuchungen, Pausen und Freigabeprozesse.
+Gilt für Haustechnik Krämer GmbH
+Pausenregel
+Lege fest, ob Pausen weiter manuell gestempelt werden oder automatisch abgezogen werden.
+Art der Pausenbuchung
+*
+Pflichtfeld
+Pause manuell stempeln
+Mitarbeiter starten und beenden ihre Pausen weiterhin selbst per Pause-Button.
+Automatische Schwelle (Minuten)
+*
+Pflichtfeld
+Ab dieser gesamten Anwesenheitszeit wird die automatische Pause berücksichtigt.
+Automatische Pausendauer (Minuten)
+Diese Minuten werden automatisch abgezogen, sobald die Schwelle erreicht ist.
+Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.

@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation';
 
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { isUserSubscribed, userHasOrganizations } from '@/lib/subscription/helpers';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 
 import { CreateOrganizationForm } from './create-organization-form';
 
@@ -36,7 +37,7 @@ export default async function CreateOrganizationPage() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
-        <CardTitle className="text-2xl">Lass uns deine Organisation erstellen</CardTitle>
+        <StandaloneTitle>Lass uns deine Organisation erstellen</StandaloneTitle>
         <CardDescription>
           Gib deiner Organisation einen Namen. Du kannst ihn später jederzeit ändern.
         </CardDescription>

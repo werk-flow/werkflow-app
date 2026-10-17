@@ -7,6 +7,7 @@ import { BriefcaseBusiness, Plus } from 'lucide-react';
 import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { describeFailure } from '@/lib/action-messages';
 import { deleteEmploymentCondition } from '@/lib/personnel/actions';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
@@ -18,6 +19,17 @@ import { EmploymentConditionListItem } from './employment-condition-list-item';
 import { SectionTitle } from '@/components/shared/section-title';
 
 type DialogState = { mode: 'closed' } | { mode: 'add' } | { mode: 'edit'; condition: EmploymentCondition };
+
+function NoConditionsYet() {
+  return (
+    <EmptyState
+      size="compact"
+      className="py-3"
+      title="Noch keine Angaben zur Beschäftigung."
+      description="Konditionen gelten ab ihrem Datum und ändern rückwirkend nichts an früheren Zeiträumen."
+    />
+  );
+}
 
 interface EmploymentConditionsSectionProps {
   recordId: string;
@@ -84,10 +96,7 @@ export function EmploymentConditionsSection({
       </div>
 
       {sorted.length === 0 ? (
-        <p className="py-3 text-sm text-muted-foreground">
-          Noch keine Angaben zur Beschäftigung. Konditionen gelten ab ihrem Datum und ändern rückwirkend
-          nichts an früheren Zeiträumen.
-        </p>
+        <NoConditionsYet />
       ) : (
         <ul className="grid gap-2">
           {sorted.map((condition) => (

@@ -14,7 +14,10 @@ export function AppShellSkeleton() {
         <Skeleton className="h-7 w-28 rounded" />
         <div className="w-9" />
       </header>
-      <aside className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card">
+      <aside
+        aria-label="Seitenleiste"
+        className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card"
+      >
         <div className="flex items-center justify-center px-4 py-5">
           <Skeleton className="h-9 w-40 rounded" />
         </div>
@@ -23,7 +26,7 @@ export function AppShellSkeleton() {
           <Skeleton className="h-9 w-full rounded-md" />
         </div>
         <div className="border-t" />
-        <nav className="flex-1 p-4">
+        <nav aria-label="Hauptnavigation" className="flex-1 p-4">
           <div className="space-y-1">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center gap-3 rounded-md px-3 py-2">

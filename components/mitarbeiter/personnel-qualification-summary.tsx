@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Award, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -44,7 +45,7 @@ export function PersonnelQualificationSummary({ data }: { data: PersonnelQualifi
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Keine aktuelle Teamzuordnung.</p>
+          <EmptyState size="compact" title="Keine aktuelle Teamzuordnung." />
         )}
       </div>
       <div className="space-y-2">
@@ -69,7 +70,7 @@ export function PersonnelQualificationSummary({ data }: { data: PersonnelQualifi
             ))}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Keine Qualifikationen hinterlegt.</p>
+          <EmptyState size="compact" title="Keine Qualifikationen hinterlegt." />
         )}
       </div>
     </Card>

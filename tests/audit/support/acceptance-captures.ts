@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Browser, type Locator, type Page, type TestInfo } from '@playwright/test';
 import {
   ACCEPTANCE_INDEX_FILE,
   acceptanceIndexSchema,
@@ -15,9 +15,11 @@ import { inPageTab } from '../../golden/support/steps/shared';
 import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 import { currentRunKey } from '../../golden/support/run-state';
 import type { TestWorld } from '../../golden/support/world';
-import type { CaptureSpec } from './acceptance-sets';
+import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
+import type { CaptureSpec, StandaloneCaptureSpec } from './acceptance-sets';
 import { DIALOG_OPENERS } from './dialog-openers';
 import { DESKTOP, openLayerAt, VIEWPORT_HEIGHT } from './open-layer';
+import { openStandaloneScreen } from './standalone-sessions';
 import { openSurface, surfaceDestination } from './surface-routes';
 
 // The capture fixture of rendered acceptance (docs/technical/standards-audit.md,
@@ -87,11 +89,13 @@ async function expectReady(page: Page, scope: Locator, view: CaptureSpec['view']
   });
 }
 
+type CaptureIdentity = Pick<AcceptanceEntry, 'role' | 'view'> & { id: string };
+
 async function writeCapture(
   page: Page,
   testInfo: TestInfo,
   set: string,
-  capture: CaptureSpec,
+  capture: CaptureIdentity,
   route: string,
   requestedWidth: number,
   scheme: 'light' | 'dark',
@@ -112,7 +116,7 @@ async function writeCapture(
       testId: testIdentityOf(testInfo),
       route,
       role: capture.role,
-      view: capture.view.kind,
+      view: capture.view,
       width: renderedWidth,
       height: viewport?.height ?? 0,
       scheme,
@@ -154,14 +158,46 @@ export async function captureAcceptance(
           await expect(tab).toHaveAttribute('data-state', 'active');
         }
       }
+      const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
       for (const scheme of capture.schemes) {
         await page.emulateMedia({ colorScheme: scheme });
         await expectReady(page, scope, capture.view.kind);
-        await writeCapture(page, testInfo, set, capture, destination.route, width, scheme);
+        await writeCapture(page, testInfo, set, identity, destination.route, width, scheme);
       }
       if (capture.view.kind === 'dialog') await page.emulateMedia({ colorScheme: 'light' });
     }
   } finally {
     await page.emulateMedia({ colorScheme: 'light' });
+  }
+}
+
+/**
+ * Captures a screen outside the app shell at each width and scheme. The screen
+ * opens with the session its inventory entry names, and the session helper
+ * refuses a redirect, so the image shows the requested screen.
+ */
+export async function captureStandalone(
+  input: { browser: Browser; baseURL: string | undefined; world: TestWorld; testInfo: TestInfo },
+  set: string,
+  capture: StandaloneCaptureSpec,
+): Promise<void> {
+  const screen = standaloneScreen(capture.screen);
+  const { context, page } = await openStandaloneScreen({ ...input, screen });
+  try {
+    const identity = { id: capture.id, role: screen.session, view: 'standalone' } as const;
+    for (const width of capture.widths) {
+      await page.setViewportSize({ width, height: VIEWPORT_HEIGHT[width] ?? 800 });
+      for (const scheme of capture.schemes) {
+        await page.emulateMedia({ colorScheme: scheme });
+        await settled(page);
+        await expect(page.locator('[data-slot="section-error"]:visible')).toHaveCount(0);
+        await page.evaluate(async () => {
+          await document.fonts.ready;
+        });
+        await writeCapture(page, input.testInfo, set, identity, screen.path, width, scheme);
+      }
+    }
+  } finally {
+    await context.close();
   }
 }

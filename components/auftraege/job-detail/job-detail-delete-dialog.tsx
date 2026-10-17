@@ -17,7 +17,6 @@ import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE } from '@/lib/jobs/messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { describeJobDeleteError } from '../list/job-actions-menu';
-import { Spinner } from '@/components/ui/spinner';
 
 type JobDetailDeleteDialogProps = {
   open: boolean;
@@ -97,10 +96,9 @@ export function JobDetailDeleteDialog({
               event.preventDefault();
               handleDelete();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
-            {isDeleting && <Spinner className="mr-2" />}
             Löschen
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -11,7 +11,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Spinner } from '@/components/ui/spinner';
 
 type MemberRemoveConfirmDialogProps = {
   open: boolean;
@@ -60,19 +59,11 @@ export function MemberRemoveConfirmDialog({
               event.preventDefault();
               void onRemove();
             }}
-            disabled={isRemoving || Boolean(removalBlockedMessage)}
+            pending={isRemoving}
+            disabled={Boolean(removalBlockedMessage)}
             variant="destructive"
           >
-            {isRemoving ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird entfernt…
-              </>
-            ) : removalBlockedMessage ? (
-              'Zuerst neu zuweisen'
-            ) : (
-              'Entfernen'
-            )}
+            {isRemoving ? 'Wird entfernt…' : removalBlockedMessage ? 'Zuerst neu zuweisen' : 'Entfernen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

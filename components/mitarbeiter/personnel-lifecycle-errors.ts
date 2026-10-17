@@ -24,11 +24,3 @@ export const ERROR_MESSAGES = {
 export function personnelLifecycleErrorMessage(code: string): string {
   return describeFailure(code, ERROR_MESSAGES, 'Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.');
 }
-
-/** Field errors are keyed by control id; the first key wins focus. */
-export function focusFirstInvalid(errors: Record<string, string>): boolean {
-  const firstInvalidId = Object.keys(errors)[0];
-  if (!firstInvalidId) return false;
-  document.getElementById(firstInvalidId)?.focus();
-  return true;
-}

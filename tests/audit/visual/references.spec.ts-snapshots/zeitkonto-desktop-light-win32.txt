@@ -27,6 +27,8 @@ Zeitkonto
 Abgeschlossene Monatswerte und nachvollziehbare Kontobewegungen.
 Dein Zeitkonto wurde noch nicht eröffnet. Die Zeiterfassung funktioniert unverändert weiter.
 Monatsabschlüsse
-Noch keine abgeschlossenen oder vorbereiteten Perioden.
+Noch keine Monatsabschlüsse
+Sobald das Büro einen Monat vorbereitet, stehen hier deine Monatswerte.
 Kontobewegungen
-Noch keine Kontobewegungen.
+Noch keine Kontobewegungen
+Korrekturen, Auszahlungen und verfallene Stunden deines Zeitkontos stehen hier.

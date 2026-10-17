@@ -20,6 +20,7 @@ import { SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/typ
 import { describeFailure } from '@/lib/action-messages';
 import { toLocalDateString, formatGermanDate } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export function OwnSicknessEndDialog({
   report,
@@ -34,16 +35,15 @@ export function OwnSicknessEndDialog({
   );
   const { run: runSave, isPending: isSaving } = useServerAction(endSicknessReport);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const endDateError = endDate ? undefined : 'Bitte wähle ein Enddatum aus.';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
-    if (!endDate) {
-      setError('Bitte wähle ein Enddatum aus.');
-      document.getElementById('sickness-end-date-edit')?.focus();
-      return;
-    }
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'sickness-end-date-edit': endDateError })) return;
 
     try {
       const result = await runSave({
@@ -77,7 +77,12 @@ export function OwnSicknessEndDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="Letzter Tag" htmlFor="sickness-end-date-edit" required>
+            <Field
+              label="Letzter Tag"
+              htmlFor="sickness-end-date-edit"
+              required
+              error={attempted ? endDateError : undefined}
+            >
               <DatePicker
                 ariaLabel="Letzter Tag"
                 value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}

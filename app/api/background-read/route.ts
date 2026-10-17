@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 
 import type { ActionResult } from '@/lib/action-result';
-import { BACKGROUND_READS, isBackgroundReadKind } from '@/lib/data/background-reads';
+import { BACKGROUND_READS, isBackgroundReadKind, SELF_SERVICE_READS } from '@/lib/data/background-reads';
+import { getAuthenticatedUser } from '@/lib/data/cached';
 import { withReadRequest } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 
@@ -46,17 +47,22 @@ export async function GET(request: Request): Promise<NextResponse> {
     if (rawInput === null) return invalidInput();
     const input = definition.input.safeParse(rawInput.value);
     if (!input.success) return invalidInput();
+    // The typed registry pairs each schema with its reader; the union collapses here.
+    const read = definition.read as (value: unknown) => Promise<ActionResult>;
     const result = await withReadRequest(
       request,
       async () => {
+        if (SELF_SERVICE_READS.has(kind)) {
+          if (!(await getAuthenticatedUser())) return { success: false as const, error: 'not_authenticated' };
+          return read(input.data);
+        }
         const auth = await authenticateAndAuthorize();
         if (!auth.success) return auth;
         const requestedOrganization = 'organizationId' in input.data ? input.data.organizationId : undefined;
         if (requestedOrganization !== undefined && auth.context.orgId !== requestedOrganization) {
           return { success: false as const, error: 'organization_changed' };
         }
-        // The typed registry pairs each schema with its reader; the union collapses here.
-        return (definition.read as (value: unknown) => Promise<ActionResult>)(input.data);
+        return read(input.data);
       },
       { priority: 'background' },
     );

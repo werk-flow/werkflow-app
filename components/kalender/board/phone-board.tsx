@@ -1,5 +1,6 @@
 'use client';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { isNoteEntry } from '@/lib/calendar/board';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
@@ -52,14 +53,14 @@ export function PhoneBoard({
             className={cn('space-y-1.5 px-4 py-2', column.isToday && 'bg-calendar-today')}
             aria-label={`${WEEKDAY_SHORT[column.weekday]} ${formatRefusalDate(column.date)}`}
           >
-            <h3 className="flex items-baseline gap-2 text-sm">
+            <h2 className="flex items-baseline gap-2 text-sm">
               <span className={cn('font-medium', column.isToday && 'text-calendar-planning-strong')}>
                 {WEEKDAY_SHORT[column.weekday]} {formatRefusalDate(column.date)}
               </span>
-              {label && <span className="text-[11px] text-muted-foreground">{label}</span>}
-            </h3>
+              {label && <span className="text-xs text-muted-foreground">{label}</span>}
+            </h2>
             {dayJobs.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Keine Termine</p>
+              <EmptyState size="compact" className="text-xs" title="Keine Termine" />
             ) : (
               dayJobs.map(({ job, model }) => {
                 const recordId = model.kind === 'person' ? model.row.employeeRecordId : null;
@@ -82,7 +83,7 @@ export function PhoneBoard({
                     }
                   >
                     {showNames && (
-                      <span className="block truncate text-[11px] text-muted-foreground">
+                      <span className="block truncate text-xs text-muted-foreground">
                         {model.kind === 'person' ? model.row.displayName : 'Ohne Zuweisung'}
                       </span>
                     )}

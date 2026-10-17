@@ -22,6 +22,166 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-17: audit:wave-2:p1-19 environment failure
+
+<!-- incident-run: 2026-10-17T151606301Z-958acb -->
+
+- Run: run `2026-10-17T151606301Z-958acb`, group `audit:wave-2:p1-19`, target local, fingerprint `fbb55a5652c8`, world `1e0735143d084383a17ffcd912bfc666`.
+- Failure point:  >  > wave-2\p1-19.spec.ts > P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2 > rejects a stale edit from a second manager without overwriting the newer state: TimeoutError: locator.fill: Timeout 30000ms exceeded.
+- Root cause: The admin page's service case render failed on the server (service_case_detail_load_failed, name Error: a Supabase result error turned into a thrown Error) about 1.3 s after load, so the page showed its region error and the edit dialog never got its fields. Kong logged only 2xx and 101 responses in the failure window and the database and PostgREST logged no error, so the failed requests never got an answer from the backend: the Node fetch to the local stack failed or was cut before Kong answered. The backend probe after the group was healthy, and the same test passed in report 2026-10-17T104007928Z-e32f575c on the same loader code.
+- Prevention: Tier 3: a Node-to-local-stack fetch failure is outside the product and the harness; the region error and its retry did what the read-failure rule requires, and a repeat on the same inputs needs a change
+- Evidence: the failure screenshot of the admin page shows „Der Servicefall konnte nicht geladen werden“; the trace shows the RSC refresh answered 200 and the live read then aborted with the unmounted content. The server log names only the error class, so which of the loader's reads failed stays unknown; if the loader fails again without a backend error, add the failing read's code to its log line first. Proof: the fresh-world diagnosis `2026-10-17T155646199Z-9a51bb` passed the whole group (5 of 5) on the same build; the world was cleaned before the one retry.
+
+## 2026-10-17: audit:visual product failure
+
+<!-- incident-run: 2026-10-17T115336672Z-742343 -->
+
+- Run: run `2026-10-17T115336672Z-742343`, group `audit:visual`, target local, fingerprint `b437df81e392`, world `e9ad86b97b8b4f7e90400d821305010a`.
+- Failure point:  >  > visual\references.spec.ts > @AUDIT-VISUAL rendered references of every page family > zeiterfassung-einstellungen matches its references: Error: expect(string).toMatchSnapshot(expected) failed
+- Root cause: Zeiterfassung settings list the employees without a time account (and the policy assignment list) in employee_records id order (lib/time-accounts/queries.ts orders by a random UUID), so the order of Martin Krämer and Kevin Schmid changes from world to world; the new zeiterfassung-einstellungen text reference exposed it
+- Prevention: Tier 2: lib/time-accounts/queries.ts sorts both lists by name with German collation, and the zeiterfassung-einstellungen text reference of tests/audit/visual/references.spec.ts fails on any other order
+- Evidence: the text diff swapped the two rows of „Zeitkonten eröffnen“; `getTimeAccountSettings` read `employee_records` and `time_accounts` ordered by `id`. Correction: `byEmployeeName` in lib/time-accounts/queries.ts orders the employees, the open accounts and the missing accounts by name; the two desktop text references were updated through the official command (run `2026-10-17T121127167Z-8ff039`, 57 of 57). Proof: report `2026-10-17T132300450Z-75452088` passed audit:visual, 57 of 57.
+
+## 2026-10-17: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-17T105700824Z-ac73fe -->
+
+- Run: run `2026-10-17T105700824Z-ac73fe`, group `audit:lab:field`, target local, fingerprint `127dfe2a24ff`, world `58dc302796784f6fb8a9ba36d7d5c698`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: Intended UI changes of the round grew the field journey's payloads (job detail, dashboard actions, the stylesheet and the script bundle) and added one client chunk at cold start; the cold-start request count was already three above its reference before the round (75 in run 2026-10-16T191852374Z-1c1873).
+- Prevention: Tier 2: lib/testing/lab-count-references.json through scripts/lab-counts.ts accept with the reason.
+- Evidence and correction: every grown shape traces to an intended change of the round (compact empty states, Badge variants, column header names, DetailColumns, the new client modules); each was accepted with its reason on this run. Proof: report `2026-10-17T112502269Z-5b7b2da1` passed audit:lab:field.
+
+## 2026-10-17: audit:layout:planning product failure
+
+<!-- incident-run: 2026-10-17T095733582Z-50e35b -->
+
+- Run: run `2026-10-17T095733582Z-50e35b`, group `audit:layout:planning`, target local, fingerprint `41490cba1443`, world `31f5f38568b9483184a288f5ceed76fc`.
+- Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: admin /kalender tab day at 375 px, light
+- Root cause: The phone day list of /kalender titled each person with an h3 directly under the page h1 (axe heading-order).
+- Prevention: Tier 2: tests/audit/support/axe.ts runs heading-order on every whole page; the day list titles are h2.
+- Correction and proof: components/kalender/day-view/day-view-list.tsx titles each person with an h2. The retained world blocked the group in two plans until `bun run test:runs cleanup` removed it; report `2026-10-17T114239033Z-89a72aef` passed audit:layout:planning (run `2026-10-17T114815761Z-e6d1c1`).
+
+## 2026-10-17: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-0799c3 -->
+
+- Run: run `2026-10-17T073731141Z-0799c3`, group `audit:lab:office`, target local, fingerprint `acac368d556d`, world `39b569aa3c404271a1d91bae7f6ce5a4`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: Intended UI changes grew the /auftraege payload and the stylesheet, added two script chunks at cold start and 48 component renders on job open; the visit-move calendar window row floor needs a check.
+- Prevention: Tier 2: lib/testing/lab-count-references.json through scripts/lab-counts.ts accept with the reason.
+- Evidence and correction: the payload and chunk growth traces to the round's intended markup and was accepted with reasons. The visit-move calendar-window rows (81 against 121) follow the run's weekday, because the profile seeds seven days from the run day + 141; accepted with that reason and the backlog row "Lab visit-move week depends on the run day". A later entry-open render count below its reference was not ratcheted for the same reason. Proof: report `2026-10-17T104007928Z-e32f575c` passed audit:lab:office.
+
+## 2026-10-17: audit:layout:field-time product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-eef855 -->
+
+- Run: run `2026-10-17T073731141Z-eef855`, group `audit:layout:field-time`, target local, fingerprint `a8e073bde695`, world `243d734ffde04f52b0abb4782bfa9ee5`.
+- Failure point:  >  > layout\surfaces-field-time.spec.ts > @AUDIT-LAYOUT-SURFACES field-time: tabs and dialogs fit, pass axe and keep their keyboard path > employee /zeiterfassung: Error: employee /zeiterfassung at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:field-time pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:field product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-f9e9a6 -->
+
+- Run: run `2026-10-17T073731141Z-f9e9a6`, group `audit:layout:field`, target local, fingerprint `a8d98b1ff8d3`, world `7ed6d613cd6e48ff82db570382c552f4`.
+- Failure point:  >  > layout\surfaces-field.spec.ts > @AUDIT-LAYOUT-SURFACES field: tabs and dialogs fit, pass axe and keep their keyboard path > employee /kalender: Error: employee /kalender tab week at 375 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:field pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:service product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-c371c0 -->
+
+- Run: run `2026-10-17T073731141Z-c371c0`, group `audit:layout:service`, target local, fingerprint `9d0cee351b88`, world `317f3b66c8aa40e6aeaecd632e19db39`.
+- Failure point:  >  > layout\surfaces-service.spec.ts > @AUDIT-LAYOUT-SURFACES service: tabs and dialogs fit, pass axe and keep their keyboard path > admin /service/anlagen/[equipmentNumber]: Error: admin /service/anlagen/ANL-2026-002 at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:service pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:inventory product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-1c9848 -->
+
+- Run: run `2026-10-17T073731141Z-1c9848`, group `audit:layout:inventory`, target local, fingerprint `84984bad1c29`, world `ca90b927c5ff4675baa956b90e939839`.
+- Failure point:  >  > layout\surfaces-inventory.spec.ts > @AUDIT-LAYOUT-SURFACES inventory: tabs and dialogs fit, pass axe and keep their keyboard path > admin /inventar: Error: admin /inventar at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:inventory pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:documents product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-4ee140 -->
+
+- Run: run `2026-10-17T073731141Z-4ee140`, group `audit:layout:documents`, target local, fingerprint `8b628c2a90e8`, world `b37883517d86428eb0fa9645e068d2e6`.
+- Failure point:  >  > layout\surfaces-documents.spec.ts > @AUDIT-LAYOUT-SURFACES documents: tabs and dialogs fit, pass axe and keep their keyboard path > admin /dokumente: Error: admin /dokumente at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:documents pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:settings product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-de28b8 -->
+
+- Run: run `2026-10-17T073731141Z-de28b8`, group `audit:layout:settings`, target local, fingerprint `8cf42d4fe8f1`, world `1efe36a1087c4dedbb7b4d0089fbf246`.
+- Failure point:  >  > layout\surfaces-settings.spec.ts > @AUDIT-LAYOUT-SURFACES settings: tabs and dialogs fit, pass axe and keep their keyboard path > admin /einstellungen/profil: Error: admin /einstellungen/profil at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:settings pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:personnel product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-c56d58 -->
+
+- Run: run `2026-10-17T073731141Z-c56d58`, group `audit:layout:personnel`, target local, fingerprint `6b6fe106f28b`, world `2ad303411b8e4ac3b38263f932d6d44a`.
+- Failure point:  >  > layout\surfaces-personnel.spec.ts > @AUDIT-LAYOUT-SURFACES personnel: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter/[userId] part 1 of 2: Error: admin /mitarbeiter/68ea63af-f8ad-4440-ab63-9dd778242f09 at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:personnel pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:people product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-ee31be -->
+
+- Run: run `2026-10-17T073731141Z-ee31be`, group `audit:layout:people`, target local, fingerprint `4b501b4af2fe`, world `f246401648d0440895f439eafc1abc8e`.
+- Failure point:  >  > layout\surfaces-people.spec.ts > @AUDIT-LAYOUT-SURFACES people: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter: Error: admin /mitarbeiter at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:people pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:time product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-665fa0 -->
+
+- Run: run `2026-10-17T073731141Z-665fa0`, group `audit:layout:time`, target local, fingerprint `93139fbc7db2`, world `74c14caadf72405e943b7f058f63054f`.
+- Failure point:  >  > layout\surfaces-time.spec.ts > @AUDIT-LAYOUT-SURFACES time: tabs and dialogs fit, pass axe and keep their keyboard path > admin /zeiterfassung: Error: admin /zeiterfassung at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:time pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:planning product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-7b3cb1 -->
+
+- Run: run `2026-10-17T073731141Z-7b3cb1`, group `audit:layout:planning`, target local, fingerprint `41490cba1443`, world `bf40feb3e301479cb6399b1c2d5b7fcf`.
+- Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: admin /kalender at 375 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:planning pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
+## 2026-10-17: audit:layout:customers product failure
+
+<!-- incident-run: 2026-10-17T073731141Z-1c74c6 -->
+
+- Run: run `2026-10-17T073731141Z-1c74c6`, group `audit:layout:customers`, target local, fingerprint `e258e624be6f`, world `9671f0733cd1462ba741a70e8961727d`.
+- Failure point:  >  > layout\surfaces-customers.spec.ts > @AUDIT-LAYOUT-SURFACES customers: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kunden/[clientId]: Error: admin /kunden/8b058900-27e3-4424-8899-0409ba321900 at 1280 px, light
+- Root cause: The newly enabled axe landmark and heading rules found real markup defects on audit:layout:customers pages: empty table headers, skipped heading levels, unlabelled duplicate landmarks.
+- Prevention: Tier 2: tests/audit/support/axe.ts runs the page-structure rules on every whole page.
+- Correction and proof: the run's axe violations were empty-table-header, heading-order and landmark-unique. `hiddenHeader` (components/ui/skeleton-table.tsx) names the action and selection columns, section titles under the page h1 are h2, and repeated landmarks carry labels; lib/ui/table-headers.test.ts refuses an empty header. Report `2026-10-17T114239033Z-89a72aef` passed the group on the repaired tree.
+
 ## 2026-10-16: audit:layout:work product failure
 
 <!-- incident-run: 2026-10-16T235232398Z-af50ea -->

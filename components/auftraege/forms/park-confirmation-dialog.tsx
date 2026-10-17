@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { useServerAction } from '@/hooks/use-server-action';
-import { Spinner } from '@/components/ui/spinner';
 
 const CONFIRM_FAILED_MESSAGE = 'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.';
 
@@ -122,19 +121,10 @@ export function ParkConfirmationDialog({
               event.preventDefault();
               void handleConfirm();
             }}
-            disabled={isLoading}
+            pending={isLoading}
           >
-            {isLoading ? (
-              <>
-                <Spinner className="mr-2" />
-                {loadingLabel}
-              </>
-            ) : (
-              <>
-                <ParkingSquare className="mr-2 size-4" />
-                {confirmLabel}
-              </>
-            )}
+            <ParkingSquare className="mr-2 size-4" />
+            {isLoading ? loadingLabel : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

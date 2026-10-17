@@ -32,9 +32,9 @@ export function EmailChangeCompletedNotice({
   onDismiss: () => void;
 }) {
   return (
-    <div className="rounded-lg border bg-primary/5 p-5">
+    <div className="rounded-lg border bg-muted/30 p-5">
       <div className="flex items-start gap-3">
-        <div className="rounded-full bg-primary/10 p-2 text-primary">
+        <div className="rounded-full bg-success-soft p-2 text-success-soft-foreground">
           <CheckCircle2 className="size-5" />
         </div>
         <div className="min-w-0 space-y-3">
@@ -78,7 +78,7 @@ export function CurrentEmailPanel({
       <p className="text-sm font-medium text-foreground">Aktuelle E-Mail-Adresse</p>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="shrink-0 rounded-full bg-primary/10 p-2 text-primary">
+          <div className="shrink-0 rounded-full bg-muted p-2 text-muted-foreground">
             <Mail className="size-4" />
           </div>
           <div className="min-w-0">

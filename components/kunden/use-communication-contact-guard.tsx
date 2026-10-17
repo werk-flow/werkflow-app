@@ -3,7 +3,7 @@
 import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { CircleAlert } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import {
 } from '@/lib/customer-relationships/actions';
 import type { CommunicationChannel, CommunicationWarningCode } from '@/lib/customer-relationships/types';
 import { loadDocument } from '@/lib/navigation/document-load';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const WARNING_TEXT: Record<CommunicationWarningCode, string> = {
   do_not_contact: 'Für diesen Kunden ist ein Nicht-kontaktieren-Hinweis hinterlegt.',
@@ -52,7 +53,6 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
   const [pendingContact, setPendingContact] = useState<PendingContact | null>(null);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
-  const reasonRef = useRef<HTMLTextAreaElement>(null);
   const { run: runGuardTask, isPending } = usePendingTask();
   // The server check runs on the link click itself; the caller shows the
   // spinner beside that contact so the click visibly did something.
@@ -87,11 +87,9 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
 
   function continueWithException() {
     if (!pendingContact) return;
-    if (!reason.trim()) {
-      setReasonError('Bitte begründe die Ausnahme.');
-      reasonRef.current?.focus();
-      return;
-    }
+    const nextReasonError = reason.trim() ? undefined : 'Bitte begründe die Ausnahme.';
+    setReasonError(nextReasonError ?? null);
+    if (focusFirstInvalidField({ 'contact-exception-reason': nextReasonError })) return;
     void runGuardTask(async () => {
       const result = await recordCustomerCommunicationException(clientId, {
         contactId: pendingContact.contactId,
@@ -146,7 +144,6 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
             error={reasonError}
           >
             <Textarea
-              ref={reasonRef}
               value={reason}
               onChange={(event) => {
                 setReason(event.target.value);

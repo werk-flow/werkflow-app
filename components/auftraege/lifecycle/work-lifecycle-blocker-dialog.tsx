@@ -20,29 +20,17 @@ import { useWorkLifecycleBlockerForm, type WorkBlockerDialogProps } from './use-
 
 export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
   const { snapshot, kind, blocker, isManager, onClose } = props;
-  const {
-    reason,
-    setReason,
-    details,
-    setDetails,
-    ownerId,
-    setOwnerId,
-    reviewDate,
-    setReviewDate,
-    error,
-    pending,
-    submit,
-  } = useWorkLifecycleBlockerForm(props);
+  const form = useWorkLifecycleBlockerForm(props);
   return (
     <Dialog
       open
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
-      pending={pending}
+      pending={form.pending}
     >
       <DialogContent>
-        <form onSubmit={submit} className="contents" noValidate>
+        <form onSubmit={form.submit} className="contents" noValidate>
           <DialogHeader>
             <DialogTitle>
               {kind === 'parking' ? 'Arbeit parken' : blocker ? 'Blocker bearbeiten' : 'Blocker erfassen'}
@@ -60,8 +48,8 @@ export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
                   value,
                   label,
                 }))}
-                value={reason}
-                onChange={(value) => setReason(value as WorkBlockerReason)}
+                value={form.reason}
+                onChange={(value) => form.setReason(value as WorkBlockerReason)}
                 searchPlaceholder="Grund suchen"
                 emptyMessage="Kein passender Grund gefunden"
               />
@@ -69,39 +57,44 @@ export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
             <Field
               label="Nächster Schritt / Details"
               htmlFor="work-blocker-details"
-              required={reason === 'other'}
+              required={form.reason === 'other'}
+              error={form.errors.details}
             >
               <Textarea
-                value={details}
-                onChange={(event) => setDetails(event.target.value)}
+                value={form.details}
+                onChange={(event) => form.setDetails(event.target.value)}
                 maxLength={2000}
                 placeholder="Was muss als Nächstes passieren?"
               />
             </Field>
-            <Field label="Verantwortlich" htmlFor="work-blocker-owner" required>
+            <Field label="Verantwortlich" htmlFor="work-blocker-owner" required error={form.errors.owner}>
               <SearchableSelect
                 options={snapshot.ownerOptions}
-                value={ownerId}
-                onChange={setOwnerId}
+                value={form.ownerId}
+                onChange={form.setOwnerId}
                 placeholder="Person auswählen"
                 searchPlaceholder="Person suchen…"
                 emptyMessage="Keine Person gefunden"
               />
             </Field>
             {isManager ? (
-              <Field label="Wiedervorlage" htmlFor="work-blocker-review" required>
-                <DatePicker ariaLabel="Wiedervorlagedatum" value={reviewDate} onChange={setReviewDate} />
+              <Field label="Wiedervorlage" htmlFor="work-blocker-review" required error={form.errors.review}>
+                <DatePicker
+                  ariaLabel="Wiedervorlagedatum"
+                  value={form.reviewDate}
+                  onChange={form.setReviewDate}
+                />
               </Field>
             ) : (
               <p className="text-sm text-muted-foreground">Die Wiedervorlage wird auf heute gesetzt.</p>
             )}
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{form.error}</ErrorText>
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
+            <Button type="button" variant="outline" onClick={onClose} disabled={form.pending}>
               Abbrechen
             </Button>
-            <Button pending={pending} type="submit" disabled={pending}>
+            <Button pending={form.pending} type="submit" disabled={form.pending}>
               Speichern
             </Button>
           </DialogFooter>

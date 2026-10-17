@@ -15,7 +15,6 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import type { EntryDetailsActionId } from './entry-details-commands';
-import { Spinner } from '@/components/ui/spinner';
 
 type EntryDetailsReviewActionsProps = {
   isPending: boolean;
@@ -90,9 +89,10 @@ export function EntryDetailsManageActions({
               variant="outline"
               size="sm"
               disabled={isPending}
+              pending={isBusy('delete')}
               className="gap-1 text-destructive hover:text-destructive"
             >
-              {isBusy('delete') ? <Spinner className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
+              <Trash2 className="h-4 w-4" />
               Löschen
             </Button>
           </AlertDialogTrigger>

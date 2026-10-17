@@ -4,6 +4,7 @@ import type { OriginRequestLink } from '../shared/origin-request-line';
 import { useState, useCallback, useMemo, useRef } from 'react';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UsableContent } from '@/components/shared/usable-content';
 import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
@@ -214,45 +215,41 @@ export function JobDetailContent({
             handoverWorkspace={handoverWorkspace}
             originRequest={originRequest}
           />
-          {/* Columns follow the width of this content, not of the screen: the app sidebar takes
-              256 px, so a screen breakpoint turned the columns on where they did not fit. */}
-          <div className="@container/detail">
-            <div className="grid grid-cols-1 gap-6 @4xl/detail:grid-cols-2">
-              {/* Left Column: Metadata + Client + Employees */}
-              <JobDetailMainColumn
-                liveJob={liveJob}
-                isAdminOrManager={isAdminOrManager}
-                canApproveWorkArtifacts={canApproveWorkArtifacts}
-                currentUserId={currentUserId}
-                members={members}
-                metadataFields={metadataFields}
-                instructionItems={instructionItems}
-                initialArtifacts={initialArtifacts}
-                documents={documents}
-                timeEntries={timeEntries}
-                setShowClientDialog={setShowClientDialog}
-                openAssignDialog={assignment.openAssignDialog}
-                isUnassigning={assignment.isUnassigning}
-                handleUnassign={assignment.handleUnassign}
-              />
+          <DetailColumns layout="halves">
+            {/* Left Column: Metadata + Client + Employees */}
+            <JobDetailMainColumn
+              liveJob={liveJob}
+              isAdminOrManager={isAdminOrManager}
+              canApproveWorkArtifacts={canApproveWorkArtifacts}
+              currentUserId={currentUserId}
+              members={members}
+              metadataFields={metadataFields}
+              instructionItems={instructionItems}
+              initialArtifacts={initialArtifacts}
+              documents={documents}
+              timeEntries={timeEntries}
+              setShowClientDialog={setShowClientDialog}
+              openAssignDialog={assignment.openAssignDialog}
+              isUnassigning={assignment.isUnassigning}
+              handleUnassign={assignment.handleUnassign}
+            />
 
-              {/* Right Column: Project + Placeholders */}
-              <JobDetailSideColumn
-                liveJob={liveJob}
-                projectInfo={projectInfo}
-                isAdminOrManager={isAdminOrManager}
-                documents={documents}
-                materialLines={materialLines}
-                inventoryItems={inventoryItems}
-                inventoryLocations={inventoryLocations}
-                isLoadingTime={isLoadingTime}
-                isTimeStale={isTimeStale}
-                refreshTime={refreshTime}
-                timeSummary={timeSummary}
-                setShowProjectDialog={setShowProjectDialog}
-              />
-            </div>
-          </div>
+            {/* Right Column: Project + Placeholders */}
+            <JobDetailSideColumn
+              liveJob={liveJob}
+              projectInfo={projectInfo}
+              isAdminOrManager={isAdminOrManager}
+              documents={documents}
+              materialLines={materialLines}
+              inventoryItems={inventoryItems}
+              inventoryLocations={inventoryLocations}
+              isLoadingTime={isLoadingTime}
+              isTimeStale={isTimeStale}
+              refreshTime={refreshTime}
+              timeSummary={timeSummary}
+              setShowProjectDialog={setShowProjectDialog}
+            />
+          </DetailColumns>
         </UsableContent>
       </PageBody>
 

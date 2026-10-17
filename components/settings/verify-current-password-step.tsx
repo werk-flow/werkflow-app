@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Form, FormField } from '@/components/ui/form';
 import { PasswordInput } from '@/components/ui/password-input';
-import { Spinner } from '@/components/ui/spinner';
 
 type VerifyCurrentPasswordStepProps = {
   currentPasswordForm: UseFormReturn<CurrentPasswordValues>;
@@ -54,16 +53,10 @@ export function VerifyCurrentPasswordStep({
             variant="link"
             className="h-auto px-0 py-0"
             onClick={handleForgotPassword}
-            disabled={isCurrentPasswordSubmitting || isForgotPasswordRedirecting}
+            disabled={isCurrentPasswordSubmitting}
+            pending={isForgotPasswordRedirecting}
           >
-            {isForgotPasswordRedirecting ? (
-              <>
-                <Spinner className="mr-2" />
-                Weiterleitung…
-              </>
-            ) : (
-              'Passwort vergessen?'
-            )}
+            {isForgotPasswordRedirecting ? 'Weiterleitung…' : 'Passwort vergessen?'}
           </Button>{' '}
           Wenn du dein aktuelles Passwort nicht mehr kennst, melden wir dich ab. Danach kannst du dir per
           E-Mail einen Link senden lassen und dein Passwort darüber zurücksetzen.
@@ -78,12 +71,9 @@ export function VerifyCurrentPasswordStep({
           >
             Abbrechen
           </Button>
-          <Button type="submit" disabled={isCurrentPasswordSubmitting || isForgotPasswordRedirecting}>
+          <Button type="submit" disabled={isForgotPasswordRedirecting} pending={isCurrentPasswordSubmitting}>
             {isCurrentPasswordSubmitting ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird geprüft…
-              </>
+              'Wird geprüft…'
             ) : (
               <>
                 Weiter

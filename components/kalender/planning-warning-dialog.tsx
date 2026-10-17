@@ -1,6 +1,6 @@
 'use client';
 
-import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
+import { focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 
@@ -108,11 +108,9 @@ export function usePlanningWarningConfirmation(): {
             </Button>
             <Button
               onClick={() => {
-                if (reason.trim().length < 8) {
-                  setReasonError(REASON_MIN_8_MESSAGE);
-                  document.getElementById('planning-warning-reason')?.focus();
-                  return;
-                }
+                const nextReasonError = reason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
+                setReasonError(nextReasonError ?? null);
+                if (focusFirstInvalidField({ 'planning-warning-reason': nextReasonError })) return;
                 finish({
                   fingerprint: request.fingerprint,
                   reason: reason.trim(),

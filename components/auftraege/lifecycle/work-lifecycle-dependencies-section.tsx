@@ -3,6 +3,7 @@
 import { Plus, Unlink } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { WORK_DEPENDENCY_EFFECT_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
@@ -32,7 +33,7 @@ export function WorkLifecycleDependenciesSection({
         )}
       </div>
       {snapshot.dependencies.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine zusätzlichen Voraussetzungen.</p>
+        <EmptyState size="compact" title="Keine zusätzlichen Voraussetzungen." />
       ) : (
         snapshot.dependencies.map((dependency) => (
           <div

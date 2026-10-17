@@ -2,12 +2,19 @@
 
 import { Plus } from 'lucide-react';
 
+import { EmptyState } from '@/components/ui/empty-state';
 import { SearchInput } from '@/components/ui/search-input';
 import { SectionError } from '@/components/ui/section-error';
 import { PlainButton } from '@/components/ui/plain-button';
 import type { InventoryPickerOption } from '@/lib/inventory/types';
 import { formatInventoryQuantity, INVENTORY_PICKER_PAGE_SIZE } from '@/lib/inventory/types';
 import type { MaterialDialogMode } from './job-material-dialog-model';
+
+function NoMatchingItems() {
+  return (
+    <EmptyState size="compact" className="px-3 py-6 text-center" title="Keine passenden Artikel gefunden." />
+  );
+}
 
 /** The left column of the material dialog: catalog search and the pickable items. */
 export function MaterialItemPicker({
@@ -56,9 +63,7 @@ export function MaterialItemPicker({
             Material wird gesucht…
           </p>
         ) : filteredItems.length === 0 ? (
-          <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-            Keine passenden Artikel gefunden.
-          </p>
+          <NoMatchingItems />
         ) : (
           <div className="divide-y">
             {filteredItems.map((item) => {

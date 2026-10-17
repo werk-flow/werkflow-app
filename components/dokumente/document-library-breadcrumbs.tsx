@@ -29,7 +29,7 @@ export function DocumentLibraryBreadcrumbs({
   onDropOnFolder,
 }: DocumentLibraryBreadcrumbsProps) {
   return (
-    <nav className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+    <nav aria-label="Ordnerpfad" className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
       <Link
         href="/dokumente?view=folders"
         data-document-breadcrumb-folder-drop-id="root"

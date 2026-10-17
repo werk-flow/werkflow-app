@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus } from 'lucide-react';
 
@@ -25,6 +25,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
 import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
   { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
@@ -91,7 +92,6 @@ export function CreateClientDialog({
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const nameInputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const { showBanner } = useBanner();
 
@@ -99,13 +99,9 @@ export function CreateClientDialog({
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setNameError(null);
-
-    if (!name.trim()) {
-      setNameError('Bitte gib einen Namen ein.');
-      nameInputRef.current?.focus();
-      return;
-    }
+    const nextNameError = name.trim() ? undefined : 'Bitte gib einen Namen ein.';
+    setNameError(nextNameError ?? null);
+    if (focusFirstInvalidField({ 'client-name': nextNameError })) return;
 
     const input: CreateClientInput = {
       name: name.trim(),
@@ -210,7 +206,6 @@ export function CreateClientDialog({
           <div className="grid gap-4 py-4">
             <Field label="Name" htmlFor="client-name" required error={showNameError || undefined}>
               <Input
-                ref={nameInputRef}
                 placeholder="Kundenname"
                 value={name}
                 onChange={(e) => {

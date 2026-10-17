@@ -1,3 +1,4 @@
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,9 +19,9 @@ export default function ProjectDetailLoading() {
         actions={<Skeleton className="h-9 w-36" />}
       />
 
-      {/* Two-column layout skeleton */}
+      {/* The page's own columns, so the skeleton switches where the page switches */}
       <PageBody>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_1.5fr]">
+        <DetailColumns layout="facts-and-work">
           {/* Left column */}
           <div className="space-y-6">
             {/* Metadata card */}
@@ -85,7 +86,7 @@ export default function ProjectDetailLoading() {
             <Skeleton className="h-24 w-full rounded-lg" />
             <Skeleton className="h-24 w-full rounded-lg" />
           </div>
-        </div>
+        </DetailColumns>
       </PageBody>
     </PageShell>
   );

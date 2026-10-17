@@ -125,9 +125,7 @@ export function DispatchPanelUnscheduledJobs({
               <span className="min-w-0 flex-1 truncate">
                 {entry.title}
                 {entry.jobNumber && (
-                  <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">
-                    {entry.jobNumber}
-                  </span>
+                  <span className="ml-1.5 font-mono text-xs text-muted-foreground">{entry.jobNumber}</span>
                 )}
               </span>
               <InlinePending active={rowBusy.isBusy(entry.jobId)} label="Wird aktualisiert" />

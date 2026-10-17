@@ -22,8 +22,7 @@ export function SignaturePad({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let previousWidth = 0;
-    let previousHeight = 0;
+    let [previousWidth, previousHeight] = [0, 0];
     const applySize = () => {
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
@@ -127,6 +126,7 @@ export function SignaturePad({
         Ohne Zeigegerät kannst du unten stattdessen ein Bild der Unterschrift auswählen.
       </p>
       <div className="flex justify-end">
+        {/* eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: an empty pad has nothing to reset */}
         <Button type="button" variant="ghost" size="sm" onClick={clear} disabled={disabled || !hasMark}>
           Zurücksetzen
         </Button>

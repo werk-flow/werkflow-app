@@ -22,6 +22,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { createCustomerFollowUp } from '@/lib/customer-relationships/actions';
 import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/date-time/berlin';
 import type { MaintenanceCatalogs, MaintenanceCoverageItem } from '@/lib/maintenance/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export function MaintenanceCoverageFollowUpDialog({
   open,
@@ -65,25 +66,21 @@ export function MaintenanceCoverageFollowUpDialog({
     // only confirmation the user gets here.
     showBanner({ variant: 'success', message: 'Nachfassaktion wurde angelegt.' });
   });
-  const titleError = attempted && !title.trim() ? 'Bitte gib einen Titel ein.' : undefined;
-  const ownerError = attempted && !ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined;
-  const dueError =
-    attempted && !parseBerlinDateTimeInput(dueAt) ? 'Bitte gib eine Fälligkeit an.' : undefined;
+  const errors = {
+    'coverage-follow-up-title': title.trim() ? undefined : 'Bitte gib einen Titel ein.',
+    'coverage-follow-up-owner': ownerUserId ? undefined : 'Bitte wähle eine zuständige Person.',
+    'coverage-follow-up-due-date': parseBerlinDateTimeInput(dueAt)
+      ? undefined
+      : 'Bitte gib eine Fälligkeit an.',
+  };
+  const titleError = attempted ? errors['coverage-follow-up-title'] : undefined;
+  const ownerError = attempted ? errors['coverage-follow-up-owner'] : undefined;
+  const dueError = attempted ? errors['coverage-follow-up-due-date'] : undefined;
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const firstInvalidId = !title.trim()
-      ? 'coverage-follow-up-title'
-      : !ownerUserId
-        ? 'coverage-follow-up-owner'
-        : !parseBerlinDateTimeInput(dueAt)
-          ? 'coverage-follow-up-due-date'
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    if (focusFirstInvalidField(errors)) return;
     void run();
   }
 

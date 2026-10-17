@@ -190,7 +190,7 @@ export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactEle
   return (
     <div
       ref={tableContainerRef}
-      className="relative -mx-4 hidden min-h-[50vh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block"
+      className="relative -mx-4 hidden min-h-[50dvh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -262,7 +262,7 @@ export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactEle
 export function DocumentTableSkeleton({ rowCount = 10 }: { rowCount?: number }) {
   return (
     <>
-      <div className="relative -mx-4 hidden min-h-[50vh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block">
+      <div className="relative -mx-4 hidden min-h-[50dvh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block">
         <Table>
           <TableHeader>
             <TableRow>

@@ -30,7 +30,7 @@ export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: r
   {
     name: 'Shared controls and tokens',
     pattern: /^(components\/ui\/|app\/globals\.css$)/,
-    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports'],
+    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports', 'audit:layout:standalone'],
   },
   {
     // Every dialog, tab and wide table of the app renders through these, so the
@@ -54,7 +54,13 @@ export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: r
   {
     name: 'Dependencies or backend environment',
     pattern: /^(package\.json|bun\.lock|<environment>)$/,
-    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports', 'audit:security:account'],
+    groups: [
+      CORE_JOURNEY,
+      'audit:layout',
+      'audit:layout:viewports',
+      'audit:layout:standalone',
+      'audit:security:account',
+    ],
   },
 ];
 

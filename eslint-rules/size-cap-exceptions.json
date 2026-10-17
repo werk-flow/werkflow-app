@@ -38,8 +38,7 @@
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/einstellungen/page.tsx": { "TimeAccountSettingsContent": 81 },
-    "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 139 },
-    "app/(app)/zeiterfassung/zeitkonto/page.tsx": { "TimeAccountOverviewContent": 93 },
+    "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 137 },
     "app/(auth)/login/login-form.tsx": { "LoginForm": 106 },
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
     "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
@@ -48,16 +47,16 @@
     "components/anfragen/close-request-dialog.tsx": { "CloseRequestDialog": 92 },
     "components/anfragen/convert-request-dialog.tsx": { "ConvertRequestDialog": 114 },
     "components/anfragen/create-request-customer-fields.tsx": { "CreateRequestCustomerFields": 90 },
-    "components/anfragen/create-request-dialog.tsx": { "CreateRequestDialog": 127 },
-    "components/anfragen/edit-request-dialog.tsx": { "EditRequestDialog": 115 },
+    "components/anfragen/create-request-dialog.tsx": { "CreateRequestDialog": 118 },
+    "components/anfragen/edit-request-dialog.tsx": { "EditRequestDialog": 106 },
     "components/anfragen/request-customer-card.tsx": { "RequestCustomerCard": 91 },
     "components/anfragen/request-detail-content.tsx": { "RequestDetailContent": 130 },
-    "components/anfragen/use-convert-request-form.ts": { "useConvertRequestForm": 181 },
-    "components/anfragen/use-create-request-form.ts": { "useCreateRequestForm": 150 },
-    "components/anfragen/use-edit-request-form.ts": { "useEditRequestForm": 121 },
+    "components/anfragen/use-convert-request-form.ts": { "useConvertRequestForm": 161 },
+    "components/anfragen/use-create-request-form.ts": { "useCreateRequestForm": 146 },
+    "components/anfragen/use-edit-request-form.ts": { "useEditRequestForm": 119 },
     "components/anfragen/use-request-detail-actions.ts": { "useRequestDetailActions": 148 },
-    "components/arbeitsvorlagen/apply-work-template-card.tsx": { "ApplyWorkTemplateCard": 127 },
-    "components/arbeitsvorlagen/use-apply-work-template.ts": { "useApplyWorkTemplate": 126 },
+    "components/arbeitsvorlagen/apply-work-template-card.tsx": { "ApplyWorkTemplateCard": 125 },
+    "components/arbeitsvorlagen/use-apply-work-template.ts": { "useApplyWorkTemplate": 125 },
     "components/arbeitsvorlagen/use-work-template-editor-options.ts": { "useWorkTemplateEditorOptions": 139 },
     "components/arbeitsvorlagen/work-template-capabilities-editor.tsx": {
       "CapabilitiesEditor": 130,
@@ -65,7 +64,7 @@
     },
     "components/arbeitsvorlagen/work-template-editor-dialog.tsx": { "TemplateEditorDialog": 191 },
     "components/arbeitsvorlagen/work-template-items-editor.tsx": {
-      "ItemsEditor": 97,
+      "ItemsEditor": 95,
       "WorkTemplateItemCard": 138,
       "WorkTemplateEvidenceEditor": 105
     },
@@ -78,7 +77,7 @@
       "useWorkArtifactCustomerActions": 132
     },
     "components/auftraege/artifacts/use-work-artifact-editor.ts": { "useWorkArtifactEditor": 132 },
-    "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 155 },
+    "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 151 },
     "components/auftraege/artifacts/work-artifact-action-panel.tsx": {
       "WorkArtifactLinkDisclosures": 144,
       "WorkArtifactActionPanel": 138
@@ -90,22 +89,22 @@
       "WorkArtifactDefectFields": 83
     },
     "components/auftraege/artifacts/work-artifacts-section.tsx": {
-      "WorkArtifactsSection": 141,
+      "WorkArtifactsSection": 139,
       "WorkArtifactDialog": 197
     },
     "components/auftraege/forms/create-auftrag-project-dialog.tsx": { "CreateAuftragProjectDialog": 108 },
     "components/auftraege/forms/create-job-form-sections.tsx": { "CreateJobPlanningFields": 101 },
-    "components/auftraege/forms/create-project-form-content.tsx": { "useCreateProjectSubmit": 88 },
+    "components/auftraege/forms/create-project-form-content.tsx": { "useCreateProjectSubmit": 83 },
     "components/auftraege/forms/create-project-form-fields.tsx": { "CreateProjectFormFields": 135 },
     "components/auftraege/forms/edit-job-form-fields.tsx": { "EditJobPlanningFields": 109 },
     "components/auftraege/forms/edit-project-form-fields.tsx": { "EditProjectFormFields": 119 },
-    "components/auftraege/forms/park-confirmation-dialog.tsx": { "ParkConfirmationDialog": 100 },
+    "components/auftraege/forms/park-confirmation-dialog.tsx": { "ParkConfirmationDialog": 91 },
     "components/auftraege/forms/use-create-job-form.ts": { "useCreateJobForm": 87 },
-    "components/auftraege/forms/use-create-job-submit.ts": { "useCreateJobSubmit": 90 },
+    "components/auftraege/forms/use-create-job-submit.ts": { "useCreateJobSubmit": 87 },
     "components/auftraege/forms/use-create-project-form.ts": { "useCreateProjectForm": 114 },
     "components/auftraege/forms/use-edit-job-form.ts": { "useEditJobForm": 156 },
     "components/auftraege/forms/use-edit-project-form.ts": { "useEditProjectForm": 125 },
-    "components/auftraege/forms/use-edit-project-submit.ts": { "useEditProjectSubmit": 96 },
+    "components/auftraege/forms/use-edit-project-submit.ts": { "useEditProjectSubmit": 94 },
     "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
     "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
     "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },
@@ -113,13 +112,13 @@
       "InstructionItemDetailsDialog": 104
     },
     "components/auftraege/instructions/job-instruction-item-row.tsx": { "JobInstructionItemRow": 141 },
-    "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 121 },
+    "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 120 },
     "components/auftraege/instructions/job-instruction-row-actions.ts": {
       "createJobInstructionRowActions": 93
     },
     "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
-    "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 166 },
+    "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
     "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
     "components/auftraege/job-detail/job-dispatch-section.tsx": { "JobDispatchSection": 100 },
     "components/auftraege/job-detail/job-qualification-add-form.tsx": { "JobQualificationAddForm": 85 },
@@ -131,7 +130,7 @@
     "components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx": {
       "ArtifactApprovalDependencyDialog": 104
     },
-    "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": { "WorkBlockerDialog": 92 },
+    "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": { "WorkBlockerDialog": 85 },
     "components/auftraege/lifecycle/work-lifecycle-blockers-section.tsx": {
       "WorkLifecycleBlockersSection": 93
     },
@@ -151,8 +150,8 @@
     "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
     "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
     "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
-    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 126 },
-    "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 121 },
+    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 119 },
+    "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 114 },
     "components/auftraege/list/unified-auftraege-desktop-rows.tsx": { "ProjectRow": 125 },
     "components/auftraege/list/unified-auftraege-mobile-cards.tsx": { "ProjectCard": 143 },
     "components/auftraege/list/unified-auftraege-row-cells.tsx": {
@@ -166,7 +165,7 @@
     "components/auftraege/list/use-auftraege-row-actions.ts": { "useAuftraegeRowActions": 100 },
     "components/auftraege/project-detail/project-detail-content.tsx": {
       "useProjectDetailState": 98,
-      "ProjectDetailContent": 162
+      "ProjectDetailContent": 158
     },
     "components/auftraege/project-detail/project-detail-metadata-fields.tsx": {
       "buildProjectDetailMetadataFields": 90
@@ -185,11 +184,11 @@
     "components/auftraege/work-pack/field-work-pack-overview.tsx": { "FieldWorkPackOverview": 145 },
     "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
     "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
-    "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 143 },
+    "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
     "components/clock-action-list.tsx": { "ClockActionList": 172 },
-    "components/clock-fab.tsx": { "ClockFAB": 134 },
+    "components/clock-fab.tsx": { "ClockFAB": 133 },
     "components/clock-state-provider.tsx": { "ClockStateProvider": 125 },
-    "components/dokumente/attach-document-dialog.tsx": { "AttachDocumentDialog": 170 },
+    "components/dokumente/attach-document-dialog.tsx": { "AttachDocumentDialog": 168 },
     "components/dokumente/contextual-documents-section.tsx": { "ContextualDocumentsSection": 177 },
     "components/dokumente/document-details-dialog.tsx": { "DocumentDetailsVersions": 103 },
     "components/dokumente/document-library-body.tsx": { "DocumentLibraryBody": 110 },
@@ -200,8 +199,8 @@
     },
     "components/dokumente/document-library-table.tsx": { "DocumentLibraryTable": 135 },
     "components/dokumente/document-library-view-switch.tsx": { "DocumentLibraryViewSwitch": 95 },
-    "components/dokumente/document-link-dialog.tsx": { "DocumentLinkDialog": 173 },
-    "components/dokumente/document-link-target-list.tsx": { "DocumentLinkTargetList": 87 },
+    "components/dokumente/document-link-dialog.tsx": { "DocumentLinkDialog": 169 },
+    "components/dokumente/document-link-target-list.tsx": { "DocumentLinkTargetList": 85 },
     "components/dokumente/document-move-destination-dialog.tsx": { "MoveDestinationDialog": 124 },
     "components/dokumente/document-upload-dialog.tsx": { "DocumentUploadDialog": 170 },
     "components/dokumente/document-viewer-dialog.tsx": { "DocumentViewerDialog": 187 },
@@ -233,31 +232,31 @@
       "InventoryTable": 92,
       "MovementsTable": 107
     },
-    "components/inventar/inventory-import-dialog.tsx": { "ImportDialog": 112 },
+    "components/inventar/inventory-import-dialog.tsx": { "ImportDialog": 106 },
     "components/inventar/inventory-item-dialog.tsx": { "ItemDialog": 97 },
     "components/inventar/inventory-item-form-fields.tsx": {
       "ItemStockFields": 83,
       "ItemSupplierFields": 102
     },
-    "components/inventar/inventory-locations-view.tsx": { "LocationsView": 105 },
-    "components/inventar/inventory-stock-adjustment-dialog.tsx": { "StockAdjustmentDialog": 139 },
+    "components/inventar/inventory-locations-view.tsx": { "LocationsView": 103 },
+    "components/inventar/inventory-stock-adjustment-dialog.tsx": { "StockAdjustmentDialog": 135 },
     "components/inventar/job-material-dialog-row.tsx": { "MaterialDialogRowCard": 88 },
-    "components/inventar/job-material-item-picker.tsx": { "MaterialItemPicker": 97 },
+    "components/inventar/job-material-item-picker.tsx": { "MaterialItemPicker": 95 },
     "components/inventar/job-material-line-row.tsx": { "MaterialLineRow": 127 },
     "components/inventar/job-material-selection-dialog.tsx": { "MaterialSelectionDialog": 132 },
-    "components/inventar/job-materials-section.tsx": { "JobMaterialsSection": 131 },
-    "components/inventar/location-select-with-create.tsx": { "CreateLocationDialog": 103 },
+    "components/inventar/job-materials-section.tsx": { "JobMaterialsSection": 128 },
+    "components/inventar/location-select-with-create.tsx": { "CreateLocationDialog": 100 },
     "components/inventar/use-inventory-editing.ts": { "useInventoryItemEditor": 86 },
     "components/inventar/use-job-material-dialog.ts": { "useJobMaterialDialog": 159 },
     "components/inventar/use-job-material-mutations.ts": { "useJobMaterialMutations": 117 },
-    "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 100 },
-    "components/job-picker-modal.tsx": { "JobPickerModal": 171 },
+    "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 96 },
+    "components/job-picker-modal.tsx": { "JobPickerModal": 168 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 106 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 139 },
     "components/kalender/board/board-toolbar.tsx": { "BoardToolbar": 132 },
     "components/kalender/board/phone-board.tsx": { "PhoneBoard": 85 },
-    "components/kalender/board/plantafel.tsx": { "Plantafel": 185 },
+    "components/kalender/board/plantafel.tsx": { "Plantafel": 183 },
     "components/kalender/board/use-board-surface.ts": { "useBoardSurface": 190 },
     "components/kalender/board/use-plantafel-model.ts": { "usePlantafelModel": 83 },
     "components/kalender/calendar-body.tsx": { "CalendarSurface": 98 },
@@ -265,26 +264,26 @@
     "components/kalender/calendar-dialogs.tsx": { "CalendarDialogs": 154 },
     "components/kalender/calendar-entry-dialog.tsx": { "CalendarEntryDialog": 193 },
     "components/kalender/calendar-header.tsx": { "CalendarHeader": 134 },
-    "components/kalender/calendar-time-correction-dialog.tsx": { "CalendarTimeCorrectionDialog": 166 },
+    "components/kalender/calendar-time-correction-dialog.tsx": { "CalendarTimeCorrectionDialog": 164 },
     "components/kalender/calendar-toolbar.tsx": { "CalendarToolbar": 85 },
     "components/kalender/calendar-view-tabs.tsx": { "CalendarViewTabs": 119 },
     "components/kalender/day-view/day-lane-item.tsx": { "DayLaneBlock": 81, "DayLaneJob": 103 },
     "components/kalender/day-view/day-surface-drop.ts": { "applyDayDrop": 140 },
     "components/kalender/day-view/day-surface-rules.ts": { "dayTargetVerdict": 111 },
     "components/kalender/day-view/day-timeline-row.tsx": { "DayTimelineRow": 103 },
-    "components/kalender/day-view/day-view-list.tsx": { "DayViewList": 102 },
+    "components/kalender/day-view/day-view-list.tsx": { "DayViewList": 100 },
     "components/kalender/day-view/day-view.tsx": { "DayView": 149 },
     "components/kalender/day-view/time-block.tsx": { "TimeBlock": 152 },
     "components/kalender/day-view/use-day-create-drag.ts": { "useDayCreateDrag": 95 },
     "components/kalender/day-view/use-day-surface.ts": { "useDaySurface": 144 },
-    "components/kalender/dispatch-issue-dialog.tsx": { "DispatchIssueDialog": 171 },
+    "components/kalender/dispatch-issue-dialog.tsx": { "DispatchIssueDialog": 169 },
     "components/kalender/dispatch-panel-commitment-dialog.tsx": { "CommitmentDialog": 111 },
     "components/kalender/dispatch-panel-row-dialogs.tsx": { "DispatchPanelRowDialogs": 86 },
     "components/kalender/dispatch-panel.tsx": { "DispatchPanel": 116 },
     "components/kalender/drag-engine/drag-engine.tsx": { "CalendarDragProvider": 194 },
     "components/kalender/entry-details-content.tsx": { "EntryDetailsContent": 104 },
     "components/kalender/entry-details-dialog.tsx": { "EntryDetailsDialog": 131 },
-    "components/kalender/job-event-popover.tsx": { "CardPopover": 181, "MoveForm": 93 },
+    "components/kalender/job-event-popover.tsx": { "CardPopover": 181, "MoveForm": 92 },
     "components/kalender/month-view/month-cell-entry.tsx": { "MonthCellEntry": 89 },
     "components/kalender/month-view/month-day-cell.tsx": { "MonthDayCell": 92 },
     "components/kalender/month-view/month-view.tsx": { "MonthView": 169 },
@@ -293,12 +292,12 @@
     "components/kalender/mutations/use-calendar-park-mutations.ts": { "useCalendarParkMutations": 140 },
     "components/kalender/mutations/use-calendar-visit-writes.ts": { "useCalendarVisitWrites": 170 },
     "components/kalender/mutations/use-optimistic-run.ts": { "useOptimisticRun": 93 },
-    "components/kalender/parking-context-dialog.tsx": { "ParkingContextDialog": 190 },
+    "components/kalender/parking-context-dialog.tsx": { "ParkingContextDialog": 187 },
     "components/kalender/parkplatz-panel.tsx": { "ParkplatzPanel": 198, "ParkplatzPanel > map#1": 140 },
     "components/kalender/planning-entry-form.tsx": { "PlanningEntryForm": 200 },
     "components/kalender/planning-entry-schedule-fields.tsx": { "PlanningEntryRecurrenceFields": 119 },
     "components/kalender/planning-occurrence-edit-dialog.tsx": { "PlanningOccurrenceEditDialog": 200 },
-    "components/kalender/planning-warning-dialog.tsx": { "usePlanningWarningConfirmation": 105 },
+    "components/kalender/planning-warning-dialog.tsx": { "usePlanningWarningConfirmation": 103 },
     "components/kalender/surface/calendar-card.tsx": { "CalendarCard": 134 },
     "components/kalender/use-calendar-data.ts": { "useCalendarData": 87 },
     "components/kalender/use-calendar-range-data.ts": { "useCalendarRangeData": 198 },
@@ -316,26 +315,26 @@
     "components/kunden/communication-preference-dialog.tsx": { "CommunicationPreferenceDialog": 125 },
     "components/kunden/communication-preferences-section.tsx": { "CommunicationPreferencesSection": 137 },
     "components/kunden/communication-settings-dialog.tsx": { "CommunicationSettingsDialog": 120 },
-    "components/kunden/create-client-dialog.tsx": { "CreateClientDialog": 195 },
+    "components/kunden/create-client-dialog.tsx": { "CreateClientDialog": 190 },
     "components/kunden/customer-follow-up-dialog.tsx": { "CustomerFollowUpDialog": 92 },
     "components/kunden/customer-relationship-workspace.tsx": { "CustomerRelationshipWorkspace": 84 },
     "components/kunden/customer-timeline-section.tsx": { "CustomerTimelineSection": 117 },
-    "components/kunden/edit-client-dialog.tsx": { "EditClientDialog": 148 },
-    "components/kunden/follow-ups-section.tsx": { "FollowUpsSection": 135 },
+    "components/kunden/edit-client-dialog.tsx": { "EditClientDialog": 143 },
+    "components/kunden/follow-ups-section.tsx": { "FollowUpsSection": 133 },
     "components/kunden/kunden-content.tsx": { "KundenList": 166 },
-    "components/kunden/kunden-detail-content.tsx": { "KundenDetailContent": 177 },
+    "components/kunden/kunden-detail-content.tsx": { "KundenDetailContent": 171 },
     "components/kunden/use-client-contacts.ts": { "useClientContacts": 103 },
     "components/kunden/use-client-sites.ts": { "useClientSites": 115 },
-    "components/kunden/use-communication-contact-guard.tsx": { "useCommunicationContactGuard": 116 },
-    "components/kunden/use-follow-up-editor.ts": { "useFollowUpEditor": 141 },
-    "components/manual-entry-form-content.tsx": { "ManualEntryFormContent": 128 },
+    "components/kunden/use-communication-contact-guard.tsx": { "useCommunicationContactGuard": 112 },
+    "components/kunden/use-follow-up-editor.ts": { "useFollowUpEditor": 134 },
+    "components/manual-entry-form-content.tsx": { "ManualEntryFormContent": 121 },
     "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
     "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
-    "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 102 },
+    "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
     "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
     "components/mitarbeiter/invitations-table.tsx": { "InvitationsTable": 104 },
     "components/mitarbeiter/invite-actions-menu.tsx": { "InviteActionsMenu": 108 },
-    "components/mitarbeiter/invite-dialog.tsx": { "InviteDialog": 130 },
+    "components/mitarbeiter/invite-dialog.tsx": { "InviteDialog": 125 },
     "components/mitarbeiter/join-requests-section.tsx": { "JoinRequestsSection": 84 },
     "components/mitarbeiter/member-actions-menu.tsx": { "MemberActionsMenu": 99 },
     "components/mitarbeiter/members-table.tsx": {
@@ -343,21 +342,21 @@
       "MemberTableRow": 92,
       "MembersTable": 93
     },
-    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 147 },
+    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
     "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
-    "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 101 },
+    "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 99 },
     "components/mitarbeiter/personalien-section.tsx": { "PersonalienSection": 97 },
-    "components/mitarbeiter/personnel-invite-dialog.tsx": { "PersonnelInviteDialog": 115 },
+    "components/mitarbeiter/personnel-invite-dialog.tsx": { "PersonnelInviteDialog": 113 },
     "components/mitarbeiter/personnel-lifecycle-onboarding-dialogs.tsx": {
       "PersonnelLifecycleRequirementDialog": 87
     },
     "components/mitarbeiter/personnel-lifecycle-overview.tsx": { "PersonnelLifecycleStatusCards": 92 },
     "components/mitarbeiter/personnel-lifecycle-section.tsx": { "PersonnelLifecycleSection": 108 },
-    "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 178 },
+    "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 172 },
     "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 114 },
     "components/mitarbeiter/qualification-management-definitions.tsx": {
-      "QualificationManagementDefinitionForm": 112
+      "QualificationManagementDefinitionForm": 111
     },
     "components/mitarbeiter/qualification-management-grant-form.tsx": {
       "QualificationManagementGrantForm": 139
@@ -375,8 +374,8 @@
       "TeamManagementCardHeader": 83,
       "TeamManagementCardAddMemberForm": 89
     },
-    "components/mitarbeiter/use-create-personnel-dialog-form.ts": { "useCreatePersonnelDialogForm": 89 },
-    "components/mitarbeiter/use-employment-condition-form.ts": { "useEmploymentConditionForm": 99 },
+    "components/mitarbeiter/use-create-personnel-dialog-form.ts": { "useCreatePersonnelDialogForm": 87 },
+    "components/mitarbeiter/use-employment-condition-form.ts": { "useEmploymentConditionForm": 94 },
     "components/mitarbeiter/use-personnel-lifecycle-documents.ts": { "usePersonnelLifecycleDocuments": 116 },
     "components/mitarbeiter/use-personnel-lifecycle-onboarding.ts": {
       "usePersonnelLifecycleRequirements": 125
@@ -386,21 +385,21 @@
     },
     "components/mitarbeiter/use-personnel-lifecycle-view.ts": { "usePersonnelLifecycleView": 88 },
     "components/mitarbeiter/use-qualification-management-grant-form.ts": {
-      "useQualificationManagementGrantForm": 116,
-      "useQualificationManagementGrantForm > saveGrant": 88
+      "useQualificationManagementGrantForm": 110,
+      "useQualificationManagementGrantForm > saveGrant": 82
     },
     "components/mitarbeiter/use-sickness-report-correction-form.ts": {
-      "useSicknessReportCorrectionForm": 86
+      "useSicknessReportCorrectionForm": 81
     },
-    "components/mitarbeiter/use-sickness-report-record-form.ts": { "useSicknessReportRecordForm": 88 },
-    "components/mitarbeiter/use-team-management-memberships.ts": { "useTeamManagementMemberships": 131 },
-    "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 119 },
-    "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 88 },
-    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 107 },
+    "components/mitarbeiter/use-sickness-report-record-form.ts": { "useSicknessReportRecordForm": 87 },
+    "components/mitarbeiter/use-team-management-memberships.ts": { "useTeamManagementMemberships": 130 },
+    "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
+    "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
+    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/org/delete-org-dialog.tsx": { "DeleteOrgDialog": 98 },
     "components/organization/organization-context.tsx": { "OrganizationProvider": 165 },
     "components/otp-form.tsx": { "OTPForm": 124 },
-    "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 106 },
+    "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 100 },
     "components/realtime/realtime-provider.tsx": {
       "RealtimeProvider": 147,
       "RealtimeProvider > useEffect#1": 119
@@ -416,11 +415,11 @@
     "components/service/maintenance-content.tsx": { "MaintenanceWorkspaceView": 183 },
     "components/service/maintenance-coverage-dialog.tsx": { "MaintenanceCoverageDialog": 151 },
     "components/service/maintenance-coverage-follow-up-dialog.tsx": {
-      "MaintenanceCoverageFollowUpDialog": 120
+      "MaintenanceCoverageFollowUpDialog": 116
     },
     "components/service/maintenance-due-action-dialog.tsx": { "MaintenanceDueActionDialog": 96 },
     "components/service/maintenance-lists.tsx": { "MaintenanceDueList": 106, "MaintenanceCoverageList": 98 },
-    "components/service/maintenance-plan-action-dialog.tsx": { "MaintenancePlanActionDialog": 105 },
+    "components/service/maintenance-plan-action-dialog.tsx": { "MaintenancePlanActionDialog": 101 },
     "components/service/maintenance-plan-cards.tsx": {
       "MaintenancePlanCards": 164,
       "MaintenancePlanCards > map#2": 94
@@ -429,33 +428,33 @@
       "MaintenancePlanScopeFields": 95,
       "MaintenancePlanScheduleFields": 97
     },
-    "components/service/service-case-detail-content.tsx": { "ServiceCaseDetailContent": 138 },
-    "components/service/service-case-detail-dialogs.tsx": { "RelationDialog": 126, "FollowUpDialog": 112 },
+    "components/service/service-case-detail-content.tsx": { "ServiceCaseDetailContent": 136 },
+    "components/service/service-case-detail-dialogs.tsx": { "RelationDialog": 126, "FollowUpDialog": 108 },
     "components/service/service-case-detail-sections.tsx": { "ServiceCaseDetailSidebar": 89 },
     "components/service/service-case-evidence-link.tsx": { "ServiceCaseEvidenceLink": 97 },
     "components/service/service-case-form-sections.tsx": { "ServiceCaseTriageFields": 105 },
     "components/service/service-case-list-content.tsx": {
-      "ServiceCaseTable": 93,
+      "ServiceCaseTable": 87,
       "ServiceCaseListResults": 85
     },
     "components/service/use-equipment-form.ts": {
-      "useEquipmentForm": 132,
-      "useEquipmentForm > handleSubmit": 89
+      "useEquipmentForm": 131,
+      "useEquipmentForm > handleSubmit": 87
     },
-    "components/service/use-maintenance-coverage-form.ts": { "useMaintenanceCoverageForm": 115 },
-    "components/service/use-maintenance-due-action.ts": { "useMaintenanceDueAction": 84 },
-    "components/service/use-maintenance-plan-form.ts": { "useMaintenancePlanForm": 94 },
-    "components/service/use-service-case-form.ts": { "useServiceCaseForm": 133 },
+    "components/service/use-maintenance-coverage-form.ts": { "useMaintenanceCoverageForm": 112 },
+    "components/service/use-maintenance-due-action.ts": { "useMaintenanceDueAction": 83 },
+    "components/service/use-maintenance-plan-form.ts": { "useMaintenancePlanForm": 93 },
+    "components/service/use-service-case-form.ts": { "useServiceCaseForm": 132 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
-    "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 131 },
+    "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
     "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 86 },
     "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 185 },
     "components/settings/password-change-card.tsx": { "PasswordChangeCard": 96 },
     "components/settings/personnel-onboarding-template-settings.tsx": {
-      "PersonnelOnboardingTemplateSettings": 184
+      "PersonnelOnboardingTemplateSettings": 178
     },
-    "components/settings/profile-avatar-section.tsx": { "ProfileAvatarSection": 143 },
+    "components/settings/profile-avatar-section.tsx": { "ProfileAvatarSection": 137 },
     "components/settings/profile-settings-form.tsx": { "ProfileSettingsForm": 87 },
     "components/settings/responsibility-delegation-dialog.tsx": { "DelegationDialog": 138 },
     "components/settings/responsibility-settings.tsx": {
@@ -469,7 +468,7 @@
     "components/settings/use-responsibility-configuration-form.ts": {
       "useResponsibilityConfigurationForm": 102
     },
-    "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 105 },
+    "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
     "components/shared/embedded-auftraege-lists.tsx": { "EmbeddedAuftraegeLists": 153 },
     "components/shared/embedded-auftraege-section.tsx": { "EmbeddedAuftraegeSection": 108 },
     "components/shared/metadata-section.tsx": { "MetadataSection": 166, "MetadataFieldRow": 176 },
@@ -493,8 +492,8 @@
       "useDatePickerSegments": 141
     },
     "components/use-manual-entry-form-submit.ts": {
-      "useManualEntrySubmit": 143,
-      "useManualEntrySubmit > handleSubmit": 103
+      "useManualEntrySubmit": 138,
+      "useManualEntrySubmit > handleSubmit": 98
     },
     "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 124 },
     "components/zeiterfassung/pending-approvals-cards.tsx": {
@@ -505,7 +504,7 @@
     "components/zeiterfassung/pending-approvals.tsx": { "PendingApprovals": 125 },
     "components/zeiterfassung/sickness-section-report-dialog.tsx": {
       "OwnSicknessReportFields": 94,
-      "OwnSicknessReportDialog": 112
+      "OwnSicknessReportDialog": 107
     },
     "components/zeiterfassung/sickness-section.tsx": { "SicknessSection": 109 },
     "components/zeiterfassung/time-account-settings-forms.tsx": { "AdjustmentRequestForm": 125 },
@@ -525,7 +524,7 @@
     "components/zeiterfassung/use-time-correction-requests.ts": { "useTimeCorrectionRequestActions": 137 },
     "components/zeiterfassung/use-vacation-approvals.ts": { "useVacationApprovalDecisions": 83 },
     "components/zeiterfassung/vacation-approvals.tsx": { "VacationApprovals": 86 },
-    "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 117 },
+    "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
     "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
     "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
     "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {

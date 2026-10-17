@@ -182,7 +182,7 @@ export function WorkContextProjectGroupCard({
         <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex items-center gap-2">
             {group.project.projectNumber && (
-              <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+              <span className="shrink-0 font-mono text-xs text-muted-foreground">
                 {group.project.projectNumber}
               </span>
             )}
@@ -222,7 +222,7 @@ export function WorkContextProjectGroupCard({
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         {jobGroup.job.jobNumber && (
-                          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                          <span className="shrink-0 font-mono text-xs text-muted-foreground">
                             {jobGroup.job.jobNumber}
                           </span>
                         )}

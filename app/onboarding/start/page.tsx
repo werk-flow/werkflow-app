@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Building2, Users } from 'lucide-react';
 
-import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { StandaloneTitle } from '@/components/shared/standalone-screen';
+import { Card, CardDescription, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DeleteAccountButton } from '@/components/onboarding/delete-account-button';
 import { UrlFlashBanner } from '@/components/ui/banner';
@@ -32,20 +33,20 @@ export default async function OnboardingStartPage() {
         />
       </Suspense>
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Willkommen bei WerkFlow</h1>
+        <StandaloneTitle>Willkommen bei WerkFlow</StandaloneTitle>
         <p className="text-muted-foreground">Wie möchtest du starten?</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
         {/* Create Organization Option */}
-        <Card className="relative overflow-hidden transition-all hover:border-primary hover:shadow-md h-full">
-          <Link href="/upgrade" className="absolute inset-0 z-10" />
+        <Card className="relative h-full overflow-hidden transition-colors hover:bg-muted/50">
+          <Link href="/upgrade" aria-label="Organisation erstellen" className="absolute inset-0 z-10" />
           <CardHeader className="flex flex-col h-full space-y-4">
-            <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10">
-              <Building2 className="size-6 text-primary" />
+            <div className="flex size-12 items-center justify-center rounded-lg bg-muted">
+              <Building2 className="size-6 text-muted-foreground" aria-hidden="true" />
             </div>
             <div className="flex-1 space-y-2">
-              <CardTitle className="text-xl">Organisation erstellen</CardTitle>
+              <h2 className="text-lg font-semibold">Organisation erstellen</h2>
               <CardDescription>
                 Werde Admin und erstelle deine eigene Organisation. Lade Mitarbeiter ein und verwalte dein
                 Team.
@@ -58,14 +59,18 @@ export default async function OnboardingStartPage() {
         </Card>
 
         {/* Join Organization Option */}
-        <Card className="relative overflow-hidden transition-all hover:border-primary hover:shadow-md h-full">
-          <Link href="/onboarding/join-organization" className="absolute inset-0 z-10" />
+        <Card className="relative h-full overflow-hidden transition-colors hover:bg-muted/50">
+          <Link
+            href="/onboarding/join-organization"
+            aria-label="Organisation beitreten"
+            className="absolute inset-0 z-10"
+          />
           <CardHeader className="flex flex-col h-full space-y-4">
-            <div className="flex size-12 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="size-6 text-primary" />
+            <div className="flex size-12 items-center justify-center rounded-lg bg-muted">
+              <Users className="size-6 text-muted-foreground" aria-hidden="true" />
             </div>
             <div className="flex-1 space-y-2">
-              <CardTitle className="text-xl">Organisation beitreten</CardTitle>
+              <h2 className="text-lg font-semibold">Organisation beitreten</h2>
               <CardDescription>
                 Du hast einen Organisationscode? Tritt einer bestehenden Organisation bei.
               </CardDescription>

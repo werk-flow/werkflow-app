@@ -61,10 +61,10 @@ export function SicknessSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
+      <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
         Krankmeldung
         <InlinePending active={settling.isBusy(NEW_REPORT_ID)} />
-      </h3>
+      </h2>
 
       {/* A failed first read is a failure with retry, never an empty card. */}
       {loadFailed ? (

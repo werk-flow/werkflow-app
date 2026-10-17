@@ -19,7 +19,7 @@ export function PasswordStrengthMeter({ level, className }: PasswordStrengthMete
 
   return (
     <div className={cn('space-y-1', className)}>
-      <div className="flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+      <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
         <span>Passwortstärke</span>
         <span>{label}</span>
       </div>

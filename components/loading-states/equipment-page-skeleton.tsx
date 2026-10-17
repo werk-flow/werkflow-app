@@ -3,6 +3,7 @@
 import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
 import { ServiceToolbarSkeleton } from '@/components/loading-states/service-cases-page-skeleton';
 import { EQUIPMENT_COLUMNS } from '@/components/service/equipment-list-content';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton-table';
 
@@ -40,8 +41,8 @@ export function EquipmentDetailSkeleton() {
         <Skeleton className="h-7 w-72 max-w-full" />
         <Skeleton className="h-4 w-56 max-w-full" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-        <div className="space-y-6">
+      <DetailColumns layout="main-and-wide-aside">
+        <div className="min-w-0 space-y-6">
           <Skeleton className="h-72 rounded-lg" />
           <ContextualDocumentsSkeleton
             description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
@@ -54,7 +55,7 @@ export function EquipmentDetailSkeleton() {
           <Skeleton className="h-48 rounded-lg" />
           <Skeleton className="h-56 rounded-lg" />
         </div>
-      </div>
+      </DetailColumns>
     </div>
   );
 }

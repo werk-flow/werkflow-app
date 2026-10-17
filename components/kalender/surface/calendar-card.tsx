@@ -192,23 +192,23 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
           <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />
         )}
         {inactive && statusLabel && (
-          <span className="shrink-0 rounded-sm bg-muted px-1 text-[11px] text-muted-foreground">
+          <span className="shrink-0 rounded-sm bg-muted px-1 text-xs text-muted-foreground">
             {statusLabel}
           </span>
         )}
         {size === 'month' && job.jobNumber && (
-          <span className="ml-auto hidden shrink-0 font-mono text-[11px] opacity-70 sm:inline">
+          <span className="ml-auto hidden shrink-0 font-mono text-xs opacity-70 sm:inline">
             {job.jobNumber}
           </span>
         )}
       </span>
       {!oneLine && job.plannedTime && (
-        <span className="text-[11px] tabular-nums opacity-80">{cardTime(job)}</span>
+        <span className="text-xs tabular-nums opacity-80">{cardTime(job)}</span>
       )}
       {!oneLine && (subtitle || job.jobNumber) && (
         <span
           className={cn(
-            'flex min-w-0 gap-1 text-[11px] opacity-80',
+            'flex min-w-0 gap-1 text-xs opacity-80',
             size === 'day' ? 'flex-col items-start' : 'items-center',
           )}
         >
@@ -226,7 +226,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
             <span
               key={chip.label}
               className={cn(
-                'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-[11px] leading-4',
+                'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-xs leading-4',
                 CHIP_CLASS[chip.tone],
               )}
             >

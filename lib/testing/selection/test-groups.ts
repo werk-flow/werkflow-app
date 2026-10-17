@@ -191,6 +191,19 @@ export const TEST_SCOPE_PREFIXES: Readonly<Record<string, readonly string[]>> = 
     'components/loading-states/maintenance-page-skeleton.tsx',
     'components/loading-states/service-cases-page-skeleton.tsx',
   ],
+  // The screens outside the app shell (standalone-route-inventory.ts).
+  standalone: [
+    'app/(auth)/',
+    'app/onboarding/',
+    'app/upgrade/',
+    'app/invite-error/',
+    'app/not-found.tsx',
+    'components/onboarding/',
+    'components/password/',
+    'components/otp-form.tsx',
+    'components/shared/standalone-screen.tsx',
+    'components/loading-states/standalone-skeletons.tsx',
+  ],
   attention: [
     'lib/attention/',
     'components/aufgaben/',
@@ -270,6 +283,8 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:service', 'layout/surfaces-service.spec.ts', ['service']],
   ['layout:field', 'layout/surfaces-field.spec.ts', ['time', 'work', 'personnel', 'planning', 'attention']],
   ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
+  // The screens outside the app shell with their own sessions (standalone-route-inventory.ts).
+  ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
   // Reference screenshots of every page family; release mode and explicit request only.
   ['visual', 'visual/references.spec.ts', ['*']],
   // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts); release mode and explicit request only.

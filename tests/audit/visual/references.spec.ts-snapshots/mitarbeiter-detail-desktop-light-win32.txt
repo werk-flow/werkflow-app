@@ -1,0 +1,75 @@
+Haustechnik Krämer GmbH
+Organisation erstellen
+Dashboard
+Aufgaben
+3
+3 offene Aufgaben und Benachrichtigungen
+Kalender
+Zeiterfassung
+Qualifikationen
+Anfragen
+Aufträge
+Dokumente
+Inventar
+Service
+Arbeitsvorlagen
+Mitarbeiter
+Kunden
+MK
+Martin Krämer
+martin.kraemer@haustechnik-kraemer.de
+Mitarbeiter
+Kevin Schmid
+Kevin Schmid
+Handwerker/in
+kevin.schmid@haustechnik-kraemer.de
+Profil
+Vorname
+Kevin
+Nachname
+Schmid
+E-Mail
+kevin.schmid@haustechnik-kraemer.de
+Rolle
+Handwerker/in
+Beigetreten
+01.01.2026
+Personalien
+Personalnummer
+—
+Telefon
+—
+Private E-Mail
+—
+Straße
+—
+PLZ
+—
+Ort
+—
+Notfallkontakt
+—
+Notfallkontakt Telefon
+—
+Eintrittsdatum
+01.01.2026
+Austrittsdatum
+—
+Notizen
+—
+Beschäftigung
+Kondition hinzufügen
+Noch keine Angaben zur Beschäftigung.
+Konditionen gelten ab ihrem Datum und ändern rückwirkend nichts an früheren Zeiträumen.
+Arbeitszeitmodell
+Wochenplan hinzufügen
+Kein Arbeitszeitmodell hinterlegt.
+Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden pro Tag – sichtbar als Hinweis, nicht als echte Vorgabe.
+Krankmeldungen
+Krankmeldung erfassen
+Keine Krankmeldungen erfasst.
+Teams & Qualifikationen
+Operative Angaben für die Planung.
+Verwalten
+Teams
+Keine aktuelle Teamzuordnung.

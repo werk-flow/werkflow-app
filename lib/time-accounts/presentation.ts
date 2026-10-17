@@ -13,13 +13,20 @@ export function formatPeriod(startDate: string): string {
   return formatBerlin(startDate, 'monthYear');
 }
 
-export const PERIOD_STATE_LABELS: Record<TimePeriodState, string> = {
+export const PERIOD_STATE_LABELS: Readonly<Record<TimePeriodState, string>> = {
   prepared: 'Vorbereitet',
   closed: 'Abgeschlossen',
   reopened: 'Wieder geöffnet',
 };
 
-export const FINDING_LABELS: Record<TimeFindingKind, string> = {
+/** The badge color of a period state: an open period waits for its close, a closed one is done. */
+export const PERIOD_STATE_BADGE_VARIANTS: Readonly<Record<TimePeriodState, 'warning' | 'success'>> = {
+  prepared: 'warning',
+  closed: 'success',
+  reopened: 'warning',
+};
+
+export const FINDING_LABELS: Readonly<Record<TimeFindingKind, string>> = {
   missing_policy: 'Arbeitszeitregel fehlt',
   missing_opening_balance: 'Zeitkonto fehlt',
   missing_schedule: 'Arbeitsplan fehlt',
@@ -40,13 +47,13 @@ export const FINDING_LABELS: Record<TimeFindingKind, string> = {
   public_holiday_work: 'Feiertagsarbeit',
 };
 
-export const FINDING_DECISION_LABELS: Record<TimeFindingDecision, string> = {
+export const FINDING_DECISION_LABELS: Readonly<Record<TimeFindingDecision, string>> = {
   acknowledged: 'Bestätigt',
   approved: 'Freigegeben',
   rejected: 'Abgelehnt',
 };
 
-export const PAYROLL_EXPORT_STATE_LABELS: Record<PayrollExportState, string> = {
+export const PAYROLL_EXPORT_STATE_LABELS: Readonly<Record<PayrollExportState, string>> = {
   requested: 'Angefordert',
   generating: 'Wird erstellt',
   ready: 'Bereit',
@@ -55,7 +62,7 @@ export const PAYROLL_EXPORT_STATE_LABELS: Record<PayrollExportState, string> = {
 };
 import type { Database } from '@/lib/supabase/database.types';
 
-type TimePeriodState = Database['public']['Enums']['time_period_state'];
-type TimeFindingKind = Database['public']['Enums']['time_period_finding_kind'];
-type TimeFindingDecision = Database['public']['Enums']['time_period_finding_decision'];
-type PayrollExportState = Database['public']['Enums']['payroll_export_state'];
+export type TimePeriodState = Database['public']['Enums']['time_period_state'];
+export type TimeFindingKind = Database['public']['Enums']['time_period_finding_kind'];
+export type TimeFindingDecision = Database['public']['Enums']['time_period_finding_decision'];
+export type PayrollExportState = Database['public']['Enums']['payroll_export_state'];

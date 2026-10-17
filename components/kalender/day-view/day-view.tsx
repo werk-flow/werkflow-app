@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef } from 'react';
+import { EmptyState } from '@/components/ui/empty-state';
 import { cn, toLocalDateString } from '@/lib/utils';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
 import { DAY_NAME_COLUMN_PX, minutesIntoDay } from '@/lib/calendar/day-layout';
@@ -192,7 +193,7 @@ export function DayView(props: DayViewProps): React.JSX.Element {
           />
         ))}
         {rows.length === 0 && (
-          <p className="px-4 py-8 text-sm text-muted-foreground">Keine Mitarbeiter für diese Auswahl.</p>
+          <EmptyState title="Keine Mitarbeiter für diese Auswahl" description="Prüfe Filter und Suche." />
         )}
         {nowMinutes !== null && (
           <NowIndicator orientation="vertical" offset={DAY_NAME_COLUMN_PX + (nowMinutes / 60) * hourWidth} />

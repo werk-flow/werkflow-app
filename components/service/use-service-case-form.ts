@@ -14,6 +14,7 @@ import type {
   ServiceCaseDetail,
   ServiceCaseListItem,
 } from '@/lib/service-cases/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   EMPTY_SERVICE_CASE_FORM,
   GENERIC_SERVICE_CASE_ERROR,
@@ -146,17 +147,16 @@ export function useServiceCaseForm({
       : undefined,
   );
   const terminal = ['resolved', 'closed_without_visit', 'duplicate'].includes(form.status);
-  const fieldErrors = attempted ? missingServiceCaseFields(form, Boolean(initial), terminal) : {};
+  const missingFields = missingServiceCaseFields(form, Boolean(initial), terminal);
+  const fieldErrors = attempted ? missingFields : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errors = missingServiceCaseFields(form, Boolean(initial), terminal);
-    const firstInvalid = SERVICE_CASE_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
+    const errorsById = Object.fromEntries(
+      SERVICE_CASE_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
+    );
+    if (focusFirstInvalidField(errorsById)) return;
     if (!initial && onSubmitted) {
       const serviceCaseId = crypto.randomUUID();
       onSubmitted({

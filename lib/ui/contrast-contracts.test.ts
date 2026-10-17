@@ -227,8 +227,31 @@ function mayContainBrightPrimaryText(source: string): boolean {
   return /text-primary(?![\w-])/.test(source);
 }
 
+// Orange marks actions, selection and focus, never decoration (AGENTS.md
+// virtue 1). An icon in bright `text-primary` and an orange-tinted tile whose
+// only content is an icon decorated the onboarding cards, the organization
+// card and four settings panels (UI audit of 2026-10-15); a decorative icon
+// is `text-muted-foreground` on `bg-muted`. The one bright text is the
+// inverse filled-control pair. A tint behind text stays: that is a selected
+// option or row. Only the tile's own background counts (also in dark mode):
+// a hover or selected tint is an action state.
+const ORANGE_TINT = /(?:^|\s)(?:dark:)?bg-primary\/\d+/;
+
+/** `<Icon />`, `show && <Icon />` or `show ? <Icon /> : null`: content that renders only an icon. */
+function rendersOnlyIcon(node: ts.Node, icons: ReadonlySet<string>, syntax: ts.SourceFile): boolean {
+  if (ts.isParenthesizedExpression(node)) return rendersOnlyIcon(node.expression, icons, syntax);
+  if (ts.isJsxSelfClosingElement(node)) return icons.has(node.tagName.getText(syntax));
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+    return rendersOnlyIcon(node.right, icons, syntax);
+  if (ts.isConditionalExpression(node))
+    return [node.whenTrue, node.whenFalse].every(
+      (branch) => branch.kind === ts.SyntaxKind.NullKeyword || rendersOnlyIcon(branch, icons, syntax),
+    );
+  return false;
+}
+
 function brightTextViolations(source: string, fileName: string): number[] {
-  if (!mayContainBrightPrimaryText(source)) return [];
+  if (!mayContainBrightPrimaryText(source) && !source.includes('bg-primary/')) return [];
   const syntax = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const icons = new Set<string>();
   for (const statement of syntax.statements) {
@@ -253,24 +276,29 @@ function brightTextViolations(source: string, fileName: string): number[] {
       }
       if (node.initializer) collect(node.initializer);
       const bright = classes.filter((value) => /(?:^|[\s:])text-primary(?=$|[\s/])/.test(value));
-      if (bright.length > 0) {
-        const opening = node.parent.parent;
-        if (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) {
-          const name = opening.tagName.getText(syntax);
-          const iconOnly =
-            ts.isJsxOpeningElement(opening) &&
-            ts.isJsxElement(opening.parent) &&
-            opening.parent.children.some((child) => ts.isJsxSelfClosingElement(child)) &&
-            opening.parent.children.every(
-              (child) =>
-                (ts.isJsxText(child) && child.text.trim() === '') ||
-                (ts.isJsxExpression(child) && !child.expression) ||
-                (ts.isJsxSelfClosingElement(child) && icons.has(child.tagName.getText(syntax))),
+      const opening = node.parent.parent;
+      if (ts.isJsxOpeningElement(opening) || ts.isJsxSelfClosingElement(opening)) {
+        const line = syntax.getLineAndCharacterOfPosition(opening.getStart(syntax)).line + 1;
+        const content = (child: ts.JsxChild): ts.Node | undefined =>
+          ts.isJsxExpression(child) ? child.expression : child;
+        const iconOnly =
+          ts.isJsxOpeningElement(opening) &&
+          ts.isJsxElement(opening.parent) &&
+          opening.parent.children.some((child) => {
+            const node = content(child);
+            return node !== undefined && rendersOnlyIcon(node, icons, syntax);
+          }) &&
+          opening.parent.children.every((child) => {
+            const node = content(child);
+            return (
+              node === undefined ||
+              (ts.isJsxText(node) && node.text.trim() === '') ||
+              rendersOnlyIcon(node, icons, syntax)
             );
-          const inverse = bright.every((value) => /(?:^|\s)bg-primary-foreground(?:$|\s)/.test(value));
-          if (!icons.has(name) && !iconOnly && !inverse)
-            violations.push(syntax.getLineAndCharacterOfPosition(opening.getStart(syntax)).line + 1);
-        }
+          });
+        const inverse = bright.every((value) => /(?:^|\s)bg-primary-foreground(?:$|\s)/.test(value));
+        if (bright.length > 0 && !inverse) violations.push(line);
+        else if (iconOnly && classes.some((value) => ORANGE_TINT.test(value))) violations.push(line);
       }
     }
     ts.forEachChild(node, visit);
@@ -279,7 +307,7 @@ function brightTextViolations(source: string, fileName: string): number[] {
   return violations;
 }
 
-test('bright primary text is limited to icons and the inverse filled-control pair', () => {
+test('bright primary text is limited to the inverse filled-control pair, and no orange tile decorates an icon', () => {
   const violations: string[] = [];
   function inspect(directory: string): void {
     for (const entry of readdirSync(join(root, directory), {
@@ -298,18 +326,24 @@ test('bright primary text is limited to icons and the inverse filled-control pai
   expect(violations).toEqual([]);
 });
 
-test('bright-text census distinguishes decorative icons from actual labels', () => {
+test('bright-text census refuses orange icons and icon tiles and keeps the inverse pair and selection tints', () => {
   const source = `import { Search } from 'lucide-react';
     const samples = <>
       <Search className="text-primary" />
       <div className="text-primary"><Search /></div>
-      <span className="bg-primary-foreground text-primary">2</span>
-      <span className="text-primary-text">Lesbar</span>
       <span className="text-primary">Zu hell</span>
       <span className={active ? 'text-primary' : 'text-muted-foreground'}>Zu hell</span>
       <div className="text-primary"><Search />Suchtext</div>
+      <div className="flex size-10 rounded-lg bg-primary/10"><Search className="text-muted-foreground" /></div>
+      <span className="bg-primary-foreground text-primary">2</span>
+      <span className="text-primary-text">Lesbar</span>
+      <li className="bg-primary/10 text-primary-text">Ausgewählt</li>
+      <div className="bg-muted"><Search className="text-muted-foreground" /></div>
+      <div className="rounded-lg bg-primary/10">{show && <Search className="text-muted-foreground" />}</div>
+      <div className="rounded-lg dark:bg-primary/20">{show ? <Search /> : null}</div>
+      <div className="rounded-lg hover:bg-primary/10"><Search className="text-muted-foreground" /></div>
     </>`;
-  expect(brightTextViolations(source, 'fixture.tsx')).toHaveLength(3);
+  expect(brightTextViolations(source, 'fixture.tsx')).toEqual([3, 4, 5, 6, 7, 8, 13, 14]);
 });
 
 test('bright-text prefilter skips semantic suffixes without losing variants, opacity or escapes', () => {

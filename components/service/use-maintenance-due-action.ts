@@ -12,6 +12,7 @@ import type {
 } from '@/lib/maintenance/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { formatMinutesAsHoursInput } from '@/lib/jobs/planned-working';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
   MAINTENANCE_DUE_REQUIRED_FIELD_IDS,
   dueActionErrorMessage,
@@ -107,17 +108,16 @@ export function useMaintenanceDueAction({
   // The reason field is hidden for schedule, so it must never count as missing there.
   const showReason = action !== 'schedule';
   const reasonRequired = showReason && action !== 'create_visit' && action !== 'complete';
-  const fieldErrors = attempted ? missingDueActionFields(values, reasonRequired) : {};
+  const missingFields = missingDueActionFields(values, reasonRequired);
+  const fieldErrors = attempted ? missingFields : {};
 
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const errors = missingDueActionFields(values, reasonRequired);
-    const firstInvalid = MAINTENANCE_DUE_REQUIRED_FIELD_IDS.find(([key]) => errors[key]);
-    if (firstInvalid) {
-      document.getElementById(firstInvalid[1])?.focus();
-      return;
-    }
+    const errorsById = Object.fromEntries(
+      MAINTENANCE_DUE_REQUIRED_FIELD_IDS.map(([key, id]) => [id, missingFields[key]]),
+    );
+    if (focusFirstInvalidField(errorsById)) return;
     void run();
   }
 

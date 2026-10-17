@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarCheck, Send } from 'lucide-react';
 import type { useBusyIds } from '@/hooks/use-busy-id';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import {
   DISPATCH_OVERVIEW_MAX_OFFSET_DAYS,
@@ -136,7 +137,7 @@ function DispatchPanelOccurrenceRow({ entry, rowBusy, dialogs, batch }: Dispatch
             <span className="min-w-0 flex-1 truncate">
               {entry.title}
               {entry.jobNumber && (
-                <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{entry.jobNumber}</span>
+                <span className="ml-1.5 font-mono text-xs text-muted-foreground">{entry.jobNumber}</span>
               )}
             </span>
             <InlinePending active={rowBusy.isBusy(entry.occurrenceId)} label="Wird aktualisiert" />
@@ -203,7 +204,7 @@ export function DispatchPanelOccurrences({
         Geplante Besuche (nächste {DISPATCH_OVERVIEW_MAX_OFFSET_DAYS} Tage)
       </h3>
       {overview && overview.occurrences.length === 0 && (
-        <p className="text-sm text-muted-foreground">Keine geplanten Auftragsbesuche im Zeitraum.</p>
+        <EmptyState size="compact" title="Keine geplanten Auftragsbesuche im Zeitraum." />
       )}
       <div className="space-y-2">
         {(overview?.occurrences ?? []).map((entry) => (

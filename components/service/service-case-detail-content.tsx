@@ -6,7 +6,9 @@ import { ArrowLeft, Pencil } from 'lucide-react';
 
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { useOrganization } from '@/components/organization/organization-context';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { RegionLoadError } from '@/components/shared/region-load-error';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SectionError } from '@/components/ui/section-error';
 import { InlinePending } from '@/components/ui/inline-pending';
@@ -90,9 +92,7 @@ export function ServiceCaseDetailContent({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span>
-              <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
-                {SERVICE_CASE_STATUS_LABELS[item.status]}
-              </span>
+              <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[item.status]}</Badge>
               <span className="text-sm text-muted-foreground">
                 {SERVICE_CASE_URGENCY_LABELS[item.urgency]}
               </span>
@@ -112,8 +112,8 @@ export function ServiceCaseDetailContent({
           </span>
         </div>
       </div>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <main className="space-y-6">
+      <DetailColumns layout="main-and-aside">
+        <div className="min-w-0 space-y-6">
           <ServiceCaseOriginSection item={item} />
           <ServiceCaseTriageSection item={item} />
           {documentsLoadFailed ? (
@@ -144,13 +144,13 @@ export function ServiceCaseDetailContent({
             onLinkClick={() => setRelationOpen(true)}
           />
           <ServiceCaseHistorySection item={item} />
-        </main>
+        </div>
         <ServiceCaseDetailSidebar
           workspace={workspace}
           isStale={live.isStale}
           onFollowUpClick={() => setFollowUpOpen(true)}
         />
-      </div>
+      </DetailColumns>
       {editOpen && (
         <ServiceCaseFormDialog
           open

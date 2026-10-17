@@ -1,0 +1,7 @@
+Organisation beitreten
+Gib den Organisationscode ein, den du von deinem Admin erhalten hast. Ein Admin oder das Büro deiner Organisation gibt deine Anfrage frei.
+Organisationscode
+*
+Pflichtfeld
+Beitritt anfragen
+Zurück

@@ -1,6 +1,7 @@
 'use client';
 
 import { StaleRegion } from '@/components/shared/stale-region';
+import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
 import { useId, useState, type ReactElement } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -133,9 +134,7 @@ export function WorkArtifactsSection({
       </div>
       <StaleRegion stale={view.isStale} onRetry={refresh}>
         {artifacts.length === 0 ? (
-          <p className="mt-4 rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
-            Noch keine Arbeitsnachweise erfasst.
-          </p>
+          <EmptyState size="compact" className="mt-4" title="Noch keine Arbeitsnachweise erfasst." />
         ) : (
           <div className="mt-4 divide-y rounded-md border">
             {artifacts.map((artifact) => (

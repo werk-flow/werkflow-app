@@ -24,7 +24,6 @@ import { QualificationWarningDialog } from '@/components/auftraege/shared/qualif
 import { ConvertRequestCustomerFields } from './convert-request-customer-fields';
 import { ConvertRequestJobFields } from './convert-request-job-fields';
 import { useConvertRequestForm, type ConversionTarget } from './use-convert-request-form';
-import { Spinner } from '@/components/ui/spinner';
 
 interface ConvertRequestDialogProps {
   request: ClientRequest;
@@ -143,8 +142,8 @@ export function ConvertRequestDialog({
               >
                 Abbrechen
               </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? <Spinner /> : <ArrowRightLeft className="size-4" />}
+              <Button type="submit" pending={isLoading}>
+                <ArrowRightLeft className="size-4" />
                 {target === 'job' ? 'In Auftrag umwandeln' : 'In Projekt umwandeln'}
               </Button>
             </DialogFooter>

@@ -8,6 +8,7 @@ import { describeFailure } from '@/lib/action-messages';
 import { correctSicknessReport } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType, type SicknessReport } from '@/lib/sickness/types';
 import { logError } from '@/lib/logging';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type SicknessReportCorrectionForm = ReturnType<typeof useSicknessReportCorrectionForm>;
 
@@ -40,17 +41,12 @@ export function useSicknessReportCorrectionForm(report: SicknessReport, onClose:
       reason: reason.trim() ? undefined : 'Bitte gib einen Grund für die Korrektur an.',
     };
     setFieldErrors(nextFieldErrors);
-    const firstInvalidId = nextFieldErrors.start
-      ? 'correct-sickness-start'
-      : nextFieldErrors.end
-        ? 'correct-sickness-end'
-        : nextFieldErrors.reason
-          ? 'correct-sickness-reason'
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      'correct-sickness-start': nextFieldErrors.start,
+      'correct-sickness-end': nextFieldErrors.end,
+      'correct-sickness-reason': nextFieldErrors.reason,
+    });
+    if (invalid) return;
 
     try {
       const result = await runSave({

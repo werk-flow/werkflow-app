@@ -42,7 +42,7 @@ export const DurationHoursInput = React.forwardRef<HTMLInputElement, DurationHou
       <div
         className={cn(
           'flex h-9 w-full items-center overflow-hidden rounded-md border border-input bg-transparent shadow-xs transition-[color,box-shadow]',
-          'focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-2',
+          'focus-within:ring-ring/50 focus-within:ring-2',
           'dark:bg-input/30',
           disabled && 'cursor-not-allowed opacity-50',
           className,

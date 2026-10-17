@@ -162,7 +162,7 @@ export function MoveDestinationDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
-      <DialogContent className="flex h-[min(780px,90vh)] !w-[min(1280px,calc(100vw-3rem))] !max-w-none flex-col gap-0 overflow-hidden p-0 sm:!max-w-none">
+      <DialogContent size="window" className="flex h-[min(780px,90dvh)] flex-col gap-0 overflow-hidden p-0">
         <DialogHeader className="border-b px-5 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
@@ -214,6 +214,7 @@ export function MoveDestinationDialog({
                     <MoveDestinationFolderRow
                       key={folder.id}
                       folder={folder}
+                      // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: a folder cannot move into itself or its own subfolder
                       isDisabled={selectedFolderIds.has(folder.id) || descendantFolderIds.has(folder.id)}
                       onSelectFolder={setCurrentFolderId}
                     />

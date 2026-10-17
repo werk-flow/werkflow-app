@@ -27,7 +27,7 @@ export function MitarbeiterDetailProfileSection({
       label: 'Rolle',
       value: (
         <Badge variant="secondary" className="text-xs">
-          {ROLE_LABELS[member.role] || member.role}
+          {ROLE_LABELS[member.role]}
         </Badge>
       ),
       editableConfig: roleOptions

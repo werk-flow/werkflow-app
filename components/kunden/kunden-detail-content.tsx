@@ -13,6 +13,7 @@ import {
 import { RegionLoadError } from '@/components/shared/region-load-error';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { MetadataSection } from '@/components/shared/metadata-section';
 import { EmbeddedAuftraegeSection } from '@/components/shared/embedded-auftraege-section';
@@ -138,97 +139,91 @@ export function KundenDetailContent({
       />
 
       <PageBody>
-        {/* Columns follow the width of this content, not of the screen: the app sidebar takes
-            256 px, so a screen breakpoint turned the columns on where they did not fit. */}
-        <div className="@container/detail">
-          <div className="grid grid-cols-1 gap-6 @7xl/detail:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
-            {/* Left Column: Metadata + Financial Placeholders */}
-            <div className="grid grid-cols-1 gap-6 @3xl/detail:grid-cols-2 @7xl/detail:grid-cols-1">
-              <MetadataSection title="Kundendetails" fields={metadataFields} isEditable={isAdminOrManager} />
+        <DetailColumns layout="cards-and-table">
+          {/* Left Column: Metadata + Financial Placeholders */}
+          <div className="grid grid-cols-1 gap-6 @3xl/detail:grid-cols-2 @7xl/detail:grid-cols-1">
+            <MetadataSection title="Kundendetails" fields={metadataFields} isEditable={isAdminOrManager} />
 
-              {relations ? (
-                <ClientRelationsSection
-                  clientId={client.id}
-                  clientAddress={client.address}
-                  contacts={relations.contacts}
-                  sites={relations.sites}
-                  isAdminOrManager={isAdminOrManager}
-                  onRequestContact={contactGuard.requestContact}
-                  isCheckingContact={contactGuard.isCheckingContact}
-                  equipment={equipment}
-                  equipmentLoadFailed={equipmentLoadFailed}
+            {relations ? (
+              <ClientRelationsSection
+                clientId={client.id}
+                clientAddress={client.address}
+                contacts={relations.contacts}
+                sites={relations.sites}
+                isAdminOrManager={isAdminOrManager}
+                onRequestContact={contactGuard.requestContact}
+                isCheckingContact={contactGuard.isCheckingContact}
+                equipment={equipment}
+                equipmentLoadFailed={equipmentLoadFailed}
+              />
+            ) : (
+              <RegionLoadError>Ansprechpartner und Einsatzorte konnten nicht geladen werden.</RegionLoadError>
+            )}
+
+            {/* Financial Summary Placeholder */}
+            <div className="space-y-3">
+              <ClientFinancePlaceholder />
+
+              {documents ? (
+                <ContextualDocumentsSection
+                  title="Dokumente"
+                  description="Verträge, Angebote, Rechnungen und weitere Kundendokumente."
+                  documents={documents}
+                  documentTarget={{ kind: 'client', clientId: client.id }}
+                  contextLabel={client.name}
+                  canUpload={isAdminOrManager}
+                  canManage={isAdminOrManager}
                 />
               ) : (
-                <RegionLoadError>
-                  Ansprechpartner und Einsatzorte konnten nicht geladen werden.
-                </RegionLoadError>
+                <RegionLoadError>Die Kundendokumente konnten nicht geladen werden.</RegionLoadError>
               )}
-
-              {/* Financial Summary Placeholder */}
-              <div className="space-y-3">
-                <ClientFinancePlaceholder />
-
-                {documents ? (
-                  <ContextualDocumentsSection
-                    title="Dokumente"
-                    description="Verträge, Angebote, Rechnungen und weitere Kundendokumente."
-                    documents={documents}
-                    documentTarget={{ kind: 'client', clientId: client.id }}
-                    contextLabel={client.name}
-                    canUpload={isAdminOrManager}
-                    canManage={isAdminOrManager}
-                  />
-                ) : (
-                  <RegionLoadError>Die Kundendokumente konnten nicht geladen werden.</RegionLoadError>
-                )}
-              </div>
-            </div>
-
-            {/* Right Column: relationship priorities, history, and linked work */}
-            <div className="min-w-0 space-y-8">
-              {relationshipBundle ? (
-                <CustomerRelationshipWorkspace
-                  clientId={client.id}
-                  currentUserId={currentUserId}
-                  contacts={relations?.contacts ?? []}
-                  initialBundle={relationshipBundle}
-                />
-              ) : (
-                <RegionLoadError>
-                  Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten nicht geladen werden.
-                </RegionLoadError>
-              )}
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Briefcase className="size-4 text-muted-foreground" />
-                  <SectionTitle>Zugeordnete Aufträge & Projekte</SectionTitle>
-                </div>
-                {linkedWork ? (
-                  <EmbeddedAuftraegeSection
-                    jobs={linkedWork.jobs}
-                    projects={linkedWork.projects}
-                    clientMap={linkedWork.clientMap}
-                    jobAssignmentMap={linkedWork.jobAssignmentMap}
-                    members={members}
-                    lockedClientLabel={client.name}
-                    hideClientColumn
-                    defaultClient={client}
-                    readOnlyClient
-                    isAdminOrManager={isAdminOrManager}
-                    visibleColumns={visibleColumns}
-                    emptyTitle="Keine Aufträge"
-                    emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."
-                  />
-                ) : (
-                  <RegionLoadError>
-                    Die Aufträge und Projekte dieses Kunden konnten nicht geladen werden.
-                  </RegionLoadError>
-                )}
-              </div>
             </div>
           </div>
-        </div>
+
+          {/* Right Column: relationship priorities, history, and linked work */}
+          <div className="min-w-0 space-y-8">
+            {relationshipBundle ? (
+              <CustomerRelationshipWorkspace
+                clientId={client.id}
+                currentUserId={currentUserId}
+                contacts={relations?.contacts ?? []}
+                initialBundle={relationshipBundle}
+              />
+            ) : (
+              <RegionLoadError>
+                Kundenhistorie, Nachfassaktionen und Kontaktvorgaben konnten nicht geladen werden.
+              </RegionLoadError>
+            )}
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Briefcase className="size-4 text-muted-foreground" />
+                <SectionTitle>Zugeordnete Aufträge & Projekte</SectionTitle>
+              </div>
+              {linkedWork ? (
+                <EmbeddedAuftraegeSection
+                  jobs={linkedWork.jobs}
+                  projects={linkedWork.projects}
+                  clientMap={linkedWork.clientMap}
+                  jobAssignmentMap={linkedWork.jobAssignmentMap}
+                  members={members}
+                  lockedClientLabel={client.name}
+                  hideClientColumn
+                  defaultClient={client}
+                  readOnlyClient
+                  isAdminOrManager={isAdminOrManager}
+                  visibleColumns={visibleColumns}
+                  emptyTitle="Keine Aufträge"
+                  emptyDescription="Diesem Kunden sind derzeit keine Aufträge oder Projekte zugeordnet."
+                />
+              ) : (
+                <RegionLoadError>
+                  Die Aufträge und Projekte dieses Kunden konnten nicht geladen werden.
+                </RegionLoadError>
+              )}
+            </div>
+          </div>
+        </DetailColumns>
       </PageBody>
 
       {contactGuard.dialog}

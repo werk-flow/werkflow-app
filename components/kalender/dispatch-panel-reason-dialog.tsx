@@ -16,6 +16,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { dispatchErrorMessage } from '@/lib/dispatch/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export function DispatchReasonDialog({
   title,
@@ -40,12 +41,12 @@ export function DispatchReasonDialog({
 
   const handleConfirm = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (reason.trim().length < minLength) {
-      setReasonError(`Bitte gib eine Begründung mit mindestens ${minLength} Zeichen an.`);
-      document.getElementById('dispatch-reason-dialog')?.focus();
-      return;
-    }
-    setReasonError(null);
+    const nextReasonError =
+      reason.trim().length < minLength
+        ? `Bitte gib eine Begründung mit mindestens ${minLength} Zeichen an.`
+        : undefined;
+    setReasonError(nextReasonError ?? null);
+    if (focusFirstInvalidField({ 'dispatch-reason-dialog': nextReasonError })) return;
     await runConfirm(async () => {
       try {
         const failure = await onConfirm(reason.trim());

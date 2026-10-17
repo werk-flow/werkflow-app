@@ -15,7 +15,7 @@ import {
 } from '@/lib/installed-equipment/types';
 import { formatGermanMediumDateTime, formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
 
-const EVENT_LABELS: Record<string, string> = {
+const EVENT_LABELS: Readonly<Record<EquipmentDetail['events'][number]['eventType'], string>> = {
   registered: 'Anlage erfasst',
   details_corrected: 'Anlagendaten geändert',
   installation_recorded: 'Installation dokumentiert',
@@ -171,7 +171,7 @@ export function EquipmentHistorySection({
             </div>
             <div>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-medium">{EVENT_LABELS[event.eventType] ?? event.eventType}</h3>
+                <h3 className="text-sm font-medium">{EVENT_LABELS[event.eventType]}</h3>
                 <time className="text-xs text-muted-foreground">
                   {formatGermanMediumDateTime(event.effectiveAt)}
                 </time>

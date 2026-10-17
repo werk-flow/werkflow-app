@@ -11,7 +11,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ErrorText } from '@/components/ui/error-text';
-import { Spinner } from '@/components/ui/spinner';
 
 interface DeleteClientDialogProps {
   clientName: string;
@@ -48,17 +47,10 @@ export function DeleteClientDialog({
               event.preventDefault();
               void onConfirm();
             }}
-            disabled={isDeleting}
+            pending={isDeleting}
             variant="destructive"
           >
-            {isDeleting ? (
-              <>
-                <Spinner className="mr-2" />
-                Wird gelöscht…
-              </>
-            ) : (
-              'Löschen'
-            )}
+            {isDeleting ? 'Wird gelöscht…' : 'Löschen'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

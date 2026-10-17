@@ -7,6 +7,7 @@ import { addTeamMembership, endTeamMembership } from '@/lib/qualifications/actio
 import type { QualificationWorkspace, Team } from '@/lib/qualifications/types';
 import type { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type TeamMembership = QualificationWorkspace['teamMemberships'][number];
 
@@ -91,12 +92,11 @@ export function useTeamManagementMemberships({
       ...current,
       [team.id]: fieldErrors,
     }));
-    if (!employeeRecordId || fieldErrors.validUntil) {
-      document
-        .getElementById(fieldErrors.member ? `team-${team.id}-member` : `team-${team.id}-valid-until`)
-        ?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      [`team-${team.id}-member`]: fieldErrors.member,
+      [`team-${team.id}-valid-until`]: fieldErrors.validUntil,
+    });
+    if (invalid || !employeeRecordId) return;
     await runAction(`add:${team.id}`, async () => {
       const draftId = crypto.randomUUID();
       membershipList.insert(draftId, {

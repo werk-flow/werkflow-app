@@ -30,6 +30,7 @@ In Ausführung
 Unterbrochen
 0
 Filter
+Auswahl
 Nr
 Titel / Beschreibung
 Kunde
@@ -37,6 +38,7 @@ Status
 Priorität
 Mitarbeiter
 Datum
+Aktionen
 A-2026-0103
 Waschtisch im Behandlungsraum tauschen
 Praxis Dr. Wolf

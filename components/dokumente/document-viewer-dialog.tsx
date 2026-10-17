@@ -128,7 +128,7 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
     >
       <DialogContent
         className={cn(
-          'flex !h-[96vh] !max-h-[96vh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-black p-0 text-white shadow-2xl sm:!max-w-none',
+          'flex !h-[96dvh] !max-h-[96dvh] !w-[min(1680px,96vw)] !max-w-none flex-col gap-0 overflow-hidden border-border/70 bg-black p-0 text-white shadow-2xl sm:!max-w-none',
           isExpanded && '!h-dvh !max-h-dvh !w-screen rounded-none border-0 sm:!max-w-none',
         )}
       >
@@ -195,7 +195,7 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
             ) : !signedUrl ? (
               <div className="flex h-full items-center justify-center p-6" role="status" aria-busy="true">
                 <span className="sr-only">Vorschau wird geladen.</span>
-                <Skeleton className="h-full max-h-[70vh] w-full max-w-3xl bg-white/10" />
+                <Skeleton className="h-full max-h-[70dvh] w-full max-w-3xl bg-white/10" />
               </div>
             ) : canPreviewImage(document) ? (
               <div className="flex h-full items-center justify-center overflow-y-auto p-6">

@@ -2,6 +2,7 @@
 
 import { Users, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Card } from '@/components/ui/card';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
@@ -115,7 +116,7 @@ function TeamManagementCardMembers({
   return (
     <div className="space-y-2">
       {memberships.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine aktuellen Mitglieder.</p>
+        <EmptyState size="compact" title="Keine aktuellen Mitglieder." />
       ) : (
         memberships.map(({ item: membership, isOptimistic: isPendingMember }) => (
           <div

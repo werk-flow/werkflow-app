@@ -4,6 +4,7 @@ import { Archive, ArchiveRestore, Pencil, Phone, Plus, Star, Users } from 'lucid
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { ClientContact } from '@/lib/clients/types';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -164,9 +165,7 @@ export function ClientContactsCard({
       </div>
 
       {activeContacts.length === 0 ? (
-        <p className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
-          Noch keine Ansprechpartner hinterlegt.
-        </p>
+        <EmptyState size="compact" title="Noch keine Ansprechpartner hinterlegt." />
       ) : (
         <ul className="space-y-2">
           {activeContacts.map((contact) => (

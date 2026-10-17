@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 
 import { ListPagination } from '@/components/shared/list-pagination';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Field } from '@/components/ui/field';
 import { SectionError } from '@/components/ui/section-error';
@@ -129,7 +130,7 @@ export function TimeCorrectionRequests({ organizationId, mode }: TimeCorrectionR
     return mode === 'approvals' ? null : (
       <section className="space-y-3" aria-labelledby={`time-corrections-${mode}`}>
         {heading}
-        <p className="text-sm text-muted-foreground">Noch keine Zeitkorrekturen vorhanden.</p>
+        <EmptyState size="compact" title="Noch keine Zeitkorrekturen vorhanden." />
       </section>
     );
   }

@@ -4,6 +4,7 @@ import { useState, type ReactElement } from 'react';
 import { Award, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ErrorText } from '@/components/ui/error-text';
@@ -162,7 +163,7 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
         </Button>
       </div>
       {requirements.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Keine Qualifikationen geplant.</p>
+        <EmptyState size="compact" title="Keine Qualifikationen geplant." />
       ) : (
         requirements.map((requirement) => {
           const capabilityName = byId.get(requirement.capability_id)?.name ?? 'Unbekannte Qualifikation';

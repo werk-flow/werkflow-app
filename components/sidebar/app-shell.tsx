@@ -73,7 +73,7 @@ function SidebarSkeleton() {
         <Skeleton className="h-9 w-full rounded-md border border-input" />
       </div>
       <Separator />
-      <nav className="flex-1 p-4">
+      <nav aria-label="Hauptnavigation" className="flex-1 p-4">
         <ul className="space-y-1">
           {Array.from({ length: 4 }).map((_, i) => (
             <li key={i}>
@@ -148,7 +148,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
       <Separator />
 
       {/* Navigation */}
-      <nav className="flex-1 p-4">
+      <nav aria-label="Hauptnavigation" className="flex-1 p-4">
         <ul className="space-y-1">
           {visibleNavItems.map((item) => {
             const isActive = isNavItemActive(item, activePath);
@@ -186,7 +186,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
                       <span
                         aria-hidden="true"
                         data-testid="sidebar-badge"
-                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[10px] font-semibold text-primary-text"
+                        className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/15 px-1.5 text-xs font-semibold text-primary-text"
                       >
                         {badgeCount}
                       </span>
@@ -222,7 +222,10 @@ function DynamicSidebarContent({ onNavigate }: { onNavigate?: (() => void) | und
 // Desktop sidebar
 function DesktopSidebar() {
   return (
-    <aside className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card">
+    <aside
+      aria-label="Seitenleiste"
+      className="hidden md:flex h-full w-64 shrink-0 flex-col border-r bg-card"
+    >
       <DynamicSidebarContent />
     </aside>
   );

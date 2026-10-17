@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
-import { REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
+import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { recordWorkArtifactAction, voidWorkArtifact } from '@/lib/work-artifacts/actions';
 import type { WorkArtifactActionType } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
@@ -18,11 +18,15 @@ export function useWorkArtifactReviewActions(editor: WorkArtifactEditor) {
   // The reason and the customer name feed several actions below; an action
   // that needs one marks the field and takes focus there instead of sitting
   // disabled without a hint.
+  /** Marks the reason field and returns its message, or undefined when the reason is valid. */
+  function checkActionReason(): string | undefined {
+    const message = actionReason.trim().length >= 3 ? undefined : REASON_MIN_3_MESSAGE;
+    setActionReasonError(message ?? null);
+    return message;
+  }
+
   function hasActionReason(): boolean {
-    const valid = actionReason.trim().length >= 3;
-    setActionReasonError(valid ? null : REASON_MIN_3_MESSAGE);
-    if (!valid) document.getElementById('artifact-action-reason')?.focus();
-    return valid;
+    return !focusFirstInvalidField({ 'artifact-action-reason': checkActionReason() });
   }
 
   function act(actionType: WorkArtifactActionType, reason?: string) {
@@ -69,7 +73,15 @@ export function useWorkArtifactReviewActions(editor: WorkArtifactEditor) {
     });
   }
 
-  return { actionReason, setActionReason, actionReasonError, hasActionReason, act, setVoid };
+  return {
+    actionReason,
+    setActionReason,
+    actionReasonError,
+    checkActionReason,
+    hasActionReason,
+    act,
+    setVoid,
+  };
 }
 
 export type WorkArtifactReviewActions = ReturnType<typeof useWorkArtifactReviewActions>;

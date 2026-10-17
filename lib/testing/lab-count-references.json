@@ -16,7 +16,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 72, "tolerance": 1 },
+        "requests": { "reference": 76, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -50,8 +50,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 17675, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 124668, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 17933, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 126843, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 1, "tolerance": 0 }
         },
         "font": {
@@ -74,20 +74,20 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 11618, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 44291, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 5510, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 45395, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 49, "tolerance": 1 },
-          "encodedBytes": { "reference": 799618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 51, "tolerance": 1 },
+          "encodedBytes": { "reference": 812599, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 22647, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 122144, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -214,6 +214,86 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 72, "tolerance": 1 },
+          "to": { "reference": 76, "tolerance": 1 },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "One more client chunk at cold start from the UI round's new shared modules (44 to 45 scripts against run 2026-10-16T191852374Z-1c1873, which already counted 75 against the reference 72 from earlier packages)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "document:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 17675, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 124668, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 17933, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 126843, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The field worker's Aufträge document carries the UI round's markup: EmptyState sizes, Badge variants, sr-only column headers and text-xs chips (+2.2 KB decoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 11618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 44291, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 5510, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 45395, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The UI round's Aufträge list payload for the field worker: EmptyState sizes, Badge variants, sr-only column headers and text-xs chips (+1.1 KB decoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 49, "tolerance": 1 },
+            "encodedBytes": { "reference": 799618, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 51, "tolerance": 1 },
+            "encodedBytes": { "reference": 812599, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The UI round's client code: DetailColumns, StandaloneTitle, EmptyState sizes, AlertDialogAction pending, focusFirstInvalidField call sites and the self-service read registry (+13 KB encoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22647, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 122144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "New utility classes of the UI round: dvh heights, the DetailColumns container variants, text-xs replacements, the dialog window size and the compact EmptyState (+1.7 KB decoded)"
         }
       ]
     },
@@ -249,8 +329,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 11852, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 30998, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1076, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 31552, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -324,6 +404,24 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 11852, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 30998, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1076, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 31552, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The work pack payload of the UI round: compact EmptyState, Button pending and DetailColumns markup (+0.6 KB decoded)"
         }
       ]
     },
@@ -352,8 +450,8 @@
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 74490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 11246, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 76080, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "background:work-lifecycle-snapshot": {
@@ -370,8 +468,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 21178, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 73408, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 74998, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -456,6 +554,42 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 74490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 11246, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 76080, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The work pack render returned with the save carries the UI round's markup (compact EmptyState, Button pending, DetailColumns; +1.6 KB decoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 21178, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 73408, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 21651, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 74998, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The work pack render after the save carries the UI round's markup (compact EmptyState, Button pending, DetailColumns; +1.6 KB decoded)"
         }
       ]
     },
@@ -484,8 +618,8 @@
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 22707, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 77005, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 23165, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 78595, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "prefetch:/auftraege": {
@@ -564,6 +698,24 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 22707, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 77005, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 23165, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 78595, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The work pack render returned with the evidence save carries the UI round's markup (compact EmptyState, Button pending, DetailColumns; +1.6 KB decoded)"
         }
       ]
     },
@@ -590,8 +742,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 10652, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 40122, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 10854, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 41165, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -668,6 +820,24 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10652, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 40122, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10854, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 41165, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The dashboard render returned with the clock-in carries the UI round's markup (neutral organization tile, text-xs chips, compact EmptyState; +1 KB decoded)"
         }
       ]
     },
@@ -781,8 +951,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 10649, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 40121, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 10855, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 41164, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -862,6 +1032,24 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10649, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 40121, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10855, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 41164, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T105700824Z-ac73fe"],
+          "reason": "The dashboard render returned with the clock-out carries the UI round's markup (neutral organization tile, text-xs chips, compact EmptyState; +1 KB decoded)"
         }
       ]
     },
@@ -880,7 +1068,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 63, "tolerance": 1 },
+        "requests": { "reference": 65, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -933,8 +1121,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 15510, "tolerance": { "relative": 0.9455, "absolute": 512 } },
-          "decodedBytes": { "reference": 93034, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 16565, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+          "decodedBytes": { "reference": 94586, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -945,8 +1133,8 @@
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 22647, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 122144, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -1111,6 +1299,50 @@
           },
           "runKeys": ["2026-10-16T101241400Z-cfbbd7"],
           "reason": "Client code of the a11y (7d305e2: return focus, dialog initial focus, tab-strip reveal, scroll regions), security (9fb58cd: input checks) and quality (0165de5: failure codes) packages and of the performance package (keyboard scroll once in the app shell, background-read kinds, the record-number hook, the wall-clock tick); no duplicated module (diagnosis 2026-10-16)"
+        },
+        {
+          "kind": "raise",
+          "target": "requests",
+          "from": { "reference": 63, "tolerance": 1 },
+          "to": { "reference": 65, "tolerance": 1 },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "One more client chunk at cold start (44 to 45 scripts against run 2026-10-16T191852374Z-fcc231): the UI round's new shared modules (DetailColumns, StandaloneTitle, EmptyState sizes, hiddenHeader, AlertDialogAction pending); the reference was already at its ceiling (64) before the round"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 15510, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+            "decodedBytes": { "reference": 93034, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 16565, "tolerance": { "relative": 0.9455, "absolute": 512 } },
+            "decodedBytes": { "reference": 94586, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "The UI round's list markup: EmptyState sizes, Badge variants, sr-only column headers (hiddenHeader) and text-xs chips in the Aufträge list payload (+1.5 KB decoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "stylesheet",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22216, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 120469, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 22647, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 122144, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "New utility classes of the UI round: dvh heights, the DetailColumns container variants, text-xs replacements, the dialog window size and the compact EmptyState (+1.7 KB decoded)"
         }
       ]
     },
@@ -1135,7 +1367,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 75, "tolerance": 1 },
-        "componentRenders": { "reference": 1523, "tolerance": 31 }
+        "componentRenders": { "reference": 1571, "tolerance": 31 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1286,6 +1518,14 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 1523, "tolerance": 31 },
+          "to": { "reference": 1571, "tolerance": 31 },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "The job detail renders DetailColumns, compact EmptyState components and Button pending wrappers of the UI round (1523 to 1571)"
         }
       ]
     },
@@ -1496,8 +1736,8 @@
       "payloads": {
         "action:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 16927, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 92968, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 18484, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 94520, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/attention-counts": {
@@ -1532,8 +1772,8 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 25132, "tolerance": { "relative": 0.6286, "absolute": 512 } },
-          "decodedBytes": { "reference": 184900, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 29415, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+          "decodedBytes": { "reference": 188004, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
@@ -1682,6 +1922,42 @@
               "reason": "the create dialog and the list lost the props and lookups that carried the customer array"
             }
           ]
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "action:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 16927, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 92968, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 18484, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 94520, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "The Aufträge list payload of the UI round (EmptyState sizes, Badge variants, sr-only column headers, text-xs chips), returned with the create action (+1.5 KB decoded)"
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 25132, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+            "decodedBytes": { "reference": 184900, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 29415, "tolerance": { "relative": 0.6286, "absolute": 512 } },
+            "decodedBytes": { "reference": 188004, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "The Aufträge list payload of the UI round (EmptyState sizes, Badge variants, sr-only column headers, text-xs chips) in the route render after a create (+3 KB decoded)"
         }
       ]
     },
@@ -1809,10 +2085,10 @@
           "rows": { "reference": 90, "tolerance": 1 }
         },
         "api:/api/calendar-window": {
-          "requests": { "reference": 1, "tolerance": 1 },
-          "encodedBytes": { "reference": 230218, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 228104, "tolerance": { "relative": 1, "absolute": 512 } },
-          "rows": { "reference": 121, "tolerance": 2 }
+          "requests": { "reference": 2, "tolerance": 1 },
+          "encodedBytes": { "reference": 154916, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 152812, "tolerance": { "relative": 1, "absolute": 512 } },
+          "rows": { "reference": 81, "tolerance": 2 }
         },
         "api:/api/time-tracking-state": {
           "requests": { "reference": 1, "tolerance": 0 },
@@ -1918,6 +2194,24 @@
               "reason": null
             }
           ]
+        },
+        {
+          "kind": "floor-accept",
+          "target": "api:/api/calendar-window",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 1 },
+            "encodedBytes": { "reference": 230218, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 228104, "tolerance": { "relative": 1, "absolute": 512 } },
+            "rows": { "reference": 121, "tolerance": 2 }
+          },
+          "to": {
+            "requests": { "reference": 2, "tolerance": 1 },
+            "encodedBytes": { "reference": 154916, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 152812, "tolerance": { "relative": 1, "absolute": 512 } },
+            "rows": { "reference": 81, "tolerance": 2 }
+          },
+          "runKeys": ["2026-10-17T095733582Z-5c6e37"],
+          "reason": "Not a UI change: the step opens the week of liveWeekStart() (run day + 141), and the profile seeds the seven days from that date, so the visible week holds 40 rows per seeded day that falls into it: 121 on the Friday runs of 2026-10-16, 81 on Saturday 2026-10-17. No calendar data code changed in this round. Backlog row 'Lab visit-move week depends on the run day' holds the fix."
         }
       ]
     },

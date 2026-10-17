@@ -8,9 +8,10 @@ import {
   type PersonnelLifecycleView,
 } from '@/lib/personnel/lifecycle-actions';
 import type { PersonnelRequirementState, PersonnelRequirementType } from '@/lib/personnel/lifecycle';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 
-import { ERROR_MESSAGES, focusFirstInvalid } from './personnel-lifecycle-errors';
+import { ERROR_MESSAGES } from './personnel-lifecycle-errors';
 import type { PersonnelLifecycleController } from './use-personnel-lifecycle-view';
 import { logError } from '@/lib/logging';
 
@@ -39,7 +40,7 @@ export function usePersonnelLifecyclePlan(lifecycle: PersonnelLifecycleControlle
     const nextErrors: Record<string, string> = {};
     if (!planName.trim()) nextErrors['plan-name'] = 'Bitte gib eine Bezeichnung an.';
     setFieldErrors(nextErrors);
-    if (focusFirstInvalid(nextErrors)) return;
+    if (focusFirstInvalidField(nextErrors)) return;
     try {
       await run(async () => {
         const result = await createPersonnelOnboardingPlan({
@@ -112,7 +113,7 @@ export function usePersonnelLifecycleRequirements(lifecycle: PersonnelLifecycleC
     const nextErrors: Record<string, string> = {};
     if (!requirementTitle.trim()) nextErrors['requirement-title'] = 'Bitte gib einen Titel an.';
     setFieldErrors(nextErrors);
-    if (focusFirstInvalid(nextErrors)) return;
+    if (focusFirstInvalidField(nextErrors)) return;
     try {
       await run(async () => {
         const result = await savePersonnelOnboardingRequirement({

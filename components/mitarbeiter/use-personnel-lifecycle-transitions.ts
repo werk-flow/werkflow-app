@@ -11,10 +11,11 @@ import type {
   PersonnelAccessTransitionKind,
   PersonnelEmploymentTransitionKind,
 } from '@/lib/personnel/lifecycle';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';
 
 import { defaultAccessDateTime, todayDate } from './personnel-lifecycle-dates';
-import { ERROR_MESSAGES, focusFirstInvalid } from './personnel-lifecycle-errors';
+import { ERROR_MESSAGES } from './personnel-lifecycle-errors';
 import { isScheduledAccessTransition } from './personnel-lifecycle-options';
 import type { PersonnelLifecycleController } from './use-personnel-lifecycle-view';
 import { logError } from '@/lib/logging';
@@ -52,7 +53,7 @@ export function usePersonnelLifecycleTransitions(lifecycle: PersonnelLifecycleCo
     if (!instant) nextErrors['access-transition-date'] = 'Bitte gib einen Zeitpunkt an.';
     if (reason.trim().length < 2) nextErrors['access-reason'] = 'Bitte gib einen Grund an.';
     setFieldErrors(nextErrors);
-    if (focusFirstInvalid(nextErrors)) return;
+    if (focusFirstInvalidField(nextErrors)) return;
     try {
       await run(async () => {
         const result = await setPersonnelAccessTransition({
@@ -88,7 +89,7 @@ export function usePersonnelLifecycleTransitions(lifecycle: PersonnelLifecycleCo
     if (!employmentDate) nextErrors['employment-date'] = 'Bitte gib ein Datum an.';
     if (reason.trim().length < 2) nextErrors['employment-reason'] = 'Bitte gib einen Grund an.';
     setFieldErrors(nextErrors);
-    if (focusFirstInvalid(nextErrors) || !employmentDate) return;
+    if (focusFirstInvalidField(nextErrors) || !employmentDate) return;
     try {
       await run(async () => {
         const result = await setPersonnelEmploymentTransition({

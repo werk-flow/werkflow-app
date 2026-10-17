@@ -51,7 +51,7 @@ export const ParkplatzButton = forwardRef<HTMLButtonElement, ParkplatzButtonProp
       <ParkingSquare className="size-4" aria-hidden="true" />
       <span className="sr-only sm:not-sr-only">Parkplatz</span>
       {count > 0 && (
-        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-purple px-1 text-[10px] font-bold text-white">
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-purple px-1 text-xs font-bold text-white">
           {count}
         </span>
       )}

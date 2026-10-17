@@ -1,0 +1,6 @@
+Passwort zurücksetzen
+Gib deine E-Mail-Adresse ein und wir senden dir einen Link zum Zurücksetzen deines Passworts.
+E-Mail
+*
+Pflichtfeld
+Link senden

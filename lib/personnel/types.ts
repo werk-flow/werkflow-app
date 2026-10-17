@@ -154,13 +154,19 @@ export const ACCESS_STATE_LABELS: Record<AccessState, string> = {
   ohne_zugang: 'Ohne Zugang',
 };
 
-export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+export const EMPLOYMENT_TYPE_LABELS: Readonly<Record<EmploymentType, string>> = {
   vollzeit: 'Vollzeit',
   teilzeit: 'Teilzeit',
   ausbildung: 'Ausbildung',
   minijob: 'Minijob',
   sonstiges: 'Sonstiges',
 };
+
+/** The label of an employment type read from free text (a history payload); never the raw value. */
+export function employmentTypeLabel(value: string): string {
+  const employmentType = EMPLOYMENT_TYPES.find((candidate) => candidate === value);
+  return employmentType ? EMPLOYMENT_TYPE_LABELS[employmentType] : 'Beschäftigungsart unbekannt';
+}
 
 /**
  * Shift an ISO business date by whole days. Product code calls addLocalDays

@@ -32,6 +32,16 @@ export interface SkeletonColumn {
 
 const DEFAULT_CELL = <Skeleton className="h-4 w-24" />;
 
+/**
+ * The header of a column without a visible title (row actions, selection,
+ * expand): screen readers still hear what the column holds. An empty header
+ * cell fails axe's empty-table-header rule; `lib/ui/table-headers.test.ts`
+ * refuses `header: null` and `header: ''`.
+ */
+export function hiddenHeader(label: string): ReactNode {
+  return <span className="sr-only">{label}</span>;
+}
+
 /** The header row of a table built from its column definition, for the loaded table and its skeleton alike. */
 export function ColumnsTableHeader({ columns }: { columns: readonly SkeletonColumn[] }) {
   return (

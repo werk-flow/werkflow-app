@@ -5,6 +5,7 @@ import { Archive, ArchiveRestore, KeyRound, MapPin, Pencil, Plus, Star, Users, W
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { formatSiteAddress, type ClientContact, type ClientSite } from '@/lib/clients/types';
 import { EQUIPMENT_STATE_LABELS, type EquipmentListItem } from '@/lib/installed-equipment/types';
@@ -162,10 +163,10 @@ export function ClientSitesCard({
       )}
 
       {activeSites.length === 0 ? (
-        <div className="rounded-md border border-dashed bg-muted/20 px-3 py-4 text-center">
-          <p className="text-sm text-muted-foreground">Noch keine Einsatzorte hinterlegt.</p>
+        <div className="space-y-2">
+          <EmptyState size="compact" title="Noch keine Einsatzorte hinterlegt." />
           {isAdminOrManager && clientAddress && (
-            <Button variant="outline" size="sm" className="mt-2 h-8 text-xs" onClick={onAdoptAddress}>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={onAdoptAddress}>
               Adresse als Einsatzort übernehmen
             </Button>
           )}

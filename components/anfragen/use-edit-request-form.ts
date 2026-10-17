@@ -6,18 +6,24 @@ import { useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
-import { formatBerlinDateTimeInput, parseBerlinDateTimeInput } from '@/lib/date-time/berlin';
+import { formatBerlinDateTimeInput } from '@/lib/date-time/berlin';
 import { updateClientRequest } from '@/lib/requests/actions';
 import type { ClientRequest, RequestCategory, RequestSource, RequestUrgency } from '@/lib/requests/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import {
+  checkRequestFields,
+  INVALID_RECEIVED_AT_MESSAGE,
+  SUMMARY_REQUIRED_MESSAGE,
+} from './use-create-request-form';
 
 const ERROR_MESSAGES = {
   not_authorized: 'Du bist nicht berechtigt, Anfragen zu bearbeiten.',
   request_not_found: 'Die Anfrage wurde nicht gefunden.',
   request_not_editable:
     'Diese Anfrage kann nicht mehr bearbeitet werden (bereits umgewandelt oder geschlossen).',
-  summary_required: 'Bitte beschreibe kurz das Anliegen.',
+  summary_required: SUMMARY_REQUIRED_MESSAGE,
   request_number_taken: 'Diese Anfragenummer ist bereits vergeben.',
-  invalid_received_at: 'Bitte gib eine gültige Eingangszeit ein.',
+  invalid_received_at: INVALID_RECEIVED_AT_MESSAGE,
   update_failed: 'Die Änderungen konnten nicht gespeichert werden.',
   no_changes: 'Es gibt keine Änderungen zu speichern.',
 } satisfies Record<string, string>;
@@ -48,9 +54,9 @@ export interface EditRequestForm {
   assignedTo: string;
   setAssignedTo: (assignedTo: string) => void;
   isLoading: boolean;
-  error: string | null;
-  showSummaryError: boolean;
-  showReceivedAtError: boolean;
+  summaryError: string | null;
+  receivedAtError: string | null;
+  formError: string | null;
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
 
@@ -82,6 +88,7 @@ export function useEditRequestForm({
   const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
   const { run: runUpdate, isPending: isLoading } = useServerAction(updateClientRequest);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
 
   // Refilled during render, never in an effect. Keyed on open and request.id
   // only: Realtime refreshes replace the request object with equal content, and
@@ -103,26 +110,23 @@ export function useEditRequestForm({
       setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
       setAssignedTo(request.assignedTo ?? '');
       setError(null);
+      setAttempted(false);
     }
   }
 
+  const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
+    idPrefix: 'edit-request',
+    summary,
+    receivedAt,
+    attempted,
+    error,
+  });
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setAttempted(true);
     setError(null);
-
-    if (!summary.trim()) {
-      setError(ERROR_MESSAGES.summary_required);
-      document.getElementById('edit-request-summary')?.focus();
-      return;
-    }
-
-    const receivedAtDate = receivedAt ? parseBerlinDateTimeInput(receivedAt) : null;
-    if (receivedAt && !receivedAtDate) {
-      setError(ERROR_MESSAGES.invalid_received_at);
-      // A date without a time is the only unparsable value the field can hold.
-      document.getElementById('edit-request-received-at-time')?.focus();
-      return;
-    }
+    if (focusFirstInvalidField(errors)) return;
 
     try {
       const result = await runUpdate(request.id, {
@@ -154,9 +158,6 @@ export function useEditRequestForm({
     }
   };
 
-  const showSummaryError = error === ERROR_MESSAGES.summary_required;
-  const showReceivedAtError = error === ERROR_MESSAGES.invalid_received_at;
-
   return {
     summary,
     setSummary,
@@ -183,9 +184,9 @@ export function useEditRequestForm({
     assignedTo,
     setAssignedTo,
     isLoading,
-    error,
-    showSummaryError,
-    showReceivedAtError,
+    summaryError,
+    receivedAtError,
+    formError,
     handleSubmit,
   };
 }

@@ -9,6 +9,7 @@ import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { createClientContact, updateClientContact } from '@/lib/clients/actions';
 import { buildContactEcho, withPendingPrimary } from '@/lib/clients/relation-echo';
 import type { ClientContact } from '@/lib/clients/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 import {
   EMPTY_CONTACT,
@@ -81,9 +82,9 @@ export function useClientContacts({
 
   function saveContact(): void {
     if (!contactDialog) return;
-    if (!contactDialog.draft.name.trim()) {
-      setContactDialog({ ...contactDialog, nameError: 'Bitte gib einen Namen ein.' });
-      document.getElementById('contact-name')?.focus();
+    const nameError = contactDialog.draft.name.trim() ? undefined : 'Bitte gib einen Namen ein.';
+    if (focusFirstInvalidField({ 'contact-name': nameError })) {
+      setContactDialog({ ...contactDialog, nameError: nameError ?? null });
       return;
     }
     const { contactId, draft } = contactDialog;

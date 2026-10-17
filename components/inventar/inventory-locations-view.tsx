@@ -97,9 +97,7 @@ export function LocationsView({
               <span className="font-medium tabular-nums">{itemCount.toLocaleString('de-DE')}</span>
             </div>
             {itemCount === 0 ? (
-              <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-                Keine Artikel in diesem Lager.
-              </p>
+              <EmptyState size="compact" title="Keine Artikel in diesem Lager." />
             ) : (
               <div className="divide-y rounded-md border">
                 {previewItems.map((item) => {

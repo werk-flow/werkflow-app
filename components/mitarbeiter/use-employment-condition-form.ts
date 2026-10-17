@@ -8,6 +8,7 @@ import { addEmploymentCondition, updateEmploymentCondition } from '@/lib/personn
 import type { EmploymentCondition, EmploymentType } from '@/lib/personnel/types';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatDecimalDe, parseBoundedDecimalInput } from '@/lib/ui/decimal';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { CONDITION_ERROR_MESSAGES } from './employment-condition-format';
 
 export type EmploymentConditionFormInput = {
@@ -62,17 +63,12 @@ export function useEmploymentConditionForm({ recordId, condition, onClose }: Emp
           : undefined,
     };
     setFieldErrors(nextFieldErrors);
-    const firstInvalidId = nextFieldErrors.validFrom
-      ? 'condition-valid-from'
-      : nextFieldErrors.weeklyHours
-        ? 'condition-weekly-hours'
-        : nextFieldErrors.vacationDays
-          ? 'condition-vacation-days'
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      'condition-valid-from': nextFieldErrors.validFrom,
+      'condition-weekly-hours': nextFieldErrors.weeklyHours,
+      'condition-vacation-days': nextFieldErrors.vacationDays,
+    });
+    if (invalid) return;
 
     setIsSaving(true);
     const input = {

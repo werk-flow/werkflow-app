@@ -6,6 +6,7 @@ import { FileUp } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   Dialog,
   DialogBody,
@@ -33,6 +34,7 @@ import {
 } from '@/lib/personnel/lifecycle-actions';
 import { PersonnelOwnDocumentList, PersonnelOwnRequirementList } from './personnel-own-actions-lists';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type EvidenceFieldErrors = { file?: string | undefined; type?: string | undefined };
 
@@ -223,15 +225,11 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
 
   async function uploadEvidence(): Promise<void> {
     setError(null);
-    const nextFieldErrors = {
-      file: file ? undefined : 'Bitte wähle eine Datei aus.',
-      type: documentType.trim().length < 2 ? 'Bitte gib die Dokumentart an.' : undefined,
-    };
-    setFieldErrors(nextFieldErrors);
-    if (!file || nextFieldErrors.type) {
-      document.getElementById(nextFieldErrors.file ? 'own-evidence-file' : 'own-evidence-type')?.focus();
-      return;
-    }
+    const fileError = file ? undefined : 'Bitte wähle eine Datei aus.';
+    const typeError = documentType.trim().length < 2 ? 'Bitte gib die Dokumentart an.' : undefined;
+    setFieldErrors({ file: fileError, type: typeError });
+    const evidenceErrors = { 'own-evidence-file': fileError, 'own-evidence-type': typeError };
+    if (focusFirstInvalidField(evidenceErrors) || !file) return;
     const employeeRecordId = view.data?.employeeRecordId;
     if (!employeeRecordId) return;
     await run(async () => {
@@ -273,9 +271,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       />
       <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-4">
         {requirements.length === 0 && documents.length === 0 ? (
-          <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-            Keine offenen Personalaufgaben oder freigegebenen Unterlagen.
-          </p>
+          <EmptyState size="compact" title="Keine offenen Personalaufgaben oder freigegebenen Unterlagen." />
         ) : null}
         {requirements.length > 0 ? (
           <PersonnelOwnRequirementList

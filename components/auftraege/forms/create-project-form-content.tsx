@@ -6,6 +6,7 @@ import { DialogBody, DialogFooter } from '@/components/ui/dialog';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { createProject, type CreateProjectInput } from '@/lib/projects/actions';
 import { updateJob } from '@/lib/jobs/actions';
 import { type Job, type Project } from '@/lib/jobs/types';
@@ -108,21 +109,16 @@ function useCreateProjectSubmit(
     setContentError(null);
     setProjectNumberError(null);
 
-    let hasValidationError = false;
-    if (!projectNumber.trim()) {
-      setProjectNumberError('Bitte gib eine Projektnummer ein.');
-      hasValidationError = true;
-    }
-    if (!name.trim() && !description.trim()) {
-      setContentError('Bitte gib mindestens einen Titel oder eine Beschreibung ein.');
-      hasValidationError = true;
-    }
-    if (hasValidationError) {
-      document
-        .getElementById(!projectNumber.trim() ? 'create-project-number' : 'create-project-name')
-        ?.focus();
-      return;
-    }
+    const fieldErrors = {
+      'create-project-number': projectNumber.trim() ? undefined : 'Bitte gib eine Projektnummer ein.',
+      'create-project-name':
+        name.trim() || description.trim()
+          ? undefined
+          : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
+    };
+    setProjectNumberError(fieldErrors['create-project-number'] ?? null);
+    setContentError(fieldErrors['create-project-name'] ?? null);
+    if (focusFirstInvalidField(fieldErrors)) return;
 
     const input: CreateProjectInput = {
       name: name.trim(),

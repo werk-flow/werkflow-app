@@ -209,7 +209,10 @@ export function EinstellungenPageSkeleton(): ReactElement {
         }
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="hidden w-72 shrink-0 border-r bg-card/40 p-4 md:block">
+        <aside
+          aria-label="Einstellungsbereiche"
+          className="hidden w-72 shrink-0 border-r bg-card/40 p-4 md:block"
+        >
           <div className="space-y-1">
             <Skeleton className="mb-2 h-4 w-24" />
             {Array.from({ length: 9 }).map((_, index) => (

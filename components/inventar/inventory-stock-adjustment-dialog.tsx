@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { InventoryLocation } from '@/lib/inventory/types';
 import { formatInventoryQuantity, getInventoryUnitLabel } from '@/lib/inventory/types';
 import { parseDecimalInput } from '@/lib/ui/decimal';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { cn } from '@/lib/utils';
 import { type StockDialogState } from './inventory-form-state';
 import { LocationSelectWithCreate } from './location-select-with-create';
@@ -49,9 +50,13 @@ export function StockAdjustmentDialog({
     setAttemptedItemId(itemId);
     setAttempted(false);
   }
-  const locationError = attempted && state && !state.locationId ? 'Bitte wähle ein Lager.' : undefined;
-  const quantityError =
-    attempted && state && quantity <= 0 ? 'Bitte gib eine Menge größer als 0 ein.' : undefined;
+  // Keyed by control id in visual order; shown after the first submit attempt.
+  const validationErrors = {
+    'inventory-stock-location': state && !state.locationId ? 'Bitte wähle ein Lager.' : undefined,
+    'inventory-stock-quantity': state && quantity <= 0 ? 'Bitte gib eine Menge größer als 0 ein.' : undefined,
+  };
+  const locationError = attempted ? validationErrors['inventory-stock-location'] : undefined;
+  const quantityError = attempted ? validationErrors['inventory-stock-quantity'] : undefined;
 
   return (
     <Dialog open={!!state} onOpenChange={(open) => !open && setState(null)} pending={isSaving}>
@@ -64,14 +69,7 @@ export function StockAdjustmentDialog({
           onSubmit={(event) => {
             event.preventDefault();
             setAttempted(true);
-            if (!state?.locationId) {
-              document.getElementById('inventory-stock-location')?.focus();
-              return;
-            }
-            if (quantity <= 0) {
-              document.getElementById('inventory-stock-quantity')?.focus();
-              return;
-            }
+            if (!state || focusFirstInvalidField(validationErrors)) return;
             onSave();
           }}
           noValidate

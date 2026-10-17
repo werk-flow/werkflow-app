@@ -21,6 +21,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { describeFailure } from '@/lib/action-messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { sendPersonnelInvite } from '@/lib/personnel/actions';
 import type { InviteRole } from '@/lib/invites/actions';
 import { SEND_INVITE_MESSAGES } from './invite-messages';
@@ -53,8 +54,10 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
   const [role, setRole] = useState<InviteRole>('employee');
   const { run: runSend, isPending: isSending } = useServerAction(sendPersonnelInvite);
   const [error, setError] = useState<string | null>(null);
-  const [emailError, setEmailError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
   const [success, setSuccess] = useState(false);
+  const emailError = EMAIL_REGEX.test(email) ? undefined : INVALID_EMAIL_MESSAGE;
+  const shownEmailError = attempted ? emailError : undefined;
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -62,7 +65,7 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
       setEmail('');
       setRole('employee');
       setError(null);
-      setEmailError(null);
+      setAttempted(false);
       setSuccess(false);
     }
   };
@@ -71,12 +74,8 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
     e.preventDefault();
     if (isSending || success) return;
     setError(null);
-
-    if (!EMAIL_REGEX.test(email)) {
-      setEmailError(INVALID_EMAIL_MESSAGE);
-      document.getElementById('personnel-invite-email')?.focus();
-      return;
-    }
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'personnel-invite-email': emailError })) return;
 
     let result: Awaited<ReturnType<typeof sendPersonnelInvite>>;
     try {
@@ -117,7 +116,7 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="E-Mail-Adresse" htmlFor="personnel-invite-email" required error={emailError}>
+            <Field label="E-Mail-Adresse" htmlFor="personnel-invite-email" required error={shownEmailError}>
               <Input
                 type="text"
                 inputMode="email"
@@ -126,7 +125,6 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  setEmailError(null);
                   if (error) setError(null);
                 }}
                 disabled={isSending || success}

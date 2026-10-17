@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactElement } from 'react';
 import { ClipboardList } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import type {
   InstructionListOwner,
@@ -103,12 +104,11 @@ export function JobInstructionItemsCard({
         </div>
 
         {!isAdminOrManager && items.length === 0 ? (
-          <div className="rounded-md border border-dashed bg-muted/20 px-4 py-6 text-center">
-            <p className="text-sm font-medium">Noch keine Arbeitsanweisungen vorhanden.</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Sobald im Büro oder von einem Admin Punkte angelegt werden, erscheinen sie hier.
-            </p>
-          </div>
+          <EmptyState
+            size="compact"
+            title="Noch keine Arbeitsanweisungen vorhanden."
+            description="Sobald im Büro oder von einem Admin Punkte angelegt werden, erscheinen sie hier."
+          />
         ) : (
           <div className="space-y-3">
             {displayedItems.map((entry) => {

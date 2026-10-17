@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import type { CapabilityDefinition, CapabilityKind } from '@/lib/qualifications/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { cn } from '@/lib/utils';
 import type { WorkTemplateDraft } from '@/lib/work-templates/types';
 
@@ -171,11 +172,9 @@ function CreateCapabilityDialog({
   function submit(event: React.FormEvent) {
     event.preventDefault();
     event.stopPropagation();
-    if (!name.trim()) {
-      setError('Bitte gib einen Namen an.');
-      document.getElementById('quick-capability-name')?.focus();
-      return;
-    }
+    const nameError = name.trim() ? undefined : 'Bitte gib einen Namen an.';
+    setError(nameError ?? null);
+    if (focusFirstInvalidField({ 'quick-capability-name': nameError })) return;
     onSubmit({ name, kind });
     setName('');
     setError(null);

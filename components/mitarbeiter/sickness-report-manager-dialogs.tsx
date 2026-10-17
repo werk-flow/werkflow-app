@@ -25,6 +25,7 @@ import { cancelSicknessReport, endSicknessReport, setSicknessEvidence } from '@/
 import { formatSicknessRange, SICKNESS_ERROR_MESSAGES, type SicknessReport } from '@/lib/sickness/types';
 import { toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { logError } from '@/lib/logging';
 
 export function ManagerEndDialog({
@@ -41,16 +42,16 @@ export function ManagerEndDialog({
   );
   const { run: runSave, isPending: isSaving } = useServerAction(endSicknessReport);
   const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const endDateError = endDate ? undefined : 'Bitte wähle ein Enddatum aus.';
+  const shownEndDateError = attempted ? endDateError : undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
-    if (!endDate) {
-      setError('Bitte wähle ein Enddatum aus.');
-      document.getElementById('manager-sickness-end')?.focus();
-      return;
-    }
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'manager-sickness-end': endDateError })) return;
 
     try {
       const result = await runSave({ reportId: report.id, endDate });
@@ -84,7 +85,7 @@ export function ManagerEndDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <Field label="Letzter Tag" htmlFor="manager-sickness-end" required>
+            <Field label="Letzter Tag" htmlFor="manager-sickness-end" required error={shownEndDateError}>
               <DatePicker
                 ariaLabel="Letzter Tag"
                 value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
@@ -217,17 +218,15 @@ export function ManagerCancelDialog({
   const [reason, setReason] = useState('');
   const { run: runSave, isPending: isSaving } = useServerAction(cancelSicknessReport);
   const [error, setError] = useState<string | null>(null);
-  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const reasonError = reason.trim() ? undefined : 'Bitte gib einen Grund für die Stornierung an.';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
-    if (!reason.trim()) {
-      setReasonError('Bitte gib einen Grund für die Stornierung an.');
-      document.getElementById('cancel-sickness-reason')?.focus();
-      return;
-    }
+    setAttempted(true);
+    if (focusFirstInvalidField({ 'cancel-sickness-reason': reasonError })) return;
     try {
       const result = await runSave({
         reportId: report.id,
@@ -266,14 +265,16 @@ export function ManagerCancelDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <Field label="Grund" htmlFor="cancel-sickness-reason" required error={reasonError}>
+            <Field
+              label="Grund"
+              htmlFor="cancel-sickness-reason"
+              required
+              error={attempted ? reasonError : undefined}
+            >
               <Textarea
                 placeholder="z. B. versehentlich erfasst"
                 value={reason}
-                onChange={(e) => {
-                  setReasonError(null);
-                  setReason(e.target.value);
-                }}
+                onChange={(e) => setReason(e.target.value)}
                 disabled={isSaving}
               />
             </Field>

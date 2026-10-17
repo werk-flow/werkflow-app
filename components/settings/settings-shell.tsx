@@ -65,7 +65,10 @@ export function SettingsShell({ children }: SettingsShellProps) {
       />
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="hidden w-72 shrink-0 border-r bg-card/40 lg:block">
+        <aside
+          aria-label="Einstellungsbereiche"
+          className="hidden w-72 shrink-0 border-r bg-card/40 lg:block"
+        >
           <div className="h-full overflow-y-auto p-4">
             <SettingsNavGroup
               label={GROUP_LABELS.account}
@@ -123,7 +126,7 @@ function SettingsNavGroup({
   return (
     <div className="space-y-2">
       <p className="px-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <nav className="space-y-1">
+      <nav aria-label={label} className="space-y-1">
         {slugs.map((slug) => {
           const section = getSettingsSectionBySlug(slug);
 

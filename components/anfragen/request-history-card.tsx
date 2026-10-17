@@ -3,6 +3,7 @@ import { History } from 'lucide-react';
 import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
 import type { RequestEventEntry } from './request-detail-content';
 import { SectionTitle } from '@/components/shared/section-title';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const EVENT_LABELS: Record<string, string> = {
   created: 'Anfrage erfasst',
@@ -27,7 +28,7 @@ export function RequestHistoryCard({ events }: { events: RequestEventEntry[] }) 
         Verlauf
       </SectionTitle>
       {events.length === 0 ? (
-        <p className="mt-3 text-sm text-muted-foreground">Noch keine Einträge.</p>
+        <EmptyState size="compact" className="mt-3" title="Noch keine Einträge." />
       ) : (
         <ul className="mt-3 space-y-2">
           {events.map((event) => (

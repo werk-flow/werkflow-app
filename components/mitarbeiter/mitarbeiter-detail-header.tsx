@@ -35,7 +35,7 @@ export function MitarbeiterDetailHeader({
       badges={
         <span className="flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary" className="text-xs">
-            {ROLE_LABELS[member.role] || member.role}
+            {ROLE_LABELS[member.role]}
           </Badge>
           {personnel && getEmploymentState(personnel.record) !== 'aktiv' && (
             <EmploymentStateBadge state={getEmploymentState(personnel.record)} />

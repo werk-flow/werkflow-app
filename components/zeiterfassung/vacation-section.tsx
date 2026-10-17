@@ -64,10 +64,10 @@ export function VacationSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
+      <h2 className="flex items-center gap-2 text-sm font-medium text-muted-foreground px-1">
         Urlaub & Abwesenheit
         <InlinePending active={busy.isBusy(NEW_REQUEST_ID)} />
-      </h3>
+      </h2>
 
       <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-3">
         {/* A failed first read is a failure with retry, never an empty card. */}

@@ -12,6 +12,7 @@ import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ColumnsTableHeader,
+  hiddenHeader,
   SkeletonList,
   SkeletonRows,
   type SkeletonColumn,
@@ -55,7 +56,7 @@ const CLIENT_COLUMNS: readonly SkeletonColumn[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: hiddenHeader('Aktionen'),
     className: 'w-[50px]',
     skeleton: <Skeleton className="size-8 rounded" />,
   },
@@ -95,7 +96,7 @@ function ClientTypeBadge({ clientType, compact }: { clientType: Client['clientTy
     <span
       className={
         compact
-          ? 'inline-flex shrink-0 items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground'
+          ? 'inline-flex shrink-0 items-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-foreground'
           : 'inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground'
       }
     >

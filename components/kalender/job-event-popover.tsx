@@ -32,6 +32,7 @@ import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messag
 import { useClock } from './surface/use-now-tick';
 import { checkOccurrenceMovable, checkParkable } from '@/lib/calendar/refusal-checks';
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 import type { CalendarMutations } from './mutations/use-calendar-mutations';
 import { moveSuccessMessage } from './board/use-board-surface';
@@ -136,6 +137,7 @@ function CardPopover({
         data-focus-return={card.anchor.dataset.focusKey}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
+          // eslint-disable-next-line no-restricted-syntax -- the popover's first focus goes to its first action, not a validation path
           (event.currentTarget as HTMLElement).querySelector<HTMLElement>('button, a')?.focus();
         }}
       >
@@ -339,10 +341,9 @@ function MoveForm({
 
   const submitMove = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!moveDate) {
-      setMoveError('Bitte wähle ein Datum.');
-      return;
-    }
+    const dateError = moveDate ? undefined : 'Bitte wähle ein Datum.';
+    setMoveError(dateError ?? null);
+    if (focusFirstInvalidField({ 'popover-move-date': dateError }) || !moveDate) return;
     const targetRow = rows.find((entry) => entry.employeeRecordId === moveRecordId) ?? null;
     const target = {
       employeeRecordId: targetRow?.employeeRecordId ?? null,

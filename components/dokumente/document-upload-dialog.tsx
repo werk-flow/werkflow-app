@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } 
 import { CheckCircle, FileText, XCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Spinner } from '@/components/ui/spinner';
 import { ErrorText } from '@/components/ui/error-text';
 import {
@@ -132,7 +133,7 @@ function DocumentUploadRowList({ rows }: { rows: UploadRow[] }): ReactElement {
   return (
     <div className="max-h-80 overflow-y-auto rounded-md border">
       {rows.length === 0 ? (
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">Keine Dateien ausgewählt.</div>
+        <EmptyState title="Keine Dateien ausgewählt" />
       ) : (
         <div className="divide-y">
           {rows.map((row) => {

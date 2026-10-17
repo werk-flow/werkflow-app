@@ -112,6 +112,7 @@ export function MaterialLineRow({
               size="sm"
               className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onTake}
+              // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: without a stock location there is nowhere to book from
               disabled={isBusy || (isAdminOrManager && locations.length === 0)}
             >
               <CheckCircle2 className="size-3.5" />
@@ -122,6 +123,7 @@ export function MaterialLineRow({
               size="sm"
               className={cn('gap-1', isAdminOrManager ? 'h-8' : 'min-h-11')}
               onClick={onReturn}
+              // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: nothing taken out, or no stock location to return to
               disabled={isBusy || !canReturn}
             >
               <RotateCcw className="size-3.5" />

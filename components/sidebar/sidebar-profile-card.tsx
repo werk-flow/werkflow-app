@@ -65,7 +65,7 @@ export function SidebarProfileCard() {
               {profile.avatarUrl ? (
                 <AvatarImage src={profile.avatarUrl} alt={`Profilbild von ${fullName}`} />
               ) : null}
-              <AvatarFallback className="bg-muted text-[11px] leading-none font-semibold text-muted-foreground">
+              <AvatarFallback className="bg-muted text-xs leading-none font-semibold text-muted-foreground">
                 {initials || <User className="size-3.5" />}
               </AvatarFallback>
             </Avatar>

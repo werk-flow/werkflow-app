@@ -9,6 +9,7 @@ import { recordSicknessForMember } from '@/lib/sickness/actions';
 import { SICKNESS_ERROR_MESSAGES, type SicknessAbsenceType } from '@/lib/sickness/types';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { logError } from '@/lib/logging';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type SicknessReportRecordForm = ReturnType<typeof useSicknessReportRecordForm>;
 
@@ -43,12 +44,11 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
             : undefined,
     };
     setDateErrors(nextDateErrors);
-    if (nextDateErrors.start || nextDateErrors.end) {
-      document
-        .getElementById(nextDateErrors.start ? 'record-sickness-start' : 'record-sickness-end')
-        ?.focus();
-      return;
-    }
+    const invalid = focusFirstInvalidField({
+      'record-sickness-start': nextDateErrors.start,
+      'record-sickness-end': nextDateErrors.end,
+    });
+    if (invalid) return;
 
     try {
       const result = await runSave({

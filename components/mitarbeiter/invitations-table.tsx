@@ -8,7 +8,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { ListRow } from '@/components/ui/list-row';
 import { PendingRow } from '@/components/ui/pending-row';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ColumnsTableHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
+import { ColumnsTableHeader, hiddenHeader, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import type { OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
@@ -79,7 +79,7 @@ const INVITATION_COLUMNS: readonly SkeletonColumn[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: hiddenHeader('Aktionen'),
     className: 'w-[50px]',
     skeleton: <Skeleton className="size-8 rounded" />,
   },
@@ -96,11 +96,11 @@ function RoleBadge({ role, compact }: { role: OrgRole; compact?: boolean }) {
     <span
       className={
         compact
-          ? 'inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground'
+          ? 'inline-flex items-center rounded-full bg-accent px-1.5 py-0.5 text-xs font-medium text-accent-foreground'
           : 'inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground'
       }
     >
-      {ROLE_LABELS[role] || role}
+      {ROLE_LABELS[role]}
     </span>
   );
 }
@@ -114,7 +114,7 @@ function PendingInviteCard({ invite }: { invite: Invite }) {
           <InlinePending active label={PENDING_LABEL} />
           <p className="min-w-0 font-medium truncate text-sm">{invite.email}</p>
           <span
-            className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_LABELS.pending.className}`}
+            className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${STATUS_LABELS.pending.className}`}
           >
             {STATUS_LABELS.pending.label}
           </span>
@@ -150,7 +150,7 @@ function InviteCard({
         <div className="flex items-center gap-2">
           <p className="min-w-0 font-medium truncate text-sm">{invite.email}</p>
           <span
-            className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${displayStatus.className}`}
+            className={`shrink-0 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${displayStatus.className}`}
           >
             {displayStatus.label}
           </span>

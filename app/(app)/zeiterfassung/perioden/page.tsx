@@ -1,15 +1,12 @@
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
+import { TimePeriodList } from '@/components/zeiterfassung/time-period-list';
 import { TimePeriodPrepareForm } from '@/components/zeiterfassung/time-period-prepare-form';
 import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
-import { formatPeriod, PERIOD_STATE_LABELS } from '@/lib/time-accounts/presentation';
-import { formatGermanDate } from '@/lib/utils';
 import { addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { getTimePeriods, type TimePeriodListItem } from '@/lib/time-accounts/queries';
+import { getTimePeriods } from '@/lib/time-accounts/queries';
 import { TIME_PERIOD_LIST_LIVE_TABLES } from '@/lib/time-accounts/live-tables';
 
 /** The Berlin month before the current one, `YYYY-MM`: the period an office closes next. */
@@ -47,41 +44,6 @@ export default async function TimePeriodsPage() {
         </RegionLoadError>
       ) : null}
       {access.canManage && periods.success ? <TimePeriodList periods={periods.data} /> : null}
-    </div>
-  );
-}
-
-function TimePeriodList({ periods }: { periods: TimePeriodListItem[] }) {
-  return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      {periods.length === 0 ? (
-        <p className="p-5 text-sm text-muted-foreground">Noch keine Periode vorbereitet.</p>
-      ) : (
-        periods.map((period) => (
-          <div
-            key={period.id}
-            className="grid items-center gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto]"
-          >
-            <div>
-              <p className="font-medium capitalize">{formatPeriod(period.startDate)}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatGermanDate(period.startDate)} – {formatGermanDate(period.endDate)}
-              </p>
-            </div>
-            <div className="text-sm">
-              {PERIOD_STATE_LABELS[period.state as keyof typeof PERIOD_STATE_LABELS] ?? period.state}
-            </div>
-            <div className="text-sm">{period.employeeCount} Mitarbeitende</div>
-            <div className="text-sm">
-              {period.findingCount} {period.findingCount === 1 ? 'Hinweis' : 'Hinweise'}
-              {period.blockingCount > 0 ? ` · ${period.blockingCount} blockierend` : ''}
-            </div>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/zeiterfassung/perioden/${period.id}`}>Öffnen</Link>
-            </Button>
-          </div>
-        ))
-      )}
     </div>
   );
 }

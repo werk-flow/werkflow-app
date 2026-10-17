@@ -288,24 +288,20 @@ export function FollowUpDialog({
     // only confirmation the user gets here.
     showBanner({ variant: 'success', message: 'Nachfassaktion wurde angelegt.' });
   });
-  const titleError = attempted && !title.trim() ? 'Bitte gib einen Titel ein.' : undefined;
-  const ownerError = attempted && !ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined;
-  const dueError =
-    attempted && !parseBerlinDateTimeInput(dueAt) ? 'Bitte gib eine Fälligkeit an.' : undefined;
+  const errors = {
+    'service-follow-up-title': title.trim() ? undefined : 'Bitte gib einen Titel ein.',
+    'service-follow-up-owner': ownerUserId ? undefined : 'Bitte wähle eine zuständige Person.',
+    'service-follow-up-due-date': parseBerlinDateTimeInput(dueAt)
+      ? undefined
+      : 'Bitte gib eine Fälligkeit an.',
+  };
+  const titleError = attempted ? errors['service-follow-up-title'] : undefined;
+  const ownerError = attempted ? errors['service-follow-up-owner'] : undefined;
+  const dueError = attempted ? errors['service-follow-up-due-date'] : undefined;
   function submit(): void {
     setError(null);
     setAttempted(true);
-    const firstInvalidId = !title.trim()
-      ? 'service-follow-up-title'
-      : !ownerUserId
-        ? 'service-follow-up-owner'
-        : !parseBerlinDateTimeInput(dueAt)
-          ? 'service-follow-up-due-date'
-          : null;
-    if (firstInvalidId) {
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    if (focusFirstInvalidField(errors)) return;
     void run();
   }
   return (

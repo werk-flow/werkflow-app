@@ -1,4 +1,5 @@
 import { ContextualDocumentsSkeleton } from '@/components/dokumente/contextual-documents-layout';
+import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,10 +31,10 @@ export default function AnfrageDetailLoading() {
       />
       <PageBody maxWidth="content">
         <div className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-2">
+          <DetailColumns layout="pair">
             <FactCardSkeleton lines={4} />
             <FactCardSkeleton lines={5} />
-          </div>
+          </DetailColumns>
           <ContextualDocumentsSkeleton
             description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
             canUpload

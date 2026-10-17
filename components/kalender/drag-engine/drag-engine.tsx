@@ -389,7 +389,7 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
         className={`pointer-events-none fixed left-0 top-0 ${CALENDAR_LAYER_CLASS.drag} flex flex-col justify-center gap-0.5 rounded-md border px-2 py-1 text-xs font-medium shadow-lg will-change-transform data-[state=idle]:border-calendar-planning-border data-[state=idle]:bg-calendar-planning data-[state=idle]:text-calendar-planning-foreground data-[state=valid]:border-calendar-planning-strong data-[state=valid]:bg-calendar-planning data-[state=valid]:text-calendar-planning-foreground data-[state=refused]:border-destructive data-[state=refused]:bg-destructive-soft data-[state=refused]:text-destructive-soft-foreground`}
       >
         <span data-ghost-label="" className="truncate" />
-        <span data-ghost-secondary="" className="truncate text-[11px] opacity-80" hidden />
+        <span data-ghost-secondary="" className="truncate text-xs opacity-80" hidden />
         <span data-ghost-message="" className="whitespace-normal break-words text-xs leading-normal" hidden />
       </div>
     </DragEngineContext.Provider>

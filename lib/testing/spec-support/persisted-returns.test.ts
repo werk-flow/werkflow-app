@@ -38,6 +38,11 @@ const NON_PERSISTED_RETURNS: readonly { file: string; name: string; reason: stri
     reason: 'opens a measured browser session, not a saved row',
   },
   {
+    file: 'tests/audit/support/standalone-sessions.ts',
+    name: 'openStandaloneScreen',
+    reason: 'opens a browser session for a screen outside the app shell, not a saved row',
+  },
+  {
     file: 'tests/audit/support/lab-network.ts',
     name: 'trackLabNetwork',
     reason: 'starts a network tracker for a measured session, not a saved row',

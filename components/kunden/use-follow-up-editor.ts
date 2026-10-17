@@ -19,6 +19,7 @@ import type {
   FollowUpInput,
   FollowUpSourceType,
 } from '@/lib/customer-relationships/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 // Busy id for a created follow-up, which has no row of its own yet, so the
 // section header can show it settling.
@@ -85,18 +86,20 @@ export function useFollowUpEditor({
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft | null>(null);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [followUpAttempted, setFollowUpAttempted] = useState(false);
-  const followUpTitleError =
-    followUpAttempted && followUpDraft && !followUpDraft.title.trim()
-      ? 'Bitte gib einen Titel ein.'
-      : undefined;
-  const followUpOwnerError =
-    followUpAttempted && followUpDraft && !followUpDraft.ownerUserId
-      ? 'Bitte wähle eine zuständige Person.'
-      : undefined;
-  const followUpDueError =
-    followUpAttempted && followUpDraft && !parseBerlinDateTimeInput(followUpDraft.dueAt)
-      ? 'Bitte gib eine Fälligkeit an.'
-      : undefined;
+  // Keyed by control id in visual order; shown after the first submit attempt.
+  const followUpErrors = {
+    'follow-up-title':
+      followUpDraft && !followUpDraft.title.trim() ? 'Bitte gib einen Titel ein.' : undefined,
+    'follow-up-owner':
+      followUpDraft && !followUpDraft.ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined,
+    'follow-up-due-date':
+      followUpDraft && !parseBerlinDateTimeInput(followUpDraft.dueAt)
+        ? 'Bitte gib eine Fälligkeit an.'
+        : undefined,
+  };
+  const followUpTitleError = followUpAttempted ? followUpErrors['follow-up-title'] : undefined;
+  const followUpOwnerError = followUpAttempted ? followUpErrors['follow-up-owner'] : undefined;
+  const followUpDueError = followUpAttempted ? followUpErrors['follow-up-due-date'] : undefined;
   const { showBanner } = useBanner();
 
   const openFollowUps = useMemo(
@@ -147,15 +150,7 @@ export function useFollowUpEditor({
     setFollowUpError(null);
     setFollowUpAttempted(true);
     const dueDate = parseBerlinDateTimeInput(followUpDraft.dueAt);
-    if (!followUpDraft.title.trim() || !followUpDraft.ownerUserId || !dueDate) {
-      const firstInvalidId = !followUpDraft.title.trim()
-        ? 'follow-up-title'
-        : !followUpDraft.ownerUserId
-          ? 'follow-up-owner'
-          : 'follow-up-due-date';
-      document.getElementById(firstInvalidId)?.focus();
-      return;
-    }
+    if (focusFirstInvalidField(followUpErrors) || !dueDate) return;
     const input: FollowUpInput = {
       title: followUpDraft.title,
       note: followUpDraft.note,

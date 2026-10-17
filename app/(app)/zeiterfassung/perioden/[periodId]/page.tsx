@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { AlertTriangle, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
 import { LiveRouteRefresh } from '@/components/shared/live-route-refresh';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { SubpageHeader } from '@/components/shared/subpage-header';
@@ -69,9 +70,7 @@ function PeriodFindingRow({
       <div className="flex items-start gap-3">
         <FindingIcon severity={finding.severity} />
         <div>
-          <p className="font-medium">
-            {FINDING_LABELS[finding.kind as keyof typeof FINDING_LABELS] ?? finding.kind}
-          </p>
+          <p className="font-medium">{FINDING_LABELS[finding.kind]}</p>
           <p className="text-sm text-muted-foreground">
             {finding.employeeName ?? 'Organisation'} ·{' '}
             {finding.severity === 'close_blocked'
@@ -79,9 +78,7 @@ function PeriodFindingRow({
               : finding.severity === 'approval_required'
                 ? 'Freigabe erforderlich'
                 : 'Information'}
-            {finding.decision
-              ? ` · ${FINDING_DECISION_LABELS[finding.decision as keyof typeof FINDING_DECISION_LABELS] ?? finding.decision}`
-              : ''}
+            {finding.decision ? ` · ${FINDING_DECISION_LABELS[finding.decision]}` : ''}
           </p>
         </div>
       </div>
@@ -89,7 +86,7 @@ function PeriodFindingRow({
         <TimePeriodFindingDecisionForm
           periodId={periodId}
           findingId={finding.id}
-          findingLabel={FINDING_LABELS[finding.kind as keyof typeof FINDING_LABELS] ?? finding.kind}
+          findingLabel={FINDING_LABELS[finding.kind]}
         />
       ) : null}
     </div>
@@ -131,7 +128,7 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
       <SubpageHeader
         title={<span className="capitalize">{formatPeriod(detail.period.startDate)}</span>}
         description={`${formatGermanDate(detail.period.startDate)} – ${formatGermanDate(detail.period.endDate)} · ${
-          PERIOD_STATE_LABELS[detail.period.state as keyof typeof PERIOD_STATE_LABELS] ?? detail.period.state
+          PERIOD_STATE_LABELS[detail.period.state]
         }`}
       />
 
@@ -170,7 +167,7 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
             <OpenSessionFinding key={session.employeeRecordId} session={session} />
           ))}
           {detail.findings.length === 0 && liveSessions.length === 0 ? (
-            <p className="rounded-lg border p-4 text-sm text-muted-foreground">Keine Prüfhinweise.</p>
+            <EmptyState size="compact" title="Keine Prüfhinweise." />
           ) : (
             detail.findings.map((finding) => (
               <PeriodFindingRow key={finding.id} finding={finding} periodId={periodId} />
@@ -228,9 +225,7 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
           {detail.exports.map((item) => (
             <div key={item.id} className="flex items-center justify-between gap-3 border-t pt-3 text-sm">
               <span>
-                Version {item.version} ·{' '}
-                {PAYROLL_EXPORT_STATE_LABELS[item.state as keyof typeof PAYROLL_EXPORT_STATE_LABELS] ??
-                  item.state}
+                Version {item.version} · {PAYROLL_EXPORT_STATE_LABELS[item.state]}
               </span>
               {item.state === 'ready' ? <TimePeriodExportDownload exportId={item.id} /> : null}
             </div>

@@ -7,6 +7,9 @@ import { updateJob } from '@/lib/jobs/actions';
 import type { Project, ProjectWithDetails } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { ERROR_MESSAGES, type EditProjectForm } from './use-edit-project-form';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+
+const CONTENT_REQUIRED_MESSAGE = 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.';
 
 type EditProjectSubmitInput = {
   project: ProjectWithDetails;
@@ -41,12 +44,9 @@ export function useEditProjectSubmit({ project, form, onOpenChange, onSuccess }:
     e.preventDefault();
     setHasAttemptedSubmit(true);
     setError(null);
-    setContentError(null);
-
-    if (!name.trim() && !description.trim()) {
-      setContentError('Bitte gib mindestens einen Titel oder eine Beschreibung ein.');
-      return;
-    }
+    const contentError = name.trim() || description.trim() ? undefined : CONTENT_REQUIRED_MESSAGE;
+    setContentError(contentError ?? null);
+    if (focusFirstInvalidField({ 'edit-project-name': contentError })) return;
 
     await runSubmit(async () => {
       try {

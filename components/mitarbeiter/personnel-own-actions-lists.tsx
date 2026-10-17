@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { OwnPersonnelActions } from '@/lib/personnel/lifecycle-actions';
 import { REQUIREMENT_STATE_LABELS } from '@/lib/personnel/lifecycle';
-import { Spinner } from '@/components/ui/spinner';
 
 type PersonnelOwnRequirementListProps = {
   requirements: OwnPersonnelActions['requirements'];
@@ -40,9 +39,9 @@ export function PersonnelOwnRequirementList({
               <Button
                 size="sm"
                 onClick={() => void onAcknowledge(requirement.id, requirement.version)}
-                disabled={isBusy(requirement.id)}
+                pending={isBusy(requirement.id)}
               >
-                {isBusy(requirement.id) ? <Spinner /> : <Check className="size-4" />} Bestätigen
+                <Check className="size-4" /> Bestätigen
               </Button>
             ) : null}
           </div>
@@ -80,17 +79,17 @@ export function PersonnelOwnDocumentList({
               size="sm"
               variant="ghost"
               onClick={() => void onDownload(document.id, document.documentId)}
-              disabled={isBusy(document.id)}
+              pending={isBusy(document.id)}
             >
-              {isBusy(document.id) ? <Spinner /> : <Download className="size-4" />} Öffnen
+              <Download className="size-4" /> Öffnen
             </Button>
             <Button
               size="sm"
               variant="outline"
               onClick={() => void onAcknowledge(document.id, document.currentVersionNumber)}
-              disabled={isBusy(document.id)}
+              pending={isBusy(document.id)}
             >
-              {isBusy(document.id) ? <Spinner /> : <Check className="size-4" />} Erhalt bestätigen
+              <Check className="size-4" /> Erhalt bestätigen
             </Button>
           </div>
         </li>

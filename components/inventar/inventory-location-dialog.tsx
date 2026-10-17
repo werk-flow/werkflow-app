@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import type { InventoryLocationType } from '@/lib/inventory/types';
 import { INVENTORY_LOCATION_TYPE_LABELS } from '@/lib/inventory/types';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import type { LocationFormState } from './inventory-form-state';
 
 // Create-only dialog: it closes on submit and the Lager tab shows the pending
@@ -44,7 +45,8 @@ export function LocationDialog({
     setWasOpen(open);
     if (open) setAttempted(false);
   }
-  const nameError = attempted && !form.name.trim() ? 'Bitte gib einen Namen ein.' : undefined;
+  const nameValidation = form.name.trim() ? undefined : 'Bitte gib einen Namen ein.';
+  const nameError = attempted ? nameValidation : undefined;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -56,10 +58,7 @@ export function LocationDialog({
           onSubmit={(event) => {
             event.preventDefault();
             setAttempted(true);
-            if (!form.name.trim()) {
-              document.getElementById('inventory-location-name')?.focus();
-              return;
-            }
+            if (focusFirstInvalidField({ 'inventory-location-name': nameValidation })) return;
             onSave();
           }}
           noValidate

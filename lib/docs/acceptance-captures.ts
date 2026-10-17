@@ -26,8 +26,9 @@ const entrySchema = z
     file: z.string().min(1),
     testId: z.string().min(1),
     route: z.string().min(1),
-    role: z.enum(['admin', 'employee']),
-    view: z.enum(['page', 'tab', 'dialog']),
+    /** The app role, or the session of a screen outside the app shell. */
+    role: z.enum(['admin', 'employee', 'anonymous', 'newcomer', 'subscriber', 'prestart']),
+    view: z.enum(['page', 'tab', 'dialog', 'standalone']),
     width: z.number().int().positive(),
     height: z.number().int().nonnegative(),
     scheme: z.enum(['light', 'dark']),

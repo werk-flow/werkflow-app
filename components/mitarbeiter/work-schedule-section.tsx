@@ -6,6 +6,7 @@ import { CalendarClock, Plus } from 'lucide-react';
 
 import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { deleteWorkSchedule } from '@/lib/personnel/actions';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
@@ -19,6 +20,17 @@ import { WorkScheduleListItem } from './work-schedule-list-item';
 import { SectionTitle } from '@/components/shared/section-title';
 
 type DialogState = { mode: 'closed' } | { mode: 'add' } | { mode: 'edit'; schedule: WorkSchedule };
+
+function NoScheduleYet() {
+  return (
+    <EmptyState
+      size="compact"
+      className="py-3"
+      title="Kein Arbeitszeitmodell hinterlegt."
+      description="Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden pro Tag – sichtbar als Hinweis, nicht als echte Vorgabe."
+    />
+  );
+}
 
 interface WorkScheduleSectionProps {
   recordId: string;
@@ -85,10 +97,7 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
       </div>
 
       {sorted.length === 0 ? (
-        <p className="py-3 text-sm text-muted-foreground">
-          Kein Arbeitszeitmodell hinterlegt. Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden
-          pro Tag – sichtbar als Hinweis, nicht als echte Vorgabe.
-        </p>
+        <NoScheduleYet />
       ) : (
         <ul className="grid gap-2">
           {sorted.map((schedule) => (

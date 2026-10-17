@@ -99,6 +99,8 @@ const DIALOG_SIZE_CLASS = {
   '2xl': 'sm:max-w-2xl',
   '3xl': 'sm:max-w-3xl',
   '4xl': 'sm:max-w-4xl',
+  // A two-pane browser (the document move destination) spans the window up to 80rem.
+  window: 'sm:w-[min(80rem,calc(100vw-3rem))] sm:max-w-none',
 } as const;
 
 const DialogContent = React.forwardRef<
@@ -161,8 +163,8 @@ const DialogContent = React.forwardRef<
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
-            'rounded-t-xl',
-            'sm:max-h-[90vh] sm:rounded-lg sm:border sm:border-t',
+            'rounded-t-lg',
+            'sm:max-h-[90dvh] sm:rounded-lg sm:border sm:border-t',
             workspace && 'h-[min(44rem,calc(100dvh-3rem))]',
             placement === 'center'
               ? [
