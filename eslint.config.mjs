@@ -9,6 +9,7 @@ import {
   MEASUREMENT_DIGEST_SUPPORT_FILES,
   playwrightSpecRules,
 } from './eslint-rules/playwright-spec-rules.mjs';
+import { LAB_DIGEST_SUPPORT_FILES } from './eslint-rules/playwright-wait-rules.mjs';
 import { qualityRules } from './eslint-rules/quality-rules.mjs';
 import { realtimeRules } from './eslint-rules/realtime-rules.mjs';
 import { uiRules } from './eslint-rules/ui-rules.mjs';
@@ -1175,6 +1176,7 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-raw-key-press': 'error',
       'playwright-spec/no-transport-internals': 'error',
       'playwright-spec/no-scoped-has-locator': 'error',
+      'playwright-spec/no-retried-action': 'error',
     },
   },
   // Support modules own locators, so they may use ancestors, but never a CSS
@@ -1190,6 +1192,24 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-transport-internals': 'error',
       'playwright-spec/no-scoped-has-locator': 'error',
       'playwright-spec/no-one-shot-count-comparison': 'error',
+    },
+  },
+  // Waits (docs/technical/testing.md): every spec and support module waits at
+  // most the configured expect timeout, or names its slow operation in
+  // tests/golden/support/timeouts.ts. The Playwright configs set the defaults
+  // themselves. The measurement-digest inputs keep their bytes (see above); a
+  // measured test that keeps a longer wait disables the rule for that line
+  // with the scenario it measures.
+  {
+    files: ['tests/**/*.ts'],
+    ignores: [
+      ...MEASUREMENT_DIGEST_SUPPORT_FILES,
+      ...LAB_DIGEST_SUPPORT_FILES,
+      'tests/**/playwright.config.ts',
+    ],
+    plugins: { 'playwright-spec': playwrightSpecRules },
+    rules: {
+      'playwright-spec/bounded-timeout': 'error',
     },
   },
   // Product code: auth + prod-ref + Realtime ownership + styling canon. The
