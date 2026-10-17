@@ -1110,9 +1110,10 @@ const eslintConfig = defineConfig([
   },
   // Narrow instead of asserting: `!` hides the missing-value branch the strict
   // index and optional flags exist to surface (typescript-best-practices
-  // skill). Product code, the tests under lib/ and the Playwright specs.
+  // skill). Every TypeScript file: product code, tests, scripts and hooks.
+  // The ESLint rule modules under eslint-rules/ are JavaScript, where `!` cannot be written.
   {
-    files: [...productFiles, 'proxy.ts', 'tests/**/*.{ts,tsx}'],
+    files: ['**/*.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'error',
     },
