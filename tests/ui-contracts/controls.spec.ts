@@ -594,6 +594,26 @@ test(
   },
 );
 
+test('a scroll that leaves the row menu trigger in place keeps the menu open', async ({ page }) => {
+  const section = page.getByRole('region', { name: 'Zeilenaktionen' });
+  const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });
+  await trigger.click();
+  await expect(page.getByRole('menuitem', { name: 'Markieren' })).toBeFocused();
+  // The scroll event of a scroll that ended before the click, as after a sideways table scroll.
+  await page.evaluate(() => document.dispatchEvent(new Event('scroll')));
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('menuitem', { name: 'Markieren' })).toBeVisible();
+  // A scroll that moves the trigger away from the placed menu closes it.
+  await trigger.evaluate((button) => {
+    button.style.marginTop = '48px';
+    document.dispatchEvent(new Event('scroll'));
+  });
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await trigger.evaluate((button) => {
+    button.style.marginTop = '';
+  });
+});
+
 test('Tab and ShiftTab leave a row menu at the adjacent page control', async ({ page }) => {
   const section = page.getByRole('region', { name: 'Zeilenaktionen' });
   const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });

@@ -49,6 +49,7 @@ import { dismissDialog, pressKey } from '../../golden/support/steps/interaction'
 import { expectRedirectedAway } from '../../golden/support/steps/organization';
 import { expectGone, SHARED_COPY } from '../../golden/support/steps/shared';
 import { createJob, createProject } from '../../golden/support/steps/work';
+import { DOCUMENT_UPLOAD_TIMEOUT_MS } from '../../golden/support/timeouts';
 import { expectSignedWindowOpen, SIGNED_URL_PATTERN } from '../support/a1-steps';
 
 function onePixelPng(): Buffer {
@@ -83,12 +84,10 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     ]);
     await expect(adminPage.getByRole('dialog')).toBeVisible();
     await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await adminPage.reload();
-    await expect(visibleDocumentName(adminPage, `a1-batch-a-${world.runId}.txt`)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, `a1-batch-a-${world.runId}.txt`)).toBeVisible();
     await expect(visibleDocumentName(adminPage, `a1-batch-b-${world.runId}.txt`)).toBeVisible();
 
     await documentFolderUploadInput(adminPage).setInputFiles(
@@ -96,12 +95,10 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     );
     await expect(adminPage.getByRole('dialog')).toBeVisible();
     await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await adminPage.reload();
-    await expect(visibleDocumentName(adminPage, FOLDER_UPLOAD_FIXTURE_NAME)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, FOLDER_UPLOAD_FIXTURE_NAME)).toBeVisible();
 
     // The library root owns the drop handlers; the search field sits inside
     // it, so a bubbling drop dispatched there reaches the same target a real
@@ -114,12 +111,10 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     }, `a1-drop-${world.runId}.txt`);
     await expect(adminPage.getByRole('dialog')).toBeVisible();
     await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await adminPage.reload();
-    await expect(visibleDocumentName(adminPage, `a1-drop-${world.runId}.txt`)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, `a1-drop-${world.runId}.txt`)).toBeVisible();
 
     await adminPage.evaluate(() => {
       document.documentElement.dataset.nativeUploadProgress = '';
@@ -168,7 +163,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       });
       await expect(documentUploadTotalProgress(adminPage)).toBeVisible();
       await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
-        timeout: 90_000,
+        timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
       });
     } finally {
       await networkSession.send('Network.emulateNetworkConditions', {
@@ -195,9 +190,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     expect(progressEvidence.nativeSamples.some(([, total]) => total === 6 * 1024 * 1024)).toBe(true);
     expect(progressEvidence.nativeSamples.at(-1)).toEqual([6 * 1024 * 1024, 6 * 1024 * 1024]);
     await adminPage.reload();
-    await expect(visibleDocumentName(adminPage, `a1-large-${world.runId}.bin`)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, `a1-large-${world.runId}.bin`)).toBeVisible();
   });
 
   test('A1-34/A1-35: Ordner, Verschieben/Kopieren und Arbeitsverknüpfung', async ({ adminPage, world }) => {
@@ -227,12 +220,10 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       buffer: Buffer.from('WerkFlow A1 Dokument'),
     });
     await expect(documentUploadCompleted(adminPage, 1, 1)).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await closeDocumentUploadProgressDialog(adminPage);
-    await expect(visibleDocumentName(adminPage, fileName)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, fileName)).toBeVisible();
 
     await chooseDocumentFileAction(adminPage, fileName, 'manageLinks');
     const linkDialog = documentDialog(adminPage, 'manageLinks');
@@ -241,7 +232,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await pickDocumentLinkTarget(linkDialog, 'client', linkCustomerName, linkCustomerName);
     await pickDocumentLinkTarget(linkDialog, 'employee', 'Emil', 'Emil');
     await linkDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(linkDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(linkDialog).toHaveCount(0);
 
     // The save closes with a router refresh; under a loaded shared-world run it
     // can supersede this tab click. Navigate to the link target directly so the
@@ -299,14 +290,12 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       buffer: Buffer.from('%PDF-1.4\nWerkFlow A1 Version 1'),
     });
     await expect(documentUploadCompleted(adminPage, 1, 1)).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await closeDocumentUploadProgressDialog(adminPage);
     await chooseDocumentFileAction(adminPage, fileName, 'details');
     const details = documentDialog(adminPage, 'details');
-    await expect(documentAuditEvent(details, 'uploaded')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(documentAuditEvent(details, 'uploaded')).toBeVisible();
     // The category control moved off the native <select> (M5 canon): shadcn
     // Select trigger plus role=option entries.
     await chooseDocumentCategory(details, 'contract');
@@ -317,9 +306,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await dismissDialog(details);
     await expect(details).toHaveCount(0);
     await chooseDocumentFileAction(adminPage, fileName, 'details');
-    await expect(documentAuditEvent(details, 'category_changed')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(documentAuditEvent(details, 'category_changed')).toBeVisible();
     await expect(documentNewVersionButton(details)).toBeVisible();
     await documentNewVersionInput(details).setInputFiles({
       name: fileName,
@@ -327,7 +314,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       buffer: Buffer.from('%PDF-1.4\nWerkFlow A1 Version 2'),
     });
     await expect(documentMessage(adminPage, 'versionUploaded')).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await expect(documentCurrentVersion(details, 2)).toBeVisible();
     await expect(documentAuditEvent(details, 'version_uploaded')).toBeVisible();
@@ -340,11 +327,9 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await confirmDocumentDeletion(adminPage, 'delete');
     const trashButton = documentLibraryTrashButton(adminPage);
     await expect(trashButton).toBeDisabled();
-    await expect(trashButton).toBeEnabled({ timeout: 30_000 });
+    await expect(trashButton).toBeEnabled();
     await trashButton.click();
-    await expect(visibleDocumentName(adminPage, fileName)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, fileName)).toBeVisible();
     await chooseDocumentFileAction(adminPage, fileName, 'restore');
     await expect(documentMessage(adminPage, 'restored')).toBeVisible();
 
@@ -353,7 +338,7 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await chooseDocumentFileAction(adminPage, fileName, 'delete');
     await confirmDocumentDeletion(adminPage, 'delete');
     await expect(trashButton).toBeDisabled();
-    await expect(trashButton).toBeEnabled({ timeout: 30_000 });
+    await expect(trashButton).toBeEnabled();
     await trashButton.click();
     await chooseDocumentFileAction(adminPage, fileName, 'deletePermanently');
     await confirmDocumentDeletion(adminPage, 'deletePermanently');
@@ -380,12 +365,12 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
       },
     ]);
     await expect(documentUploadCompleted(adminPage, 2, 2)).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await closeDocumentUploadProgressDialog(adminPage);
     await visibleDocumentName(adminPage, imageViewerFile).click();
     const imageViewer = documentViewer(adminPage, imageViewerFile);
-    await expect(documentViewerImage(imageViewer, imageViewerFile)).toBeVisible({ timeout: 20_000 });
+    await expect(documentViewerImage(imageViewer, imageViewerFile)).toBeVisible();
     await expect(documentViewerNewTabLink(imageViewer)).toHaveAttribute('href', SIGNED_URL_PATTERN);
     await expectSignedWindowOpen(adminPage, () => documentViewerDownloadButton(imageViewer).click());
     await dismissDialog(imageViewer);
@@ -428,14 +413,12 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     // progress dialog (transient-flash class, testing.md); the close-wait plus
     // the persisted file row below are the honest proof.
     await expect(employeePage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await employeePage.reload();
     await documentOpenButton(employeePage, fileName).click();
     const viewer = documentViewer(employeePage, fileName);
-    await expect(documentViewerImage(viewer, fileName)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(documentViewerImage(viewer, fileName)).toBeVisible();
     await expectSignedWindowOpen(employeePage, () => documentViewerDownloadButton(viewer).click());
     await dismissDialog(viewer);
     await expectRedirectedAway(employeePage, `/auftraege/${unassignedJobNumber}`);
@@ -446,32 +429,17 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     const uploadDialog = documentDialog(bueroPage, 'upload');
     // Right after navigation the file input can receive the files before
     // hydration attaches its change handler, so nothing opens (pre-hydration
-    // class; surfaced by the fast local stack 2026-08-28). Wait for hydration
-    // like the login helper does; no dialog means no upload started, so
-    // re-selecting the files is safe.
+    // class). Wait for hydration like the login helper does, then select the
+    // files once.
     await bueroPage.waitForLoadState('networkidle');
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
-      await documentUploadInput(bueroPage).setInputFiles(
-        {
-          name: liveFileName,
-          mimeType: 'text/plain',
-          buffer: Buffer.from('A1 document Realtime'),
-        },
-        { timeout: 15_000 },
-      );
-      const opened = await uploadDialog
-        .waitFor({ state: 'visible', timeout: 10_000 })
-        .then(() => true)
-        .catch(() => false);
-      if (opened) break;
-      if (attempt === 3) {
-        throw new Error('Upload dialog did not open after three file selections.');
-      }
-    }
-    await expect(uploadDialog).toHaveCount(0, { timeout: 60_000 });
-    await expect(visibleDocumentName(bueroPage, liveFileName)).toBeVisible({
-      timeout: 15_000,
+    await documentUploadInput(bueroPage).setInputFiles({
+      name: liveFileName,
+      mimeType: 'text/plain',
+      buffer: Buffer.from('A1 document Realtime'),
     });
+    await expect(uploadDialog).toBeVisible();
+    await expect(uploadDialog).toHaveCount(0, { timeout: DOCUMENT_UPLOAD_TIMEOUT_MS });
+    await expect(visibleDocumentName(bueroPage, liveFileName)).toBeVisible();
     // The admin channel can still be subscribing when the INSERT fires right
     // after navigation (missed-delivery class); the sanctioned one-reload
     // fallback keeps the persisted-row assertion strict while GG-00's

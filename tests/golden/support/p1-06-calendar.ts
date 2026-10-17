@@ -13,6 +13,6 @@ export async function expectCalendarVacationEventOnDate(
   status: 'pending' | 'approved',
 ): Promise<void> {
   const bar = calendarAbsenceBars(page.getByRole('main'), status, dateIso).filter({ hasText: title });
-  await expect(bar).toHaveCount(1, { timeout: 15_000 });
+  await expect(bar).toHaveCount(1);
   await expect(bar).toBeVisible();
 }

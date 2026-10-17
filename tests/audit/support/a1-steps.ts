@@ -23,25 +23,19 @@ export async function bookMaterialDialog(
     has: page.getByRole('heading', { name: heading }),
   });
   await retryDialogTransaction({
-    open: () => openButton.click({ timeout: 15_000 }),
+    open: () => openButton.click(),
     dialog,
     prepare: async () => {
       // These suffix selectors distinguish the generated material controls;
       // every action stays bounded because Realtime can unmount the dialog.
-      await materialRowQuantity(dialog).fill(quantity, { timeout: 15_000 });
-      await materialRowLocation(dialog).click({ timeout: 15_000 });
+      await materialRowQuantity(dialog).fill(quantity);
+      await materialRowLocation(dialog).click();
       const listbox = page.getByRole('listbox');
-      await expect(listbox).toBeVisible({ timeout: 15_000 });
-      await page.getByRole('textbox', { name: MATERIAL_LOCATION_SEARCH }).fill('Hauptlager (Golden)', {
-        timeout: 15_000,
-      });
-      await listbox
-        .getByRole('option')
-        .filter({ hasText: 'Hauptlager (Golden)' })
-        .first()
-        .click({ timeout: 15_000 });
+      await expect(listbox).toBeVisible();
+      await page.getByRole('textbox', { name: MATERIAL_LOCATION_SEARCH }).fill('Hauptlager (Golden)');
+      await listbox.getByRole('option').filter({ hasText: 'Hauptlager (Golden)' }).first().click();
     },
-    submit: () => dialog.getByRole('button', { name: submitLabel }).click({ timeout: 15_000 }),
+    submit: () => dialog.getByRole('button', { name: submitLabel }).click(),
   });
 }
 
@@ -56,7 +50,7 @@ export async function setJobStatus(page: Page, state: SettableJobState): Promise
   if (state === 'in_progress') {
     await transitionWork(page, 'not_started', 'in_progress');
   } else {
-    await expect(workLifecycleCard(page)).toBeVisible({ timeout: 20_000 });
+    await expect(workLifecycleCard(page)).toBeVisible();
     const canStart = await lifecycleAction(page, 'not_started', 'in_progress')
       .waitFor({ state: 'visible', timeout: 2_000 })
       .then(() => true)

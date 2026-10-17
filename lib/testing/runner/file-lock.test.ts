@@ -40,7 +40,7 @@ describe('cross-process file lock', () => {
     // workers can be slow to start under host load (it intermittently crossed
     // 15s on 2026-08-27), and a latency-tripped failure here reads as a lock
     // bug. Generous budget on purpose; the count assertion is the contract.
-  }, 60_000);
+  });
 
   test('never steals an old lock from another operation', () => {
     const directory = mkdtempSync(resolve(tmpdir(), 'werkflow-file-lock-'));

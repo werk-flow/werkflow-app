@@ -40,9 +40,8 @@ export async function observeCalendarChange(input: {
             // timing after the remaining functional steps have completed.
             await input.target.waitFor({
               state: input.state === 'absent' ? 'detached' : 'visible',
-              timeout: 15_000,
             });
-            await input.receiverReady.waitFor({ state: 'visible', timeout: 15_000 });
+            await input.receiverReady.waitFor({ state: 'visible' });
             if (input.state === 'absent') await expect(input.target).toHaveCount(0);
             else await expect(input.target).toBeVisible();
           },

@@ -157,4 +157,4 @@ test('every id list in a PostgREST string filter is a literal or a reviewed boun
       .map((key) => `${file}: ${key}`),
   );
   expect(stale, 'These BOUNDED_STRING_FILTERS entries match no call; remove them.').toEqual([]);
-}, 60_000);
+});

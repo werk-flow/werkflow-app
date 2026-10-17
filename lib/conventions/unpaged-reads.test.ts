@@ -333,7 +333,7 @@ test('every read of an organization-sized table has a page boundary or a reviewe
     Object.keys(REVIEWED_UNPAGED_READS).filter((key) => !keys.has(key)),
     'These REVIEWED_UNPAGED_READS entries match no read; remove them.',
   ).toEqual([]);
-}, 120_000);
+});
 
 test('every small-table exception names an organization table', () => {
   const tables = organizationTables();

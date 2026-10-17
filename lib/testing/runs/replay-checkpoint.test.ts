@@ -178,6 +178,8 @@ test('the first replay of a test on a retained world always starts', () => {
         replay('other-world', 'failed', { sourceRunKey: 'elsewhere' }),
         replay('other-test', null, { outcomes: [{ id: `${TEST_ID} 2`, status: 'failed' }] }),
         replay('group-run', 'failed', { lane: 'group' }),
+        // A fresh-world diagnostic of the same run never touched the retained world.
+        replay('fresh-world', 'failed', { diagnosticWorld: 'fresh' }),
       ],
     }),
   ).toBeUndefined();

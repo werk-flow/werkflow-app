@@ -59,10 +59,10 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
       });
 
       await employeePage.goto('/qualifikationen');
-      await expect(visibleText(employeePage, teamName)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(employeePage, teamName)).toBeVisible();
       // A team is not authority: the field worker still cannot open management.
       await employeePage.goto('/mitarbeiter');
-      await employeePage.waitForURL('**/dashboard', { timeout: 15_000 });
+      await employeePage.waitForURL('**/dashboard');
     });
 
     await test.step('Kuratierte Fähigkeiten und Zertifizierungen tragen Gültigkeit, interne Bestätigung und Nachweisstatus', async () => {
@@ -90,7 +90,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
 
       // The employee sees the own entries read-only, never a colleague's.
       await employeePage.goto('/qualifikationen');
-      await expect(visibleText(employeePage, certification)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(employeePage, certification)).toBeVisible();
       await expect(visibleText(employeePage, OWN_QUALIFICATION_COPY.expired)).toBeVisible();
       await expect(visibleText(employeePage, OWN_QUALIFICATION_COPY.evidenceReceived)).toBeVisible();
       await expect(textInDom(employeePage, officeSkill)).toHaveCount(0);
@@ -130,7 +130,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
 
       await openAufgaben(adminPage);
       const notice = attentionNotificationRow(adminPage, expiredRow.id);
-      await expect(notice).toHaveCount(1, { timeout: 15_000 });
+      await expect(notice).toHaveCount(1);
       await expect(notice.getByText(certification)).toBeVisible();
       await markAttentionNotificationReadViaButton(adminPage, expiredRow.id);
 
@@ -149,7 +149,7 @@ test.describe('P1-09 Teams und Qualifikationen @P1-09', () => {
       expect(after.employeeEventTypes).toEqual(['qualification_added', 'qualification_renewed']);
 
       await openAufgaben(adminPage);
-      await expectGone(attentionNotificationRow(adminPage, expiredRow.id), { timeout: 15_000 });
+      await expectGone(attentionNotificationRow(adminPage, expiredRow.id));
     });
   });
 });

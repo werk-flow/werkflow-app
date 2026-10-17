@@ -299,7 +299,7 @@ test('a write after a state check filters on the checked state and reads its row
     Object.keys(ALLOWED_UNGUARDED).filter((entry) => !findings.map(findingKey).includes(entry)),
     'These allowlisted writes are no longer findings; remove them from ALLOWED_UNGUARDED.',
   ).toEqual([]);
-}, 60_000);
+});
 
 test('the scan catches a planted read-check-write', () => {
   const columns = new Map([['things', new Set(['status', 'taken_quantity'])]]);

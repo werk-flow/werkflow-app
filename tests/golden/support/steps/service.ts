@@ -305,19 +305,15 @@ export async function createInstalledEquipment(
     }
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expect(pendingRow(page, options.name)).toHaveCount(0, {
-    timeout: 20_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(pendingRow(page, options.name)).toHaveCount(0);
   const equipmentLink = page.getByRole('link', {
     name: options.name,
     exact: true,
   });
-  await expect(equipmentLink).toBeVisible({ timeout: 20_000 });
+  await expect(equipmentLink).toBeVisible();
   await equipmentLink.click();
-  await page.waitForURL(/\/service\/anlagen\/ANL-\d{4}-\d{3}$/i, {
-    timeout: 20_000,
-  });
+  await page.waitForURL(/\/service\/anlagen\/ANL-\d{4}-\d{3}$/i);
   const equipmentNumber = page.url().split('/').at(-1);
   if (!equipmentNumber) throw new Error('Equipment number missing from detail route.');
   return getInstalledEquipmentByNumber(options.orgId, decodeURIComponent(equipmentNumber));
@@ -333,7 +329,7 @@ export async function linkInstalledEquipmentToJob(page: Page, jobNumber: string)
   const dialog = await openInstalledEquipmentWorkLinkDialog(page);
   await selectFromSearchable(page, equipmentWorkTargetPicker(dialog), jobNumber);
   await dialog.getByRole('button', { name: SERVICE_COPY.link, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await expect(equipmentWorkLinkSection(page).getByRole('link').filter({ hasText: jobNumber })).toBeVisible();
 }
 
@@ -356,7 +352,7 @@ export async function transitionInstalledEquipment(
   await page.getByRole('option', { name: stateLabel, exact: true }).click();
   await dialog.getByLabel(EQUIPMENT_COPY.field.stateReason).fill(reason);
   await dialog.getByRole('button', { name: SHARED_COPY.action.saveChange }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await expect(page.getByText(stateLabel, { exact: true }).first()).toBeVisible();
 }
 
@@ -372,8 +368,8 @@ export async function updateInstalledEquipmentModel(
   await dialog.getByLabel(EQUIPMENT_COPY.field.changeReason).fill(reason);
   await beforeSubmit?.();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(visibleText(page, model)).toBeVisible({ timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
+  await expect(visibleText(page, model)).toBeVisible();
 }
 
 export async function linkInstalledEquipmentSourceToJob(
@@ -386,7 +382,7 @@ export async function linkInstalledEquipmentSourceToJob(
   await selectFromSearchable(page, dialog.locator('#equipment-source'), jobNumber);
   await dialog.getByLabel(EQUIPMENT_COPY.field.sourceMeaning).fill(reason);
   await dialog.getByRole('button', { name: SERVICE_COPY.link, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('link').filter({ hasText: jobNumber }).last()).toBeVisible();
 }
 
@@ -404,7 +400,6 @@ export async function replaceInstalledEquipment(
   await dialog.getByRole('button', { name: EQUIPMENT_COPY.createSuccessor }).click();
   await page.waitForURL(
     (url) => url.href !== predecessorUrl && /\/service\/anlagen\/ANL-\d{4}-\d{3}$/i.test(url.pathname),
-    { timeout: 20_000 },
   );
   await expect(page.getByRole('heading', { name: options.successorName })).toBeVisible();
   return getInstalledEquipmentByNumber(options.orgId, decodeURIComponent(page.url().split('/').at(-1) ?? ''));
@@ -430,10 +425,8 @@ export async function expectDuplicateInstalledEquipmentRejected(
   await dialog.getByLabel(EQUIPMENT_COPY.field.manufacturer, { exact: true }).fill(options.manufacturer);
   await dialog.getByLabel(EQUIPMENT_COPY.field.serialNumber, { exact: true }).fill(options.serialNumber);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expect(page.getByText(EQUIPMENT_COPY.duplicateIdentifier, { exact: true })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText(EQUIPMENT_COPY.duplicateIdentifier, { exact: true })).toBeVisible();
 }
 
 export async function correctInstalledEquipmentTerminalAction(page: Page, reason: string): Promise<void> {
@@ -441,7 +434,7 @@ export async function correctInstalledEquipmentTerminalAction(page: Page, reason
   const dialog = page.getByRole('alertdialog');
   await dialog.getByLabel(EQUIPMENT_COPY.field.correctionReason).fill(reason);
   await dialog.getByRole('button', { name: EQUIPMENT_COPY.recordCorrection }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await expect(equipmentEvent(page, 'terminal_action_corrected')).toBeVisible();
 }
 
@@ -454,7 +447,7 @@ async function selectRadixOption(page: Page, trigger: Locator, optionName: strin
     name: optionName,
     exact: typeof optionName === 'string',
   });
-  await expect(option).toBeVisible({ timeout: 15_000 });
+  await expect(option).toBeVisible();
   await option.click();
 }
 
@@ -539,29 +532,23 @@ export async function createDirectServiceCase(
         name: new RegExp(escapeRegExp(options.equipmentName)),
       })
       .first();
-    await expect(equipmentCheckbox).toBeVisible({ timeout: 15_000 });
+    await expect(equipmentCheckbox).toBeVisible();
     if (!(await equipmentCheckbox.isChecked())) await equipmentCheckbox.click();
     await expect(equipmentCheckbox).toBeChecked();
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expect(pendingRow(page, options.summary)).toHaveCount(0, {
-    timeout: 20_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(pendingRow(page, options.summary)).toHaveCount(0);
   const serviceCaseLink = page.getByRole('link', {
     name: options.summary,
     exact: true,
   });
-  await expect(serviceCaseLink).toBeVisible({ timeout: 20_000 });
+  await expect(serviceCaseLink).toBeVisible();
   await serviceCaseLink.click();
-  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
-    timeout: 20_000,
-  });
+  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/);
   const serviceCaseNumber = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/)?.[1];
   if (!serviceCaseNumber) throw new Error('createDirectServiceCase: service case number missing');
-  await expect(visibleText(page, options.statement)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, options.statement)).toBeVisible();
   return getServiceCaseByNumber(options.orgId, serviceCaseNumber);
 }
 
@@ -570,9 +557,7 @@ export async function convertRequestToServiceCase(page: Page, orgId: string): Pr
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: SERVICE_CASE_COPY.convertDialog })).toBeVisible();
   await dialog.getByRole('button', { name: SERVICE_CASE_COPY.convertConfirm, exact: true }).click();
-  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/, {
-    timeout: 20_000,
-  });
+  await page.waitForURL(/\/service\/faelle\/SRV-\d{4}-\d{3}/);
   const serviceCaseNumber = page.url().match(/\/service\/faelle\/(SRV-\d{4}-\d{3})/)?.[1];
   if (!serviceCaseNumber) throw new Error('convertRequestToServiceCase: service case number missing');
   return getServiceCaseByNumber(orgId, serviceCaseNumber);
@@ -641,7 +626,7 @@ export async function updateServiceCaseViaDialog(
   await dialog.locator('#service-reason').fill(options.reason);
   await options.beforeSubmit?.();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** Relates the open case to another case through the relations section. */
@@ -687,7 +672,7 @@ export async function createServiceCaseFollowUp(page: Page, note: string): Promi
   const dialog = page.getByRole('dialog');
   await dialog.locator('#service-follow-up-note').fill(note);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -705,6 +690,58 @@ export function maintenanceTab(page: Page, tab: keyof typeof MAINTENANCE_TABS): 
 /** The coverage renewal signal as a list row shows it. */
 export function maintenanceRenewalSignal(page: Page, signal: MaintenanceRenewalSignal): Locator {
   return visibleText(page, MAINTENANCE_RENEWAL_SIGNAL_LABELS[signal]);
+}
+
+/** The tab panel that lists this plan's due row on this due date. */
+export function maintenanceDuePanel(page: Page, planNumber: string, dueDateLabel: string): Locator {
+  return page
+    .getByRole('main')
+    .getByRole('tabpanel')
+    .filter({
+      has: confirmed(
+        page
+          .getByTestId('maintenance-due-row')
+          .filter({ hasText: planNumber })
+          .filter({ hasText: dueDateLabel }),
+      ),
+    });
+}
+
+/** The column header of a due list panel. */
+export function maintenanceDueHeader(panel: Locator): Locator {
+  return panel.getByTestId('maintenance-due-header');
+}
+
+/** Every due row of one plan inside a due list panel. */
+export function maintenanceDueRowsOfPlan(panel: Locator, planNumber: string): Locator {
+  return confirmed(panel.getByTestId('maintenance-due-row').filter({ hasText: planNumber }));
+}
+
+/** The due row of one plan for one ISO due date inside a due list panel. */
+export function maintenanceDueRowOnDate(panel: Locator, planNumber: string, dueDateIso: string): Locator {
+  return confirmed(
+    panel
+      .locator(`[data-testid="maintenance-due-row"][data-due-date="${dueDateIso}"]`)
+      .filter({ hasText: planNumber }),
+  );
+}
+
+/** The tab panel that lists the coverage row naming this reference. */
+export function maintenanceCoveragePanel(page: Page, reference: string): Locator {
+  return page
+    .getByRole('main')
+    .getByRole('tabpanel')
+    .filter({ has: confirmed(page.getByTestId('maintenance-coverage-row').filter({ hasText: reference })) });
+}
+
+/** The column header of a coverage list panel. */
+export function maintenanceCoverageHeader(panel: Locator): Locator {
+  return panel.getByTestId('maintenance-coverage-header');
+}
+
+/** A field of the service case edit dialog. */
+export function serviceCaseField(dialog: Locator, field: 'triage' | 'reason'): Locator {
+  return dialog.locator(`#service-${field}`);
 }
 
 /** The coverage row that names this reference. */
@@ -740,7 +777,7 @@ export async function recordCoverageFollowUp(page: Page, reference: string): Pro
   await maintenanceCoverageAction(maintenanceCoverageRow(page, reference), 'followUp').click();
   const dialog = page.getByRole('dialog');
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** The due row of one plan on one due date (as the list formats it). */
@@ -825,11 +862,9 @@ export async function createMaintenanceCoverageViaDialog(
     await dialog.locator('#coverage-note').fill(options.operationalNote);
   }
   await dialog.getByRole('button', { name: MAINTENANCE_COPY.saveCoverage }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await maintenanceTab(page, 'coverages').click();
-  await expect(visibleText(page, options.reference)).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(visibleText(page, options.reference)).toBeVisible();
 }
 
 type MaintenancePlanFormInput = {
@@ -896,13 +931,13 @@ export async function createMaintenancePlanViaDialog(
   const dialog = await openMaintenancePlanDialog(page);
   await fillMaintenancePlanForm(page, dialog, options);
   await maintenancePlanSubmit(dialog).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
   await maintenanceTab(page, 'plans').click();
   await expect(
     confirmed(page.getByRole('main').getByTestId('maintenance-plan-card'))
       .filter({ hasText: options.clientName })
       .filter({ hasText: options.equipmentName }),
-  ).toBeVisible({ timeout: 20_000 });
+  ).toBeVisible();
 }
 
 /** The workspace searched for one record, so the record is on the first page of its list. */

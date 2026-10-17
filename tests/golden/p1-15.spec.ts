@@ -9,6 +9,7 @@ import {
   workArtifactDialog,
   workArtifactEntry,
   workArtifactField,
+  workArtifactInput,
   workArtifactsSection,
   workArtifactStatusText,
   workArtifactVersion,
@@ -49,9 +50,7 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
         'Sicherheitsventil geprüft und Anlage entlüftet.',
       );
       await workArtifactAction(dialog, 'submitForReview').click();
-      await expect(workArtifactVersion(dialog, 1)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(workArtifactVersion(dialog, 1)).toBeVisible();
       await expect(workArtifactAction(dialog, 'approveInternally')).toHaveCount(0);
       await closeWorkArtifactDialog(dialog);
       await expect
@@ -63,15 +62,11 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
 
     await test.step('A second person approves the report internally', async () => {
       await adminPage.goto(`/auftraege/${jobNumber}`);
-      await expect(workArtifactsSection(adminPage)).toContainText(title, {
-        timeout: 30_000,
-      });
+      await expect(workArtifactsSection(adminPage)).toContainText(title);
       await workArtifactEntry(adminPage, title).click();
       const adminDialog = workArtifactDialog(adminPage);
       await workArtifactAction(adminDialog, 'approveInternally').click();
-      await expect(workArtifactStatusText(adminDialog, 'approved')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(workArtifactStatusText(adminDialog, 'approved')).toBeVisible();
       await closeWorkArtifactDialog(adminDialog);
       const state = await getWorkArtifactState(world.orgId, { jobNumber });
       expect(state.artifacts[0]).toMatchObject({
@@ -95,13 +90,11 @@ test.describe('P1-15 structured site evidence @P1-15', () => {
       await workArtifactField(measurementDialog, 'measurementLocation').fill('Technikzentrale');
       await workArtifactAction(measurementDialog, 'addMeasurementLine').click();
       await workArtifactField(measurementDialog, 'lineName').fill('Heizungsrohr');
-      await measurementDialog.locator('#artifact-measurement-quantity-0').fill('7,25');
+      await workArtifactInput(measurementDialog, 'firstMeasurementQuantity').fill('7,25');
       await selectWorkArtifactUnit(adminPage, measurementDialog, 'meter');
       await workArtifactField(measurementDialog, 'location').fill('Achse B');
       await workArtifactAction(measurementDialog, 'saveDraft').click();
-      await expect(workArtifactDescription(measurementDialog, 'measurement', 'draft', 1)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(workArtifactDescription(measurementDialog, 'measurement', 'draft', 1)).toBeVisible();
       const state = await getWorkArtifactState(world.orgId, { jobNumber });
       expect(state.measurements).toHaveLength(1);
       expect(Number(state.measurements[0]?.quantity)).toBe(7.25);

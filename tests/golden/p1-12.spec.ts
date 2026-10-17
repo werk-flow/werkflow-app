@@ -9,16 +9,20 @@ import {
   acknowledgeDispatchOnJobPage,
   batchPreviewNotice,
   challengeDispatchOnJobPage,
+  commitmentMismatchMarker,
   confirmBatchReschedule,
   dispatchOccurrenceRow,
   dispatchPanelOccurrences,
   dispatchPanelRegion,
   dispatchParkedJobFromParkplatz,
+  dispatchRecipientState,
   expectDispatchStateOnJobPage,
+  expectNoDispatchPanelToggle,
   issueDispatchForOccurrence,
   openChallengesRegion,
   openDispatchPanel,
   openParkplatzPanel,
+  parkingContextLine,
   parkplatzCard,
   recordCommitmentForOccurrence,
   resolveDispatchChallengeInPanel,
@@ -61,8 +65,8 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
       await openParkplatzPanel(adminPage);
       const card = parkplatzCard(adminPage, title);
-      await expect(card).toBeVisible({ timeout: 20_000 });
-      await expect(card.locator('[data-parking-context="set"]')).toBeVisible({ timeout: 20_000 });
+      await expect(card).toBeVisible();
+      await expect(parkingContextLine(card, 'set')).toBeVisible();
       const parking = await getParkingState(world.orgId, jobNumber);
       expect(parking.context?.reason).toBe('warten_auf_material');
       expect(parking.context?.nextReviewDate).toBe(reviewDate);
@@ -78,7 +82,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       // The recipient sees the pending confirmation on the shared surface.
       await employeePage.goto('/aufgaben');
       const taskGroup = dispatchTaskGroup(employeePage);
-      await expect(taskGroup).toBeVisible({ timeout: 20_000 });
+      await expect(taskGroup).toBeVisible();
       await expect(taskGroup.getByText(title, { exact: true })).toBeVisible();
     });
 
@@ -148,9 +152,9 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await test.step('the worker challenges, the office keeps the plan, the worker confirms it', async () => {
       await challengeDispatchOnJobPage(employeePage, jobNumber, challengeReason);
       await openDispatchPanel(adminPage);
-      await expect(openChallengesRegion(adminPage).getByText(challengeReason, { exact: false })).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(
+        openChallengesRegion(adminPage).getByText(challengeReason, { exact: false }),
+      ).toBeVisible();
       await resolveDispatchChallengeInPanel(adminPage, 'Kunde besteht auf dem Termin, Einsatz bleibt.');
 
       await expectDispatchStateOnJobPage(employeePage, jobNumber, 'ausstehend');
@@ -210,8 +214,8 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       await openDispatchPanel(adminPage);
       await recordCommitmentForOccurrence(adminPage, mainTitle);
       await expect(
-        dispatchOccurrenceRow(adminPage, mainTitle).locator('[data-commitment-mismatch="false"]'),
-      ).toBeVisible({ timeout: 20_000 });
+        commitmentMismatchMarker(dispatchOccurrenceRow(adminPage, mainTitle), false),
+      ).toBeVisible();
       const commitments = await getCommitmentState(world.orgId, mainJobNumber);
       expect(commitments.map((commitment) => commitment.committedDate)).toEqual([mainDate]);
     });
@@ -228,9 +232,7 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
       await expect(batchPreviewNotice(preview, 'oneConfirmationInvalidated')).toBeVisible();
       await confirmBatchReschedule(adminPage, preview, OVERRIDE_REASON);
 
-      await expect(
-        dispatchOccurrenceRow(adminPage, mainTitle).locator('[data-commitment-mismatch="true"]'),
-      ).toBeVisible({ timeout: 20_000 });
+      await expect(commitmentMismatchMarker(dispatchOccurrenceRow(adminPage, mainTitle), true)).toBeVisible();
       const batchPlanning = await getPlanningState(world.orgId, { jobNumber: batchJobNumber });
       // The move writes one batch event for the whole selection, on whichever
       // occurrence leads it, so the proof reads both jobs' histories.
@@ -242,8 +244,8 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     await test.step('a new commitment supersedes the old one', async () => {
       await recordCommitmentForOccurrence(adminPage, mainTitle);
       await expect(
-        dispatchOccurrenceRow(adminPage, mainTitle).locator('[data-commitment-mismatch="false"]'),
-      ).toBeVisible({ timeout: 20_000 });
+        commitmentMismatchMarker(dispatchOccurrenceRow(adminPage, mainTitle), false),
+      ).toBeVisible();
       const commitments = await getCommitmentState(world.orgId, mainJobNumber);
       expect(commitments.map((commitment) => commitment.status)).toEqual(['superseded', 'active']);
       expect(commitments[1]?.committedDate).toBe(berlinDateAtOffset(8));
@@ -274,11 +276,11 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
     // A second office user's open panel learns about a new dispatch live.
     await openDispatchPanel(bueroPage);
     const bueroRow = dispatchPanelOccurrences(dispatchPanelRegion(bueroPage), liveTitle);
-    await expect(bueroRow).toBeVisible({ timeout: 20_000 });
-    await expectGone(bueroRow.locator('[data-recipient-state]'));
+    await expect(bueroRow).toBeVisible();
+    await expectGone(dispatchRecipientState(bueroRow));
 
     await openDispatchPanel(adminPage);
-    await expectLiveWithin(bueroRow.locator('[data-recipient-state]'), {
+    await expectLiveWithin(dispatchRecipientState(bueroRow), {
       label: 'p1-12 dispatch state cross-session',
       actingPage: adminPage,
       mutation: (beforeSubmit) => issueDispatchForOccurrence(adminPage, liveTitle, beforeSubmit),
@@ -288,6 +290,6 @@ test.describe('P1-12 dispatch, batch rescheduling, readiness, acknowledgement, a
 
     // Field workers never see the office dispatch surface.
     await employeePage.goto('/kalender');
-    await expect(employeePage.getByTestId('dispatch-panel-toggle')).toHaveCount(0);
+    await expectNoDispatchPanelToggle(employeePage);
   });
 });

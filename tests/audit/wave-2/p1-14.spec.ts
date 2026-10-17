@@ -16,6 +16,8 @@ import {
   createAndPublishWorkTemplate,
   createJob,
   createProject,
+  expectNoLifecycleCardButton,
+  expectNoWorkLifecycleCard,
   handoverAction,
   handoverField,
   handoverMessage,
@@ -47,6 +49,7 @@ import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/suppor
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 import { representativeReadinessState } from '../support/p1-14-steps';
 import { observeRouteRenders } from '../../golden/support/route-renders';
+import { DOCUMENT_UPLOAD_TIMEOUT_MS } from '../../golden/support/timeouts';
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -80,21 +83,13 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(representativeReadinessState(adminPage, 'unknown')).toBeVisible();
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    await expect(
-      employeePage
-        .getByTestId('work-lifecycle-card')
-        .getByRole('button', { name: workTransitionActionLabel('not_started', 'cancelled') }),
-    ).toHaveCount(0);
-    await expect(
-      employeePage
-        .getByTestId('work-lifecycle-card')
-        .getByRole('button', { name: lifecycleCardActionName('park') }),
-    ).toHaveCount(0);
+    await expectNoLifecycleCardButton(employeePage, workTransitionActionLabel('not_started', 'cancelled'));
+    await expectNoLifecycleCardButton(employeePage, lifecycleCardActionName('park'));
 
     await bueroPage.goto(`/auftraege/${jobNumber}`);
     await lifecycleAction(bueroPage, 'not_started', 'in_progress').click();
     await transitionWork(adminPage, 'not_started', 'in_progress');
-    await expect(lifecycleRemoteUpdateHint(bueroPage)).toBeVisible({ timeout: 20_000 });
+    await expect(lifecycleRemoteUpdateHint(bueroPage)).toBeVisible();
     await workTransitionSave(workLifecycleDialog(bueroPage)).click();
     // The dialog closes with the click; the refusal names the rule in the banner.
     await expect(lifecycleRefusalBanner(bueroPage, 'work_transition_stale_version')).toBeVisible();
@@ -145,16 +140,14 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     await expect(lifecycleNextStep(employeePage, 'not_started', 'blocker')).toBeVisible();
 
     await adminPage.goto('/aufgaben');
-    await expect(visibleText(adminPage, jobTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleText(adminPage, jobTitle)).toBeVisible();
     await adminPage.goto(`/auftraege/${jobNumber}`);
     let dialog = await confirmLifecycleReason(
       adminPage,
       'resolveBlocker',
       'Bereich ist abgesperrt und freigegeben.',
     );
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
 
     await adminPage.reload();
     await openResolvedBlockers(adminPage);
@@ -163,10 +156,10 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       'reopenBlocker',
       'Die Absperrung wurde vorzeitig entfernt.',
     );
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     await adminPage.reload();
     dialog = await confirmLifecycleReason(adminPage, 'resolveBlocker', 'Die Absperrung ist wieder wirksam.');
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     await adminPage.reload();
     dialog = await parkWork(adminPage, {
       reason: 'customer',
@@ -174,7 +167,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       responsibleName: world.users.admin.firstName,
       reviewDate: berlinDateAtOffset(76),
     });
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     await expect(lifecycleBadge(adminPage, 'parked')).toBeVisible();
 
     const state = await getWorkLifecycleState(world.orgId, { jobNumber });
@@ -266,20 +259,20 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     // Bound each step so a lost submit or a Realtime remount fails in seconds
     // with the real cause instead of waiting out the test budget (local-stack
     // finding 2026-08-28).
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     const declared = workDependencyRow(adminPage, declaredDescription);
-    await expect(declared).toBeVisible({ timeout: 20_000 });
+    await expect(declared).toBeVisible();
     dialog = await changeWorkDependency(
       adminPage,
       declared,
       'fulfil',
       'Freigabe wurde schriftlich bestätigt.',
     );
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     dialog = await changeWorkDependency(adminPage, declared, 'reopen', 'Freigabe wurde zurückgezogen.');
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     dialog = await changeWorkDependency(adminPage, declared, 'remove', 'Die Bedingung entfällt endgültig.');
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     state = await getWorkLifecycleState(world.orgId, { jobNumber: first });
     expect(state.dependencies).toHaveLength(2);
     expect(
@@ -354,47 +347,34 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     const documentsHeading = adminPage.getByRole('heading', {
       name: SHARED_COPY.region.documents,
     });
-    await expect(documentsHeading).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(documentsHeading).toBeVisible();
     await documentsRegionUploadInput(documentsRegion(adminPage)).setInputFiles({
       name: `p114-uebergabequelle-${world.runId}.pdf`,
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4\nP1-14 Uebergabequelle'),
     });
     await expect(documentUploadCompleted(adminPage, 1, 1)).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await expect(textInDom(adminPage, SHARED_COPY.upload.failed)).toHaveCount(0);
-    const uploadClose = adminPage.getByRole('button', { name: SHARED_COPY.action.close });
-    if (await uploadClose.isVisible().catch(() => false)) {
-      await uploadClose.click();
-    }
-    await expect(adminPage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 10_000,
-    });
+    // The upload dialog closes itself after a successful upload.
+    await expect(adminPage.getByRole('dialog')).toHaveCount(0);
     await adminPage.goto(`/auftraege/${jobNumber}/uebergabe`);
     const handoverSection = workHandoverSection(adminPage);
     await selectAllHandoverSources(handoverSection);
     await handoverAction(handoverSection, 'saveDraft').click();
-    await expect(handoverMessage(handoverSection, 'draftSaved')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(handoverMessage(handoverSection, 'draftSaved')).toBeVisible();
     const handoverOverride = handoverField(handoverSection, 'exceptionReason');
-    if (await handoverOverride.isVisible().catch(() => false)) {
+    if (await handoverOverride.isVisible()) {
       await handoverOverride.fill('Offene Punkte sind im Übergabepaket transparent ausgewiesen.');
     }
     const previewPromise = adminPage.waitForEvent('popup');
     await handoverAction(handoverSection, 'openPreview').click();
     const handoverPreview = await previewPromise;
     await handoverPreview.waitForLoadState('domcontentloaded');
-    await expect(handoverMessage(handoverSection, 'previewCreated')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(handoverMessage(handoverSection, 'previewCreated')).toBeVisible();
     await handoverAction(handoverSection, 'release').click();
-    await expect(handoverMessage(handoverSection, 'released')).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(handoverMessage(handoverSection, 'released')).toBeVisible();
     await handoverPreview.close();
     const state = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(state.entity).toMatchObject({
@@ -440,7 +420,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       responsibleName: world.users.admin.firstName,
       reviewDate: berlinDateAtOffset(79),
     });
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     let childParkingState = await getWorkLifecycleState(world.orgId, {
       jobNumber,
     });
@@ -455,7 +435,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       'continuePlanning',
       'Projekt wird wieder für die Einsatzplanung geöffnet.',
     );
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     childParkingState = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(childParkingState.blockers[0]).toMatchObject({
       kind: 'parking',
@@ -483,13 +463,13 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
       'deriveAutomatically',
       'Projekt folgt wieder dem Auftragsstand.',
     );
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
     projectState = await getWorkLifecycleState(world.orgId, { projectNumber });
     expect(projectState.entity).toMatchObject({
       execution_state_override: null,
     });
 
     await outsiderPage.goto(`/auftraege/${jobNumber}`);
-    await expect(outsiderPage.getByTestId('work-lifecycle-card')).toHaveCount(0);
+    await expectNoWorkLifecycleCard(outsiderPage);
   });
 });

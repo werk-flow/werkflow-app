@@ -90,7 +90,7 @@ test('real freshness helper imports stay independent of scenario references', ()
     expect(reachable.has('lib/testing/performance-baselines.json')).toBe(measured);
   }
   // This reads and parses repository sources; its deadline is not an app latency contract.
-}, 30_000);
+});
 
 test('a browser proof covers its spec, the test support it imports and the dependency manifests, never product code', () => {
   const root = mkdtempSync(join(tmpdir(), 'werkflow-group-qualification-'));

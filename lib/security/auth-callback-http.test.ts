@@ -12,4 +12,4 @@ test('the auth callback fails closed on an unavailable Auth, redeems no invite f
     new Response(child.stderr).text(),
   ]);
   expect(code, `${stdout}\n${stderr}`).toBe(0);
-}, 30_000); // A spawned Bun process that loads next/server took 4 to 6 s under host load.
+});

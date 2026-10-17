@@ -136,6 +136,11 @@ export function employeeSelectionSummary(count: number): string {
   return `${count} Mitarbeiter`;
 }
 
+/** The scrolling body of an open dialog, between its header and its footer. */
+export function dialogBody(dialog: Locator): Locator {
+  return dialog.locator('[data-slot="dialog-body"]');
+}
+
 /**
  * The employee multi-select trigger inside a form. Without a count it shows its
  * placeholder; with a count it shows the selection summary („1 Mitarbeiter“).
@@ -168,7 +173,7 @@ export function qualificationOverrideReason(warning: Locator): Locator {
 /** Waits for the qualification warning, gives the override reason and assigns anyway; returns the warning. */
 export async function assignDespiteQualificationWarning(page: Page, reason: string): Promise<Locator> {
   const warning = qualificationWarningDialog(page);
-  await expect(warning).toBeVisible({ timeout: 15_000 });
+  await expect(warning).toBeVisible();
   await qualificationOverrideReason(warning).fill(reason);
   await warning.getByRole('button', { name: SHARED_COPY.qualificationWarning.assignAnyway }).click();
   return warning;
@@ -337,7 +342,6 @@ export async function expectBannerAfter(
   page: Page,
   text: string | RegExp,
   action: () => Promise<void>,
-  timeout = 20_000,
 ): Promise<void> {
   const banners = page.locator('[role="alert"][data-banner-id]');
   const idsOf = (locator: Locator): Promise<Array<string | null>> =>
@@ -346,7 +350,6 @@ export async function expectBannerAfter(
   await action();
   await expect
     .poll(async () => (await idsOf(banners.filter({ hasText: text }))).some((id) => !before.includes(id)), {
-      timeout,
       message: `A new banner confirms the action: ${String(text)}`,
     })
     .toBe(true);
@@ -378,7 +381,7 @@ export async function retryDialogTransaction(input: {
     canRetryPreparation: async () => (await input.dialog.count()) === 0,
     ...(input.attempts !== undefined ? { attempts: input.attempts } : {}),
   });
-  await expect(input.dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(input.dialog).toHaveCount(0);
 }
 
 export async function openDialogWithRetry(input: {
@@ -388,7 +391,7 @@ export async function openDialogWithRetry(input: {
 }): Promise<void> {
   const attempts = input.attempts ?? 3;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    await input.trigger.click({ timeout: 15_000 });
+    await input.trigger.click();
     if (
       await input.dialog
         .waitFor({ state: 'visible', timeout: 2_500 })
@@ -408,7 +411,7 @@ export async function inputByValue(
   value: string,
 ): Promise<Locator> {
   const inputs = container.getByLabel(label);
-  await expect(inputs).not.toHaveCount(0, { timeout: 15_000 });
+  await expect(inputs).not.toHaveCount(0);
   const count = await inputs.count();
   for (let index = 0; index < count; index += 1) {
     const input = inputs.nth(index);
@@ -432,11 +435,11 @@ export function escapeRegExp(value: string): string {
 // landed on Dashboard before — and assert the server-rendered persisted row.
 export async function expectVisibleAfterSave(page: Page, text: string): Promise<void> {
   try {
-    await expect(visibleText(page, text)).toBeVisible({ timeout: 30_000 });
+    await expect(visibleText(page, text)).toBeVisible();
   } catch {
     const route = page.url();
     await page.goto(route);
-    await expect(visibleText(page, text)).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(page, text)).toBeVisible();
   }
 }
 
@@ -524,8 +527,8 @@ export async function selectFromSearchable(
   const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
   const openPicker = async (): Promise<void> => {
     if (await listbox.isVisible().catch(() => false)) return;
-    await expect(stableTrigger).toBeVisible({ timeout: 15_000 });
-    await expect(stableTrigger).toBeEnabled({ timeout: 15_000 });
+    await expect(stableTrigger).toBeVisible();
+    await expect(stableTrigger).toBeEnabled();
     let lastError: unknown;
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       try {

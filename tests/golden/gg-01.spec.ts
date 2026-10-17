@@ -116,12 +116,12 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
       // The created job carries customer, site, contact, Ort snapshot, context,
       // and the attachment — nothing was retyped.
       await convertedJobLink(bueroPage).click();
-      await expect(visibleText(bueroPage, summary)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(bueroPage, summary)).toBeVisible();
       await expect(visibleText(bueroPage, customer)).toBeVisible();
       await expect(visibleText(bueroPage, bakerySite.name)).toBeVisible();
       await expect(visibleText(bueroPage, `${caretaker.name} (${caretaker.role})`)).toBeVisible();
       await expect(visibleText(bueroPage, formatSiteAddress(bakerySite))).toBeVisible();
-      await expect(visibleText(bueroPage, fileName)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(bueroPage, fileName)).toBeVisible();
       // The work links back to its origin request.
       await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.workOrigin)).toBeVisible();
     });
@@ -155,15 +155,13 @@ test.describe('GG-01 Anfrage zu Auftrag @GG-01', () => {
 
     // Promote the caller into a customer straight from the captured data.
     await promoteCallerButton(bueroPage).click();
-    await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.callerPromoted)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.callerPromoted)).toBeVisible();
     const customerLink = bueroPage.getByRole('link', { name: caller, exact: true });
-    await expect(customerLink).toBeVisible({ timeout: 15_000 });
+    await expect(customerLink).toBeVisible();
 
     // The promoted customer carries the captured phone without retyping.
     await customerLink.click();
-    await expect(visibleText(bueroPage, CUSTOMER_DETAIL_TITLE)).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(bueroPage, CUSTOMER_DETAIL_TITLE)).toBeVisible();
     await expect(visibleText(bueroPage, '089 555999')).toBeVisible();
 
     // The promoted customer exists once in the customer master.

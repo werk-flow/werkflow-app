@@ -244,7 +244,7 @@ test('every application dialog has an owned form or a reasoned interaction excep
   }
   expect(dialogs.length).toBeGreaterThan(0);
   expect(failures).toEqual([]);
-}, 15_000);
+});
 
 function fixture(source: string, additional: Record<string, string> = {}): DialogContract {
   const dialog = inspectDialogs(

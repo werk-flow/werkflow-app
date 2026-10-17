@@ -40,7 +40,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
         reason: 'site_access',
         details: 'Schlüssel fehlt am vereinbarten Ort.',
       });
-      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(dialog).toHaveCount(0);
       await expect(lifecycleNextStep(employeePage, 'not_started', 'blocker')).toBeVisible();
       await expectGone(
         workLifecycleCard(employeePage).getByRole('button', { name: lifecycleCardActionName('park') }),
@@ -57,7 +57,7 @@ test.describe('P1-14 work lifecycle @P1-14', () => {
         'resolveBlocker',
         'Schlüssel wurde übergeben.',
       );
-      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(dialog).toHaveCount(0);
       await expect
         .poll(async () => (await getWorkLifecycleState(world.orgId, { jobNumber })).blockers[0]?.state)
         .toBe('resolved');

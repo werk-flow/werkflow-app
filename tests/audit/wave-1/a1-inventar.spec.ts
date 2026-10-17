@@ -19,6 +19,9 @@ import {
   INVENTORY_COPY,
   INVENTORY_VIEWS,
   inventoryDialog,
+  inventoryField,
+  inventoryImportColumnPicker,
+  inventoryImportFileInput,
   inventoryLocationCard,
   inventoryRow,
   inventoryTab,
@@ -94,11 +97,6 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       '1',
       JOB_MATERIAL_ACTIONS.return.submit,
     );
-    const returnReachedUi = await expect(materialLine)
-      .toContainText(/\+1/, { timeout: 5_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!returnReachedUi) await employeePage.reload();
     await expect(materialLine).toContainText(/\+1/);
     await expect(materialLine).toContainText(world.inventory.itemName);
     await expect(materialLine).not.toContainText(INVENTORY_COPY.billable);
@@ -113,9 +111,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     // P1-13 adds the project qualification client section immediately before
     // material. Wait for that boundary to hydrate so the first material click
     // cannot land on the streamed HTML before its handler is attached.
-    await expect(projectQualificationSection(adminPage)).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(projectQualificationSection(adminPage)).toBeVisible();
     await planMaterialOnDetailPage(adminPage, {
       itemName: world.inventory.itemName,
       locationName: world.inventory.locationName,
@@ -153,7 +149,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await adminPage.goto('/inventar');
     await openItemRowAction(adminPage, inventoryRow(adminPage, inventoryItemName), 'edit');
     const editDialog = inventoryDialog(adminPage, 'editItem');
-    await editDialog.locator('#inventory-item-type').click();
+    await inventoryField(editDialog, 'itemType').click();
     for (const type of ['material', 'consumable', 'tool', 'asset'] as const) {
       await expect(
         adminPage.getByRole('option', { name: INVENTORY_ITEM_TYPE_LABELS[type], exact: true }),
@@ -162,27 +158,25 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await adminPage.getByRole('option', { name: INVENTORY_ITEM_TYPE_LABELS.material, exact: true }).click();
     await selectFromSearchable(
       adminPage,
-      editDialog.locator('#inventory-item-unit'),
+      inventoryField(editDialog, 'itemUnit'),
       getInventoryUnitLabel('meter'),
     );
-    await editDialog.locator('#inventory-item-internal-sku').fill(`SKU-${world.runId}`);
-    await editDialog
-      .locator('#inventory-item-barcode')
-      .fill(`400${world.runId.replace(/\D/g, '').slice(-10)}`);
-    await editDialog.locator('#inventory-item-manufacturer').fill('WerkFlow Prüfhersteller');
-    await editDialog.locator('#inventory-item-supplier-number').fill(`LIEF-${world.runId}`);
-    await editDialog.locator('#inventory-item-minimum-stock').fill('2');
-    await editDialog.locator('#inventory-item-target-stock').fill('12');
-    await editDialog.locator('#inventory-item-purchase-price').fill('12,50');
-    await editDialog.locator('#inventory-item-sale-price').fill('24,90');
-    await editDialog.locator('#inventory-item-description').fill('A1 vollständige Artikelbeschreibung');
-    await editDialog.locator('#inventory-item-notes').fill('A1 interne Notiz');
+    await inventoryField(editDialog, 'itemInternalSku').fill(`SKU-${world.runId}`);
+    await inventoryField(editDialog, 'itemBarcode').fill(`400${world.runId.replace(/\D/g, '').slice(-10)}`);
+    await inventoryField(editDialog, 'itemManufacturer').fill('WerkFlow Prüfhersteller');
+    await inventoryField(editDialog, 'itemSupplierNumber').fill(`LIEF-${world.runId}`);
+    await inventoryField(editDialog, 'itemMinimumStock').fill('2');
+    await inventoryField(editDialog, 'itemTargetStock').fill('12');
+    await inventoryField(editDialog, 'itemPurchasePrice').fill('12,50');
+    await inventoryField(editDialog, 'itemSalePrice').fill('24,90');
+    await inventoryField(editDialog, 'itemDescription').fill('A1 vollständige Artikelbeschreibung');
+    await inventoryField(editDialog, 'itemNotes').fill('A1 interne Notiz');
     const billableCheckbox = editDialog.getByRole('checkbox', {
       name: INVENTORY_COPY.billable,
     });
     if (!(await billableCheckbox.isChecked())) await billableCheckbox.click();
     await editDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(editDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(editDialog).toHaveCount(0);
 
     const createDialog = inventoryDialog(adminPage, 'createItem');
     for (const [suffix, type] of [
@@ -191,19 +185,19 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       ['G', 'asset'],
     ] as const) {
       await createItemButton(adminPage).click();
-      await createDialog.locator('#inventory-item-name').fill(`A1 Typ ${suffix} ${world.runId}`);
-      await createDialog.locator('#inventory-item-type').click();
+      await inventoryField(createDialog, 'itemName').fill(`A1 Typ ${suffix} ${world.runId}`);
+      await inventoryField(createDialog, 'itemType').click();
       await adminPage.getByRole('option', { name: INVENTORY_ITEM_TYPE_LABELS[type], exact: true }).click();
       await createDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-      await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(createDialog).toHaveCount(0);
     }
     const toolItemName = `A1 Typ W ${world.runId}`;
 
     await createLocationButton(adminPage).click();
     const locationDialog = inventoryDialog(adminPage, 'createLocation');
     const vehicleLocation = `A1 Fahrzeug ${world.runId}`;
-    await locationDialog.locator('#inventory-location-name').fill(vehicleLocation);
-    await locationDialog.locator('#inventory-location-type').click();
+    await inventoryField(locationDialog, 'locationName').fill(vehicleLocation);
+    await inventoryField(locationDialog, 'locationType').click();
     for (const type of ['storage', 'room', 'shelf', 'vehicle', 'other'] as const) {
       await expect(
         adminPage.getByRole('option', { name: INVENTORY_LOCATION_TYPE_LABELS[type], exact: true }),
@@ -212,13 +206,11 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await adminPage
       .getByRole('option', { name: INVENTORY_LOCATION_TYPE_LABELS.vehicle, exact: true })
       .click();
-    await locationDialog.locator('#inventory-location-description').fill('Servicefahrzeug Nord');
+    await inventoryField(locationDialog, 'locationDescription').fill('Servicefahrzeug Nord');
     await locationDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(locationDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(locationDialog).toHaveCount(0);
     await inventoryTab(adminPage, 'locations').click();
-    await expect(pendingLocationStatus(adminPage)).toHaveCount(0, {
-      timeout: 30_000,
-    });
+    await expect(pendingLocationStatus(adminPage)).toHaveCount(0);
     await expect(inventoryLocationCard(adminPage, vehicleLocation)).toContainText(
       INVENTORY_LOCATION_TYPE_LABELS.vehicle,
     );
@@ -254,9 +246,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await itemSearchField(adminPage).fill(liveItemName);
     await expect(textInDom(adminPage, liveItemName)).toHaveCount(0);
     await createInventoryItem(bueroPage, { name: liveItemName });
-    await expect(visibleText(adminPage, liveItemName)).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(visibleText(adminPage, liveItemName)).toBeVisible();
   });
 
   test('A1-41: Zu-/Abgang, Negativsperre und nachvollziehbare Bewegung', async ({ adminPage, world }) => {
@@ -275,24 +265,24 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     const stockDialog = inventoryDialog(adminPage, 'adjustStock');
 
     await openItemRowAction(adminPage, row, 'adjustStock');
-    await stockDialog.locator('#inventory-stock-quantity').fill('2');
-    await stockDialog.locator('#inventory-stock-reason').fill(inboundReason);
+    await inventoryField(stockDialog, 'stockQuantity').fill('2');
+    await inventoryField(stockDialog, 'stockReason').fill(inboundReason);
     await renders.forSave('stock.adjust', async () => {
       await stockDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-      await expect(stockDialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(stockDialog).toHaveCount(0);
     });
 
     await openItemRowAction(adminPage, row, 'adjustStock');
     await stockDialog.getByRole('button', { name: INVENTORY_COPY.withdraw }).click();
-    await stockDialog.locator('#inventory-stock-quantity').fill('1');
-    await stockDialog.locator('#inventory-stock-reason').fill(outboundReason);
+    await inventoryField(stockDialog, 'stockQuantity').fill('1');
+    await inventoryField(stockDialog, 'stockReason').fill(outboundReason);
     await stockDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(stockDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(stockDialog).toHaveCount(0);
 
     await openItemRowAction(adminPage, row, 'adjustStock');
     await stockDialog.getByRole('button', { name: INVENTORY_COPY.withdraw }).click();
-    await stockDialog.locator('#inventory-stock-quantity').fill('999');
-    await stockDialog.locator('#inventory-stock-reason').fill('A1 Negativtest');
+    await inventoryField(stockDialog, 'stockQuantity').fill('999');
+    await inventoryField(stockDialog, 'stockReason').fill('A1 Negativtest');
     await stockDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
     await expect(stockDialog.getByText(INVENTORY_COPY.insufficientStock)).toBeVisible();
     await stockDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
@@ -341,7 +331,7 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await adminPage.goto('/inventar');
     await csvImportButton(adminPage).click();
     const dialog = inventoryDialog(adminPage, 'importCsv');
-    await dialog.locator('input[type="file"]').setInputFiles({
+    await inventoryImportFileInput(dialog).setInputFiles({
       name: `a1-import-${world.runId}.csv`,
       mimeType: 'text/csv',
       buffer: Buffer.from(
@@ -357,14 +347,12 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
       unit: 'Einheit',
     } as const;
     for (const [field, header] of Object.entries(mappings)) {
-      await selectFromSearchable(adminPage, dialog.locator(`#inventory-import-${field}`), header);
+      await selectFromSearchable(adminPage, inventoryImportColumnPicker(dialog, field), header);
     }
     await csvImportSubmit(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+    await expect(dialog).toHaveCount(0);
     const importedRow = inventoryRow(adminPage, importedItem);
-    await expect(importedRow).toContainText(importedCategory, {
-      timeout: 20_000,
-    });
+    await expect(importedRow).toContainText(importedCategory);
     await expect(importedRow).toContainText(importedLocation);
     // Bestand and Verfügbar both show the imported quantity.
     await expect(
@@ -372,8 +360,8 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     ).toHaveCount(2);
     await openItemRowAction(adminPage, importedRow, 'edit');
     const itemDialog = inventoryDialog(adminPage, 'editItem');
-    await expect(itemDialog.locator('#inventory-item-category')).toContainText(importedCategory);
-    await expect(itemDialog.locator('#inventory-item-supplier')).toContainText(importedSupplier);
+    await expect(inventoryField(itemDialog, 'itemCategory')).toContainText(importedCategory);
+    await expect(inventoryField(itemDialog, 'itemSupplier')).toContainText(importedSupplier);
     await itemDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
     await inventoryTab(adminPage, 'locations').click();
     await expect(visibleText(adminPage, importedLocation)).toBeVisible();

@@ -12,4 +12,4 @@ test('an unknown subscription status fails with a retry instead of showing the p
     new Response(child.stderr).text(),
   ]);
   expect(code, `${stdout}\n${stderr}`).toBe(0);
-}, 30_000); // The fixture loads the app layout and the upgrade page in a spawned Bun process; 5 s is not enough under host load.
+});

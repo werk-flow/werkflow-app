@@ -274,7 +274,7 @@ export async function switchClockActivity(page: Page, kind: TimeSegmentKind): Pr
   const dialog = await openActivityDialogFromSheet(page);
   await activityKindButton(dialog, kind).click();
   await dialog.getByRole('button', { name: CLOCK_COPY.switchActivity, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /**
@@ -351,28 +351,24 @@ export async function clockInOnJob(page: Page, jobTitle?: string): Promise<void>
     await sheet.getByRole('button', { name: CLOCK_COPY.startWork, exact: true }).click();
   }
 
-  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
-  await expect(runningClockLauncher(page)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(sheet).toHaveCount(0);
+  await expect(runningClockLauncher(page)).toBeVisible();
 }
 
 export async function clockOut(page: Page): Promise<void> {
   const sheet = await openRunningClockSheet(page);
   await sheet.getByRole('button', { name: CLOCK_COPY.endCapture }).click();
-  await expect(clockInLauncher(page)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(clockInLauncher(page)).toBeVisible();
 }
 
 export async function startClockBreak(page: Page): Promise<void> {
   const sheet = await openRunningClockSheet(page);
   await sheet.getByRole('button', { name: TIME_ACTIVITY_LABELS.break, exact: true }).click();
-  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
+  await expect(sheet).toHaveCount(0);
   // The pill above the button names the running break.
-  await expect(page.getByRole('button', { name: new RegExp(`^${TIME_ACTIVITY_LABELS.break}`) })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(
+    page.getByRole('button', { name: new RegExp(`^${TIME_ACTIVITY_LABELS.break}`) }),
+  ).toBeVisible();
 }
 
 export async function endClockBreak(page: Page, jobTitle?: string): Promise<void> {
@@ -385,7 +381,7 @@ export async function endClockBreak(page: Page, jobTitle?: string): Promise<void
   } else {
     await sheet.getByRole('button', { name: CLOCK_COPY.resume }).first().click();
   }
-  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
+  await expect(sheet).toHaveCount(0);
 }
 
 export async function switchClockJob(page: Page, jobTitle: string): Promise<void> {
@@ -394,7 +390,7 @@ export async function switchClockJob(page: Page, jobTitle: string): Promise<void
   const picker = dialogWithHeading(page, CLOCK_COPY.switchJob);
   await selectJobInPicker(picker, jobTitle);
   await picker.getByRole('button', { name: CLOCK_COPY.switchAction, exact: true }).click();
-  await expect(sheet).toHaveCount(0, { timeout: 15_000 });
+  await expect(sheet).toHaveCount(0);
 }
 
 /** Time tracking: the hero and summary copy of /zeiterfassung. */
@@ -525,8 +521,8 @@ export async function createOwnManualTimeEntry(
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
   // Close-then-banner: the dialog closes immediately and the global banner
   // confirms the save (M5).
-  await expect(page.getByText(TIME_ENTRY_COPY.createdOrSubmitted)).toBeVisible({ timeout: 15_000 });
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText(TIME_ENTRY_COPY.createdOrSubmitted)).toBeVisible();
+  await expect(dialog).toHaveCount(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -588,12 +584,8 @@ export function timeApprovalsTab(page: Page): Locator {
 
 export async function openTimeApprovals(page: Page): Promise<void> {
   await page.goto('/zeiterfassung?tab=approvals');
-  await expect(timeApprovalsTab(page)).toHaveAttribute('aria-selected', 'true', {
-    timeout: 15_000,
-  });
-  await expect(pendingApprovalsPanel(page)).toHaveAttribute('data-loaded', 'true', {
-    timeout: 30_000,
-  });
+  await expect(timeApprovalsTab(page)).toHaveAttribute('aria-selected', 'true');
+  await expect(pendingApprovalsPanel(page)).toHaveAttribute('data-loaded', 'true');
 }
 
 /** The approvals panel's „Alle genehmigen“ action; it shows with more than one pending submission. */
@@ -608,15 +600,9 @@ export function approveAllTimeEntriesConfirmation(page: Page): Locator {
 
 export async function expectTimeApprovalsUnavailable(page: Page): Promise<void> {
   await page.goto('/zeiterfassung?tab=approvals');
-  await expect(timeApprovalsTab(page)).toHaveAttribute('aria-selected', 'true', {
-    timeout: 15_000,
-  });
-  await expect(page.getByTestId('pending-approvals-panel')).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await expect(page.getByRole('heading', { name: TIME_ENTRY_COPY.correctionReviewHeading })).toHaveCount(0, {
-    timeout: 15_000,
-  });
+  await expect(timeApprovalsTab(page)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByTestId('pending-approvals-panel')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: TIME_ENTRY_COPY.correctionReviewHeading })).toHaveCount(0);
 }
 
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {
@@ -624,15 +610,11 @@ function pendingTimeApprovalCard(page: Page, userId: string): Locator {
 }
 
 export async function expectPendingTimeApprovalVisible(page: Page, userId: string): Promise<void> {
-  await expect(pendingTimeApprovalCard(page, userId)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(pendingTimeApprovalCard(page, userId)).toBeVisible();
 }
 
 export async function expectPendingTimeApprovalHidden(page: Page, userId: string): Promise<void> {
-  await expectGone(pendingTimeApprovalCard(page, userId), {
-    timeout: 15_000,
-  });
+  await expectGone(pendingTimeApprovalCard(page, userId));
 }
 
 export async function approvePendingTimeEntry(
@@ -642,7 +624,7 @@ export async function approvePendingTimeEntry(
 ): Promise<void> {
   const cards = pendingTimeApprovalCard(page, userId);
   const card = visibleText ? cards.filter({ hasText: visibleText }) : cards;
-  await expect(card).toHaveCount(1, { timeout: 15_000 });
+  await expect(card).toHaveCount(1);
   // The card leaves with the click, before the server answers. The banner is
   // the confirmation, and a fresh read of the approvals proves the decision
   // persisted.
@@ -650,14 +632,14 @@ export async function approvePendingTimeEntry(
     card.getByTitle(TIME_ENTRY_COPY.approveEntry).click(),
   );
   await openTimeApprovals(page);
-  await expect(card).toHaveCount(0, { timeout: 15_000 });
+  await expect(card).toHaveCount(0);
 }
 
 export async function expectExpiredResponsibilityDeniedAtAction(page: Page, userId: string): Promise<void> {
   const card = pendingTimeApprovalCard(page, userId);
   await card.getByTitle(TIME_ENTRY_COPY.approveEntry).click();
-  await expect(page.getByText(TIME_ENTRY_COPY.responsibilityExpired)).toBeVisible({ timeout: 15_000 });
-  await expectGone(card, { timeout: 15_000 });
+  await expect(page.getByText(TIME_ENTRY_COPY.responsibilityExpired)).toBeVisible();
+  await expectGone(card);
 }
 
 export async function expectMemberRemovalBlockedByResponsibility(
@@ -668,7 +650,7 @@ export async function expectMemberRemovalBlockedByResponsibility(
   await memberDetailActionsButton(page).click();
   await page.getByRole('menuitem', { name: SHARED_COPY.action.remove }).click();
   const dialog = page.getByRole('alertdialog');
-  await expect(dialog.getByText(TIME_ENTRY_COPY.removalBlocked)).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByText(TIME_ENTRY_COPY.removalBlocked)).toBeVisible();
   await expect(dialog.getByRole('button', { name: TIME_ENTRY_COPY.reassignFirst })).toBeDisabled();
 }
 
@@ -765,6 +747,21 @@ export function timeCorrectionSaveButton(dialog: Locator): Locator {
 /** A correction's card on the history or the approvals, by request id. */
 export function timeCorrectionCard(page: Page, requestId: string): Locator {
   return confirmed(page.getByRole('main').getByTestId(`time-correction-${requestId}`));
+}
+
+/** Proves no copy of the correction's card exists in the DOM. */
+export async function expectNoTimeCorrectionCard(page: Page, requestId: string): Promise<void> {
+  await expect(page.getByTestId(`time-correction-${requestId}`)).toHaveCount(0);
+}
+
+/** The approve action of one period finding. */
+export function approveFindingButton(page: Page, findingId: string): Locator {
+  return page.getByRole('main').getByTestId(`approve-finding-${findingId}`);
+}
+
+/** Proves no copy of the finding's approve action exists in the DOM. */
+export async function expectNoApproveFindingButton(page: Page, findingId: string): Promise<void> {
+  await expect(page.getByTestId(`approve-finding-${findingId}`)).toHaveCount(0);
 }
 
 /** The status badge of a correction card. */

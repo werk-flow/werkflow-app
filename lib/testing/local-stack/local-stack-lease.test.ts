@@ -87,7 +87,7 @@ test('lease loss cancels a real pending command before any next step', async () 
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
-}, 15_000);
+});
 
 test('cancellation between commands prevents the next process from starting', async () => {
   const controller = new AbortController();

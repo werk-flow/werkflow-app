@@ -54,7 +54,7 @@ describe('type-aware lint rules', () => {
         ),
       ).toEqual([]);
     }
-  }, 60_000);
+  });
 
   test('a promise is awaited, handled or voided; Bun mock.module is a known safe call', async () => {
     const rule = '@typescript-eslint/no-floating-promises';
@@ -88,7 +88,7 @@ describe('type-aware lint rules', () => {
         'lib/typed-lint-probe.test.ts',
       ),
     ).toEqual([]);
-  }, 60_000);
+  });
 
   test('a type assertion fails outside the ratchet; `as const` passes', async () => {
     const rule = '@typescript-eslint/consistent-type-assertions';
@@ -102,7 +102,7 @@ describe('type-aware lint rules', () => {
       ).toHaveLength(1);
       expect(await ruleMessages(rule, "export const kinds = ['a', 'b'] as const;\n", filePath)).toEqual([]);
     }
-  }, 60_000);
+  });
 
   test('a file on the ratchet keeps its recorded assertions without a lint error', async () => {
     const [listed] = Object.keys(readTypeAssertionRatchet());
@@ -114,5 +114,5 @@ describe('type-aware lint rules', () => {
         listed,
       ),
     ).toEqual([]);
-  }, 60_000);
+  });
 });

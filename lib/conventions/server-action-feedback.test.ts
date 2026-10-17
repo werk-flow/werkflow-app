@@ -616,7 +616,7 @@ test('every Server Action write in client code shows feedback in its first frame
     Object.keys(REVIEWED_USES).filter((key) => !findingKeys.has(key)),
     'These REVIEWED_USES entries match no finding; remove them.',
   ).toEqual([]);
-}, 120_000);
+});
 
 // One owner for pending state (AGENTS.md "2. Performance and immediate
 // feedback"). A pending setter (PENDING_FLAG_SETTER called with `true`,
@@ -766,7 +766,7 @@ test('pending state of a write has one owner: the FEEDBACK_OWNER_HOOKS hooks', (
     Object.keys(HAND_PENDING_STATE).filter((key) => !siteKeys.has(key)),
     'These HAND_PENDING_STATE entries match no site; remove them.',
   ).toEqual([]);
-}, 120_000);
+});
 
 /** The unacknowledged writes of a fixture client module that imports `updateJob` and `getJobDetails`. */
 function fixtureFindings(name: string, body: string): string[] {

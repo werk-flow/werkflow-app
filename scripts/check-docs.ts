@@ -18,7 +18,9 @@
 // 10. User-flow catalog: section order, unique sequential flow IDs, invariant counts.
 // 11. One document per slice: per-slice files exist only under plans/phase-1/slices/.
 // 12. Incident tiers — every dated incident-log section since decision 0005 names the
-//     enforcement tier its prevention landed on (or that no prevention claim follows).
+//     enforcement tier its prevention landed on (or that no prevention claim follows), and a Tier 1
+//     or Tier 2 Prevention line names a mechanism that exists (lib/testing/runs/incident-mechanisms.ts).
+// 12b. Publication gate wiring — git's core.hooksPath names .githooks.
 // 13. Deletion pass and review — a slice record closed since the rule carries the section.
 // 14. Durable homes — a plan record closed since the rule names where its lasting facts live.
 // 15. Guidance references — links and backticked docs paths in AGENTS.md and the skills resolve.
@@ -109,6 +111,8 @@ import {
   readTestTitles,
 } from '../lib/docs/slice-browser-proof';
 import { INCIDENT_TIER_PATTERN } from '../lib/testing/runs/incident-record';
+import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
+import { configuredHooksPath, hooksPathProblem } from '../lib/testing/publication/push-refs';
 
 const repoRoot = resolve(import.meta.dir, '..');
 const docsRoot = join(repoRoot, 'docs');
@@ -563,15 +567,28 @@ for (const [, sliceId, body] of catalogSections) {
 //     same sentence, or states that no prevention claim follows. Sections before that date are history.
 const incidentLogRelativePath = 'technical/test-incident-log.md';
 const incidentTierSince = '2026-08-27';
+const incidentMechanisms = repositoryMechanismIndex(repoRoot);
 for (const section of readFileSync(join(docsRoot, incidentLogRelativePath), 'utf8').split(/^(?=#{2,3} )/m)) {
   const heading = section.split('\n')[0] ?? '';
   const date = heading.match(/\d{4}-\d{2}-\d{2}/)?.[0];
   if (!heading.startsWith('#') || !date || date < incidentTierSince) continue;
+  // A Tier 1 or Tier 2 Prevention line names a mechanism that exists (lib/testing/runs/incident-mechanisms.ts).
+  const preventionLine = section.split('\n').find((line) => line.startsWith('- Prevention:'));
+  const claimProblem = preventionLine ? tierClaimProblem(preventionLine, incidentMechanisms) : null;
+  if (claimProblem)
+    problems.push(
+      `incident-mechanism: docs/${incidentLogRelativePath} "${heading.replace(/^#+ /, '')}": ${claimProblem}`,
+    );
   if (INCIDENT_TIER_PATTERN.test(section)) continue;
   problems.push(
     `incident-tier: docs/${incidentLogRelativePath} "${heading.replace(/^#+ /, '')}" names no enforcement tier; end the entry with Tier 1 or Tier 2, "Tier 3: <why no mechanism reaches it>" or "no prevention claim" (decision 0005)`,
   );
 }
+
+// 12b. Publication gate wiring (audit finding B6, 2026-10-16): the documented gate runs only while
+//      git's core.hooksPath names .githooks, which a fresh clone lacks.
+const hooksProblem = hooksPathProblem(configuredHooksPath(repoRoot), repoRoot);
+if (hooksProblem) problems.push(`publication-gate: ${hooksProblem}`);
 
 // 13. Deletion pass and independent review (docs/technical/code-quality.md, first adopted
 //     pre-Wave-3 step 2, 2026-09-14): a slice record closed from 2026-09-15 on carries the section

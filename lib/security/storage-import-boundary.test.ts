@@ -97,7 +97,7 @@ test('browser imports cannot reach raw storage through relative, dynamic, or tra
       listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib']),
     ),
   ).toEqual([]);
-}, 30_000); // The browser import graph is parsed with the TypeScript AST; 5 s is not enough under host load (incident 2026-09-13).
+});
 
 test('the admin client keeps its build-time server-only guard', () => {
   const source = readFileSync(resolve(repositoryRoot, 'lib/supabase/admin.ts'), 'utf8');
@@ -254,7 +254,7 @@ test('Server Actions never accept file bytes from the client', () => {
     serverActionByteInputs(file, readFileSync(resolve(repositoryRoot, file), 'utf8')),
   );
   expect(found, 'upload through a signed URL instead (lib/documents/upload-targets.ts)').toEqual([]);
-}, 30_000);
+});
 
 test('only the reviewed server-generated files are written with putStorageObject', () => {
   const callers = listSources(repositoryRoot, ['app', 'components', 'hooks', 'lib'])

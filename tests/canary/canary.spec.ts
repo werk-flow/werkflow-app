@@ -195,7 +195,7 @@ test.describe('Cloud-Canary @CANARY', () => {
         // most common breached passwords — only HaveIBeenPwned rejects it.
         password: 'Password123',
       });
-      await expect(visibleText(page, LEAKED_PASSWORD_MESSAGE)).toBeVisible({ timeout: 30_000 });
+      await expect(visibleText(page, LEAKED_PASSWORD_MESSAGE)).toBeVisible();
     } finally {
       await context.close();
     }

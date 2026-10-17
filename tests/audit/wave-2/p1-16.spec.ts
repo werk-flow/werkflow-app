@@ -28,6 +28,7 @@ import {
   createAndPublishWorkTemplate,
   createJob,
   createProject,
+  expectNoFieldWorkPack,
   CUSTOMER_PACKAGE_TERM,
   FIELD_PACK_SECTION_ORDER,
   fieldPackAbsentTerms,
@@ -159,9 +160,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await workArtifactField(officeDraftDialog, 'summary').fill('Interner Entwurf für die Einsatzleitung.');
     await workArtifactField(officeDraftDialog, 'performedWork').fill('Noch nicht für das Feld freigegeben.');
     await workArtifactAction(officeDraftDialog, 'saveDraft').click();
-    await expect(workArtifactVersion(officeDraftDialog, 1)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactVersion(officeDraftDialog, 1)).toBeVisible();
     await closeWorkArtifactDialog(officeDraftDialog);
 
     const stateBeforeOpen = await getAppliedWorkTemplateState(world.orgId, {
@@ -218,20 +217,20 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     expect(stateAfterOpen).toEqual(stateBeforeOpen);
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
+    await expectNoFieldWorkPack(adminPage);
     await expect(
       adminPage.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }),
     ).toBeVisible();
     await bueroPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await expect(bueroPage.getByTestId('field-work-pack')).toHaveCount(0);
+    await expectNoFieldWorkPack(bueroPage);
     await expect(bueroPage.getByRole('heading', { name: SHARED_COPY.region.details })).toBeVisible();
 
     await employeePage.goto(`/auftraege/${unassignedJobNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    await expect(employeePage.getByTestId('field-work-pack')).toHaveCount(0);
+    await employeePage.waitForURL(/\/auftraege\/?$/);
+    await expectNoFieldWorkPack(employeePage);
     await outsiderPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
-    await expect(outsiderPage.getByTestId('field-work-pack')).toHaveCount(0);
+    await outsiderPage.waitForURL(/\/auftraege\/?$/);
+    await expectNoFieldWorkPack(outsiderPage);
   });
 
   test('dispatch and readiness keep one next action without changing execution facts', async ({
@@ -283,9 +282,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     });
     await employeePage.bringToFront();
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(fieldPrimaryNextAction(pack)).toHaveText(DISPATCH_ACKNOWLEDGE_ACTION, {
-      timeout: 30_000,
-    });
+    await expect(fieldPrimaryNextAction(pack)).toHaveText(DISPATCH_ACKNOWLEDGE_ACTION);
     await expect(fieldPrimaryNextAction(pack)).toHaveCount(1);
     await adminPage.bringToFront();
     await dispatchParkedJobFromParkplatz(adminPage, {
@@ -374,7 +371,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await setInstructionCompletionOnJobPage(employeePage, firstInstruction, true);
 
     await transitionWork(employeePage, 'in_progress', 'execution_complete');
-    await expect(lifecycleSavedBanner(employeePage)).toBeVisible({ timeout: 20_000 });
+    await expect(lifecycleSavedBanner(employeePage)).toBeVisible();
     await expect(pack).toContainText(WORK_EXECUTION_LABELS.execution_complete);
     await expect(pack).not.toContainText(CUSTOMER_PACKAGE_TERM);
 
@@ -457,9 +454,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     // Role fixtures use separate browser contexts, so bringToFront does not
     // reliably emit the tab-focus event that drives the production catch-up.
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await expect(contextPack.getByText(world.inventory.itemName, { exact: true })).toHaveCount(2, {
-      timeout: 30_000,
-    });
+    await expect(contextPack.getByText(world.inventory.itemName, { exact: true })).toHaveCount(2);
     await changeTimeOnWorkPack(employeePage, 'switch');
     await changeTimeOnWorkPack(employeePage, 'stop');
     await expect(contextPack.getByText(world.users.employee.email, { exact: false })).toHaveCount(0);
@@ -509,9 +504,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     const pack = await openFieldWorkPack(employeePage, jobNumber);
     await transitionWork(employeePage, 'not_started', 'in_progress');
     await reportOwnBlockerOnJobPage(employeePage, blockerDetails);
-    await expect(pack.getByText(blockerDetails, { exact: true })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(pack.getByText(blockerDetails, { exact: true })).toBeVisible();
     await expect(fieldPackLink(pack, 'reviewOpenPoints')).toBeVisible();
     let lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });
     expect(lifecycle.blockers[0]).toMatchObject({
@@ -531,9 +524,9 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await removeJobAssignment(adminPage, jobNumber, employeeName);
     await employeePage.bringToFront();
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 30_000 });
-    await expect(employeePage.getByTestId('field-work-pack')).toHaveCount(0);
+    await employeePage.waitForURL(/\/auftraege\/?$/);
+    await expectNoFieldWorkPack(employeePage);
     await employeePage.goto(`/auftraege/${jobNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await employeePage.waitForURL(/\/auftraege\/?$/);
   });
 });

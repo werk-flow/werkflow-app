@@ -36,7 +36,7 @@ test.describe('P1-21 activity qualifier audit @AUDIT-W2-P1-21 @AUDIT-W2', () => 
       await chooseActivityJob(employeePage, dialog, title);
       await chooseTravelQualifiers(employeePage, dialog, { route: 'home_to_site', role: 'passenger' });
       await confirm.click();
-      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(dialog).toHaveCount(0);
       await expect
         .poll(async () => (await getTimeCaptureState(world.orgId, employeeId)).segments.at(-1)?.kind)
         .toBe('travel');
@@ -53,7 +53,7 @@ test.describe('P1-21 activity qualifier audit @AUDIT-W2-P1-21 @AUDIT-W2', () => 
       await activityKindButton(dialog, 'standby').click();
       await chooseStandbyContext(employeePage, dialog, 'remote');
       await confirm.click();
-      await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(dialog).toHaveCount(0);
       await expect
         .poll(
           async () => (await getTimeCaptureState(world.orgId, employeeId)).segments.at(-1)?.standby_context,

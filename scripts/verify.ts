@@ -48,7 +48,14 @@ import {
 import { checkLatencyEvidence, latencyEvidenceSchema } from '../lib/testing/latency-evidence';
 import { checkLabEvidence, labEvidenceSchema, type LabEvidenceCheck } from '../lib/testing/lab-evidence';
 import { recoveredEnvironmentRuns } from '../lib/testing/runner/group-recovery';
-import { readGroupDiagnoses, recoveredGroupAttempts } from '../lib/testing/evidence/group-diagnosis';
+import { recordEvidence } from '../lib/testing/publication/evidence-ledger';
+import { configuredHooksPath, hooksPathProblem } from '../lib/testing/publication/push-refs';
+import {
+  DIAGNOSED_ATTEMPT_KINDS,
+  readGroupDiagnoses,
+  recoveredGroupAttempts,
+  undiagnosedAttemptProblem,
+} from '../lib/testing/evidence/group-diagnosis';
 import {
   changedTestTier,
   groupSelections,
@@ -376,7 +383,7 @@ async function main(): Promise<void> {
   );
   if (repairing)
     console.log(
-      '[verify] Repair mode: only the browser groups whose latest result failed or was blocked are selected. Their pass verifies the repair.',
+      '[verify] Repair mode: the browser groups whose latest result failed or was blocked, and those whose own test code changed, are selected. Their pass verifies the repair.',
     );
   if (changed.length > 0 && changed.length <= 12) console.log(`[verify] changed: ${changed.join(', ')}`);
   for (const entry of planning) {
@@ -433,10 +440,19 @@ async function main(): Promise<void> {
         })
       : undefined,
     freshBrowserEntries.length ? browserStorageProblem(repository) : undefined,
+    // Evidence is worth nothing while git skips the gate that reads it (push-refs.ts).
+    hooksPathProblem(configuredHooksPath(repository), repository),
     unclassifiedFailureProblem({
       groupIds: freshBrowserEntries.map((entry) => entry.group.id),
       target: options.target,
       runs: browserHistory,
+    }),
+    undiagnosedAttemptProblem({
+      groupIds: planning
+        .filter((entry) => !entry.reusable && DIAGNOSED_ATTEMPT_KINDS.has(entry.group.kind))
+        .map((entry) => entry.group.id),
+      results: priorResults,
+      diagnoses: readGroupDiagnoses(archive),
     }),
   ].filter((refusal): refusal is string => Boolean(refusal));
   for (const refusal of refusals) console.log(`[verify] refused: ${refusal}`);
@@ -508,6 +524,9 @@ async function main(): Promise<void> {
         (left, right) => (planIndex.get(left.groupId) ?? 0) - (planIndex.get(right.groupId) ?? 0),
       );
       writeJsonAtomically(resolve(directory, 'report.json'), report);
+      // The publication gate trusts a finished report only through its ledger entry (evidence-ledger.ts).
+      if (report.status !== 'running')
+        recordEvidence(repository, `.agent-logs/verification/${id}/report.json`, 'verification report');
     };
     await withVerificationReport({
       report,

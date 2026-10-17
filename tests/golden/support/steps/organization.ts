@@ -119,14 +119,14 @@ export async function submitSignupForm(page: Page, account: SignupAccount): Prom
 export async function signUpViaUi(page: Page, account: SignupAccount): Promise<void> {
   await page.goto('/signup');
   await submitSignupForm(page, account);
-  await expect(page).toHaveURL(/\/(verify|upgrade|onboarding)/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/(verify|upgrade|onboarding)/);
   if (!/\/verify/.test(page.url())) return;
   await confirmTestUserEmail(account.email);
   await page.goto('/login');
   await page.getByRole('textbox', { name: ORGANIZATION_COPY.login.email }).fill(account.email);
   await page.getByRole('textbox', { name: ORGANIZATION_COPY.login.password }).fill(account.password);
   await loginSubmitButton(page).click();
-  await expect(page).toHaveURL(/\/(upgrade|onboarding)/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/(upgrade|onboarding)/);
 }
 
 /** The upgrade page's payment simulation that continues to the organization form. */
@@ -138,7 +138,7 @@ export function simulatedPaymentButton(page: Page): Locator {
 export async function createOrganizationInOnboarding(page: Page, organizationName: string): Promise<void> {
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/dashboard/);
 }
 
 /** Creates a further organization through the switcher's dialog and lands on its dashboard. */
@@ -146,7 +146,7 @@ export async function createAdditionalOrganization(page: Page, organizationName:
   await page.getByRole('button', { name: ORGANIZATION_COPY.createOrganization }).click();
   await page.getByLabel(ORGANIZATION_COPY.organizationName).fill(organizationName);
   await page.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
-  await expect(page).toHaveURL(/\/dashboard\?created=/, { timeout: 30_000 });
+  await expect(page).toHaveURL(/\/dashboard\?created=/);
 }
 
 /** The organization switcher while it shows this organization. */
@@ -322,17 +322,13 @@ export async function inviteMember(page: Page, email: string, role: InvitedRole)
   // Phase 5 closes the dialog after validation and lets the list own the
   // pending row. The email-specific banner confirms the server action; the
   // marker clearing confirms the refreshed server list replaced the draft.
-  await expect(page.getByText(`Einladung an ${email} wurde gesendet.`)).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(page.getByText(`Einladung an ${email} wurde gesendet.`)).toBeVisible();
   await expect(page.getByRole('heading', { name: ORGANIZATION_COPY.invite.title })).toBeHidden({
     timeout: 10_000,
   });
   await invitationsTab(page).click();
-  await expect(pendingRow(page, email)).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await expect(visibleText(page, email)).toBeVisible({ timeout: 15_000 });
+  await expect(pendingRow(page, email)).toHaveCount(0);
+  await expect(visibleText(page, email)).toBeVisible();
 }
 
 // Simulates the invited existing user clicking the email's invite link:
@@ -365,7 +361,7 @@ export async function joinOrganizationViaInviteLink(
     if (await acceptButton.isVisible()) {
       await acceptButton.click();
       joined = await page
-        .waitForURL(confirmationUrl, { timeout: 30_000 })
+        .waitForURL(confirmationUrl)
         .then(() => true)
         .catch(() => false);
       continue;
@@ -374,7 +370,7 @@ export async function joinOrganizationViaInviteLink(
     await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
     await loginSubmitButton(page).click();
     joined = await page
-      .waitForURL(confirmationUrl, { timeout: 30_000 })
+      .waitForURL(confirmationUrl)
       .then(() => true)
       .catch(() => false);
   }
@@ -394,14 +390,12 @@ export async function removeMemberFromDetail(page: Page, name: string): Promise<
   await page.getByRole('menuitem', { name: ORGANIZATION_COPY.memberMenu.remove }).click();
   await expect(page.getByRole('heading', { name: ORGANIZATION_COPY.memberMenu.removeTitle })).toBeVisible();
   await page.getByRole('button', { name: ORGANIZATION_COPY.memberMenu.remove, exact: true }).click();
-  await page.waitForURL(/\/mitarbeiter\?removed_member=/, { timeout: 20_000 });
+  await page.waitForURL(/\/mitarbeiter\?removed_member=/);
 }
 
 export async function expectRedirectedAway(page: Page, path: string): Promise<void> {
   await page.goto(path);
-  await expect(page).not.toHaveURL(new RegExp(`${path.replace('/', '\\/')}$`), {
-    timeout: 15_000,
-  });
+  await expect(page).not.toHaveURL(new RegExp(`${path.replace('/', '\\/')}$`));
 }
 
 export async function loginViaUi(
@@ -417,7 +411,7 @@ export async function loginViaUi(
     await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
     await loginSubmitButton(page).click();
     loggedIn = await page
-      .waitForURL('**/dashboard**', { timeout: 20_000 })
+      .waitForURL('**/dashboard**')
       .then(() => true)
       .catch(() => false);
   }
@@ -462,5 +456,5 @@ export async function signOutViaUi(page: Page): Promise<void> {
     }
     throw new Error('Sign-out menu did not navigate to login after three attempts.');
   }
-  await page.waitForURL('**/login', { timeout: 20_000 });
+  await page.waitForURL('**/login');
 }

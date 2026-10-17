@@ -5,6 +5,7 @@ import {
   workArtifactCreateDialog,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
 import { getEmployeeRecordStateByUser } from '../../../golden/support/db/personnel';
+import { hydratedAndSettled, settled } from '../../../golden/support/steps/interaction';
 import { seedOrganizationCertification } from '../../../golden/support/db/qualifications';
 import {
   seedDeclaredWorkDependency,
@@ -137,9 +138,18 @@ async function openListRowMenu(context: SurfaceContext, record: LayoutRecord): P
   const { page, world } = context;
   const details = await prepareLayoutDetails(world);
   await page.reload();
+  await hydratedAndSettled(page);
   const number = record === 'job' ? details.jobNumber : details.projectNumber;
   await visibleJobSearch(page).fill(number);
-  await workListRowActionsButton(page, number).click();
+  // The search navigates to its URL after a debounce and re-renders the list, which closes a menu
+  // opened before it (2026-10-15, 2026-10-16): act once the URL holds the search and the page settled.
+  await expect(page).toHaveURL((url) =>
+    [...url.searchParams].some(([key, value]) => key.endsWith('_q') && value === number),
+  );
+  await settled(page);
+  const actions = workListRowActionsButton(page, number);
+  await actions.click();
+  await expect(actions, 'the row actions menu opened').toHaveAttribute('aria-expanded', 'true');
 }
 
 /** The row menu button that `openListRowMenu` opened; the trigger saved the layout details before. */

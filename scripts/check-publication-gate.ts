@@ -7,6 +7,7 @@ import {
   type InputSnapshot,
 } from '../lib/testing/evidence/group-evidence';
 import { deletionPassProblems, parsePublishedCommits } from '../lib/testing/publication/deletion-pass';
+import { readRepositoryLedger, recordedEvidence } from '../lib/testing/publication/evidence-ledger';
 import {
   measuredPassReportSchema,
   publicationGateProblems,
@@ -15,6 +16,7 @@ import {
   reviewRecordSchema,
   type ReviewRecord,
 } from '../lib/testing/publication/publication-gate';
+import { parsePushUpdates, publishesProduction, pushDiffBase } from '../lib/testing/publication/push-refs';
 import { measuredGroupsForChange } from '../lib/testing/selection/group-selection';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 
@@ -24,36 +26,50 @@ import { getTestGroups } from '../lib/testing/selection/test-groups';
  * verification report passed on the tree being pushed, every wall-clock group
  * that measures a pushed product file passed on its current content, a
  * CodeRabbit review completed on it, and every commit the push publishes
- * records its deletion pass. It reads evidence only; the hook owns the owner
- * override.
+ * records its deletion pass. A push to main also needs a release plan and the
+ * cloud canary. It trusts only evidence whose content the evidence ledger
+ * records (lib/testing/publication/evidence-ledger.ts). It reads evidence
+ * only; the hook owns the owner override.
  */
 const repository = resolve(import.meta.dir, '..');
+const ledger = readRepositoryLedger(repository);
+const VERIFICATION_DIRECTORY = '.agent-logs/verification';
 
 function git(...args: string[]): string {
   return execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 }
 
-function newestLocalReport(): ReturnType<typeof publicationReportSchema.parse> | undefined {
-  const archive = resolve(repository, '.agent-logs/verification');
-  if (!existsSync(archive)) return undefined;
-  for (const directory of readdirSync(archive).sort().reverse()) {
-    const file = resolve(archive, directory, 'report.json');
-    if (!existsSync(file)) continue;
-    const report = publicationReportSchema.safeParse(JSON.parse(readFileSync(file, 'utf8')));
-    if (report.success && report.data.target === 'local') return report.data;
+/** The text of a ledger-recorded evidence file, or undefined for a missing or unrecorded one. */
+function recordedText(relativePath: string): string | undefined {
+  const file = resolve(repository, relativePath);
+  if (!existsSync(file)) return undefined;
+  const bytes = readFileSync(file);
+  return recordedEvidence(ledger, relativePath, bytes) ? bytes.toString('utf8') : undefined;
+}
+
+function reportDirectories(): string[] {
+  const archive = resolve(repository, VERIFICATION_DIRECTORY);
+  return existsSync(archive) ? readdirSync(archive).sort().reverse() : [];
+}
+
+function newestReport(
+  target: 'local' | 'cloud',
+): ReturnType<typeof publicationReportSchema.parse> | undefined {
+  for (const directory of reportDirectories()) {
+    const text = recordedText(`${VERIFICATION_DIRECTORY}/${directory}/report.json`);
+    if (!text) continue;
+    const report = publicationReportSchema.safeParse(JSON.parse(text));
+    if (report.success && report.data.target === target) return report.data;
   }
   return undefined;
 }
 
 /** The passing local runs of the named wall-clock groups, each with the snapshot of its report. */
 function measuredPasses(groupIds: ReadonlySet<string>): { groupId: string; snapshot: InputSnapshot }[] {
-  const archive = resolve(repository, '.agent-logs/verification');
-  if (!groupIds.size || !existsSync(archive)) return [];
-  return readdirSync(archive).flatMap((directory) => {
-    const file = resolve(archive, directory, 'report.json');
-    if (!existsSync(file)) return [];
-    const text = readFileSync(file, 'utf8');
-    if (![...groupIds].some((groupId) => text.includes(`"${groupId}"`))) return [];
+  if (!groupIds.size) return [];
+  return reportDirectories().flatMap((directory) => {
+    const text = recordedText(`${VERIFICATION_DIRECTORY}/${directory}/report.json`);
+    if (!text || ![...groupIds].some((groupId) => text.includes(`"${groupId}"`))) return [];
     const report = measuredPassReportSchema.safeParse(JSON.parse(text));
     if (!report.success || report.data.target !== 'local') return [];
     return report.data.results
@@ -68,8 +84,9 @@ function reviewRecords(): ReviewRecord[] {
   return readdirSync(directory)
     .filter((name) => /^[a-f0-9]{40}(-\d{8}T\d{9}Z)?\.json$/.test(name))
     .flatMap((name) => {
-      const record = reviewRecordSchema.safeParse(JSON.parse(readFileSync(resolve(directory, name), 'utf8')));
-      return record.success ? [record.data] : [];
+      const text = recordedText(`${REVIEW_RECORD_DIRECTORY}/${name}`);
+      const record = text ? reviewRecordSchema.safeParse(JSON.parse(text)) : undefined;
+      return record?.success ? [record.data] : [];
     });
 }
 
@@ -78,29 +95,22 @@ function knownCommit(commit: string): boolean {
     git('rev-parse', '--verify', '--quiet', `${commit}^{commit}`);
     return true;
   } catch {
+    // rev-parse exits 1 for a commit this clone lacks.
     return false;
   }
 }
 
-// Each line git writes to a pre-push hook: <local ref> <local sha> <remote ref> <remote sha>; a deletion pushes the zero id.
-const isCommit = (commit: string | undefined): commit is string =>
-  commit !== undefined && /^[a-f0-9]{40}$/.test(commit) && !/^0+$/.test(commit);
-const updates = (await Bun.stdin.text())
-  .split(/\r?\n/)
-  .map((line) => line.trim().split(/\s+/))
-  .flatMap(([, local, , remote]) => (isCommit(local) ? [{ local, remote }] : []));
+const updates = parsePushUpdates(await Bun.stdin.text());
 const pushed = updates.map((update) => update.local);
-// A new remote ref, or a remote commit this clone lacks, compares with production (or with nothing).
-const fallbackBase = knownCommit('origin/main') ? 'origin/main' : '4b825dc642cb6eb9a060e54bf8d69288fbee4904';
-const pushedFiles = updates.flatMap(({ local, remote }) =>
+const pushedFiles = updates.flatMap((update) =>
   git(
     'diff',
     '--name-only',
     '--no-renames',
     '--diff-filter=d',
     '-z',
-    isCommit(remote) && knownCommit(remote) ? remote : fallbackBase,
-    local,
+    pushDiffBase(update, knownCommit),
+    update.local,
     '--',
   ).split('\0'),
 );
@@ -118,17 +128,27 @@ const publishedCommits = parsePublishedCommits(
 
 const publishedFiles = [...new Set(pushedFiles.filter(Boolean))].sort();
 const measuredGroups = measuredGroupsForChange(getTestGroups(repository), publishedFiles);
-const problems = publicationGateProblems({
-  newestReport: newestLocalReport(),
-  current: captureInputSnapshot(repository),
-  uncommitted: [...new Set(uncommitted)].sort(),
-  head: git('rev-parse', 'HEAD').trim(),
-  pushed,
-  pushedFiles: publishedFiles,
-  reviews: reviewRecords(),
-  measuredGroups,
-  measuredPasses: measuredPasses(new Set(measuredGroups.map((group) => group.id))),
-}).concat(deletionPassProblems(publishedCommits));
+const problems = [
+  ...(ledger.problems.length
+    ? [
+        `The evidence ledger is broken (${ledger.problems.join('; ')}); no report or review counts. Report it to the owner.`,
+      ]
+    : []),
+  ...publicationGateProblems({
+    newestReport: newestReport('local'),
+    current: captureInputSnapshot(repository),
+    uncommitted: [...new Set(uncommitted)].sort(),
+    head: git('rev-parse', 'HEAD').trim(),
+    pushed,
+    pushedFiles: publishedFiles,
+    reviews: reviewRecords(),
+    measuredGroups,
+    measuredPasses: measuredPasses(new Set(measuredGroups.map((group) => group.id))),
+    production: publishesProduction(updates),
+    canaryReport: newestReport('cloud'),
+  }),
+  ...deletionPassProblems(publishedCommits),
+];
 if (problems.length) {
   console.error(`[publication-gate] Push refused; ${problems.length} requirement(s) missing:`);
   for (const problem of problems) console.error(`  - ${problem}`);

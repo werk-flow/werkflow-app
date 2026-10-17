@@ -68,29 +68,24 @@ const admin = {
 // earlier one, so the mocked scenario runs in its own process.
 const ISOLATED = process.env.COLUMN_PREFERENCES_WRITE_PATH_ISOLATED === '1';
 
-// The child Bun test process takes several seconds under host load; the 5 s default cuts it off.
-test.skipIf(ISOLATED)(
-  'the write path cases pass in an isolated process',
-  async () => {
-    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
-      env: { ...process.env, COLUMN_PREFERENCES_WRITE_PATH_ISOLATED: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(
-      status,
-      `${stdout}
+test.skipIf(ISOLATED)('the write path cases pass in an isolated process', async () => {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+    env: { ...process.env, COLUMN_PREFERENCES_WRITE_PATH_ISOLATED: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(
+    status,
+    `${stdout}
 ${stderr}`,
-    ).toBe(0);
-    expect(stderr).toContain('3 pass');
-  },
-  30_000,
-);
+  ).toBe(0);
+  expect(stderr).toContain('3 pass');
+});
 
 if (ISOLATED) {
   const loggedErrors: string[] = [];

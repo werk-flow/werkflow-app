@@ -1,5 +1,6 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { confirmed, expectGone } from './shared';
+import { TASK_OVERVIEW_READ_TIMEOUT_MS } from '../timeouts';
 
 // ============================================
 // P1-07 — Shared attention pattern (/aufgaben)
@@ -21,7 +22,7 @@ export const ATTENTION_ROW_COPY = {
 export async function openAufgaben(page: Page): Promise<void> {
   await page.goto('/aufgaben');
   await expect(page.locator('[data-testid="aufgaben-content"][data-loaded="true"]')).toBeVisible({
-    timeout: 15_000,
+    timeout: TASK_OVERVIEW_READ_TIMEOUT_MS,
   });
 }
 
@@ -62,9 +63,42 @@ export function workArtifactTaskLink(
   return confirmed(page.getByRole('link', { name: `${WORK_ARTIFACT_TASKS[task]} für ${title} öffnen` }));
 }
 
+/** The task groups of /aufgaben, by their test id (components/aufgaben/aufgaben-task-section.tsx). */
+const ATTENTION_TASK_GROUPS = {
+  joinRequests: 'attention-join-request-tasks',
+  requests: 'attention-request-tasks',
+  dispatch: 'attention-dispatch-tasks',
+  dispatchChallenges: 'attention-dispatch-challenge-tasks',
+  parkingReviews: 'attention-parking-review-tasks',
+  workHandovers: 'attention-work-handover-tasks',
+  time: 'attention-time-tasks',
+  vacation: 'attention-vacation-tasks',
+} as const;
+
+type AttentionTaskGroup = keyof typeof ATTENTION_TASK_GROUPS;
+
+/** One task group of /aufgaben in the page content. */
+export function attentionTaskGroup(page: Page, group: AttentionTaskGroup): Locator {
+  return page.getByRole('main').getByTestId(ATTENTION_TASK_GROUPS[group]);
+}
+
+/** Proves the task group exists nowhere in the DOM, hidden streaming containers included. */
+export async function expectNoAttentionTaskGroup(page: Page, group: AttentionTaskGroup): Promise<void> {
+  await expect(page.getByTestId(ATTENTION_TASK_GROUPS[group])).toHaveCount(0);
+}
+
+/** Proves no copy of the task group in the DOM holds this text. */
+export async function expectAttentionTaskGroupWithout(
+  page: Page,
+  group: AttentionTaskGroup,
+  text: string,
+): Promise<void> {
+  await expect(page.getByTestId(ATTENTION_TASK_GROUPS[group]).getByText(text)).toHaveCount(0);
+}
+
 /** The /aufgaben group of dispatch confirmations (P1-12). */
 export function dispatchTaskGroup(page: Page): Locator {
-  return page.getByRole('main').getByTestId('attention-dispatch-tasks');
+  return attentionTaskGroup(page, 'dispatch');
 }
 
 /** The task link that confirms the dispatch of this job (P1-12). */
@@ -133,24 +167,20 @@ export async function markAttentionNotificationReadViaButton(page: Page, sourceI
   const row = attentionNotificationRow(page, sourceId);
   const button = markNotificationReadButton(row);
   await button.click();
-  await expect(row).toHaveAttribute('data-unread', 'false', {
-    timeout: 15_000,
-  });
+  await expect(row).toHaveAttribute('data-unread', 'false');
   // The optimistic unread flag changes in the first frame. The action button
   // stays mounted while its Server Action is pending, so disappearance is the
   // durable completion boundary rather than the optimistic echo.
-  await expect(button).toHaveCount(0, { timeout: 15_000 });
+  await expect(button).toHaveCount(0);
 }
 
 export async function markAllAttentionNotificationsReadViaButton(page: Page): Promise<void> {
   const button = page.getByRole('button', { name: ATTENTION_COPY.markAllRead });
   await button.click();
-  await expectGone(unreadNotificationRows(page), {
-    timeout: 15_000,
-  });
+  await expectGone(unreadNotificationRows(page));
   // Keep the bulk control observable until the persisted write and reconcile
   // read settle; otherwise this helper can return on the optimistic echo.
-  await expect(button).toHaveCount(0, { timeout: 15_000 });
+  await expect(button).toHaveCount(0);
 }
 
 export type SidebarBadgeTarget = '/aufgaben' | '/zeiterfassung';

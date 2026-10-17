@@ -94,13 +94,27 @@ function teamMemberRow(card: Locator, memberName: string): Locator {
   return confirmed(card.getByTestId('team-member-row').filter({ hasText: memberName }));
 }
 
+/** Proves no copy of the team's card in the DOM lists this person as a current member. */
+export async function expectNoTeamMemberRow(page: Page, teamName: string, memberName: string): Promise<void> {
+  await expect(
+    page
+      .getByTestId('team-card')
+      .filter({ hasText: teamName })
+      .getByTestId('team-member-row')
+      .filter({ hasText: memberName }),
+  ).toHaveCount(0);
+}
+
+/** Proves no copy of the team's card exists in the DOM. */
+export async function expectNoTeamCard(page: Page, teamName: string): Promise<void> {
+  await expect(page.getByTestId('team-card').filter({ hasText: teamName })).toHaveCount(0);
+}
+
 export async function createTeamViaManagement(page: Page, teamName: string): Promise<void> {
   await openManagementTab(page, 'teams');
   await page.locator('#new-team-name').fill(teamName);
   await page.getByRole('button', { name: 'Team anlegen' }).click();
-  await expect(teamCard(page.getByRole('main'), teamName)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(teamCard(page.getByRole('main'), teamName)).toBeVisible();
 }
 
 /** Picks the member, optionally types the start date, and presses the card's add button. */
@@ -131,7 +145,7 @@ export async function addTeamMemberViaManagement(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     await openManagementTab(page, 'teams');
     const card = teamCard(page.getByRole('main'), options.teamName);
-    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card).toBeVisible();
     const memberRow = teamMemberRow(card, options.employeeName).first();
     if (await memberRow.isVisible().catch(() => false)) return;
 
@@ -163,7 +177,7 @@ export async function addFutureTeamMemberViaManagement(
 ): Promise<void> {
   await openManagementTab(page, 'teams');
   const card = teamCard(page.getByRole('main'), options.teamName);
-  await expect(card).toBeVisible({ timeout: 15_000 });
+  await expect(card).toBeVisible();
   await submitTeamMember(page, card, options);
 }
 
@@ -180,9 +194,7 @@ export async function dissolveTeamViaManagement(page: Page, teamName: string): P
     }),
   ).toBeVisible();
   await dissolveDialog.getByRole('button', { name: QUALIFICATION_COPY.confirmDissolve, exact: true }).click();
-  await expect(page.getByRole('heading', { name: QUALIFICATION_COPY.dissolvedTeams })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByRole('heading', { name: QUALIFICATION_COPY.dissolvedTeams })).toBeVisible();
 }
 
 /** The dissolve action of a current team's card on the Teams tab. */
@@ -227,11 +239,11 @@ export async function createCapabilityViaManagement(
     hasText: options.name,
   });
   try {
-    await expect(definitionRow).toBeVisible({ timeout: 15_000 });
+    await expect(definitionRow).toBeVisible();
   } catch {
     await page.reload();
     await managementTab(page, 'qualifications').click();
-    await expect(definitionRow).toBeVisible({ timeout: 15_000 });
+    await expect(definitionRow).toBeVisible();
   }
 }
 
@@ -289,7 +301,7 @@ export async function assignCapabilityViaManagement(
     confirmed(page.getByRole('main').getByTestId('employee-capability-row'))
       .filter({ hasText: options.employeeName })
       .filter({ hasText: options.capabilityName }),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
 }
 
 export async function renewCapabilityViaManagement(
@@ -316,7 +328,7 @@ export async function renewCapabilityViaManagement(
       .filter({ hasText: options.capabilityName })
       // The row reads the date as people write it (01.09.2026).
       .filter({ hasText: `bis ${options.validUntil.split('-').reverse().join('.')}` }),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
 }
 
 /** The admin-only switch for the apprentice notice on the Qualifikationen tab. */
@@ -331,9 +343,7 @@ export async function setApprenticeWarningViaManagement(page: Page, enabled: boo
   const checkbox = apprenticeWarningToggle(page);
   if ((await checkbox.isChecked()) !== enabled) {
     await checkbox.click();
-    await expect(page.getByText('Einstellung gespeichert.')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page.getByText('Einstellung gespeichert.')).toBeVisible();
   }
   await expect(checkbox).toBeChecked({ checked: enabled });
 }
@@ -347,9 +357,7 @@ export async function addJobCapabilityRequirement(
   },
 ): Promise<void> {
   await page.goto(`/auftraege/${options.jobNumber}`);
-  await expect(page.getByRole('heading', { name: 'Qualifikationsabdeckung' })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByRole('heading', { name: 'Qualifikationsabdeckung' })).toBeVisible();
   await selectFromSearchable(page, page.locator('#job-qualification-capability'), options.capabilityName);
   if (options.requireConfirmation) {
     await page.locator('#job-require-confirmation').click();
@@ -359,7 +367,7 @@ export async function addJobCapabilityRequirement(
     confirmed(page.getByRole('main').getByTestId('qualification-coverage-row')).filter({
       hasText: options.capabilityName,
     }),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
 }
 
 /** A coverage status label inside a coverage row or a warning gap row. */
@@ -429,15 +437,13 @@ export async function assignJobWithQualificationWarning(
   }
   await assignmentDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
   const warningDialog = qualificationWarningDialog(page);
-  await expect(warningDialog).toBeVisible({ timeout: 15_000 });
+  await expect(warningDialog).toBeVisible();
   await expect(warningDialog.getByText(getCoverageStatusLabel(options.expectedStatus)).first()).toBeVisible();
   await qualificationOverrideReason(warningDialog).fill(options.overrideReason);
   await assignDespiteWarningButton(warningDialog).click();
-  await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(warningDialog).toHaveCount(0);
   if (options.employeeName) {
     await page.reload();
-    await expect(visibleText(page, options.employeeName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(page, options.employeeName)).toBeVisible();
   }
 }

@@ -7,7 +7,12 @@ import {
   seedApprovedManualInterval,
 } from '../../golden/support/db/time-tracking';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
-import { selectFromSearchable, SHARED_COPY, visibleText } from '../../golden/support/steps/shared';
+import {
+  dialogBody,
+  selectFromSearchable,
+  SHARED_COPY,
+  visibleText,
+} from '../../golden/support/steps/shared';
 import {
   approvePendingTimeEntry,
   breakModeSelect,
@@ -84,9 +89,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       clockOutDigits: '0800',
     });
     await invalidOrderDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(invalidOrderDialog.getByText(TIME_ENTRY_COPY.clockOutBeforeClockIn)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(invalidOrderDialog.getByText(TIME_ENTRY_COPY.clockOutBeforeClockIn)).toBeVisible();
     await invalidOrderDialog.getByRole('button', { name: SHARED_COPY.action.close }).click();
 
     await manualEntryButton(employeePage).click();
@@ -99,9 +102,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     });
     await validDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
     // Close-then-banner (M5): the dialog closes and the global banner confirms.
-    await expect(visibleText(employeePage, TIME_ENTRY_COPY.submittedForApproval)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, TIME_ENTRY_COPY.submittedForApproval)).toBeVisible();
     await expect(validDialog).toHaveCount(0, { timeout: 10_000 });
 
     await manualEntryButton(employeePage).click();
@@ -112,9 +113,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       clockOutDigits: '0004',
     });
     await overlapDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(overlapDialog.getByText(TIME_ENTRY_COPY.overlap)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(overlapDialog.getByText(TIME_ENTRY_COPY.overlap)).toBeVisible();
 
     // The accepted submission reaches the manager's approvals with its job.
     await openTimeApprovals(adminPage);
@@ -149,7 +148,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     await visibleCalendarLayerToggle(adminPage, 'work').click();
     await calendarRefreshButton(adminPage).click();
     const workBlock = visibleCalendarTimeBlock(adminPage, /10:00.*11:00/);
-    await expect(workBlock).toBeVisible({ timeout: 20_000 });
+    await expect(workBlock).toBeVisible();
     await workBlock.click();
     const editDialog = timeEntryDetailsDialog(adminPage);
     await editDialog
@@ -157,7 +156,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       .click({ delay: 250 });
     const originalViewport = expectDefined(adminPage.viewportSize(), 'the configured viewport');
     await adminPage.setViewportSize({ width: 375, height: 568 });
-    const entryBody = editDialog.locator('[data-slot="dialog-body"]');
+    const entryBody = dialogBody(editDialog);
     const entryHeading = timeEntryDetailsHeading(editDialog);
     const saveEntry = editDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true });
     await expect(entryHeading).toBeInViewport({ ratio: 1 });
@@ -195,13 +194,11 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     await expect(saveEntry).toHaveAttribute('form', entryFormId);
     // Enter on the save button submits the form it names by its form attribute.
     await pressKey(editDialog, 'Enter', { into: saveEntry });
-    await expect(editDialog.getByRole('button', { name: SHARED_COPY.action.edit, exact: true })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(
+      editDialog.getByRole('button', { name: SHARED_COPY.action.edit, exact: true }),
+    ).toBeVisible();
     await dismissDialog(editDialog);
-    await expect(visibleCalendarTimeBlock(adminPage, /10:00.*11:30/)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleCalendarTimeBlock(adminPage, /10:00.*11:30/)).toBeVisible();
 
     await visibleCalendarTimeBlock(adminPage, /10:00.*11:30/).click();
     const deleteDialog = timeEntryDetailsDialog(adminPage);
@@ -210,9 +207,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       .getByRole('alertdialog')
       .getByRole('button', { name: SHARED_COPY.action.delete, exact: true })
       .click();
-    await expect(adminPage.getByTitle(/10:00.*11:30/)).toHaveCount(0, {
-      timeout: 20_000,
-    });
+    await expect(adminPage.getByTitle(/10:00.*11:30/)).toHaveCount(0);
     // Reassignment is an audited correction. Keep deletion coverage above on
     // a separate uncorrected booking, whose raw rows may still be deleted.
     await seedApprovedManualInterval({
@@ -271,9 +266,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
 
     await timeHistoryTab(adminPage).click();
     const history = timeHistoryPanel(adminPage);
-    await expect(history.getByText(TIME_ENTRY_COPY.entriesFound)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(history.getByText(TIME_ENTRY_COPY.entriesFound)).toBeVisible();
     await selectFromSearchable(
       adminPage,
       timeHistoryFilter(history, TIME_ENTRY_COPY.allMembers),
@@ -287,7 +280,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     await setTimeHistoryDay(history, businessDateDigits);
     await refreshTimeHistoryButton(history).click();
     const rows = timeHistoryRows(history);
-    await expect(rows).toHaveCount(2, { timeout: 20_000 });
+    await expect(rows).toHaveCount(2);
     await expect(rows.filter({ hasText: /00:0[14]/ })).toHaveCount(2);
     for (const row of await rows.all()) {
       await expect(row).toContainText(employeeFirstName);
@@ -300,9 +293,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       'approved',
     );
     await refreshTimeHistoryButton(history).click();
-    await expect(rows.filter({ hasText: /00:0[58]/ })).toHaveCount(2, {
-      timeout: 20_000,
-    });
+    await expect(rows.filter({ hasText: /00:0[58]/ })).toHaveCount(2);
     await expect(rows).toHaveCount(2);
     for (const row of await rows.all()) {
       await expect(row).toContainText(employeeFirstName);
@@ -320,9 +311,7 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
       'pending',
     );
     await refreshTimeHistoryButton(history).click();
-    await expect(visibleText(adminPage, TIME_ENTRY_COPY.noEntriesFound)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleText(adminPage, TIME_ENTRY_COPY.noEntriesFound)).toBeVisible();
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
   });
 

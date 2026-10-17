@@ -36,6 +36,7 @@ import {
 import { readPerformanceBaselines } from '../lib/testing/performance-baselines';
 import { recordGroupDiagnosis } from '../lib/testing/evidence/group-diagnosis';
 import { classificationProblem } from '../lib/testing/evidence/browser-group-evidence';
+import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
 import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import {
   incidentPreventionProblem,
@@ -247,7 +248,10 @@ async function main(): Promise<void> {
     if (refusal) throw new Error(refusal);
     // A failed acceptance run gets its incident-log entry from this command (testing.md, "Failures").
     const writesIncident = recordsIncident(run, classification);
-    const preventionProblem = writesIncident ? incidentPreventionProblem(prevention) : null;
+    const preventionProblem = writesIncident
+      ? (incidentPreventionProblem(prevention) ??
+        tierClaimProblem(prevention, repositoryMechanismIndex(resolve(import.meta.dir, '..'))))
+      : null;
     if (preventionProblem) throw new Error(preventionProblem);
     updateRunManifest(runKey, {
       classification,

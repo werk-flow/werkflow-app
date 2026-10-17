@@ -11,6 +11,11 @@ import {
   seedJobAssignment,
   seedProject,
 } from '../../golden/support/db/work';
+import {
+  attentionTaskGroup,
+  expectAttentionTaskGroupWithout,
+  openAufgaben,
+} from '../../golden/support/steps/attention';
 import { createPlannedCalendarEntry } from '../../golden/support/steps/calendar';
 import { uploadIntoDocumentsSection } from '../../golden/support/steps/documents';
 import {
@@ -103,7 +108,7 @@ async function completeManagerWork(page: Page, path: string, startNeedsReason = 
   // The step into execution names where it comes from: a fresh start, a
   // resumption after an interruption, or reopening finished work.
   const startButton = lifecycleIntoExecutionAction(page);
-  await expect(completeButton.or(startButton)).toBeVisible({ timeout: 20_000 });
+  await expect(completeButton.or(startButton)).toBeVisible();
   if (await startButton.isVisible()) {
     await moveWorkIntoExecution(
       page,
@@ -121,11 +126,9 @@ async function releaseHandover(page: Page, path: string): Promise<void> {
   const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
   await handoverAction(section, 'saveDraft').click();
-  await expect(handoverMessage(section, 'draftSaved')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(handoverMessage(section, 'draftSaved')).toBeVisible();
   const overrideReason = handoverField(section, 'exceptionReason');
-  if (await overrideReason.isVisible().catch(() => false)) {
+  if (await overrideReason.isVisible()) {
     await overrideReason.fill('Die Ausnahme ist im Auditfall fachlich geprüft und vollständig dokumentiert.');
   }
   const popupPromise = page.waitForEvent('popup');
@@ -133,9 +136,7 @@ async function releaseHandover(page: Page, path: string): Promise<void> {
   const preview = await popupPromise;
   await preview.waitForLoadState('domcontentloaded');
   await handoverAction(section, 'release').click();
-  await expect(handoverMessage(section, 'released')).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(handoverMessage(section, 'released')).toBeVisible();
   await preview.close();
 }
 
@@ -166,9 +167,9 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     expect(await getWorkHandoverState(world.orgId, { jobNumber: childJobNumber })).toEqual(before);
 
     await employeePage.goto(childRoute);
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await employeePage.waitForURL(/\/auftraege\/?$/);
     await outsiderPage.goto(projectRoute);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await outsiderPage.waitForURL(/\/auftraege\/?$/);
   });
 
   test('composes a project package from immutable child releases and keeps it through a successor', async ({
@@ -205,21 +206,11 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
             resolve(artifactsDirectory(), 'upload-fixture.pdf'),
             'upload-fixture',
           );
-          await adminPage.goto('/aufgaben');
-          await expect(adminPage.getByRole('main').getByTestId('aufgaben-content')).toHaveAttribute(
-            'data-loaded',
-            'true',
-          );
+          await openAufgaben(adminPage);
           await completeManagerWork(bueroPage, jobPath);
-          await expect(
-            adminPage.getByRole('main').getByTestId('attention-work-handover-tasks'),
-          ).toContainText(jobNumber, { timeout: 30_000 });
+          await expect(attentionTaskGroup(adminPage, 'workHandovers')).toContainText(jobNumber);
           await releaseHandover(bueroPage, `${jobPath}/uebergabe`);
-          await expect(
-            adminPage.getByTestId('attention-work-handover-tasks').getByText(jobNumber),
-          ).toHaveCount(0, {
-            timeout: 30_000,
-          });
+          await expectAttentionTaskGroupWithout(adminPage, 'workHandovers', jobNumber);
           const state = await getWorkHandoverState(world.orgId, { jobNumber });
           expect(state.target).toMatchObject({ execution_state: 'handed_over' });
           expect(state.package).toMatchObject({ state: 'released' });
@@ -252,9 +243,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       await expect(handoverAction(bueroSection, 'saveDraft')).toBeVisible();
       await selectAllHandoverSources(adminSection);
       await handoverAction(adminSection, 'saveDraft').click();
-      await expect(handoverMessage(adminSection, 'draftSaved')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(handoverMessage(adminSection, 'draftSaved')).toBeVisible();
       await handoverAction(bueroSection, 'saveDraft').click();
       await expect(bueroSection).toContainText(HANDOVER_TEXT.staleDraft);
       await releaseBuero();
@@ -266,9 +255,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       const preview = await popupPromise;
       await preview.waitForLoadState('domcontentloaded');
       await handoverAction(refreshed, 'release').click();
-      await expect(handoverMessage(refreshed, 'released')).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(handoverMessage(refreshed, 'released')).toBeVisible();
       await preview.close();
 
       const state = await getWorkHandoverState(world.orgId, { projectNumber: scope.projectNumber });
@@ -293,18 +280,14 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
         'Projektpaket benötigt eine ergänzende Abschlussprüfung.',
       );
       await handoverAction(section, 'withdraw').click();
-      await expect(handoverMessage(section, 'withdrawn')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(handoverMessage(section, 'withdrawn')).toBeVisible();
       await adminPage.reload();
       section = workHandoverSection(adminPage);
       await handoverField(section, 'reopenReason').fill(
         'Projektprüfung wird mit dem Büro erneut durchgeführt.',
       );
       await handoverAction(section, 'reopenForCorrection').click();
-      await expect(handoverMessage(section, 'reopened')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(handoverMessage(section, 'reopened')).toBeVisible();
 
       await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
       await releaseHandover(adminPage, projectRoute);

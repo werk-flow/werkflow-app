@@ -66,7 +66,7 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await openPlantafel(adminPage, visitDate);
     await expect(calendarViewTab(adminPage, 'board')).toHaveAttribute('data-state', 'active');
     const card = boardCard(adminPage, employeeRecord.id, title);
-    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card).toBeVisible();
     await expect(cardDispatchChip(card, 'nicht_gesendet')).toBeVisible();
 
     // Reassign to the Büro member: the card is in the target row before the
@@ -74,15 +74,15 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await dragCardTo(adminPage, card, boardCell(adminPage, bueroRecord.id, visitDate));
     await expect(boardCard(adminPage, bueroRecord.id, title)).toBeVisible({ timeout: 1_000 });
     const banner = calendarBanner(adminPage, 'moved');
-    await expect(banner).toBeVisible({ timeout: 20_000 });
+    await expect(banner).toBeVisible();
     await expect(bannerUndo(banner)).toBeVisible();
     expect(await getJobOccurrenceAssigneeRecordIds(world.orgId, visit.jobNumber)).toEqual([bueroRecord.id]);
 
     await bannerUndo(banner).click();
-    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible({ timeout: 20_000 });
+    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible();
     await expect(calendarBanner(adminPage, 'undoFailed')).toHaveCount(0);
     await expect
-      .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, visit.jobNumber), { timeout: 20_000 })
+      .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, visit.jobNumber))
       .toEqual([employeeRecord.id]);
     await closeBanners(adminPage);
   });
@@ -114,15 +114,13 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
         await adminPage.mouse.up();
       },
     });
-    await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
+    await expect(calendarBanner(adminPage, 'moved')).toBeVisible();
     await closeBanners(adminPage);
     await expect
-      .poll(
-        async () =>
-          occurrenceLocalDate(
-            (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
-          ),
-        { timeout: 20_000 },
+      .poll(async () =>
+        occurrenceLocalDate(
+          (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
+        ),
       )
       .toBe(movedDate);
 
@@ -130,13 +128,13 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await openDispatchPanel(adminPage, movedDate);
     await issueDispatchForOccurrence(adminPage, title);
     await openPlantafel(adminPage, visitDate);
-    await expect(cardDispatchChip(boardCard(adminPage, employeeRecord.id, title), 'ausstehend')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(
+      cardDispatchChip(boardCard(adminPage, employeeRecord.id, title), 'ausstehend'),
+    ).toBeVisible();
     await acknowledgeDispatchOnJobPage(employeePage, visit.jobNumber);
-    await expect(cardDispatchChip(boardCard(adminPage, employeeRecord.id, title), 'bestaetigt')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(
+      cardDispatchChip(boardCard(adminPage, employeeRecord.id, title), 'bestaetigt'),
+    ).toBeVisible();
     const dispatch = await getDispatchState(world.orgId, visit.jobNumber);
     expect(dispatch.dispatches).toHaveLength(1);
   });
@@ -150,19 +148,19 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     const { title } = visit;
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
     await openPlantafel(adminPage, visitDate);
-    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible({ timeout: 20_000 });
+    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible();
 
     // Cancel: the card left the grid on the drop and comes back on cancel.
     await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, title), parkplatzButton(adminPage));
     const dialog = adminPage.getByRole('dialog');
-    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog).toBeVisible();
     await expect(boardCardAsShown(adminPage, employeeRecord.id, title)).toHaveCount(0);
     await dialog.getByRole('button', { name: SHARED_COPY.action.cancel, exact: true }).click();
-    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible({ timeout: 20_000 });
+    await expect(boardCard(adminPage, employeeRecord.id, title)).toBeVisible();
 
     // Save: the parked job carries its context and the board no longer shows it.
     await dragCardTo(adminPage, boardCard(adminPage, employeeRecord.id, title), parkplatzButton(adminPage));
-    await expect(dialog).toBeVisible({ timeout: 20_000 });
+    await expect(dialog).toBeVisible();
     // The Parkplatz context (P1-14): reason, note, responsible person and review date.
     await fillParkingContext(adminPage, dialog, {
       reason: 'capacity',
@@ -171,8 +169,8 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
       reviewDate: shiftIsoDate(movedDate, 2),
     });
     await parkingContextSave(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(calendarBanner(adminPage, 'parked')).toBeVisible({ timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
+    await expect(calendarBanner(adminPage, 'parked')).toBeVisible();
     await closeBanners(adminPage);
     const parked = await getParkingState(world.orgId, visit.jobNumber);
     expect(parked.context?.reason).toBe('capacity');
@@ -180,28 +178,26 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     // Back onto the board through the keyboard route of the Parkplatz card.
     await parkplatzButton(adminPage).click();
     const parkedCard = parkplatzCardOf(adminPage, title);
-    await expect(parkedCard).toBeVisible({ timeout: 20_000 });
+    await expect(parkedCard).toBeVisible();
     await parkplatzScheduleButton(parkedCard, title).click();
     const schedule = scheduleParkedDialog(adminPage);
     await typeIntoDatePickerById(schedule, 'schedule-parked-date', visitDate);
     await scheduleParkedSubmit(schedule).click();
-    await expect(schedule).toHaveCount(0, { timeout: 20_000 });
-    await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible({ timeout: 20_000 });
+    await expect(schedule).toHaveCount(0);
+    await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible();
     await closeBanners(adminPage);
     await expect
-      .poll(async () => (await getParkingState(world.orgId, visit.jobNumber)).eventTypes, { timeout: 20_000 })
+      .poll(async () => (await getParkingState(world.orgId, visit.jobNumber)).eventTypes)
       .toContain('unparked');
     // The re-planned visit has no person yet; the cancelled occurrence stays struck through in the employee's row.
-    await expect(boardCard(adminPage, 'unassigned', title)).toBeVisible({ timeout: 20_000 });
+    await expect(boardCard(adminPage, 'unassigned', title)).toBeVisible();
   });
 
   test('the horizon is remembered per user', async ({ adminPage, world }) => {
     const { visitDate } = visitDates();
     await openPlantafel(adminPage, visitDate);
     await chooseBoardHorizon(adminPage, 2);
-    await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '2', {
-      timeout: 20_000,
-    });
+    await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '2');
     // Confirm persistence before testing the reloaded page, without action transport assumptions.
     await expect
       .poll(async () => (await getCalendarPreferencesFor(world.orgId, world.users.admin.id))?.horizonWeeks, {
@@ -212,9 +208,7 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     await openPlantafel(adminPage, visitDate);
     await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '2');
     await chooseBoardHorizon(adminPage, 1);
-    await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '1', {
-      timeout: 20_000,
-    });
+    await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '1');
     await expect
       .poll(async () => (await getCalendarPreferencesFor(world.orgId, world.users.admin.id))?.horizonWeeks, {
         timeout: 10_000,
@@ -235,14 +229,14 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
       boardCard(adminPage, 'unassigned', title),
       boardCell(adminPage, employeeRecord.id, visitDate),
     );
-    await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
+    await expect(calendarBanner(adminPage, 'moved')).toBeVisible();
     await closeBanners(adminPage);
     await expect
-      .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, visit.jobNumber), { timeout: 20_000 })
+      .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, visit.jobNumber))
       .toEqual([employeeRecord.id]);
     await employeePage.goto(`/kalender?date=${visitDate}`);
     await calendarViewTab(employeePage, 'week').click();
-    await expect(calendarViewReady(employeePage, 'week')).toBeVisible({ timeout: 30_000 });
+    await expect(calendarViewReady(employeePage, 'week')).toBeVisible();
     await expect(boardRows(employeePage)).toHaveCount(1);
     await expect(activeBoardRowCards(employeePage, title)).toBeVisible();
     await expect(

@@ -56,7 +56,6 @@ export async function expectVacationPreview(
   if (halfDay) await vacationHalfDayToggle(dialog).click();
   await expect(dialog.getByTestId('vacation-days-preview')).toHaveText(
     vacationPreviewText(formatVacationDays(expectedDays)),
-    { timeout: 15_000 },
   );
   await expect(submitVacationRequestButton(dialog)).toBeEnabled();
   await dialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();

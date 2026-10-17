@@ -16,6 +16,7 @@ import {
   customerTimelineEntry,
   customerTimelineFact,
   customerTimelineFilter,
+  expectCustomerTimelineWithout,
   followUpRow,
   forbiddenPreferenceState,
   openSeededCustomerDetail,
@@ -94,15 +95,15 @@ test.describe('P1-10 customer relationships @P1-10', () => {
 
     await customerTimelineFilter(adminPage, 'work').click();
     await expect(timeline.getByText(jobTitle)).toBeVisible();
-    await expect(adminPage.getByTestId('customer-timeline').getByText(anna)).toHaveCount(0);
+    await expectCustomerTimelineWithout(adminPage, anna);
 
     await customerTimelineFilter(adminPage, 'documents').click();
     const documentEntry = customerTimelineEntry(timeline, 'upload-fixture');
     await expect(documentEntry).toHaveCount(1);
-    await expect(adminPage.getByTestId('customer-timeline').getByText(jobTitle)).toHaveCount(0);
+    await expectCustomerTimelineWithout(adminPage, jobTitle);
     await timelineSourceLinks(documentEntry).click();
     await expect(adminPage).toHaveURL(/\/dokumente\?document=/);
-    await expect(documentViewerHeading(adminPage, 'upload-fixture')).toBeVisible({ timeout: 15_000 });
+    await expect(documentViewerHeading(adminPage, 'upload-fixture')).toBeVisible();
   });
 
   test('an overdue owned follow-up appears and clears in the shared attention pattern', async ({
@@ -127,13 +128,13 @@ test.describe('P1-10 customer relationships @P1-10', () => {
 
     await openAufgaben(bueroPage);
     const task = followUpTaskLink(bueroPage, title, customer);
-    await expect(task).toHaveCount(1, { timeout: 15_000 });
+    await expect(task).toHaveCount(1);
     await task.click();
-    await expect(followUp).toBeVisible({ timeout: 15_000 });
+    await expect(followUp).toBeVisible();
     await completeFollowUpOnCustomerDetail(bueroPage, title);
 
     await openAufgaben(bueroPage);
-    await expectGone(followUpTaskLink(bueroPage, title, customer), { timeout: 15_000 });
+    await expectGone(followUpTaskLink(bueroPage, title, customer));
 
     const state = await getCustomerRelationshipState(world.orgId, customer);
     expect(state.followUps.find((row) => row.title === title)).toMatchObject({
@@ -173,9 +174,7 @@ test.describe('P1-10 customer relationships @P1-10', () => {
       purpose: 'appointment_service',
       sourceNote: 'Telefonische Angabe P1-10',
     });
-    await expect(forbiddenPreferenceState(adminPage)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(forbiddenPreferenceState(adminPage)).toBeVisible();
 
     await adminPage.getByRole('link', { name: '+49 30 555002' }).click();
     const warningDialog = adminPage.getByRole('dialog');

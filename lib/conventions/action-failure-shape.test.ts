@@ -221,7 +221,7 @@ describe('one result shape', () => {
       format(findings),
       'Type the result as ActionResult<Data, Code> or ActionFailure<Code> from lib/action-result.ts; a richer failure is `ActionFailure<Code> & { extra: T }`.',
     ).toEqual([]);
-  }, 60_000);
+  });
 
   test('a failure names a snake_case code, never a sentence', () => {
     const findings = listProductSources().flatMap((file) => failureCodeFindings(file));
@@ -229,7 +229,7 @@ describe('one result shape', () => {
       format(findings),
       'Return a stable code such as `load_failed`; its German sentence lives in lib/action-messages.ts or the area message map, and extra facts travel as fields beside the code.',
     ).toEqual([]);
-  }, 60_000);
+  });
 
   test('every Server Action declares Promise<ActionResult> or a type built from it', () => {
     const sources = new Map(listProductSources().map((file) => [file, parseProductSource(file)]));
@@ -243,7 +243,7 @@ describe('one result shape', () => {
       reviewed.filter((action) => !offending.includes(action)),
       'Remove the stale entries from REVIEWED_RESULT_EXCEPTIONS.',
     ).toEqual([]);
-  }, 60_000);
+  });
 });
 
 describe('planted violations', () => {

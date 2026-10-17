@@ -8,6 +8,7 @@ import {
   readGroupDiagnoses,
   recordGroupDiagnosis,
   recoveredGroupAttempts,
+  undiagnosedAttemptProblem,
 } from './group-diagnosis';
 
 const failedSql = {
@@ -78,4 +79,33 @@ test('the diagnosis is stored beside its report, replaces an earlier one of the 
       now: new Date(),
     }),
   ).toThrow();
+});
+
+test('verification waits for the diagnosis of a failed unit, SQL or component attempt', () => {
+  type AttemptInput = Parameters<typeof undiagnosedAttemptProblem>[0];
+  const problemFor = (
+    results: AttemptInput['results'],
+    diagnoses: AttemptInput['diagnoses'] = [],
+    groupIds: AttemptInput['groupIds'] = ['sql:security'],
+  ): string | undefined => undiagnosedAttemptProblem({ groupIds, results, diagnoses });
+  const results = reports.flatMap((report): AttemptInput['results'] => report.results);
+  const diagnosis: AttemptInput['diagnoses'][number] = {
+    groupId: 'sql:security',
+    startedAt: failedSql.startedAt,
+    classification: 'harness',
+    classifiedAt: '2026-10-03T13:00:00.000Z',
+    rootCause: 'cause',
+    prevention: 'prevention',
+  };
+  // The latest executed attempt failed: blocked and drift-voided results do not hide it.
+  expect(problemFor(results)).toContain('sql:security');
+  expect(problemFor(results, [diagnosis])).toBeUndefined();
+  // A diagnosis of an earlier attempt does not cover the latest one.
+  const later = { ...failedSql, startedAt: '2026-10-04T10:00:00.000Z' };
+  expect(problemFor([...results, later], [diagnosis])).toContain('sql:security');
+  // A later pass closes the failure; a group the plan does not run is not asked about.
+  expect(problemFor([...results, { ...later, status: 'passed' }])).toBeUndefined();
+  expect(problemFor(results, [], ['unit:all'])).toBeUndefined();
+  // A browser attempt is classified through its run (unclassifiedFailureProblem).
+  expect(problemFor([{ ...later, runKey: 'run-1' }])).toBeUndefined();
 });

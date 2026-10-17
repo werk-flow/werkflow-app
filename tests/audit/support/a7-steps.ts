@@ -26,7 +26,7 @@ export async function sendDispatchWithNote(page: Page, title: string, note: stri
   const dialog = await openIssueDialogForPanelRow(page, title);
   await dialog.locator('#dispatch-note').fill(note);
   await dispatchSendButton(dialog).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 // The /aufgaben deep link is the catalog's second confirmation path — no
@@ -34,10 +34,10 @@ export async function sendDispatchWithNote(page: Page, title: string, note: stri
 export async function openJobViaDispatchTask(page: Page, title: string): Promise<void> {
   await openAufgaben(page);
   const taskGroup = dispatchTaskGroup(page);
-  await expect(taskGroup).toBeVisible({ timeout: 20_000 });
+  await expect(taskGroup).toBeVisible();
   await dispatchTaskLink(taskGroup, title).click();
-  await page.waitForURL(/\/auftraege\//, { timeout: 20_000 });
-  await expect(jobDispatchSection(page)).toBeVisible({ timeout: 20_000 });
+  await page.waitForURL(/\/auftraege\//);
+  await expect(jobDispatchSection(page)).toBeVisible();
 }
 
 /** Changes the job's location through the job page's actions menu and saves. */
@@ -46,8 +46,8 @@ export async function editJobLocation(page: Page, jobNumber: string, location: s
   await page.getByRole('button', { name: SHARED_COPY.action.openActions }).click();
   await jobDetailMenuItem(page, 'edit').click();
   const dialog = jobEditDialog(page);
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toBeVisible();
   await dialog.locator('#edit-job-location').fill(location);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }

@@ -51,6 +51,7 @@ import {
   workCreateJobNumberField,
   workCreateSubmit,
   workCreateTab,
+  workTransitionReasonField,
   workTransitionSave,
 } from '../../golden/support/steps/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
@@ -87,10 +88,10 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     // it 15s, then reload once — the persisted count assertion stays strict.
     const nextCount = visibleMatchingText(adminPage, customerCountPattern(initialCount + 1));
     try {
-      await expect(nextCount).toBeVisible({ timeout: 15_000 });
+      await expect(nextCount).toBeVisible();
     } catch {
       await adminPage.reload();
-      await expect(nextCount).toBeVisible({ timeout: 15_000 });
+      await expect(nextCount).toBeVisible();
     }
     const customerRow = adminPage.getByRole('row').filter({ hasText: customerName });
     await expect(customerRow).toContainText(CLIENT_TYPE_LABELS.gewerblich);
@@ -118,9 +119,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await expect(visibleText(adminPage, customerAddress)).toBeVisible();
     await expect(visibleText(adminPage, customerNotes)).toBeVisible();
     await editMetadataTextField(adminPage, 'name', renamedCustomerName);
-    await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible();
     await adminPage.reload();
     await expect(visibleText(adminPage, renamedCustomerName)).toBeVisible();
 
@@ -132,9 +131,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await inlineCustomerCreateButton(adminPage).click();
     await customerFormField(adminPage.getByRole('dialog'), 'name').fill(inlineCustomer);
     await customerCreateSubmit(adminPage).click();
-    await expect(customerCreateHeading(adminPage)).toBeHidden({
-      timeout: 15_000,
-    });
+    await expect(customerCreateHeading(adminPage)).toBeHidden();
     await expect(adminPage.getByRole('combobox').filter({ hasText: inlineCustomer })).toBeVisible();
     const inlineJobNumber = `A1-INLINE-${world.runId}`;
     const createJobDialog = workCreateDialog(adminPage);
@@ -149,10 +146,10 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     // load that read can trail the persisted row. Give it 15 s, then reload once.
     const inlineRow = adminPage.getByRole('row').filter({ hasText: inlineJobNumber });
     try {
-      await expect(inlineRow).toContainText(inlineCustomer, { timeout: 15_000 });
+      await expect(inlineRow).toContainText(inlineCustomer);
     } catch {
       await adminPage.reload();
-      await expect(inlineRow).toContainText(inlineCustomer, { timeout: 15_000 });
+      await expect(inlineRow).toContainText(inlineCustomer);
     }
     await adminPage.goto(`/auftraege/${inlineJobNumber}`);
     await expect(visibleText(adminPage, inlineCustomer)).toBeVisible();
@@ -214,7 +211,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await adminPage.getByRole('listbox').getByRole('option').filter({ hasText: secondAssignee }).click();
     await workCreateHeading(createDialog).click();
     await workCreateSubmit(createDialog, 'job').click();
-    await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(createDialog).toHaveCount(0);
 
     await expect.poll(() => getJobCountByNumber(world.orgId, jobNumber)).toBe(1);
     await adminPage.goto(`/auftraege/${jobNumber}`);
@@ -241,7 +238,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await adminPage.getByRole('listbox').getByRole('option').filter({ hasText: jobNumber }).click();
     await dismissDialog(adminPage.getByRole('listbox'));
     await assignmentDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(assignmentDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(assignmentDialog).toHaveCount(0);
     await expect(visibleText(adminPage, jobNumber)).toBeVisible();
     await expect(visibleText(adminPage, '0%')).toBeVisible();
 
@@ -255,9 +252,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
 
     await lifecycleAction(adminPage, 'in_progress', 'cancelled').click();
     const cancelDialog = adminPage.getByRole('dialog');
-    await cancelDialog
-      .locator('#work-transition-reason')
-      .fill('Projektstatus im Grundstock bewusst übersteuert.');
+    await workTransitionReasonField(cancelDialog).fill('Projektstatus im Grundstock bewusst übersteuert.');
     await workTransitionSave(cancelDialog).click();
     await expectWorkTransitionSaved(adminPage, workTransitionActionLabel('in_progress', 'cancelled'));
     await expect(lifecycleState(adminPage, 'cancelled')).toBeVisible();
@@ -266,7 +261,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
       'deriveAutomatically',
       'Projekt folgt wieder den Aufträgen.',
     );
-    await expect(deriveDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(deriveDialog).toHaveCount(0);
     await expect(lifecycleState(adminPage, 'in_progress')).toBeVisible();
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${jobNumber}`);
@@ -306,7 +301,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
       .getByRole('button', { name: SHARED_COPY.action.delete });
     await expectButtonTextContrast(adminPage, confirmCustomerDeletion);
     await confirmCustomerDeletion.click();
-    await expect(adminPage).toHaveURL(/\/kunden$/, { timeout: 60_000 });
+    await expect(adminPage).toHaveURL(/\/kunden$/);
     await adminPage.goto('/auftraege');
     await expect(visibleText(adminPage, linkedProjectNumber)).toBeVisible();
     await expandProjectButton(adminPage.getByRole('row', { name: new RegExp(linkedProjectNumber) })).click();
@@ -318,9 +313,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await expect(deleteProject).toBeInViewport({ timeout: 5_000 });
     await deleteProject.click();
     await adminPage.getByRole('alertdialog').getByRole('button', { name: SHARED_COPY.action.delete }).click();
-    await expect(adminPage).toHaveURL((url) => url.pathname === '/auftraege', {
-      timeout: 20_000,
-    });
+    await expect(adminPage).toHaveURL((url) => url.pathname === '/auftraege');
     await expect(visibleText(adminPage, linkedJobNumber)).toBeVisible();
     await adminPage.goto(`/auftraege/${linkedJobNumber}`);
     await expect(visibleText(adminPage, WORK_DETAIL_TEXT.noProject)).toBeVisible();

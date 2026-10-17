@@ -202,6 +202,25 @@ export function workArtifactField(dialog: Locator, field: WorkArtifactField): Lo
   return dialog.getByLabel(ARTIFACT_COPY.field[field], EXACT_FIELDS.has(field) ? { exact: true } : {});
 }
 
+/** Inputs of the work report dialog, by their DOM id. */
+const ARTIFACT_INPUT_IDS = {
+  actionReason: 'artifact-action-reason',
+  customerName: 'artifact-customer-name',
+  customerRole: 'artifact-customer-role',
+  customerRelationship: 'artifact-customer-relationship',
+  firstMeasurementQuantity: 'artifact-measurement-quantity-0',
+} as const;
+
+/** An input of the open work report dialog. */
+export function workArtifactInput(dialog: Locator, input: keyof typeof ARTIFACT_INPUT_IDS): Locator {
+  return dialog.locator(`#${ARTIFACT_INPUT_IDS[input]}`);
+}
+
+/** Proves the section exists nowhere in the DOM, hidden streaming containers included. */
+export async function expectNoWorkArtifactsSection(page: Page): Promise<void> {
+  await expect(page.getByTestId('work-artifacts-section')).toHaveCount(0);
+}
+
 export function workArtifactPicker(dialog: Locator, picker: WorkArtifactPicker): Locator {
   return dialog.getByRole('combobox', { name: ARTIFACT_COPY.picker[picker] });
 }
@@ -291,7 +310,7 @@ export function workArtifactStatusLabel(status: WorkArtifactStatus): string {
 async function selectWorkArtifactOption(page: Page, trigger: Locator, name: string): Promise<void> {
   await trigger.click();
   const option = page.getByRole('option', { name, exact: true });
-  await expect(option).toBeVisible({ timeout: 15_000 });
+  await expect(option).toBeVisible();
   await option.click();
 }
 
@@ -375,7 +394,7 @@ export async function submitWorkArtifactWithEnter(dialog: Locator): Promise<void
 /** Submits a new Arbeitsnachweis for review, waits for its first version and closes the dialog. */
 export async function submitWorkArtifactAndClose(dialog: Locator): Promise<void> {
   await workArtifactAction(dialog, 'submitForReview').click();
-  await expect(workArtifactVersion(dialog, 1)).toBeVisible({ timeout: 20_000 });
+  await expect(workArtifactVersion(dialog, 1)).toBeVisible();
   await closeWorkArtifactDialog(dialog);
 }
 
@@ -383,9 +402,7 @@ export async function submitWorkArtifactAndClose(dialog: Locator): Promise<void>
 export async function approveWorkArtifact(page: Page, title: string): Promise<void> {
   const dialog = await openWorkArtifact(page, title, { attempts: 3, timeout: 10_000, clickTimeout: 10_000 });
   await workArtifactAction(dialog, 'approveInternally').click();
-  await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible();
   await closeWorkArtifactDialog(dialog);
 }
 

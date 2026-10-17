@@ -143,15 +143,19 @@ test('a runner change runs both integration pilots', () => {
   }
 });
 
-test('repair mode selects exactly the failed or blocked browser groups, whatever the repair touched', () => {
+test('repair mode selects the failed or blocked browser groups, whatever product code the repair touched', () => {
   const repair = [
     'components/ui/button.tsx',
     'lib/calendar/a.ts',
     'lib/inventory/b.ts',
     'lib/testing/selection/group-selection.ts',
-    'tests/golden/support/steps/shared.ts',
   ];
   expect(select(repair, ['audit:wave-2:p1-13'])).toEqual([...CHEAP, 'audit:wave-2:p1-13']);
+  // A group's own test code changed during the repair runs too: it would otherwise become baseline unrun.
+  const withTestCode = select([...repair, 'tests/golden/support/steps/shared.ts'], ['audit:wave-2:p1-13']);
+  const testCodeGroups = browserOnly(select(['tests/golden/support/steps/shared.ts']));
+  expect(testCodeGroups.length).toBeGreaterThan(0);
+  expect(new Set(browserOnly(withTestCode))).toEqual(new Set([...testCodeGroups, 'audit:wave-2:p1-13']));
   expect(select([], ['audit:wave-2:p1-13', 'golden:gg-00'])).toEqual([
     ...CHEAP,
     'golden:gg-00',

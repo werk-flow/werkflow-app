@@ -125,6 +125,7 @@ test.describe('Lab counts of the office @AUDIT-LAB-OFFICE', () => {
     const lab = await openLabSession({ browser, baseURL, world, profileStep: 'lab.office.visit-move' });
     try {
       await lab.page.goto(`/kalender?date=${liveDate}`);
+      // eslint-disable-next-line playwright-spec/bounded-timeout -- lab step LAB-O4: its wait changes only in the run that re-records its lab reference (docs/technical/performance.md)
       await expect(calendarReady(lab.page, 'week')).toBeVisible({ timeout: 30_000 });
       const card = seededBoardCard(lab.page);
       await expect(card).toBeVisible();

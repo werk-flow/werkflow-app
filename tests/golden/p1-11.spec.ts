@@ -59,7 +59,7 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
         time: '09:00',
         recurrence: { frequency: 'daily', count: 5 },
       });
-      await expect(plannedEntriesConfirmation(adminPage, 5)).toBeVisible({ timeout: 15_000 });
+      await expect(plannedEntriesConfirmation(adminPage, 5)).toBeVisible();
       await createPlannedCalendarEntry(adminPage, {
         kind: 'job_visit',
         jobSearch: jobNumber,
@@ -67,9 +67,9 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
         time: '10:00',
         durationHours: 2,
       });
-      await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible({ timeout: 15_000 });
+      await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible();
       await showPlanningMonth(adminPage, planningDate);
-      await expect(plannedCalendarEvent(adminPage, title, 5)).toBeVisible({ timeout: 20_000 });
+      await expect(plannedCalendarEvent(adminPage, title, 5)).toBeVisible();
 
       const state = await getPlanningState(world.orgId, { jobNumber });
       expect(state.occurrenceCount).toBe(6);
@@ -84,7 +84,7 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
         scope: 'one',
         time: '11:00',
       });
-      await expect(occurrenceEditConfirmation(adminPage, 'one')).toBeVisible({ timeout: 15_000 });
+      await expect(occurrenceEditConfirmation(adminPage, 'one')).toBeVisible();
       const state = await getPlanningState(world.orgId, { jobNumber });
       expect(state.occurrences.filter((occurrence) => occurrence.isException)).toHaveLength(1);
     });
@@ -97,9 +97,7 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
         scope: 'future',
         time: '12:00',
       });
-      await expect(occurrenceEditConfirmation(adminPage, 'future')).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(occurrenceEditConfirmation(adminPage, 'future')).toBeVisible();
       const state = await getPlanningState(world.orgId, { jobNumber });
       expect(state.seriesCount).toBe(2);
     });
@@ -112,7 +110,7 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
         scope: 'series',
         time: '13:00',
       });
-      await expect(occurrenceEditConfirmation(adminPage, 'series')).toBeVisible({ timeout: 15_000 });
+      await expect(occurrenceEditConfirmation(adminPage, 'series')).toBeVisible();
       const state = await getPlanningState(world.orgId, { jobNumber });
       expect(state.eventTypes).toContain('series_changed');
       expect(state.actualTimeCount).toBe(0);
@@ -224,7 +222,7 @@ test.describe('P1-11 recurring and multi-visit planning @P1-11', () => {
       scope: 'one',
       date: shiftIsoDate(legacyDate, 1),
     });
-    await expect(occurrenceEditConfirmation(adminPage, 'one')).toBeVisible({ timeout: 15_000 });
+    await expect(occurrenceEditConfirmation(adminPage, 'one')).toBeVisible();
     const after = await getPlanningState(world.orgId, { jobNumber });
     expect(after.occurrences[0]?.legacySourceJobId).toBe(after.jobId);
     expect(after.occurrences[0]?.startDate).toBe(shiftIsoDate(legacyDate, 1));

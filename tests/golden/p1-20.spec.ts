@@ -57,7 +57,7 @@ async function assignEmployee(page: Page, jobNumber: string, employeeName: strin
   await page.getByRole('listbox').getByRole('option').filter({ hasText: employeeName }).click();
   await employeeAssignmentHeading(dialog).click();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
   await expect(page.getByRole('main').getByRole('link', { name: employeeName, exact: true })).toBeVisible();
 }
 
@@ -195,7 +195,7 @@ test.describe('P1-20 maintenance plan to completed visit @P1-20 @GG-06', () => {
       await maintenanceDueRowAction(dueRow, 'createJob').click();
       let dialog = adminPage.getByRole('dialog');
       await maintenanceDueSubmit(dialog).click();
-      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(dialog).toHaveCount(0);
       const created = expectDefined(
         await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
         'plan state',
@@ -208,7 +208,7 @@ test.describe('P1-20 maintenance plan to completed visit @P1-20 @GG-06', () => {
       await maintenanceDueRowAction(dueRow, 'schedule').click();
       dialog = adminPage.getByRole('dialog');
       await maintenanceDueSubmit(dialog).click();
-      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(dialog).toHaveCount(0);
       const scheduled = expectDefined(
         await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
         'plan state',
@@ -237,7 +237,7 @@ test.describe('P1-20 maintenance plan to completed visit @P1-20 @GG-06', () => {
       const dialog = adminPage.getByRole('dialog');
       await maintenanceDueEvidence(dialog, names.evidenceTitle).click();
       await maintenanceDueSubmit(dialog).click();
-      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(dialog).toHaveCount(0);
       const state = expectDefined(
         await getMaintenanceStateByPlanNumber(world.orgId, planNumber),
         'plan state',

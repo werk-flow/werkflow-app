@@ -25,6 +25,7 @@ import {
 import {
   approveCorrectionButton,
   calendarTimeCorrectionDialog,
+  expectNoTimeCorrectionCard,
   fillMissedTime,
   openMissedTimeDialog,
   submitCalendarTimeCorrection,
@@ -90,14 +91,12 @@ test.describe('P1-22 consistent time corrections @P1-22', () => {
     await test.step('A second person reviews before and after and approves', async () => {
       await adminPage.goto('/zeiterfassung?tab=approvals');
       const card = timeCorrectionCard(adminPage, requestId);
-      await expect(card.getByText(TIME_CORRECTION_COPY.before)).toBeVisible({ timeout: 30_000 });
+      await expect(card.getByText(TIME_CORRECTION_COPY.before)).toBeVisible();
       await expect(card.getByText(TIME_CORRECTION_COPY.proposed)).toBeVisible();
       await approveCorrectionButton(card).click();
       // The card leaves with the click; the banner confirms the decision before the persisted row is read.
-      await expect(visibleText(adminPage, TIME_CORRECTION_COPY.decisionSaved)).toBeVisible({
-        timeout: 20_000,
-      });
-      await expect(adminPage.getByTestId(`time-correction-${requestId}`)).toHaveCount(0);
+      await expect(visibleText(adminPage, TIME_CORRECTION_COPY.decisionSaved)).toBeVisible();
+      await expectNoTimeCorrectionCard(adminPage, requestId);
       expect(
         (await getTimeCorrectionState(world.orgId)).requests.find((row) => row.id === requestId)?.status,
       ).toBe('approved');

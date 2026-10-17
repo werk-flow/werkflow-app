@@ -628,24 +628,20 @@ const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number;
 // Module mocks are process-wide, so the mocked scenario runs in its own process.
 const ISOLATED = process.env.ATTENTION_COUNT_VOLUME_ISOLATED === '1';
 
-test.skipIf(ISOLATED)(
-  'the attention count volume cases pass in an isolated process',
-  async () => {
-    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
-      env: { ...process.env, ATTENTION_COUNT_VOLUME_ISOLATED: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(status, `${stdout}\n${stderr}`).toBe(0);
-    expect(stderr).toContain(' 0 fail');
-  },
-  60_000,
-);
+test.skipIf(ISOLATED)('the attention count volume cases pass in an isolated process', async () => {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+    env: { ...process.env, ATTENTION_COUNT_VOLUME_ISOLATED: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(status, `${stdout}\n${stderr}`).toBe(0);
+  expect(stderr).toContain(' 0 fail');
+});
 
 if (ISOLATED) {
   mock.module('server-only', () => ({}));

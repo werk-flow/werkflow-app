@@ -9,16 +9,19 @@ import {
   isStoredReviewCommand,
 } from '../lib/testing/publication/coderabbit-review-command';
 import { writeJsonAtomically } from '../lib/testing/runner/file-lock';
-import { contentDigest } from '../lib/testing/evidence/source-content';
+import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
+import { recordEvidence } from '../lib/testing/publication/evidence-ledger';
 import {
   REVIEW_RECORD_DIRECTORY,
-  reviewedFiles,
+  reviewDigests,
   reviewRecordSchema,
   reviewScope,
+  type ReviewScope,
 } from '../lib/testing/publication/publication-gate';
 
 const rawArguments = process.argv.slice(2);
 const doctorOnly = rawArguments.includes('--doctor');
+const repository = resolve(import.meta.dir, '..');
 
 function runCommand(command: readonly string[]): number {
   const result = Bun.spawnSync({
@@ -34,6 +37,39 @@ function runCommand(command: readonly string[]): number {
 function fail(message: string): never {
   console.error(`[coderabbit-review] ${message}`);
   process.exit(1);
+}
+
+function git(...args: string[]): string[] {
+  return execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+    .split('\0')
+    .filter(Boolean);
+}
+
+function committedContent(file: string): Buffer | undefined {
+  try {
+    return execFileSync('git', ['show', `HEAD:${file}`], { cwd: repository, maxBuffer: 64 * 1024 * 1024 });
+  } catch {
+    // git show exits 128 for a file HEAD does not hold (deleted in the reviewed commits).
+    return undefined;
+  }
+}
+
+/** The digests of the files the review compares, read now: before CodeRabbit starts, or after it to compare. */
+function scopeDigests(scope: ReviewScope): Record<string, string> {
+  // The files the review compared: commits after the base, or the working tree against it with untracked files.
+  const changed = scope.committedOnly
+    ? git('diff', '--name-only', '--no-renames', '-z', scope.base, 'HEAD', '--')
+    : [
+        ...git('-c', 'core.safecrlf=false', 'diff', '--name-only', '--no-renames', '-z', scope.base, '--'),
+        ...git('ls-files', '--others', '--exclude-standard', '-z'),
+      ];
+  return reviewDigests({
+    changed,
+    scope,
+    readWorkingTree: (file) =>
+      existsSync(resolve(repository, file)) ? readFileSync(resolve(repository, file)) : undefined,
+    readCommitted: committedContent,
+  });
 }
 
 if (process.platform !== 'win32') {
@@ -82,48 +118,52 @@ try {
 } catch (error) {
   fail(error instanceof Error ? error.message : 'Invalid review arguments.');
 }
+const command = buildWindowsCodeRabbitCommand({ workingDirectory: process.cwd(), reviewArguments });
 
-const reviewExitCode = runCommand(
-  buildWindowsCodeRabbitCommand({
-    workingDirectory: process.cwd(),
-    reviewArguments,
-  }),
-);
+// Replaying stored findings reviews nothing and certifies nothing.
+if (isStoredReviewCommand(rawArguments)) process.exit(runCommand(command));
+
 // A completed review of this tree is the evidence the pre-push gate reads (lib/testing/publication/publication-gate.ts).
-if (reviewExitCode === 0 && !isStoredReviewCommand(rawArguments)) {
-  const repository = resolve(import.meta.dir, '..');
-  const git = (...args: string[]): string[] =>
-    execFileSync('git', args, { cwd: repository, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
-      .split('\0')
-      .filter(Boolean);
-  const head = git('rev-parse', 'HEAD')[0]?.trim() ?? fail('git rev-parse HEAD returned nothing.');
-  // The files the review compared: commits after the base, or the working tree against it with untracked files.
-  const scope = reviewScope(reviewArguments);
-  const changed = scope.committedOnly
-    ? git('diff', '--name-only', '--no-renames', '-z', scope.base, 'HEAD', '--')
-    : [
-        ...git('-c', 'core.safecrlf=false', 'diff', '--name-only', '--no-renames', '-z', scope.base, '--'),
-        ...git('ls-files', '--others', '--exclude-standard', '-z'),
-      ];
-  const directory = resolve(repository, REVIEW_RECORD_DIRECTORY);
-  mkdirSync(directory, { recursive: true });
-  // Directory passes of one tree each write their own record; the gate unites them.
-  const recordName = `${head}-${new Date().toISOString().replace(/[-:.]/g, '')}.json`;
-  writeJsonAtomically(
-    resolve(directory, recordName),
-    reviewRecordSchema.parse({
-      version: 3,
-      head,
-      completedAt: new Date().toISOString(),
-      arguments: reviewArguments,
-      // Deleted files have no content to review and no digest.
-      reviewedFiles: Object.fromEntries(
-        reviewedFiles(changed, scope.directories)
-          .filter((file) => existsSync(resolve(repository, file)))
-          .map((file) => [file, contentDigest(file, readFileSync(resolve(repository, file)))]),
-      ),
-    }),
-  );
-  console.info(`[coderabbit-review] recorded ${REVIEW_RECORD_DIRECTORY}/${recordName}`);
+// The workspace lock keeps agents from editing a file while CodeRabbit reads it (the edit guard), and the
+// digests are taken before the review starts, so the record certifies exactly what CodeRabbit saw.
+// Inside the lock a failure throws, so the lock is released before the process exits.
+const reviewUnderLock = withWorkspaceTestLock(
+  { operation: 'CodeRabbit review', repositoryRoot: repository },
+  async () => {
+    const head = git('rev-parse', 'HEAD')[0]?.trim();
+    if (!head) throw new Error('git rev-parse HEAD returned nothing.');
+    const scope = reviewScope(reviewArguments);
+    const before = scopeDigests(scope);
+    const reviewExitCode = runCommand(command);
+    if (reviewExitCode !== 0) return reviewExitCode;
+    const after = scopeDigests(scope);
+    const changed = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
+      (file) => before[file] !== after[file],
+    );
+    if (git('rev-parse', 'HEAD')[0]?.trim() !== head || changed.length)
+      throw new Error(
+        `The reviewed content changed while CodeRabbit ran (${changed.slice(0, 5).join(', ') || 'HEAD moved'}); no review record was written. Review again.`,
+      );
+    mkdirSync(resolve(repository, REVIEW_RECORD_DIRECTORY), { recursive: true });
+    // Directory passes of one tree each write their own record; the gate unites them.
+    const recordPath = `${REVIEW_RECORD_DIRECTORY}/${head}-${new Date().toISOString().replace(/[-:.]/g, '')}.json`;
+    writeJsonAtomically(
+      resolve(repository, recordPath),
+      reviewRecordSchema.parse({
+        version: 3,
+        head,
+        completedAt: new Date().toISOString(),
+        arguments: reviewArguments,
+        reviewedFiles: before,
+      }),
+    );
+    recordEvidence(repository, recordPath, 'CodeRabbit review record');
+    console.info(`[coderabbit-review] recorded ${recordPath}`);
+    return 0;
+  },
+);
+try {
+  process.exit(await reviewUnderLock);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
-process.exit(reviewExitCode);

@@ -91,9 +91,7 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     // Correcting the historical version works and stays traceable.
     await editConditionWeeklyHours(adminPage, toGermanDate(pastIso), '38');
     await expectVisibleAfterSave(adminPage, conditionWeeklyHoursText(38));
-    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_updated)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_updated)).toBeVisible();
   });
 
   test('Personalakte ohne Zugang bleibt getrennt, steht in keiner Auswahl und wird per Einladung verknüpft', async ({
@@ -118,18 +116,14 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
         world.personnelInvitee.lastName,
       ]);
       const recordHeader = personnelRecordHeader(adminPage, recordName);
-      await expect(recordHeader.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(recordHeader.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible();
       await expect(recordHeader.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
       return created.id;
     });
 
     await test.step('Die Akte steht unter Weiteres Personal und in keiner Auswahl', async () => {
       await adminPage.goto('/mitarbeiter');
-      await expect(visibleText(adminPage, PERSONNEL_COPY.otherPersonnel)).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(visibleText(adminPage, PERSONNEL_COPY.otherPersonnel)).toBeVisible();
       await expect(visibleText(adminPage, recordName)).toBeVisible();
 
       // The job dialog's employee picker finds a real member but not the record.
@@ -140,7 +134,7 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
           .getByRole('listbox')
           .getByRole('option')
           .filter({ hasText: `${world.users.employee.firstName} ${world.users.employee.lastName}` }),
-      ).toBeVisible({ timeout: 15_000 });
+      ).toBeVisible();
       await search.fill(world.personnelInvitee.lastName);
       await expect(
         adminPage
@@ -204,18 +198,14 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
 
     await expectRedirectedAway(employeePage, '/mitarbeiter');
     await employeePage.goto(`/mitarbeiter/${adminRecord.id}`);
-    await expect(employeePage).not.toHaveURL(new RegExp(adminRecord.id), {
-      timeout: 15_000,
-    });
+    await expect(employeePage).not.toHaveURL(new RegExp(adminRecord.id));
     await expect(textInDom(employeePage, PERSONNEL_COPY.personnelSection)).toHaveCount(0);
 
     await outsiderPage.goto('/mitarbeiter');
-    await expect(outsiderPage).toHaveURL(/\/mitarbeiter$/, { timeout: 15_000 });
+    await expect(outsiderPage).toHaveURL(/\/mitarbeiter$/);
     await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
     await outsiderPage.goto(`/mitarbeiter/${adminRecord.id}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(adminRecord.id), {
-      timeout: 15_000,
-    });
+    await expect(outsiderPage).not.toHaveURL(new RegExp(adminRecord.id));
     await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
   });
 });

@@ -13,6 +13,7 @@ import { seedJob } from '../../golden/support/db/work';
 import { uploadIntoDocumentsSection } from '../../golden/support/steps/documents';
 import { dismissDialog } from '../../golden/support/steps/interaction';
 import {
+  serviceCaseField,
   serviceCaseJobPicker,
   serviceCaseListSearch,
   serviceEditButton,
@@ -154,17 +155,15 @@ test.describe('P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
     await bueroPage.goto(`/service/faelle/${caseNumber}`);
     await serviceEditButton(bueroPage).click();
     const staleDialog = bueroPage.getByRole('dialog');
-    await staleDialog
-      .locator('#service-triage')
-      .fill('Diese Eingabe darf nicht den neueren Stand überschreiben.');
-    await staleDialog.locator('#service-reason').fill('Parallelprüfung aus dem Büro');
+    await serviceCaseField(staleDialog, 'triage').fill(
+      'Diese Eingabe darf nicht den neueren Stand überschreiben.',
+    );
+    await serviceCaseField(staleDialog, 'reason').fill('Parallelprüfung aus dem Büro');
     await updateServiceCaseViaDialog(adminPage, {
       summary: confirmedSummary,
       reason: 'Aktueller Stand durch Admin bestätigt',
     });
-    await expect(adminPage.getByRole('heading', { name: confirmedSummary, exact: true })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(adminPage.getByRole('heading', { name: confirmedSummary, exact: true })).toBeVisible();
     await staleDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
     await expect(staleDialog.getByRole('alert')).toContainText(
       expectDefined(SERVICE_CASE_ERRORS.service_case_stale_version, 'the stale-version message'),

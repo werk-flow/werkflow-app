@@ -6,6 +6,7 @@ import {
   getOrganizationJoinCode,
   getPendingInviteCode,
 } from '../../golden/support/db/shared';
+import { attentionTaskGroup } from '../../golden/support/steps/attention';
 import { createCustomer } from '../../golden/support/steps/customers';
 import { dismissDialog } from '../../golden/support/steps/interaction';
 import {
@@ -83,13 +84,11 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await signUpViaUi(page, { firstName, lastName, email, password });
     if (/\/onboarding\/start/.test(page.url())) {
       await upgradeChoiceLink(page).click();
-      await expect(page).toHaveURL(/\/upgrade/, { timeout: 30_000 });
+      await expect(page).toHaveURL(/\/upgrade/);
     }
     if (/\/upgrade/.test(page.url())) {
       await simulatedPaymentButton(page).click();
-      await expect(page).toHaveURL(/\/onboarding\/create-organization/, {
-        timeout: 30_000,
-      });
+      await expect(page).toHaveURL(/\/onboarding\/create-organization/);
     }
 
     await createOrganizationInOnboarding(page, organizationName);
@@ -142,15 +141,13 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
 
       // The code alone grants no access: the app sends the requester back to the waiting state.
       await page.goto('/dashboard');
-      await expect(page).toHaveURL(/\/onboarding\/join-organization/, { timeout: 30_000 });
+      await expect(page).toHaveURL(/\/onboarding\/join-organization/);
       await expect(visibleText(page, joinRequestPendingMessage(world.orgName))).toBeVisible();
     });
 
     await test.step('Das Büro sieht die Anfrage in Aufgaben und gibt sie unter Mitarbeiter frei', async () => {
       await adminPage.goto('/aufgaben');
-      await expect(adminPage.getByRole('main').getByTestId('attention-join-request-tasks')).toContainText(
-        requesterName,
-      );
+      await expect(attentionTaskGroup(adminPage, 'joinRequests')).toContainText(requesterName);
       await adminPage.goto('/mitarbeiter');
       const joinRequests = joinRequestsRegion(adminPage);
       await expect(joinRequests).toContainText(email);
@@ -211,9 +208,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
         secondaryOrganizationName,
         { searchFirst: false },
       );
-      await expect(organizationSwitcher(employeePage, secondaryOrganizationName)).toBeEnabled({
-        timeout: 30_000,
-      });
+      await expect(organizationSwitcher(employeePage, secondaryOrganizationName)).toBeEnabled();
       await expectRedirectedAway(employeePage, '/kunden');
     });
 
@@ -236,9 +231,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       // organization component contract with a held switch. A real switch
       // completes before the first poll; assert the settled state and the data
       // isolation instead.
-      await expect(organizationSwitcher(employeePage, world.orgName)).toBeEnabled({
-        timeout: 30_000,
-      });
+      await expect(organizationSwitcher(employeePage, world.orgName)).toBeEnabled();
       await employeePage.goto('/auftraege');
       await expect(textInDom(employeePage, secondaryOrganizationCustomer)).toHaveCount(0);
 
@@ -248,15 +241,13 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
         world.orgName,
         { searchFirst: false },
       );
-      await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
+      await expect(primaryOrganizationSwitcher).toBeEnabled();
       await adminPage.goto('/kunden');
       await expect(textInDom(adminPage, secondaryOrganizationCustomer)).toHaveCount(0);
       await selectFromSearchable(adminPage, primaryOrganizationSwitcher, secondaryOrganizationName, {
         searchFirst: false,
       });
-      await expect(organizationSwitcher(adminPage, secondaryOrganizationName)).toBeEnabled({
-        timeout: 30_000,
-      });
+      await expect(organizationSwitcher(adminPage, secondaryOrganizationName)).toBeEnabled();
       await adminPage.goto('/kunden');
       await expect(visibleText(adminPage, secondaryOrganizationCustomer)).toBeVisible();
       await expect(textInDom(adminPage, primaryOrganizationCustomer)).toHaveCount(0);
@@ -266,7 +257,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
         world.orgName,
         { searchFirst: false },
       );
-      await expect(primaryOrganizationSwitcher).toBeEnabled({ timeout: 30_000 });
+      await expect(primaryOrganizationSwitcher).toBeEnabled();
     });
 
     const firstJob = `A1 Zeitauftrag 1 ${world.runId}`;
@@ -303,11 +294,11 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       await expect(visibleText(employeePage, TIME_PAGE_TEXT.workTime)).toBeVisible();
       await expect(visibleText(employeePage, TIME_PAGE_TEXT.breakTime)).toBeVisible();
       await expect(visibleText(employeePage, TIME_PAGE_TEXT.overtimeToday)).toBeVisible();
-      await expect(employeeRow).toContainText(MEMBER_CLOCK_STATUS.working, { timeout: 30_000 });
+      await expect(employeeRow).toContainText(MEMBER_CLOCK_STATUS.working);
       await startClockBreak(employeePage);
       await employeePage.goto('/zeiterfassung');
       await expect(visibleText(employeePage, TIME_PAGE_TEXT.onBreak)).toBeVisible();
-      await expect(employeeRow).toContainText(MEMBER_CLOCK_STATUS.onBreak, { timeout: 30_000 });
+      await expect(employeeRow).toContainText(MEMBER_CLOCK_STATUS.onBreak);
       await endClockBreak(employeePage, firstJob);
       await employeePage.goto('/zeiterfassung');
       await expect(visibleText(employeePage, TIME_PAGE_TEXT.working)).toBeVisible();
@@ -321,14 +312,10 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
         organizationSwitcher(employeePage, world.orgName),
         secondaryOrganizationName,
       );
-      await expect(visibleText(employeePage, secondaryOrganizationName)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(visibleText(employeePage, secondaryOrganizationName)).toBeVisible();
       await clockInLauncher(employeePage).click();
       await clockInConfirmationButton(employeePage).click();
-      await expect(visibleText(employeePage, TIME_PAGE_TEXT.clockedInElsewhere)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(visibleText(employeePage, TIME_PAGE_TEXT.clockedInElsewhere)).toBeVisible();
       await selectFromSearchable(
         employeePage,
         organizationSwitcher(employeePage, secondaryOrganizationName),
@@ -351,10 +338,10 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
       await adminPage.goto(`/auftraege/projekt/${timeProjectNumber}`);
       const projectTimeSummary = visibleText(adminPage, WORK_TIME_TEXT.projectTotalHours);
       try {
-        await expect(projectTimeSummary).toBeVisible({ timeout: 20_000 });
+        await expect(projectTimeSummary).toBeVisible();
       } catch {
         await adminPage.reload();
-        await expect(projectTimeSummary).toBeVisible({ timeout: 30_000 });
+        await expect(projectTimeSummary).toBeVisible();
       }
     });
   });
@@ -406,9 +393,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await expect(adminInviteRow).toContainText(ROLE_LABELS.buero);
     await expect(adminInviteRow).toContainText(INVITATION_STATUS.pending);
     await cancelInvitationFromRow(adminPage, adminInviteRow);
-    await expect(adminInviteRow).toContainText(INVITATION_STATUS.cancelled, {
-      timeout: 20_000,
-    });
+    await expect(adminInviteRow).toContainText(INVITATION_STATUS.cancelled);
 
     await inviteMember(bueroPage, bueroInviteEmail, 'employee');
     await invitationsTab(bueroPage).click();
@@ -427,9 +412,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await expect(joinedInviteeRow).toContainText(ROLE_LABELS.buero);
 
     await clockInOnJob(inviteePage);
-    await expect(joinedInviteeRow).toContainText(MEMBER_CLOCK_STATUS.working, {
-      timeout: 30_000,
-    });
+    await expect(joinedInviteeRow).toContainText(MEMBER_CLOCK_STATUS.working);
     // SI-006 protects recorded time; security_boundaries.sql proves the
     // database keeps the membership and the history. The page shows the denial.
     const removalDialog = await requestMemberRemovalFromRow(adminPage, joinedInviteeRow);

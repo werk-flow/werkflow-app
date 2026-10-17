@@ -13,6 +13,7 @@ import {
   textInDom,
   visibleText,
 } from './shared';
+import { DOCUMENT_UPLOAD_TIMEOUT_MS } from '../timeouts';
 
 /**
  * The documents area: the library under /dokumente, its dialogs and the
@@ -176,6 +177,21 @@ export function documentViewerHeading(page: Page, fileName: string): Locator {
   });
 }
 
+/** The embedded preview frame of an open document viewer, titled by the file name. */
+export function documentViewerFrame(viewer: Locator, fileName: string): Locator {
+  return viewer.locator(`iframe[title*="${fileName}"]`);
+}
+
+/** The contextual documents frame inside a dialog, the box whose geometry the layout audits measure. */
+export function contextualDocumentsFrame(dialog: Locator): Locator {
+  return dialog.locator('[data-slot="contextual-documents-frame"]');
+}
+
+/** The contextual documents section inside a dialog. */
+export function contextualDocumentsSection(dialog: Locator): Locator {
+  return dialog.getByTestId('contextual-documents-section');
+}
+
 /**
  * Closes the upload progress dialog if it is still open. The dialog exposes
  * its footer action and the icon close both as „Schließen“; the footer action
@@ -192,7 +208,7 @@ export async function closeDocumentUploadProgressDialog(page: Page): Promise<voi
     .first()
     .click({ timeout: 2_000 })
     .catch(() => undefined);
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export function documentLibraryCreateMenu(page: Page): Locator {
@@ -381,7 +397,7 @@ export async function createDocumentFolder(page: Page, folderName: string): Prom
   const dialog = documentDialog(page, 'createFolder');
   await dialog.getByPlaceholder('Ordnername').fill(folderName);
   await dialog.getByRole('button', { name: SHARED_COPY.action.create }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** Picks one record in the link dialog: switches to the target's tab, searches, chooses the match. */
@@ -406,7 +422,7 @@ export async function submitDocumentDestination(
   const dialog = documentDialog(page, mode);
   await dialog.getByRole('button', { name: folderName }).click();
   await dialog.getByRole('button', { name: DESTINATION_SUBMIT_LABELS[mode] }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export function documentCategorySelect(details: Locator): Locator {
@@ -468,9 +484,7 @@ export async function uploadIntoDocumentsSection(
 ): Promise<void> {
   const documentsContainer = options?.enclosingDialog ?? page.getByRole('main');
   const documentsHeading = visibleText(documentsContainer, SHARED_COPY.region.documents);
-  await expect(documentsHeading).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(documentsHeading).toBeVisible();
 
   const section = documentsRegion(documentsContainer);
   await expect(section).toHaveCount(1);
@@ -498,7 +512,7 @@ export async function uploadIntoDocumentsSection(
         }
         return uploadDialogSeen ? 'closed' : 'starting';
       },
-      { timeout: 60_000 },
+      { timeout: DOCUMENT_UPLOAD_TIMEOUT_MS },
     )
     .toMatch(/^(complete|closed)$/);
   await expect(page.getByText(SHARED_COPY.upload.failed)).toHaveCount(0);
@@ -514,7 +528,7 @@ export async function uploadIntoDocumentsSection(
   const persistedFile = options?.enclosingDialog
     ? options.enclosingDialog.getByText(expectedFileName).filter({ visible: true }).first()
     : visibleText(page, expectedFileName);
-  await expect(persistedFile).toBeVisible({ timeout: 15_000 });
+  await expect(persistedFile).toBeVisible();
 }
 
 export async function uploadDocumentOnJobPage(

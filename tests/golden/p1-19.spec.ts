@@ -159,16 +159,14 @@ test.describe('P1-19 reactive service vertical slice @P1-19 @GG-05', () => {
         equipmentName: names.equipment,
         reason: 'Einsatz nach telefonischer Rückfrage vorbereitet',
       });
-      await expect(visibleText(adminPage, names.jobNumber)).toBeVisible({ timeout: 20_000 });
+      await expect(visibleText(adminPage, names.jobNumber)).toBeVisible();
 
       await relateServiceCase(adminPage, {
         relatedCaseNumber: directCaseNumber,
         relation: 'continuation_of',
         reason: 'Wiederkehrendes Fehlerbild derselben Kundenanlage',
       });
-      await expect(serviceCaseRelationText(adminPage, 'continuation_of', directCaseNumber)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(serviceCaseRelationText(adminPage, 'continuation_of', directCaseNumber)).toBeVisible();
 
       const state = await getServiceCaseStateByNumber(world.orgId, caseNumber);
       expect(state.serviceCase).toMatchObject({
@@ -218,10 +216,8 @@ test.describe('P1-19 reactive service vertical slice @P1-19 @GG-05', () => {
       await adminPage.goto(`/service/faelle/${caseNumber}`);
       await linkServiceCaseEvidence(adminPage, names.evidenceTitle);
       // The version is listed with the click; the banner confirms the link.
-      await expect(serviceCaseEvidenceLinkedBanner(adminPage)).toBeVisible({ timeout: 20_000 });
-      await expect(serviceCaseEvidenceSection(adminPage)).toContainText(names.evidenceTitle, {
-        timeout: 20_000,
-      });
+      await expect(serviceCaseEvidenceLinkedBanner(adminPage)).toBeVisible();
+      await expect(serviceCaseEvidenceSection(adminPage)).toContainText(names.evidenceTitle);
 
       await createServiceCaseFollowUp(adminPage, 'Gewährleistungsunterlagen im Büro prüfen.');
 

@@ -38,25 +38,20 @@ const admin = {
 // Module mocks are process-wide, so the mocked scenario runs in its own process.
 const ISOLATED = process.env.WORK_TEMPLATE_ACTION_BOUNDARIES_ISOLATED === '1';
 
-// The child Bun test process takes several seconds under host load; the 5 s default cuts it off.
-test.skipIf(ISOLATED)(
-  'the work-template boundary cases pass in an isolated process',
-  async () => {
-    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
-      env: { ...process.env, WORK_TEMPLATE_ACTION_BOUNDARIES_ISOLATED: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(status, `${stdout}\n${stderr}`).toBe(0);
-    expect(stderr).toContain('4 pass');
-  },
-  30_000,
-);
+test.skipIf(ISOLATED)('the work-template boundary cases pass in an isolated process', async () => {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+    env: { ...process.env, WORK_TEMPLATE_ACTION_BOUNDARIES_ISOLATED: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(status, `${stdout}\n${stderr}`).toBe(0);
+  expect(stderr).toContain('4 pass');
+});
 
 if (ISOLATED) {
   mock.module('server-only', () => ({}));

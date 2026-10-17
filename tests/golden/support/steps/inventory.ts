@@ -110,6 +110,45 @@ export function inventoryDialog(page: Page, dialog: InventoryDialog): Locator {
     .filter({ has: page.getByRole('heading', { name: INVENTORY_DIALOGS[dialog] }) });
 }
 
+/** The fields of the item, location and stock dialogs, by their DOM id. */
+const INVENTORY_FIELD_IDS = {
+  itemName: 'inventory-item-name',
+  itemType: 'inventory-item-type',
+  itemUnit: 'inventory-item-unit',
+  itemCategory: 'inventory-item-category',
+  itemSupplier: 'inventory-item-supplier',
+  itemInternalSku: 'inventory-item-internal-sku',
+  itemBarcode: 'inventory-item-barcode',
+  itemManufacturer: 'inventory-item-manufacturer',
+  itemSupplierNumber: 'inventory-item-supplier-number',
+  itemMinimumStock: 'inventory-item-minimum-stock',
+  itemTargetStock: 'inventory-item-target-stock',
+  itemPurchasePrice: 'inventory-item-purchase-price',
+  itemSalePrice: 'inventory-item-sale-price',
+  itemDescription: 'inventory-item-description',
+  itemNotes: 'inventory-item-notes',
+  locationName: 'inventory-location-name',
+  locationType: 'inventory-location-type',
+  locationDescription: 'inventory-location-description',
+  stockQuantity: 'inventory-stock-quantity',
+  stockReason: 'inventory-stock-reason',
+} as const;
+
+/** A field of an open inventory dialog. */
+export function inventoryField(dialog: Locator, field: keyof typeof INVENTORY_FIELD_IDS): Locator {
+  return dialog.locator(`#${INVENTORY_FIELD_IDS[field]}`);
+}
+
+/** The CSV file input of the import dialog. */
+export function inventoryImportFileInput(dialog: Locator): Locator {
+  return dialog.locator('input[type="file"]');
+}
+
+/** The column picker of the import dialog for one item field (`name`, `quantity`, ...). */
+export function inventoryImportColumnPicker(dialog: Locator, field: string): Locator {
+  return dialog.locator(`#inventory-import-${field}`);
+}
+
 export function createItemButton(page: Page): Locator {
   return page.getByRole('button', { name: INVENTORY_DIALOGS.createItem, exact: true });
 }
@@ -244,6 +283,11 @@ export function materialRowQuantity(dialog: Locator): Locator {
   return dialog.locator('input[id$="-quantity"]');
 }
 
+/** The notes of the material rows inside a material dialog. */
+export function materialRowNotes(dialog: Locator): Locator {
+  return dialog.locator('textarea[id$="-notes"]');
+}
+
 /** The location picker trigger of the material rows inside a material dialog. */
 export function materialRowLocation(dialog: Locator): Locator {
   return dialog.locator('button[id$="-location"]');
@@ -295,18 +339,18 @@ export async function planMaterialOnDetailPage(
   input: { itemName: string; locationName: string; quantity: number },
 ): Promise<void> {
   const button = materialPlanButton(page);
-  await expect(button).toBeEnabled({ timeout: 30_000 });
+  await expect(button).toBeEnabled();
   await button.click();
   const dialog = materialPlanDialog(page);
-  await expect(dialog).toBeVisible({ timeout: 30_000 });
+  await expect(dialog).toBeVisible();
   await itemSearchField(dialog).fill(input.itemName);
   await dialog.getByRole('button').filter({ hasText: input.itemName }).click();
   await materialRowQuantity(dialog).fill(String(input.quantity));
   await selectFromSearchable(page, materialRowLocation(dialog), input.locationName);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
   // The dialog closes with the click; the banner confirms the write.
-  await expect(materialPlanSavedBanner(page)).toBeVisible({ timeout: 20_000 });
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(materialPlanSavedBanner(page)).toBeVisible();
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function createInventoryLocation(page: Page, name: string): Promise<void> {
@@ -315,7 +359,7 @@ export async function createInventoryLocation(page: Page, name: string): Promise
   const dialog = inventoryDialog(page, 'createLocation');
   await dialog.locator('#inventory-location-name').fill(name);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function createInventoryItem(
@@ -361,7 +405,7 @@ export async function createInventoryItem(
     await expect(supplierDialog).toHaveCount(0, { timeout: 10_000 });
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function takeMaterialOnJobPage(
@@ -371,9 +415,7 @@ export async function takeMaterialOnJobPage(
   quantity: number,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(visibleText(page, INVENTORY_COPY.material.section)).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(visibleText(page, INVENTORY_COPY.material.section)).toBeVisible();
   await takeFromStockButton(page).click();
   await expect(page.getByRole('heading', { name: JOB_MATERIAL_ACTIONS.take.heading })).toBeVisible();
 
@@ -384,7 +426,7 @@ export async function takeMaterialOnJobPage(
   // The line rows outside the dialog also carry an "Entnahme buchen" button,
   // so the confirm click must stay scoped to the dialog.
   await page.getByRole('dialog').getByRole('button', { name: JOB_MATERIAL_ACTIONS.take.submit }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 export async function returnMaterialOnJobPage(
@@ -394,9 +436,7 @@ export async function returnMaterialOnJobPage(
   quantity: number,
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
-  await expect(visibleText(page, INVENTORY_COPY.material.section)).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(visibleText(page, INVENTORY_COPY.material.section)).toBeVisible();
   await jobMaterialLine(page, itemName)
     .locator('button:enabled')
     .filter({ hasText: JOB_MATERIAL_ACTIONS.return.trigger })
@@ -406,7 +446,7 @@ export async function returnMaterialOnJobPage(
 
   await page.locator('input[id^="material-row-"][id$="-quantity"]').fill(String(quantity));
   await page.getByRole('dialog').getByRole('button', { name: JOB_MATERIAL_ACTIONS.return.submit }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 export async function planMaterialOnJobPage(
@@ -428,5 +468,5 @@ export async function planMaterialOnJobPage(
   await expectBannerAfter(page, INVENTORY_COPY.material.planSaved, () =>
     dialog.getByRole('button', { name: SHARED_COPY.action.save }).click(),
   );
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }

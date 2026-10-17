@@ -109,9 +109,7 @@ test.describe('GG-00 Bestandsfunktionen @GG-00', () => {
       fileName,
     );
     await bueroPage.goto('/dokumente');
-    await expect(visibleText(bueroPage, fileName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(bueroPage, fileName)).toBeVisible();
   });
 
   test('Mitarbeiter erfasst auftragsbezogene Arbeitszeit', async ({ employeePage, world }) => {

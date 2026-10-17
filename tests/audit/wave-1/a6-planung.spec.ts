@@ -27,6 +27,7 @@ import {
   plannedEntriesConfirmation,
   planningCheckAndSave,
   planningEmployeeSearch,
+  planningField,
   planningFrequencyOption,
   planningInternalEntryToggle,
   planningOverrideTooShort,
@@ -200,7 +201,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // The four internal entry types are offered with their exact German labels.
     const labelDialog = await openPlanningCreationDialog(adminPage);
     await planningInternalEntryToggle(labelDialog).click();
-    await labelDialog.locator('#planning-internal-type').click();
+    await planningField(labelDialog, 'internalType').click();
     const typeOptions = adminPage.getByRole('option');
     await expect(typeOptions).toHaveCount(4);
     for (const label of Object.values(PLANNING_INTERNAL_TYPE_LABELS)) {
@@ -209,7 +210,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // The open select list is the top layer: the first Escape closes it, the second the dialog.
     await dismissDialog(adminPage.getByRole('listbox'));
     await dismissDialog(labelDialog);
-    await expect(labelDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(labelDialog).toHaveCount(0);
 
     // Büro plans a Besprechung (the default type) — the planner role includes
     // Büro, not only Admin.
@@ -224,9 +225,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       durationHours: 1,
     });
     await showPlanningMonth(bueroPage, besprechungDate);
-    await expect(plannedCalendarEvent(bueroPage, besprechungTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(plannedCalendarEvent(bueroPage, besprechungTitle)).toBeVisible();
     expect(await getInternalOccurrenceTypes(world.orgId, besprechungTitle)).toEqual(['meeting']);
 
     // Internal work across midnight needs neither a job nor a second entry.
@@ -239,7 +238,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       time: '22:00',
       durationHours: 4,
     });
-    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible({ timeout: 15_000 });
+    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible();
     const night = await getPlanningState(world.orgId, { internalTitle: nightTitle });
     expect(night.jobId).toBeNull();
     const nightOccurrence = expectDefined(night.occurrences[0], 'the night occurrence');
@@ -270,9 +269,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     expect(visitState.occurrences[0]?.startDate).toBe(visitDate);
     expect(visitState.occurrences[0]?.endDateExclusive).toBe(shiftIsoDate(visitDate, 2));
     await showPlanningMonth(adminPage, visitDate);
-    await expect(plannedCalendarEvent(adminPage, visitTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(plannedCalendarEvent(adminPage, visitTitle)).toBeVisible();
   });
 
   test('A6-T2: Eine Wochenserie mit zusätzlich gewähltem Wochentag wird genau an diesen Tagen geplant [P1-11-F01]', async ({
@@ -297,7 +294,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
         weekdayLabels: [secondWeekdayLabel],
       },
     });
-    await expect(plannedEntriesConfirmation(adminPage, 6)).toBeVisible({ timeout: 15_000 });
+    await expect(plannedEntriesConfirmation(adminPage, 6)).toBeVisible();
     const expectedWeeklyDates: string[] = [];
     for (let date = weeklyStart; expectedWeeklyDates.length < 6; date = shiftIsoDate(date, 1)) {
       const weekday = mondayWeekdayIndex(date);
@@ -340,9 +337,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       durationHours: 1,
       recurrence: { frequency: 'weekly', count: 730 },
     });
-    await expect(plannedEntriesConfirmation(adminPage, expectedInitialDates.length)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(plannedEntriesConfirmation(adminPage, expectedInitialDates.length)).toBeVisible();
     const initialState = await getPlanningState(world.orgId, {
       internalTitle: horizonTitle,
     });
@@ -373,7 +368,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       expect(addedDates.length).toBeGreaterThan(0);
       const dialog = await openOccurrenceEditDialogByDate(adminPage, horizonTitle, horizonStart);
       await extendSeriesButton(dialog).click();
-      await expect(seriesExtendedConfirmation(adminPage, addedDates.length)).toBeVisible({ timeout: 30_000 });
+      await expect(seriesExtendedConfirmation(adminPage, addedDates.length)).toBeVisible();
       expectedDates = [...expectedDates, ...addedDates];
       const extendedState = await getPlanningState(world.orgId, {
         internalTitle: horizonTitle,
@@ -429,7 +424,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // Whole-series edit from a future visit: the three scopes are offered, the
     // future visits move, the past one keeps its start.
     const seriesDialog = await openOccurrenceEditDialogByDate(adminPage, title, skipDate);
-    await seriesDialog.locator('#planning-edit-scope').click();
+    await planningField(seriesDialog, 'editScope').click();
     for (const scopeLabel of Object.values(PLANNING_EDIT_SCOPE_LABELS)) {
       await expect(adminPage.getByRole('option', { name: scopeLabel, exact: true })).toBeVisible();
     }
@@ -440,10 +435,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       .click();
     await typeIntoTimeInput(seriesDialog, 'planning-edit-time', '1000');
     await seriesDialog.getByRole('button', { name: SHARED_COPY.action.saveChange, exact: true }).click();
-    await expect(seriesDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(occurrenceEditConfirmation(adminPage, 'series')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(seriesDialog).toHaveCount(0);
+    await expect(occurrenceEditConfirmation(adminPage, 'series')).toBeVisible();
     const postEditState = await getPlanningState(world.orgId, {
       internalTitle: title,
     });
@@ -461,41 +454,31 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // traceably VISIBLE calendar presence instead of disappearing.
     const cancelDialog = await openOccurrenceEditDialogByDate(adminPage, title, cancelDate);
     await occurrenceStatusAction(cancelDialog, 'cancelled').click();
-    await cancelDialog
-      .locator('#planning-status-reason')
-      .fill('A6 Termin bewusst abgesagt und dokumentiert.');
+    await planningField(cancelDialog, 'statusReason').fill('A6 Termin bewusst abgesagt und dokumentiert.');
     await occurrenceStatusSave(cancelDialog).click();
-    await expect(cancelDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(occurrenceStatusConfirmation(adminPage, 'cancelled')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(cancelDialog).toHaveCount(0);
+    await expect(occurrenceStatusConfirmation(adminPage, 'cancelled')).toBeVisible();
 
     const skipDialog = await openOccurrenceEditDialogByDate(adminPage, title, skipDate);
     await occurrenceStatusAction(skipDialog, 'skipped').click();
-    await skipDialog.locator('#planning-status-reason').fill('A6 Termin betrieblich nicht benötigt.');
+    await planningField(skipDialog, 'statusReason').fill('A6 Termin betrieblich nicht benötigt.');
     await occurrenceStatusSave(skipDialog).click();
-    await expect(skipDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(occurrenceStatusConfirmation(adminPage, 'skipped')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(skipDialog).toHaveCount(0);
+    await expect(occurrenceStatusConfirmation(adminPage, 'skipped')).toBeVisible();
 
     await showPlanningMonth(adminPage, cancelDate);
     const cancelledEvent = occurrenceInDateCell(adminPage, cancelDate, title);
-    await expect(cancelledEvent).toBeVisible({ timeout: 20_000 });
+    await expect(cancelledEvent).toBeVisible();
     await expect(planningDateCellStatus(adminPage, cancelDate, 'cancelled')).toBeVisible();
     await showPlanningMonth(adminPage, skipDate);
-    await expect(occurrenceInDateCell(adminPage, skipDate, title)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(occurrenceInDateCell(adminPage, skipDate, title)).toBeVisible();
     await expect(planningDateCellStatus(adminPage, skipDate, 'skipped')).toBeVisible();
 
     // The cancelled occurrence is read-only: its popover explains the status
     // and offers no editing.
     await showPlanningMonth(adminPage, cancelDate);
     await occurrenceInDateCell(adminPage, cancelDate, title).click();
-    await expect(closeOccurrenceOverviewButton(adminPage)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(closeOccurrenceOverviewButton(adminPage)).toBeVisible();
     await expect(occurrenceEditButton(adminPage)).toHaveCount(0);
     await closeOccurrenceOverviewButton(adminPage).click();
 
@@ -537,7 +520,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     await planningCheckAndSave(pendingDialog).click();
     const pendingWarning = planningWarningPanel(pendingDialog);
-    await expect(pendingWarning).toBeVisible({ timeout: 30_000 });
+    await expect(pendingWarning).toBeVisible();
     await expect(
       capacityWarningLine(pendingWarning, { employeeName, kind: 'pendingAbsence', dateIso: pendingDate }),
     ).toBeVisible();
@@ -545,7 +528,7 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       capacityWarningLine(pendingWarning, { employeeName, kind: 'scheduleFallback', dateIso: pendingDate }),
     ).toBeVisible();
     const planWithReason = planWithReasonButton(pendingDialog);
-    const overrideReason = pendingDialog.locator('#planning-override');
+    const overrideReason = planningField(pendingDialog, 'override');
     await expect(planWithReason).toBeEnabled();
     await planWithReason.click();
     await expect(planningOverrideTooShort(pendingDialog)).toBeVisible();
@@ -553,10 +536,8 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     await expect(overrideReason).toBeFocused();
     await overrideReason.fill(`A6 Einsatz trotz offenen Antrags abgestimmt ${world.runId}`);
     await planWithReason.click();
-    await expect(pendingDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(pendingDialog).toHaveCount(0);
+    await expect(plannedEntriesConfirmation(adminPage, 1)).toBeVisible();
     const pendingState = await getPlanningState(world.orgId, {
       internalTitle: pendingTitle,
     });
@@ -582,12 +563,12 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     });
     await planningRepeatToggle(staleDialog).click();
     // The Rhythmus Field wires its id onto the select trigger.
-    await staleDialog.locator('#planning-frequency').click();
+    await planningField(staleDialog, 'frequency').click();
     await planningFrequencyOption(adminPage, 'daily').click();
-    await staleDialog.locator('#planning-count').fill('2');
+    await planningField(staleDialog, 'count').fill('2');
     await planningCheckAndSave(staleDialog).click();
     const staleWarning = planningWarningPanel(staleDialog);
-    await expect(staleWarning).toBeVisible({ timeout: 30_000 });
+    await expect(staleWarning).toBeVisible();
     await expect(
       capacityWarningLine(staleWarning, { employeeName, kind: 'scheduleFallback', dateIso: staleDateFirst }),
     ).toBeVisible();
@@ -602,18 +583,16 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
       endDigits: toDatePickerDigits(staleDateFirst),
       comment: `A6 Faktenänderung ${world.runId}`,
     });
-    await staleDialog.locator('#planning-override').fill(`A6 Einsatz bewusst bestätigt ${world.runId}`);
+    await planningField(staleDialog, 'override').fill(`A6 Einsatz bewusst bestätigt ${world.runId}`);
     await planWithReasonButton(staleDialog).click();
-    await expect(staleAssessmentNotice(adminPage)).toBeVisible({ timeout: 30_000 });
+    await expect(staleAssessmentNotice(adminPage)).toBeVisible();
     await expect(staleDialog).toBeVisible();
     await expect(
       capacityWarningLine(staleWarning, { employeeName, kind: 'pendingAbsence', dateIso: staleDateFirst }),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible();
     await planWithReasonButton(staleDialog).click();
-    await expect(staleDialog).toHaveCount(0, { timeout: 30_000 });
-    await expect(plannedEntriesConfirmation(adminPage, 2)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(staleDialog).toHaveCount(0);
+    await expect(plannedEntriesConfirmation(adminPage, 2)).toBeVisible();
     const staleState = await getPlanningState(world.orgId, {
       internalTitle: staleTitle,
     });
@@ -773,24 +752,20 @@ test.describe('A6 Planung @AUDIT-W1-A6', () => {
     // Managers SEE the planned no-login person: the occurrence renders on the
     // manager calendar and the edit dialog carries the assignment visibly.
     const editDialog = await openOccurrenceEditDialogByDate(adminPage, noLoginTitle, noLoginDate);
-    await expect(employeeAssignmentPicker(editDialog, 1)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(employeeAssignmentPicker(editDialog, 1)).toBeVisible();
     await employeeAssignmentPicker(editDialog, 1).click();
     await planningEmployeeSearch(adminPage).fill('Nora');
     const noLoginOption = adminPage.getByRole('listbox').getByRole('option').filter({ hasText: noLoginName });
-    await expect(noLoginOption).toBeVisible({ timeout: 15_000 });
+    await expect(noLoginOption).toBeVisible();
     await expect(noAppAccessBadge(noLoginOption)).toBeVisible();
     await occurrenceEditHeading(editDialog).click();
     await closePlanningDialogWithNamedControl(editDialog);
-    await expect(editDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(editDialog).toHaveCount(0);
 
     // Field workers see EXACTLY their assigned occurrences: their own entry is
     // visible, the no-login-only entry is not.
     await showPlanningMonth(employeePage, ownDate);
-    await expect(occurrenceInDateCell(employeePage, ownDate, ownTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(occurrenceInDateCell(employeePage, ownDate, ownTitle)).toBeVisible();
     await showPlanningMonth(employeePage, noLoginDate);
     await expectGone(occurrenceInDateCell(employeePage, noLoginDate, noLoginTitle));
   });

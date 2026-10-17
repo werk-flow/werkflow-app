@@ -18,6 +18,7 @@ import {
   type WorkExecutionState,
 } from '../../../../lib/work-lifecycle/types';
 import { expectDefined } from '../../../../lib/testing/spec-support/expect-defined';
+import { usableContentTarget } from '../browser-observation';
 import { pressKey } from './interaction';
 import {
   assignDespiteQualificationWarning,
@@ -124,6 +125,33 @@ export function workHandoverSection(page: Page): Locator {
 
 export function workLifecycleCard(page: Page): Locator {
   return confirmed(page.getByRole('main').getByTestId('work-lifecycle-card'));
+}
+
+/** The reason field of an open lifecycle transition dialog. */
+export function workTransitionReasonField(dialog: Locator): Locator {
+  return dialog.locator('#work-transition-reason');
+}
+
+/** Proves no copy of the lifecycle card exists in the DOM. */
+export async function expectNoWorkLifecycleCard(page: Page): Promise<void> {
+  await expect(page.getByTestId('work-lifecycle-card')).toHaveCount(0);
+}
+
+/** Proves no copy of the lifecycle card in the DOM offers a button with this name. */
+export async function expectNoLifecycleCardButton(page: Page, buttonName: string): Promise<void> {
+  await expect(page.getByTestId('work-lifecycle-card').getByRole('button', { name: buttonName })).toHaveCount(
+    0,
+  );
+}
+
+/** Proves no copy of the field work pack exists in the DOM. */
+export async function expectNoFieldWorkPack(page: Page): Promise<void> {
+  await expect(page.getByTestId('field-work-pack')).toHaveCount(0);
+}
+
+/** The contact card of the field work pack. */
+export function fieldWorkPackContact(page: Page): Locator {
+  return page.getByRole('main').getByTestId('field-work-pack-contact');
 }
 
 // ---------------------------------------------------------------------------
@@ -242,13 +270,9 @@ export function workLifecycleDialogCancel(dialog: Locator): Locator {
  */
 export async function expectWorkTransitionSaved(page: Page, label: string): Promise<void> {
   const lifecycle = workLifecycleCard(page);
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
-  await expectGone(lifecycle.getByRole('status', { name: LIFECYCLE_COPY.savingStatus }), {
-    timeout: 20_000,
-  });
-  await expectGone(lifecycle.getByRole('button', { name: label, exact: true }), {
-    timeout: 20_000,
-  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expectGone(lifecycle.getByRole('status', { name: LIFECYCLE_COPY.savingStatus }));
+  await expectGone(lifecycle.getByRole('button', { name: label, exact: true }));
 }
 
 /**
@@ -453,7 +477,7 @@ export async function changeWorkDependency(
   reason: string,
 ): Promise<Locator> {
   const button = row.getByRole('button', { name: DEPENDENCY_ROW_ACTIONS[action] });
-  if (action === 'fulfil') await button.click({ timeout: 15_000 });
+  if (action === 'fulfil') await button.click();
   else await button.click();
   const dialog = workLifecycleDialog(page);
   await dialog.locator('#work-reason').fill(reason);
@@ -567,6 +591,19 @@ export function jobEditDialog(page: Page): Locator {
   });
 }
 
+/** Fields of the job and project edit dialogs, by their DOM id. */
+const WORK_EDIT_FIELD_IDS = {
+  jobTitle: 'edit-job-title',
+  jobSite: 'edit-job-site',
+  jobContact: 'edit-job-contact',
+  projectClient: 'edit-project-client',
+} as const;
+
+/** A field of an open job or project edit dialog. */
+export function workEditField(dialog: Locator, field: keyof typeof WORK_EDIT_FIELD_IDS): Locator {
+  return dialog.locator(`#${WORK_EDIT_FIELD_IDS[field]}`);
+}
+
 /** The edit dialog's title; clicking it closes an open picker popover inside the dialog. */
 export function jobEditDialogTitle(scope: Page | Locator): Locator {
   return scope.getByRole('heading', { name: JOB_DETAIL_COPY.editDialog });
@@ -656,7 +693,12 @@ const INSTRUCTION_EDITOR_COPY = {
   details: 'Eintragsdetails bearbeiten',
   createdBy: 'Erstellt von',
   statusChangedBy: { done: 'Zuletzt erledigt von', open: 'Zuletzt offen von' },
-  detailsField: { evidenceDescription: 'Nachweisbeschreibung', evidenceCategory: 'Nachweiskategorie' },
+  detailsField: {
+    group: 'Gruppe',
+    notes: 'Hinweise',
+    evidenceDescription: 'Nachweisbeschreibung',
+    evidenceCategory: 'Nachweiskategorie',
+  },
   evidenceFulfilled: /^Nachweis erfüllt:/,
 } as const;
 
@@ -712,7 +754,7 @@ export async function jobInstructionEditorRow(
         index = values.indexOf(content);
         return index;
       },
-      { message: `A confirmed checklist point holds the text "${content}"`, timeout: 15_000 },
+      { message: `A confirmed checklist point holds the text "${content}"` },
     )
     .toBeGreaterThanOrEqual(0);
   const rowId = expectDefined(await rows.nth(index).getAttribute('data-row-id'), 'the checklist row id');
@@ -743,6 +785,21 @@ export function jobInstructionDetailsDialog(page: Page): Locator {
   return page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: INSTRUCTION_EDITOR_COPY.details }),
   });
+}
+
+/**
+ * Opens the last row's details dialog with one click. The server HTML shows
+ * the button before React attaches its handler, so a click on it opens
+ * nothing; the job detail marks its content usable from a mount effect
+ * (components/shared/usable-content.tsx), which runs only after the content
+ * hydrated. Callers assert the row count first.
+ */
+export async function openLastJobInstructionDetails(page: Page): Promise<Locator> {
+  await expect(usableContentTarget(page, 'auftrag').locator).toBeVisible();
+  await lastJobInstructionDetailsButton(page).click();
+  const dialog = jobInstructionDetailsDialog(page);
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 export function jobInstructionDetailsField(
@@ -1144,9 +1201,7 @@ export function handoverReviewLink(page: Page): Locator {
 }
 
 export async function selectAllHandoverSources(section: Locator): Promise<void> {
-  await expect(section.getByRole('checkbox').first()).toBeAttached({
-    timeout: 20_000,
-  });
+  await expect(section.getByRole('checkbox').first()).toBeAttached();
   const sourceCheckboxes = await section.getByRole('checkbox').all();
   for (const checkbox of sourceCheckboxes) {
     if (!(await checkbox.isChecked())) await checkbox.check();
@@ -1179,15 +1234,13 @@ export async function createJob(
 
   // The suggested number arrives after the dialog opens; a fill before it lands
   // would keep the typed number only until the suggestion replaces or prefixes it.
-  await expect(jobFormField(page, 'number')).not.toHaveValue('', { timeout: 15_000 });
+  await expect(jobFormField(page, 'number')).not.toHaveValue('');
   await jobFormField(page, 'number').fill(options.jobNumber);
   await jobFormField(page, 'title').fill(options.title);
   if (options.description) await jobFormField(page, 'description').fill(options.description);
 
   if (options.workTemplateName) {
-    await expect(workTemplateSelect(page, 'job')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplateSelect(page, 'job')).toBeVisible();
     await selectFromSearchable(page, workTemplateSelect(page, 'job'), options.workTemplateName);
   }
 
@@ -1218,28 +1271,24 @@ export async function createJob(
       .getByRole('listbox')
       .getByRole('option')
       .filter({ hasText: `${options.projectNumber} –` });
-    await expect(projectOption).toHaveCount(1, { timeout: 15_000 });
+    await expect(projectOption).toHaveCount(1);
     await projectOption.click();
     if (options.expectedInheritedSiteName) {
-      await expect(jobFormField(page, 'site')).toContainText(options.expectedInheritedSiteName, {
-        timeout: 15_000,
-      });
+      await expect(jobFormField(page, 'site')).toContainText(options.expectedInheritedSiteName);
     }
     if (options.expectedInheritedContactName) {
-      await expect(jobFormField(page, 'contact')).toContainText(options.expectedInheritedContactName, {
-        timeout: 15_000,
-      });
+      await expect(jobFormField(page, 'contact')).toContainText(options.expectedInheritedContactName);
     }
   }
 
   if (options.siteName) {
     // The site picker appears once the customer's sites finished loading.
-    await expect(jobFormField(page, 'site')).toBeEnabled({ timeout: 15_000 });
+    await expect(jobFormField(page, 'site')).toBeEnabled();
     await selectFromSearchable(page, jobFormField(page, 'site'), options.siteName);
   }
 
   if (options.contactName) {
-    await expect(jobFormField(page, 'contact')).toBeEnabled({ timeout: 15_000 });
+    await expect(jobFormField(page, 'contact')).toBeEnabled();
     await selectFromSearchable(page, jobFormField(page, 'contact'), options.contactName);
   }
 
@@ -1263,12 +1312,10 @@ export async function createJob(
   await workCreateSubmit(page, 'job').click();
   if (options.qualificationOverrideReason) {
     const warningDialog = await assignDespiteQualificationWarning(page, options.qualificationOverrideReason);
-    await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(warningDialog).toHaveCount(0);
   }
   // The dialog closes on success; the caller asserts the job row afterwards.
-  await expect(workCreateHeading(page)).toBeHidden({
-    timeout: 15_000,
-  });
+  await expect(workCreateHeading(page)).toBeHidden();
 
   // Phase 5 creation is optimistic: validation closes the dialog before the
   // server action settles. A child row is not mounted while its project is
@@ -1277,7 +1324,7 @@ export async function createJob(
   // on the project number can be mistaken for the confirmed child.
   if (options.projectNumber) {
     const projectNumber = visibleText(page, options.projectNumber, true);
-    await expect(projectNumber).toBeVisible({ timeout: 15_000 });
+    await expect(projectNumber).toBeVisible();
     const projectRow = projectNumber.locator('xpath=ancestor::tr[1]');
     const expandButton = expandProjectButton(projectRow);
     if (await expandButton.isVisible().catch(() => false)) {
@@ -1288,13 +1335,9 @@ export async function createJob(
   // Do not let a following navigation abort the request. The mounted pending
   // marker clearing proves the action response landed; the exact visible job
   // number then proves the confirmed result replaced the draft.
-  await expect(pendingRow(page, options.jobNumber)).toHaveCount(0, {
-    timeout: 15_000,
-  });
+  await expect(pendingRow(page, options.jobNumber)).toHaveCount(0);
   const confirmedJobNumber = visibleText(page, options.jobNumber, true);
-  await expect(confirmedJobNumber).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(confirmedJobNumber).toBeVisible();
 }
 
 export async function createProject(
@@ -1316,13 +1359,11 @@ export async function createProject(
   const dialog = workCreateDialog(page);
   await workCreateTab(dialog, 'project').click();
   const projectNumberInput = dialog.locator('#create-project-number');
-  await expect(projectNumberInput).not.toHaveValue('', { timeout: 15_000 });
+  await expect(projectNumberInput).not.toHaveValue('');
   await projectNumberInput.fill(options.projectNumber);
   await dialog.locator('#create-project-name').fill(options.title);
   if (options.workTemplateName) {
-    await expect(workTemplateSelect(dialog, 'project')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplateSelect(dialog, 'project')).toBeVisible();
     await selectFromSearchable(page, workTemplateSelect(dialog, 'project'), options.workTemplateName);
   }
   if (options.clientName) {
@@ -1336,25 +1377,17 @@ export async function createProject(
       .click();
   }
   if (options.siteName) {
-    await expect(dialog.locator('#create-project-site')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(dialog.locator('#create-project-site')).toBeVisible();
     await selectFromSearchable(page, dialog.locator('#create-project-site'), options.siteName);
   }
   if (options.contactName) {
-    await expect(dialog.locator('#create-project-contact')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(dialog.locator('#create-project-contact')).toBeVisible();
     await selectFromSearchable(page, dialog.locator('#create-project-contact'), options.contactName);
   }
   await workCreateSubmit(dialog, 'project').click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expect(pendingRow(page, options.projectNumber)).toHaveCount(0, {
-    timeout: 15_000,
-  });
-  await expect(visibleText(page, options.projectNumber)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(pendingRow(page, options.projectNumber)).toHaveCount(0);
+  await expect(visibleText(page, options.projectNumber)).toBeVisible();
 }
 
 export async function createAndPublishWorkTemplate(
@@ -1379,10 +1412,10 @@ export async function createAndPublishWorkTemplate(
     await workTemplateProjectTargetOption(page).click();
   }
   await createDialog.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
-  await expect(createDialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(createDialog).toHaveCount(0);
 
   const editor = workTemplateDraftEditor(page, 1);
-  await expect(editor).toBeVisible({ timeout: 20_000 });
+  await expect(editor).toBeVisible();
   await workTemplateEditorAction(editor, 'addItem', { exact: true }).click();
   await workTemplateItemNames(editor).last().fill(options.firstItem);
   if (options.evidenceDescription) {
@@ -1412,7 +1445,7 @@ export async function createAndPublishWorkTemplate(
     );
   }
   await workTemplateEditorAction(editor, 'publish', { exact: true }).click();
-  await expect(editor).toHaveCount(0, { timeout: 20_000 });
+  await expect(editor).toHaveCount(0);
 }
 
 // P1-13: the work template list and editor.
@@ -1466,6 +1499,11 @@ export function workTemplateCreateDialog(page: Page): Locator {
 /** The create dialog's required name field. */
 export function workTemplateCreateNameField(dialog: Locator): Locator {
   return dialog.getByRole('textbox', { name: TEMPLATE_COPY.createName, exact: true });
+}
+
+/** The create dialog's description field or target picker. */
+export function workTemplateCreateField(dialog: Locator, field: 'description' | 'target'): Locator {
+  return dialog.locator(`#new-template-${field}`);
 }
 
 /** The create dialog's submit. */
@@ -1567,10 +1605,8 @@ export async function openFieldWorkPack(
   // may retain a hidden transition copy outside <main>; a document-wide test-id
   // lookup would then fail strict mode despite one user-visible work pack.
   const pack = page.getByRole('main').getByTestId('field-work-pack');
-  await expect(pack).toBeVisible({ timeout: 20_000 });
-  await expect(pack.getByTestId('field-work-pack-overview')).toHaveAttribute('data-realtime-ready', 'true', {
-    timeout: 20_000,
-  });
+  await expect(pack).toBeVisible();
+  await expect(pack.getByTestId('field-work-pack-overview')).toHaveAttribute('data-realtime-ready', 'true');
   return pack;
 }
 
@@ -1617,9 +1653,9 @@ export async function setInstructionCompletionOnJobPage(
 ): Promise<void> {
   const item = jobInstructionItem(page, label);
   const action = jobInstructionToggle(item, completed ? 'done' : 'open');
-  await expect(action).toBeEnabled({ timeout: 20_000 });
+  await expect(action).toBeEnabled();
   await action.click();
-  await expect(jobInstructionToggle(item, completed ? 'open' : 'done')).toBeEnabled({ timeout: 20_000 });
+  await expect(jobInstructionToggle(item, completed ? 'open' : 'done')).toBeEnabled();
 }
 
 export async function changeTimeOnWorkPack(page: Page, action: 'start' | 'stop' | 'switch'): Promise<void> {
@@ -1632,22 +1668,18 @@ export async function changeTimeOnWorkPack(page: Page, action: 'start' | 'stop' 
         : 'Zu diesem Auftrag wechseln';
   await pack.getByRole('button', { name: label, exact: true }).click();
   const expected = action === 'stop' ? 'Arbeitszeit starten' : 'Arbeitszeit beenden';
-  await expect(pack.getByRole('button', { name: label, exact: true })).toHaveCount(0, {
-    timeout: 20_000,
-  });
-  await expect(pack.getByRole('button', { name: expected, exact: true })).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(pack.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+  await expect(pack.getByRole('button', { name: expected, exact: true })).toBeVisible();
 }
 
 export async function reportOwnBlockerOnJobPage(page: Page, details: string): Promise<void> {
   const dialog = await addWorkBlocker(page, { reason: 'site_access', details });
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function resolveOwnBlockerOnJobPage(page: Page, reason: string): Promise<void> {
   const dialog = await confirmLifecycleReason(page, 'resolveBlocker', reason);
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function parkJobOnJobPage(
@@ -1659,7 +1691,7 @@ export async function parkJobOnJobPage(
 ): Promise<void> {
   await page.goto(`/auftraege/${encodeURIComponent(jobNumber)}`);
   const dialog = await parkWork(page, { reason: 'material', details, responsibleName, reviewDate });
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -1772,5 +1804,5 @@ export async function removeJobAssignment(
     page.getByRole('button', {
       name: `Zuweisung für ${employeeName} entfernen`,
     }),
-  ).toHaveCount(0, { timeout: 20_000 });
+  ).toHaveCount(0);
 }

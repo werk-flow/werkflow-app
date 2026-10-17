@@ -26,11 +26,26 @@ export function hashValue(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
-/** Files no test executes: agent and review tooling, and the ignore files that only shape this listing. */
-const AGENT_TOOLING_INPUTS: readonly string[] = ['.mcp.json', '.coderabbit.yaml'];
+/** Files no test executes: agent tooling, and the ignore files that only shape this listing. */
+const AGENT_TOOLING_INPUTS: readonly string[] = ['.mcp.json'];
+
+/**
+ * Files that wire the verification itself: the agent hooks that install the edit guard, and the
+ * review configuration. Until 2026-10-16 they sat under the documentation exemption, so a change
+ * that removed the guard needed neither a review nor a verification (audit finding B10).
+ */
+function isVerificationWiring(file: string): boolean {
+  return (
+    file === '.claude/settings.json' ||
+    file.startsWith('.claude/hooks/') ||
+    file === '.codex/hooks.json' ||
+    file === '.coderabbit.yaml'
+  );
+}
 
 /** Runtime Markdown/MDX remains an input; guidance, tooling and isolated research are exempt. */
 export function isDocumentationInput(file: string): boolean {
+  if (isVerificationWiring(file)) return false;
   return (
     (/\.(md|mdx)$/.test(file) && (file.startsWith('docs/') || file.startsWith('tests/'))) ||
     /^(AGENTS|CLAUDE|README)\.md$/i.test(file) ||

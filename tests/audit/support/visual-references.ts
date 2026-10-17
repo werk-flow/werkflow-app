@@ -102,6 +102,11 @@ async function normalizeText(
  * (`settled`: no skeleton, spinner, busy region or route refresh), fonts
  * loaded, the clock launcher ready.
  */
+/** The page body inside the main landmark, the content a reference waits for. */
+export function pageBody(main: Locator): Locator {
+  return main.locator('[data-page-body]');
+}
+
 export async function settlePage(page: Page, ready: Locator): Promise<void> {
   await expect(ready).toBeVisible();
   await settled(page);
@@ -161,7 +166,6 @@ export async function expectReference(
     scale: 'css',
     mask: [...(options.mask ?? [])],
     maxDiffPixelRatio: 0.002,
-    timeout: 15_000,
   });
   expect(await viewportText(page)).toMatchSnapshot(`${name}.txt`);
 }

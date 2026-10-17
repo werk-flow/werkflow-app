@@ -31,25 +31,43 @@ type RowActionsMenuProps = {
 
 type MenuPosition = Pick<CSSProperties, 'top' | 'right' | 'bottom'>;
 
+/** Below the trigger when the items fit there, otherwise above it. */
+function menuPosition(bounds: DOMRect, itemCount: number): MenuPosition {
+  const estimatedHeight = itemCount * 36 + 16;
+  const right = Math.max(8, window.innerWidth - bounds.right);
+  return window.innerHeight - bounds.bottom >= estimatedHeight || bounds.top < estimatedHeight
+    ? { top: bounds.bottom + 4, right }
+    : { bottom: window.innerHeight - bounds.top + 4, right };
+}
+
+/** Where the trigger stood when the menu was placed. */
+type TriggerAnchor = { top: number; left: number };
+
+/**
+ * A scroll event arrives a frame after its scroll: the one that brought the trigger into view
+ * before the click (a table scrolled sideways, a momentum scroll) must not close the menu it
+ * opened. Only a scroll that moved the trigger away from the placed menu closes it.
+ */
+function triggerInPlace(trigger: HTMLElement | null, anchor: TriggerAnchor | null): boolean {
+  const bounds = trigger?.getBoundingClientRect();
+  if (!bounds || !anchor) return false;
+  return Math.abs(bounds.top - anchor.top) < 1 && Math.abs(bounds.left - anchor.left) < 1;
+}
+
 export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProps) {
   const menuId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<MenuPosition>({ top: 0, right: 0 });
+  const anchorRef = useRef<TriggerAnchor | null>(null);
 
   function openMenu(): void {
     const trigger = triggerRef.current;
     if (!trigger) return;
     const bounds = trigger.getBoundingClientRect();
-    const estimatedHeight = actions.length * 36 + 16;
-    const right = Math.max(8, window.innerWidth - bounds.right);
-
-    setPosition(
-      window.innerHeight - bounds.bottom >= estimatedHeight || bounds.top < estimatedHeight
-        ? { top: bounds.bottom + 4, right }
-        : { bottom: window.innerHeight - bounds.top + 4, right },
-    );
+    anchorRef.current = { top: bounds.top, left: bounds.left };
+    setPosition(menuPosition(bounds, actions.length));
     setOpen(true);
   }
 
@@ -77,14 +95,18 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
       closeMenu();
     }
 
+    const handleScroll = (): void => {
+      if (!triggerInPlace(triggerRef.current, anchorRef.current)) closeMenu();
+    };
+
     document.addEventListener('pointerdown', handlePointerDown, true);
     window.addEventListener('resize', handleViewportChange);
-    window.addEventListener('scroll', handleViewportChange, true);
+    window.addEventListener('scroll', handleScroll, true);
     return () => {
       window.cancelAnimationFrame(frame);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('resize', handleViewportChange);
-      window.removeEventListener('scroll', handleViewportChange, true);
+      window.removeEventListener('scroll', handleScroll, true);
     };
   }, [open]);
 

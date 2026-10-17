@@ -56,6 +56,22 @@ describe('Playwright run policy', () => {
     ).toHaveLength(1);
   });
 
+  test('a fresh-world diagnostic names its failed run and nothing else', () => {
+    const fresh = {
+      lane: 'diagnostic',
+      suite: 'audit',
+      target: 'local',
+      grep: null,
+      reuseRunKey: null,
+    } as const;
+    expect(validateRunRequest({ ...fresh, freshForRunKey: 'run-1' })).toEqual([]);
+    expect(validateRunRequest({ ...fresh, freshForRunKey: 'run-1', grep: 'x' })).toHaveLength(1);
+    expect(validateRunRequest({ ...fresh, freshForRunKey: 'run-1', reuseRunKey: 'run-1' })).toHaveLength(1);
+    expect(validateRunRequest({ ...fresh, lane: 'iteration', grep: 'x', freshForRunKey: 'run-1' })).toEqual([
+      '--fresh-for is available only in diagnostic mode.',
+    ]);
+  });
+
   test('pins the canary suite to the cloud target', () => {
     expect(
       validateRunRequest({

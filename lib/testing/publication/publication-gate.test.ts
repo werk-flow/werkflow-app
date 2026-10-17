@@ -1,8 +1,10 @@
 // Rule test: a push needs a passing report and a review record for its tree.
 import { expect, test } from 'bun:test';
 import { hashValue, type InputSnapshot } from '../evidence/group-evidence';
+import { contentDigest } from '../evidence/source-content';
 import {
   publicationGateProblems,
+  reviewDigests,
   reviewedFiles,
   reviewRecordSchema,
   reviewScope,
@@ -17,6 +19,7 @@ const current: InputSnapshot = {
 };
 const report = {
   id: '2026-10-01T100000000Z-report',
+  mode: 'change' as const,
   target: 'local' as const,
   status: 'passed' as const,
   scope: 'all-required-groups' as const,
@@ -39,7 +42,48 @@ const ready = {
   reviews: [review],
   measuredGroups: [],
   measuredPasses: [],
+  production: false,
+  canaryReport: undefined,
 };
+
+test('a push to main needs a passing release plan and a passing cloud canary on the pushed tree', () => {
+  const canary = { ...report, id: '2026-10-01T110000000Z-canary', target: 'cloud' as const };
+  const production = { ...ready, production: true };
+  // A change plan that opens a preview push does not open production (audit finding B9).
+  expect(publicationGateProblems(production)).toEqual([
+    expect.stringContaining('bun run test:verify --mode release'),
+    expect.stringContaining('bun run test:verify --target cloud'),
+  ]);
+  const release = { ...report, mode: 'release' as const };
+  expect(publicationGateProblems({ ...production, newestReport: release, canaryReport: canary })).toEqual([]);
+  // The canary's own environment differs; its files must not.
+  expect(
+    publicationGateProblems({
+      ...production,
+      newestReport: release,
+      canaryReport: { ...canary, snapshot: { ...current, environment: hashValue('dev') } },
+    }),
+  ).toEqual([]);
+  const older = { ...current, files: { ...current.files, 'scripts/verify.ts': hashValue('older') } };
+  expect(
+    publicationGateProblems({
+      ...production,
+      newestReport: release,
+      canaryReport: { ...canary, snapshot: older },
+    }),
+  ).toEqual([
+    expect.stringContaining('Cloud canary 2026-10-01T110000000Z-canary passed on a different tree'),
+  ]);
+  for (const failing of [
+    { ...canary, status: 'failed' as const },
+    { ...canary, scope: 'selected-groups' as const },
+  ])
+    expect(publicationGateProblems({ ...production, newestReport: release, canaryReport: failing })).toEqual([
+      expect.stringContaining('needs a passing cloud canary'),
+    ]);
+  // A preview push asks for neither.
+  expect(publicationGateProblems({ ...ready, canaryReport: undefined })).toEqual([]);
+});
 
 test('a pushed product file a wall-clock group measures needs a passing run of that group on its current content', () => {
   const measured = {
@@ -162,4 +206,35 @@ test('a review scope reads its base, its committed flag and its folders from the
   const changed = ['lib/testing/a.ts', 'lib/testingx/b.ts', 'scripts/verify.ts', 'lib/testing/a.ts'];
   expect(reviewedFiles(changed, ['lib/testing'])).toEqual(['lib/testing/a.ts']);
   expect(reviewedFiles(changed, [])).toEqual(['lib/testing/a.ts', 'lib/testingx/b.ts', 'scripts/verify.ts']);
+});
+
+const contentDigestOf = (file: string, text: string): string => contentDigest(file, Buffer.from(text));
+
+test('a committed review certifies the content at HEAD, an uncommitted one the working tree', () => {
+  const committed = new Map([['docs/a.txt', Buffer.from('committed')]]);
+  const working = new Map([
+    ['docs/a.txt', Buffer.from('edited after the commit')],
+    ['docs/b.txt', Buffer.from('new')],
+  ]);
+  const readers = {
+    readWorkingTree: (file: string) => working.get(file),
+    readCommitted: (file: string) => committed.get(file),
+  };
+  const changed = ['docs/a.txt', 'docs/b.txt'];
+  // The uncommitted edit beside a committed review is not what CodeRabbit compared (audit finding B8).
+  expect(
+    reviewDigests({
+      ...readers,
+      changed,
+      scope: reviewScope(['review', '--committed', '--base-commit', 'x']),
+    }),
+  ).toEqual({ 'docs/a.txt': contentDigestOf('docs/a.txt', 'committed') });
+  expect(reviewDigests({ ...readers, changed, scope: reviewScope(['review']) })).toEqual({
+    'docs/a.txt': contentDigestOf('docs/a.txt', 'edited after the commit'),
+    'docs/b.txt': contentDigestOf('docs/b.txt', 'new'),
+  });
+  // A directory pass certifies its folder only.
+  expect(
+    Object.keys(reviewDigests({ ...readers, changed, scope: reviewScope(['review', '--dir', 'lib']) })),
+  ).toEqual([]);
 });

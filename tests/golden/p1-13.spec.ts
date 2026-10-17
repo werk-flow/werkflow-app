@@ -71,7 +71,6 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
             (await getAppliedWorkTemplateState(world.orgId, { jobNumber: firstJobNumber })).instructions.find(
               (item) => item.content === 'Anlage prüfen',
             )?.is_completed,
-          { timeout: 20_000 },
         )
         .toBe(true);
       await employeePage.reload();
@@ -84,12 +83,12 @@ test.describe('P1-13 versioned work templates @P1-13', () => {
       await workTemplateOpenButton(adminPage).click();
       let editor = adminPage.getByRole('dialog');
       await workTemplateEditorAction(editor, 'newVersion').click();
-      await expect(editor).toHaveCount(0, { timeout: 15_000 });
+      await expect(editor).toHaveCount(0);
       await workTemplateOpenButton(adminPage).click();
       editor = adminPage.getByRole('dialog');
       await (await inputByValue(editor, SHARED_COPY.field.name, checkPoint)).fill(changedCheckPoint);
       await workTemplateEditorAction(editor, 'publish').click();
-      await expect(editor).toHaveCount(0, { timeout: 20_000 });
+      await expect(editor).toHaveCount(0);
       const state = await getWorkTemplateStateByName(world.orgId, name);
       expect(state.versions.map((version) => [version.version_number, version.status])).toEqual([
         [1, 'published'],

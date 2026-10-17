@@ -88,29 +88,24 @@ const client = {
 // earlier one, so the mocked scenario runs in its own process.
 const ISOLATED = process.env.ATTENTION_COUNT_READS_ISOLATED === '1';
 
-// The child Bun test process takes several seconds under host load; the 5 s default cuts it off.
-test.skipIf(ISOLATED)(
-  'the attention count read cases pass in an isolated process',
-  async () => {
-    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
-      env: { ...process.env, ATTENTION_COUNT_READS_ISOLATED: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(
-      status,
-      `${stdout}
+test.skipIf(ISOLATED)('the attention count read cases pass in an isolated process', async () => {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+    env: { ...process.env, ATTENTION_COUNT_READS_ISOLATED: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(
+    status,
+    `${stdout}
 ${stderr}`,
-    ).toBe(0);
-    expect(stderr).toContain('4 pass');
-  },
-  30_000,
-);
+  ).toBe(0);
+  expect(stderr).toContain('4 pass');
+});
 
 if (ISOLATED) {
   mock.module('server-only', () => ({}));

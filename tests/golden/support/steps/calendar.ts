@@ -157,19 +157,38 @@ export async function openPlanningCreationDialog(page: Page): Promise<Locator> {
   await page.goto('/kalender');
   await calendarNewEntryButton(page).click();
   const dialog = calendarEntryDialog(page);
-  await expect(entryDialogTab(dialog, 'plan')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(entryDialogTab(dialog, 'plan')).toBeVisible();
   await entryDialogTab(dialog, 'plan').click();
-  await expect(dialog.locator('#planning-date')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(dialog.locator('#planning-date')).toBeVisible();
   return dialog;
 }
 
 /** The title field of an internal entry in the planning form. */
 export function planningTitleField(dialog: Locator): Locator {
   return dialog.locator('#planning-title');
+}
+
+/** Fields of the planning, edit and status dialogs, by their DOM id. */
+const PLANNING_FIELD_IDS = {
+  date: 'planning-date',
+  teams: 'planning-teams',
+  internalType: 'planning-internal-type',
+  timeKind: 'planning-time-kind',
+  frequency: 'planning-frequency',
+  count: 'planning-count',
+  override: 'planning-override',
+  editScope: 'planning-edit-scope',
+  statusReason: 'planning-status-reason',
+} as const;
+
+/** A field of an open planning dialog. */
+export function planningField(dialog: Locator, field: keyof typeof PLANNING_FIELD_IDS): Locator {
+  return dialog.locator(`#${PLANNING_FIELD_IDS[field]}`);
+}
+
+/** The person picker of the board's move popover. */
+export function popoverMovePersonPicker(popover: Locator): Locator {
+  return popover.locator('#popover-move-person');
 }
 
 /** Types the planning form's date (YYYY-MM-DD). */
@@ -254,7 +273,7 @@ export function planningWarningRevert(warning: Locator): Locator {
 export async function confirmPlanningWarning(page: Page, reason: string, required = true): Promise<void> {
   const warning = planningWarningDialog(page);
   if (required) {
-    await expect(warning).toBeVisible({ timeout: 30_000 });
+    await expect(warning).toBeVisible();
   } else {
     // isVisible ignores its timeout; the warning opens after the planning check answers.
     const appeared = await warning.waitFor({ state: 'visible', timeout: 2_000 }).then(
@@ -265,7 +284,7 @@ export async function confirmPlanningWarning(page: Page, reason: string, require
   }
   await planningWarningReason(warning).fill(reason);
   await planningWarningSave(warning).click();
-  await expect(warning).toHaveCount(0, { timeout: 20_000 });
+  await expect(warning).toHaveCount(0);
 }
 
 export function plannedEntriesConfirmation(page: Page, occurrenceCount: number): Locator {
@@ -320,20 +339,17 @@ async function finishPlanningSave(
   if (!overrideReason) await beforeSubmit?.();
   await dialog.getByRole('button', { name: firstButtonName }).click();
   await expect
-    .poll(
-      async () => {
-        if (!(await dialog.isVisible().catch(() => false))) return 'closed';
-        if (
-          await planningWarningPanel(dialog)
-            .isVisible()
-            .catch(() => false)
-        ) {
-          return 'warning';
-        }
-        return 'pending';
-      },
-      { timeout: 30_000 },
-    )
+    .poll(async () => {
+      if (!(await dialog.isVisible().catch(() => false))) return 'closed';
+      if (
+        await planningWarningPanel(dialog)
+          .isVisible()
+          .catch(() => false)
+      ) {
+        return 'warning';
+      }
+      return 'pending';
+    })
     .not.toBe('pending');
 
   if (!(await dialog.isVisible().catch(() => false))) {
@@ -355,7 +371,7 @@ async function finishPlanningSave(
       name: PLANNING_COPY.overrideSubmit,
     })
     .click();
-  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function createPlannedCalendarEntry(
@@ -553,7 +569,7 @@ export async function showPlanningMonth(page: Page, targetDate?: string): Promis
   await calendarViewTab(page, 'month').click();
   await expect(
     page.locator('[data-calendar-scroll-container][data-calendar-state="ready"][data-calendar-view="month"]'),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
   if (targetDate)
     await expect(page.locator(`[data-month-cell="${targetDate}"][data-in-month="true"]`)).toBeVisible();
 }
@@ -581,11 +597,11 @@ export async function openOccurrenceEditDialogByDate(
 ): Promise<Locator> {
   await showPlanningMonth(page, dateIso);
   const event = occurrenceInDateCell(page, dateIso, title);
-  await expect(event).toBeVisible({ timeout: 20_000 });
+  await expect(event).toBeVisible();
   await event.click();
   await occurrenceEditButton(page).click();
   const dialog = occurrenceEditDialog(page);
-  await expect(dialog).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toBeVisible();
   return dialog;
 }
 
@@ -625,25 +641,22 @@ export async function addOccurrenceAssignee(page: Page, dialog: Locator, searchT
 export async function saveOccurrenceEditWithOverride(dialog: Locator, overrideReason: string): Promise<void> {
   await dialog.getByRole('button', { name: PLANNING_COPY.editSubmit }).click();
   await expect
-    .poll(
-      async () => {
-        if (!(await dialog.isVisible().catch(() => false))) return 'closed';
-        if (
-          await planningWarningPanel(dialog)
-            .isVisible()
-            .catch(() => false)
-        ) {
-          return 'warning';
-        }
-        return 'pending';
-      },
-      { timeout: 30_000 },
-    )
+    .poll(async () => {
+      if (!(await dialog.isVisible().catch(() => false))) return 'closed';
+      if (
+        await planningWarningPanel(dialog)
+          .isVisible()
+          .catch(() => false)
+      ) {
+        return 'warning';
+      }
+      return 'pending';
+    })
     .not.toBe('pending');
   if (!(await dialog.isVisible().catch(() => false))) return;
   await dialog.locator('#planning-edit-reason').fill(overrideReason);
   await dialog.getByRole('button', { name: PLANNING_COPY.editOverrideSubmit }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 30_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function editPlannedCalendarOccurrence(
@@ -661,7 +674,7 @@ export async function editPlannedCalendarOccurrence(
 ): Promise<void> {
   await showPlanningMonth(page, options.calendarDate);
   const event = plannedCalendarEvent(page, options.title, options.eventIndex ?? 0);
-  await expect(event).toBeVisible({ timeout: 20_000 });
+  await expect(event).toBeVisible();
   await event.click();
   await occurrenceEditButton(page).click();
   const dialog = occurrenceEditDialog(page);

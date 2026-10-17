@@ -6,7 +6,7 @@ import { DOCUMENT_LIBRARY_TITLE } from '../../golden/support/steps/documents';
 import { loginSubmitButton } from '../../golden/support/steps/organization';
 import { SERVICE_AREA_HEADER } from '../../golden/support/steps/service';
 import { TIME_AREA_HEADER } from '../../golden/support/steps/time-tracking';
-import { DESKTOP, PHONE, expectReference, settlePage } from '../support/visual-references';
+import { DESKTOP, PHONE, expectReference, pageBody, settlePage } from '../support/visual-references';
 import {
   VISUAL_NAMES,
   prepareVisualWorld,
@@ -113,7 +113,7 @@ async function expectFamilyReferences(
     await expect(main.getByRole('heading', { level: 1, name: family.heading, exact: true })).toBeVisible();
     if (family.title)
       await expect(main.getByRole('heading', { level: 2, name: family.title, exact: true })).toBeVisible();
-    await settlePage(page, main.locator('[data-page-body]'));
+    await settlePage(page, pageBody(main));
   };
   const options = { clockText: family.clockText ?? true };
   await page.emulateMedia({ colorScheme: 'light' });

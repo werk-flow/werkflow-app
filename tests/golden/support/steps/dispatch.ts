@@ -79,9 +79,12 @@ const BATCH_PREVIEW_NOTICES = {
 export async function openDispatchPanel(page: Page, calendarDate?: string): Promise<void> {
   await showPlanningMonth(page, calendarDate);
   await page.getByRole('main').getByTestId('dispatch-panel-toggle').click();
-  await expect(dispatchPanel(page)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(dispatchPanel(page)).toBeVisible();
+}
+
+/** Proves the panel toggle exists nowhere in the DOM: a field worker never sees the dispatch surface. */
+export async function expectNoDispatchPanelToggle(page: Page): Promise<void> {
+  await expect(page.getByTestId('dispatch-panel-toggle')).toHaveCount(0);
 }
 
 // The dispatch panel has a stable state hook; its landmark is the complementary region.
@@ -119,12 +122,10 @@ export function dispatchSendButton(scope: Locator): Locator {
 /** Opens the issue dialog of the panel row and waits until its readiness picture loaded. */
 export async function openIssueDialogForPanelRow(page: Page, title: string): Promise<Locator> {
   const row = dispatchOccurrenceRow(page, title);
-  await expect(row).toBeVisible({ timeout: 20_000 });
+  await expect(row).toBeVisible();
   await dispatchSendButton(row).click();
   const dialog = dispatchIssueDialog(page);
-  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible();
   return dialog;
 }
 
@@ -150,18 +151,14 @@ export async function issueDispatchForOccurrence(
   beforeSubmit?: () => void | Promise<void>,
 ): Promise<void> {
   const row = dispatchOccurrenceRow(page, title).first();
-  await expect(row).toBeVisible({ timeout: 20_000 });
+  await expect(row).toBeVisible();
   await dispatchSendButton(row).click();
   const dialog = dispatchIssueDialog(page);
-  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible();
   await beforeSubmit?.();
   await dispatchSendButton(dialog).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(row.locator('[data-recipient-state]').first()).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(row.locator('[data-recipient-state]').first()).toBeVisible();
 }
 
 /** The note a dispatch card shows: „Hinweis: …“. */
@@ -202,19 +199,15 @@ export async function expectDispatchStateOnJobPage(
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
   const section = jobDispatchSection(page);
-  await expect(section.locator(`[data-dispatch-state="${state}"]`)).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(section.locator(`[data-dispatch-state="${state}"]`)).toBeVisible();
 }
 
 export async function acknowledgeDispatchOnJobPage(page: Page, jobNumber: string): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
   const section = jobDispatchSection(page);
-  await expect(section).toBeVisible({ timeout: 20_000 });
+  await expect(section).toBeVisible();
   await acknowledgeDispatchButton(section).click();
-  await expect(section.locator('[data-dispatch-state="bestaetigt"]')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(section.locator('[data-dispatch-state="bestaetigt"]')).toBeVisible();
 }
 
 /** A reason dialog of the dispatch surfaces, named by its heading. */
@@ -222,12 +215,54 @@ export function dispatchReasonDialog(page: Page, kind: keyof typeof REASON_DIALO
   return page.getByRole('dialog').filter({ has: page.getByRole('heading', { name: REASON_DIALOGS[kind] }) });
 }
 
+/** The reason field of an open dispatch reason dialog. */
+export function dispatchReasonField(dialog: Locator): Locator {
+  return dialog.locator('#dispatch-reason-dialog');
+}
+
+/** The optional note of the issue dialog that travels with the dispatch. */
+export function dispatchNoteField(dialog: Locator): Locator {
+  return dialog.locator('#dispatch-note');
+}
+
+/** The job's dispatch card while the dispatch has this state (`ausstehend`, `bestaetigt`, `rueckfrage`). */
+export function dispatchStateCard(section: Locator, state: string): Locator {
+  return confirmed(section.locator(`[data-dispatch-state="${state}"]`));
+}
+
+/** A recipient's state on a dispatch row; without a state, every recipient state. */
+export function dispatchRecipientState(row: Locator, state?: string): Locator {
+  return row.locator(state ? `[data-recipient-state="${state}"]` : '[data-recipient-state]');
+}
+
+/** The readiness dimensions of the issue dialog that have this state. */
+export function readinessDimensionsInState(dialog: Locator, state: 'ok' | 'warning' | 'unknown'): Locator {
+  return dialog.locator(`[data-readiness-state="${state}"]`);
+}
+
+/** The icon of one readiness dimension, by the state it shows. */
+export function readinessIcon(dimension: Locator, icon: 'ok' | 'warning' | 'unknown'): Locator {
+  return dimension.locator(`[data-readiness-icon="${icon}"]`);
+}
+
+/** The Parkplatz context line of a card; with `set`, only once the context is recorded. */
+export function parkingContextLine(card: Locator, state?: 'set'): Locator {
+  return confirmed(card.locator(state ? `[data-parking-context="${state}"]` : '[data-parking-context]'));
+}
+
+/** The commitment marker of a dispatch row; with a value, only while it is or is not a mismatch. */
+export function commitmentMismatchMarker(row: Locator, mismatch?: boolean): Locator {
+  return row.locator(
+    mismatch === undefined ? '[data-commitment-mismatch]' : `[data-commitment-mismatch="${mismatch}"]`,
+  );
+}
+
 /** Fills and sends the challenge dialog that the dispatch card's challenge action opened. */
 export async function submitDispatchChallenge(page: Page, reason: string): Promise<void> {
   const dialog = dispatchReasonDialog(page, 'challenge');
   await dialog.locator('#dispatch-challenge-reason').fill(reason);
   await dialog.getByRole('button', { name: DISPATCH_COPY.challengeSend }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function challengeDispatchOnJobPage(
@@ -237,12 +272,10 @@ export async function challengeDispatchOnJobPage(
 ): Promise<void> {
   await page.goto(`/auftraege/${jobNumber}`);
   const section = jobDispatchSection(page);
-  await expect(section).toBeVisible({ timeout: 20_000 });
+  await expect(section).toBeVisible();
   await challengeDispatchButton(section).click();
   await submitDispatchChallenge(page, reason);
-  await expect(section.locator('[data-dispatch-state="rueckfrage"]')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(section.locator('[data-dispatch-state="rueckfrage"]')).toBeVisible();
 }
 
 export async function resolveDispatchChallengeInPanel(page: Page, reason: string): Promise<void> {
@@ -251,7 +284,7 @@ export async function resolveDispatchChallengeInPanel(page: Page, reason: string
   const dialog = dispatchReasonDialog(page, 'keepPlan');
   await dialog.locator('#dispatch-reason-dialog').fill(reason);
   await dialog.getByRole('button', { name: DISPATCH_COPY.keep, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** The row action that opens a withdraw dialog. */
@@ -268,9 +301,7 @@ export async function openParkplatzPanel(page: Page): Promise<void> {
   await page.goto('/kalender');
   // The button's accessible name includes the live count badge.
   await parkplatzButton(page).click();
-  await expect(page.locator('[data-parkplatz-panel]')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.locator('[data-parkplatz-panel]')).toBeVisible();
 }
 
 export function parkplatzCard(page: Page, title: string): Locator {
@@ -295,18 +326,16 @@ export async function dispatchParkedJobFromParkplatz(
   options: { jobTitle: string; recipientName: string },
 ): Promise<void> {
   const card = parkplatzCard(page, options.jobTitle);
-  await expect(card).toBeVisible({ timeout: 20_000 });
+  await expect(card).toBeVisible();
   await parkplatzDispatchButton(card).click();
   const dialog = dispatchIssueDialog(page);
-  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible();
   await searchDispatchRecipients(page, dialog, options.recipientName);
   const recipient = dispatchRecipientOption(page, options.recipientName);
   if ((await recipient.getAttribute('aria-selected')) !== 'true') await recipient.click();
   await dialog.getByRole('heading').click();
   await dispatchSendButton(dialog).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** The context dialog that a park by drag opens before anything is persisted. */
@@ -332,6 +361,11 @@ export async function fillParkingContext(
   await typeIntoDatePickerById(dialog, 'parking-review-date', input.reviewDate);
 }
 
+/** A field of the Parkplatz context dialog. */
+export function parkingContextField(dialog: Locator, field: 'reason' | 'note' | 'responsible'): Locator {
+  return dialog.locator(`#parking-${field}`);
+}
+
 export function parkingContextSave(dialog: Locator): Locator {
   return dialog.getByRole('button', { name: DISPATCH_COPY.saveParkingContext, exact: true });
 }
@@ -344,6 +378,11 @@ export function commitmentDialog(page: Page): Locator {
   return page.getByRole('dialog').filter({
     has: page.getByRole('heading', { name: DISPATCH_COPY.commitmentDialog }),
   });
+}
+
+/** The channel picker of the commitment dialog. */
+export function commitmentSourceField(dialog: Locator): Locator {
+  return dialog.locator('#commitment-source');
 }
 
 export function commitmentSubmit(dialog: Locator): Locator {
@@ -364,11 +403,11 @@ export function commitmentSummaryText(germanDate: string, from: string, to: stri
 // prefills the occurrence's Berlin date). Recording sends NO message.
 export async function recordCommitmentForOccurrence(page: Page, title: string): Promise<void> {
   const row = dispatchOccurrenceRow(page, title).first();
-  await expect(row).toBeVisible({ timeout: 20_000 });
+  await expect(row).toBeVisible();
   await row.getByRole('button', { name: DISPATCH_COPY.recordAnyCommitment }).click();
   const dialog = commitmentDialog(page);
   await commitmentSubmit(dialog).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 /** The panel's switch into batch selection. */
@@ -390,6 +429,16 @@ export function checkBatchImpactButton(panel: Locator): Locator {
 /** The batch form's reason field. */
 export function batchReasonField(panel: Locator): Locator {
   return panel.locator('#batch-reason');
+}
+
+/** The batch form's whole-day shift field. */
+export function batchDayShiftField(panel: Locator): Locator {
+  return panel.locator('#batch-day-shift');
+}
+
+/** The occurrences the batch preview lists, in its order. */
+export function batchPreviewItems(preview: Locator): Locator {
+  return confirmed(preview.locator('[data-batch-preview-item]'));
 }
 
 export function batchShiftMissingError(panel: Locator): Locator {
@@ -443,7 +492,7 @@ export async function startBatchRescheduleInPanel(
   await panel.locator('#batch-reason').fill(options.reason);
   await checkBatchImpactButton(panel).click();
   const preview = batchPreviewDialog(page);
-  await expect(preview).toBeVisible({ timeout: 30_000 });
+  await expect(preview).toBeVisible();
   return preview;
 }
 
@@ -458,18 +507,15 @@ export async function confirmBatchReschedule(
   await moveNowButton(preview).click();
   const warning = planningWarningDialog(page);
   await expect
-    .poll(
-      async () => {
-        if (await warning.isVisible().catch(() => false)) return 'warning';
-        if (!(await preview.isVisible().catch(() => false))) return 'closed';
-        return 'pending';
-      },
-      { timeout: 30_000 },
-    )
+    .poll(async () => {
+      if (await warning.isVisible().catch(() => false)) return 'warning';
+      if (!(await preview.isVisible().catch(() => false))) return 'closed';
+      return 'pending';
+    })
     .not.toBe('pending');
   if (await warning.isVisible().catch(() => false)) {
     await planningWarningReason(warning).fill(overrideReason);
     await planningWarningSave(warning).click();
   }
-  await expect(preview).toHaveCount(0, { timeout: 30_000 });
+  await expect(preview).toHaveCount(0);
 }

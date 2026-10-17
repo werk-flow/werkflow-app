@@ -70,7 +70,7 @@ function runtimeToolingImportProblems(repositoryRoot: string): string[] {
 // This whole-repository AST census measured 6.1 s on Windows; it is not a latency contract.
 test('application runtime cannot import command-only modules excluded from build identity', () => {
   expect(runtimeToolingImportProblems(resolve(import.meta.dir, '../../..'))).toEqual([]);
-}, 15_000);
+});
 
 test('root runtime entries receive the same tooling import protection as app files', () => {
   const root = fixture();

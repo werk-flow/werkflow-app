@@ -15,6 +15,7 @@ import {
   documentFileInputs,
   documentLibraryTrashButton,
   documentOpenButton,
+  documentViewerFrame,
   documentViewerHeading,
   visibleDocumentName,
 } from '../../golden/support/steps/documents';
@@ -37,6 +38,7 @@ import {
   requestCloseSubmit,
   requestConvertButton,
   requestDocumentTrashedMessage,
+  requestField,
   requestsNavLink,
   searchRequests,
   setRequestStatusFromDetail,
@@ -152,20 +154,14 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
         throw new Error('The request-number suggestion read was not intercepted within 15 seconds.');
       }
       const dialog = bueroPage.getByRole('dialog');
-      await dialog.locator('#request-summary').fill(summary);
-      await dialog.locator('#request-number').fill(requestNumber);
-      const suggestionResponse = bueroPage.waitForResponse((response) => isSuggestion(response.url()), {
-        timeout: 15_000,
-      });
+      await requestField(dialog, 'summary').fill(summary);
+      await requestField(dialog, 'number').fill(requestNumber);
+      const suggestionResponse = bueroPage.waitForResponse((response) => isSuggestion(response.url()));
       releaseSuggestion();
       await suggestionResponse;
-      await expect(dialog.locator('#request-number')).toHaveValue(requestNumber, {
-        timeout: 15_000,
-      });
+      await expect(requestField(dialog, 'number')).toHaveValue(requestNumber);
       await requestCaptureButton(dialog).click();
-      await bueroPage.waitForURL(/\/anfragen\/[0-9a-f-]{36}/, {
-        timeout: 20_000,
-      });
+      await bueroPage.waitForURL(/\/anfragen\/[0-9a-f-]{36}/);
     } finally {
       releaseSuggestion();
       await bueroPage.unroute('**/api/background-read?*');
@@ -238,8 +234,8 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     await bueroPage.goto('/anfragen');
     await requestCaptureButton(bueroPage).click();
     const dialog = bueroPage.getByRole('dialog');
-    await expect(dialog.locator('#request-received-at-date')).toBeVisible();
-    await expectSelectOptions(bueroPage, dialog.locator('#request-category'), [
+    await expect(requestField(dialog, 'receivedAtDate')).toBeVisible();
+    await expectSelectOptions(bueroPage, requestField(dialog, 'category'), [
       REQUEST_CATEGORY_LABELS.notfall,
       REQUEST_CATEGORY_LABELS.stoerung_reparatur,
       REQUEST_CATEGORY_LABELS.wartung,
@@ -249,19 +245,19 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       REQUEST_CATEGORY_LABELS.allgemeine_frage,
       REQUEST_CATEGORY_LABELS.sonstiges,
     ]);
-    await expectSelectOptions(bueroPage, dialog.locator('#request-urgency'), [
+    await expectSelectOptions(bueroPage, requestField(dialog, 'urgency'), [
       REQUEST_URGENCY_LABELS.niedrig,
       REQUEST_URGENCY_LABELS.normal,
       REQUEST_URGENCY_LABELS.hoch,
       REQUEST_URGENCY_LABELS.notfall,
     ]);
-    await expectSelectOptions(bueroPage, dialog.locator('#request-source'), [
+    await expectSelectOptions(bueroPage, requestField(dialog, 'source'), [
       REQUEST_SOURCE_LABELS.telefon,
       REQUEST_SOURCE_LABELS.email,
       REQUEST_SOURCE_LABELS.vor_ort,
       REQUEST_SOURCE_LABELS.sonstiges,
     ]);
-    await dialog.locator('#request-assignee').click();
+    await requestField(dialog, 'assignee').click();
     const assigneeListbox = bueroPage.getByRole('listbox');
     await expect(assigneeListbox).toBeVisible();
     await expect(noAssigneeOption(assigneeListbox)).toBeVisible();
@@ -324,25 +320,17 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     );
     await documentOpenButton(adminPage, 'upload-fixture').click();
     const viewer = adminPage.getByRole('dialog');
-    await expect(documentViewerHeading(adminPage, 'upload-fixture')).toBeVisible({
-      timeout: 20_000,
-    });
-    await expect(viewer.locator('iframe[title*="upload-fixture"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(documentViewerHeading(adminPage, 'upload-fixture')).toBeVisible();
+    await expect(documentViewerFrame(viewer, 'upload-fixture')).toBeVisible();
     await dismissDialog(viewer);
     await expect(viewer).toHaveCount(0);
 
     await moveRequestDocumentToTrash(adminPage, 'upload-fixture');
-    await expect(requestDocumentTrashedMessage(adminPage)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(requestDocumentTrashedMessage(adminPage)).toBeVisible();
     await expect(documentOpenButton(adminPage, 'upload-fixture')).toHaveCount(0);
     await adminPage.goto('/dokumente');
     await documentLibraryTrashButton(adminPage).click();
-    await expect(visibleDocumentName(adminPage, 'upload-fixture')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleDocumentName(adminPage, 'upload-fixture')).toBeVisible();
   });
 
   test('A2-R03: Abschlussgründe sind verpflichtend; umgewandelte Anfragen sind schreibgeschützt', async ({
@@ -373,26 +361,24 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     await requestCloseButton(bueroPage).click();
     const closeDialog = bueroPage.getByRole('dialog');
     await expect(requestCloseReasonLabel(closeDialog)).toBeVisible();
-    await expectSelectOptions(bueroPage, closeDialog.locator('#close-reason'), [
+    await expectSelectOptions(bueroPage, requestField(closeDialog, 'closeReason'), [
       REQUEST_CLOSE_REASON_LABELS.kein_bedarf,
       REQUEST_CLOSE_REASON_LABELS.abgelehnt,
       REQUEST_CLOSE_REASON_LABELS.duplikat,
       REQUEST_CLOSE_REASON_LABELS.anderweitig_geloest,
       REQUEST_CLOSE_REASON_LABELS.sonstiges,
     ]);
-    await expect(closeDialog.locator('#close-reason')).not.toHaveText('');
-    await closeDialog.locator('#close-reason').click();
+    await expect(requestField(closeDialog, 'closeReason')).not.toHaveText('');
+    await requestField(closeDialog, 'closeReason').click();
     await bueroPage.getByRole('option', { name: REQUEST_CLOSE_REASON_LABELS.duplikat, exact: true }).click();
     await requestCloseSubmit(closeDialog).click();
-    await expect(closeDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(closeDialog).toHaveCount(0);
     await bueroPage.reload();
     await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.closedWithoutWork)).toBeVisible();
     await expect(visibleText(bueroPage, REQUEST_CLOSE_REASON_LABELS.duplikat)).toBeVisible();
 
     await bueroPage.goto(`/anfragen/${convertedRequestId}`);
-    await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.converted)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(bueroPage, REQUEST_DETAIL_TEXT.converted)).toBeVisible();
     await expect(requestConvertButton(bueroPage)).toHaveCount(0);
     await expect(bueroPage.getByRole('button', { name: SHARED_COPY.action.edit })).toHaveCount(0);
     await expect(bueroPage.getByRole('button', { name: SHARED_COPY.action.close })).toHaveCount(0);
@@ -435,23 +421,21 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     await adminPage.goto(`/anfragen/${requestId}`);
     await requestConvertButton(adminPage).click();
     const dialog = adminPage.getByRole('dialog');
-    await expect(dialog.locator('#convert-title')).toHaveValue(summary);
-    await expect(dialog.locator('#convert-description')).toHaveValue(details);
+    await expect(requestField(dialog, 'convertTitle')).toHaveValue(summary);
+    await expect(requestField(dialog, 'convertDescription')).toHaveValue(details);
     await expect(dialog.getByRole('combobox').filter({ hasText: customer })).toBeVisible();
-    await expect(dialog.locator('#convert-site')).toContainText(site);
-    await expect(dialog.locator('#convert-contact')).toContainText(contact);
-    await expect(dialog.locator('#convert-priority')).toContainText(JOB_PRIORITY_LABELS.hoch);
-    await expect(dialog.locator('#convert-date')).toContainText(REQUEST_DETAIL_TEXT.noPlannedDate);
+    await expect(requestField(dialog, 'convertSite')).toContainText(site);
+    await expect(requestField(dialog, 'convertContact')).toContainText(contact);
+    await expect(requestField(dialog, 'convertPriority')).toContainText(JOB_PRIORITY_LABELS.hoch);
+    await expect(requestField(dialog, 'convertDate')).toContainText(REQUEST_DETAIL_TEXT.noPlannedDate);
     await expect(dialog.getByText(REQUEST_DETAIL_TEXT.noAutomaticScheduling)).toBeVisible();
-    await dialog.locator('#convert-title').fill(editedTitle);
-    await dialog.locator('#convert-description').fill(editedDescription);
-    await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, {
-      timeout: 15_000,
-    });
+    await requestField(dialog, 'convertTitle').fill(editedTitle);
+    await requestField(dialog, 'convertDescription').fill(editedDescription);
+    await expect(requestField(dialog, 'convertNumber')).toHaveValue(/.+/);
     await convertToJobSubmit(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     const jobLink = convertedJobLink(adminPage);
-    await expect(jobLink).toBeVisible({ timeout: 15_000 });
+    await expect(jobLink).toBeVisible();
     await jobLink.click();
     await expect(visibleText(adminPage, editedTitle)).toBeVisible();
     await expect(visibleText(adminPage, editedDescription)).toBeVisible();

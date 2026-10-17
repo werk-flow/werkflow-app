@@ -94,9 +94,11 @@ export async function expectPhoneLayout(
   if (heading) await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
   await testInfo.attach('phone-layout', { body: await page.screenshot(), contentType: 'image/png' });
   await expectPhoneMeasures(page, route);
-  expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
   await expectCurrentAreaItemInView(page, route);
   await expectMainThreadSettles(page, route);
+  // Measured on the settled page only: on 2026-10-09 the check met two /kalender board cells of a
+  // render still in flight, which the screenshot of the finished agenda no longer showed.
+  expect(await controlsUnderClockAtEnd(page), `${route}: a control stays under the clock button`).toEqual([]);
   await expectNothingMovesAfterUsable(page, route, testInfo);
 }
 
@@ -177,12 +179,15 @@ export async function expectMainThreadSettles(page: Page, route: string): Promis
 // The clock button floats over the bottom right of every page. Scrolled to its
 // end, the page body must leave every control clear of it: the service lists'
 // fixed create buttons sat underneath it on phones (rendered review of 2026-10-02).
+// The scroll can mount content (lazy rows), so the boxes are read two frames after it.
 async function controlsUnderClockAtEnd(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const body = document.querySelector<HTMLElement>('[data-page-body]');
     const clock = document.querySelector<HTMLElement>('[data-clock-fab]');
     if (!body || !clock) return [];
     body.scrollTop = body.scrollHeight;
+    for (let frame = 0; frame < 2; frame++)
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const cover = clock.getBoundingClientRect();
     return Array.from(
       document.querySelectorAll<HTMLElement>('main a, main button, main input, main [role="combobox"]'),

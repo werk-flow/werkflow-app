@@ -37,4 +37,4 @@ test('a surface describes a failure code through describeFailure', () => {
     [...offending].map(([file, lines]) => `${file}:${lines.join(',')}`),
     'Use describeFailure(code, areaMessages, fallback) from lib/action-messages.ts; list only the codes the area owns.',
   ).toEqual([]);
-}, 60_000);
+});

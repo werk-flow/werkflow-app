@@ -308,9 +308,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     // Büro has no stored entitlement: the approver sees the labeled exception
     // instead of an invented number, and may still decide deliberately.
     await openVacationApprovals(adminPage);
-    await expect(visibleText(adminPage, VACATION_COPY.noEntitlement)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, VACATION_COPY.noEntitlement)).toBeVisible();
     await approveVacationRequestFor(adminPage, bueroName);
     const bueroState = await getLatestVacationRequestState(world.orgId, bueroRecord.id);
     expect(bueroState.startDate).toBe(bueroStartIso);
@@ -327,7 +325,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     const releaseBuero = await freezeLiveUpdates(bueroPage);
     await openVacationApprovals(bueroPage);
     const staleApproveButton = approveVacationButton(bueroPage, employeeName);
-    await expect(staleApproveButton).toBeVisible({ timeout: 15_000 });
+    await expect(staleApproveButton).toBeVisible();
 
     // The owner narrows leave_approval to the admin alone while Büro still
     // shows the stale approval card. The click must be denied by action-time
@@ -340,9 +338,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     await confirmResponsibilityPreview(adminPage);
 
     await staleApproveButton.click();
-    await expect(visibleText(bueroPage, VACATION_COPY.approverNoLongerResponsible)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(bueroPage, VACATION_COPY.approverNoLongerResponsible)).toBeVisible();
     const pendingState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
     expect(pendingState.startDate).toBe(requestIso);
     expect(pendingState.status).toBe('pending');
@@ -357,9 +353,7 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
     expect(rejectedState.eventTypes).toEqual(['requested', 'rejected']);
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, VACATION_STATUS_LABELS.rejected)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, VACATION_STATUS_LABELS.rejected)).toBeVisible();
     await expect(visibleText(employeePage, rejectionReason)).toBeVisible();
   });
 });

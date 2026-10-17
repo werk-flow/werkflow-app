@@ -83,8 +83,10 @@ import {
   planningAllDayOption,
   planningCheckAndSave,
   planningEmployeePicker,
+  planningField,
   planningInternalEntryToggle,
   planningInternalTypeOption,
+  popoverMovePersonPicker,
 } from '../../golden/support/steps/calendar';
 import { fillParkingContext, parkingContextSave } from '../../golden/support/steps/dispatch';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
@@ -213,9 +215,6 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute(
         'data-calendar-horizon',
         String(weeks),
-        {
-          timeout: 20_000,
-        },
       );
     }
     await expect(boardWeekNumber(adminPage)).toBeVisible();
@@ -245,7 +244,7 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     const entriesBefore = await getOrganizationTimeEntryCount(world.orgId);
 
     await openPlantafel(adminPage, monday);
-    await expect(boardAbsenceBar(adminPage, employeeRecord.id, 'sickness')).toBeVisible({ timeout: 20_000 });
+    await expect(boardAbsenceBar(adminPage, employeeRecord.id, 'sickness')).toBeVisible();
 
     await test.step('A drop onto an absence day is refused at the pointer and writes nothing', async () => {
       await dragCardTo(
@@ -271,15 +270,13 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
         boardCard(adminPage, bueroRecord.id, visit.title),
         boardCell(adminPage, bueroRecord.id, tuesday),
       );
-      await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarBanner(adminPage, 'moved')).toBeVisible();
       await closeBanners(adminPage);
       await expect
-        .poll(
-          async () =>
-            occurrenceLocalDate(
-              (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
-            ),
-          { timeout: 20_000 },
+        .poll(async () =>
+          occurrenceLocalDate(
+            (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0],
+          ),
         )
         .toBe(tuesday);
       await expect(boardCard(adminPage, bueroRecord.id, visit.title)).toContainText('08:00');
@@ -292,12 +289,11 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
         boardCell(adminPage, employeeRecord.id, monday),
         { alt: true },
       );
-      await expect(calendarBanner(adminPage, 'copied')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarBanner(adminPage, 'copied')).toBeVisible();
       await closeBanners(adminPage);
       await expect
         .poll(
           async () => (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrenceCount,
-          { timeout: 20_000 },
         )
         .toBe(2);
     });
@@ -308,14 +304,13 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
         trailingResizeHandle(boardCard(adminPage, 'unassigned', bar.title)),
         boardCell(adminPage, 'unassigned', thursday),
       );
-      await expect(calendarBanner(adminPage, 'extendedUntil')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarBanner(adminPage, 'extendedUntil')).toBeVisible();
       await closeBanners(adminPage);
       await expect
         .poll(
           async () =>
             (await getPlanningState(world.orgId, { jobNumber: bar.jobNumber })).occurrences[0]
               ?.endDateExclusive,
-          { timeout: 20_000 },
         )
         .toBe(friday);
     });
@@ -328,15 +323,15 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       await noteAction.click();
       const noteDialog = calendarEntryDialog(adminPage);
       await planningInternalEntryToggle(noteDialog).click();
-      await noteDialog.locator('#planning-internal-type').click();
+      await planningField(noteDialog, 'internalType').click();
       await planningInternalTypeOption(adminPage, 'other').click();
-      await noteDialog.locator('#planning-time-kind').click();
+      await planningField(noteDialog, 'timeKind').click();
       await planningAllDayOption(adminPage).click();
       await noteDialog.getByLabel(SHARED_COPY.field.title).fill(noteTitle);
       await planningCheckAndSave(noteDialog).click();
-      await expect(noteDialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(noteDialog).toHaveCount(0);
       const noteCard = boardCard(adminPage, employeeRecord.id, noteTitle, friday);
-      await expect(noteCard).toBeVisible({ timeout: 20_000 });
+      await expect(noteCard).toBeVisible();
       await expect(cardDispatchChip(noteCard, 'nicht_gesendet')).toHaveCount(0);
       expect(
         occurrenceLocalDate(
@@ -352,26 +347,24 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
         parkplatzButton(adminPage),
       );
       const parkDialog = adminPage.getByRole('dialog');
-      await expect(parkDialog).toBeVisible({ timeout: 20_000 });
+      await expect(parkDialog).toBeVisible();
       await fillParkingContext(adminPage, parkDialog, {
         reason: 'capacity',
         responsibleName: world.users.admin.firstName,
         reviewDate: friday,
       });
       await parkingContextSave(parkDialog).click();
-      await expect(parkDialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(parkDialog).toHaveCount(0);
       await closeBanners(adminPage);
       expect((await getParkingState(world.orgId, visit.jobNumber)).context?.reason).toBe('capacity');
       await parkplatzButton(adminPage).click();
       const parkedCard = parkplatzCardOf(adminPage, visit.title);
-      await expect(parkedCard).toBeVisible({ timeout: 20_000 });
+      await expect(parkedCard).toBeVisible();
       await dragCardTo(adminPage, parkedCard, boardCell(adminPage, employeeRecord.id, tuesday));
-      await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarBanner(adminPage, 'scheduled')).toBeVisible();
       await closeBanners(adminPage);
       await expect
-        .poll(async () => (await getParkingState(world.orgId, visit.jobNumber)).eventTypes, {
-          timeout: 20_000,
-        })
+        .poll(async () => (await getParkingState(world.orgId, visit.jobNumber)).eventTypes)
         .toContain('unparked');
     });
 
@@ -400,16 +393,12 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       await expect(popover).toBeVisible();
       await expect(occurrenceEditButton(popover)).toBeVisible();
       await cardPopoverAction(popover, 'openMoveForm').click();
-      await selectFromSearchable(adminPage, popover.locator('#popover-move-person'), bueroName);
+      await selectFromSearchable(adminPage, popoverMovePersonPicker(popover), bueroName);
       await cardPopoverAction(popover, 'move').click();
-      await expect(reassignedBanner(adminPage, bueroName)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(reassignedBanner(adminPage, bueroName)).toBeVisible();
       await closeBanners(adminPage);
       await expect
-        .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, moved.jobNumber), {
-          timeout: 20_000,
-        })
+        .poll(async () => getJobOccurrenceAssigneeRecordIds(world.orgId, moved.jobNumber))
         .toEqual([bueroRecord.id]);
     });
 
@@ -443,21 +432,19 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       await densityToggle(adminPage, 'comfortable').click();
       // The shortcuts move by the horizon; a one-week horizon makes each step one week.
       await chooseBoardHorizon(adminPage, 1);
-      await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '1', {
-        timeout: 20_000,
-      });
+      await expect(calendarViewReady(adminPage, 'week')).toHaveAttribute('data-calendar-horizon', '1');
       // The closed select keeps focus on its combobox trigger, where a key belongs
       // to the control and never to the calendar; leave it as a user would.
       // pressKey refuses a shortcut while focus still sits in a field.
       await calendarPageHeading(adminPage).click();
       await pressKey(adminPage, 'j');
-      await expect(boardColumn(adminPage, shiftIsoDate(monday, 7))).toBeVisible({ timeout: 20_000 });
+      await expect(boardColumn(adminPage, shiftIsoDate(monday, 7))).toBeVisible();
       await pressKey(adminPage, 'k');
-      await expect(boardColumn(adminPage, monday)).toBeVisible({ timeout: 20_000 });
+      await expect(boardColumn(adminPage, monday)).toBeVisible();
       await pressKey(adminPage, 'd');
-      await expect(calendarViewReady(adminPage, 'day')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarViewReady(adminPage, 'day')).toBeVisible();
       await pressKey(adminPage, 'w');
-      await expect(calendarViewReady(adminPage, 'week')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarViewReady(adminPage, 'week')).toBeVisible();
       await expect
         .poll(
           async () => {
@@ -509,8 +496,8 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     await test.step('Drag-to-create on empty time opens the dialog with the person preset', async () => {
       await dragToCreateOnDayRow(adminPage, dayTimeline(row), 15.1, 16.6);
       const dialog = calendarEntryDialog(adminPage);
-      await expect(dialog).toBeVisible({ timeout: 20_000 });
-      await expect(dialog.locator('#planning-date')).toBeVisible({ timeout: 15_000 });
+      await expect(dialog).toBeVisible();
+      await expect(planningField(dialog, 'date')).toBeVisible();
       // The multi-select summarises its selection; the opened list (a body portal) names the preset person.
       await expect(planningEmployeePicker(dialog)).toHaveText(employeeSelectionSummary(1));
       await planningEmployeePicker(dialog).click();
@@ -527,17 +514,14 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     const timelineBox = expectDefined(await dayTimeline(row).boundingBox(), 'the day timeline layout');
     await test.step('The end handle lengthens the visit', async () => {
       await dragHandleBy(adminPage, trailingResizeHandle(visitCard), timelineBox.width / 24);
-      await expect(calendarBanner(adminPage, 'lengthened')).toBeVisible({ timeout: 20_000 });
+      await expect(calendarBanner(adminPage, 'lengthened')).toBeVisible();
       await closeBanners(adminPage);
       await expect
-        .poll(
-          async () => {
-            const endAt = (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0]
-              ?.endAt;
-            return endAt ? Date.parse(endAt) : null;
-          },
-          { timeout: 20_000 },
-        )
+        .poll(async () => {
+          const endAt = (await getPlanningState(world.orgId, { jobNumber: visit.jobNumber })).occurrences[0]
+            ?.endAt;
+          return endAt ? Date.parse(endAt) : null;
+        })
         .toBeGreaterThan(seededEnd);
     });
 
@@ -601,15 +585,13 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     await expect(monthCards(monthDay(adminPage, moveDay), movedVisit.title)).toBeVisible({
       timeout: 1_000,
     });
-    await expect(calendarBanner(adminPage, 'moved')).toBeVisible({ timeout: 20_000 });
+    await expect(calendarBanner(adminPage, 'moved')).toBeVisible();
     await closeBanners(adminPage);
     await expect
-      .poll(
-        async () =>
-          occurrenceLocalDate(
-            (await getPlanningState(world.orgId, { jobNumber: movedVisit.jobNumber })).occurrences[0],
-          ),
-        { timeout: 20_000 },
+      .poll(async () =>
+        occurrenceLocalDate(
+          (await getPlanningState(world.orgId, { jobNumber: movedVisit.jobNumber })).occurrences[0],
+        ),
       )
       .toBe(moveDay);
     // The card popover opens beside the card in the month too.

@@ -85,7 +85,7 @@ export async function withdrawOwnPendingVacationRequestByDate(page: Page, german
   await openOwnVacationSection(page);
   const withdrawButton = pendingVacationWithdrawButton(page, germanDate);
   await withdrawButton.click();
-  await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
+  await expect(withdrawButton).toHaveCount(0);
 }
 
 // The dialog deliberately has two equally named close controls. The footer
@@ -134,7 +134,7 @@ export async function probePlanningWarningLine(
   });
   await planningCheckAndSave(dialog).click();
   const warning = planningWarningPanel(dialog);
-  await expect(warning).toBeVisible({ timeout: 30_000 });
+  await expect(warning).toBeVisible();
   await expect(
     capacityWarningLine(warning, {
       employeeName: options.employeeName,
@@ -143,7 +143,7 @@ export async function probePlanningWarningLine(
     }),
   ).toBeVisible();
   await dismissDialog(dialog);
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function markAllOwnNotificationsRead(page: Page): Promise<void> {
@@ -156,8 +156,8 @@ async function markAllUnreadNotificationsRead(page: Page): Promise<void> {
   const unreadRows = unreadNotificationRows(page);
   let unreadCount = await unreadRows.count();
   while (unreadCount > 0) {
-    await markNotificationReadButton(unreadRows.first()).click({ timeout: 15_000 });
-    await expect.poll(async () => unreadRows.count(), { timeout: 15_000 }).toBeLessThan(unreadCount);
+    await markNotificationReadButton(unreadRows.first()).click();
+    await expect.poll(async () => unreadRows.count()).toBeLessThan(unreadCount);
     unreadCount = await unreadRows.count();
   }
 }

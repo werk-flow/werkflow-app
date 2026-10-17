@@ -10,6 +10,7 @@ import {
   ATTENTION_ROW_COPY,
   attentionNotificationRow,
   aufgabenSidebarBadge,
+  expectNoAttentionTaskGroup,
   markAttentionNotificationReadViaButton,
   openAufgaben,
   requestTaskLink,
@@ -141,14 +142,12 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
 
       // The employee never sees office request tasks (role boundary).
       await openAufgaben(employeePage);
-      await expect(employeePage.getByTestId('attention-request-tasks')).toHaveCount(0);
+      await expectNoAttentionTaskGroup(employeePage, 'requests');
 
       // Deep link into the owning context, resolve it there, and the item disappears.
       await adminRequestTask.click();
-      await adminPage.waitForURL(`**/anfragen/${request.id}`, { timeout: 20_000 });
-      await expect(visibleText(adminPage, requestSummary)).toBeVisible({
-        timeout: 15_000,
-      });
+      await adminPage.waitForURL(`**/anfragen/${request.id}`);
+      await expect(visibleText(adminPage, requestSummary)).toBeVisible();
       await closeRequestViaDialog(adminPage, REQUEST_CLOSE_REASON_LABELS.anderweitig_geloest);
       await openAufgaben(adminPage);
       await expectGone(requestTaskLink(adminPage, requestNumber));
@@ -165,18 +164,16 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       });
 
       await openAufgaben(adminPage);
-      await expect(adminPage.getByTestId('attention-time-tasks')).toHaveCount(0);
+      await expectNoAttentionTaskGroup(adminPage, 'time');
 
       await openAufgaben(employeePage);
       const timeTask = timeApprovalTaskLink(employeePage, bueroName);
       await expect(timeTask).toHaveCount(1);
-      await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', { timeout: 15_000 });
+      await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1');
 
       await timeTask.click();
-      await employeePage.waitForURL('**/zeiterfassung?tab=approvals', { timeout: 20_000 });
-      await expect(pendingApprovalsPanel(employeePage)).toHaveAttribute('data-loaded', 'true', {
-        timeout: 15_000,
-      });
+      await employeePage.waitForURL('**/zeiterfassung?tab=approvals');
+      await expect(pendingApprovalsPanel(employeePage)).toHaveAttribute('data-loaded', 'true');
       await approvePendingTimeEntry(employeePage, world.users.buero.id);
       expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe(
         'approved',
@@ -184,8 +181,8 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
 
       // Resolved means gone from the surface — and the badge follows.
       await openAufgaben(employeePage);
-      await expect(employeePage.getByTestId('attention-time-tasks')).toHaveCount(0);
-      await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, { timeout: 15_000 });
+      await expectNoAttentionTaskGroup(employeePage, 'time');
+      await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0);
     });
 
     await test.step('Vertretung: die Aufmerksamkeit folgt der Delegation ohne Duplikate und endet mit ihr', async () => {
@@ -199,7 +196,7 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       await openAufgaben(adminPage);
       await expect(vacationRequestTaskLink(adminPage, employeeName)).toHaveCount(1);
       await openAufgaben(bueroPage);
-      await expect(bueroPage.getByTestId('attention-vacation-tasks')).toHaveCount(0);
+      await expectNoAttentionTaskGroup(bueroPage, 'vacation');
 
       // The admin delegates leave approval to Büro for a bounded window; the
       // attention item follows the delegation — exactly once, never twice.
@@ -216,26 +213,22 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       await expect(bueroVacationTask).toHaveCount(1);
       // Unified badge: the open requests plus exactly one delegated approval.
       const openRequests = await countOpenClientRequests(world.orgId);
-      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests + 1), {
-        timeout: 15_000,
-      });
+      await expect(aufgabenSidebarBadge(bueroPage)).toHaveText(String(openRequests + 1));
 
       // The substitute decides over the deep link, on the same surface as always.
       await bueroVacationTask.click();
-      await bueroPage.waitForURL('**/zeiterfassung?tab=approvals', { timeout: 20_000 });
+      await bueroPage.waitForURL('**/zeiterfassung?tab=approvals');
       const approveButton = approveVacationButton(bueroPage, employeeName);
       // The card leaves with the click; the banner is the server's confirmation.
       await expectBannerAfter(bueroPage, vacationApprovedBanner(employeeName), () => approveButton.click());
-      await expect(approveButton).toHaveCount(0, { timeout: 15_000 });
+      await expect(approveButton).toHaveCount(0);
       const approvedState = await getLatestVacationRequestState(world.orgId, employeeRecord.id);
       expect(approvedState.startDate).toBe(firstDayIso);
       expect(approvedState.status).toBe('approved');
 
       // Approved availability: the calendar entry loses its provisional suffix.
       await showCalendarMonth(bueroPage, monthsBetween(businessDate, firstDayIso));
-      await expect(visibleText(bueroPage, vacationCalendarLabel(employeeName))).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(visibleText(bueroPage, vacationCalendarLabel(employeeName))).toBeVisible();
       await expect(
         textInDom(bueroPage, vacationCalendarLabel(employeeName, { requested: true })),
       ).toHaveCount(0);
@@ -255,7 +248,7 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       // the remaining holder keeps it.
       await endResponsibilityDelegationViaSettings(adminPage, 'leave_approval', bueroName);
       await openAufgaben(bueroPage);
-      await expect(bueroPage.getByTestId('attention-vacation-tasks')).toHaveCount(0, { timeout: 15_000 });
+      await expectNoAttentionTaskGroup(bueroPage, 'vacation');
       await openAufgaben(adminPage);
       await expect(vacationRequestTaskLink(adminPage, employeeName)).toHaveCount(1);
     });
@@ -283,7 +276,7 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
 
       await markAttentionNotificationReadViaButton(employeePage, approvedRequest.id);
       await markAttentionNotificationReadViaButton(employeePage, rejectedRequest.id);
-      await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0, { timeout: 15_000 });
+      await expect(aufgabenSidebarBadge(employeePage)).toHaveCount(0);
 
       // Retroactive correction: cancelling the approved request re-surfaces the
       // SAME notification as unread — never a second row.
@@ -296,11 +289,11 @@ test.describe('GG-02 Freigaben und Aufmerksamkeit @P1-07 @GG-02', () => {
       );
 
       await openAufgaben(employeePage);
-      await expect(approvedRow).toHaveCount(1, { timeout: 15_000 });
-      await expect(approvedRow).toHaveAttribute('data-unread', 'true', { timeout: 15_000 });
+      await expect(approvedRow).toHaveCount(1);
+      await expect(approvedRow).toHaveAttribute('data-unread', 'true');
       await expect(approvedRow.getByText(ATTENTION_ROW_COPY.cancelled)).toBeVisible();
       await expect(approvedRow.getByText(cancellationReason)).toBeVisible();
-      await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1', { timeout: 15_000 });
+      await expect(aufgabenSidebarBadge(employeePage)).toHaveText('1');
       await markAttentionNotificationReadViaButton(employeePage, approvedRequest.id);
 
       // Pattern audit: the read marker moved through both versions of the

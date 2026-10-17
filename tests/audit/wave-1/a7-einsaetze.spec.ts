@@ -5,6 +5,7 @@ import { getCommitmentState, getDispatchState, getParkingState } from '../../gol
 import { createAdminClient } from '../../golden/support/db/shared';
 import { seedJob } from '../../golden/support/db/work';
 import {
+  attentionTaskGroup,
   challengeTaskLink,
   openAufgaben,
   parkingReviewTaskLink,
@@ -23,27 +24,36 @@ import {
   acknowledgeDispatchButton,
   acknowledgeDispatchOnJobPage,
   arrivalWindowText,
+  batchDayShiftField,
   batchModeToggle,
   batchPreviewDialog,
   batchPreviewInstant,
+  batchPreviewItems,
   batchPreviewNotice,
+  batchReasonField,
   batchSelectionCount,
   batchShiftMissingError,
   challengeDispatchButton,
   checkBatchImpactButton,
   commitmentDialog,
+  commitmentMismatchMarker,
+  commitmentSourceField,
   commitmentSubmit,
   commitmentSummaryText,
   DISPATCH_COMMITMENT_COPY,
   DISPATCH_READINESS_COPY,
   dispatchIssueDialog,
+  dispatchNoteField,
   dispatchNoteText,
   dispatchOccurrenceRow,
   dispatchPanel,
   dispatchPanelOccurrences,
   dispatchReasonDialog,
+  dispatchReasonField,
   dispatchRecipientOption,
+  dispatchRecipientState,
   dispatchSendButton,
+  dispatchStateCard,
   issueDispatchForOccurrence,
   jobDispatchSection,
   moveNowButton,
@@ -51,11 +61,15 @@ import {
   openIssueDialogForPanelRow,
   openParkplatzPanel,
   parkingContextDialog,
+  parkingContextField,
+  parkingContextLine,
   parkingContextSave,
   parkplatzCard,
   parkplatzDispatchButton,
-  reasonDialogConfirm,
   readinessDimension,
+  readinessDimensionsInState,
+  readinessIcon,
+  reasonDialogConfirm,
   recordCommitmentButton,
   rowReasonAction,
   searchDispatchRecipients,
@@ -257,17 +271,17 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     );
     await expect(readinessDimension(dialog, 'tools')).toContainText(DISPATCH_READINESS_COPY.toolsUnknown);
     // The negative: no unknown dimension may borrow the success icon.
-    const renderedUnknownDimensions = await dialog.locator('[data-readiness-state="unknown"]').all();
+    const renderedUnknownDimensions = await readinessDimensionsInState(dialog, 'unknown').all();
     expect(renderedUnknownDimensions.length).toBeGreaterThan(0);
     for (const unknownDimension of renderedUnknownDimensions) {
-      await expect(unknownDimension.locator('[data-readiness-icon="unknown"]')).toBeVisible();
-      await expect(unknownDimension.locator('[data-readiness-icon="ok"]')).toHaveCount(0);
+      await expect(readinessIcon(unknownDimension, 'unknown')).toBeVisible();
+      await expect(readinessIcon(unknownDimension, 'ok')).toHaveCount(0);
     }
 
     // The optional Hinweistext travels with the dispatch.
-    await dialog.locator('#dispatch-note').fill(MAIN_NOTE);
+    await dispatchNoteField(dialog).fill(MAIN_NOTE);
     await dispatchSendButton(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     const state = await getDispatchState(world.orgId, jobNumber);
     expect(state.dispatches.map((dispatch) => dispatch.status)).toEqual(['active']);
     expect(await getDispatchRevisionNotes(world.orgId, jobNumber)).toEqual([MAIN_NOTE]);
@@ -336,26 +350,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       DISPATCH_READINESS_COPY.travelConflict,
     );
     await travelDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
-    await expect(travelDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(travelDialog).toHaveCount(0);
     // The panel surfaces the same provable fact as a Fahrzeit-Hinweis.
     await expect(
       firstDispatchPanelText(adminPage, new RegExp(DISPATCH_READINESS_COPY.travelConflict)),
-    ).toBeVisible({
-      timeout: 20_000,
-    });
+    ).toBeVisible();
 
     // The worker's card: Termin, Ort, Hinweis — then confirmation VIA the
     // /aufgaben task (deep link, not a direct navigation).
     await openJobViaDispatchTask(employeePage, mainTitle);
-    const card = jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]');
-    await expect(card).toBeVisible({ timeout: 20_000 });
+    const card = dispatchStateCard(jobDispatchSection(employeePage), 'ausstehend');
+    await expect(card).toBeVisible();
     await expect(card).toContainText(`${formatGermanDate(visitDate)}, 06:00`);
     await expect(card).toContainText(NORTH_STREET);
     await expect(card).toContainText(dispatchNoteText(MAIN_NOTE));
     await acknowledgeDispatchButton(jobDispatchSection(employeePage)).click();
-    await expect(jobDispatchSection(employeePage).locator('[data-dispatch-state="bestaetigt"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(dispatchStateCard(jobDispatchSection(employeePage), 'bestaetigt')).toBeVisible();
 
     const state = await getDispatchState(world.orgId, mainNumber);
     expect(
@@ -420,14 +430,14 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // The panel shows the full visible state vocabulary.
     await openDispatchPanel(adminPage);
     const row = dispatchOccurrenceRow(adminPage, title);
-    await expect(row).toBeVisible({ timeout: 20_000 });
-    await expect(row.locator('[data-recipient-state="uebernommen"]')).toContainText(
+    await expect(row).toBeVisible();
+    await expect(dispatchRecipientState(row, 'uebernommen')).toContainText(
       `${emilName} · ${DISPATCH_RECIPIENT_STATE_LABELS.uebernommen}`,
     );
-    await expect(row.locator('[data-recipient-state="ausstehend"]')).toContainText(
+    await expect(dispatchRecipientState(row, 'ausstehend')).toContainText(
       DISPATCH_RECIPIENT_STATE_LABELS.ausstehend,
     );
-    await expect(row.locator('[data-recipient-state="nicht_moeglich"]')).toContainText(
+    await expect(dispatchRecipientState(row, 'nicht_moeglich')).toContainText(
       `${noLoginName} · ${DISPATCH_RECIPIENT_STATE_LABELS.nicht_moeglich}`,
     );
   });
@@ -461,20 +471,16 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await openJobViaDispatchTask(bueroPage, title);
     await challengeDispatchButton(bueroPage).click();
     await submitDispatchChallenge(bueroPage, challengeReason);
-    await expect(jobDispatchSection(bueroPage).locator('[data-dispatch-state="rueckfrage"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(dispatchStateCard(jobDispatchSection(bueroPage), 'rueckfrage')).toBeVisible();
 
     // The open challenge is a manager task AND visible in the panel.
     await openAufgaben(adminPage);
-    const challengeGroup = adminPage.getByRole('main').getByTestId('attention-dispatch-challenge-tasks');
-    await expect(challengeGroup).toBeVisible({ timeout: 20_000 });
+    const challengeGroup = attentionTaskGroup(adminPage, 'dispatchChallenges');
+    await expect(challengeGroup).toBeVisible();
     await expect(challengeTaskLink(challengeGroup, brunoName, title)).toBeVisible();
     await expect(challengeGroup.getByText(challengeReason)).toBeVisible();
     await openDispatchPanel(adminPage);
-    await expect(firstDispatchPanelText(adminPage, challengeReason)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(firstDispatchPanelText(adminPage, challengeReason)).toBeVisible();
 
     // Resolution by ADAPTING the plan: moving the visit supersedes the
     // revision, closes the challenge, and the recipient sees the new state.
@@ -497,30 +503,25 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // The recipient sees "ausstehend" WITH the new state (the moved date).
     await bueroPage.goto(`/auftraege/${jobNumber}`);
-    const pendingCard = jobDispatchSection(bueroPage).locator('[data-dispatch-state="ausstehend"]');
-    await expect(pendingCard).toBeVisible({ timeout: 20_000 });
+    const pendingCard = dispatchStateCard(jobDispatchSection(bueroPage), 'ausstehend');
+    await expect(pendingCard).toBeVisible();
     await expect(pendingCard).toContainText(formatGermanDate(movedDate));
 
     // A changed Ort is a material instruction change: the confirmed dispatch
     // is superseded again and the card shows the new location.
     await acknowledgeDispatchButton(jobDispatchSection(bueroPage)).click();
-    await expect(jobDispatchSection(bueroPage).locator('[data-dispatch-state="bestaetigt"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(dispatchStateCard(jobDispatchSection(bueroPage), 'bestaetigt')).toBeVisible();
     await editJobLocation(adminPage, jobNumber, newLocation);
 
     await expect
-      .poll(
-        async () => {
-          state = await getDispatchState(world.orgId, jobNumber);
-          return state.dispatches[0]?.revisionChangeKinds;
-        },
-        { timeout: 20_000 },
-      )
+      .poll(async () => {
+        state = await getDispatchState(world.orgId, jobNumber);
+        return state.dispatches[0]?.revisionChangeKinds;
+      })
       .toEqual(['issued', 'schedule_changed', 'instruction_changed']);
     expect(state.dispatches[0]?.acknowledgements.filter((ack) => ack.revisionNumber === 3)).toHaveLength(0);
-    const invalidatedCard = jobDispatchSection(bueroPage).locator('[data-dispatch-state="ausstehend"]');
-    await expect(invalidatedCard).toBeVisible({ timeout: 20_000 });
+    const invalidatedCard = dispatchStateCard(jobDispatchSection(bueroPage), 'ausstehend');
+    await expect(invalidatedCard).toBeVisible();
     await expect(invalidatedCard).toContainText(newLocation);
   });
 
@@ -545,45 +546,37 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       responsibleName: world.users.admin.firstName,
       reviewDate: berlinDateAtOffset(2),
     });
-    await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(parkingDialog).toHaveCount(0);
 
     await openParkplatzPanel(adminPage);
     const card = parkplatzCard(adminPage, parkTitle);
-    await expect(card).toBeVisible({ timeout: 20_000 });
-    await expect(card.locator('[data-parking-context="set"]')).toContainText(
-      WORK_BLOCKER_REASON_LABELS.capacity,
-    );
+    await expect(card).toBeVisible();
+    await expect(parkingContextLine(card, 'set')).toContainText(WORK_BLOCKER_REASON_LABELS.capacity);
 
     // Dispatch to the ASSIGNED employees: the dialog preselects them.
     await parkplatzDispatchButton(card).click();
     const dialog = dispatchIssueDialog(adminPage);
-    await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(readinessDimension(dialog, 'tools', 'unknown')).toBeVisible();
     await searchDispatchRecipients(adminPage, dialog, emilName);
     await expect(dispatchRecipientOption(adminPage, emilName)).toHaveAttribute('aria-selected', 'true');
     await dialog.getByRole('heading').click();
-    await dialog.locator('#dispatch-note').fill(MAIN_NOTE);
+    await dispatchNoteField(dialog).fill(MAIN_NOTE);
     await dispatchSendButton(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
 
     await employeePage.goto(`/auftraege/${parkNumber}`);
-    await expect(jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(dispatchStateCard(jobDispatchSection(employeePage), 'ausstehend')).toBeVisible();
     await expect(jobDispatchSection(employeePage)).toContainText(dispatchNoteText(MAIN_NOTE));
 
     // Manual cancel with reason: history stays, the worker's card disappears.
     await openDispatchPanel(adminPage);
     const unscheduledRow = unscheduledDispatchRow(adminPage, parkTitle);
-    await expect(unscheduledRow).toBeVisible({ timeout: 20_000 });
+    await expect(unscheduledRow).toBeVisible();
     await rowReasonAction(unscheduledRow, 'withdrawDispatch').click();
     const cancelDialog = dispatchReasonDialog(adminPage, 'withdrawDispatch');
-    await cancelDialog
-      .locator('#dispatch-reason-dialog')
-      .fill('A7 Material fehlt, Einsatz wird neu geplant.');
+    await dispatchReasonField(cancelDialog).fill('A7 Material fehlt, Einsatz wird neu geplant.');
     await reasonDialogConfirm(cancelDialog, 'withdrawDispatch').click();
-    await expect(cancelDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(cancelDialog).toHaveCount(0);
 
     let state = await getDispatchState(world.orgId, parkNumber);
     expect(state.dispatches.map((dispatch) => dispatch.status)).toEqual(['cancelled']);
@@ -594,16 +587,16 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // reaches the person via withdraw + re-send.
     await openParkplatzPanel(adminPage);
     const cardAgain = parkplatzCard(adminPage, parkTitle);
-    await expect(cardAgain).toBeVisible({ timeout: 20_000 });
+    await expect(cardAgain).toBeVisible();
     await parkplatzDispatchButton(cardAgain).click();
     const resendDialog = dispatchIssueDialog(adminPage);
-    await expect(readinessDimension(resendDialog, 'tools', 'unknown')).toBeVisible({ timeout: 20_000 });
+    await expect(readinessDimension(resendDialog, 'tools', 'unknown')).toBeVisible();
     await searchDispatchRecipients(adminPage, resendDialog, emilName);
     await expect(dispatchRecipientOption(adminPage, emilName)).toHaveAttribute('aria-selected', 'true');
     await resendDialog.getByRole('heading').click();
-    await resendDialog.locator('#dispatch-note').fill(RESEND_NOTE);
+    await dispatchNoteField(resendDialog).fill(RESEND_NOTE);
     await dispatchSendButton(resendDialog).click();
-    await expect(resendDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(resendDialog).toHaveCount(0);
 
     state = await getDispatchState(world.orgId, parkNumber);
     expect(state.dispatches.map((dispatch) => dispatch.status)).toEqual(['cancelled', 'active']);
@@ -611,9 +604,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       expect.arrayContaining([MAIN_NOTE, RESEND_NOTE]),
     );
     await employeePage.goto(`/auftraege/${parkNumber}`);
-    await expect(jobDispatchSection(employeePage).locator('[data-dispatch-state="ausstehend"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(dispatchStateCard(jobDispatchSection(employeePage), 'ausstehend')).toBeVisible();
     await expect(jobDispatchSection(employeePage)).toContainText(dispatchNoteText(RESEND_NOTE));
   });
 
@@ -651,7 +642,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await adminPage.goto(`/kalender?date=${scheduledDate}`);
     await calendarViewTab(adminPage, 'day').click();
     const block = dayViewCards(adminPage, schedTitle);
-    await expect(block).toBeVisible({ timeout: 20_000 });
+    await expect(block).toBeVisible();
     await expect(block).not.toHaveAttribute('data-locked', '');
     const blockBox = await block.boundingBox();
     const parkplatzBox = await parkplatzButton(adminPage).boundingBox();
@@ -669,9 +660,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // Dragging opens the required atomic parking context before anything is
     // persisted.
     const contextDialog = parkingContextDialog(adminPage);
-    await expect(contextDialog).toBeVisible({ timeout: 20_000 });
+    await expect(contextDialog).toBeVisible();
     // The P1-14 canonical reason vocabulary is offered in one place.
-    await contextDialog.locator('#parking-reason').click();
+    await parkingContextField(contextDialog, 'reason').click();
     const reasonListbox = adminPage.getByRole('listbox');
     await expect(reasonListbox.getByRole('option')).toHaveCount(10);
     for (const label of Object.values(WORK_BLOCKER_REASON_LABELS)) {
@@ -680,19 +671,17 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await reasonListbox
       .getByRole('option', { name: WORK_BLOCKER_REASON_LABELS.approval, exact: true })
       .click();
-    await contextDialog.locator('#parking-note').fill('A7 Freigabe des Eigentümers steht aus.');
+    await parkingContextField(contextDialog, 'note').fill('A7 Freigabe des Eigentümers steht aus.');
     await selectFromSearchable(
       adminPage,
-      contextDialog.locator('#parking-responsible'),
+      parkingContextField(contextDialog, 'responsible'),
       world.users.buero.firstName,
     );
     // A review date of TODAY is already overdue (≤ business today).
     await typeIntoDatePickerById(contextDialog, 'parking-review-date', businessDate);
     await parkingContextSave(contextDialog).click();
-    await expect(contextDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(calendarConfirmation(adminPage, 'parked')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(contextDialog).toHaveCount(0);
+    await expect(calendarConfirmation(adminPage, 'parked')).toBeVisible();
 
     const parking = await getParkingState(world.orgId, schedNumber);
     expect(parking.context?.reason).toBe('approval');
@@ -708,8 +697,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     // The overdue Wiedervorlage is a task for the responsible person.
     await openAufgaben(bueroPage);
-    const reviewGroup = bueroPage.getByRole('main').getByTestId('attention-parking-review-tasks');
-    await expect(reviewGroup).toBeVisible({ timeout: 20_000 });
+    const reviewGroup = attentionTaskGroup(bueroPage, 'parkingReviews');
+    await expect(reviewGroup).toBeVisible();
     const reviewTask = parkingReviewTaskLink(reviewGroup, schedTitle);
     await expect(reviewTask).toBeVisible();
     await expect(reviewTask).toContainText(taskResponsibleText(world.users.buero.firstName));
@@ -745,11 +734,11 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     const row = dispatchOccurrenceRow(adminPage, commitTitle);
     await recordCommitmentButton(row).click();
     const dialog = commitmentDialog(adminPage);
-    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await expect(dialog).toBeVisible();
     // Recording documents an internal note only — the app sends nothing.
     await expect(dialog).toContainText(DISPATCH_COMMITMENT_COPY.noMessageSent);
     // Exactly the four catalog channels are offered.
-    await dialog.locator('#commitment-source').click();
+    await commitmentSourceField(dialog).click();
     await expect(adminPage.getByRole('option')).toHaveCount(4);
     for (const label of Object.values(COMMITMENT_SOURCE_LABELS)) {
       await expect(adminPage.getByRole('option', { name: label, exact: true })).toBeVisible();
@@ -759,11 +748,9 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await typeIntoTimeInput(dialog, 'commitment-window-start', '0600');
     await typeIntoTimeInput(dialog, 'commitment-window-end', '0800');
     await commitmentSubmit(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
 
-    await expect(row.locator('[data-commitment-mismatch="false"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(commitmentMismatchMarker(row, false)).toBeVisible();
     await expect(row).toContainText(commitmentSummaryText(formatGermanDate(commitDate), '06:00', '08:00'));
     const recorded = await getCommitmentFacts(world.orgId, commitNumber);
     expect(recorded).toHaveLength(1);
@@ -787,28 +774,22 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     });
     await openDispatchPanel(adminPage);
     const movedRow = dispatchOccurrenceRow(adminPage, commitTitle);
-    await expect(movedRow.locator('[data-commitment-mismatch="true"]')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(commitmentMismatchMarker(movedRow, true)).toBeVisible();
     await expect(movedRow).toContainText(DISPATCH_COMMITMENT_COPY.mismatch);
 
     // Explicit resolution: withdraw WITH reason; no customer notification.
     await rowReasonAction(movedRow, 'withdrawCommitment').click();
     const withdrawDialog = dispatchReasonDialog(adminPage, 'withdrawCommitment');
     await expect(withdrawDialog).toContainText(DISPATCH_COMMITMENT_COPY.customerNotNotified);
-    await withdrawDialog
-      .locator('#dispatch-reason-dialog')
-      .fill('A7 Kundin hat den Termin telefonisch abgesagt.');
+    await dispatchReasonField(withdrawDialog).fill('A7 Kundin hat den Termin telefonisch abgesagt.');
     await reasonDialogConfirm(withdrawDialog, 'withdrawCommitment').click();
-    await expect(withdrawDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(withdrawDialog).toHaveCount(0);
 
     const withdrawn = await getCommitmentFacts(world.orgId, commitNumber);
     expect(withdrawn.map((commitment) => commitment.status)).toEqual(['withdrawn']);
     expect(withdrawn[0]?.withdrawalReason).toBe('A7 Kundin hat den Termin telefonisch abgesagt.');
-    await expect(recordCommitmentButton(movedRow)).toBeVisible({
-      timeout: 20_000,
-    });
-    await expectGone(movedRow.locator('[data-commitment-mismatch]'));
+    await expect(recordCommitmentButton(movedRow)).toBeVisible();
+    await expectGone(commitmentMismatchMarker(movedRow));
   });
 
   test('A7-T8: Batch-Auswahl kennt nur die Zukunft; ganztägige Besuche brauchen eine Tagesverschiebung — alles oder nichts [P1-12-F15/P1-12-F17]', async ({
@@ -845,7 +826,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // Only FUTURE visits are selectable: today's all-day visit is offered as
     // a row but its checkbox stays disabled.
     const todayRow = dispatchOccurrenceRow(adminPage, todayTitle);
-    await expect(todayRow).toBeVisible({ timeout: 20_000 });
+    await expect(todayRow).toBeVisible();
     await expect(todayRow.getByRole('checkbox')).toBeDisabled();
 
     const alldayRow = dispatchOccurrenceRow(adminPage, alldayTitle);
@@ -853,8 +834,8 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     await expect(batchSelectionCount(panel, 1)).toBeVisible({
       timeout: 10_000,
     });
-    await panel.locator('#batch-day-shift').fill('0');
-    await panel.locator('#batch-reason').fill('A7 Uhrzeitverschiebung ohne Tageswechsel.');
+    await batchDayShiftField(panel).fill('0');
+    await batchReasonField(panel).fill('A7 Uhrzeitverschiebung ohne Tageswechsel.');
     // A zero shift without a new time is no move at all: submitting names the
     // missing input and opens no preview.
     await checkBatchImpactButton(panel).click();
@@ -865,9 +846,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     // refused with the exact German message and NOTHING moves.
     await typeIntoTimeInput(panel, 'batch-new-time', '0700');
     await checkBatchImpactButton(panel).click();
-    await expect(panel.getByText(dispatchErrorMessage('batch_item_all_day_needs_day_shift'))).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(panel.getByText(dispatchErrorMessage('batch_item_all_day_needs_day_shift'))).toBeVisible();
     const allday = await getPlanningState(world.orgId, { jobNumber: alldayNumber });
     expect(allday.occurrences.map((occurrence) => occurrence.startDate)).toEqual([alldayDate]);
   });
@@ -909,7 +888,7 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
     const rows = dispatchPanelOccurrences(panel, seriesTitle);
     // The overview loads asynchronously after the panel opens — wait for the
     // series rows before touching any checkbox.
-    await expect(rows).toHaveCount(2, { timeout: 20_000 });
+    await expect(rows).toHaveCount(2);
     for (const row of await rows.all()) {
       await row.getByRole('checkbox').check();
     }
@@ -917,16 +896,16 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
       timeout: 10_000,
     });
     // Whole days AND a new time together.
-    await panel.locator('#batch-day-shift').fill('1');
+    await batchDayShiftField(panel).fill('1');
     await typeIntoTimeInput(panel, 'batch-new-time', '0800');
-    await panel.locator('#batch-reason').fill('A7 Krankheitsbedingte Umplanung mit neuer Anfahrtszeit.');
+    await batchReasonField(panel).fill('A7 Krankheitsbedingte Umplanung mit neuer Anfahrtszeit.');
     await checkBatchImpactButton(panel).click();
     const preview = batchPreviewDialog(adminPage);
-    await expect(preview).toBeVisible({ timeout: 30_000 });
+    await expect(preview).toBeVisible();
 
     // The preview names each occurrence with its OLD and NEW instant, ordered
     // by the old start (the server sorts the items deterministically).
-    const previewItems = preview.locator('[data-batch-preview-item]');
+    const previewItems = batchPreviewItems(preview);
     await expect(previewItems).toHaveCount(2);
     const expectedRows = [
       { oldDate: seriesDate, newDate: shiftedFirst },
@@ -949,15 +928,15 @@ test.describe('A7 Einsätze @AUDIT-W1-A7', () => {
 
     await moveNowButton(preview).click();
     const warning = planningWarningDialog(adminPage);
-    await expect(warning).toBeVisible({ timeout: 30_000 });
+    await expect(warning).toBeVisible();
     // Conflicts override ONLY with a sufficient reason.
     await planningWarningReason(warning).fill('kurz');
     await planningWarningSave(warning).click();
     await expect(warning.getByText(REASON_MIN_8_MESSAGE, { exact: true })).toBeVisible();
     await planningWarningReason(warning).fill('A7 Umplanung betrieblich abgestimmt und bestätigt.');
     await planningWarningSave(warning).click();
-    await expect(warning).toHaveCount(0, { timeout: 30_000 });
-    await expect(preview).toHaveCount(0, { timeout: 30_000 });
+    await expect(warning).toHaveCount(0);
+    await expect(preview).toHaveCount(0);
 
     // Both visits moved one day to 08:00 as exceptions of the SAME series.
     const after = await getPlanningState(world.orgId, { jobNumber: seriesNumber });

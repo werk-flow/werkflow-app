@@ -1,4 +1,4 @@
-// Rule test: every catalog flow maps to evidence.
+// Rule test: every catalog flow maps to evidence, and every executable reference names the test titles that prove it.
 import { describe, expect, test } from 'bun:test';
 import { parseCatalogFlows, validateCoverageMap, coverageMapSchema, type CoverageMap } from './coverage-map';
 import type { TestGroup } from './test-groups';
@@ -10,16 +10,28 @@ const catalog = parseCatalogFlows(
 const groups: TestGroup[] = [
   {
     id: 'audit:corrections',
-    files: ['tests/corrections.spec.ts'],
+    files: ['tests/corrections.spec.ts', 'tests/other.spec.ts'],
     kind: 'audit',
     scopes: ['time'],
     isolation: 'group-world',
     timing: { requireFreshness: false, requireReadiness: false, exclusive: false },
   },
 ];
+const sources: Record<string, string> = {
+  'tests/corrections.spec.ts': [
+    "test.describe('Corrections @AUDIT', () => {",
+    "  test('C-01: employee submits once and the manager sees one request', async () => {",
+    "    await test.step('The outsider reads no request', async () => {});",
+    '  });',
+    "  test('C-02/C-03: a resubmission keeps one request', async () => {});",
+    "  test('C-03: the history keeps both revisions', async () => {});",
+    '});',
+  ].join('\n'),
+  'tests/other.spec.ts': "test('C-09: an unrelated flow', async () => {});",
+};
 function mapping(): CoverageMap {
   return {
-    version: 1,
+    version: 2,
     catalogHashes: Object.fromEntries(catalog.map((flow) => [flow.id, flow.hash])),
     mappings: [
       {
@@ -30,6 +42,7 @@ function mapping(): CoverageMap {
             file: 'tests/corrections.spec.ts',
             kind: 'browser',
             description: 'Submit and exact request cardinality; outsider reads zero rows.',
+            titles: ['C-01', 'The outsider reads no request'],
           },
         ],
         clauses:
@@ -46,7 +59,18 @@ function validate(coverage: CoverageMap): string[] {
     groups,
     repositoryRoot: process.cwd(),
     fileExists: () => true,
+    readText: (file) => sources[file] ?? '',
   });
+}
+function firstReference(coverage: CoverageMap): CoverageMap['mappings'][number]['evidence'][number] {
+  return expectDefined(expectDefined(coverage.mappings[0]).evidence[0]);
+}
+function withTitles(titles: string[], file = 'tests/corrections.spec.ts'): CoverageMap {
+  const coverage = mapping();
+  const reference = firstReference(coverage);
+  reference.file = file;
+  reference.titles = titles;
+  return coverage;
 }
 
 describe('catalog coverage traceability', () => {
@@ -64,6 +88,7 @@ describe('catalog coverage traceability', () => {
         groups,
         repositoryRoot: process.cwd(),
         fileExists: () => true,
+        readText: (file) => sources[file] ?? '',
       }).some((problem) => problem.includes('changed or is unreviewed: P1-22-F01')),
     ).toBe(true);
   });
@@ -91,13 +116,15 @@ describe('catalog coverage traceability', () => {
     expectDefined(onlyInspection.mappings[0]).evidence = [
       { kind: 'inspection', file: 'docs/review.md', description: 'A reviewer looked at it.' },
     ];
-    expect(validate(onlyInspection)).toContain(
-      'No executable evidence in correction-review; inspection alone cannot cover a user flow.',
-    );
+    expect(
+      validate(onlyInspection).some((problem) =>
+        problem.startsWith('No executable evidence in correction-review'),
+      ),
+    ).toBe(true);
   });
   test('unsafe references and unregistered tests fail even when the file exists', () => {
     const unsafe = mapping();
-    expectDefined(expectDefined(unsafe.mappings[0]).evidence[0]).file = '../other-repo/test.spec.ts';
+    firstReference(unsafe).file = '../other-repo/test.spec.ts';
     expect(validate(unsafe).some((problem) => problem.includes('unsafe evidence'))).toBe(true);
     expect(validate(unsafe).some((problem) => problem.includes('no executable test group'))).toBe(true);
   });
@@ -109,5 +136,76 @@ describe('catalog coverage traceability', () => {
     expect(expectDefined(flows[0]).id).toBe('P1-00a-F01');
     expect(expectDefined(flows[0]).bullet).toContain('Download remains private');
     expect(coverageMapSchema.safeParse({ ...mapping(), unnoticed: true }).success).toBe(false);
+  });
+});
+
+describe('coverage evidence names its proving tests', () => {
+  test('a version 1 map that names files only is refused', () => {
+    expect(coverageMapSchema.safeParse({ ...mapping(), version: 1 }).success).toBe(false);
+  });
+  test('a missing title fails', () => {
+    expect(validate(withTitles(['C-04']))).toEqual([
+      'Unknown test title in correction-review: "C-04" is not declared in tests/corrections.spec.ts',
+    ]);
+  });
+  test('a renamed test fails under its old full title', () => {
+    expect(validate(withTitles(['C-01: employee submits once and the manager sees two requests']))).toEqual([
+      'Unknown test title in correction-review: "C-01: employee submits once and the manager sees two requests" is not declared in tests/corrections.spec.ts',
+    ]);
+  });
+  test('a tag carried by two tests is ambiguous; the full title resolves it', () => {
+    expect(validate(withTitles(['C-03']))).toEqual([
+      'Ambiguous test title in correction-review: "C-03" matches 2 titles in tests/corrections.spec.ts',
+    ]);
+    expect(validate(withTitles(['C-03: the history keeps both revisions']))).toEqual([]);
+  });
+  test('a tag only matches as a whole tag, not as a prefix', () => {
+    expect(validate(withTitles(['C-0']))).toEqual([
+      'Unknown test title in correction-review: "C-0" is not declared in tests/corrections.spec.ts',
+    ]);
+  });
+  test('a title declared in another file does not prove this reference', () => {
+    expect(validate(withTitles(['C-09']))).toEqual([
+      'Unknown test title in correction-review: "C-09" is not declared in tests/corrections.spec.ts',
+    ]);
+    expect(validate(withTitles(['C-09'], 'tests/other.spec.ts'))).toEqual([]);
+  });
+  test('an executable reference names titles or a reason, never neither or both', () => {
+    const neither = mapping();
+    delete firstReference(neither).titles;
+    const both = withTitles(['C-01']);
+    firstReference(both).unmatched = 'The file proves no clause of this ledger row.';
+    const message =
+      'Evidence tests/corrections.spec.ts in correction-review must name its proving test titles or give the reason none exists, not both.';
+    expect(validate(neither)).toContain(message);
+    expect(validate(both)).toContain(message);
+  });
+  test('a reasoned reference cannot be the only evidence of a mapping', () => {
+    const reasoned = mapping();
+    const reference = firstReference(reasoned);
+    delete reference.titles;
+    reference.unmatched = 'The file proves no clause of this ledger row.';
+    expect(
+      validate(reasoned).some((problem) => problem.startsWith('No executable evidence in correction-review')),
+    ).toBe(true);
+    expectDefined(reasoned.mappings[0]).evidence.push({
+      file: 'tests/other.spec.ts',
+      kind: 'browser',
+      description: 'The flow that proves it.',
+      titles: ['C-09'],
+    });
+    expect(validate(reasoned)).toEqual([]);
+  });
+  test('an inspection names no test', () => {
+    const inspected = mapping();
+    expectDefined(inspected.mappings[0]).evidence.push({
+      kind: 'inspection',
+      file: 'docs/review.md',
+      description: 'A reviewer looked at it.',
+      titles: ['C-01'],
+    });
+    expect(validate(inspected)).toEqual([
+      'Inspection evidence in correction-review names no test: docs/review.md',
+    ]);
   });
 });

@@ -223,7 +223,7 @@ test('every Server Action parses its arguments before their first use', () => {
   ).toEqual([]);
   const stale = Object.keys(REVIEWED_INPUTS).filter((key) => !problems.includes(key));
   expect(stale, 'These REVIEWED_INPUTS entries match no parameter; remove them.').toEqual([]);
-}, 60_000);
+});
 
 function fixture(code: string): string[] {
   return unvalidatedParameters('lib/fixture.ts', `'use server';\n${code}`);

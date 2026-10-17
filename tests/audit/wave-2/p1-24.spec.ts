@@ -86,9 +86,7 @@ test.describe('P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2', () => {
       effectiveOn: entryDate,
       reason: 'Geplanter Eintritt ohne vorgezogenen Zugang',
     });
-    await expect(visibleText(lifecycle, EMPLOYMENT_LIFECYCLE_LABELS.planned)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(lifecycle, EMPLOYMENT_LIFECYCLE_LABELS.planned)).toBeVisible();
     const state = await getP124State(world.orgId);
     expect(state.employment.filter((item) => item.employee_record_id === recordId)).toMatchObject([
       { state: 'planned', scheduled_state: 'active' },
@@ -100,6 +98,6 @@ test.describe('P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2', () => {
     ).toEqual(['plan_start']);
 
     await outsiderPage.goto(`/mitarbeiter/${recordId}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(recordId), { timeout: 15_000 });
+    await expect(outsiderPage).not.toHaveURL(new RegExp(recordId));
   });
 });

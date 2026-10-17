@@ -33,6 +33,7 @@ import {
   type TestOutcomeEvidence,
 } from '../../../lib/testing/evidence/test-evidence';
 import { assertRetainedBusinessDate } from '../../../lib/testing/runner/business-date';
+import type { DiagnosticWorld } from '../../../lib/testing/runner/group-recovery';
 import {
   assertInterruptedRecoveryOwnership,
   archiveRecoveryActiveState,
@@ -66,6 +67,8 @@ export type RunManifest = {
   groupFingerprint?: string | undefined;
   runKey: string;
   sourceRunKey: string | null;
+  /** A diagnostic's world; absent on other runs and on replays recorded before 2026-10-16. */
+  diagnosticWorld?: DiagnosticWorld | undefined;
   lane: PlaywrightLane;
   suite: PlaywrightSuite;
   // Absent on manifests archived before the local-stack split (Stage A,
@@ -228,7 +231,13 @@ export function createRunManifest(input?: {
     groupId: process.env.WERKFLOW_TEST_GROUP,
     groupFingerprint: input?.groupFingerprint,
     runKey,
-    sourceRunKey: process.env.WERKFLOW_REUSE_RUN_KEY || null,
+    // A diagnostic names the failed run it diagnoses, on its retained world or on a fresh one.
+    sourceRunKey: process.env.WERKFLOW_REUSE_RUN_KEY || process.env.WERKFLOW_FRESH_FOR_RUN_KEY || null,
+    ...(process.env.WERKFLOW_REUSE_RUN_KEY
+      ? { diagnosticWorld: 'retained' as const }
+      : process.env.WERKFLOW_FRESH_FOR_RUN_KEY
+        ? { diagnosticWorld: 'fresh' as const }
+        : {}),
     lane: parseEnvironmentValue(
       process.env.WERKFLOW_TEST_LANE,
       PLAYWRIGHT_LANES,

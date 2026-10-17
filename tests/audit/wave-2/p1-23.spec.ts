@@ -80,9 +80,7 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
         policyLabel: exceptionPolicy,
         validFrom: period.start,
       });
-      await expect
-        .poll(async () => (await getP123State(world.orgId)).policyAssignments.length, { timeout: 20_000 })
-        .toBe(1);
+      await expect.poll(async () => (await getP123State(world.orgId)).policyAssignments.length).toBe(1);
     });
 
     await test.step('Büro requests an adjustment and the admin rejects it', async () => {
@@ -94,16 +92,12 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
         reason: 'Audit: nicht übernehmen',
         effectiveDate: ownedBerlinDateAtOffset('p1-23', 120),
       });
-      await expect
-        .poll(async () => (await getP123State(world.orgId)).adjustmentRequests.length, { timeout: 20_000 })
-        .toBe(1);
+      await expect.poll(async () => (await getP123State(world.orgId)).adjustmentRequests.length).toBe(1);
 
       await adminPage.reload();
       await rejectTimeAccountAdjustment(settings, employeeName, 'Audit-Ablehnung');
       await expect
-        .poll(async () => (await getP123State(world.orgId)).adjustmentRequests[0]?.status, {
-          timeout: 20_000,
-        })
+        .poll(async () => (await getP123State(world.orgId)).adjustmentRequests[0]?.status)
         .toBe('rejected');
     });
   });
@@ -131,7 +125,7 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
         const calculationsBefore = (await getP123State(world.orgId)).calculations.length;
         await preparePeriodMonth(adminPage, period.month);
         await expect
-          .poll(async () => (await getP123State(world.orgId)).calculations.length, { timeout: 20_000 })
+          .poll(async () => (await getP123State(world.orgId)).calculations.length)
           .toBeGreaterThan(calculationsBefore);
         const preparedState = await getP123State(world.orgId);
         const preparedPeriod = expectDefined(
@@ -160,7 +154,7 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
       const calculationsBefore = (await getP123State(world.orgId)).calculations.length;
       await preparePeriodMonth(adminPage, period.month);
       await expect
-        .poll(async () => (await getP123State(world.orgId)).calculations.length, { timeout: 20_000 })
+        .poll(async () => (await getP123State(world.orgId)).calculations.length)
         .toBeGreaterThan(calculationsBefore);
       await adminPage.goto(`/zeiterfassung/perioden/${periodId}`);
       await expect(textInDom(adminPage, FINDING_LABELS.missing_clock)).toHaveCount(0);

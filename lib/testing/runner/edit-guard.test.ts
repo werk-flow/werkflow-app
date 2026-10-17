@@ -2,6 +2,7 @@
 import { expect, test } from 'bun:test';
 import {
   editedFiles,
+  evidenceWriteRefusal,
   guardedInputs,
   refusalMessage,
   repositoryPath,
@@ -116,4 +117,31 @@ test('the refusal names the run, the files and the way out', () => {
   expect(
     refusalMessage({ operation: 'x', startedAt: 'y', inputs: [], command: 'prettier --write' }),
   ).toContain('Running prettier --write');
+});
+
+test('publication evidence is never written by an agent tool, while reading it stays allowed', () => {
+  const file = (tool_name: string, file_path: string) => ({ tool_name, tool_input: { file_path } });
+  const shell = (command: string) => ({ tool_name: 'Bash', tool_input: { command } });
+  for (const call of [
+    file('Write', '.agent-logs/verification/r1/report.json'),
+    file('Edit', `${root}/.agent-logs/review/abc.json`),
+    file('Write', '.agent-logs/evidence-ledger.jsonl'),
+    file('Write', '.Agent-Logs/Review/abc.json'),
+    shell('echo {} > .agent-logs/verification/r1/report.json'),
+    shell('cat x >> .agent-logs\\review\\abc.json'),
+    shell('rm -rf .agent-logs/verification/r1'),
+    shell("Set-Content -Path .agent-logs/review/abc.json -Value '{}'"),
+    shell("bun -e \"require('fs').writeFileSync('.agent-logs/evidence-ledger.jsonl', '')\""),
+    shell("sed -i 's/failed/passed/' .agent-logs/verification/r1/report.json"),
+  ])
+    expect(evidenceWriteRefusal(call, root)).toContain('publication evidence');
+  for (const call of [
+    file('Write', '.agent-logs/coderabbit-20261016c/dispositions.md'),
+    file('Write', 'lib/testing/publication/evidence-ledger.ts'),
+    shell('cat .agent-logs/verification/r1/report.json'),
+    shell('ls .agent-logs/review 2>/dev/null | tail -3'),
+    shell('grep -c passed .agent-logs/verification/r1/report.json > /tmp/count.txt'),
+    shell('bun run test:verify'),
+  ])
+    expect(evidenceWriteRefusal(call, root)).toBeUndefined();
 });

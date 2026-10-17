@@ -31,6 +31,7 @@ import {
   dragPlanningMonthEvent,
   openPlanningCreationDialog,
   plannedCalendarEvent,
+  planningField,
   planningTeamSearch,
   planningWarningReason,
   planningWarningRevert,
@@ -55,6 +56,8 @@ import {
   createCapabilityViaManagement,
   createTeamViaManagement,
   dissolveTeamViaManagement,
+  expectNoTeamCard,
+  expectNoTeamMemberRow,
   missingReasonError,
   noCoveringPerson,
   openManagementTab,
@@ -217,7 +220,7 @@ async function readBadgeCount(page: Page, href: SidebarBadgeTarget): Promise<num
 }
 
 async function expectBadgeCount(page: Page, href: SidebarBadgeTarget, expected: number): Promise<void> {
-  await expect.poll(async () => readBadgeCount(page, href), { timeout: 20_000 }).toBe(expected);
+  await expect.poll(async () => readBadgeCount(page, href)).toBe(expected);
 }
 
 test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
@@ -273,7 +276,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     });
     await openAufgaben(adminPage);
     const adminRequestTask = taskRowByText(adminPage, requestNumber);
-    await expect(adminRequestTask).toHaveCount(1, { timeout: 15_000 });
+    await expect(adminRequestTask).toHaveCount(1);
     await expect(taskOpenSince(adminRequestTask, 1)).toBeVisible();
     await expect(
       taskResponsible(adminRequestTask, `${world.users.buero.firstName} ${world.users.buero.lastName}`),
@@ -293,7 +296,6 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
           (await readBadgeCount(adminPage, '/aufgaben')) -
           (await taskRows(adminPage).count()) -
           (await unreadNotificationRows(adminPage).count()),
-        { timeout: 20_000 },
       )
       .toBe(0);
 
@@ -305,7 +307,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(firstRequest?.status).toBe('pending');
     await openAufgaben(employeePage);
     const firstOwnRow = ownRequestRow(employeePage, expectDefined(firstRequest, 'the first A5 request').id);
-    await expect(firstOwnRow).toHaveCount(1, { timeout: 15_000 });
+    await expect(firstOwnRow).toHaveCount(1);
     await expect(firstOwnRow.getByText(formatGermanDate(firstDayIso))).toBeVisible();
     await expect(firstOwnRow.getByText(VACATION_STATUS_LABELS.pending)).toBeVisible();
 
@@ -330,28 +332,23 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await openAufgaben(employeePage);
     const approvedRow = attentionNotificationRow(employeePage, approvedRequest.id);
     const rejectedRow = attentionNotificationRow(employeePage, rejectedRequest.id);
-    await expect(approvedRow).toHaveAttribute('data-unread', 'true', { timeout: 15_000 });
+    await expect(approvedRow).toHaveAttribute('data-unread', 'true');
     await expect(rejectedRow).toHaveAttribute('data-unread', 'true');
 
     // Employee badge equality: nothing actionable for this viewer, so the
     // badge equals the unread notification count. The badge and the rows
     // settle from separate reads, so both are read together in one poll.
     await expect
-      .poll(
-        async () => {
-          const unread = await unreadNotificationRows(employeePage).count();
-          const badge = await readBadgeCount(employeePage, '/aufgaben');
-          return { atLeastTwoUnread: unread >= 2, badgeMinusUnread: badge - unread };
-        },
-        { timeout: 20_000 },
-      )
+      .poll(async () => {
+        const unread = await unreadNotificationRows(employeePage).count();
+        const badge = await readBadgeCount(employeePage, '/aufgaben');
+        return { atLeastTwoUnread: unread >= 2, badgeMinusUnread: badge - unread };
+      })
       .toEqual({ atLeastTwoUnread: true, badgeMinusUnread: 0 });
 
     // "Alle als gelesen markieren" clears every unread row at once.
     await markAllAttentionNotificationsReadViaButton(employeePage);
-    await expect(sidebarBadge(employeePage, '/aufgaben')).toHaveCount(0, {
-      timeout: 15_000,
-    });
+    await expect(sidebarBadge(employeePage, '/aufgaben')).toHaveCount(0);
     const patternState = await getAttentionPatternStateForUser(world.orgId, world.users.employee.id);
     for (const sourceId of [approvedRequest.id, rejectedRequest.id]) {
       expect(patternState.readStates.some((state) => state.sourceId === sourceId)).toBe(true);
@@ -363,9 +360,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // Meine Anträge carries status AND the decision reason (P1-07-F01).
     const approvedOwnRow = ownRequestRow(employeePage, approvedRequest.id);
     const rejectedOwnRow = ownRequestRow(employeePage, rejectedRequest.id);
-    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.approved)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.approved)).toBeVisible();
     await expect(rejectedOwnRow.getByText(VACATION_STATUS_LABELS.rejected)).toBeVisible();
     await expect(decisionReason(rejectedOwnRow, rejectionReason)).toBeVisible();
 
@@ -380,9 +375,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       cancellationReason,
     );
     await openAufgaben(employeePage);
-    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.cancelled)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(approvedOwnRow.getByText(VACATION_STATUS_LABELS.cancelled)).toBeVisible();
     await expect(decisionReason(approvedOwnRow, cancellationReason)).toBeVisible();
     // The re-surfaced unread notification is read again so A5 leaves no
     // unread employee state behind.
@@ -390,9 +383,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
 
     // Approving Büro's entry returns the Zeiterfassung badge exactly to its baseline.
     await adminPage.goto('/zeiterfassung?tab=approvals');
-    await expect(pendingApprovalsPanel(adminPage)).toHaveAttribute('data-loaded', 'true', {
-      timeout: 15_000,
-    });
+    await expect(pendingApprovalsPanel(adminPage)).toHaveAttribute('data-loaded', 'true');
     await approvePendingTimeEntry(adminPage, world.users.buero.id);
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('approved');
     await expectBadgeCount(adminPage, '/zeiterfassung', adminZeitBaseline);
@@ -449,24 +440,16 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     });
     const bueroRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.buero.id);
     await expect
-      .poll(
-        async () =>
-          (await getTeamStateByName(world.orgId, teamName)).memberships.some(
-            (membership) =>
-              membership.employeeRecordId === bueroRecord.id && membership.validFrom === futureFromIso,
-          ),
-        { timeout: 15_000 },
+      .poll(async () =>
+        (await getTeamStateByName(world.orgId, teamName)).memberships.some(
+          (membership) =>
+            membership.employeeRecordId === bueroRecord.id && membership.validFrom === futureFromIso,
+        ),
       )
       .toBe(true);
     // Date-effectiveness in the management view: the future member is not a
     // current member row.
-    await expect(
-      adminPage
-        .getByTestId('team-card')
-        .filter({ hasText: teamName })
-        .getByTestId('team-member-row')
-        .filter({ hasText: bueroName }),
-    ).toHaveCount(0);
+    await expectNoTeamMemberRow(adminPage, teamName, bueroName);
 
     // Job-dialog expansion: one click selects all CURRENTLY ACTIVE members;
     // the person without login is visibly skipped, the future member is not
@@ -478,10 +461,10 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await adminPage.goto(`/auftraege/${jobNumber}`);
     const assignmentDialog = await openEmployeeAssignmentDialog(adminPage);
     await teamShortcut(assignmentDialog, teamName).click();
-    await expect(teamMemberSkippedNotice(adminPage, noLoginName)).toBeVisible({ timeout: 15_000 });
+    await expect(teamMemberSkippedNotice(adminPage, noLoginName)).toBeVisible();
     await expect(employeeAssignmentPicker(assignmentDialog, 1)).toBeVisible();
     await assignmentDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-    await expect(assignmentDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(assignmentDialog).toHaveCount(0);
     expect(await getJobAssignmentUserIds(world.orgId, jobNumber)).toEqual([world.users.employee.id]);
 
     // Calendar expansion: the planner works on employee records, so the team
@@ -501,9 +484,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(planningState.occurrenceCount).toBe(1);
     expect(planningState.assignmentCount).toBe(2);
     await showPlanningMonth(bueroPage, planningDateIso);
-    await expect(plannedCalendarEvent(bueroPage, testData`A5 Teamauftrag ${world.runId}`)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(plannedCalendarEvent(bueroPage, testData`A5 Teamauftrag ${world.runId}`)).toBeVisible();
 
     // Dissolution keeps the history: the team disappears from every picker,
     // rows/events/assignments stay durable.
@@ -512,7 +493,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     expect(stateBefore.memberships).toHaveLength(3);
     await dissolveTeamViaManagement(adminPage, teamName);
     await expect(visibleText(adminPage, teamName)).toBeVisible();
-    await expect(adminPage.getByTestId('team-card').filter({ hasText: teamName })).toHaveCount(0);
+    await expectNoTeamCard(adminPage, teamName);
 
     const stateAfter = await getTeamStateByName(world.orgId, teamName);
     expect(stateAfter.dissolvedAt).not.toBeNull();
@@ -525,19 +506,17 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     // No picker offers the dissolved team anymore: job assignment dialog …
     await adminPage.goto(`/auftraege/${jobNumber}`);
     const reopenedDialog = await openEmployeeAssignmentDialog(adminPage);
-    await expect(reopenedDialog).toBeVisible({ timeout: 15_000 });
+    await expect(reopenedDialog).toBeVisible();
     await expect(teamShortcut(reopenedDialog, teamName)).toHaveCount(0);
     await dismissDialog(reopenedDialog);
     // … and the calendar planning dialog.
     const planningDialog = await openPlanningCreationDialog(adminPage);
-    await expect(planningDialog.locator('#planning-date')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(planningField(planningDialog, 'date')).toBeVisible();
     // The team picker is a searchable multi-select; its popover portals
     // outside the dialog.
-    await planningDialog.locator('#planning-teams').click();
+    await planningField(planningDialog, 'teams').click();
     await planningTeamSearch(adminPage).fill(teamName);
-    await expect(noTeamFound(adminPage)).toBeVisible({ timeout: 15_000 });
+    await expect(noTeamFound(adminPage)).toBeVisible();
     await expect(teamOption(adminPage, teamName)).toHaveCount(0);
     // Escape closes the picker popover first, then the dialog.
     await dismissDialog(pickerListbox(adminPage));
@@ -568,12 +547,10 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
     await test.step('Fünf Abdeckungszustände, Mehrfach-Warnung mit Pflichtgrund, Azubi-Standard aus und rechtzeitiger Ablaufhinweis', async () => {
       // The apprentice warning is OFF by default and only the admin controls it.
       await openManagementTab(bueroPage, 'qualifications');
-      await expect(apprenticeWarningToggle(bueroPage)).toBeDisabled({
-        timeout: 15_000,
-      });
+      await expect(apprenticeWarningToggle(bueroPage)).toBeDisabled();
       await openManagementTab(adminPage, 'qualifications');
       const apprenticeCheckbox = apprenticeWarningToggle(adminPage);
-      await expect(apprenticeCheckbox).toBeVisible({ timeout: 15_000 });
+      await expect(apprenticeCheckbox).toBeVisible();
       await expect(apprenticeCheckbox).not.toBeChecked();
       await setApprenticeWarningViaManagement(adminPage, true);
 
@@ -663,7 +640,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       for (const page of [adminPage, bueroPage]) {
         await openAufgaben(page);
         const notice = attentionNotificationRow(page, approachingRecordId);
-        await expect(notice).toHaveCount(1, { timeout: 15_000 });
+        await expect(notice).toHaveCount(1);
         await expect(qualificationExpiresSoon(notice)).toBeVisible();
         await expect(notice.getByText(approachingCert)).toBeVisible();
         await expect(qualificationNoticeLink(notice)).toHaveAttribute(
@@ -713,7 +690,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       await employeeAssignmentHeading(assignDialog).click();
       await assignDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
       const warningDialog = qualificationWarningDialog(adminPage);
-      await expect(warningDialog).toBeVisible({ timeout: 15_000 });
+      await expect(warningDialog).toBeVisible();
       for (const [name, status] of [
         [unconfirmedCert, 'unconfirmed'],
         [expiredCert, 'expired'],
@@ -733,11 +710,11 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         `A5 erfahrene Begleitung ist organisiert ${world.runId}`,
       );
       await assignDespiteWarningButton(warningDialog).click();
-      await expect(warningDialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(warningDialog).toHaveCount(0);
 
       // The job detail distinguishes all five states and names the strongest
       // matching person per requirement.
-      await expect(qualificationCoverageRow(adminPage, coveredSkill)).toBeVisible({ timeout: 15_000 });
+      await expect(qualificationCoverageRow(adminPage, coveredSkill)).toBeVisible();
       await expect(
         coverageStatusLabel(qualificationCoverageRow(adminPage, coveredSkill), 'covered', true),
       ).toBeVisible();
@@ -772,19 +749,19 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       // re-evaluates and reopens the reasoned confirmation.
       await adminPage.goto(`/auftraege/${jobNumber}`);
       const editDialog = await openJobEditDialog(adminPage);
-      await expect(editDialog).toBeVisible({ timeout: 15_000 });
+      await expect(editDialog).toBeVisible();
       await employeeAssignmentPicker(editDialog, 1).click();
       await employeeAssignmentSearch(adminPage).fill(world.users.buero.firstName);
       await visibleSearchResult(adminPage, bueroName).click();
       await jobEditDialogTitle(editDialog).click();
       await editDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
       const editWarning = qualificationWarningDialog(adminPage);
-      await expect(editWarning).toBeVisible({ timeout: 15_000 });
+      await expect(editWarning).toBeVisible();
       await qualificationOverrideReason(editWarning).fill(
         `A5 Änderung im Bearbeitungsdialog begründet ${world.runId}`,
       );
       await assignDespiteWarningButton(editWarning).click();
-      await expect(editWarning).toHaveCount(0, { timeout: 15_000 });
+      await expect(editWarning).toHaveCount(0);
       expect((await getJobAssignmentUserIds(world.orgId, jobNumber)).sort()).toEqual(
         [world.users.buero.id, world.users.employee.id].sort(),
       );
@@ -793,7 +770,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       // calendar silently and mutates NOTHING.
       await showPlanningMonth(adminPage, plannedDateIso);
       const jobEvent = plannedCalendarEvent(adminPage, jobTitle);
-      await expect(jobEvent).toBeVisible({ timeout: 20_000 });
+      await expect(jobEvent).toBeVisible();
       const stateBeforeDrag = await getPlanningState(world.orgId, { jobNumber });
       expect(stateBeforeDrag.occurrences[0]?.startDate).toBe(plannedDateIso);
       const dragWarning = planningWarningDialog(adminPage);
@@ -802,10 +779,10 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         sourceDate: plannedDateIso,
         targetDate: dragTargetIso,
       });
-      await expect(dragWarning).toBeVisible({ timeout: 20_000 });
+      await expect(dragWarning).toBeVisible();
       await planningWarningRevert(dragWarning).click();
-      await expect(dragWarning).toHaveCount(0, { timeout: 15_000 });
-      await expect(monthDayShowing(adminPage, plannedDateIso, jobTitle)).toBeVisible({ timeout: 20_000 });
+      await expect(dragWarning).toHaveCount(0);
+      await expect(monthDayShowing(adminPage, plannedDateIso, jobTitle)).toBeVisible();
       const stateAfterCancel = await getPlanningState(world.orgId, { jobNumber });
       expect(stateAfterCancel.occurrences[0]?.startDate).toBe(plannedDateIso);
       expect(stateAfterCancel.occurrenceCount).toBe(stateBeforeDrag.occurrenceCount);
@@ -819,16 +796,14 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
         sourceDate: plannedDateIso,
         targetDate: dragTargetIso,
       });
-      await expect(dragWarning).toBeVisible({ timeout: 20_000 });
+      await expect(dragWarning).toBeVisible();
       await planningWarningReason(dragWarning).fill(
         `A5 Kalenderverschiebung bewusst bestätigt ${world.runId}`,
       );
       await planningWarningSave(dragWarning).click();
-      await expect(dragWarning).toHaveCount(0, { timeout: 20_000 });
+      await expect(dragWarning).toHaveCount(0);
       await expect
-        .poll(async () => (await getPlanningState(world.orgId, { jobNumber })).occurrences[0]?.startDate, {
-          timeout: 20_000,
-        })
+        .poll(async () => (await getPlanningState(world.orgId, { jobNumber })).occurrences[0]?.startDate)
         .toBe(dragTargetIso);
       const stateAfterMove = await getPlanningState(world.orgId, { jobNumber });
       expect(stateAfterMove.overrideReasons).toContain(
@@ -860,7 +835,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       }
       await employeeAssignmentHeading(mixedDialog).click();
       await mixedDialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-      await expect(mixedDialog).toHaveCount(0, { timeout: 15_000 });
+      await expect(mixedDialog).toHaveCount(0);
       await expect(qualificationWarningDialog(adminPage)).toHaveCount(0);
       expect((await getJobAssignmentUserIds(world.orgId, accompaniedJobNumber)).sort()).toEqual(
         [world.users.buero.id, world.users.employee.id].sort(),
@@ -873,9 +848,7 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       // Employee transparency stays read-only: the own overview shows the A5
       // records with their validity states, but offers no management control.
       await employeePage.goto('/qualifikationen');
-      await expect(visibleText(employeePage, coveredSkill)).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(visibleText(employeePage, coveredSkill)).toBeVisible();
       await expect(visibleText(employeePage, expiredCert)).toBeVisible();
       await expect(visibleText(employeePage, futureSkill)).toBeVisible();
       await expect(visibleText(employeePage, approachingCert)).toBeVisible();

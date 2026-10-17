@@ -113,9 +113,9 @@ export async function openPlantafel(page: Page, dateIso: string): Promise<void> 
   const tab = page.getByRole('tab', {
     name: new RegExp(`^(${CALENDAR_VIEW_TABS.board}|${CALENDAR_VIEW_TABS.week})$`),
   });
-  await expect(tab).toBeVisible({ timeout: 30_000 });
+  await expect(tab).toBeVisible();
   if ((await tab.getAttribute('data-state')) !== 'active') await tab.click();
-  await expect(calendarViewReady(page, 'week')).toBeVisible({ timeout: 30_000 });
+  await expect(calendarViewReady(page, 'week')).toBeVisible();
 }
 
 /** A view tab of the calendar page; managers see „Plantafel“, field workers „Woche“. */
@@ -126,7 +126,7 @@ export function calendarViewTab(page: Page, view: CalendarViewTab): Locator {
 export async function openCalendarView(page: Page, dateIso: string, view: 'day' | 'month'): Promise<void> {
   await page.goto(`/kalender?date=${dateIso}`);
   await calendarViewTab(page, view).click();
-  await expect(calendarViewReady(page, view)).toBeVisible({ timeout: 30_000 });
+  await expect(calendarViewReady(page, view)).toBeVisible();
 }
 
 /** The calendar page's title. */

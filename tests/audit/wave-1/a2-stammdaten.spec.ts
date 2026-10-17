@@ -10,7 +10,9 @@ import {
   addSiteOnCustomerDetail,
   adoptCustomerAddressAsSite,
   archiveCustomerRelation,
+  contactRoleSuggestions,
   CUSTOMER_TEXT,
+  customerDialogField,
   customerNumberField,
   openSeededCustomerDetail,
   restoreCustomerRelation,
@@ -32,6 +34,7 @@ import {
   jobFormField,
   workCreateButton,
   workCreateTab,
+  workEditField,
 } from '../../golden/support/steps/work';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
 import { customerContactRow, customerSiteRow } from '../support/a2-steps';
@@ -66,11 +69,14 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
     await openSeededCustomerDetail(adminPage, seeded.clientId);
     await addContactButton(adminPage).click();
     const contactDialog = adminPage.getByRole('dialog');
-    await expect(contactDialog.locator('#contact-role')).toHaveAttribute('list', 'contact-role-suggestions');
+    await expect(customerDialogField(contactDialog, 'contactRole')).toHaveAttribute(
+      'list',
+      'contact-role-suggestions',
+    );
     expect(
-      await contactDialog
-        .locator('#contact-role-suggestions option')
-        .evaluateAll((options) => options.map((option) => option.getAttribute('value'))),
+      await contactRoleSuggestions(contactDialog).evaluateAll((options) =>
+        options.map((option) => option.getAttribute('value')),
+      ),
     ).toEqual([...CONTACT_ROLE_SUGGESTIONS]);
     await contactDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
     await addContactOnCustomerDetail(adminPage, {
@@ -160,16 +166,12 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
 
     await openSeededCustomerDetail(adminPage, first.clientId);
     await setCustomerNumber(adminPage, customerNumber);
-    await expect(visibleText(adminPage, customerNumber)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, customerNumber)).toBeVisible();
     expect(await getCustomerNumber(world.orgId, firstCustomer)).toBe(customerNumber);
 
     await openSeededCustomerDetail(adminPage, second.clientId);
     await setCustomerNumber(adminPage, customerNumber);
-    await expect(visibleText(adminPage, CUSTOMER_TEXT.customerNumberTaken)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, CUSTOMER_TEXT.customerNumberTaken)).toBeVisible();
     await adminPage.reload();
     expect(await getCustomerNumber(world.orgId, secondCustomer)).toBeNull();
     await expect(customerNumberField(adminPage)).toContainText('—');
@@ -241,10 +243,10 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
     await adminPage.getByRole('button', { name: SHARED_COPY.action.openActions }).click();
     await adminPage.getByRole('menuitem', { name: SHARED_COPY.action.edit }).click();
     const jobDialog = jobEditDialog(adminPage);
-    await selectFromSearchable(adminPage, jobDialog.locator('#edit-job-site'), inheritedSite);
-    await selectFromSearchable(adminPage, jobDialog.locator('#edit-job-contact'), inheritedContact);
+    await selectFromSearchable(adminPage, workEditField(jobDialog, 'jobSite'), inheritedSite);
+    await selectFromSearchable(adminPage, workEditField(jobDialog, 'jobContact'), inheritedContact);
     await jobDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(jobDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(jobDialog).toHaveCount(0);
     const edited = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
     expect(edited.jobs[1]?.siteId).toBe(edited.siteId);
     expect(edited.jobs[1]?.contactId).toBe(edited.contactId);
@@ -253,14 +255,14 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
     await adminPage.getByRole('button', { name: SHARED_COPY.action.openActions }).click();
     await adminPage.getByRole('menuitem', { name: SHARED_COPY.action.edit }).click();
     const dialog = adminPage.getByRole('dialog');
-    await selectFromSearchable(adminPage, dialog.locator('#edit-project-client'), targetCustomer);
+    await selectFromSearchable(adminPage, workEditField(dialog, 'projectClient'), targetCustomer);
     const saveProjectButton = dialog.getByRole('button', {
       name: SHARED_COPY.action.save,
       exact: true,
     });
     await expect(saveProjectButton).toBeEnabled();
     await saveProjectButton.click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
 
     const after = await getProjectJobRelationState(world.orgId, projectNumber, jobNumbers);
     expect(after.siteId).toBeNull();
@@ -290,8 +292,8 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
       name: `A2 Geschützter Kunde ${world.runId}`,
     });
     await employeePage.goto(`/kunden/${clientId}`);
-    await employeePage.waitForURL('**/dashboard', { timeout: 15_000 });
+    await employeePage.waitForURL('**/dashboard');
     await outsiderPage.goto(`/kunden/${clientId}`);
-    await outsiderPage.waitForURL('**/kunden', { timeout: 15_000 });
+    await outsiderPage.waitForURL('**/kunden');
   });
 });

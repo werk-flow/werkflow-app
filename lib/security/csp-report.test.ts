@@ -171,4 +171,4 @@ test('the storage origin is the origin the storage adapter signs URLs for', asyn
     ]);
     expect(code, `${JSON.stringify(env)}\n${stdout}\n${stderr}`).toBe(0);
   }
-}, 30_000); // Three spawned Bun processes that load the S3 client; 5 s is not enough under host load.
+});

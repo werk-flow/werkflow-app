@@ -94,7 +94,7 @@ describe('workspace test operation ownership', () => {
     ]);
     expect({ code, errors }).toEqual({ code: 0, errors: '' });
     expect(output).toContain('controls.spec.ts:');
-  }, 30_000);
+  });
   test('allows an inherited child without releasing its parent operation lock', async () => {
     const repositoryRoot = mkdtempSync(join(tmpdir(), 'werkflow-child-lock-'));
     try {

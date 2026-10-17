@@ -65,4 +65,4 @@ test('no React key is built from a mapped or joined collection', () => {
     findings,
     'A key derived from a collection remounts the element on every row change and closes open dialogs (Step 3 CL-13). Pass fresh rows as props or read them through a live view; use a stable resetKey for a deliberate reset.',
   ).toEqual([]);
-}, 60_000);
+});

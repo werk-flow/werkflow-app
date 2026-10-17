@@ -49,12 +49,12 @@ test.describe('P1-24 controlled people lifecycle @P1-24 @GG-07', () => {
         firstItemType: 'acknowledgement',
         firstItemTitle: acknowledgementTitle,
       });
-      await expect(visibleText(adminPage, templateName)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(adminPage, templateName)).toBeVisible();
 
       await openMemberDetailFromList(adminPage, employeeName);
       await expect(lifecycle.getByText(PEOPLE_LIFECYCLE_COPY.noAccessRule)).toBeVisible();
       await createOnboardingPlan(adminPage, templateVersionLabel(templateName, 1));
-      await expect(visibleText(lifecycle, acknowledgementTitle)).toBeVisible({ timeout: 15_000 });
+      await expect(visibleText(lifecycle, acknowledgementTitle)).toBeVisible();
       const state = await getP124State(world.orgId);
       expect(
         state.requirements.find(
@@ -120,10 +120,10 @@ test.describe('P1-24 controlled people lifecycle @P1-24 @GG-07', () => {
         ['reactivate', 'Zugang kontrolliert reaktiviert', 'active'],
       ] as const) {
         await changeOrganizationAccess(adminPage, transition, reason);
-        await expect(visibleText(lifecycle, ACCESS_STATE_LABELS[shown])).toBeVisible({ timeout: 15_000 });
+        await expect(visibleText(lifecycle, ACCESS_STATE_LABELS[shown])).toBeVisible();
         if (transition === 'suspend_now') {
           await employeePage.goto('/aufgaben');
-          await expect(employeePage).not.toHaveURL(/\/aufgaben/, { timeout: 15_000 });
+          await expect(employeePage).not.toHaveURL(/\/aufgaben/);
         }
       }
       const state = await getP124State(world.orgId);

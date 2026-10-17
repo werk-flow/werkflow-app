@@ -46,6 +46,7 @@ import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/suppor
 import {
   beginWorkArtifact,
   closeWorkArtifactDialog,
+  expectNoWorkArtifactsSection,
   makeWorkArtifactCustomerFacing,
   openWorkArtifact,
   openWorkArtifactLinkDisclosure,
@@ -59,6 +60,7 @@ import {
   workArtifactDialog,
   workArtifactEntry,
   workArtifactField,
+  workArtifactInput,
   workArtifactFulfilEvidenceToggle,
   workArtifactFulfilWithVersion,
   workArtifactMessage,
@@ -74,6 +76,7 @@ import {
 } from '../../golden/support/spec-helpers/work-artifact-dialog';
 import { workArtifactTaskLink } from '../../golden/support/steps/attention';
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { DOCUMENT_UPLOAD_TIMEOUT_MS, TASK_OVERVIEW_READ_TIMEOUT_MS } from '../../golden/support/timeouts';
 
 function digits(dateIso: string): string {
   const [year, month, day] = dateIso.split('-');
@@ -91,7 +94,7 @@ async function finishArtifact(dialog: Locator, submit = true): Promise<void> {
   } else {
     await workArtifactAction(dialog, 'saveDraft').click();
   }
-  await expect(workArtifactVersion(dialog, 1)).toBeVisible({ timeout: 20_000 });
+  await expect(workArtifactVersion(dialog, 1)).toBeVisible();
 }
 
 async function closeArtifact(dialog: Locator): Promise<void> {
@@ -169,11 +172,9 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     );
     await workArtifactField(dialog, 'performedWork').fill('Noch nicht eingereichter Testentwurf.');
     await finishArtifact(dialog, false);
-    await dialog.locator('#artifact-action-reason').fill('Eigener ungesendeter Testentwurf wird verworfen.');
+    await workArtifactInput(dialog, 'actionReason').fill('Eigener ungesendeter Testentwurf wird verworfen.');
     await workArtifactAction(dialog, 'void').click();
-    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible();
     await closeArtifact(dialog);
 
     dialog = await beginWorkArtifact(employeePage, newArtifact('site_diary', `Bautagebuch ${world.runId}`));
@@ -191,9 +192,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await workArtifactField(dialog, 'decisions').fill('Steigstrang wird links geführt.');
     await workArtifactField(dialog, 'specialEvents').fill('Abnahme der Leitungsführung durch Bauleitung.');
     await workArtifactAction(dialog, 'submitForReview').click();
-    await expect(workArtifactVersion(dialog, 2)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactVersion(dialog, 2)).toBeVisible();
     await closeArtifact(dialog);
 
     dialog = await beginWorkArtifact(
@@ -216,7 +215,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await workArtifactField(dialog, 'measurementNotes').fill('Lichte Maße vor Ort geprüft.');
     await workArtifactAction(dialog, 'addMeasurementLine').click();
     await workArtifactField(dialog, 'lineName').fill('Kupferrohr');
-    await dialog.locator('#artifact-measurement-quantity-0').fill('12,5');
+    await workArtifactInput(dialog, 'firstMeasurementQuantity').fill('12,5');
     await selectWorkArtifactUnit(employeePage, dialog, 'meter');
     await workArtifactField(dialog, 'location').fill('Technikraum Nord');
     await finishArtifact(dialog);
@@ -284,7 +283,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     });
 
     await outsiderPage.goto(`/auftraege/${jobNumber}`);
-    await expect(outsiderPage.getByTestId('work-artifacts-section')).toHaveCount(0);
+    await expectNoWorkArtifactsSection(outsiderPage);
   });
 
   test('immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up', async ({
@@ -313,8 +312,8 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await employeePage.goto(`/auftraege/${jobNumber}`);
     await submitWorkReport(employeePage, title, berlinDateAtOffset(82));
     await Promise.all([adminPage.goto(`/auftraege/${jobNumber}`), bueroPage.goto(`/auftraege/${jobNumber}`)]);
-    await expect(workArtifactEntry(adminPage, title)).toBeVisible({ timeout: 20_000 });
-    await expect(workArtifactEntry(bueroPage, title)).toBeVisible({ timeout: 20_000 });
+    await expect(workArtifactEntry(adminPage, title)).toBeVisible();
+    await expect(workArtifactEntry(bueroPage, title)).toBeVisible();
     await workArtifactEntry(adminPage, title).click();
     await workArtifactEntry(bueroPage, title).click();
     const adminDialog = workArtifactDialog(adminPage);
@@ -326,16 +325,12 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await workArtifactField(bueroDialog, 'title').fill(`${title} lokaler Entwurf`);
     await workArtifactField(bueroDialog, 'revisionReason').fill('Lokale, noch nicht gespeicherte Korrektur.');
     await workArtifactAction(adminDialog, 'saveDraft').click();
-    await expect(workArtifactVersion(adminDialog, 2)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactVersion(adminDialog, 2)).toBeVisible();
     await workArtifactAction(bueroDialog, 'saveDraft').click();
     await expect(workArtifactMessage(bueroDialog, 'changedMeanwhile')).toBeVisible();
     await expect(workArtifactField(bueroDialog, 'title')).toHaveValue(`${title} lokaler Entwurf`);
     await closeWorkArtifactDialog(bueroDialog);
-    await expect(workArtifactEntry(bueroPage, `${title} v2`)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactEntry(bueroPage, `${title} v2`)).toBeVisible();
 
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
     const report = expectDefined(state.artifacts[0], 'the work report');
@@ -387,14 +382,14 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await closeWorkArtifactDialog(workArtifactDialog(employeePage));
 
     await adminPage.goto('/aufgaben');
-    await expect(workArtifactTaskLink(adminPage, 'review', approvedTitle)).toBeVisible({ timeout: 20_000 });
+    await expect(workArtifactTaskLink(adminPage, 'review', approvedTitle)).toBeVisible({
+      timeout: TASK_OVERVIEW_READ_TIMEOUT_MS,
+    });
     await adminPage.goto(`/auftraege/${jobNumber}`);
     await workArtifactEntry(adminPage, approvedTitle).click();
     const dialog = workArtifactDialog(adminPage);
     await workArtifactAction(dialog, 'approveInternally').click();
-    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible();
     await closeWorkArtifactDialog(dialog);
 
     const approvedState = await getWorkArtifactState(world.orgId, { jobNumber });
@@ -410,41 +405,31 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     expect(approval?.created_by).toBe(world.users.admin.id);
 
     await workArtifactEntry(adminPage, correctionTitle).click();
-    await dialog.locator('#artifact-action-reason').fill('Leistungsort muss genauer bezeichnet werden.');
+    await workArtifactInput(dialog, 'actionReason').fill('Leistungsort muss genauer bezeichnet werden.');
     await workArtifactAction(dialog, 'requestCorrection').click();
-    await expect(workArtifactStatusText(dialog, 'correction_requested')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusText(dialog, 'correction_requested')).toBeVisible();
     await closeWorkArtifactDialog(dialog);
     await employeePage.goto('/aufgaben');
-    await expect(workArtifactTaskLink(employeePage, 'correction', correctionTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactTaskLink(employeePage, 'correction', correctionTitle)).toBeVisible();
 
     await workArtifactEntry(adminPage, rejectedTitle).click();
-    await dialog.locator('#artifact-action-reason').fill('Zuständigkeit ist noch nicht eindeutig.');
+    await workArtifactInput(dialog, 'actionReason').fill('Zuständigkeit ist noch nicht eindeutig.');
     await workArtifactAction(dialog, 'reject').click();
-    await expect(workArtifactStatusText(dialog, 'rejected')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusText(dialog, 'rejected')).toBeVisible();
     await closeWorkArtifactDialog(dialog);
 
     await employeePage.goto(`/auftraege/${jobNumber}`);
     await workArtifactEntry(employeePage, withdrawnTitle).click();
     const employeeDialog = workArtifactDialog(employeePage);
     await workArtifactAction(employeeDialog, 'withdrawReview').click();
-    await expect(workArtifactStatusText(employeeDialog, 'draft')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusText(employeeDialog, 'draft')).toBeVisible();
     await closeWorkArtifactDialog(employeeDialog);
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
     await workArtifactEntry(adminPage, rejectedTitle).click();
-    await dialog.locator('#artifact-action-reason').fill('Durch einen gültigen Folgevorgang ersetzt.');
+    await workArtifactInput(dialog, 'actionReason').fill('Durch einen gültigen Folgevorgang ersetzt.');
     await workArtifactAction(dialog, 'void').click();
-    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusVersion(dialog, 'voided', 1)).toBeVisible();
     await closeWorkArtifactDialog(dialog);
     await expect(workArtifactEntry(adminPage, rejectedTitle)).toContainText(
       workArtifactStatusLabel('voided'),
@@ -482,25 +467,18 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     const evidenceFileName = `p115-nachweis-${world.runId}.pdf`;
     await employeePage.goto(`/auftraege/${jobNumber}`);
     const documents = documentsRegion(employeePage.getByRole('main'));
-    await expect(documents).toBeVisible({ timeout: 30_000 });
+    await expect(documents).toBeVisible();
     await documentsRegionUploadInput(documents).setInputFiles({
       name: evidenceFileName,
       mimeType: 'application/pdf',
       buffer: Buffer.from('%PDF-1.4\nP1-15 Nachweisdokument'),
     });
     await expect(documentUploadCompleted(employeePage, 1, 1)).toBeVisible({
-      timeout: 60_000,
+      timeout: DOCUMENT_UPLOAD_TIMEOUT_MS,
     });
     await expect(textInDom(employeePage, SHARED_COPY.upload.failed)).toHaveCount(0);
-    const evidenceUploadClose = employeePage.getByRole('button', {
-      name: SHARED_COPY.action.close,
-    });
-    if (await evidenceUploadClose.isVisible().catch(() => false)) {
-      await evidenceUploadClose.click();
-    }
-    await expect(employeePage.getByRole('dialog')).toHaveCount(0, {
-      timeout: 10_000,
-    });
+    // The upload dialog closes itself after a successful upload.
+    await expect(employeePage.getByRole('dialog')).toHaveCount(0);
     await clockInOnJob(employeePage, jobTitle);
     await clockOut(employeePage);
     await adminPage.goto(`/auftraege/${jobNumber}`);
@@ -521,22 +499,18 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
 
     await adminPage.reload();
     await adminPage.waitForLoadState('networkidle');
-    await expect(workArtifactEntry(adminPage, artifactTitle)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactEntry(adminPage, artifactTitle)).toBeVisible();
     dialog = await openWorkArtifact(adminPage, artifactTitle, { attempts: 2, timeout: 5_000 });
     await workArtifactAction(dialog, 'approveInternally').click();
-    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workArtifactStatusText(dialog, 'approved')).toBeVisible();
     await closeArtifact(dialog);
     await employeePage.reload();
     dialog = await openWorkArtifact(employeePage, artifactTitle, { attempts: 2, timeout: 5_000 });
     await workArtifactCustomerDecisionPanel(dialog).click();
     await expect(workArtifactMessage(dialog, 'legalNotice')).toBeVisible();
-    await dialog.locator('#artifact-customer-name').fill('Erika Beispiel');
-    await dialog.locator('#artifact-customer-role').fill('Objektleitung');
-    await dialog.locator('#artifact-customer-relationship').fill('Bevollmächtigte Ansprechperson vor Ort');
+    await workArtifactInput(dialog, 'customerName').fill('Erika Beispiel');
+    await workArtifactInput(dialog, 'customerRole').fill('Objektleitung');
+    await workArtifactInput(dialog, 'customerRelationship').fill('Bevollmächtigte Ansprechperson vor Ort');
     const acknowledge = workArtifactAction(dialog, 'recordAcknowledgement');
     await acknowledge.click();
     await expect
@@ -548,7 +522,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       )
       .toBe(1);
     await expect(acknowledge).toBeEnabled();
-    await dialog.locator('#artifact-action-reason').fill('Kundin bittet um Ergänzung der Seriennummer.');
+    await workArtifactInput(dialog, 'actionReason').fill('Kundin bittet um Ergänzung der Seriennummer.');
     await workArtifactAction(dialog, 'recordReservation').click();
     await expect
       .poll(
@@ -559,9 +533,9 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       )
       .toBe(1);
     await expect(acknowledge).toBeEnabled();
-    await dialog
-      .locator('#artifact-action-reason')
-      .fill('Kunde möchte erst nach eigener Prüfung bestätigen.');
+    await workArtifactInput(dialog, 'actionReason').fill(
+      'Kunde möchte erst nach eigener Prüfung bestätigen.',
+    );
     await workArtifactAction(dialog, 'recordRefusal').click();
     await expect
       .poll(
@@ -589,7 +563,6 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
             (action) => action.action_type === 'signature_captured',
           ).length,
-        { timeout: 60_000 },
       )
       .toBe(1);
     const exportButton = workArtifactAction(dialog, 'export');
@@ -643,7 +616,6 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
           (await getWorkArtifactState(world.orgId, { jobNumber })).actions.filter(
             (action) => action.action_type === 'exported',
           ).length,
-        { timeout: 60_000 },
       )
       .toBe(1);
     await expect(exportButton).toBeEnabled();
@@ -666,9 +638,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     await closeArtifact(dialog);
 
     await employeePage.reload();
-    await expect(instructionEvidenceFulfilled(jobInstructionItem(employeePage, commissioning))).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(instructionEvidenceFulfilled(jobInstructionItem(employeePage, commissioning))).toBeVisible();
     const state = await getWorkArtifactState(world.orgId, { jobNumber });
     const exportedArtifact = expectDefined(state.artifacts[0], 'the exported artifact');
     const currentRevisionId = exportedArtifact.current_revision_id;
@@ -715,14 +685,14 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       kind: 'approval',
       description: dependencyDescription,
     });
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     const dependencyRow = workDependencyRow(adminPage, dependencyDescription);
     await expect(dependencyRow).toContainText(workDependencyStateLabel('open'));
     dialog = await linkWorkDependencyApproval(adminPage, dependencyRow, {
       artifactTitle: artifactTitle,
       reason: 'Aktuelle interne Freigabe erfüllt die dokumentierte Voraussetzung.',
     });
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     await expect(dependencyRow).toContainText(workDependencyStateLabel('satisfied'));
 
     const lifecycle = await getWorkLifecycleState(world.orgId, { jobNumber });

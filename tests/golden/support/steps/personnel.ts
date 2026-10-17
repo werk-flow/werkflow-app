@@ -152,7 +152,7 @@ export function personnelRecordHeader(page: Page, recordName: string): Locator {
 export async function openMemberDetailFromList(page: Page, name: string): Promise<void> {
   await page.goto('/mitarbeiter');
   const memberLink = page.getByRole('link', { name, exact: true });
-  await expect(memberLink).toBeVisible({ timeout: 20_000 });
+  await expect(memberLink).toBeVisible();
   const memberHref = await memberLink.getAttribute('href');
   if (!memberHref) {
     throw new Error(`openMemberDetailFromList: link for ${name} has no href`);
@@ -161,10 +161,8 @@ export async function openMemberDetailFromList(page: Page, name: string): Promis
   // still refresh the list and supersede an App Router transition. Follow the
   // semantic link directly while establishing the persisted setup state.
   await page.goto(memberHref);
-  await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
-  await expect(visibleText(page, PERSONNEL_COPY.personnelSection)).toBeVisible({
-    timeout: 15_000,
-  });
+  await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/);
+  await expect(visibleText(page, PERSONNEL_COPY.personnelSection)).toBeVisible();
 }
 
 /** The inline-edit pencil of one Personalien field. */
@@ -215,18 +213,36 @@ export async function editPersonnelExitDate(page: Page, dateIso: string): Promis
   await editButton.click();
   await typeIntoDatePicker(page.getByRole('main'), SHARED_COPY.field.date, datePickerDigits(dateIso), 10);
   await page.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(editButton).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(editButton).toBeVisible();
   await page.reload();
-  await expect(visibleText(page, isoToGermanDate(dateIso))).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, isoToGermanDate(dateIso))).toBeVisible();
 }
 
 /** The page action that opens the „Personalakte anlegen“ dialog. */
 export function createPersonnelRecordButton(page: Page): Locator {
   return page.getByRole('button', { name: PERSONNEL_COPY.createRecord });
+}
+
+/** Fields of the personnel record and condition dialogs, by their DOM id. */
+const PERSONNEL_FIELD_IDS = {
+  firstName: 'personnel-first-name',
+  lastName: 'personnel-last-name',
+  number: 'personnel-number',
+  notes: 'personnel-notes',
+  conditionType: 'condition-type',
+} as const;
+
+/** A field of an open personnel dialog. */
+export function personnelField(dialog: Locator, field: keyof typeof PERSONNEL_FIELD_IDS): Locator {
+  return dialog.locator(`#${PERSONNEL_FIELD_IDS[field]}`);
+}
+
+/** Proves no copy of the responsibility card exists in the DOM. */
+export async function expectNoResponsibilityCard(
+  page: Page,
+  responsibility: OrganizationResponsibility,
+): Promise<void> {
+  await expect(page.getByTestId(`responsibility-${responsibility}`)).toHaveCount(0);
 }
 
 /** The submit button inside the „Personalakte anlegen“ dialog. */
@@ -369,9 +385,7 @@ export async function addConditionViaDialog(
       await dialog
         .getByRole('button', { name: SHARED_COPY.action.save, exact: true })
         .click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
@@ -392,7 +406,7 @@ export async function editConditionWeeklyHours(
   await expect(page.getByRole('heading', { name: 'Kondition bearbeiten' })).toBeVisible();
   await page.locator('#condition-weekly-hours').fill(weeklyHours);
   await page.getByRole('dialog').getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 /** Deletes one condition version through its actions menu and the confirmation. */
@@ -401,7 +415,7 @@ export async function deleteConditionViaMenu(page: Page, validFromLabel: string)
   await page.getByRole('menuitem', { name: SHARED_COPY.action.delete }).click();
   const deleteDialog = page.getByRole('alertdialog');
   await deleteDialog.getByRole('button', { name: SHARED_COPY.action.delete, exact: true }).click();
-  await expect(deleteDialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(deleteDialog).toHaveCount(0);
 }
 
 export async function createPersonnelRecordViaDialog(
@@ -427,9 +441,7 @@ export async function createPersonnelRecordViaDialog(
   } else {
     // The number suggestion arrives asynchronously; wait so the submit cannot
     // race it (mirrors the request/job dialogs).
-    await expect(page.locator('#personnel-number')).toHaveValue(/.+/, {
-      timeout: 15_000,
-    });
+    await expect(page.locator('#personnel-number')).toHaveValue(/.+/);
   }
   if (options.entryDateDigits) {
     await typeIntoDatePicker(dialog, PERSONNEL_COPY.entryDate, options.entryDateDigits);
@@ -437,7 +449,7 @@ export async function createPersonnelRecordViaDialog(
 
   await submitPersonnelRecordButton(dialog).click();
   const reachedDetail = await page
-    .waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 })
+    .waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/)
     .then(() => true)
     .catch(() => false);
   if (!reachedDetail) {
@@ -448,9 +460,9 @@ export async function createPersonnelRecordViaDialog(
       name: recordName,
       exact: true,
     });
-    await expect(recordLink).toBeVisible({ timeout: 30_000 });
+    await expect(recordLink).toBeVisible();
     await recordLink.click();
-    await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, { timeout: 20_000 });
+    await page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/);
   }
 
   const recordId = page.url().match(/\/mitarbeiter\/([0-9a-f-]{36})/)?.[1];
@@ -473,9 +485,7 @@ export async function sendInviteFromPersonnelRecord(
   await page.getByRole('button', { name: 'Einladung senden' }).click();
   // A Realtime refresh can replace the dialog before its short success flash
   // is observed. Assert the persisted personnel state and audit entry instead.
-  await expect(page.getByRole('dialog')).toHaveCount(0, {
-    timeout: 30_000,
-  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(visibleText(page, PERSONNEL_COPY.invited)).toBeVisible();
   await expect(visibleText(page, PERSONNEL_COPY.inviteSent)).toBeVisible();
 }
@@ -575,9 +585,7 @@ export async function addWorkScheduleViaDialog(
       await dialog
         .getByRole('button', { name: SHARED_COPY.action.save, exact: true })
         .click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
@@ -601,9 +609,7 @@ export async function setHolidayRegionViaSettings(page: Page, regionLabel: strin
   await page.goto('/einstellungen/zeiterfassung');
   await selectFromSearchable(page, page.locator('#holiday-region'), regionLabel);
   await saveHolidayRegionButton(page).click();
-  await expect(page.getByText('Der Feiertagskalender wurde gespeichert.')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByText('Der Feiertagskalender wurde gespeichert.')).toBeVisible();
 }
 
 const CLOSURE_DATE_FIELD = 'Datum der Betriebsruhe';
@@ -634,9 +640,7 @@ export async function addClosureDayViaSettings(
   }
   await options.beforeSubmit?.();
   await closureDaySubmitButton(page).click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde eingetragen.')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByText('Der Betriebsruhe-Tag wurde eingetragen.')).toBeVisible();
 }
 
 // dateLabel: dd.mm.yyyy — the aria-label also contains the weekday, so match
@@ -654,9 +658,7 @@ export async function removeClosureDayViaSettings(
       name: new RegExp(`Betriebsruhe am .*${escaped} entfernen`),
     })
     .click();
-  await expect(page.getByText('Der Betriebsruhe-Tag wurde entfernt.')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByText('Der Betriebsruhe-Tag wurde entfernt.')).toBeVisible();
 }
 
 // P1-05: scoped responsibilities, effective previews, and substitutions.
@@ -735,9 +737,7 @@ export async function previewResponsibilityChange(
   if (options.selectedNames) {
     await dialog.locator(`#${options.responsibility}-mode`).click();
     await page.getByRole('option', { name: RESPONSIBILITY_COPY.selectedMode }).click();
-    await expect(dialog.getByRole('checkbox').first()).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(dialog.getByRole('checkbox').first()).toBeVisible();
     for (const checkbox of await dialog.getByRole('checkbox').all()) {
       if (await checkbox.isChecked()) await checkbox.uncheck();
     }
@@ -751,7 +751,7 @@ export async function previewResponsibilityChange(
 
   await dialog.getByRole('button', { name: 'Wirkung prüfen' }).click();
   const preview = dialog.getByTestId('effective-access-preview');
-  await expect(preview).toBeVisible({ timeout: 15_000 });
+  await expect(preview).toBeVisible();
   const gainedSection = preview.getByTestId('preview-gained');
   const lostSection = preview.getByTestId('preview-lost');
   for (const name of options.gainedNames ?? []) {
@@ -764,7 +764,7 @@ export async function previewResponsibilityChange(
 
 export async function confirmResponsibilityPreview(page: Page): Promise<void> {
   await page.getByRole('dialog').getByRole('button', { name: 'Änderung bestätigen' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 const END_DELEGATION_TODAY = 'Heute beenden';
@@ -785,7 +785,7 @@ export async function createResponsibilityDelegationViaSettings(
   const dialog = page.getByRole('dialog');
 
   const delegatorTrigger = dialog.locator(`#${options.responsibility}-delegator`);
-  await expect(delegatorTrigger).toBeVisible({ timeout: 15_000 });
+  await expect(delegatorTrigger).toBeVisible();
   if (!(await delegatorTrigger.textContent())?.includes(options.delegatorName)) {
     await selectFromSearchable(page, delegatorTrigger, options.delegatorName);
   }
@@ -797,19 +797,17 @@ export async function createResponsibilityDelegationViaSettings(
   await typeIntoDatePicker(dialog, SHARED_COPY.field.validFrom, options.validFromDigits);
   await typeIntoDatePicker(dialog, 'Gültig bis', options.validUntilDigits);
   await dialog.getByRole('button', { name: 'Vertretung speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const activeDelegationRow = (scope: Locator): Locator =>
     confirmed(scope.locator('li'))
       .filter({ hasText: options.substituteName })
       .filter({ has: page.getByRole('button', { name: END_DELEGATION_TODAY }) })
       .first();
   try {
-    await expect(activeDelegationRow(card)).toBeVisible({ timeout: 15_000 });
+    await expect(activeDelegationRow(card)).toBeVisible();
   } catch {
     await page.reload();
-    await expect(activeDelegationRow(responsibilityCard(page, options.responsibility))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(activeDelegationRow(responsibilityCard(page, options.responsibility))).toBeVisible();
   }
 }
 
@@ -829,9 +827,7 @@ export async function endResponsibilityDelegationViaSettings(
     .filter({ hasText: substituteName })
     .filter({ has: page.getByText('Beendet', { exact: true }) })
     .first();
-  await expect(endedRow.getByText('Beendet', { exact: true })).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(endedRow.getByText('Beendet', { exact: true })).toBeVisible();
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,7 +997,7 @@ export async function uploadProtectedPersonnelFile(
     );
   }
   await dialog.getByRole('button', { name: LIFECYCLE_CONTROLS.upload }).click();
-  await expect(visibleText(lifecycle, input.fileName)).toBeVisible({ timeout: 20_000 });
+  await expect(visibleText(lifecycle, input.fileName)).toBeVisible();
 }
 
 /** The release action of one protected file in the lifecycle section. */
@@ -1046,7 +1042,7 @@ export async function changeOrganizationAccess(
   );
   await dialog.getByLabel(SHARED_COPY.field.reason).fill(reason);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-  await expect(dialog).toBeHidden({ timeout: 15_000 });
+  await expect(dialog).toBeHidden();
 }
 
 /** Records one employment transition from a date with a reason. */

@@ -5,6 +5,7 @@ import {
   isDocumentationInput,
   type InputSnapshot,
 } from '../evidence/group-evidence';
+import { contentDigest } from '../evidence/source-content';
 
 /**
  * The one gate before publication (decision 0007, amendment 2026-10-01): a
@@ -77,8 +78,31 @@ export function reviewedFiles(changed: readonly string[], directories: readonly 
   return [...new Set(changed.filter(inScope))].sort();
 }
 
+/**
+ * The content digests a review record certifies, taken before CodeRabbit starts: for
+ * `--committed` the content at HEAD (the scope is base..HEAD), otherwise the working tree.
+ * Until 2026-10-16 the wrapper read the working tree after the review, so an edit during the
+ * review, or an uncommitted edit beside a committed review, was certified unseen (audit finding B8).
+ * A file without content (deleted) has no digest.
+ */
+export function reviewDigests(input: {
+  changed: readonly string[];
+  scope: ReviewScope;
+  readWorkingTree: (file: string) => Buffer | undefined;
+  readCommitted: (file: string) => Buffer | undefined;
+}): Record<string, string> {
+  const read = input.scope.committedOnly ? input.readCommitted : input.readWorkingTree;
+  return Object.fromEntries(
+    reviewedFiles(input.changed, input.scope.directories).flatMap((file) => {
+      const contents = read(file);
+      return contents === undefined ? [] : [[file, contentDigest(file, contents)]];
+    }),
+  );
+}
+
 export const publicationReportSchema = z.object({
   id: z.string(),
+  mode: z.enum(['change', 'release']),
   target: z.enum(['local', 'cloud']),
   status: z.enum(['running', 'passed', 'failed']),
   scope: z.enum(['selected-groups', 'all-required-groups']),
@@ -123,6 +147,37 @@ function measuredGroupProblems(input: {
   });
 }
 
+/**
+ * A push to production (`refs/heads/main`) needs the release evidence of testing.md: the newest
+ * local report is a passing release plan, and the newest cloud report is a passing canary, both on
+ * the pushed tree. Until 2026-10-16 the gate read no remote ref, and a change plan let a push to
+ * main through (audit finding B9).
+ */
+function productionProblems(input: {
+  newestReport: PublicationReport | undefined;
+  canaryReport: PublicationReport | undefined;
+  current: InputSnapshot;
+}): string[] {
+  const problems: string[] = [];
+  if (input.newestReport?.mode !== 'release')
+    problems.push(
+      `A push to main publishes production and needs a passing release plan as the newest local report${input.newestReport ? `; ${input.newestReport.id} is a ${input.newestReport.mode} plan` : ''}. Run: bun run test:verify --mode release`,
+    );
+  const canary = input.canaryReport;
+  const canaryDrift = canary
+    ? changedInputs({ ...canary.snapshot, environment: input.current.environment }, input.current)
+    : [];
+  if (!canary || canary.status !== 'passed' || canary.scope !== 'all-required-groups')
+    problems.push(
+      `A push to main needs a passing cloud canary${canary ? `; the newest cloud report ${canary.id} is ${canary.status === 'passed' ? 'an explicit --group run' : canary.status}` : ''}. Run: bun run env:dev, bun run test:server cloud (own terminal), bun run test:verify --target cloud, then bun run env:local`,
+    );
+  else if (canaryDrift.length)
+    problems.push(
+      `Cloud canary ${canary.id} passed on a different tree; ${canaryDrift.length} file(s) changed since: ${sample(canaryDrift)}. Run the canary again on this tree.`,
+    );
+  return problems;
+}
+
 function sample(files: readonly string[]): string {
   return `${files.slice(0, 5).join(', ')}${files.length > 5 ? `, and ${files.length - 5} more` : ''}`;
 }
@@ -144,8 +199,13 @@ export function publicationGateProblems(input: {
   measuredGroups: readonly { id: string; changedFiles: readonly string[] }[];
   /** The passing local runs of those groups. */
   measuredPasses: readonly MeasuredPass[];
+  /** True when the push updates production (`publishesProduction`). */
+  production: boolean;
+  /** The newest verification report of the cloud target: the canary. */
+  canaryReport: PublicationReport | undefined;
 }): string[] {
   const problems: string[] = [];
+  if (input.production) problems.push(...productionProblems(input));
   const foreign = input.pushed.filter((commit) => commit !== input.head);
   if (foreign.length)
     problems.push(

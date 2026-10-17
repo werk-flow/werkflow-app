@@ -9,6 +9,7 @@ import {
   seedWorkSchedule,
 } from '../../../golden/support/db/personnel';
 import { seedTeam } from '../../../golden/support/db/qualifications';
+import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
 import {
   memberMenuItem,
@@ -76,14 +77,14 @@ async function employeeRecordId(world: TestWorld): Promise<string> {
 }
 
 /**
- * Opens a row's actions menu and returns the item. A click before hydration
- * opens nothing, so the click repeats until the item shows.
+ * Opens a row's actions menu with one click and returns the item. A click on
+ * the server HTML before hydration opens nothing, so the click waits for the
+ * hydrated, settled page.
  */
 async function menuItem(button: Locator, item: Locator): Promise<Locator> {
-  await expect(async () => {
-    if (!(await item.isVisible())) await button.click();
-    await expect(item).toBeVisible({ timeout: 2_000 });
-  }).toPass();
+  await hydratedAndSettled(button.page());
+  await button.click();
+  await expect(item).toBeVisible();
   return item;
 }
 

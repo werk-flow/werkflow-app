@@ -51,6 +51,8 @@ export type RunRequest = {
   target: PlaywrightTarget;
   grep: string | null;
   reuseRunKey: string | null;
+  /** A fresh-world diagnostic of this failed group run (`freshDiagnosisProblem` in group-recovery.ts). */
+  freshForRunKey?: string | null;
 };
 
 export type FocusedIterationAttempt = {
@@ -68,12 +70,22 @@ export function validateRunRequest(request: RunRequest): string[] {
   if (request.lane === 'iteration' && !request.grep?.trim()) {
     errors.push('Iteration runs require --grep. Complete evidence comes from bun run test:verify.');
   }
-  if (request.lane === 'diagnostic') {
-    if (!request.grep?.trim()) errors.push('Diagnostic runs require --grep.');
-    if (!request.reuseRunKey) errors.push('Diagnostic runs require --reuse-run <run-key>.');
-  } else if (request.reuseRunKey) {
-    errors.push('--reuse-run is available only in diagnostic mode.');
+  if (request.lane !== 'diagnostic') {
+    if (request.reuseRunKey) errors.push('--reuse-run is available only in diagnostic mode.');
+    if (request.freshForRunKey) errors.push('--fresh-for is available only in diagnostic mode.');
+    return errors;
   }
+  if (request.freshForRunKey) {
+    // A fresh-world diagnostic repeats the failed run's whole group on a world of its own.
+    if (request.grep || request.reuseRunKey)
+      errors.push(
+        '--fresh-for runs the failed group on a fresh world; it takes neither --grep nor --reuse-run.',
+      );
+    return errors;
+  }
+  if (!request.grep?.trim()) errors.push('Diagnostic runs require --grep.');
+  if (!request.reuseRunKey)
+    errors.push('Diagnostic runs require --reuse-run <run-key>, or --fresh-for <run-key> for a fresh world.');
   return errors;
 }
 

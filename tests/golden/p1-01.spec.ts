@@ -12,7 +12,7 @@ import {
   searchCustomers,
 } from './support/steps/customers';
 import { testData, visibleText, textInDom } from './support/steps/shared';
-import { createJob, fieldPackCallLink, siteAccessText } from './support/steps/work';
+import { createJob, fieldPackCallLink, fieldWorkPackContact, siteAccessText } from './support/steps/work';
 
 // P1-01 — Customer contacts and work sites (@P1-01)
 // Bounded outcome: Admin/Büro maintain multiple contacts and durable work
@@ -100,7 +100,7 @@ test.describe('P1-01 Kontakte und Einsatzorte @P1-01', () => {
       await expect(visibleText(employeePage, buildingB.name)).toBeVisible();
       await expect(visibleText(employeePage, formatSiteAddress(buildingB))).toBeVisible();
       await expect(visibleText(employeePage, siteAccessText(buildingB.accessNotes))).toBeVisible();
-      const contact = employeePage.getByRole('main').getByTestId('field-work-pack-contact');
+      const contact = fieldWorkPackContact(employeePage);
       await expect(contact.getByText(manager.name, { exact: true })).toBeVisible();
       await expect(contact.getByText(manager.role, { exact: true })).toBeVisible();
       // The contact's phone number is a click-to-call link (normalized href).

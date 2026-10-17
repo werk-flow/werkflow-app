@@ -97,9 +97,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
 
     // Büro sees the selection but cannot change it (admin-only policy).
     await bueroPage.goto('/einstellungen/zeiterfassung');
-    await expect(holidayRegionSelect(bueroPage)).toContainText(HOLIDAY_REGION_LABELS.BY, {
-      timeout: 15_000,
-    });
+    await expect(holidayRegionSelect(bueroPage)).toContainText(HOLIDAY_REGION_LABELS.BY);
     await expect(holidayRegionSelect(bueroPage)).toBeDisabled();
     await expect(saveHolidayRegionButton(bueroPage)).toBeDisabled();
 
@@ -109,9 +107,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     await showCalendarMonth(adminPage, 12 - currentMonth);
     const newYearsDay = getHolidayName('BY', `${Number(businessDate.slice(0, 4)) + 1}-01-01`);
     if (!newYearsDay) throw new Error('P1-04: the Bavarian calendar has no New Year holiday');
-    await expect(visibleText(adminPage, newYearsDay)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, newYearsDay)).toBeVisible();
   });
 
   test('Vollzeit-Wochenplan: Ziel kommt aus dem Plan, Abweichung vom Vertrag ist sichtbar', async ({
@@ -143,9 +139,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     await expect(visibleText(adminPage, PERSONNEL_COPY.scheduleWins)).toBeVisible();
 
     // The change is auditable like every other personnel change.
-    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.schedule_added)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.schedule_added)).toBeVisible();
   });
 
   test('Teilzeit-Wochenplan erzeugt ein anderes Wochenziel', async ({
@@ -273,9 +267,7 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     const memberName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
     await openMemberDetailFromList(adminPage, memberName);
 
-    await expect(visibleText(adminPage, PERSONNEL_COPY.noScheduleDefaultTarget)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, PERSONNEL_COPY.noScheduleDefaultTarget)).toBeVisible();
     await expect(visibleText(adminPage, PERSONNEL_COPY.noScheduleSection)).toBeVisible();
   });
 

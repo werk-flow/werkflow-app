@@ -220,13 +220,49 @@ function isPendingState(file: string, name: string | null): boolean {
   return PENDING_STATE_LOCATORS.some((entry) => entry.file === file && entry.name === name);
 }
 
+/**
+ * A whole-DOM privacy absence: `expectNo…(page, …)` asserts
+ * `expect(page.<record locator chain>).toHaveCount(0)`. It must count every
+ * copy, unconfirmed ones included, so `confirmed` would hide exactly what it
+ * checks; the artifact locator guard (work-artifact-locators.test.ts) owns
+ * the page-rooted form.
+ */
+function isWholeDomPrivacyAbsence(call: ts.CallExpression): boolean {
+  if (!owningFunctionName(call)?.startsWith('expectNo')) return false;
+  let chain: ts.Expression = call;
+  while (
+    ts.isPropertyAccessExpression(chain.parent) &&
+    chain.parent.expression === chain &&
+    ts.isCallExpression(chain.parent.parent)
+  )
+    chain = chain.parent.parent;
+  const expectCall = chain.parent;
+  if (!ts.isCallExpression(expectCall) || calledName(expectCall) !== 'expect') return false;
+  if (expectCall.arguments[0] !== chain) return false;
+  const matcher = expectCall.parent;
+  if (!ts.isPropertyAccessExpression(matcher) || matcher.name.text !== 'toHaveCount') return false;
+  const assertion = matcher.parent;
+  const root = chainRoot(chain);
+  return (
+    ts.isCallExpression(assertion) &&
+    assertion.arguments[0]?.getText() === '0' &&
+    ts.isIdentifier(root) &&
+    root.text === 'page'
+  );
+}
+
 /** Rules 1 and 2 for one support module; `recordFunctions` holds every compliant record function name. */
 export function supportFindings(file: string, text: string, recordFunctions: ReadonlySet<string>): Finding[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const findings: Finding[] = [];
   const lineOf = (node: ts.Node) => source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && isRecordLocatorCall(node) && !insideConfirmed(node)) {
+    if (
+      ts.isCallExpression(node) &&
+      isRecordLocatorCall(node) &&
+      !insideConfirmed(node) &&
+      !isWholeDomPrivacyAbsence(node)
+    ) {
       const name = owningFunctionName(node);
       if (!isPendingState(file, name))
         findings.push({
@@ -386,5 +422,22 @@ await expect(card).toHaveCount(0);
 await expect(dayCard(row, title)).not.toBeVisible();
 await expectGone(card);`;
     expect(absenceFindings('probe.spec.ts', absence, names).map((finding) => finding.line)).toEqual([2, 3]);
+  });
+
+  test('a whole-DOM privacy absence counts every copy, only in an expectNo helper and only for zero', () => {
+    const privacyAbsence = `export async function expectNoTeamCard(page: Page, teamName: string): Promise<void> {
+  await expect(page.getByTestId('team-card').filter({ hasText: teamName })).toHaveCount(0);
+}`;
+    expect(supportFindings('probe.ts', privacyAbsence, new Set())).toEqual([]);
+    for (const misuse of [
+      privacyAbsence.replace('expectNoTeamCard', 'expectTeamCardGone'),
+      privacyAbsence.replace('toHaveCount(0)', 'toHaveCount(1)'),
+      privacyAbsence.replace("page.getByTestId('team-card')", "section.getByTestId('team-card')"),
+      `export async function expectNoTeamCard(page: Page): Promise<void> {
+  const card = page.getByTestId('team-card');
+  await expect(card).toHaveCount(0);
+}`,
+    ])
+      expect(supportFindings('probe.ts', misuse, new Set())).toHaveLength(1);
   });
 });

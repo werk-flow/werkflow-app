@@ -35,7 +35,7 @@ try {
     process.exitCode = 1;
   } else {
     console.log(
-      `Coverage traceability passed: ${catalog.length} catalog flows, ${coverage.mappings.length} many-to-many mappings, ${groups.length} execution groups. Whole-clause semantic review remains required; this check does not certify runtime outcomes.`,
+      `Coverage traceability passed: ${catalog.length} catalog flows, ${coverage.mappings.length} many-to-many mappings bound to declared test titles, ${groups.length} execution groups. Whole-clause semantic review remains required; this check does not certify runtime outcomes.`,
     );
   }
 } catch (error) {

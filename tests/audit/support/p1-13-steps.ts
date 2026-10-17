@@ -86,6 +86,14 @@ export function templateQuickCreateDialog(page: Page, kind: 'item' | 'location' 
   return dialogWithHeading(page, heading);
 }
 
+/** The name field of an open quick-create dialog. */
+export function templateQuickCreateNameField(
+  dialog: Locator,
+  kind: 'item' | 'location' | 'capability',
+): Locator {
+  return dialog.locator(`#quick-${kind}-name`);
+}
+
 /** The inline-create action of a template picker popup: a new article, location or capability. */
 export function templateQuickCreateButton(page: Page, kind: 'item' | 'location' | 'capability'): Locator {
   const labels = TEMPLATE_AUDIT_COPY.quickCreate;
@@ -139,6 +147,11 @@ export function appendedTemplateItemCard(editor: Locator): Locator {
 
 export function templateMaterialCard(editor: Locator): Locator {
   return confirmed(editor.getByTestId('work-template-material'));
+}
+
+/** The planned quantity of a template material card. */
+export function templateMaterialQuantity(materialCard: Locator): Locator {
+  return materialCard.locator('input[id^="quantity-"]');
 }
 
 export function materialArticlePicker(materialCard: Locator): Locator {

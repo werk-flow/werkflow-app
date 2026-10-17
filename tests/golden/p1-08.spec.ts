@@ -112,9 +112,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
 
         // Own list: active, honestly open-ended.
         await openOwnSicknessSection(employeePage);
-        await expect(visibleText(employeePage, openEndedRangeText)).toBeVisible({
-          timeout: 15_000,
-        });
+        await expect(visibleText(employeePage, openEndedRangeText)).toBeVisible();
 
         // Target truth: the dashboard's weekly Soll equals what the app's own
         // resolver computes from stored schedules, conditions, holidays, and the
@@ -130,16 +128,12 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
         await employeePage.goto('/zeiterfassung');
         await expect(
           visibleText(employeePage, weeklyTargetText(formatDuration(expectedSollMinutes))),
-        ).toBeVisible({
-          timeout: 15_000,
-        });
+        ).toBeVisible();
         // Today's Tagesziel explains itself — unless a holiday/closure already
         // zeroes the day with its own label (runtime-checked, never assumed).
         const todayTarget = targets.find((target) => target.date === todayIso);
         if (todayTarget && !todayTarget.isHoliday && !todayTarget.isClosureDay) {
-          await expect(visibleText(employeePage, TARGET_COPY.sicknessNoTarget)).toBeVisible({
-            timeout: 15_000,
-          });
+          await expect(visibleText(employeePage, TARGET_COPY.sicknessNoTarget)).toBeVisible();
         }
 
         // The shared calendar shows WHO is unavailable, never why: neutral
@@ -147,25 +141,21 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
         await showCalendarMonth(adminPage);
         await expect(
           visibleText(adminPage, absenceCalendarLabel(employeeName, { openEnded: true })),
-        ).toBeVisible({
-          timeout: 15_000,
-        });
+        ).toBeVisible();
         await expect(textInDom(adminPage, typedSicknessCalendarLabel(employeeName))).toHaveCount(0);
 
         // Notifications (privacy-matrix audiences): both managers are informed —
         // minimal payload, no type; the reporter themselves gets no notice.
         await openAufgaben(bueroPage);
         const bueroRow = attentionNotificationRow(bueroPage, reportState.id);
-        await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
+        await expect(bueroRow).toHaveCount(1);
         await expect(bueroRow).toHaveAttribute('data-unread', 'true');
         await expect(bueroRow.getByText(sicknessNoticeText(employeeName))).toBeVisible();
         await expectGone(bueroRow.getByText(SICKNESS_TYPE_LABELS.krankheit));
         await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
 
         await openAufgaben(adminPage);
-        await expect(attentionNotificationRow(adminPage, reportState.id)).toHaveCount(1, {
-          timeout: 15_000,
-        });
+        await expect(attentionNotificationRow(adminPage, reportState.id)).toHaveCount(1);
 
         await openAufgaben(employeePage);
         await expectGone(attentionNotificationRow(employeePage, reportState.id));
@@ -216,15 +206,13 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
             adminPage,
             sicknessReportSummaryText({ type: 'kind_krank', halfDay: true, evidence: 'pending' }),
           ),
-        ).toBeVisible({
-          timeout: 15_000,
-        });
+        ).toBeVisible();
 
         // The affected person is informed transparently (own-flavored notice),
         // the recording manager is not re-notified of their own action.
         await openAufgaben(bueroPage);
         const bueroRow = attentionNotificationRow(bueroPage, reportState.id);
-        await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
+        await expect(bueroRow).toHaveCount(1);
         await expect(bueroRow).toHaveAttribute('data-unread', 'true');
         await expect(bueroRow.getByText(SICKNESS_COPY.recordedForYouNotice)).toBeVisible();
         await markAttentionNotificationReadViaButton(bueroPage, reportState.id);
@@ -250,10 +238,8 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       // new version, never a duplicate.
       await openAufgaben(bueroPage);
       const bueroRow = attentionNotificationRow(bueroPage, reportId);
-      await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
-      await expect(bueroRow).toHaveAttribute('data-unread', 'true', {
-        timeout: 15_000,
-      });
+      await expect(bueroRow).toHaveCount(1);
+      await expect(bueroRow).toHaveAttribute('data-unread', 'true');
       await markAttentionNotificationReadViaButton(bueroPage, reportId);
 
       // Evidence bookkeeping (state only, no bytes): require → received. The
@@ -265,18 +251,14 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       });
       await expect(
         visibleText(adminPage, sicknessReportSummaryText({ type: 'krankheit', evidence: 'pending' })),
-      ).toBeVisible({
-        timeout: 15_000,
-      });
+      ).toBeVisible();
       await setSicknessEvidenceViaMenu(adminPage, endedRangeText, {
         required: true,
         received: true,
       });
       await expect(
         visibleText(adminPage, sicknessReportSummaryText({ type: 'krankheit', evidence: 'received' })),
-      ).toBeVisible({
-        timeout: 15_000,
-      });
+      ).toBeVisible();
 
       const afterEvidence = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
       expect(afterEvidence.evidenceRequired).toBe(true);
@@ -285,9 +267,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
 
       // Evidence changes never re-surface the notice (version unchanged).
       await openAufgaben(bueroPage);
-      await expect(bueroRow).toHaveAttribute('data-unread', 'false', {
-        timeout: 15_000,
-      });
+      await expect(bueroRow).toHaveAttribute('data-unread', 'false');
 
       // Pattern audit: Büro's marker moved through both report versions.
       const bueroPattern = await getAttentionPatternStateForUser(world.orgId, world.users.buero.id);
@@ -315,9 +295,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       // (supabase/tests/people_boundaries.sql). The surface proof: the
       // employee's calendar never shows another person's absence.
       await showCalendarMonth(employeePage);
-      await expect(textInDom(employeePage, absenceCalendarLabel(bueroName))).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(textInDom(employeePage, absenceCalendarLabel(bueroName))).toHaveCount(0);
       await expect(textInDom(employeePage, absenceCalendarLabel(adminName))).toHaveCount(0);
     });
 
@@ -349,17 +327,15 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
       // The SAME notification re-surfaces unread for the other manager…
       await openAufgaben(bueroPage);
       const bueroRow = attentionNotificationRow(bueroPage, reportId);
-      await expect(bueroRow).toHaveCount(1, { timeout: 15_000 });
-      await expect(bueroRow).toHaveAttribute('data-unread', 'true', {
-        timeout: 15_000,
-      });
+      await expect(bueroRow).toHaveCount(1);
+      await expect(bueroRow).toHaveAttribute('data-unread', 'true');
       await expect(bueroRow.getByText(SICKNESS_COPY.cancelledNoticePrefix)).toBeVisible();
 
       // …and the affected person now learns of the office action on their own
       // report (transparency: an availability change is always explainable).
       await openAufgaben(employeePage);
       const employeeRow = attentionNotificationRow(employeePage, reportId);
-      await expect(employeeRow).toHaveCount(1, { timeout: 15_000 });
+      await expect(employeeRow).toHaveCount(1);
       await expect(employeeRow).toHaveAttribute('data-unread', 'true');
       await expect(
         employeeRow.getByText(SICKNESS_COPY.ownCancelledNoticeStart, { exact: false }),
@@ -380,9 +356,7 @@ test.describe('P1-08 Krankmeldung und sensible Abwesenheit @P1-08', () => {
 
       // The availability signal is gone from planning.
       await showCalendarMonth(adminPage);
-      await expect(textInDom(adminPage, absenceCalendarLabel(employeeName))).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(textInDom(adminPage, absenceCalendarLabel(employeeName))).toHaveCount(0);
     });
   });
 });

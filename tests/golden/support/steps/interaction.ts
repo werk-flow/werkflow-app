@@ -86,6 +86,18 @@ export async function settled(scope: Scope, options: { timeout?: number } = {}):
 }
 
 /**
+ * Waits until the app shell hydrated and settled. The realtime provider marks
+ * `<html>` from an effect once its channel joined, so server HTML never
+ * carries the mark; after the root hydrated, React replays a click on content
+ * that still streams in instead of dropping it. The catch-up read the mark
+ * starts must settle before a step acts.
+ */
+export async function hydratedAndSettled(page: Page): Promise<void> {
+  await expect(page.locator('html')).toHaveAttribute('data-realtime-postgres-state', 'ready');
+  await settled(page);
+}
+
+/**
  * Settles the scope, then presses the key. Without `into`, focus must not sit
  * in a text field, combobox or listbox, where a shortcut becomes typed text.
  * With `into`, the key goes to that field (Enter in a search box).

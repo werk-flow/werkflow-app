@@ -56,7 +56,7 @@ async function templateDraftName({ page, world }: SurfaceContext): Promise<strin
     await workTemplateCreateSubmit(createDialog).click();
     // A created draft opens in its editor; close it so the opener starts from the list.
     const editor = workTemplateDraftEditor(page, 1);
-    await expect(editor).toBeVisible({ timeout: 20_000 });
+    await expect(editor).toBeVisible();
     // Focus sits in the editor's first field, so the layer helper presses Escape into it.
     await dismissDialog(editor);
     return name;
@@ -69,7 +69,7 @@ async function openTemplateDraftEditor(context: SurfaceContext): Promise<Locator
   await templateDraftName(context);
   await workTemplateOpenButton(context.page).click();
   const editor = workTemplateDraftEditor(context.page, 1);
-  await expect(editor).toBeVisible({ timeout: 20_000 });
+  await expect(editor).toBeVisible();
   return editor;
 }
 

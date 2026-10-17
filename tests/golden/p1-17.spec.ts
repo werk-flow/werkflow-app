@@ -19,6 +19,7 @@ import {
   workArtifactDialog,
   workArtifactEntry,
   workArtifactField,
+  workArtifactInput,
   workArtifactOption,
   fillWorkArtifactVisit,
 } from './support/spec-helpers/work-artifact-dialog';
@@ -70,27 +71,21 @@ async function releaseCurrentDraft(page: Page): Promise<string> {
   const section = workHandoverSection(page);
   await selectAllHandoverSources(section);
   await handoverAction(section, 'saveDraft').click();
-  await expect(handoverMessage(section, 'draftSaved')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(handoverMessage(section, 'draftSaved')).toBeVisible();
   await expect(section).toContainText(HANDOVER_TEXT.openReviewPoints);
   await expect(section).toContainText(HANDOVER_TEXT.notAssessed);
   const override = handoverField(section, 'exceptionReason');
-  if (await override.isVisible().catch(() => false)) {
+  if (await override.isVisible()) {
     await override.fill('Offener Mangel und fehlende Unterschrift sind im Paket klar ausgewiesen.');
   }
   const popupPromise = page.waitForEvent('popup');
   await handoverAction(section, 'openPreview').click();
   const preview = await popupPromise;
   await preview.waitForLoadState('domcontentloaded');
-  await expect(handoverMessage(section, 'previewCreated')).toBeVisible({
-    timeout: 20_000,
-  });
+  await expect(handoverMessage(section, 'previewCreated')).toBeVisible();
   const html = await readPopupBodyText(preview);
   await handoverAction(section, 'release').click();
-  await expect(handoverMessage(section, 'released')).toBeVisible({
-    timeout: 30_000,
-  });
+  await expect(handoverMessage(section, 'released')).toBeVisible();
   await preview.close();
   return html;
 }
@@ -193,7 +188,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
         'continuePlanning',
         'Einsatz ist disponiert und kann ausgeführt werden.',
       );
-      await expect(unparkDialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(unparkDialog).toHaveCount(0);
 
       const [dispatch, handover] = await Promise.all([
         getDispatchState(world.orgId, jobNumber),
@@ -241,7 +236,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       await workArtifactField(dialog, 'measurementLocation').fill('Heizzentrale');
       await workArtifactAction(dialog, 'addMeasurementLine').click();
       await workArtifactField(dialog, 'lineName').fill('Kupferrohr');
-      await dialog.locator('#artifact-measurement-quantity-0').fill('4,5');
+      await workArtifactInput(dialog, 'firstMeasurementQuantity').fill('4,5');
       await selectWorkArtifactUnit(employeePage, dialog, 'meter');
       await submitWorkArtifactAndClose(dialog);
 
@@ -284,10 +279,10 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       await workArtifactEntry(employeePage, reportTitle).click();
       dialog = workArtifactDialog(employeePage);
       await workArtifactCustomerDecisionPanel(dialog).click();
-      await dialog.locator('#artifact-customer-name').fill('Erika Beispiel');
-      await dialog
-        .locator('#artifact-action-reason')
-        .fill('Kundin bestätigt die Arbeiten, lehnt eine digitale Unterschrift jedoch ab.');
+      await workArtifactInput(dialog, 'customerName').fill('Erika Beispiel');
+      await workArtifactInput(dialog, 'actionReason').fill(
+        'Kundin bestätigt die Arbeiten, lehnt eine digitale Unterschrift jedoch ab.',
+      );
       await workArtifactAction(dialog, 'recordRefusal').click();
       await closeWorkArtifactDialog(dialog);
 
@@ -296,7 +291,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       expect(artifacts.defects).toHaveLength(1);
       expect(artifacts.changes).toHaveLength(1);
       expect(artifacts.actions.some((action) => action.action_type === 'customer_refused')).toBe(true);
-      await expect(pack).toBeVisible({ timeout: 20_000 });
+      await expect(pack).toBeVisible();
       await expect(pack).not.toContainText(internalSecret);
     });
 
@@ -340,16 +335,12 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
         'Seriennummer muss nach dem Termin ergänzt werden.',
       );
       await handoverAction(section, 'withdraw').click();
-      await expect(handoverMessage(section, 'withdrawn')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(handoverMessage(section, 'withdrawn')).toBeVisible();
       await adminPage.reload();
       const reopenSection = workHandoverSection(adminPage);
       await handoverField(reopenSection, 'reopenReason').fill('Techniker ergänzt die Seriennummer vor Ort.');
       await handoverAction(reopenSection, 'reopenForCorrection').click();
-      await expect(handoverMessage(reopenSection, 'reopened')).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(handoverMessage(reopenSection, 'reopened')).toBeVisible();
 
       await completeWithManagerOverride(adminPage, jobNumber);
       await adminPage.goto(`/auftraege/${jobNumber}/uebergabe`);
@@ -369,9 +360,9 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
       await bueroPage.goto(`/auftraege/${jobNumber}/uebergabe`);
       await expect(workHandoverSection(bueroPage)).toContainText(handoverReleaseHistory(2));
       await employeePage.goto(`/auftraege/${jobNumber}/uebergabe`);
-      await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+      await employeePage.waitForURL(/\/auftraege\/?$/);
       await outsiderPage.goto(`/auftraege/${jobNumber}/uebergabe`);
-      await outsiderPage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+      await outsiderPage.waitForURL(/\/auftraege\/?$/);
     });
   });
 });

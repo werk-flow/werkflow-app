@@ -20,7 +20,7 @@ test('a failed cached read throws, caches nothing, and reads again; a time compu
     new Response(child.stderr).text(),
   ]);
   expect(code, `${stdout}\n${stderr}`).toBe(0);
-}, 30_000); // The fixture loads the time-tracking actions in a spawned Bun process; 5 s is not enough under host load.
+});
 
 /** True when the subtree calls a function of this name. */
 function callsFunction(node: ts.Node, name: string): boolean {

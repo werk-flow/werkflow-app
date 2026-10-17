@@ -30,6 +30,7 @@ import { SHARED_COPY, testData } from './support/steps/shared';
 import {
   changeTimeOnWorkPack,
   createJob,
+  expectNoFieldWorkPack,
   fieldPackAbsentTerms,
   fieldPackButton,
   fieldPackCallLink,
@@ -168,9 +169,7 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
         'Anlage geprüft und Ergebnis dokumentiert.',
       );
       await workArtifactAction(artifactDialog, 'saveDraft').click();
-      await expect(workArtifactVersion(artifactDialog, 1)).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(workArtifactVersion(artifactDialog, 1)).toBeVisible();
       await closeWorkArtifactDialog(artifactDialog);
 
       const [applied, artifacts, inventory] = await Promise.all([
@@ -194,9 +193,9 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
     await test.step('Completion leaves a read-only pack while the office keeps its own view', async () => {
       await openFieldWorkPack(employeePage, jobNumber);
       await transitionWork(employeePage, 'in_progress', 'execution_complete');
-      await expect(lifecycleState(employeePage, 'execution_complete').filter({ visible: true })).toBeVisible({
-        timeout: 20_000,
-      });
+      await expect(
+        lifecycleState(employeePage, 'execution_complete').filter({ visible: true }),
+      ).toBeVisible();
       await expect(fieldPrimaryNextAction(pack)).toHaveCount(0);
       await expect(workArtifactsSection(employeePage)).toBeVisible();
       await expect(newWorkArtifactButton(employeePage, { exact: true })).toHaveCount(0);
@@ -207,7 +206,7 @@ test.describe('P1-16 focused field work pack @P1-16', () => {
       expect(lifecycle.entity).toMatchObject({ execution_state: 'execution_complete' });
 
       await adminPage.goto(`/auftraege/${jobNumber}`);
-      await expect(adminPage.getByTestId('field-work-pack')).toHaveCount(0);
+      await expectNoFieldWorkPack(adminPage);
       await expect(adminPage.getByRole('heading', { name: SHARED_COPY.region.details })).toBeVisible();
       await expect(
         adminPage.getByRole('button', { name: SHARED_COPY.assignment.assign, exact: true }),

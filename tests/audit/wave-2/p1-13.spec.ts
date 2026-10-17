@@ -21,13 +21,14 @@ import {
   entryDialogTab,
 } from '../../golden/support/steps/calendar';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
-import { materialRowQuantity } from '../../golden/support/steps/inventory';
+import { materialRowNotes, materialRowQuantity } from '../../golden/support/steps/inventory';
 import { openSeededCustomerDetail } from '../../golden/support/steps/customers';
 import {
   convertRequestToJobViaDialog,
   convertToJobSubmit,
   requestConversionDialog,
   requestConvertButton,
+  requestField,
 } from '../../golden/support/steps/requests';
 import {
   selectFromSearchable,
@@ -43,15 +44,16 @@ import {
   evidenceCategoryOption,
   instructionPrerequisiteText,
   jobInstructionDetailsButtons,
-  jobInstructionDetailsDialog,
   jobInstructionDetailsField,
   jobInstructionItem,
   jobInstructionToggle,
-  lastJobInstructionDetailsButton,
+  openLastJobInstructionDetails,
   workCreateButton,
   workCreateTab,
   workTemplateCreateButton,
   workTemplateCreateDialog,
+  workTemplateCreateField,
+  workTemplateCreateNameField,
   workTemplateDraftEditor,
   workTemplateDraftHeading,
   workTemplateEditor,
@@ -82,8 +84,10 @@ import {
   TEMPLATE_AUDIT_COPY,
   templateItemCard,
   templateMaterialCard,
+  templateMaterialQuantity,
   templateQualificationRow,
   templateQuickCreateDialog,
+  templateQuickCreateNameField,
   visibleExactText,
 } from '../support/p1-13-steps';
 
@@ -122,19 +126,17 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await workTemplateCreateButton(adminPage).click();
     const dialog = workTemplateCreateDialog(adminPage);
     await dialog.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
-    const templateNameInput = dialog.locator('#new-template-name');
+    const templateNameInput = workTemplateCreateNameField(dialog);
     await expect(dialog.getByText(TEMPLATE_AUDIT_COPY.createDialog.nameRequired)).toBeVisible();
     await expect(templateNameInput).toHaveAttribute('aria-invalid', 'true');
     await expect(templateNameInput).toBeFocused();
     await templateNameInput.fill(templateName);
-    await dialog.locator('#new-template-description').fill(`Wiederkehrende Projektarbeit ${world.runId}`);
-    await dialog.locator('#new-template-target').click();
+    await workTemplateCreateField(dialog, 'description').fill(`Wiederkehrende Projektarbeit ${world.runId}`);
+    await workTemplateCreateField(dialog, 'target').click();
     await workTemplateProjectTargetOption(adminPage).click();
     await dialog.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
     const editor = workTemplateDraftEditor(adminPage, 1);
-    await expect(workTemplateDraftHeading(editor, 1)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(workTemplateDraftHeading(editor, 1)).toBeVisible();
     await workTemplateEditorAction(editor, 'publish', { exact: true }).click();
     await expect(editor.getByText(ERROR_MESSAGES.work_template_item_required)).toBeVisible();
     await workTemplateEditorAction(editor.locator('form'), 'close', { exact: true }).click();
@@ -142,9 +144,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     // Realtime must not interrupt the open Büro dialog; after close its list catches up.
     await expect(bueroPage.getByRole('dialog')).toBeVisible();
     await bueroPage.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
-    await expect(visibleExactText(bueroPage, templateName)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleExactText(bueroPage, templateName)).toBeVisible();
     await workTemplateSearch(bueroPage).fill(`Wiederkehrende Projektarbeit ${world.runId}`);
     await expect(visibleExactText(bueroPage, templateName)).toBeVisible();
     await bueroPage.getByRole('combobox', { name: list.targetFilter }).click();
@@ -174,7 +174,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await workTemplateOpenButton(adminPage).click();
     let editor = workTemplateEditor(adminPage, name, 1);
     await workTemplateEditorAction(editor, 'newVersion').click();
-    await expect(editor).toHaveCount(0, { timeout: 15_000 });
+    await expect(editor).toHaveCount(0);
     await workTemplateOpenButton(adminPage).click();
     editor = workTemplateDraftEditor(adminPage, 2);
 
@@ -203,18 +203,18 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await materialArticlePicker(materialCard).click();
     await adminPage.getByRole('button', { name: quickCreate.newItem }).click();
     const itemDialog = templateQuickCreateDialog(adminPage, 'item');
-    await itemDialog.locator('#quick-item-name').fill(`Dichtung ${world.runId}`);
+    await templateQuickCreateNameField(itemDialog, 'item').fill(`Dichtung ${world.runId}`);
     await itemDialog.getByRole('button', { name: SHARED_COPY.action.create }).click();
-    await expect(itemDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(itemDialog).toHaveCount(0);
     await materialLocationPicker(materialCard).click();
     await adminPage.getByRole('button', { name: quickCreate.newLocation }).click();
     const locationDialog = templateQuickCreateDialog(adminPage, 'location');
-    const locationName = locationDialog.locator('#quick-location-name');
+    const locationName = templateQuickCreateNameField(locationDialog, 'location');
     await locationName.fill(`Servicewagen ${world.runId}`);
     await pressKey(locationDialog, 'Enter', { into: locationName });
-    await expect(locationDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(locationDialog).toHaveCount(0);
     await expect(editor).toBeVisible();
-    await materialCard.locator('input[id^="quantity-"]').fill('3');
+    await templateMaterialQuantity(materialCard).fill('3');
     await materialCard.getByRole('checkbox').click();
     await materialCard.getByLabel(TEMPLATE_AUDIT_COPY.material.notes).fill('Nur für die Einsatzplanung.');
 
@@ -223,20 +223,18 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await qualificationRow.getByRole('combobox').click();
     await adminPage.getByRole('button', { name: quickCreate.newCapability }).click();
     const capabilityDialog = templateQuickCreateDialog(adminPage, 'capability');
-    await capabilityDialog.locator('#quick-capability-name').fill(`Gasprüfung ${world.runId}`);
+    await templateQuickCreateNameField(capabilityDialog, 'capability').fill(`Gasprüfung ${world.runId}`);
     await capabilityDialog.getByRole('combobox', { name: quickCreate.capabilityKind }).click();
     await adminPage
       .getByRole('option', { name: getCapabilityKindLabel('certification'), exact: true })
       .click();
     await capabilityDialog.getByRole('button', { name: SHARED_COPY.action.create }).click();
-    await expect(capabilityDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(capabilityDialog).toHaveCount(0);
     await qualificationRow.getByRole('checkbox').click();
     await workTemplateEditorAction(editor, 'save', { exact: true }).click();
-    await expect(visibleExactText(adminPage, TEMPLATE_AUDIT_COPY.editor.draftSaved)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleExactText(adminPage, TEMPLATE_AUDIT_COPY.editor.draftSaved)).toBeVisible();
     await workTemplateEditorAction(editor, 'publish').click();
-    await expect(editor).toHaveCount(0, { timeout: 20_000 });
+    await expect(editor).toHaveCount(0);
 
     const state = await getWorkTemplateStateByName(world.orgId, name);
     const latestVersion = expectDefined(state.versions[1], 'the second template version');
@@ -341,7 +339,6 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
           (await getAppliedWorkTemplateState(world.orgId, { jobNumber })).instructions.find(
             (item) => item.content === 'Sicherheitsprüfung',
           )?.last_status_changed_by,
-        { timeout: 20_000 },
       )
       .toBe(world.users.employee.id);
     await employeePage.reload();
@@ -350,24 +347,17 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     ).toBeVisible();
 
     await adminPage.goto(`/auftraege/${jobNumber}`);
-    await expect(adminPage.getByRole('heading', { name: jobTitle })).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(adminPage.getByRole('heading', { name: jobTitle })).toBeVisible();
+    // The flow edits the second persisted item after asserting there are exactly two.
     await expect(jobInstructionDetailsButtons(adminPage)).toHaveCount(2);
-    const detailsDialog = jobInstructionDetailsDialog(adminPage);
-    await expect(async () => {
-      // The flow edits the second persisted item after asserting there are exactly two.
-      if (!(await detailsDialog.isVisible().catch(() => false)))
-        await lastJobInstructionDetailsButton(adminPage).click();
-      await expect(detailsDialog).toBeVisible({ timeout: 2_000 });
-    }).toPass({ timeout: 15_000 });
-    await detailsDialog.locator('#instruction-group').fill('Vor Ort geändert');
-    await detailsDialog.locator('#instruction-notes').fill('Am Auftrag individuell ergänzt.');
+    const detailsDialog = await openLastJobInstructionDetails(adminPage);
+    await jobInstructionDetailsField(detailsDialog, 'group').fill('Vor Ort geändert');
+    await jobInstructionDetailsField(detailsDialog, 'notes').fill('Am Auftrag individuell ergänzt.');
     await jobInstructionDetailsField(detailsDialog, 'evidenceDescription').fill('Foto direkt am Auftrag');
     await jobInstructionDetailsField(detailsDialog, 'evidenceCategory').click();
     await evidenceCategoryOption(adminPage, 'other').click();
     await detailsDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(detailsDialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(detailsDialog).toHaveCount(0);
     await adminPage.reload();
     await expect(visibleMatchingText(adminPage, new RegExp(testData`Vor Ort geändert`))).toBeVisible();
     const edited = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
@@ -386,14 +376,12 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await adminPage.getByRole('button', { name: TEMPLATE_AUDIT_COPY.jobPlanning.editMaterial }).click();
     const materialDialog = materialPositionDialog(adminPage);
     await materialRowQuantity(materialDialog).fill('4');
-    await materialDialog.locator('textarea[id$="-notes"]').fill('Am Auftrag angepasst.');
+    await materialRowNotes(materialDialog).fill('Am Auftrag angepasst.');
     await materialDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(materialDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(materialDialog).toHaveCount(0);
     await removeCapabilityRequirementButton(adminPage, capabilityName).click();
     await expect
-      .poll(async () => (await getAppliedWorkTemplateState(world.orgId, { jobNumber })).capabilities.length, {
-        timeout: 20_000,
-      })
+      .poll(async () => (await getAppliedWorkTemplateState(world.orgId, { jobNumber })).capabilities.length)
       .toBe(0);
     const adjusted = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
     expect(adjusted.materials).toEqual([
@@ -421,9 +409,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await workTemplateSearch(adminPage).fill(name);
     await adminPage.getByRole('button', { name: list.archive }).click();
     await expect
-      .poll(async () => (await getWorkTemplateStateByName(world.orgId, name)).template.archived_at, {
-        timeout: 20_000,
-      })
+      .poll(async () => (await getWorkTemplateStateByName(world.orgId, name)).template.archived_at)
       .not.toBeNull();
     await adminPage.goto('/auftraege');
     await adminPage.getByRole('button', { name: SHARED_COPY.action.create, exact: true }).click();
@@ -444,9 +430,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await expect(visibleExactText(adminPage, name)).toBeVisible();
     await adminPage.getByRole('button', { name: list.reactivate }).click();
     await expect
-      .poll(async () => (await getWorkTemplateStateByName(world.orgId, name)).template.archived_at, {
-        timeout: 20_000,
-      })
+      .poll(async () => (await getWorkTemplateStateByName(world.orgId, name)).template.archived_at)
       .toBeNull();
     const templateState = await getWorkTemplateStateByName(world.orgId, name);
     expect(templateState.events.map((event) => event.event_type)).toEqual(
@@ -515,11 +499,9 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), templateName);
     await expect(applyDialog.getByText(apply.preview)).toBeVisible();
     await applySubmit.click();
-    await expect(applyDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(applyDialog).toHaveCount(0);
     expect((await getAppliedWorkTemplateState(world.orgId, { jobNumber })).applications).toHaveLength(1);
-    await expect(visibleExactText(bueroPage, testData`Messung nachträglich dokumentieren`)).toBeVisible({
-      timeout: 25_000,
-    });
+    await expect(visibleExactText(bueroPage, testData`Messung nachträglich dokumentieren`)).toBeVisible();
 
     await adminPage.getByRole('button', { name: apply.open }).click();
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), templateName);
@@ -539,7 +521,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     ).toBeVisible();
     await applyDialog.getByRole('checkbox').click();
     await applySubmit.click();
-    await expect(applyDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(applyDialog).toHaveCount(0);
     const additional = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
     expect(additional.applications).toHaveLength(2);
     expect(additional.instructions.map((item) => item.content)).toContain('Zusätzliche Sichtprüfung');
@@ -618,49 +600,41 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
       name: SHARED_COPY.action.create,
       exact: true,
     });
-    await expect(customerCreateButton).toBeVisible({ timeout: 15_000 });
+    await expect(customerCreateButton).toBeVisible();
     await customerCreateButton.click();
     await workCreateTab(adminPage, 'job').click();
-    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible();
     await closeCreationDialog.click();
 
     await adminPage.goto('/mitarbeiter');
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const employeeRow = adminPage.getByRole('row').filter({ hasText: employeeName });
-    await expect(employeeRow).toBeVisible({ timeout: 15_000 });
+    await expect(employeeRow).toBeVisible();
     await employeeRow.getByRole('link', { name: employeeName }).click();
     const employeeCreateButton = adminPage.getByRole('button', {
       name: context.employeeCreateJob,
     });
-    await expect(employeeCreateButton).toBeVisible({ timeout: 15_000 });
+    await expect(employeeCreateButton).toBeVisible();
     await employeeCreateButton.click();
-    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible();
     await closeCreationDialog.click();
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}`);
     const projectCreateButton = adminPage.getByRole('button', {
       name: context.projectAddJob,
     });
-    await expect(projectCreateButton).toBeVisible({ timeout: 15_000 });
+    await expect(projectCreateButton).toBeVisible();
     await projectCreateButton.click();
-    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplatePicker(adminPage.getByRole('dialog'))).toBeVisible();
     await closeCreationDialog.click();
 
     await adminPage.goto('/kalender');
     const calendarCreateButton = calendarNewEntryButton(adminPage);
-    await expect(calendarCreateButton).toBeVisible({ timeout: 15_000 });
+    await expect(calendarCreateButton).toBeVisible();
     await calendarCreateButton.click();
     const calendarDialog = calendarEntryDialog(adminPage);
     await entryDialogTab(calendarDialog, 'job').click();
-    await expect(workTemplateSelect(calendarDialog, 'job')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(workTemplateSelect(calendarDialog, 'job')).toBeVisible();
     await calendarDialog.getByRole('button', { name: SHARED_COPY.action.close, exact: true }).click();
   });
 
@@ -718,9 +692,7 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await outsiderPage.goto('/auftraege');
     await workCreateButton(outsiderPage).click();
     await workCreateTab(outsiderPage, 'job').click();
-    await expect(visibleMatchingText(outsiderPage, TEMPLATE_AUDIT_COPY.picker.noTemplate)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleMatchingText(outsiderPage, TEMPLATE_AUDIT_COPY.picker.noTemplate)).toBeVisible();
     await expect(outsiderPage.getByRole('link', { name: TEMPLATE_AUDIT_COPY.picker.manage })).toHaveAttribute(
       'href',
       '/arbeitsvorlagen',
@@ -731,13 +703,11 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await requestConvertButton(adminPage).click();
     const conversionDialog = requestConversionDialog(adminPage);
     await selectFromSearchable(adminPage, workTemplateSelect(conversionDialog, 'job'), referencedTemplate);
-    await expect(conversionDialog.locator('#convert-number')).toHaveValue(/.+/, {
-      timeout: 15_000,
-    });
+    await expect(requestField(conversionDialog, 'convertNumber')).toHaveValue(/.+/);
     await convertToJobSubmit(conversionDialog).click();
-    await expect(conversionDialog.getByText(TEMPLATE_AUDIT_COPY.conversion.referenceUnavailable)).toBeVisible(
-      { timeout: 20_000 },
-    );
+    await expect(
+      conversionDialog.getByText(TEMPLATE_AUDIT_COPY.conversion.referenceUnavailable),
+    ).toBeVisible();
     expect(await getRequestConversionState(world.orgId, requestNumber)).toMatchObject({
       status: 'offen',
       convertedJobId: null,
@@ -752,14 +722,14 @@ test.describe('P1-13 exhaustive work-template flows @AUDIT-W2-P1-13 @AUDIT-W2', 
     await adminPage.getByRole('button', { name: apply.open }).click();
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), referencedTemplate);
     await applyDialog.getByRole('button', { name: apply.submit, exact: true }).click();
-    await expect(retiredCapabilityRefusal(applyDialog, capabilityName)).toBeVisible({ timeout: 20_000 });
+    await expect(retiredCapabilityRefusal(applyDialog, capabilityName)).toBeVisible();
     expect((await getAppliedWorkTemplateState(world.orgId, { jobNumber })).applications).toHaveLength(0);
     await applyDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
 
     await adminPage.getByRole('button', { name: apply.open }).click();
     await selectFromSearchable(adminPage, applyDialog.getByRole('combobox'), cleanTemplate);
     await applyDialog.getByRole('button', { name: apply.submit, exact: true }).click();
-    await expect(applyDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(applyDialog).toHaveCount(0);
     const retried = await getAppliedWorkTemplateState(world.orgId, { jobNumber });
     expect(retried.applications).toHaveLength(1);
     expect(retried.instructions.map((item) => item.content)).toEqual(['Zusätzliche Sichtprüfung']);

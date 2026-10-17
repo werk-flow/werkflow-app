@@ -113,6 +113,26 @@ export function customerFormField(scope: Locator, field: keyof typeof CUSTOMER_F
   return scope.getByLabel(CUSTOMER_FORM_FIELDS[field]);
 }
 
+/** Fields of the contact, follow-up, preference and contact-warning dialogs, by their DOM id. */
+const CUSTOMER_DIALOG_FIELD_IDS = {
+  contactRole: 'contact-role',
+  followUpOwner: 'follow-up-owner',
+  preferenceChannel: 'preference-channel',
+  preferencePurpose: 'preference-purpose',
+  preferenceState: 'preference-state',
+  contactExceptionReason: 'contact-exception-reason',
+} as const;
+
+/** A field of an open customer relationship dialog. */
+export function customerDialogField(dialog: Locator, field: keyof typeof CUSTOMER_DIALOG_FIELD_IDS): Locator {
+  return dialog.locator(`#${CUSTOMER_DIALOG_FIELD_IDS[field]}`);
+}
+
+/** The role suggestions the contact dialog offers its role field. */
+export function contactRoleSuggestions(dialog: Locator): Locator {
+  return dialog.locator('#contact-role-suggestions option');
+}
+
 export function customerCreateSubmit(scope: Page | Locator): Locator {
   return scope.getByRole('button', { name: CUSTOMER_COPY.createSubmit });
 }
@@ -334,7 +354,7 @@ export async function createCustomer(
 export async function openCustomerDetail(page: Page, customerName: string): Promise<void> {
   await page.goto('/kunden');
   const customerRow = confirmed(page.locator('tbody tr:visible')).filter({ hasText: customerName }).first();
-  await expect(customerRow).toBeVisible({ timeout: 15_000 });
+  await expect(customerRow).toBeVisible();
   const customerLink = customerRow.getByRole('link', {
     name: customerName,
     exact: true,
@@ -346,18 +366,14 @@ export async function openCustomerDetail(page: Page, customerName: string): Prom
   // The customer list can refresh between pointer-down and navigation. Use
   // the verified semantic link target for one deterministic read-only goto.
   await page.goto(customerHref);
-  await page.waitForURL(/\/kunden\/[0-9a-f-]{36}$/, { timeout: 15_000 });
-  await expect(visibleText(page, CUSTOMER_COPY.detailTitle)).toBeVisible({
-    timeout: 15_000,
-  });
+  await page.waitForURL(/\/kunden\/[0-9a-f-]{36}$/);
+  await expect(visibleText(page, CUSTOMER_COPY.detailTitle)).toBeVisible();
 }
 
 /** Opens the detail page of a customer whose id the test seeded. */
 export async function openSeededCustomerDetail(page: Page, clientId: string): Promise<void> {
   await page.goto(`/kunden/${clientId}`);
-  await expect(visibleText(page, CUSTOMER_COPY.detailTitle)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, CUSTOMER_COPY.detailTitle)).toBeVisible();
 }
 
 export async function addContactOnCustomerDetail(
@@ -389,7 +405,7 @@ export async function addContactOnCustomerDetail(
   await expectBannerAfter(page, 'Ansprechpartner gespeichert.', () =>
     page.getByRole('dialog').getByRole('button', { name: SHARED_COPY.action.save }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectVisibleAfterSave(page, contact.name);
 }
 
@@ -416,7 +432,7 @@ export async function createFollowUpOnCustomerDetail(
   }
   await input.beforeSubmit?.();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
   await expectVisibleAfterSave(page, input.title);
 }
 
@@ -438,15 +454,13 @@ export async function createFollowUpFromTimeline(
   await dialog.locator('#follow-up-title').fill(input.title);
   await typeIntoDateTimeField(dialog, 'follow-up-due', input.dueAtLocal);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, input.title)).toBeVisible({ timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
+  await expect(visibleText(page, input.title)).toBeVisible();
 }
 
 export async function completeFollowUpOnCustomerDetail(page: Page, title: string): Promise<void> {
   await followUpActionButton(page, title, 'complete').click();
-  await expect(page.getByText(CUSTOMER_TEXT.followUpCompleted)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByText(CUSTOMER_TEXT.followUpCompleted)).toBeVisible();
 }
 
 export async function configureCustomerCommunicationSettings(
@@ -486,7 +500,7 @@ export async function configureCustomerCommunicationSettings(
     await dialog.locator('#settings-source').fill(input.sourceNote);
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
   if (input.preferredContactName) {
     const communicationSection = page.locator('section[aria-labelledby="communication-heading"]');
     const preferredContactEntry = communicationSection
@@ -523,7 +537,7 @@ export async function setCustomerCommunicationPreference(
     await dialog.locator('#preference-source').fill(input.sourceNote);
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 export async function proceedThroughContactWarning(
@@ -575,7 +589,7 @@ export async function addSiteOnCustomerDetail(
   await expectBannerAfter(page, 'Einsatzort gespeichert.', () =>
     page.getByRole('dialog').getByRole('button', { name: SHARED_COPY.action.save }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectVisibleAfterSave(page, site.name);
 }
 
@@ -603,14 +617,10 @@ export async function archiveCustomerRelation(
     })
     .filter({ hasText: name })
     .filter({ visible: true });
-  await expect(archivedRow).toHaveCount(1, {
-    timeout: 15_000,
-  });
+  await expect(archivedRow).toHaveCount(1);
   // The row moves with the click and stays disabled until the refreshed
   // relations arrive; a refusal moves it back.
-  await expect(archivedRow.getByRole('button', { name: `${kind} wiederherstellen` })).toBeEnabled({
-    timeout: 15_000,
-  });
+  await expect(archivedRow.getByRole('button', { name: `${kind} wiederherstellen` })).toBeEnabled();
 }
 
 export async function restoreCustomerRelation(
@@ -640,9 +650,7 @@ export async function restoreCustomerRelation(
       .first();
   // Enabled, not only visible: the row moves with the click and stays
   // disabled until the refreshed relations arrive.
-  await expect(activeRow().getByRole('button', { name: `${kind} archivieren` })).toBeEnabled({
-    timeout: 15_000,
-  });
+  await expect(activeRow().getByRole('button', { name: `${kind} archivieren` })).toBeEnabled();
 }
 
 export async function adoptCustomerAddressAsSite(page: Page): Promise<void> {
@@ -652,7 +660,7 @@ export async function adoptCustomerAddressAsSite(page: Page): Promise<void> {
   await expectBannerAfter(page, 'Einsatzort gespeichert.', () =>
     dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click(),
   );
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
   await expectVisibleAfterSave(page, CUSTOMER_TEXT.primarySite);
 }
 
@@ -673,7 +681,7 @@ export async function editSiteStreetOnCustomerDetail(
   await expectBannerAfter(page, 'Einsatzort gespeichert.', () =>
     page.getByRole('dialog').getByRole('button', { name: SHARED_COPY.action.save }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectVisibleAfterSave(page, newStreet);
 }
 
@@ -705,6 +713,11 @@ const TIMELINE_COPY = { sourceLink: 'Quelle öffnen', followUps: 'Nachfassaktion
 /** The customer's relationship timeline inside its owner (`main`). */
 export function customerTimeline(scope: Locator): Locator {
   return scope.getByTestId('customer-timeline');
+}
+
+/** Proves no copy of the timeline in the DOM shows this text. */
+export async function expectCustomerTimelineWithout(page: Page, text: string): Promise<void> {
+  await expect(page.getByTestId('customer-timeline').getByText(text)).toHaveCount(0);
 }
 
 /** A fact the timeline records for the customer itself. */

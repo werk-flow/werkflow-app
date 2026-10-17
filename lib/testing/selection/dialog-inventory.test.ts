@@ -73,7 +73,7 @@ test('every discovered dialog is audited or names why it cannot be opened in the
   const dialogs = inspectDialogs(readProductSources(resolve(import.meta.dir, '../../..')));
   expect(dialogs.length).toBeGreaterThan(100);
   expect(dialogInventoryProblems(dialogs, DIALOG_INVENTORY)).toEqual([]);
-}, 15_000);
+});
 
 test("the field worker's own dialogs are audited with the employee session", () => {
   const inventory: Readonly<Record<string, DialogInventoryEntry>> = DIALOG_INVENTORY;

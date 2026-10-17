@@ -23,6 +23,8 @@ import {
   PERSONNEL_COPY,
   PERSONNEL_HISTORY_EVENTS,
   RESPONSIBILITY_COPY,
+  expectNoResponsibilityCard,
+  personnelField,
   activeDelegationsBadge,
   addClosureDayViaSettings,
   addConditionButton,
@@ -169,23 +171,17 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       }
 
       const dialog = adminPage.getByRole('dialog');
-      await dialog.locator('#personnel-first-name').fill('Alina');
-      await dialog.locator('#personnel-last-name').fill(`Personal-A3-${world.runId}`);
-      await dialog.locator('#personnel-number').fill(employeeNumber);
-      const suggestionResponse = adminPage.waitForResponse((response) => isSuggestion(response.url()), {
-        timeout: 15_000,
-      });
+      await personnelField(dialog, 'firstName').fill('Alina');
+      await personnelField(dialog, 'lastName').fill(`Personal-A3-${world.runId}`);
+      await personnelField(dialog, 'number').fill(employeeNumber);
+      const suggestionResponse = adminPage.waitForResponse((response) => isSuggestion(response.url()));
       releaseSuggestion();
       await suggestionResponse;
-      await expect(dialog.locator('#personnel-number')).toHaveValue(employeeNumber, {
-        timeout: 15_000,
-      });
+      await expect(personnelField(dialog, 'number')).toHaveValue(employeeNumber);
       await typeIntoDatePicker(dialog, PERSONNEL_COPY.entryDate, toDatePickerDigits(entryDate));
-      await dialog.locator('#personnel-notes').fill(note);
+      await personnelField(dialog, 'notes').fill(note);
       await submitPersonnelRecordButton(dialog).click();
-      await adminPage.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/, {
-        timeout: 20_000,
-      });
+      await adminPage.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/);
     } finally {
       releaseSuggestion();
       await adminPage.unroute('**/api/background-read?*');
@@ -222,7 +218,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await addConditionButton(adminPage).click();
     const optionDialog = adminPage.getByRole('dialog');
-    await optionDialog.locator('#condition-type').click();
+    await personnelField(optionDialog, 'conditionType').click();
     for (const employmentType of Object.values(EMPLOYMENT_TYPE_LABELS)) {
       await expect(adminPage.getByRole('option', { name: employmentType, exact: true })).toBeVisible();
     }
@@ -237,9 +233,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       vacationDays: '28',
       note: conditionNote,
     });
-    await expect(visibleVersionBadge(adminPage, 'scheduled')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleVersionBadge(adminPage, 'scheduled')).toBeVisible();
     await expect(visibleText(adminPage, EMPLOYMENT_TYPE_LABELS.ausbildung)).toBeVisible();
     await expect(visibleText(adminPage, conditionWeeklyHoursText(35))).toBeVisible();
     await expect(visibleText(adminPage, conditionVacationDaysText(28))).toBeVisible();
@@ -247,9 +241,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     await editConditionWeeklyHours(adminPage, toGermanDate(conditionDate), '34');
     await adminPage.reload();
-    await expect(visibleText(adminPage, personnelChangeText('phone', null, '030 300030'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, personnelChangeText('phone', null, '030 300030'))).toBeVisible();
     await expect(
       visibleText(adminPage, personnelChangeText('private_email', null, privateEmail)),
     ).toBeVisible();
@@ -278,9 +270,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await deleteConditionViaMenu(adminPage, toGermanDate(deletedConditionDate));
 
     await adminPage.reload();
-    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_deleted)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, PERSONNEL_HISTORY_EVENTS.condition_deleted)).toBeVisible();
     await expect(
       visibleText(adminPage, personnelChangeText('employment_type', EMPLOYMENT_TYPE_LABELS.minijob, null)),
     ).toBeVisible();
@@ -316,20 +306,16 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await adminPage.goto('/mitarbeiter');
     await createPersonnelRecordButton(adminPage).click();
     const duplicateDialog = adminPage.getByRole('dialog');
-    await duplicateDialog.locator('#personnel-last-name').fill(`Dora Doppel-A3-${world.runId}`);
-    const duplicateNumberInput = duplicateDialog.locator('#personnel-number');
-    await expect(duplicateNumberInput).toHaveValue(/^MA-\d+$/, {
-      timeout: 15_000,
-    });
+    await personnelField(duplicateDialog, 'lastName').fill(`Dora Doppel-A3-${world.runId}`);
+    const duplicateNumberInput = personnelField(duplicateDialog, 'number');
+    await expect(duplicateNumberInput).toHaveValue(/^MA-\d+$/);
     await duplicateNumberInput.fill(employeeNumber);
     await expect(duplicateNumberInput).toHaveValue(employeeNumber);
     await typeIntoDatePicker(duplicateDialog, PERSONNEL_COPY.entryDate, toDatePickerDigits(entryDate));
     await submitPersonnelRecordButton(duplicateDialog).click();
-    await expect(duplicateDialog.getByText(PERSONNEL_COPY.numberTaken)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(duplicateDialog.getByText(PERSONNEL_COPY.numberTaken)).toBeVisible();
     await dismissDialog(duplicateDialog);
-    await expect(duplicateDialog).toBeHidden({ timeout: 15_000 });
+    await expect(duplicateDialog).toBeHidden();
     await adminPage.goto(`/mitarbeiter/${a3RecordId}`);
     await expect(visibleText(adminPage, employeeNumber)).toBeVisible();
   });
@@ -351,9 +337,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
     await adminPage.goto('/mitarbeiter');
     const plannedRow = personnelListRow(adminPage, plannedName);
-    await expect(plannedRow.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(plannedRow.getByText(EMPLOYMENT_STATE_LABELS.geplant, { exact: true })).toBeVisible();
     await expect(plannedRow.getByText(ACCESS_STATE_LABELS.ohne_zugang, { exact: true })).toBeVisible();
 
     const activeRow = personnelListRow(adminPage, activeName);
@@ -414,7 +398,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       dateDigits: toDatePickerDigits(pastDate),
       label: `A3 Vergangenheit ${world.runId}`,
     });
-    await expect(visibleText(adminPage, PERSONNEL_COPY.closurePastDay)).toBeVisible({ timeout: 15_000 });
+    await expect(visibleText(adminPage, PERSONNEL_COPY.closurePastDay)).toBeVisible();
 
     // Büro maintains closure days too; the month grid shows them as labels
     // that cannot be clicked.
@@ -430,7 +414,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     ).toBe(true);
     await navigateMonthViewTo(adminPage, bueroClosureDate);
     const closureEvent = informationalCalendarEvent(adminPage, bueroClosureLabel);
-    await expect(closureEvent).toBeVisible({ timeout: 15_000 });
+    await expect(closureEvent).toBeVisible();
     await expect(closureEvent).toHaveCSS('pointer-events', 'none');
     await closureEvent.dispatchEvent('click');
     await expect(adminPage.getByRole('dialog')).toHaveCount(0);
@@ -473,9 +457,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       dayHours: ['0,02', '0,02', '0,02', '0,02', '0,02', '0,02', '0,02'],
       note: `A3 Ein-Minuten-Modell ${world.runId}`,
     });
-    await expect(visibleText(adminPage, weeklyScheduleText({ minutes: 7 }))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(adminPage, weeklyScheduleText({ minutes: 7 }))).toBeVisible();
     await createOwnManualTimeEntry(adminPage, {
       memberName: employeeName,
       dateDigits: toDatePickerDigits(businessDate),
@@ -484,9 +466,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     });
 
     await employeePage.goto('/zeiterfassung');
-    await expect(visibleText(employeePage, dailyTargetText(formatDuration(1)))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, dailyTargetText(formatDuration(1)))).toBeVisible();
     await expect(todayOvertime(employeePage)).not.toHaveText(ZERO_OVERTIME_TODAY);
 
     await adminPage.goto('/mitarbeiter');
@@ -541,12 +521,10 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     // A selected field worker sees the own responsibility, without any control to change it.
     await pin('time_approval', [employeeRecord.id]);
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(visibleText(employeePage, RESPONSIBILITY_LABELS.time_approval)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, RESPONSIBILITY_LABELS.time_approval)).toBeVisible();
     await expect(changeResponsibilityButton(employeePage)).toHaveCount(0);
     await expect(addDelegationButton(employeePage)).toHaveCount(0);
-    await expect(employeePage.getByTestId('responsibility-time_approval')).toHaveCount(0);
+    await expectNoResponsibilityCard(employeePage, 'time_approval');
 
     // Büro reads the configuration and cannot change it.
     await pin('time_approval', 'role_default');
@@ -575,9 +553,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       validUntilDigits: toDatePickerDigits(shiftIsoDate(businessDate, 30)),
     });
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible();
     await expect(visibleText(employeePage, substituteForText(adminName))).toBeVisible();
     await expect(visibleText(employeePage, RESPONSIBILITY_COPY.substituteUntil)).toBeVisible();
 
@@ -603,9 +579,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     for (const managerPage of [adminPage, bueroPage]) {
       await managerPage.goto('/einstellungen/mitarbeiter');
-      await expect(visibleText(managerPage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
-        timeout: 15_000,
-      });
+      await expect(visibleText(managerPage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible();
       await expect(visibleText(managerPage, RESPONSIBILITY_COPY.currentlyResponsible)).toBeVisible();
     }
 
@@ -618,9 +592,7 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     // After the end the person keeps the history but is no longer responsible.
     await endResponsibilityDelegationViaSettings(adminPage, 'leave_approval', employeeName);
     await employeePage.goto('/einstellungen/mitarbeiter');
-    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, RESPONSIBILITY_COPY.ownSummary)).toBeVisible();
     await expect(visibleText(employeePage, RESPONSIBILITY_COPY.notResponsible)).toBeVisible();
     await expect(visibleText(employeePage, substituteForText(adminName))).toBeVisible();
   });

@@ -18,6 +18,7 @@ import {
   createFollowUpFromTimeline,
   createFollowUpOnCustomerDetail,
   CUSTOMER_TEXT,
+  customerDialogField,
   customerTimeline,
   customerTimelineFilter,
   editableFollowUpRow,
@@ -101,31 +102,27 @@ test.describe('A2 Kundenbeziehungen @AUDIT-W1-A2', () => {
     await removeMemberFromDetail(adminPage, inviteeName);
 
     await openAufgaben(adminPage);
-    await expect(followUpTaskLink(adminPage, title, customer)).toHaveCount(1, {
-      timeout: 15_000,
-    });
+    await expect(followUpTaskLink(adminPage, title, customer)).toHaveCount(1);
     await openAufgaben(bueroPage);
-    await expect(followUpTaskLink(bueroPage, title, customer)).toHaveCount(1, {
-      timeout: 15_000,
-    });
+    await expect(followUpTaskLink(bueroPage, title, customer)).toHaveCount(1);
 
     await openSeededCustomerDetail(adminPage, clientId);
     const followUpRow = editableFollowUpRow(adminPage, title);
     await expect(followUpRow).toContainText(CUSTOMER_TEXT.followUpNeedsReassignment);
     await followUpActionButton(followUpRow, title, 'edit').click();
     const dialog = adminPage.getByRole('dialog');
-    await selectFromSearchable(adminPage, dialog.locator('#follow-up-owner'), fullName(world.users.buero));
+    await selectFromSearchable(
+      adminPage,
+      customerDialogField(dialog, 'followUpOwner'),
+      fullName(world.users.buero),
+    );
     await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
 
     await openAufgaben(adminPage);
-    await expectGone(followUpTaskLink(adminPage, title, customer), {
-      timeout: 15_000,
-    });
+    await expectGone(followUpTaskLink(adminPage, title, customer));
     await openAufgaben(bueroPage);
-    await expect(followUpTaskLink(bueroPage, title, customer)).toHaveCount(1, {
-      timeout: 15_000,
-    });
+    await expect(followUpTaskLink(bueroPage, title, customer)).toHaveCount(1);
     await openSeededCustomerDetail(bueroPage, clientId);
     await completeFollowUpOnCustomerDetail(bueroPage, title);
 
@@ -279,19 +276,19 @@ test.describe('A2 Kundenbeziehungen @AUDIT-W1-A2', () => {
 
     await addPreferenceButton(adminPage).click();
     const dialog = adminPage.getByRole('dialog');
-    await expectSelectOptions(adminPage, dialog.locator('#preference-channel'), [
+    await expectSelectOptions(adminPage, customerDialogField(dialog, 'preferenceChannel'), [
       CHANNEL_LABELS.phone,
       CHANNEL_LABELS.email,
       CHANNEL_LABELS.sms,
       CHANNEL_LABELS.letter,
       CHANNEL_LABELS.in_person,
     ]);
-    await expectSelectOptions(adminPage, dialog.locator('#preference-purpose'), [
+    await expectSelectOptions(adminPage, customerDialogField(dialog, 'preferencePurpose'), [
       PURPOSE_LABELS.appointment_service,
       PURPOSE_LABELS.marketing,
       PURPOSE_LABELS.commercial_required,
     ]);
-    await expectSelectOptions(adminPage, dialog.locator('#preference-state'), [
+    await expectSelectOptions(adminPage, customerDialogField(dialog, 'preferenceState'), [
       STATE_LABELS.allowed,
       STATE_LABELS.disallowed,
       STATE_LABELS.unknown,
@@ -334,14 +331,14 @@ test.describe('A2 Kundenbeziehungen @AUDIT-W1-A2', () => {
     await expect(contactWarningReason(warning, 'channelForbidden')).toBeVisible();
     await expect(contactWarningLegalNote(warning)).toBeVisible();
     const continueButton = contactWarningContinueButton(warning);
-    const exceptionReason = warning.locator('#contact-exception-reason');
+    const exceptionReason = customerDialogField(warning, 'contactExceptionReason');
     await expect(continueButton).toBeEnabled();
     await continueButton.click();
     await expect(warning.getByText(CUSTOMER_TEXT.contactExceptionReasonRequired)).toBeVisible();
     await expect(exceptionReason).toHaveAttribute('aria-invalid', 'true');
     await expect(exceptionReason).toBeFocused();
     await warning.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
-    await expect(warning).toHaveCount(0, { timeout: 15_000 });
+    await expect(warning).toHaveCount(0);
 
     const relationship = await getCustomerRelationshipState(world.orgId, customer);
     expect(relationship.communicationSettings).toMatchObject({

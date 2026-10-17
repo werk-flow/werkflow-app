@@ -102,6 +102,11 @@ export function sicknessReportActionsButton(page: Page, rangeText: string): Loca
   return page.getByRole('button', { name: `Aktionen für die Krankmeldung vom ${rangeText}` });
 }
 
+/** A field of the correction dialog. */
+export function sicknessCorrectionField(dialog: Locator, field: 'reason' | 'half-day'): Locator {
+  return dialog.locator(`#correct-sickness-${field}`);
+}
+
 /** The save button of the correction dialog. */
 export function saveSicknessCorrectionButton(dialog: Locator): Locator {
   return dialog.getByRole('button', { name: 'Korrektur speichern' });
@@ -117,9 +122,7 @@ export async function expectNoDiagnosisControl(dialog: Locator): Promise<void> {
 
 export async function openOwnSicknessSection(page: Page): Promise<void> {
   await page.goto('/zeiterfassung');
-  await expect(visibleText(page, 'Krankmeldung')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, 'Krankmeldung')).toBeVisible();
 }
 
 // Self-report. `endDigits` undefined = open-ended („bis auf Weiteres").
@@ -155,12 +158,10 @@ export async function reportOwnSicknessViaDialog(
   await dialog.getByRole('button', { name: SICKNESS_COPY.reportSickness }).click();
   if (options.expectVacationOverlapHint) {
     // The saved report shows the overlap hint until explicitly acknowledged.
-    await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible();
     await dialog.getByRole('button', { name: 'Verstanden' }).click();
   }
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 // Overlapping own active sickness is impossible (gist exclusion constraint);
@@ -178,11 +179,9 @@ export async function expectSicknessOverlapRejectedViaDialog(
     await typeIntoDatePicker(dialog, SHARED_COPY.field.rangeEnd, options.endDigits);
   }
   await dialog.getByRole('button', { name: SICKNESS_COPY.reportSickness }).click();
-  await expect(dialog.getByText('Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(dialog.getByText('Für diesen Zeitraum ist bereits eine Krankmeldung erfasst.')).toBeVisible();
   await dialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 // Own close-out: set the end date on an active report identified by its
@@ -202,10 +201,8 @@ export async function setOwnSicknessEndDateViaDialog(
   await expect(dialog).toBeVisible();
   await typeIntoDatePicker(dialog, 'Letzter Tag', options.endDigits);
   await dialog.getByRole('button', { name: 'Enddatum speichern' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, options.expectedRangeText)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(visibleText(page, options.expectedRangeText)).toBeVisible();
 }
 
 // Own cancellation of an active report from the own section, identified by
@@ -220,7 +217,7 @@ export async function cancelOwnSicknessReport(page: Page, rangeText: string): Pr
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: 'Krankmeldung stornieren' })).toBeVisible();
   await dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
 }
 
 // Office entry on the currently open member/personnel detail (the 7:00
@@ -262,14 +259,10 @@ export async function recordSicknessForMemberViaSection(
       await dialog.getByRole('button', { name: SICKNESS_COPY.recordSickness }).click();
       if (options.expectVacationOverlapHint) {
         // The saved report shows the overlap hint until explicitly acknowledged.
-        await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible({
-          timeout: 15_000,
-        });
+        await expect(dialog.getByText('überschneidet sich mit genehmigtem Urlaub')).toBeVisible();
         await dialog.getByRole('button', { name: 'Verstanden' }).click();
       }
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
       const interruptedBeforeSubmit = !submitted && !(await dialog.isVisible().catch(() => false));
@@ -344,7 +337,7 @@ export async function setSicknessEvidenceViaMenu(
     }
   }
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 export async function cancelSicknessReportViaMenuWithReason(
@@ -357,7 +350,7 @@ export async function cancelSicknessReportViaMenuWithReason(
   await expect(dialog).toBeVisible();
   await dialog.locator('#cancel-sickness-reason').fill(reason);
   await dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   // The row flips to the terminal state — the precise transition, not a text
   // an inherited row could already satisfy.
   await expect(
@@ -365,7 +358,7 @@ export async function cancelSicknessReportViaMenuWithReason(
       .filter({ hasText: rangeText })
       .getByText('Storniert')
       .first(),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
 }
 
 // Clock-in on a sick day succeeds with a visible notice (warn, never block).
@@ -374,11 +367,7 @@ export async function expectClockInNoticeForSickness(page: Page): Promise<void> 
   await clockInLauncher(page).click();
   await expect(clockInSheetHeading(page)).toBeVisible();
   await clockInConfirmationButton(page).click();
-  await expect(visibleText(page, 'Für heute liegt eine Krankmeldung vor')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, 'Für heute liegt eine Krankmeldung vor')).toBeVisible();
   // Clocked IN despite the notice — the warn-not-block contract.
-  await expect(runningClockLauncher(page)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(runningClockLauncher(page)).toBeVisible();
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
+import { boundedTimeoutRule, noRetriedActionRule } from './playwright-wait-rules.mjs';
 
 export const noUnscopedPageSelectorsRule = {
   meta: {
@@ -563,6 +564,18 @@ export const noLocatorFunctionInSpecRule = {
 
 const CLASS_SELECTOR = /\[class[*^$~|]?=|contains\(\s*@class/;
 const STRUCTURAL_SELECTOR = /^\s*xpath=|^\s*\.\.\s*$|ancestor::/;
+/** An id (`#planning-date`) or an attribute (`[data-row-id="…"]`, `input[type="file"]`) in a CSS selector. */
+const HOOK_SELECTOR = /(?:^|[\s>+~,(\w\])])#[A-Za-z_-]|\[/;
+const SELECTOR_METHODS = new Set(['locator', 'frameLocator']);
+
+/** The selector text of a locator argument; a template's expressions count as plain text. */
+function selectorText(context, node) {
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral')
+    return node.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw).join('x');
+  if (node?.type === 'Identifier') return selectorText(context, constantInitializer(context, node));
+  return null;
+}
 
 export const noStructuralLocatorRule = {
   meta: {
@@ -576,21 +589,31 @@ export const noStructuralLocatorRule = {
     ],
     messages: {
       structural:
-        'A structural locator (xpath, a parent step or an ancestor) breaks when markup moves. Use getByRole("main" | "region" | "form" | "row", { name }), a row by data-row-id, or getByTestId on the container.',
+        'A structural locator (xpath, a parent step or an ancestor) breaks when markup moves. Use getByRole("main" | "region" | "form" | "row", { name }), or a structure hook (data-row-id, a test id) through the area module.',
       classes:
-        'A CSS class is a design token, not a hook: a pure design change breaks this locator. Use a role and name, data-row-id or getByTestId.',
+        'A CSS class is a design token, not a hook: a pure design change breaks this locator. Use a role and name, or a structure hook (data-row-id, a test id) through the area module.',
+      hook: 'An id or attribute selector is a structure hook, and the area module under tests/golden/support/steps/ (audit-only parts: tests/audit/support/) owns structure hooks. Call or add a named locator function there and pass only data from the spec.',
+      testId:
+        'A test id is a structure hook, and the area module under tests/golden/support/steps/ (audit-only parts: tests/audit/support/) owns structure hooks. Call or add a named locator function there and pass only data from the spec.',
     },
   },
   create(context) {
     const classesOnly = context.options[0]?.classesOnly === true;
     return {
       CallExpression(node) {
-        if (node.callee.type !== 'MemberExpression' || calleeName(node.callee) !== 'locator') return;
-        const text = staticTextOf(node.arguments[0]);
+        if (node.callee.type !== 'MemberExpression') return;
+        const method = calleeName(node.callee);
+        if (!classesOnly && method === 'getByTestId') {
+          context.report({ node, messageId: 'testId' });
+          return;
+        }
+        if (!SELECTOR_METHODS.has(method)) return;
+        const text = selectorText(context, node.arguments[0]);
         if (text === null) return;
         if (CLASS_SELECTOR.test(text)) context.report({ node, messageId: 'classes' });
-        else if (!classesOnly && STRUCTURAL_SELECTOR.test(text))
-          context.report({ node, messageId: 'structural' });
+        else if (classesOnly) return;
+        else if (STRUCTURAL_SELECTOR.test(text)) context.report({ node, messageId: 'structural' });
+        else if (HOOK_SELECTOR.test(text)) context.report({ node, messageId: 'hook' });
       },
     };
   },
@@ -867,5 +890,7 @@ export const playwrightSpecRules = {
     'no-transport-internals': noTransportInternalsRule,
     'no-scoped-has-locator': noScopedHasLocatorRule,
     'no-one-shot-count-comparison': noOneShotCountComparisonRule,
+    'bounded-timeout': boundedTimeoutRule,
+    'no-retried-action': noRetriedActionRule,
   },
 };

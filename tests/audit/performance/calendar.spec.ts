@@ -112,6 +112,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
           // A fresh read never reports stale data. The drops work on the live week.
           await expect(calendarStale(page)).toHaveCount(0);
           await page.goto(LIVE_ENTRY);
+          // eslint-disable-next-line playwright-spec/bounded-timeout -- measured test PERF-02: its waits change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios)
           await expect(calendarReady(page, 'week')).toBeVisible({ timeout: 30_000 });
           await expect(seededBoardCard(page)).toBeVisible();
           // The drop scenarios measure a settled shell: the Realtime join catch-up
@@ -130,6 +131,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
           );
           // The target is the person row beside the source on the board (four visits, room for one more): both
           // rows share the viewport, so the pointer never scrolls the board.
+          // eslint-disable-next-line playwright-spec/no-structural-locator -- measured test PERF-02: its locators change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios)
           const rowIds = await page
             .locator('[data-plantafel] [data-board-row]')
             .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-board-row') ?? ''));
@@ -150,6 +152,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
             usable: boardCardTarget(page, title, targetRow),
           });
           await expect(page.getByRole('alert').filter({ hasText: 'verschoben' })).toBeVisible({
+            // eslint-disable-next-line playwright-spec/bounded-timeout -- measured test PERF-02: its waits change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios)
             timeout: 15_000,
           });
           await closeBanners(page);
@@ -192,6 +195,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
           // The visit returns to its hour, so the next sample resizes the same visit (not measured).
           await dragHandleBy(page, trailingResizeHandle(seededDayCard(page)), -70);
           await expect(page.getByRole('alert').filter({ hasText: 'Termin dauert jetzt' })).toBeVisible({
+            // eslint-disable-next-line playwright-spec/bounded-timeout -- measured test PERF-02: its waits change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios)
             timeout: 15_000,
           });
           await closeBanners(page);
@@ -233,6 +237,7 @@ test.describe('Performance profile @AUDIT-PERFORMANCE', () => {
             usable: standaloneCalendarVisitTarget(page, monthTitle, NEXT_DATE),
           });
           await expect(page.getByRole('alert').filter({ hasText: 'verschoben' })).toBeVisible({
+            // eslint-disable-next-line playwright-spec/bounded-timeout -- measured test PERF-02: its waits change only in the run that recalibrates its references (docs/technical/testing.md#deadlines-and-measured-scenarios)
             timeout: 15_000,
           });
           await closeBanners(page);

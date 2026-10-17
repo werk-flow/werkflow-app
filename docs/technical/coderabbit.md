@@ -43,7 +43,7 @@ Stay quiet while a review runs. Report only completion, a setup or authenticatio
 
 When you capture the output in a file, write it to a gitignored location inside the repository. WSL temporary paths do not persist across invocations. If the output is lost, replay the stored findings instead of running the review again.
 
-A finished review writes its own record under `.agent-logs/review/` with the content digest of each file its scope covered. `.githooks/pre-push` refuses a push unless these digests match every changed file that is not documentation, as it is now, so an edit after a review needs a new review of that file. The [publication gate](testing.md#publication-gate) owns the rule.
+The wrapper holds the workspace lock for the whole review, so no browser run, unit run or agent edit overlaps it. It takes the content digest of each file in its scope before CodeRabbit starts (for `--committed`, the content at `HEAD`), refuses to record a review whose files changed meanwhile, and writes the record under `.agent-logs/review/` with an entry in the evidence ledger. `.githooks/pre-push` refuses a push unless these digests match every changed file that is not documentation, as it is now, so an edit after a review needs a new review of that file. The [publication gate](testing.md#publication-gate) owns the rule.
 
 ## Give the review its context
 

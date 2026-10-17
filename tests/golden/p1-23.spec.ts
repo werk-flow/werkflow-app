@@ -11,11 +11,13 @@ import {
 import { getP123State } from './support/db/time-tracking';
 import { visibleText } from './support/steps/shared';
 import {
+  approveFindingButton,
   closeMonthButton,
   confirmDefaultMappingButton,
   confirmDefaultTimePolicy,
   createPayrollExportButton,
   currentMappingText,
+  expectNoApproveFindingButton,
   fillOpeningBalance,
   openAccountButton,
   payrollExportText,
@@ -61,7 +63,7 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
       await openAccount.click();
       // The form disappears only after the Server Action commits and its
       // authoritative settings read no longer lists this account as missing.
-      await expect(openAccount).toHaveCount(0, { timeout: 15_000 });
+      await expect(openAccount).toHaveCount(0);
       await openRemainingP123Accounts({
         organizationId: world.orgId,
         actorUserId: world.users.admin.id,
@@ -95,15 +97,13 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
         )
         .map((finding) => finding.id);
       for (const findingId of approvalFindingIds) {
-        await adminPage.getByRole('main').getByTestId(`approve-finding-${findingId}`).click();
-        await expect(adminPage.getByTestId(`approve-finding-${findingId}`)).toHaveCount(0);
+        await approveFindingButton(adminPage, findingId).click();
+        await expectNoApproveFindingButton(adminPage, findingId);
       }
       await closeMonthButton(adminPage).click();
       await expect(visibleText(adminPage, PERIOD_STATE_LABELS.closed)).toBeVisible();
       await createPayrollExportButton(adminPage).click();
-      await expect(visibleText(adminPage, payrollExportText(1, 'ready'))).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(visibleText(adminPage, payrollExportText(1, 'ready'))).toBeVisible();
 
       const state = await getP123State(world.orgId);
       expect(state.periods.find((candidate) => candidate.id === preparedPeriod.id)?.state).toBe('closed');
@@ -137,7 +137,6 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
         .poll(
           async () =>
             (await getP123State(world.orgId)).periods.find((candidate) => candidate.id === periodId)?.state,
-          { timeout: 30_000 },
         )
         .toBe('reopened');
       await adminPage.reload();

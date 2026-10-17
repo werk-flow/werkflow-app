@@ -32,7 +32,7 @@ describe('type-assertion ratchet', () => {
       typeAssertionRatchetProblems(ratchet, counts),
       `Bring ${TYPE_ASSERTION_RATCHET_FILE} in line with the code; the list only shrinks.`,
     ).toEqual([]);
-  }, 60_000);
+  });
 
   test('the count matches the lint rule: every assertion but `as const`', () => {
     const source = [

@@ -11,6 +11,7 @@ import {
   approveSelectedCorrectionsButton,
   askCorrectionQuestion,
   correctionBatchReviewedText,
+  expectNoTimeCorrectionCard,
   TIME_CORRECTION_COPY,
   timeCorrectionCard,
   timeCorrectionStatus,
@@ -49,10 +50,8 @@ test.describe('P1-22 correction review audit @AUDIT-W2-P1-22 @AUDIT-W2', () => {
         'Bitte den fehlenden Einsatz genauer erläutern.',
       );
       // The card leaves with the click; the banner confirms the decision before the employee reads it.
-      await expect(visibleText(adminPage, TIME_CORRECTION_COPY.decisionSaved)).toBeVisible({
-        timeout: 20_000,
-      });
-      await expect(adminPage.getByTestId(`time-correction-${clarificationRequestId}`)).toHaveCount(0);
+      await expect(visibleText(adminPage, TIME_CORRECTION_COPY.decisionSaved)).toBeVisible();
+      await expectNoTimeCorrectionCard(adminPage, clarificationRequestId);
       expect(
         (await getTimeCorrectionState(world.orgId)).requests.find((row) => row.id === clarificationRequestId)
           ?.status,

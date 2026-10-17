@@ -60,9 +60,17 @@ test('runtime Markdown remains qualified while agent guidance uses current stati
   expect(isDocumentationInput('temporary-transcripts/check-inventory.mjs')).toBe(true);
   expect(isDocumentationInput('temporary-transcripts-app/runtime.ts')).toBe(false);
   // Tooling no test executes (2026-09-14: an .mcp.json edit invalidated every browser proof).
+  // The files that wire verification and review are inputs (audit finding B10, 2026-10-16).
+  for (const file of [
+    '.claude/settings.json',
+    '.claude/hooks/refuse-publication-bypass.ts',
+    '.codex/hooks.json',
+    '.coderabbit.yaml',
+  ])
+    expect(isDocumentationInput(file)).toBe(false);
+  expect(isDocumentationInput('.claude/skills/werkflow-design/SKILL.md')).toBe(true);
   for (const file of [
     '.mcp.json',
-    '.coderabbit.yaml',
     '.gitignore',
     'supabase/.gitignore',
     'tests/audit/README.md',

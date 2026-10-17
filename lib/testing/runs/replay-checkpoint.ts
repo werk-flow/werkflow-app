@@ -175,6 +175,8 @@ type ReplayRun = {
   runKey: string;
   lane: string;
   sourceRunKey?: string | null;
+  /** A fresh-world diagnostic never touched the retained world. */
+  diagnosticWorld?: 'retained' | 'fresh' | undefined;
   status: string;
   retainedAt?: string | null;
   cleanedAt?: string | null;
@@ -197,6 +199,7 @@ export function repeatedReplayProblem(input: {
   const earlier = input.runs.filter(
     (run) =>
       run.lane === 'diagnostic' &&
+      run.diagnosticWorld !== 'fresh' &&
       run.sourceRunKey === input.sourceRunKey &&
       (run.outcomes ?? []).some((outcome) => selected.has(outcome.id) && outcome.status !== 'skipped'),
   );

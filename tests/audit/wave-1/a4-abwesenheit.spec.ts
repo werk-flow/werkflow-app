@@ -27,6 +27,7 @@ import {
 import { expectGone, SHARED_COPY, textInDom, visibleText } from '../../golden/support/steps/shared';
 import {
   SICKNESS_COPY,
+  sicknessCorrectionField,
   absenceCalendarLabel,
   cancelOwnSicknessReport,
   cancelSicknessReportViaMenuWithReason,
@@ -153,9 +154,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     ).toBe(true);
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(0, 27))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(0, 27))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(27))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
@@ -174,9 +173,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     ).toBe(true);
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(0, 31))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(0, 31))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(31))).toBeVisible();
   });
 
@@ -296,9 +293,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openOwnSicknessSection(employeePage);
@@ -338,9 +333,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
@@ -351,16 +344,16 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await openSicknessReportMenu(adminPage, sicknessRange, 'correct');
     dialog = adminPage.getByRole('dialog');
     const saveCorrection = saveSicknessCorrectionButton(dialog);
-    const correctionReason = dialog.locator('#correct-sickness-reason');
+    const correctionReason = sicknessCorrectionField(dialog, 'reason');
     await expect(saveCorrection).toBeEnabled();
     await saveCorrection.click();
     await expect(dialog.getByText(SICKNESS_COPY.correctionReasonRequired)).toBeVisible();
     await expect(correctionReason).toHaveAttribute('aria-invalid', 'true');
     await expect(correctionReason).toBeFocused();
-    await dialog.locator('#correct-sickness-half-day').click();
+    await sicknessCorrectionField(dialog, 'half-day').click();
     await correctionReason.fill(`A4 telefonisch auf halbtags korrigiert ${world.runId}`);
     await saveCorrection.click();
-    await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+    await expect(dialog).toHaveCount(0);
 
     const correctedSickness = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
     expect(correctedSickness).toMatchObject({
@@ -374,9 +367,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
@@ -404,9 +395,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(0, 31))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, vacationTakenText(0, 31))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(31))).toBeVisible();
   });
 
@@ -448,7 +437,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
 
     await adminPage.goto('/zeiterfassung?tab=approvals');
     const requestCard = vacationRequestCard(adminPage, employeeName);
-    await expect(requestCard).toHaveCount(1, { timeout: 15_000 });
+    await expect(requestCard).toHaveCount(1);
     await expect(requestCard).toContainText(OTHER_ABSENCE_HINT);
     await expect(requestCard).toContainText(
       plannedInRangeText(inRangeJobTitle, formatGermanDate(requestDate)),
@@ -512,16 +501,14 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await openMonthCalendar(adminPage, requestDate);
     const employeePending = vacationCalendarEvent(adminPage, 'pending', employeeName);
     const bueroPending = vacationCalendarEvent(adminPage, 'pending', bueroName);
-    await expect(employeePending).toBeVisible({ timeout: 15_000 });
+    await expect(employeePending).toBeVisible();
     await expect(bueroPending).toBeVisible();
     expect(await employeePending.evaluate((element) => getComputedStyle(element).borderStyle)).toContain(
       'dashed',
     );
 
     await openMonthCalendar(employeePage, requestDate);
-    await expect(vacationCalendarEvent(employeePage, 'pending', employeeName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(vacationCalendarEvent(employeePage, 'pending', employeeName)).toBeVisible();
     await expectGone(vacationCalendarEvent(employeePage, 'pending', bueroName));
 
     await approveVacationRequestFor(adminPage, employeeName);
@@ -537,22 +524,18 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
 
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, dailyTargetText(halfTargetLabel, 'vacation'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, dailyTargetText(halfTargetLabel, 'vacation'))).toBeVisible();
 
     await openMonthCalendar(adminPage, requestDate);
     const employeeApproved = vacationCalendarEvent(adminPage, 'approved', employeeName);
-    await expect(employeeApproved).toBeVisible({ timeout: 15_000 });
+    await expect(employeeApproved).toBeVisible();
     await expect(vacationCalendarEvent(adminPage, 'approved', bueroName)).toBeVisible();
     expect(await employeeApproved.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
       'rgba(0, 0, 0, 0)',
     );
 
     await openMonthCalendar(employeePage, requestDate);
-    await expect(vacationCalendarEvent(employeePage, 'approved', employeeName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(vacationCalendarEvent(employeePage, 'approved', employeeName)).toBeVisible();
     await expectGone(vacationCalendarEvent(employeePage, 'approved', bueroName));
 
     await cancelApprovedVacationForRangeText(
@@ -602,15 +585,11 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       eventTypes: ['reported'],
     });
     await employeePage.goto('/zeiterfassung');
-    await expect(visibleText(employeePage, dailyTargetText(halfTargetLabel, 'sickness'))).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(visibleText(employeePage, dailyTargetText(halfTargetLabel, 'sickness'))).toBeVisible();
 
     await openMonthCalendar(adminPage, requestDate);
     const halfDayAbsenceLabel = absenceCalendarLabel(employeeName, { halfDay: true });
-    await expect(absenceCalendarEvent(adminPage, halfDayAbsenceLabel)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(absenceCalendarEvent(adminPage, halfDayAbsenceLabel)).toBeVisible();
 
     await cancelOwnSicknessReport(employeePage, rangeText);
     const cancelled = await getLatestSicknessReportState(world.orgId, employeeRecord.id);
@@ -622,10 +601,8 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     await employeePage.goto('/zeiterfassung');
     await expect(
       visibleText(employeePage, dailyTargetText(formatDuration(baseTarget.baseTargetMinutes))),
-    ).toBeVisible({ timeout: 15_000 });
+    ).toBeVisible();
     await openMonthCalendar(adminPage, requestDate);
-    await expect(textInDom(adminPage, halfDayAbsenceLabel)).toHaveCount(0, {
-      timeout: 15_000,
-    });
+    await expect(textInDom(adminPage, halfDayAbsenceLabel)).toHaveCount(0);
   });
 });

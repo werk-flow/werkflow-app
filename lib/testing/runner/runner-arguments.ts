@@ -1,6 +1,6 @@
 import type { PlaywrightLane } from './run-policy';
 
-const RUNNER_OPTIONS = ['--target', '--grep', '--reuse-run', '--group'] as const;
+const RUNNER_OPTIONS = ['--target', '--grep', '--reuse-run', '--fresh-for', '--group'] as const;
 export type RunnerArguments = Partial<Record<(typeof RUNNER_OPTIONS)[number], string>>;
 
 /** All Playwright configuration stays owned by the repository. */
@@ -21,7 +21,10 @@ export function parseRunnerArguments(lane: PlaywrightLane, args: readonly string
     if (!value?.trim() || value.startsWith('--')) throw new Error(`${name} requires a value.`);
     result[option] = value;
   }
-  if (lane === 'group' && (!result['--group'] || result['--grep'] || result['--reuse-run']))
+  if (
+    lane === 'group' &&
+    (!result['--group'] || result['--grep'] || result['--reuse-run'] || result['--fresh-for'])
+  )
     throw new Error(
       'Group acceptance requires --group with optional --target only. Selection and prerequisites come from the registry.',
     );

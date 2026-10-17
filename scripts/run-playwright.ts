@@ -16,7 +16,7 @@ import {
   isPerformanceSpec,
 } from '../lib/testing/selection/test-groups';
 import { checkLatencyEvidence } from '../lib/testing/latency-evidence';
-import { recoveredEnvironmentRuns } from '../lib/testing/runner/group-recovery';
+import { freshDiagnosisProblem, recoveredEnvironmentRuns } from '../lib/testing/runner/group-recovery';
 import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import {
   createGroupQualification,
@@ -79,7 +79,7 @@ async function main(signal: AbortSignal): Promise<number> {
   const suite = process.argv[3] as PlaywrightSuite | undefined;
   if (!lane || !(RUNNABLE_LANES as readonly string[]).includes(lane)) {
     throw new Error(
-      'Usage: bun scripts/run-playwright.ts <group|iteration|diagnostic> <golden|audit|canary> [--target local|cloud] [--group <id> | --grep <pattern>]',
+      'Usage: bun scripts/run-playwright.ts <group|iteration|diagnostic> <golden|audit|canary> [--target local|cloud] [--group <id> | --grep <pattern> [--reuse-run <run-key>] | --fresh-for <run-key>]',
     );
   }
   if (!suite || !['golden', 'audit', 'canary'].includes(suite)) {
@@ -89,10 +89,19 @@ async function main(signal: AbortSignal): Promise<number> {
   const argumentsByName = parseRunnerArguments(lane, process.argv.slice(4));
   const repositoryRoot = resolve(import.meta.dir, '..');
   const groupId = argumentsByName['--group'];
-  const groups = groupId ? getTestGroups(repositoryRoot) : [];
+  // A fresh-world diagnostic repeats the whole group of the failed run it names (group-recovery.ts).
+  const freshForRunKey = argumentsByName['--fresh-for'] ?? null;
+  const freshSource = freshForRunKey ? readRunManifest(freshForRunKey) : null;
+  const groups = groupId || freshSource ? getTestGroups(repositoryRoot) : [];
   const group = groupId ? groups.find((entry) => entry.id === groupId) : undefined;
   if (groupId && (!group || group.kind !== suite))
     throw new Error(`Group ${groupId} does not belong to suite ${suite}.`);
+  const diagnosedGroup = freshSource ? groups.find((entry) => entry.id === freshSource.groupId) : undefined;
+  if (freshSource && (!diagnosedGroup || diagnosedGroup.kind !== suite))
+    throw new Error(
+      `${freshForRunKey} is no run of a registered ${suite} group (group ${freshSource.groupId ?? 'none'}).`,
+    );
+  const selectedGroup = group ?? diagnosedGroup;
   // A verification run prepared the shared work (preflight, discovery, qualification, the run
   // identity) once for every group it starts; a direct lane does that work here.
   const preparedPlan = lane === 'group' ? readPreparedPlan() : null;
@@ -100,9 +109,12 @@ async function main(signal: AbortSignal): Promise<number> {
     const archiveProblem = browserStorageProblem(repositoryRoot);
     if (archiveProblem) throw new Error(archiveProblem);
   }
-  const groupFiles = group ? group.files : [];
+  const groupFiles = selectedGroup ? selectedGroup.files : [];
+  // A diagnostic never records a group id: it is no attempt of the group's retry rule.
   if (groupId) process.env.WERKFLOW_TEST_GROUP = groupId;
   else delete process.env.WERKFLOW_TEST_GROUP;
+  if (freshForRunKey) process.env.WERKFLOW_FRESH_FOR_RUN_KEY = freshForRunKey;
+  else delete process.env.WERKFLOW_FRESH_FOR_RUN_KEY;
   // Baseline validation runs after Playwright exits. Keep traces even when its
   // assertions pass, otherwise a later comparison failure loses its diagnosis.
   process.env.WERKFLOW_RETAIN_PERFORMANCE_TRACE =
@@ -116,7 +128,7 @@ async function main(signal: AbortSignal): Promise<number> {
   const preparedRun =
     preparedPlan && group ? preparedGroupRun(preparedPlan, { groupId: group.id, suite, target }) : null;
   const grep = argumentsByName['--grep'] ?? null;
-  const playwrightArgs = group
+  const playwrightArgs = selectedGroup
     ? groupFiles.map((file) => file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$')
     : grep
       ? ['--grep', grep]
@@ -127,6 +139,7 @@ async function main(signal: AbortSignal): Promise<number> {
     target,
     grep,
     reuseRunKey,
+    freshForRunKey,
   });
   if (requestErrors.length > 0) throw new Error(requestErrors.join('\n'));
 
@@ -137,11 +150,10 @@ async function main(signal: AbortSignal): Promise<number> {
   if (lane === 'diagnostic' && retainedSource) {
     // A replay on another build still explains a failure, but only a replay on
     // the failed run's build can count as environment recovery (group-recovery.ts).
-    const buildIdPath = resolve(import.meta.dir, '../.next/BUILD_ID');
-    const servedBuildId = existsSync(buildIdPath) ? readFileSync(buildIdPath, 'utf8').trim() : null;
-    if (!retainedSource.buildId || retainedSource.buildId !== servedBuildId) {
+    const served = servedBuildId();
+    if (!retainedSource.buildId || retainedSource.buildId !== served) {
       console.warn(
-        `[werkflow-test] ${reuseRunKey} was recorded on build ${retainedSource.buildId ?? 'unknown'}; the served build is ${servedBuildId ?? 'unknown'}. This diagnostic cannot count as environment recovery for that run.`,
+        `[werkflow-test] ${reuseRunKey} was recorded on build ${retainedSource.buildId ?? 'unknown'}; the served build is ${served ?? 'unknown'}. This diagnostic cannot count as environment recovery for that run.`,
       );
     }
   }
@@ -164,7 +176,7 @@ async function main(signal: AbortSignal): Promise<number> {
   if (!fullSelection.total)
     throw new Error(`The ${suite} suite contains no tests. Refusing to create a world.`);
   // A group's selection is its registered files; only a grep needs Playwright's own filtering.
-  const requestedSelection = group
+  const requestedSelection = selectedGroup
     ? selectionForFiles(fullSelection, groupFiles)
     : grep
       ? await discoverPlaywrightSelection({ suite, playwrightArgs, repositoryRoot, signal })
@@ -181,9 +193,27 @@ async function main(signal: AbortSignal): Promise<number> {
   if (selectionErrors.length > 0) throw new Error(selectionErrors.join('\n'));
   if (
     !requestedSelection.total ||
-    (group && requestedSelection.tests.some((test) => !groupFiles.includes(test.file)))
+    (selectedGroup && requestedSelection.tests.some((test) => !groupFiles.includes(test.file)))
   )
     throw new Error('Group discovery did not match its registered files.');
+  if (freshSource) {
+    const failedTestIds = (freshSource.outcomes ?? [])
+      .filter((outcome) => !['passed', 'skipped'].includes(outcome.status))
+      .map((outcome) => outcome.id);
+    const resultsDirectory = browserRunPaths(repositoryRoot, freshSource.runKey).results;
+    const problem = freshDiagnosisProblem({
+      source: freshSource,
+      servedBuildId: servedBuildId(),
+      runs: listRunManifests(),
+      failedTestStages: failedTestIds.map((testId) =>
+        retainedTestStages({ resultsDirectory, testId, failedTestIds }),
+      ),
+    });
+    if (problem) throw new Error(`Fresh-world diagnostic refused: ${problem}`);
+    console.log(
+      `[werkflow-test] Fresh-world diagnostic of ${freshSource.groupId ?? 'its group'} for ${freshSource.runKey}: its failed test wrote to its world, so it runs the whole group on a new world on the same build. A pass qualifies one retry of the group after the cleanup.`,
+    );
+  }
   if (lane === 'diagnostic' && retainedSource && reuseRunKey) {
     const problem = repeatedReplayProblem({
       sourceRunKey: reuseRunKey,
@@ -315,8 +345,8 @@ async function main(signal: AbortSignal): Promise<number> {
   } catch {
     throw new Error(`Playwright exited ${exitCode} without manifest ${manifestPath(runKey)}.`);
   }
-  const timing = group
-    ? getGroupTimingRequirements(group, repositoryRoot)
+  const timing = selectedGroup
+    ? getGroupTimingRequirements(selectedGroup, repositoryRoot)
     : {
         requireFreshness: requestedSelection.titles.some((title) => title.includes('@FRESHNESS')),
         requireReadiness: requestedSelection.titles.some((title) => title.includes('@READINESS')),
@@ -373,6 +403,12 @@ async function main(signal: AbortSignal): Promise<number> {
   );
   if (manifest.failures[0]) console.log(`[werkflow-test] failure: ${manifest.failures[0].message}`);
   return ['passed', 'diagnostic_passed'].includes(manifest.status) ? exitCode : 1;
+}
+
+/** The build the test server serves: .next/BUILD_ID of the recorded build. */
+function servedBuildId(): string | null {
+  const buildIdPath = resolve(import.meta.dir, '../.next/BUILD_ID');
+  return existsSync(buildIdPath) ? readFileSync(buildIdPath, 'utf8').trim() : null;
 }
 
 function recordRunnerFailure(error: unknown): void {

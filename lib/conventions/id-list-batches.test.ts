@@ -134,4 +134,4 @@ test('every id list sent to PostgREST is fixed, batched, or a reviewed bounded s
       .map((key) => `${file}: ${key}`),
   );
   expect(stale, 'These BOUNDED_LISTS entries match no call; remove them.').toEqual([]);
-}, 60_000);
+});

@@ -17,7 +17,11 @@ import {
 } from '../../golden/support/db/service';
 import { seedPublishedWorkTemplate } from '../../golden/support/db/work';
 import { ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
-import { uploadIntoDocumentsSection } from '../../golden/support/steps/documents';
+import {
+  contextualDocumentsFrame,
+  contextualDocumentsSection,
+  uploadIntoDocumentsSection,
+} from '../../golden/support/steps/documents';
 import {
   MAINTENANCE_PLAN_STALE_TEXT,
   chooseMaintenanceDueAction,
@@ -25,11 +29,17 @@ import {
   maintenanceCoverageAction,
   maintenanceCoverageDocumentsDialog,
   maintenanceCoverageDocumentsLoading,
+  maintenanceCoverageHeader,
+  maintenanceCoveragePanel,
   maintenanceCoverageRow,
   maintenanceDueActionDialog,
+  maintenanceDueHeader,
+  maintenanceDuePanel,
   maintenanceDueReason,
   maintenanceDueRow,
   maintenanceDueRowAction,
+  maintenanceDueRowOnDate,
+  maintenanceDueRowsOfPlan,
   maintenanceDueServiceCasePicker,
   maintenanceDueSubmit,
   maintenancePageHeading,
@@ -219,7 +229,7 @@ async function measureDocumentFrame(dialog: Locator): Promise<DocumentFrameGeome
       ),
     )
     .toBe(0);
-  return dialog.locator('[data-slot="contextual-documents-frame"]').evaluate((frame) => {
+  return contextualDocumentsFrame(dialog).evaluate((frame) => {
     const header = frame.querySelector('[data-slot="contextual-documents-header"]');
     const actions = frame.querySelector('[data-slot="contextual-documents-actions"]');
     const row = frame.querySelector('[data-slot="list-row"]');
@@ -281,7 +291,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
       'Zweite Fachwartung deckt einen getrennten Anlagenumfang ab.',
     );
     await maintenancePlanSubmit(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     const planNumbers = await getMaintenancePlanNumbersByClient(world.orgId, customer.clientId);
     expect(planNumbers).toHaveLength(2);
     const second = expectDefined(
@@ -324,7 +334,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     await selectFromSearchable(adminPage, maintenanceDueServiceCasePicker(dialog), serviceSummary);
     await maintenanceDueReason(dialog).fill('Reaktiver Befund gehört exakt zu dieser Wartungsfälligkeit.');
     await maintenanceDueSubmit(dialog).click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
 
     const state = expectDefined(await getMaintenanceStateByPlanNumber(world.orgId, planNumber), 'plan state');
     expect(state.serviceCaseLinks).toHaveLength(1);
@@ -346,26 +356,16 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     await adminPage.goto(maintenanceSearchUrl(planNumber));
     const populatedDueRow = maintenanceDueRow(adminPage, planNumber, firstDueLabel);
     await expect(populatedDueRow).toBeVisible();
-    const duePanel = adminPage
-      .getByRole('main')
-      .getByRole('tabpanel')
-      .filter({
-        has: adminPage
-          .getByTestId('maintenance-due-row')
-          .filter({ hasText: planNumber })
-          .filter({ hasText: firstDueLabel }),
-      });
-    const dueHeader = duePanel.getByTestId('maintenance-due-header');
-    const planRows = duePanel.getByTestId('maintenance-due-row').filter({ hasText: planNumber });
+    const duePanel = maintenanceDuePanel(adminPage, planNumber, firstDueLabel);
+    const dueHeader = maintenanceDueHeader(duePanel);
+    const planRows = maintenanceDueRowsOfPlan(duePanel, planNumber);
     const openPlanDue = state.dueWork.filter((due) => ['open', 'visit_created'].includes(due.status));
     await expect(planRows).toHaveCount(openPlanDue.length);
     const lastDue = expectDefined(
       [...openPlanDue].sort((left, right) => left.due_date.localeCompare(right.due_date)).at(-1),
       'the last open due item of the seeded plan',
     );
-    const lastOwnedDueRow = duePanel
-      .locator(`[data-testid="maintenance-due-row"][data-due-date="${lastDue.due_date}"]`)
-      .filter({ hasText: planNumber });
+    const lastOwnedDueRow = maintenanceDueRowOnDate(duePanel, planNumber, lastDue.due_date);
     await captureResponsiveSection(
       adminPage,
       testInfo,
@@ -385,12 +385,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     await maintenanceTab(adminPage, 'coverages').click();
     const coverageRow = maintenanceCoverageRow(adminPage, names.coverageReference);
     await expect(coverageRow).toBeVisible();
-    const coveragePanel = adminPage
-      .getByRole('main')
-      .getByRole('tabpanel')
-      .filter({
-        has: adminPage.getByTestId('maintenance-coverage-row').filter({ hasText: names.coverageReference }),
-      });
+    const coveragePanel = maintenanceCoveragePanel(adminPage, names.coverageReference);
     await captureResponsiveSection(
       adminPage,
       testInfo,
@@ -399,7 +394,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
       async (width) => {
         await verifyMaintenanceResponsiveRow(
           adminPage,
-          coveragePanel.getByTestId('maintenance-coverage-header'),
+          maintenanceCoverageHeader(coveragePanel),
           coverageRow,
           width,
         );
@@ -481,8 +476,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
         await adminPage.unroute(readUrl, holdCoverageRead);
       }
     }
-    const loadedDocument = documentsDialog
-      .getByTestId('contextual-documents-section')
+    const loadedDocument = contextualDocumentsSection(documentsDialog)
       .getByText(testData`upload-fixture`)
       .filter({ visible: true });
     await expect(loadedDocument).toBeVisible();
@@ -543,7 +537,7 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     const currentDialog = await openMaintenancePlanAction(adminPage, planNumber, 'pause');
     await maintenancePlanActionReason(currentDialog).fill('Plan während der getrennten Fachprüfung pausiert');
     await maintenancePlanActionSubmit(currentDialog, 'pause').click();
-    await expect(currentDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(currentDialog).toHaveCount(0);
     await maintenancePlanActionReason(staleDialog).fill('Dieser veraltete Stand darf nicht gewinnen');
     await maintenancePlanActionSubmit(staleDialog, 'pause').click();
     await expect(staleDialog.getByRole('alert')).toContainText(MAINTENANCE_PLAN_STALE_TEXT);
@@ -560,11 +554,11 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     let dialog = await openMaintenancePlanAction(adminPage, planNumber, 'terminate');
     await maintenancePlanActionReason(dialog).fill('Auditplan nachvollziehbar beendet');
     await maintenancePlanActionSubmit(dialog, 'terminate').click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
     dialog = await openMaintenancePlanAction(adminPage, planNumber, 'archive');
     await maintenancePlanActionReason(dialog).fill('Beendeten Auditplan aus der laufenden Ansicht entfernt');
     await maintenancePlanActionSubmit(dialog, 'archive').click();
-    await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(dialog).toHaveCount(0);
 
     const state = expectDefined(await getMaintenanceStateByPlanNumber(world.orgId, planNumber), 'plan state');
     expect(state.plan.status).toBe('terminated');

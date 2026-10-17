@@ -118,4 +118,4 @@ test('every code a message map translates is still named outside the message map
     .map(([code, files]) => `${code} (${[...files].join(', ')})`)
     .sort();
   expect(unnamed, 'No action returns these codes any more; remove them from the message map.').toEqual([]);
-}, 20_000);
+});

@@ -118,7 +118,8 @@ function browserSelection(file: string, group: SelectableGroup): string | undefi
  * Chooses what a change must check. Release mode selects every group. Change
  * mode selects the cheap gates, and browser groups by declared scope or the
  * core table; when a browser group's latest result failed or was blocked, it
- * selects exactly those browser groups instead (repair mode).
+ * selects those browser groups and the groups whose own test code changed
+ * instead (repair mode).
  */
 export function groupSelections(input: {
   mode: 'change' | 'release';
@@ -149,9 +150,16 @@ export function groupSelections(input: {
       selections.set(group.id, { reason: 'Current policy check', changedFiles: [] });
     } else if (!isBrowser(group)) {
       selections.set(group.id, { reason: 'Cheap gate; runs when its inputs changed', changedFiles: [] });
+    } else if (input.unresolvedGroupIds.includes(group.id)) {
+      selections.set(group.id, { reason: 'Repair: latest result failed or was blocked', changedFiles: [] });
     } else if (repairing) {
-      if (input.unresolvedGroupIds.includes(group.id))
-        selections.set(group.id, { reason: 'Repair: latest result failed or was blocked', changedFiles: [] });
+      // A repair absorbs shared product changes into its baseline, but never a group's own test code:
+      // until 2026-10-16 a spec rewritten during a repair became baseline without ever running.
+      const testChanges = input.changedFiles.filter(
+        (file) => isTestInput(file) && group.executionInputs?.includes(file),
+      );
+      if (testChanges.length)
+        selections.set(group.id, { reason: 'Test execution dependency changed', changedFiles: testChanges });
     } else if (RUNNER_PILOTS.has(group.id) && runnerChanges.length) {
       selections.set(group.id, { reason: 'Runner integration pilot', changedFiles: runnerChanges });
     } else {

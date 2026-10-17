@@ -59,7 +59,7 @@ test('a module-level helper name is declared in one product file unless it is a 
     shrunk.map(([name]) => name),
     'These names have fewer copies than KNOWN_DUPLICATE_HELPERS records; lower the count or remove the name so the list only shrinks.',
   ).toEqual([]);
-}, 60_000);
+});
 
 // Known copies of the checks below, keyed by their sorted names joined by
 // " = ", each with the reason it stays. An entry leaves its list with its last copy.
@@ -83,7 +83,7 @@ test('no helper body is copied under another name', () => {
     'KNOWN_RENAMED_COPIES',
     'Identical helper bodies under different names: keep one in its owning module and import it.',
   );
-}, 60_000);
+});
 
 // A copy that renamed its parameters, its locals or the module data it reads
 // is still a copy: equal parameters and bodies once every identifier but a
@@ -97,7 +97,7 @@ test('no helper body is copied with its identifiers renamed', () => {
     'KNOWN_ERASED_COPIES',
     'Helper bodies equal up to their identifiers: keep one implementation in its owning module and pass the part that differs as a parameter.',
   );
-}, 60_000);
+});
 
 // One home per shared type: an exported type alias or interface name is
 // declared in one product file. A local type stays private to its file.
@@ -109,7 +109,7 @@ test('an exported type name is declared in one product file', () => {
     'KNOWN_DUPLICATE_TYPES',
     'One home per type: export it from its owning module and import it there; a type with another meaning needs another name.',
   );
-}, 60_000);
+});
 
 test('no type body is copied under another name', () => {
   expectKnownCopies(
@@ -118,7 +118,7 @@ test('no type body is copied under another name', () => {
     'KNOWN_RENAMED_TYPES',
     'Identical type bodies under different names: declare the type once and import it, or alias it where the second name says more.',
   );
-}, 60_000);
+});
 
 describe('duplicate detection probes', () => {
   const sumBody = (name: string, values: string, entry: string): string =>

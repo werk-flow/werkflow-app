@@ -14,6 +14,7 @@ import {
 import {
   fillParkingContext,
   parkingContextDialog,
+  parkingContextLine,
   parkingContextSave,
 } from '../../golden/support/steps/dispatch';
 import { dismissDialog } from '../../golden/support/steps/interaction';
@@ -86,17 +87,14 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await calendarRefreshButton(adminPage).click();
     const targetDay = monthDay(adminPage, planningDate);
     const calendarEvent = monthCards(targetDay, title);
-    await expect(calendarEvent).toHaveCount(1, { timeout: 20_000 });
+    await expect(calendarEvent).toHaveCount(1);
     const calendarTitle = visibleText(adminPage, title);
     // The month shows three items per day; the fourth waits behind „+n mehr".
     const otherCalendarTitle = visibleText(adminPage, otherEmployeeTitle);
-    if (
-      !(await calendarTitle.isVisible().catch(() => false)) ||
-      !(await otherCalendarTitle.isVisible().catch(() => false))
-    ) {
+    if (!(await calendarTitle.isVisible()) || !(await otherCalendarTitle.isVisible())) {
       await monthMoreButton(targetDay).click({ timeout: 5_000 });
     }
-    await expect(calendarTitle).toBeVisible({ timeout: 20_000 });
+    await expect(calendarTitle).toBeVisible();
     await expect(otherCalendarTitle).toBeVisible();
     await expect(calendarLayerToggle(adminPage, 'work')).toBeVisible();
     await expect(calendarLayerToggle(adminPage, 'planned')).toBeVisible();
@@ -120,9 +118,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await expect(memberFilterSummary(adminPage)).toBeVisible();
 
     await showPlanningMonth(employeePage, planningDate);
-    await expect(visibleText(employeePage, title)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleText(employeePage, title)).toBeVisible();
     await expect(textInDom(employeePage, otherEmployeeTitle)).toHaveCount(0);
     for (const view of ['day', 'week', 'month'] as const) {
       await calendarViewTab(employeePage, view).click();
@@ -150,10 +146,10 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await showPlanningMonth(adminPage, sourceDate);
     await dragPlanningMonthEvent(adminPage, { title, sourceDate, targetDate });
     const warning = planningWarningDialog(adminPage);
-    await expect(warning).toBeVisible({ timeout: 20_000 });
+    await expect(warning).toBeVisible();
     await planningWarningReason(warning).fill('A1 Drag bewusst bestätigt');
     await planningWarningSave(warning).click();
-    await expect(warning).toHaveCount(0, { timeout: 20_000 });
+    await expect(warning).toHaveCount(0);
     await showPlanningMonth(adminPage, targetDate);
     await expect(monthDayShowing(adminPage, targetDate, title)).toBeVisible();
   });
@@ -175,13 +171,13 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
       employeeName: world.users.employee.firstName,
     });
     await confirmPlanningWarning(adminPage, 'A1 Kalenderauftrag bewusst geplant', false);
-    await expect(createDialog).toHaveCount(0, { timeout: 20_000 });
+    await expect(createDialog).toHaveCount(0);
 
     await showPlanningMonth(adminPage, plannedDate);
     await monthDayNumber(adminPage, plannedDate).click();
     await expect(calendarViewTab(adminPage, 'day')).toHaveAttribute('data-state', 'active');
     const jobBlock = dayViewCards(adminPage, title);
-    await expect(jobBlock).toBeVisible({ timeout: 20_000 });
+    await expect(jobBlock).toBeVisible();
     const widthBefore = (await jobBlock.boundingBox())?.width ?? 0;
     await dragHandleBy(adminPage, trailingResizeHandle(jobBlock), 60);
     await confirmPlanningWarning(adminPage, 'A1 Dauer bewusst verlängert');
@@ -192,7 +188,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await moveCalendarBlockToMember(adminPage, jobBlock, bueroName);
     await confirmPlanningWarning(adminPage, 'A1 Umplanung zu Bruno bewusst bestätigt');
     // The day drop snaps the start as well, so the sentence may name the new time.
-    await expect(reassignedConfirmation(adminPage, bueroName)).toBeVisible({ timeout: 20_000 });
+    await expect(reassignedConfirmation(adminPage, bueroName)).toBeVisible();
 
     const blockBox = await jobBlock.boundingBox();
     const parkplatzBox = await parkplatzButton(adminPage).boundingBox();
@@ -208,7 +204,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     );
     await adminPage.mouse.up();
     const parkingDialog = parkingContextDialog(adminPage);
-    await expect(parkingDialog).toBeVisible({ timeout: 20_000 });
+    await expect(parkingDialog).toBeVisible();
     await fillParkingContext(adminPage, parkingDialog, {
       reason: 'capacity',
       note: 'A1 Auftrag wird bis zur neuen Kapazitätsplanung geparkt.',
@@ -216,29 +212,19 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
       reviewDate: berlinDateAtOffset(7),
     });
     await parkingContextSave(parkingDialog).click();
-    await expect(parkingDialog).toHaveCount(0, { timeout: 20_000 });
-    await expect(calendarConfirmation(adminPage, 'parked')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(parkingDialog).toHaveCount(0);
+    await expect(calendarConfirmation(adminPage, 'parked')).toBeVisible();
     await adminPage.reload();
     await showPlanningMonth(adminPage, plannedDate);
     await monthDayNumber(adminPage, plannedDate).click();
     await parkplatzButton(adminPage).click();
     const parkedPill = parkplatzCardOf(adminPage, title);
     await expect(parkedPill).toBeVisible();
-    await expect(parkedPill.locator('[data-parking-context]')).toHaveAttribute(
-      'data-parking-context',
-      'set',
-      {
-        timeout: 20_000,
-      },
-    );
+    await expect(parkingContextLine(parkedPill)).toHaveAttribute('data-parking-context', 'set');
     await dragCardTo(adminPage, parkedPill, dayTimeline(dayRow(adminPage, world.users.employee.id)));
     await confirmPlanningWarning(adminPage, 'A1 Auftrag aus Parkplatz eingeplant', false);
-    await expect(scheduledFromParkplatzConfirmation(adminPage)).toBeVisible({
-      timeout: 20_000,
-    });
-    await expectGone(parkedPill, { timeout: 20_000 });
+    await expect(scheduledFromParkplatzConfirmation(adminPage)).toBeVisible();
+    await expectGone(parkedPill);
     // The visit kept Bruno and gained Emil: the card sits in both rows; the drop row is the proof.
     // The saved plan proves it, not the placement the grid shows before the answer: reload first.
     await adminPage.reload();
@@ -276,21 +262,19 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
       clockInDigits: '0006',
       clockOutDigits: '0009',
     });
-    await expect(manualEntrySavedConfirmation(adminPage)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(manualEntrySavedConfirmation(adminPage)).toBeVisible();
     await expect(manualDialog).toHaveCount(0, { timeout: 10_000 });
 
     await calendarViewTab(adminPage, 'day').click();
     const refreshButton = calendarRefreshButton(adminPage);
     await refreshButton.click();
     await expect(refreshButton).toBeDisabled();
-    await expect(refreshButton).toBeEnabled({ timeout: 30_000 });
+    await expect(refreshButton).toBeEnabled();
     await visibleCalendarLayerToggle(adminPage, 'work').click();
     const plannedBlock = dayViewCards(adminPage, plannedTitle);
     const workBlock = visibleCalendarTimeBlock(adminPage, /00:06.*00:09/);
-    await expect(plannedBlock).toBeVisible({ timeout: 20_000 });
-    await expect(workBlock).toBeVisible({ timeout: 20_000 });
+    await expect(plannedBlock).toBeVisible();
+    await expect(workBlock).toBeVisible();
     await calendarLayerToggle(adminPage, 'planned').click();
     await expectGone(plannedBlock);
     await expect(workBlock).toBeVisible();
@@ -301,7 +285,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     await visibleCalendarLayerToggle(adminPage, 'work').click();
 
     const pendingBlock = visibleCalendarTimeBlock(adminPage, /00:00.*00:05/);
-    await expect(pendingBlock).toBeVisible({ timeout: 20_000 });
+    await expect(pendingBlock).toBeVisible();
     await expect(pendingBlock).toHaveClass(/bg-warning/);
     await pendingBlock.click();
     const detailsDialog = timeEntryDetailsDialog(adminPage);
@@ -319,8 +303,6 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
       employeeNames: ['Bruno'],
       overrideReason: 'A1 Kalender-Realtime',
     });
-    await expect(visibleText(adminPage, liveTitle)).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(visibleText(adminPage, liveTitle)).toBeVisible();
   });
 });

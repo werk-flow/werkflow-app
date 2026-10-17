@@ -163,6 +163,30 @@ export function requestCloseButton(page: Page): Locator {
   return page.getByRole('button', { name: REQUEST_COPY.close, exact: true });
 }
 
+/** The fields of the capture, close and conversion dialogs, by their DOM id. */
+const REQUEST_FIELD_IDS = {
+  summary: 'request-summary',
+  number: 'request-number',
+  receivedAtDate: 'request-received-at-date',
+  category: 'request-category',
+  urgency: 'request-urgency',
+  source: 'request-source',
+  assignee: 'request-assignee',
+  closeReason: 'close-reason',
+  convertTitle: 'convert-title',
+  convertDescription: 'convert-description',
+  convertSite: 'convert-site',
+  convertContact: 'convert-contact',
+  convertPriority: 'convert-priority',
+  convertDate: 'convert-date',
+  convertNumber: 'convert-number',
+} as const;
+
+/** A field of an open request dialog. */
+export function requestField(dialog: Locator, field: keyof typeof REQUEST_FIELD_IDS): Locator {
+  return dialog.locator(`#${REQUEST_FIELD_IDS[field]}`);
+}
+
 /** The close dialog's required reason label. */
 export function requestCloseReasonLabel(dialog: Locator): Locator {
   return dialog.getByText(REQUEST_COPY.closeReasonLabel, { exact: true });
@@ -231,14 +255,12 @@ export function requestDocumentTrashedMessage(page: Page): Locator {
 // these steps reads the selected page and never the previous one.
 export async function showRequestStatus(page: Page, status: keyof typeof REQUEST_STATUS_TABS): Promise<void> {
   await page.getByRole('tab', { name: REQUEST_STATUS_TABS[status], exact: true }).click();
-  await expect(page).toHaveURL((url) => url.searchParams.get('status') === status, {
-    timeout: 15_000,
-  });
+  await expect(page).toHaveURL((url) => url.searchParams.get('status') === status);
 }
 
 export async function searchRequests(page: Page, query: string): Promise<void> {
   await page.getByLabel(REQUEST_COPY.search).fill(query);
-  await expect(page).toHaveURL((url) => (url.searchParams.get('q') ?? '') === query, { timeout: 15_000 });
+  await expect(page).toHaveURL((url) => (url.searchParams.get('q') ?? '') === query);
 }
 
 export async function createRequestViaDialog(
@@ -274,7 +296,7 @@ export async function createRequestViaDialog(
     const requestNumberInput = page.locator('#request-number');
     // The generated suggestion arrives asynchronously. Let it settle before
     // replacing it so Playwright cannot interleave both controlled updates.
-    await expect(requestNumberInput).toHaveValue(/.+/, { timeout: 15_000 });
+    await expect(requestNumberInput).toHaveValue(/.+/);
     await requestNumberInput.fill(options.requestNumber);
     await expect(requestNumberInput).toHaveValue(options.requestNumber);
   }
@@ -304,15 +326,11 @@ export async function createRequestViaDialog(
   }
 
   if (options.siteName) {
-    await expect(page.locator('#request-site')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page.locator('#request-site')).toBeVisible();
     await selectFromSearchable(page, page.locator('#request-site'), options.siteName);
   }
   if (options.contactName) {
-    await expect(page.locator('#request-contact')).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(page.locator('#request-contact')).toBeVisible();
     await selectFromSearchable(page, page.locator('#request-contact'), options.contactName);
   }
 
@@ -342,10 +360,8 @@ export async function createRequestViaDialog(
   // The submit button carries the same label as the header trigger; scope it
   // to the dialog. Success navigates straight to the new request detail.
   await requestCaptureButton(page.getByRole('dialog')).click();
-  await page.waitForURL(/\/anfragen\/[0-9a-f-]{36}/, { timeout: 20_000 });
-  await expect(visibleText(page, options.summary)).toBeVisible({
-    timeout: 15_000,
-  });
+  await page.waitForURL(/\/anfragen\/[0-9a-f-]{36}/);
+  await expect(visibleText(page, options.summary)).toBeVisible();
 
   const requestId = page.url().match(/\/anfragen\/([0-9a-f-]{36})/)?.[1];
   if (!requestId) {
@@ -400,18 +416,14 @@ export async function convertRequestToJobViaDialog(
 
   // The job number is suggested asynchronously after the dialog opens;
   // submitting before it arrives fails validation like it would for a user.
-  await expect(page.locator('#convert-number')).toHaveValue(/.+/, {
-    timeout: 15_000,
-  });
+  await expect(page.locator('#convert-number')).toHaveValue(/.+/);
 
   await convertToJobSubmit(page.getByRole('dialog')).click();
   if (options?.qualificationOverrideReason) {
     await assignDespiteQualificationWarning(page, options.qualificationOverrideReason);
   }
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
-  await expect(visibleText(page, REQUEST_DETAIL_TEXT.converted)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(visibleText(page, REQUEST_DETAIL_TEXT.converted)).toBeVisible();
 }
 
 export async function matchRequestToExistingCustomer(page: Page, clientName: string): Promise<void> {
@@ -422,7 +434,7 @@ export async function matchRequestToExistingCustomer(page: Page, clientName: str
   await customerPickerSearch(page).fill(clientName);
   await page.getByRole('listbox').getByRole('option').filter({ hasText: clientName }).first().click();
   await dialog.getByRole('button', { name: REQUEST_COPY.match, exact: true }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0);
   await expectVisibleAfterSave(page, clientName);
 }
 
@@ -435,18 +447,14 @@ export async function convertRequestToProjectViaDialog(
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByRole('heading', { name: REQUEST_COPY.convertTitle })).toBeVisible();
   await dialog.getByRole('tab', { name: REQUEST_COPY.projectTab }).click();
-  await expect(dialog.locator('#convert-number')).toHaveValue(/.+/, {
-    timeout: 15_000,
-  });
+  await expect(dialog.locator('#convert-number')).toHaveValue(/.+/);
   await dialog.locator('#convert-number').fill(projectNumber);
   if (workTemplateName) {
     await selectFromSearchable(page, workTemplateSelect(dialog, 'project'), workTemplateName);
   }
   await dialog.getByRole('button', { name: REQUEST_COPY.convertToProject }).click();
-  await expect(dialog).toHaveCount(0, { timeout: 20_000 });
-  await expect(visibleText(page, REQUEST_DETAIL_TEXT.converted)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(dialog).toHaveCount(0);
+  await expect(visibleText(page, REQUEST_DETAIL_TEXT.converted)).toBeVisible();
 }
 
 export async function setRequestStatusFromDetail(
@@ -463,9 +471,9 @@ export async function setRequestStatusFromDetail(
     name: next,
     exact: true,
   });
-  await expect(expectedAction).toBeVisible({ timeout: 15_000 });
+  await expect(expectedAction).toBeVisible();
   await page.reload();
-  await expect(expectedAction).toBeVisible({ timeout: 15_000 });
+  await expect(expectedAction).toBeVisible();
 }
 
 export async function closeRequestViaDialog(page: Page, reasonLabel: string): Promise<void> {
@@ -487,9 +495,7 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
       await dialog.locator('#close-reason').click({ timeout: 5_000 });
       await page.getByRole('option', { name: reasonLabel, exact: true }).click({ timeout: 5_000 });
       await requestCloseSubmit(dialog).click({ timeout: 5_000 });
-      await expect(page.getByRole('dialog')).toHaveCount(0, {
-        timeout: 15_000,
-      });
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     } catch (error) {
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
@@ -518,6 +524,6 @@ export async function assignRequestAssigneeViaEditDialog(page: Page, assigneeNam
   await expect(dialog).toBeVisible();
   await selectFromSearchable(page, dialog.locator('#edit-request-assignee'), assigneeName);
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   await expectVisibleAfterSave(page, assigneeName);
 }

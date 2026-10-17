@@ -11,16 +11,36 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Field          | Required content                                                                                                                                                                                                                                               |
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Run | Verification report and group ID, run key where created, target, input fingerprint, and retained world ID where owned |
-| Classification | `product`, `harness`, `environment`, or `transient`                                                                                                                                                                                                            |
+| Classification | One of `INCIDENT_CLASSES` in `lib/testing/runner/run-policy.ts`; [Failures](testing.md#failures) defines each. `authoring` and `accepted-change` leave no entry |
 | Failure point  | Spec/stage and first failing assertion or runner error                                                                                                                                                                                                         |
 | Evidence       | `error-context.md`, screenshot, trace, server/edge log or read-only database fact actually inspected                                                                                                                                                           |
 | Root cause     | The smallest explanation supported by that evidence                                                                                                                                                                                                            |
 | Correction     | Product, harness or environment change made                                                                                                                                                                                                                    |
-| Focused proof | Affected fresh group result, exact passed identities, current input fingerprint, and target; matching retained diagnostic evidence for an environment-recovery retry |
+| Focused proof | Affected fresh group result, exact passed identities, current input fingerprint, and target; for an environment-recovery retry, the passing diagnostic (retained replay, or fresh-world run of a test that wrote its world) |
 | Prevention     | Enforced check, shared helper, spec boundary or documented rule that prevents recurrence — with its enforcement-ladder tier ([decision 0005](../decisions/0005-enforcement-ladder.md)); a Tier-3 prose-only prevention states why Tier 1 and 2 are unreachable |
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
-`bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier. Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+`bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-16: audit:layout:work product failure
+
+<!-- incident-run: 2026-10-16T235232398Z-af50ea -->
+
+- Run: run `2026-10-16T235232398Z-af50ea`, group `audit:layout:work`, target local, fingerprint `e5155c38ca1d`, world `0250864c52004c2d8548e7c8b30b5b30`.
+- Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: the row actions menu opened
+- Root cause: The row actions menu (components/ui/row-actions-menu.tsx) closes on every scroll event in the capture phase. On /auftraege at 1280 px the job table overflows sideways, so the click first scrolls the table to bring the actions button into view; that scroll's event arrives a frame later, after the menu opened, and closes it (probe: aria-expanded true at 3336 ms, scroll on the overflow-x-auto table at 3338 ms, false at 3343 ms; Enter on the focused trigger opens it). A user whose sideways or momentum scroll ends as they click loses the menu the same way.
+- Prevention: Tier 2: ui:contracts case 'a scroll that leaves the row menu trigger in place keeps the menu open' fails on the old close-on-any-scroll handler; the menu now closes only when its trigger moved
+
+- Evidence: error-context.md of the four failed runs (the trigger shows `aria-expanded="false"` after the click), the trace (the click came 0.7 s after the search had settled), and a probe on the run's retained world that logged `aria-expanded` true, a scroll event on the table's `overflow-x-auto` wrapper 2 ms later, and false 5 ms after that. Two repairs on the wrong cause (a hydration wait, then a search-settled wait, runs `2026-10-16T212848904Z-4bb1c5` and `2026-10-16T225936300Z-488b4d`, classified authoring) did not change it. Correction: `triggerInPlace` in components/ui/row-actions-menu.tsx; the opener keeps the hydration and search-URL waits and asserts `aria-expanded`. Focused proof: the ui:contracts case failed against the old handler and passes; report `2026-10-17T004621356Z-0a4b38f9` passed audit:layout:work and 125 other groups. Cleanup: every world cleaned.
+
+## 2026-10-16: audit:layout:work product failure
+
+<!-- incident-run: 2026-10-16T191852374Z-65df4a -->
+
+- Run: run `2026-10-16T191852374Z-65df4a`, group `audit:layout:work`, target local, fingerprint `82a531c5f5e5`, world `b45eeec2cba94423bdec6bc47f29b0ac`.
+- Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: the trigger is on screen
+- Root cause: The row actions menu (components/ui/row-actions-menu.tsx) closes on every scroll event in the capture phase. On /auftraege at 1280 px the job table overflows sideways, so the click first scrolls the table to bring the actions button into view; that scroll's event arrives a frame later, after the menu opened, and closes it (probe: aria-expanded true at 3336 ms, scroll on the overflow-x-auto table at 3338 ms, false at 3343 ms; Enter on the focused trigger opens it). A user whose sideways or momentum scroll ends as they click loses the menu the same way. (Reclassified 2026-10-17 from harness: the hydration wait did not change it.)
+- Prevention: Tier 2: ui:contracts case 'a scroll that leaves the row menu trigger in place keeps the menu open' fails on the old close-on-any-scroll handler; the menu now closes only when its trigger moved
 
 ## 2026-10-16: audit:wave-2:p1-14 environment failure
 
@@ -30,7 +50,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Failure point:  >  > wave-2\p1-14.spec.ts > P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2 > work prerequisites block start, follow predecessor state, reject cycles, and retain history: TimeoutError: locator.click: Timeout 30000ms exceeded.
 - Root cause: The browser's work-lifecycle-snapshot read failed with net::ERR_NETWORK_CHANGED (trace 0-trace.network; the same error hit time-tracking-state and the browser's auth read at the same moment): the host network changed during the test, the live view correctly kept its data stale and inert, and the stale region intercepted the click
 - Prevention: Tier 3: a host network change is outside the product and the harness; the stale region did what realtime-and-caching.md requires
-- Evidence: the same test passed in plan `2026-10-16T103827263Z-5597749f` with the same read code. The diagnostic replay on the retained world (`2026-10-16T163246990Z-45296f`) could not observe anything: the source run's writes persisted (one open prerequisite), so the test met another state from its first step. A focused fresh-world run passed (`2026-10-16T163452340Z-0e14b7`), but the runner accepts only a passing replay on the retained world, so the group stays blocked on this tree (backlog row "Replay of a test that mutates its world").
+- Evidence: the same test passed in plan `2026-10-16T103827263Z-5597749f` with the same read code. The diagnostic replay on the retained world (`2026-10-16T163246990Z-45296f`) could not observe anything: the source run's writes persisted (one open prerequisite), so the test met another state from its first step. A focused fresh-world run passed (`2026-10-16T163452340Z-0e14b7`), but the runner then accepted only a passing replay on the retained world, so the group stayed blocked on that tree. Correction (2026-10-16): for a test that wrote its world before it failed, the first fresh-world run of the whole group on the same build (`--fresh-for <run-key>`, recorded as `diagnosticWorld: fresh`) qualifies the one retry (`lib/testing/runner/group-recovery.ts`). This run's build was gone by then, because `bun run test:server` rebuilds; the runner change changed the candidate, and the group ran again in the next automatic plan.
 
 ## 2026-10-16: audit:wave-1:a2-anfragen harness failure
 
@@ -69,7 +89,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-16T100324580Z-0edce6`, group `audit:lab:office`, target local, fingerprint `5bc9c002e4b8`, world `31498d384c7644baa42c9533d782cc29`.
 - Failure point: no failed test recorded; read the run log.
 - Root cause: The route-bound reference of the cold-start and tasks-open script bytes predates the client code of 7d305e2, 9fb58cd, 0165de5 and this package (keyboard-scroll hook in the app shell, background-read kinds, the record-number hook, the wall-clock tick): +9,435 B and +1,427 B encoded; no duplicated module; every count and payload is within its reference after the PageBodyKeyboardScroll fix
-- Prevention: Tier 2: accepted with lab-counts accept and its reason; the change plan now runs the lab groups, so script growth is judged in the change that adds it
+- Prevention: Tier 2: a change plan now runs audit:lab:office, so script growth is judged in the change that adds it; this growth was accepted with its reason through scripts/lab-counts.ts
 - Correction and proof: see the entry of `2026-10-16T101241400Z-cfbbd7`; report `2026-10-16T102856474Z-ddd4e324` passed.
 
 ## 2026-10-16: audit:lab:office product failure
@@ -122,15 +142,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Prevention: Tier 3: no runner mechanism sees a WSL process outside the verification run; the operator rule is to run CodeRabbit WSL passes before or after the browser plan, never during it.
 - Evidence: after the world cleanup, the repair plan `2026-10-16T063133871Z-56605863` ran the group on a rebuilt server with no review pass running, and it passed.
 
-## 2026-10-15: audit:layout:work transient failure
+## 2026-10-15: audit:layout:work product failure
 
 <!-- incident-run: 2026-10-15T190815412Z-f15eed -->
 
 - Run: run `2026-10-15T190815412Z-f15eed`, group `audit:layout:work`, target local, fingerprint `c6cf8a0cb4c5`, world `0a5da77d3c97490b90c7f67f7c008573`.
 - Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: the trigger is on screen
-- Root cause: The row actions menu of the project row on /auftraege was closed when the Löschen item was awaited (snapshot: no menu in the tree, row present); the list surface, its openers and the admin read path are unchanged by this change, and the same group passed on the previous plan.
-- Prevention: no prevention claim: a single closed-menu observation on an unchanged surface; a recurrence makes openListRowMenu wait for aria-expanded (Tier 2 harness).
-- Evidence: the next change plan ran the group on a rebuilt server as run `2026-10-15T211341900Z-d8de4c` and it passed; no product or harness file of the surface changed in between.
+- Root cause: The row actions menu (components/ui/row-actions-menu.tsx) closes on every scroll event in the capture phase. On /auftraege at 1280 px the job table overflows sideways, so the click first scrolls the table to bring the actions button into view; that scroll's event arrives a frame later, after the menu opened, and closes it (probe: aria-expanded true at 3336 ms, scroll on the overflow-x-auto table at 3338 ms, false at 3343 ms; Enter on the focused trigger opens it). A user whose sideways or momentum scroll ends as they click loses the menu the same way. (Reclassified 2026-10-17 from transient: the same closed menu recurred and was reproduced.)
+- Prevention: Tier 2: ui:contracts case 'a scroll that leaves the row menu trigger in place keeps the menu open' fails on the old close-on-any-scroll handler; the menu now closes only when its trigger moved
+- Evidence: first recorded as transient with no prevention claim (a closed menu with the row present); the same symptom recurred four times on 2026-10-16, and the reproduction and repair are recorded under `2026-10-16T235232398Z-af50ea`.
 
 ## 2026-10-15: audit:wave-2:p1-15 product failure
 
@@ -139,7 +159,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-15T131542126Z-7ac336`, group `audit:wave-2:p1-15`, target local, fingerprint `17de3419bb17`, world `6ad3dd2795e84a3eb0b96b7aa2c5f661`.
 - Failure point:  >  > wave-2\p1-15.spec.ts > P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @AUDIT-W2 > customer outcomes, signature, document/source/evidence links, and deterministic export: Error: expect(received).toBe(expected) // Object.is equality
 - Root cause: The work-artifact editor's load() became fire-and-forget when the detail read moved to useClientRead, so a customer action ended its busy state before the reload of the detail settled; the next decision was sent against the previous version and refused as work_artifact_stale_version (customer_reserved never recorded)
-- Prevention: Tier 1: load() returns a promise that settles with the read, and every mutation awaits it inside its busy task, so the dialog's actions stay pending until the current version is shown
+- Prevention: Tier 2: audit:wave-2:p1-15 sends the customer decisions back to back and fails on a stale-version refusal. The repair (load() settles with its read, and every mutation awaits it inside its busy task) is a code fix, not a Tier 1 mechanism: nothing makes a fire-and-forget reload unwritable (corrected 2026-10-16, audit finding A4).
 - Evidence: error-context.md (the dialog shows „Der Arbeitsnachweis wurde zwischenzeitlich geändert“ after „Vorbehalt erfassen“) and the trace, where the reservation request left before the acknowledgement's request had ended. The spec passed in every change plan from 2026-10-08 to 2026-10-09, before the editor moved to useClientRead. Cleanup: the world was cleaned. Correction: `load` in components/auftraege/artifacts/use-work-artifact-editor.ts settles when its read settles, and the save, review, link, customer and conflict paths await it again; each waiter settles only with the read it started. Focused proof: report `2026-10-15T165451975Z-1c474064` passed audit:wave-2:p1-15 and golden:p1-15.
 
 ## 2026-10-15: audit:layout:job environment failure
@@ -179,7 +199,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T083642857Z-376a46`, group `audit:layout:people`, target local, fingerprint `4f0e99a452df`, world `0a4500be2f09432e873ac9bec1391275`.
 - Failure point:  >  > layout\surfaces-people.spec.ts > @AUDIT-LAYOUT-SURFACES people: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter: Error: admin /mitarbeiter dialog people.invite-cancel at 375 px
 - Root cause: Invitation confirmations at 375 px overflowed sideways: the invited email address is one unbreakable word
-- Prevention: Tier 1: dialog and confirmation titles and descriptions wrap anywhere
+- Prevention: Tier 1: dialog and confirmation titles and descriptions wrap anywhere (components/ui/dialog.tsx, components/ui/alert-dialog.tsx)
 - Evidence: error-context.md (the alert dialog wider than 375 px). Cleanup: the world was cleaned. Correction: wrap-anywhere on dialog, confirmation and sheet titles and descriptions. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:people.
 
 ## 2026-10-10: audit:layout:time product failure
@@ -189,7 +209,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T083642857Z-46aca7`, group `audit:layout:time`, target local, fingerprint `f53765af3742`, world `04d0c85e294541c091e0e48022356709`.
 - Failure point:  >  > layout\surfaces-time.spec.ts > @AUDIT-LAYOUT-SURFACES time: tabs and dialogs fit, pass axe and keep their keyboard path > admin /zeiterfassung/perioden/[periodId]: Error: admin /zeiterfassung/perioden/32f33aa3-27ef-4d27-820e-9b9919a0c5a0 at 1280 px, light
 - Root cause: A closed period's detail page scrolls but holds no focusable control, so a keyboard user cannot scroll it (axe scrollable-region-focusable)
-- Prevention: Tier 1: PageBody makes itself a focusable named region while it scrolls without a focusable control
+- Prevention: Tier 1: PageBody makes itself a focusable named region while it scrolls without a focusable control (components/shared/page-body-keyboard-scroll.tsx)
 - Evidence: error-context.md (scrollable-region-focusable on the page body). Cleanup: the world was cleaned. Correction: PageBodyKeyboardScroll. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:time.
 
 ## 2026-10-10: audit:layout:planning-board product failure
@@ -199,7 +219,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T083642857Z-7e9106`, group `audit:layout:planning-board`, target local, fingerprint `3855e7a20678`, world `6b02811c93634f919c88bb5f43bd22b7`.
 - Failure point:  >  > layout\surfaces-planning-board.spec.ts > @AUDIT-LAYOUT-SURFACES planning-board: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 2 of 2: Error: admin /kalender dialog calendar.planning-warning: Escape returns focus to the trigger
 - Root cause: The card popover's move button unmounts with the popover before the planning warning opens, so the warning found no opener and the re-rendered card never got focus back
-- Prevention: Tier 1: the focusin record keeps the popover trigger and its data-focus-key, so the closing warning finds the card again
+- Prevention: Tier 1: the focusin record keeps the popover trigger and its data-focus-key, so the closing warning finds the card again (components/ui/return-focus.ts)
 - Evidence: error-context.md (card not focused after Escape). Cleanup: the world was cleaned. Correction: first round: the focusin record; the remaining cause is entry 2026-10-10T100238917Z-34154b.
 
 ## 2026-10-10: audit:layout:job-lifecycle product failure
@@ -209,7 +229,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T083642857Z-3b81cb`, group `audit:layout:job-lifecycle`, target local, fingerprint `1bf873a96f9a`, world `aaa0bf36139d489fb3e547453017e354`.
 - Failure point:  >  > layout\surfaces-job-lifecycle.spec.ts > @AUDIT-LAYOUT-SURFACES job-lifecycle: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 3 of 3: Error: admin /auftraege/[jobNumber] dialog work.qualification-warning: Escape returns focus to the trigger
 - Root cause: The assignment Save button loses focus when it is disabled for the request, and Chrome fires no focusout for that, so the qualification warning opened with nothing to return to
-- Prevention: Tier 1: useReturnFocus records the opening chain on every focusin and uses it when focus sits on the body at open
+- Prevention: Tier 1: useReturnFocus records the opening chain on every focusin and uses it when focus sits on the body at open (components/ui/return-focus.ts)
 - Evidence: error-context.md (Save not focused after Escape). Cleanup: the world was cleaned. Correction: first round: the focusin record; the remaining cause is entry 2026-10-10T100238917Z-8f5067.
 
 ## 2026-10-10: audit:layout:field product failure
@@ -239,7 +259,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T074311836Z-093cdf`, group `audit:layout:people`, target local, fingerprint `0f167542511e`, world `e36459757dce47daaad55f60be245c13`.
 - Failure point:  >  > layout\surfaces-people.spec.ts > @AUDIT-LAYOUT-SURFACES people: tabs and dialogs fit, pass axe and keep their keyboard path > admin /mitarbeiter: Error: admin /mitarbeiter tab qualifications at 375 px: the active tab stays in its strip's view
 - Root cause: The tab strip did not scroll its active tab back into view after the window narrowed
-- Prevention: Tier 1: TabsTrigger observes its strip's size and reveals the active tab
+- Prevention: Tier 1: TabsTrigger observes its strip's size and reveals the active tab (components/ui/tabs.tsx)
 - Evidence: error-context.md (qualifications tab outside the strip at 375 px). Cleanup: the world was cleaned. Correction: TabsTrigger reveals the active tab when its strip resizes. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:people.
 
 ## 2026-10-10: audit:layout:planning product failure
@@ -249,7 +269,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T073339917Z-5d54d0`, group `audit:layout:planning`, target local, fingerprint `42f5a5d5ef87`, world `9951c31695324d3d9ad7a6fb93c97c1a`.
 - Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: admin /kalender tab month at 375 px, light
 - Root cause: Month grid rows held day headers and items outside grid cells, focus did not return to a re-rendered calendar card or a re-enabled dispatch button, and the entry dialog's tab strip counted as a separate tab stop in the check
-- Prevention: Tier 1: month parts are grid cells, data-focus-key and dropped-focus memory in useReturnFocus; Tier 2: keyboard path skips roving-focus containers
+- Prevention: Tier 1: month parts are grid cells (components/kalender/month-view/month-day-cell.tsx), data-focus-key and dropped-focus memory in useReturnFocus (components/ui/return-focus.ts); Tier 2: the audit:layout:planning keyboard path skips roving-focus containers
 - Evidence: error-context.md (aria-required-children on month rows, focus return, the tab strip counted as a tab stop). Cleanup: the world was cleaned. Correction: month parts are grid cells; useReturnFocus with data-focus-key; the keyboard path skips roving containers. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:planning; report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:planning-board.
 
 ## 2026-10-10: audit:layout:customers product failure
@@ -269,7 +289,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T071726290Z-afbe88`, group `audit:layout:job`, target local, fingerprint `60789f22954b`, world `0224ad7126664c929f5549cee2ff6547`.
 - Failure point:  >  > layout\surfaces-job.spec.ts > @AUDIT-LAYOUT-SURFACES job: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege/[jobNumber] part 2 of 3: Error: admin /auftraege/[jobNumber] dialog work.assign-employees at 1280 px, light
 - Root cause: Assignment pickers had no accessible name (no Field), the approval dialog showed text instead of a skeleton while loading so focus landed on the reason, and the qualification warning lost its return target while Save was disabled
-- Prevention: Tier 1: Field labels on the two pickers, skeleton placeholder, useReturnFocus remembers the control that dropped focus and waits for it to be enabled; Tier 2: surface audit axe and keyboard path
+- Prevention: Tier 1: Field labels on the two pickers, skeleton placeholder, useReturnFocus remembers the control that dropped focus and waits for it to be enabled (components/ui/return-focus.ts); Tier 2: the audit:layout:job axe check and keyboard path
 - Evidence: error-context.md (unnamed comboboxes, focus on the reason field). Cleanup: the world was cleaned. Correction: Field labels on the two pickers, a skeleton in the approval dialog, focus return through useReturnFocus. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:job and audit:layout:job-actions; report `2026-10-10T110458586Z-a7acca2d` passed audit:layout:job-lifecycle.
 
 ## 2026-10-10: audit:layout:work product failure
@@ -279,7 +299,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-10T071328652Z-581e59`, group `audit:layout:work`, target local, fingerprint `fa7dec72cd77`, world `e045e45183e94b6cb522b873b9832f79`.
 - Failure point:  >  > layout\surfaces-work.spec.ts > @AUDIT-LAYOUT-SURFACES work: tabs and dialogs fit, pass axe and keep their keyboard path > admin /auftraege: Error: admin /auftraege dialog work.filter-sheet at 1280 px, dark
 - Root cause: Edit project dialog disabled every field while its jobs loaded, so Radix focused the close button; the filter sheet's axe colors were read mid theme fade
-- Prevention: Tier 1: DialogContent focuses itself when its first tab stop is the close button, project fields stay editable while jobs load; Tier 2: the audit's nextFrames waits for finite animations before measuring
+- Prevention: Tier 1: DialogContent focuses itself when its first tab stop is the close button (components/ui/dialog.tsx), project fields stay editable while jobs load; Tier 2: the audit:layout:work nextFrames waits for finite animations before measuring
 - Evidence: error-context.md (axe colors between the light and dark tokens; focus on „Schließen“). Cleanup: the world was cleaned. Correction: DialogContent focuses itself when its first tab stop is the close button; project fields stay editable while jobs load; nextFrames waits for finite animations. Focused proof: report `2026-10-10T095630216Z-61ae48c9` passed audit:layout:work.
 
 ## 2026-10-09: audit:performance:field environment failure
@@ -342,15 +362,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Prevention: Tier 2: lib/data/background-read-http.test.ts pins the dialog to the background-read client, and the spec now holds that GET kind.
 - Evidence: error-context.md (the hold never saw a POST) and lib/data/background-read-http.test.ts (`maintenance-coverage-documents` kind). Cleanup: the world was cleaned. Correction: the spec holds the GET `/api/background-read` of that kind. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:wave-2:p1-20.
 
-## 2026-10-09: audit:layout transient failure
+## 2026-10-09: audit:layout harness failure
 
 <!-- incident-run: 2026-10-09T101325554Z-d7a6dc -->
 
 - Run: run `2026-10-09T101325554Z-d7a6dc`, group `audit:layout`, target local, fingerprint `950f67cdc8e3`, world `c007a9fd6d9e48fd87062301afe56dd5`.
 - Failure point:  >  > layout\mobile-viewport.spec.ts > @AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls > admin /kalender fits a 375 px viewport: Error: /kalender: a control stays under the clock button
-- Root cause: The /kalender phone check found two board cells of the removable employee under the clock button after scrolling to the end, while the screenshot shows the agenda without them; no calendar code changed in this tree, so the cells belonged to a board render still in flight.
-- Prevention: no prevention claim
-- Evidence: error-context.md and test-failed-1.png (agenda rows without the reported cells). Cleanup: the world was cleaned. Correction: none. Focused proof: report `2026-10-09T114142420Z-9665c35b` passed audit:layout on the same build.
+- Root cause: The /kalender phone check measured controls under the clock button before the page settled: it found two board cells of the removable employee from a board render still in flight, while the screenshot of the finished agenda shows none. A check that measures a render in flight misrepresents the behavior, so this is a harness failure (reclassified 2026-10-16 from transient, audit finding A3).
+- Prevention: Tier 1: tests/audit/support/viewport-audit.ts measures the controls under the clock only after expectMainThreadSettles and two frames after its scroll, so no phone check of any layout group measures a render in flight
+- Evidence: error-context.md and test-failed-1.png (agenda rows without the reported cells). Cleanup: the world was cleaned. Correction (2026-10-16): the settle order in `expectPhoneLayout`; the 2026-10-09 rerun passed without it on the same build (report `2026-10-09T114142420Z-9665c35b`), which shows a timing window, not a fixed outcome. Focused proof: the audit:layout pass of the testing fix package's final change plan.
 
 ## 2026-10-09: golden:p1-19 product failure
 

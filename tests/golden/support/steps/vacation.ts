@@ -111,9 +111,7 @@ export async function typeVacationRange(
 // (dashboard) for every role.
 export async function openOwnVacationSection(page: Page): Promise<void> {
   await page.goto('/zeiterfassung');
-  await expect(visibleText(page, 'Urlaub & Abwesenheit')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, 'Urlaub & Abwesenheit')).toBeVisible();
 }
 
 export async function createOwnVacationRequestViaDialog(
@@ -138,7 +136,7 @@ export async function createOwnVacationRequestViaDialog(
     await dialog.locator('#vacation-comment').fill(options.comment);
   }
   await submitVacationRequestButton(dialog).click();
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 // Submitting an overlapping range must fail with an understandable message
@@ -154,7 +152,7 @@ export async function expectVacationOverlapRejectedViaDialog(
   await submitVacationRequestButton(dialog).click();
   await expect(
     dialog.getByText('Für diesen Zeitraum existiert bereits ein offener oder genehmigter Urlaubsantrag.'),
-  ).toBeVisible({ timeout: 15_000 });
+  ).toBeVisible();
   await dialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
 }
@@ -170,17 +168,13 @@ export async function withdrawOwnPendingVacationRequest(page: Page): Promise<voi
     name: /^Urlaubsantrag vom .* zurückziehen$/,
   });
   await withdrawButton.click();
-  await expect(withdrawButton).toHaveCount(0, { timeout: 15_000 });
-  await expect(visibleText(page, 'Zurückgezogen')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(withdrawButton).toHaveCount(0);
+  await expect(visibleText(page, 'Zurückgezogen')).toBeVisible();
 }
 
 export async function openVacationApprovals(page: Page): Promise<void> {
   await page.goto('/zeiterfassung?tab=approvals');
-  await expect(timeApprovalsTab(page)).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(timeApprovalsTab(page)).toBeVisible();
 }
 
 export async function approveVacationRequestFor(page: Page, personName: string): Promise<void> {
@@ -189,7 +183,7 @@ export async function approveVacationRequestFor(page: Page, personName: string):
   // The card leaves with the click, before the server answers. The banner is
   // the confirmation; callers read the persisted request where they need it.
   await expectBannerAfter(page, vacationApprovedBanner(personName), () => approve.click());
-  await expect(approve).toHaveCount(0, { timeout: 15_000 });
+  await expect(approve).toHaveCount(0);
 }
 
 export async function rejectVacationRequestFor(
@@ -206,7 +200,7 @@ export async function rejectVacationRequestFor(
   await expectBannerAfter(page, `Der Urlaubsantrag von ${personName} wurde abgelehnt.`, () =>
     dialog.getByRole('button', { name: 'Ablehnen', exact: true }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 export async function cancelApprovedVacationFor(
@@ -226,7 +220,7 @@ export async function cancelApprovedVacationFor(
   await expectBannerAfter(page, `Der Urlaub von ${personName} wurde storniert.`, () =>
     dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 // Cancels one specific approved vacation when a person has several approved
@@ -252,7 +246,7 @@ export async function cancelApprovedVacationForRangeText(
   await expectBannerAfter(page, `Der Urlaub von ${personName} wurde storniert.`, () =>
     dialog.getByRole('button', { name: SHARED_COPY.action.cancelRecord, exact: true }).click(),
   );
-  await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 }
 
 // The clock-in contradiction rule: on an approved full-day vacation day the
@@ -262,9 +256,7 @@ export async function expectClockInBlockedByVacation(page: Page): Promise<void> 
   await clockInLauncher(page).click();
   await expect(clockInSheetHeading(page)).toBeVisible();
   await clockInConfirmationButton(page).click();
-  await expect(visibleText(page, 'Heute ist Urlaub genehmigt')).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(visibleText(page, 'Heute ist Urlaub genehmigt')).toBeVisible();
   // Still clocked out: the FAB keeps offering a start, never an active session.
   await expect(clockInLauncher(page)).toBeVisible();
   await expect(runningClockLauncher(page)).toHaveCount(0);

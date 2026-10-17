@@ -435,7 +435,7 @@ test('every admin query on an organization table is filtered or carries a review
     Object.keys(UNSCOPED_FUNCTIONS).filter((name) => !called.has(name) || functions.get(name) !== null),
     'These UNSCOPED_FUNCTIONS entries name a function that no product code calls or that takes an organization argument; remove them.',
   ).toEqual([]);
-}, 120_000);
+});
 
 const fixtureTables = new Set(['jobs', 'time_entries']);
 

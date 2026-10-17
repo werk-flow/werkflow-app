@@ -48,6 +48,7 @@ import {
   workListResetFilters,
   workListSection,
   WORK_LIST_SORT_COLUMNS,
+  workEditField,
 } from '../../golden/support/steps/work';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
 import { setJobStatus } from '../support/a1-steps';
@@ -65,7 +66,7 @@ async function parkOpenWork(page: Page, details: string, adminFirstName: string)
     responsibleName: adminFirstName,
     reviewDate: berlinDateAtOffset(7),
   });
-  await expect(parkDialog).toHaveCount(0, { timeout: 20_000 });
+  await expect(parkDialog).toHaveCount(0);
 }
 
 test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () => {
@@ -90,9 +91,9 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     await detailActionsButton(adminPage).click();
     await jobDetailMenuItem(adminPage, 'edit').click();
     const dialog = jobEditDialog(adminPage);
-    await dialog.locator('#edit-job-title').fill(`${title} geändert`);
+    await workEditField(dialog, 'jobTitle').fill(`${title} geändert`);
     const employeePicker = employeeAssignmentPicker(dialog, 1);
-    await expect(employeePicker).toBeEnabled({ timeout: 20_000 });
+    await expect(employeePicker).toBeEnabled();
     await employeePicker.click();
     await adminPage
       .getByRole('listbox')
@@ -102,11 +103,11 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     // pinned DialogFooter sits underneath it, and Playwright never dispatches
     // the outside click that would dismiss it for a real user. The trigger's
     // label changed with the deselection, so target it by its open state.
-    await dialog.locator('button[role="combobox"][aria-expanded="true"]').click();
+    await dialog.getByRole('combobox', { expanded: true }).click();
     await expect(adminPage.getByRole('listbox')).toBeHidden();
     await renders.forSave('job.edit', async () => {
       await dialog.getByRole('button', { name: SHARED_COPY.action.save }).click();
-      await expect(dialog).toHaveCount(0, { timeout: 20_000 });
+      await expect(dialog).toHaveCount(0);
       await expect(visibleText(adminPage, testData`${title} geändert`)).toBeVisible();
     });
     await employeePage.reload();
@@ -115,9 +116,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     await detailActionsButton(adminPage).click();
     await jobDetailMenuItem(adminPage, 'delete').click();
     await adminPage.getByRole('alertdialog').getByRole('button', { name: SHARED_COPY.action.delete }).click();
-    await expect(adminPage).toHaveURL((url) => url.pathname === '/auftraege', {
-      timeout: 20_000,
-    });
+    await expect(adminPage).toHaveURL((url) => url.pathname === '/auftraege');
     await expect(adminPage.getByRole('row').filter({ hasText: jobNumber })).toHaveCount(0);
   });
 
@@ -150,9 +149,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
 
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${unfinishedNumber}`);
     await clearPlannedDateOnJobPage(adminPage);
-    await expect(lifecycleBadge(adminPage, 'unplanned')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(lifecycleBadge(adminPage, 'unplanned')).toBeVisible();
     await expect(textInDom(adminPage, parked)).toHaveCount(0);
     await setPlannedDateOnJobPage(adminPage, plannedDateDigits);
     await expect(textInDom(adminPage, parked)).toHaveCount(0);
@@ -164,9 +161,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
       'Projekt wird bis zur neuen Kapazitätsplanung geparkt.',
       world.users.admin.firstName,
     );
-    await expect(visibleText(adminPage, parked)).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(visibleText(adminPage, parked)).toBeVisible();
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${unfinishedNumber}`);
     await expect(visibleText(adminPage, parked)).toBeVisible();
     await adminPage.goto(`/auftraege/projekt/${projectNumber}/${finishedNumber}`);
@@ -190,20 +185,18 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     });
     await adminPage.goto(`/auftraege/${checklistJobNumber}`);
     await addJobInstruction(adminPage, pressureTest);
-    await expect(instructionCreatedBy(adminPage, world.users.admin.firstName)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(instructionCreatedBy(adminPage, world.users.admin.firstName)).toBeVisible();
     const persistedInstruction = await jobInstructionEditorRow(adminPage, pressureTest);
     await expect(persistedInstruction.field).toHaveValue(pressureTest);
     await addJobInstruction(adminPage, labelValves);
     const secondInstruction = await jobInstructionEditorRow(adminPage, labelValves);
-    await expect(secondInstruction.field).toBeVisible({ timeout: 15_000 });
+    await expect(secondInstruction.field).toBeVisible();
     // The first frame of the move: the row as shown, while its order is unconfirmed.
     const moveSecondInstructionUp = jobInstructionMoveUp(secondInstruction.shown);
     await moveSecondInstructionUp.click();
     await expect(moveSecondInstructionUp).toBeDisabled();
     // Saved: the confirmed first point moved down, and reordering is available again.
-    await expect(jobInstructionMoveUp(persistedInstruction.row)).toBeEnabled({ timeout: 20_000 });
+    await expect(jobInstructionMoveUp(persistedInstruction.row)).toBeEnabled();
     await adminPage.reload();
     const orderedInstructions = jobInstructionEditorFields(adminPage);
     await expect(orderedInstructions).toHaveCount(2);
@@ -220,21 +213,14 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     await setInstructionCompletionOnJobPage(employeePage, labelValves, false);
     await expect(instructionStatusChangedBy(employeePage, 'open', employeeFirstName)).toBeVisible();
     await setInstructionCompletionOnJobPage(employeePage, labelValves, true);
-    await expect(jobInstructionToggle(jobInstructionItem(employeePage, labelValves), 'open')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(jobInstructionToggle(jobInstructionItem(employeePage, labelValves), 'open')).toBeVisible();
     await setInstructionCompletionOnJobPage(employeePage, pressureTest, true);
-    await expect(jobInstructionToggle(jobInstructionItem(employeePage, pressureTest), 'open')).toBeVisible({
-      timeout: 20_000,
-    });
+    await expect(jobInstructionToggle(jobInstructionItem(employeePage, pressureTest), 'open')).toBeVisible();
 
     await adminPage.reload();
     await setJobStatus(adminPage, 'execution_complete');
     await expect(jobDetailField(adminPage, 'completionDate')).toContainText(
       businessDate.split('-').reverse().join('.'),
-      {
-        timeout: 20_000,
-      },
     );
   });
 
@@ -334,9 +320,7 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
       title: `A1 Liveauftrag ${world.runId}`,
       plannedDateDigits: dateDigits(ownedBerlinDateAtOffset('a1-auftraege', 150)),
     });
-    await expect(visibleText(adminPage, liveJobNumber)).toBeVisible({
-      timeout: 30_000,
-    });
+    await expect(visibleText(adminPage, liveJobNumber)).toBeVisible();
     await expect(visibleText(adminPage, world.orgName)).toBeVisible();
   });
 

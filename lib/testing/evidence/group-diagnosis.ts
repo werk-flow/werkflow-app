@@ -12,7 +12,7 @@ import { resolve } from 'node:path';
 import { z } from 'zod';
 import { writeJsonAtomically } from '../runner/file-lock';
 import { INCIDENT_CLASSES, type IncidentClass } from '../runner/run-policy';
-import { groupAttemptKey, voidedByDrift } from './group-evidence';
+import { groupAttemptKey, voidedByDrift, type GroupResult } from './group-evidence';
 
 const DIAGNOSES_FILE = 'diagnoses.json';
 
@@ -113,6 +113,33 @@ export function recordGroupDiagnosis(
   );
   writeJsonAtomically(resolve(reportDirectory, DIAGNOSES_FILE), [...kept, diagnosis]);
   return { reportId: attempt.reportId, diagnosis };
+}
+
+/** Group kinds whose failed attempt needs a recorded diagnosis before `test:verify` starts again. */
+export const DIAGNOSED_ATTEMPT_KINDS: ReadonlySet<string> = new Set(['unit', 'sql', 'ui']);
+
+/**
+ * `test:verify` refuses to start while the latest attempt of a unit, SQL or component group it would
+ * run failed without a recorded diagnosis, as it does for browser runs (`unclassifiedFailureProblem`):
+ * otherwise a changed input reruns the group and the failure leaves no class. Static gates are
+ * exempt: they are deterministic over their inputs, so their failure is the author's current work
+ * and its message names the cause.
+ */
+export function undiagnosedAttemptProblem(input: {
+  groupIds: readonly string[];
+  results: readonly Pick<GroupResult, 'groupId' | 'status' | 'startedAt' | 'runKey' | 'reason'>[];
+  diagnoses: readonly GroupDiagnosis[];
+}): string | undefined {
+  const diagnosed = new Set(input.diagnoses.map((diagnosis) => groupAttemptKey(diagnosis)));
+  const open = input.groupIds.filter((groupId) => {
+    const latest = input.results
+      .filter((result) => result.groupId === groupId && result.status !== 'blocked' && !voidedByDrift(result))
+      .sort((left, right) => left.startedAt.localeCompare(right.startedAt))
+      .at(-1);
+    return latest?.status === 'failed' && !latest.runKey && !diagnosed.has(groupAttemptKey(latest));
+  });
+  if (!open.length) return undefined;
+  return `Diagnose the latest failed attempt of ${open.join(', ')} first: bun run test:runs classify <group-id> <class> "<cause>" "<prevention>".`;
 }
 
 /** A product or harness cause needs a change, which changes the inputs anyway; only an environment cause allows the retry. */

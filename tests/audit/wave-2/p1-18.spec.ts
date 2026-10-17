@@ -174,7 +174,7 @@ test.describe('P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT
   }) => {
     const { names, root } = await seedEquipmentAtSite(world, 'denial');
     await employeePage.goto(`/service/anlagen/${root.equipmentNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/, { timeout: 20_000 });
+    await employeePage.waitForURL(/\/auftraege\/?$/);
     await outsiderPage.goto(`/service/anlagen/${root.equipmentNumber}`);
     await expect(textInDom(outsiderPage, names.root)).toHaveCount(0);
   });
