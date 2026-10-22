@@ -129,10 +129,6 @@ export type JobInstructionItem = {
   lastStatusChangedAt: string | null;
 };
 
-// ============================================
-// Extended Types (with joined data)
-// ============================================
-
 export type JobWithDetails = Job & {
   assignments: JobAssignmentWithProfile[];
   client: Client | null;
@@ -140,6 +136,7 @@ export type JobWithDetails = Job & {
   // Loaded by the job detail queries; list builders may omit them.
   site?: ClientSite | null;
   contact?: ClientContact | null;
+  scheduledVisitCount?: number;
 };
 
 export type JobAssignmentWithProfile = JobAssignment & {

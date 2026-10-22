@@ -94,9 +94,33 @@ export function buildCodeRabbitReviewArguments(rawArguments: readonly string[]):
   return [...argumentsWithDefaults, ...reviewArguments];
 }
 
+/** A Windows path (`C:\Users\…` or `C:/Users/…`) as WSL mounts it (`/mnt/c/Users/…`). */
+export function toWslPath(windowsPath: string): string {
+  const match = /^([A-Za-z]):[\\/](.*)$/.exec(windowsPath);
+  if (!match?.[1]) throw new Error(`Not an absolute Windows path: ${windowsPath}`);
+  return `/mnt/${match[1].toLowerCase()}/${(match[2] ?? '').replaceAll('\\', '/')}`;
+}
+
+/**
+ * The git environment of a WSL command: git in WSL reads the Windows user's
+ * global ignore file too, so an untracked file that git ignores on Windows
+ * (local settings, env files) stays out of what CodeRabbit collects.
+ */
+export function wslGitEnvironment(windowsExcludesFile: string | null): string[] {
+  if (!windowsExcludesFile) return [];
+  return [
+    '/usr/bin/env',
+    'GIT_CONFIG_COUNT=1',
+    'GIT_CONFIG_KEY_0=core.excludesFile',
+    `GIT_CONFIG_VALUE_0=${toWslPath(windowsExcludesFile)}`,
+  ];
+}
+
 export function buildWindowsCodeRabbitCommand(input: {
   readonly workingDirectory: string;
   readonly reviewArguments: readonly string[];
+  /** The Windows user's global git ignore file, when one exists. */
+  readonly windowsExcludesFile: string | null;
 }): string[] {
   return [
     'wsl.exe',
@@ -105,7 +129,23 @@ export function buildWindowsCodeRabbitCommand(input: {
     '--cd',
     input.workingDirectory,
     '--exec',
+    ...wslGitEnvironment(input.windowsExcludesFile),
     CODERABBIT_WSL_BINARY,
     ...input.reviewArguments,
   ];
+}
+
+/**
+ * Refuses a review whose untracked scope in WSL holds a file that git on
+ * Windows ignores or does not list: CodeRabbit would read a file the review
+ * record never names, such as `.claude/settings.local.json`.
+ */
+export function untrackedScopeProblem(
+  windowsUntracked: readonly string[],
+  wslUntracked: readonly string[],
+): string | null {
+  const listed = new Set(windowsUntracked);
+  const extra = wslUntracked.filter((file) => !listed.has(file));
+  if (!extra.length) return null;
+  return `CodeRabbit would read untracked files that git on Windows ignores: ${extra.slice(0, 5).join(', ')}. Add them to an ignore file both sides read, or move them out of the repository.`;
 }

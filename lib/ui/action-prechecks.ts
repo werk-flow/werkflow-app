@@ -205,4 +205,29 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
         'Opens only for a block drag, which the day and month views start only for a block canManageBlock allows.',
     },
   },
+  {
+    kind: 'job-schedule-edit',
+    serverCodes: ['job_has_several_visits'],
+    predicate: { module: 'lib/jobs/visit-schedule.ts', exportName: 'jobFormEditsSchedule' },
+    wrappers: [{ module: 'components/auftraege/forms/edit-job-input.ts', exportName: 'buildEditJobInput' }],
+    actions: [{ module: 'lib/jobs/actions.ts', exportName: 'updateJob' }],
+    screenedReads: [],
+    props: [],
+    server: {
+      kind: 'typescript',
+      guards: [{ module: 'lib/jobs/job-detail-reads.ts', exportName: 'refuseScheduleOfSeveralVisits' }],
+    },
+    exempt: {
+      'components/auftraege/forms/create-project-form-content.tsx':
+        'Links the chosen jobs to the new project: the edit names projectId only, never a schedule column.',
+      'components/auftraege/forms/use-edit-project-submit.ts':
+        'Links and unlinks jobs of the edited project: the edit names projectId only, never a schedule column.',
+      'components/auftraege/job-detail/job-detail-relation-dialogs.tsx':
+        "Changes the job's customer or project: the edit names clientId or projectId only, never a schedule column.",
+      'components/auftraege/project-detail/project-detail-dialogs.tsx':
+        'Adds jobs to the project: the edit names projectId only, never a schedule column.',
+      'components/kalender/mutations/use-calendar-visit-writes.ts':
+        'Moves a job through updateJob only while it has no planning occurrence; a job with visits moves each visit through the planning actions.',
+    },
+  },
 ];

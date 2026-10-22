@@ -14,7 +14,8 @@ import {
 } from '@/lib/realtime/events';
 import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
-import { countRealtimeRefresh, markRouteRefresh } from '@/lib/ui/route-refresh-signal';
+import { countRealtimeRefresh, useHeldReadFlag, markRouteRefresh } from '@/lib/ui/route-refresh-signal';
+import { ownWrites } from '@/lib/realtime/own-writes';
 
 type UseRealtimeRouterRefreshOptions = {
   tables: readonly RealtimeTable[];
@@ -48,7 +49,7 @@ export function useRealtimeRouterRefresh({
   const anyDialogOpen = useAnyDialogOpen();
   const suspended = anyDialogOpen || isPending || !enabled;
   const suspendedRef = useRef(suspended);
-  const pendingWhileSuspendedRef = useRef(false);
+  const pendingWhileSuspendedRef = useHeldReadFlag();
   const enabledRef = useRef(enabled);
   const eventFilterRef = useRef(eventFilter);
   const tablesRef = useRef<readonly RealtimeTable[]>(tables);
@@ -64,6 +65,8 @@ export function useRealtimeRouterRefresh({
       if (!enabledRef.current || (event && !shouldScheduleRealtimeRefresh(event, eventFilterRef.current))) {
         return;
       }
+      // The echo of this tab's own save: the save's response already rendered the route.
+      if (event && ownWrites.covers(event)) return;
 
       if (suspendedRef.current) {
         pendingWhileSuspendedRef.current = true;
@@ -83,7 +86,7 @@ export function useRealtimeRouterRefresh({
       markRouteRefresh(queuedHolder, true);
       schedulerRef.current.schedule();
     },
-    [refresh, queuedHolder],
+    [refresh, queuedHolder, pendingWhileSuspendedRef],
   );
 
   useEffect(() => {
@@ -102,7 +105,7 @@ export function useRealtimeRouterRefresh({
       pendingWhileSuspendedRef.current = false;
       scheduleRefresh();
     }
-  }, [suspended, scheduleRefresh, queuedHolder]);
+  }, [suspended, scheduleRefresh, queuedHolder, pendingWhileSuspendedRef]);
 
   useEffect(() => {
     return () => {

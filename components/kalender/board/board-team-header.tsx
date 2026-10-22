@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { PlainButton } from '@/components/ui/plain-button';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,7 +15,7 @@ type BoardTeamHeaderProps = {
 };
 
 /** A team's header row on the Plantafel: name, row count and the collapse toggle. */
-export function BoardTeamHeader({
+export const BoardTeamHeader = memo(function BoardTeamHeader({
   group,
   collapsed,
   setCollapsedTeams,
@@ -48,4 +49,4 @@ export function BoardTeamHeader({
       <div className="border-b border-calendar-grid bg-calendar-gutter" aria-hidden="true" />
     </div>
   );
-}
+});

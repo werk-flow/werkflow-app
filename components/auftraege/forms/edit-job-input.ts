@@ -2,6 +2,7 @@ import type { UpdateJobInput } from '@/lib/jobs/actions';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import type { Job, JobPriority } from '@/lib/jobs/types';
 import { parseHoursInputToMinutes } from '@/lib/jobs/planned-working';
+import { jobFormEditsSchedule, type JobVisitPlan } from '@/lib/jobs/visit-schedule';
 import { toLocalDateString } from '@/lib/utils';
 
 export type EditJobDraft = {
@@ -22,6 +23,8 @@ export type EditJobDraft = {
   location: string;
   selectedEmployees: string[];
   assignmentTeamSourceId: string | null;
+  /** The job's visits; with several, the form shows them read-only and sends no schedule. */
+  visitPlan: JobVisitPlan | null;
 };
 
 /**
@@ -52,6 +55,7 @@ export function buildEditJobInput(
     location,
     selectedEmployees,
     assignmentTeamSourceId,
+    visitPlan,
   } = draft;
 
   const parsedEstimatedDuration = parseHoursInputToMinutes(estimatedHours);
@@ -76,6 +80,20 @@ export function buildEditJobInput(
         : undefined;
   }
 
+  // A job with several visits is planned on the Plantafel: the form sends no schedule then.
+  const schedule: Pick<UpdateJobInput, 'plannedDate' | 'plannedTime' | 'estimatedDurationMinutes'> =
+    visitPlan && !jobFormEditsSchedule(visitPlan.total)
+      ? {}
+      : {
+          ...(plannedDate
+            ? { plannedDate: toLocalDateString(plannedDate) }
+            : job.plannedDate !== null
+              ? { plannedDate: null }
+              : {}),
+          ...(plannedTime ? { plannedTime } : job.plannedTime !== null ? { plannedTime: null } : {}),
+          ...(estimatedDurationMinutes !== undefined ? { estimatedDurationMinutes } : {}),
+        };
+
   const input: UpdateJobInput = {
     title: title.trim(),
     ...(description.trim() || job.description !== null ? { description: description.trim() } : {}),
@@ -83,13 +101,7 @@ export function buildEditJobInput(
     projectId: projectId && projectId !== 'none' ? projectId : '',
     ...(jobNumber.trim() ? { jobNumber: jobNumber.trim() } : {}),
     priority,
-    ...(plannedDate
-      ? { plannedDate: toLocalDateString(plannedDate) }
-      : job.plannedDate !== null
-        ? { plannedDate: null }
-        : {}),
-    ...(plannedTime ? { plannedTime } : job.plannedTime !== null ? { plannedTime: null } : {}),
-    ...(estimatedDurationMinutes !== undefined ? { estimatedDurationMinutes } : {}),
+    ...schedule,
     ...(plannedWorkingMinutes !== undefined ? { plannedWorkingMinutes } : {}),
     ...(location.trim() || job.location !== null ? { location: location.trim() } : {}),
     siteId,

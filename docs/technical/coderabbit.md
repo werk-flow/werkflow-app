@@ -1,6 +1,6 @@
 # CodeRabbit reviews
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-22
 
 CodeRabbit gives a second review of local changes and slice diffs before acceptance. Treat it as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 
@@ -27,7 +27,7 @@ bun run review -- --uncommitted -c AGENTS.md .coderabbit.yaml docs/features/inve
 bun run review -- findings
 ```
 
-The wrapper is the only supported way to start a review. It owns the WSL distribution, the binary path, the working directory, agent mode and the failure policy. A failed PowerShell or WSL PATH lookup is not an installation check. Never install or reinstall CodeRabbit. If the wrapper reports that the binary is missing or the authentication is unavailable, report the host problem to the owner.
+The wrapper is the only supported way to start a review. It owns the WSL distribution, the binary path, the working directory, agent mode and the failure policy. A failed PowerShell or WSL PATH lookup is not an installation check. Never install or reinstall CodeRabbit. When the installed CLI asks for an update, update that binary with its own `coderabbit update` inside WSL, then run `bun run review:doctor` before the next review. If the wrapper reports that the binary is missing or the authentication is unavailable, report the host problem to the owner.
 
 The owner has given standing authorization to send repository code and review context to CodeRabbit, including uncommitted and unpushed changes. Run reviews without requesting approval again. The authorization does not cover buying credits or a subscription.
 
@@ -44,6 +44,8 @@ Stay quiet while a review runs. Report only completion, a setup or authenticatio
 When you capture the output in a file, write it to a gitignored location inside the repository. WSL temporary paths do not persist across invocations. If the output is lost, replay the stored findings instead of running the review again.
 
 The wrapper holds the workspace lock for the whole review, so no browser run, unit run or agent edit overlaps it. It takes the content digest of each file in its scope before CodeRabbit starts (for `--committed`, the content at `HEAD`), refuses to record a review whose files changed meanwhile, and writes the record under `.agent-logs/review/` with an entry in the evidence ledger. `.githooks/pre-push` refuses a push unless these digests match every changed file that is not documentation, as it is now, so an edit after a review needs a new review of that file. The [publication gate](testing.md#publication-gate) owns the rule.
+
+CodeRabbit collects untracked files with git inside WSL, which does not read the Windows user's global ignore file. The wrapper hands that file to git in WSL (`wslGitEnvironment` in `lib/testing/publication/coderabbit-review-command.ts`) and refuses an uncommitted review while WSL lists an untracked file that git on Windows ignores (`untrackedScopeProblem`), so local settings and env files never reach the review.
 
 ## Give the review its context
 

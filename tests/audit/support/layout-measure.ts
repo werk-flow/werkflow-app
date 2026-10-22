@@ -323,3 +323,47 @@ export async function expectDialogFits(dialog: Locator, label: string): Promise<
   expect(report.footerActionsOutOfReach, `${label}: a footer action is out of reach`).toEqual([]);
   expect(report.nativeControls, `${label}: a native select, date, time or number control`).toBe(0);
 }
+
+/**
+ * The field worker's touch targets (werkflow-design, "Density and layout"):
+ * every button, tab, link row and the clock button in the scope measures at
+ * least 44 x 44 CSS px. Returns the targets that are smaller.
+ */
+async function smallTouchTargets(scope: Locator): Promise<string[]> {
+  return scope.evaluate((root) => {
+    const targets = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        '[data-slot="button"], [role="tab"], [data-clock-fab], [data-slot="list-row"] a[href], a[data-slot="list-row"]',
+      ),
+    ).filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        rect.width > 1 && rect.height > 1 && style.visibility !== 'hidden' && !element.closest('[inert]')
+      );
+    });
+    return targets
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width < 44 - 0.5 || rect.height < 44 - 0.5;
+      })
+      .slice(0, 5)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const label = (element.getAttribute('aria-label') ?? element.textContent ?? '')
+          .trim()
+          .replace(/\s+/g, ' ');
+        return `${element.tagName.toLowerCase()} „${label.slice(0, 30)}“ ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+      });
+  });
+}
+
+/** Soft by default: every field-worker target in the scope measures at least 44 x 44 CSS px. */
+export async function expectTouchTargets(
+  scope: Locator,
+  label: string,
+  options: { soft?: boolean } = {},
+): Promise<void> {
+  const check = options.soft === false ? expect : expect.soft;
+  check(await smallTouchTargets(scope), `${label}: touch targets below 44 x 44 px`).toEqual([]);
+}

@@ -20,7 +20,12 @@ import {
 } from '../support/lab-journeys';
 import { idleFrames, openLabSession, recordLabStep } from '../support/lab-recorder';
 import { ensureTypicalProfile, MEASURED_VISIT_TITLE } from '../support/performance-profile';
-import { clockSheetAction, openClockSheet, usableListCount } from '../support/performance-steps';
+import {
+  clockSheetAction,
+  openClockSheet,
+  settleLiveShell,
+  usableListCount,
+} from '../support/performance-steps';
 
 // Lab counts of the field worker's journeys (lib/testing/journeys.ts), on the
 // typical profile at a phone width with a four-times slower CPU. Each step id
@@ -84,6 +89,8 @@ test.describe('Lab counts of the field worker @AUDIT-LAB-FIELD', () => {
     const lab = await openLabSession({ browser, baseURL, world, profileStep: 'lab.field.evidence-add' });
     try {
       await openFieldWorkPack(lab.page, assignedJobNumber);
+      // The artifact dialog suspends every live view: the Realtime join's catch-up must land before it opens.
+      await settleLiveShell(lab.page);
       const dialog = await beginWorkArtifact(lab.page, {
         kind: 'site_diary',
         title,
@@ -113,6 +120,8 @@ test.describe('Lab counts of the field worker @AUDIT-LAB-FIELD', () => {
     try {
       await lab.page.goto('/dashboard');
       await expect(clockStateTarget(lab.page, 'out').locator).toBeVisible();
+      // The clock dialog suspends every live view: the Realtime join's catch-up must land before it opens.
+      await settleLiveShell(lab.page);
       await openClockSheet(lab.page, false);
       await recordLabStep(lab, 'lab.field.clock-in', {
         trigger: () => clockSheetAction(lab.page, 'Arbeit starten').click(),

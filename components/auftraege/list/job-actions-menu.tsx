@@ -39,7 +39,8 @@ interface JobActionsMenuProps {
   /** The customer name the row shows. */
   clientName: string;
   members: OrgMemberOption[];
-  projects: ProjectWithDetails[];
+  /** The job's parent project, when the list shows it. */
+  knownProject?: ProjectWithDetails | undefined;
   onJobUpdated?:
     | ((payload: { job: Job; selectedEmployeeIds?: string[] }) => void | Promise<void>)
     | undefined;
@@ -57,14 +58,13 @@ export function JobActionsMenu({
   detailHref,
   clientName,
   members,
-  projects,
+  knownProject,
   onJobUpdated,
   onJobDeleted,
   onDeleteRequested,
 }: JobActionsMenuProps) {
   const router = useRouter();
   const displayTitle = getJobDisplayTitle(job);
-  const knownProject = projects.find((project) => project.id === job.projectId);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const { run: runDelete, isPending: isDeleting } = usePendingTask();

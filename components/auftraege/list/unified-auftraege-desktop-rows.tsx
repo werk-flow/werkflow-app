@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { ListPagination } from '@/components/shared/list-pagination';
@@ -9,6 +10,8 @@ import { PendingRow } from '@/components/ui/pending-row';
 import { jobDetailHref, projectDetailHref } from '@/lib/jobs/routes';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
+import { memoPropsEqual } from '@/lib/ui/memo-equality';
+import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { jobPendingCells, projectPendingCells, type AuftraegeTableColumn } from './unified-auftraege-columns';
 import type { AuftraegeRowFeedback, UnifiedAuftraegeEntryListProps } from './unified-auftraege-entry-list';
@@ -19,26 +22,35 @@ import {
   type UnifiedAuftraegeJobRowCellsProps,
   type UnifiedAuftraegeProjectMenuProps,
 } from './unified-auftraege-row-cells';
+import {
+  JOB_ROW_CONTENT_CHECKS,
+  PROJECT_ROW_CONTENT_CHECKS,
+  TABLE_ROW_CONTENT_CHECKS,
+} from './unified-auftraege-row-memo';
 import { useUnifiedAuftraegeProjectEntry } from './use-unified-auftraege-project-entry';
 
-type StandaloneJobRowProps = Omit<UnifiedAuftraegeJobRowCellsProps, 'detailHref' | 'indented'>;
+type JobTableRowProps = Omit<UnifiedAuftraegeJobRowCellsProps, 'detailHref'>;
 
-function StandaloneJobRow({ job, ...cellProps }: StandaloneJobRowProps) {
-  const router = useRouter();
-  const detailHref = jobDetailHref(job);
+/** One job's table row: a standalone job, or an indented child job of an expanded project. */
+const JobTableRow = memo(
+  function JobTableRow({ job, project, ...cellProps }: JobTableRowProps) {
+    const router = useRouter();
+    const detailHref = jobDetailHref(job, project);
 
-  return (
-    <TableRow
-      interactive
-      unconfirmed={cellProps.isSettling}
-      onClick={() => router.push(detailHref)}
-      onMouseEnter={() => router.prefetch(detailHref)}
-      onFocus={() => router.prefetch(detailHref)}
-    >
-      <UnifiedAuftraegeJobRowCells job={job} detailHref={detailHref} {...cellProps} />
-    </TableRow>
-  );
-}
+    return (
+      <TableRow
+        interactive
+        unconfirmed={cellProps.isSettling}
+        className={cellProps.indented ? 'bg-muted/10' : undefined}
+        onClick={() => router.push(detailHref)}
+        {...rowIntentPrefetch(() => router.prefetch(detailHref))}
+      >
+        <UnifiedAuftraegeJobRowCells job={job} project={project} detailHref={detailHref} {...cellProps} />
+      </TableRow>
+    );
+  },
+  memoPropsEqual<JobTableRowProps>({ ...JOB_ROW_CONTENT_CHECKS, ...TABLE_ROW_CONTENT_CHECKS }),
+);
 
 type UnifiedAuftraegeChildPaginationProps = {
   childPage: ReturnType<typeof useUnifiedAuftraegeProjectEntry>['childPage'];
@@ -68,7 +80,7 @@ type ProjectRowProps = UnifiedAuftraegeJobMenuProps &
     clientName: string;
     isAdminOrManager: boolean;
     isExpanded: boolean;
-    onToggle: () => void;
+    onToggle: (projectId: string) => void;
     clientMap: Record<string, string>;
     activeJobIds: Set<string>;
     rowFeedback: AuftraegeRowFeedback;
@@ -78,133 +90,122 @@ type ProjectRowProps = UnifiedAuftraegeJobMenuProps &
     visibleColumns: AuftraegeColumnId[];
   };
 
-function ProjectRow({
-  project,
-  childJobs: initialChildJobs,
-  pagedChildren = false,
-  projectAssignedUserIds,
-  clientName,
-  isAdminOrManager,
-  isExpanded,
-  onToggle,
-  clientMap: initialClientMap,
-  activeJobIds,
-  rowFeedback,
-  columns,
-  memberLookup,
-  jobAssignmentMap: initialAssignmentMap,
-  visibleColumns,
-  jobs,
-  members,
-  projects,
-  onJobUpdated,
-  onJobDeleted,
-  onJobDeleteRequested,
-  onProjectUpdated,
-  onProjectDeleted,
-  onProjectDeleteRequested,
-}: ProjectRowProps) {
-  const router = useRouter();
-  const entry = useUnifiedAuftraegeProjectEntry({
+const ProjectRow = memo(
+  function ProjectRow({
     project,
-    expanded: isExpanded,
-    initialChildJobs,
-    pagedChildren,
+    childJobs: initialChildJobs,
+    pagedChildren = false,
     projectAssignedUserIds,
-    initialClientMap,
-    initialAssignmentMap,
+    clientName,
+    isAdminOrManager,
+    isExpanded,
+    onToggle,
+    clientMap: initialClientMap,
     activeJobIds,
-  });
-  const { childPage, childJobs, clientMap, jobAssignmentMap } = entry;
-  const projectHref = projectDetailHref(project);
+    rowFeedback,
+    columns,
+    memberLookup,
+    jobAssignmentMap: initialAssignmentMap,
+    visibleColumns,
+    jobs,
+    members,
+    onJobUpdated,
+    onJobDeleted,
+    onJobDeleteRequested,
+    onProjectUpdated,
+    onProjectDeleted,
+    onProjectDeleteRequested,
+  }: ProjectRowProps) {
+    const router = useRouter();
+    const entry = useUnifiedAuftraegeProjectEntry({
+      project,
+      expanded: isExpanded,
+      initialChildJobs,
+      pagedChildren,
+      projectAssignedUserIds,
+      initialClientMap,
+      initialAssignmentMap,
+      activeJobIds,
+    });
+    const { childPage, childJobs, clientMap, jobAssignmentMap } = entry;
+    const projectHref = projectDetailHref(project);
 
-  return (
-    <>
-      <TableRow
-        interactive
-        unconfirmed={rowFeedback.settlingIds.has(project.id)}
-        className="bg-muted/30"
-        onClick={() => router.push(projectHref)}
-        onMouseEnter={() => router.prefetch(projectHref)}
-        onFocus={() => router.prefetch(projectHref)}
-      >
-        <UnifiedAuftraegeProjectRowCells
-          project={project}
-          projectHref={projectHref}
-          clientName={clientName}
-          isAdminOrManager={isAdminOrManager}
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-          hasActiveWork={entry.hasActiveWork}
-          isSettling={rowFeedback.settlingIds.has(project.id)}
-          effectiveStatus={entry.effectiveStatus}
-          progress={entry.progress}
-          trafficLight={entry.trafficLight}
-          allProjectUserIds={entry.allProjectUserIds}
-          memberLookup={memberLookup}
-          visibleColumns={visibleColumns}
-          jobs={jobs}
-          onProjectUpdated={onProjectUpdated}
-          onProjectDeleted={onProjectDeleted}
-          onProjectDeleteRequested={onProjectDeleteRequested}
-        />
-      </TableRow>
-
-      {isExpanded && pagedChildren && (
-        <TableRow>
-          <TableCell colSpan={columns.length}>
-            <UnifiedAuftraegeChildPagination childPage={childPage} />
-          </TableCell>
+    return (
+      <>
+        <TableRow
+          interactive
+          unconfirmed={rowFeedback.settlingIds.has(project.id)}
+          className="bg-muted/30"
+          onClick={() => router.push(projectHref)}
+          {...rowIntentPrefetch(() => router.prefetch(projectHref))}
+        >
+          <UnifiedAuftraegeProjectRowCells
+            project={project}
+            projectHref={projectHref}
+            clientName={clientName}
+            isAdminOrManager={isAdminOrManager}
+            isExpanded={isExpanded}
+            onToggle={() => onToggle(project.id)}
+            hasActiveWork={entry.hasActiveWork}
+            isSettling={rowFeedback.settlingIds.has(project.id)}
+            effectiveStatus={entry.effectiveStatus}
+            progress={entry.progress}
+            trafficLight={entry.trafficLight}
+            allProjectUserIds={entry.allProjectUserIds}
+            memberLookup={memberLookup}
+            visibleColumns={visibleColumns}
+            jobs={jobs}
+            onProjectUpdated={onProjectUpdated}
+            onProjectDeleted={onProjectDeleted}
+            onProjectDeleteRequested={onProjectDeleteRequested}
+          />
         </TableRow>
-      )}
-      {isExpanded &&
-        childJobs.map((job) => {
-          const childClientName = job.clientId ? clientMap[job.clientId] || '—' : clientName;
-          if (rowFeedback.pendingIds.has(job.id)) {
+
+        {isExpanded && pagedChildren && (
+          <TableRow>
+            <TableCell colSpan={columns.length}>
+              <UnifiedAuftraegeChildPagination childPage={childPage} />
+            </TableCell>
+          </TableRow>
+        )}
+        {isExpanded &&
+          childJobs.map((job) => {
+            const childClientName = job.clientId ? clientMap[job.clientId] || '—' : clientName;
+            if (rowFeedback.pendingIds.has(job.id)) {
+              return (
+                <PendingRow
+                  key={job.id}
+                  columns={columns}
+                  cells={jobPendingCells(job, childClientName)}
+                  interactive
+                />
+              );
+            }
             return (
-              <PendingRow
+              <JobTableRow
                 key={job.id}
-                columns={columns}
-                cells={jobPendingCells(job, childClientName)}
-                interactive
-              />
-            );
-          }
-          const childHref = jobDetailHref(job, project);
-          const childAssigned = jobAssignmentMap[job.id] ?? [];
-          return (
-            <TableRow
-              key={job.id}
-              interactive
-              unconfirmed={rowFeedback.settlingIds.has(job.id)}
-              className="bg-muted/10"
-              onClick={() => router.push(childHref)}
-              onMouseEnter={() => router.prefetch(childHref)}
-              onFocus={() => router.prefetch(childHref)}
-            >
-              <UnifiedAuftraegeJobRowCells
                 job={job}
-                detailHref={childHref}
+                project={project}
                 clientName={childClientName}
                 isAdminOrManager={isAdminOrManager}
                 isActive={activeJobIds.has(job.id)}
                 isSettling={rowFeedback.settlingIds.has(job.id)}
                 indented
                 memberLookup={memberLookup}
-                assignedUserIds={childAssigned}
+                assignedUserIds={jobAssignmentMap[job.id] ?? []}
                 visibleColumns={visibleColumns}
                 members={members}
-                projects={projects}
                 onJobUpdated={onJobUpdated}
                 onJobDeleted={onJobDeleted}
                 onJobDeleteRequested={onJobDeleteRequested}
               />
-            </TableRow>
-          );
-        })}
-    </>
-  );
-}
+            );
+          })}
+      </>
+    );
+  },
+  memoPropsEqual<ProjectRowProps>({ ...PROJECT_ROW_CONTENT_CHECKS, ...TABLE_ROW_CONTENT_CHECKS }),
+);
 
 type UnifiedAuftraegeDesktopRowsProps = UnifiedAuftraegeEntryListProps & {
   columns: readonly AuftraegeTableColumn[];
@@ -245,7 +246,7 @@ export function UnifiedAuftraegeDesktopRows({
         );
       }
       return (
-        <StandaloneJobRow
+        <JobTableRow
           key={`job-${entry.job.id}`}
           job={entry.job}
           clientName={clientName}
@@ -280,7 +281,7 @@ export function UnifiedAuftraegeDesktopRows({
         clientName={clientName}
         isAdminOrManager={isAdminOrManager}
         isExpanded={expandedProjects.has(entry.project.id)}
-        onToggle={() => toggleProject(entry.project.id)}
+        onToggle={toggleProject}
         clientMap={clientMap}
         activeJobIds={activeJobIds}
         rowFeedback={rowFeedback}

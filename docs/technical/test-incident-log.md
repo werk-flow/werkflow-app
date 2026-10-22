@@ -22,6 +22,46 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-22: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-22T152820321Z-4c45dc -->
+
+- Run: run `2026-10-22T152820321Z-4c45dc`, group `audit:lab:office`, target local, fingerprint `c7a698c7884a`, world `a1cb908022fb446da2fa3063df30b0e3`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: The lab judge saw the package's intended changes before their references moved: lower counts (own-save echo skipped, memoized rows, settled dialogs), the 44 px class strings in the server document, and request shapes that stopped
+- Prevention: Tier 2: scripts/lab-counts.ts ratchet and accept recorded each change with its reason in lib/testing/lab-count-references.json
+- Focused proof: change plan `2026-10-22T160155402Z-c8dcc3cf` passed both lab groups on the repaired tree.
+
+## 2026-10-22: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-22T152820321Z-ddebd8 -->
+
+- Run: run `2026-10-22T152820321Z-ddebd8`, group `audit:lab:field`, target local, fingerprint `e8af94924b25`, world `da8cd52ef117493abe0f86715b8f4a09`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: The lab judge saw the package's intended changes before their references moved: lower counts (own-save echo skipped, memoized rows, settled dialogs), the 44 px class strings in the server document, and request shapes that stopped
+- Prevention: Tier 2: scripts/lab-counts.ts ratchet and accept recorded each change with its reason in lib/testing/lab-count-references.json
+- Focused proof: change plan `2026-10-22T160155402Z-c8dcc3cf` passed both lab groups on the repaired tree.
+
+## 2026-10-22: audit:lab:field harness failure
+
+<!-- incident-run: 2026-10-22T151900954Z-108cf1 -->
+
+- Run: run `2026-10-22T151900954Z-108cf1`, group `audit:lab:field`, target local, fingerprint `11dab2802ebd`, world `5ac3bfee329048b0aa6db4dc31783093`.
+- Failure point:  >  > lab\field.spec.ts > Lab counts of the field worker @AUDIT-LAB-FIELD > LAB-F3 the field worker saves a new Arbeitsnachweis @AUDIT-LAB-F3: Error: lab.field.evidence-add starts while a dialog holds a live read back: settle the page (settleLiveShell) before you open the dialog.
+- Root cause: The new recorder precondition refused lab.field.evidence-add because its open artifact dialog held the echo of the draft it created; that held read never releases inside a step that keeps the dialog open
+- Prevention: Tier 2: tests/audit/support/lab-recorder.ts now fails a step only when it released a live read held since before the step
+- Focused proof: change plan `2026-10-22T160155402Z-c8dcc3cf` passed both lab groups on the repaired tree.
+
+## 2026-10-22: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-22T151900954Z-0d390e -->
+
+- Run: run `2026-10-22T151900954Z-0d390e`, group `audit:lab:office`, target local, fingerprint `c421331f5ea7`, world `34350d36db9a48fe8faafaeaca609ffa`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: lab.office.job-open lost its warm-up: rowIntentPrefetch skipped a pointermove without movementX/Y, and the first pointer move after a navigation reports zero movement, so hovering the row prefetched nothing and the open fetched the full route and scripts (requests 7 to 16, scripts 9 KB to 115 KB)
+- Prevention: Tier 2: audit:lab:office budgets and ceilings on lab.office.job-open caught it; lib/ui/row-intent.ts now warms on the first pointermove of each arrival
+- Focused proof: change plan `2026-10-22T160155402Z-c8dcc3cf` passed both lab groups on the repaired tree.
+
 ## 2026-10-22: audit:lab:field harness failure
 
 <!-- incident-run: 2026-10-22T102242015Z-c57225 -->
@@ -29,7 +69,9 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-22T102242015Z-c57225`, group `audit:lab:field`, target local, fingerprint `3f326f900092`, world `d8709b6614b54750b197f4bdae2fbc20`.
 - Failure point: no failed test recorded; read the run log.
 - Root cause: lab.field.clock-in caught an /api/attention-counts refresh about 700 ms after the clock-in, which the reference lacks (shape-added). The race predates this change: three of the six calibration runs of 2026-10-21 carried the same request, so the calibration left the shape out as unstable (appeared in 3 of 6 runs) while the judge still fails on its presence. The product code of the clock-in, the attention counts and the lab files is unchanged by this diff.
-- Prevention: no prevention claim: the repair is open. Either the lab reference records a shape the calibration found unstable and reports it ungated (lib/testing/lab-counts.ts, lib/testing/lab-history.ts, scripts/lab-counts.ts), or the own-save echo coalescing of package D2 removes the refresh; the coordinator decides.
+- Prevention: Tier 2: tests/audit/support/lab-recorder.ts fails a step that released a live read a dialog held since before the step (`data-live-read-held`, set by lib/ui/route-refresh-signal.ts from useLiveView and useRealtimeRouterRefresh), and LAB-F4, LAB-F3 and LAB-O3 settle the live shell before they open their dialog.
+- Correction: the request was the Realtime join's catch-up (`dispatchAll`), not an echo of the clock-in. LAB-F4 opened the clock dialog before the join reported database readiness; the dialog suspended every live view, and its close released their queued catch-up inside the measured step. The lab stays strict: no tolerance for an unstable shape. The product keeps the catch-up after a dialog closes: it re-reads views the closing action did not refresh (the attention counts, the memberships), so skipping it would show stale data.
+- Evidence: two focused runs of LAB-F4 with the old order on one build. Run `2026-10-22T151609765Z-95e1e3` passed with no attention read in the clock-in step; run `2026-10-22T151708290Z-d31d4e` held a live read when the step started, and the new precondition refused it (its first form, checked at the step start). The race needs the join's readiness to land after the dialog opened, as the request sequences of the earlier failures showed.
 
 ## 2026-10-22: audit:wave-1:a1-zeiten environment failure
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
@@ -15,6 +15,7 @@ import {
   type Job,
   type ProjectWithDetails,
 } from '@/lib/jobs/types';
+import { memoPropsEqual } from '@/lib/ui/memo-equality';
 import { cn } from '@/lib/utils';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { JobActionsMenu } from './job-actions-menu';
@@ -31,6 +32,7 @@ import type {
   UnifiedAuftraegeJobMenuProps,
   UnifiedAuftraegeProjectMenuProps,
 } from './unified-auftraege-row-cells';
+import { JOB_ROW_CONTENT_CHECKS, PROJECT_ROW_CONTENT_CHECKS } from './unified-auftraege-row-memo';
 import { useUnifiedAuftraegeProjectEntry } from './use-unified-auftraege-project-entry';
 
 type JobCardProps = UnifiedAuftraegeJobMenuProps & {
@@ -39,7 +41,7 @@ type JobCardProps = UnifiedAuftraegeJobMenuProps & {
   isAdminOrManager: boolean;
   indented?: boolean | undefined;
   /** The parent project of a child job; its route nests the job's. */
-  project?: Pick<ProjectWithDetails, 'id' | 'projectNumber'> | undefined;
+  project?: ProjectWithDetails | undefined;
   isActive?: boolean | undefined;
   /** A draft the server has not confirmed: dimmed, not navigable, no actions. */
   isPending?: boolean | undefined;
@@ -48,7 +50,7 @@ type JobCardProps = UnifiedAuftraegeJobMenuProps & {
   assignedUserIds: string[];
 };
 
-function JobCard({
+const JobCard = memo(function JobCard({
   job,
   clientName,
   isAdminOrManager,
@@ -60,7 +62,6 @@ function JobCard({
   memberLookup,
   assignedUserIds,
   members,
-  projects,
   onJobUpdated,
   onJobDeleted,
   onJobDeleteRequested,
@@ -117,7 +118,7 @@ function JobCard({
             detailHref={detailHref}
             clientName={clientName}
             members={members}
-            projects={projects}
+            knownProject={project}
             onJobUpdated={onJobUpdated}
             onJobDeleted={onJobDeleted}
             onDeleteRequested={onJobDeleteRequested}
@@ -126,7 +127,7 @@ function JobCard({
       )}
     </ListRow>
   );
-}
+}, memoPropsEqual<JobCardProps>(JOB_ROW_CONTENT_CHECKS));
 
 type ProjectCardProps = UnifiedAuftraegeJobMenuProps &
   UnifiedAuftraegeProjectMenuProps & {
@@ -143,7 +144,7 @@ type ProjectCardProps = UnifiedAuftraegeJobMenuProps &
     jobAssignmentMap: Record<string, string[]>;
   };
 
-function ProjectCard({
+const ProjectCard = memo(function ProjectCard({
   project,
   childJobs: initialChildJobs,
   pagedChildren = false,
@@ -157,7 +158,6 @@ function ProjectCard({
   jobAssignmentMap: initialAssignmentMap,
   jobs,
   members,
-  projects,
   onJobUpdated,
   onJobDeleted,
   onJobDeleteRequested,
@@ -277,7 +277,6 @@ function ProjectCard({
               memberLookup={memberLookup}
               assignedUserIds={jobAssignmentMap[job.id] ?? []}
               members={members}
-              projects={projects}
               onJobUpdated={onJobUpdated}
               onJobDeleted={onJobDeleted}
               onJobDeleteRequested={onJobDeleteRequested}
@@ -287,7 +286,7 @@ function ProjectCard({
       )}
     </div>
   );
-}
+}, memoPropsEqual<ProjectCardProps>(PROJECT_ROW_CONTENT_CHECKS));
 
 /** The mobile card list: standalone jobs and projects with their expandable child jobs. */
 export function UnifiedAuftraegeMobileCards({

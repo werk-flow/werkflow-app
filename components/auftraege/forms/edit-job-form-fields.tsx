@@ -5,8 +5,6 @@ import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DatePicker } from '@/components/ui/date-picker';
-import { TimeInput } from '@/components/ui/time-input';
 import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SectionError } from '@/components/ui/section-error';
@@ -18,6 +16,7 @@ import { formatSiteAddress } from '@/lib/clients/types';
 import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
+import { EditJobScheduleFields } from './edit-job-schedule';
 import type { EditJobForm } from './use-edit-job-form';
 
 export function EditJobIdentityFields({ form }: { form: EditJobForm }) {
@@ -156,11 +155,6 @@ type EditJobPlanningFieldsProps = {
 export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsProps) {
   const {
     plannedDate,
-    setPlannedDate,
-    plannedTime,
-    setPlannedTime,
-    estimatedHours,
-    handleEstimatedHoursChange,
     clientId,
     siteId,
     setSiteId,
@@ -186,23 +180,7 @@ export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsPr
       <Separator />
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planung</p>
 
-      <Field label="Geplantes Datum" htmlFor="edit-job-date">
-        <DatePicker value={plannedDate} onChange={setPlannedDate} disabled={formDisabled} />
-      </Field>
-
-      <Field label="Geplante Uhrzeit" htmlFor="edit-job-time">
-        <TimeInput value={plannedTime} onChange={setPlannedTime} disabled={formDisabled} />
-      </Field>
-
-      <Field label="Geschätzte Dauer (Stunden)" htmlFor="edit-job-duration">
-        <DurationHoursInput
-          id="edit-job-duration"
-          placeholder="z.B. 2.5"
-          value={estimatedHours}
-          onChange={handleEstimatedHoursChange}
-          disabled={formDisabled}
-        />
-      </Field>
+      <EditJobScheduleFields form={form} />
 
       <SiteContactFields
         clientId={clientId}

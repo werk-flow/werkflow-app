@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read this file at the start of every task. It gives the product context, the six virtues that define quality in this repository, and the rules that apply to every change. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
+Read this file at the start of every task. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
 
 ## Workspace
 
@@ -12,7 +12,7 @@ The parent `Code` directory holds three independent Git repositories, not a mono
 | [werkflow-business](../werkflow-business/docs/README.md) | Avatar, offer, acquisition, beta relationship, customer research, Hormozi library | Making business decisions or checking commercial promises |
 | [werkflow-website](../werkflow-website/AGENTS.md) | Public website, campaign pages and their integrations | Building or checking marketing pages |
 
-Open the repository that owns the task. Read a sibling's AGENTS.md and index before using its context. Reading a sibling never authorizes changing it. Report missing sibling context; never invent it. The business [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and new-machine setup.
+Open the repository that owns the task. Read a sibling's AGENTS.md and index before using its context; reading never authorizes changing it. Report missing sibling context; never invent it. The business [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and new-machine setup.
 
 For substantive business work, use the [Hormozi advisor](../werkflow-business/.agents/skills/hormozi-advisor/SKILL.md) and its [reasoning baseline](../werkflow-business/docs/library/baseline.md). For customer-facing sales or marketing copy, also use [copywriting](../werkflow-business/.agents/skills/copywriting/SKILL.md) and its [fifth-grade standard](../werkflow-business/docs/copy-standard.md). Routine engineering does not load the business library.
 
@@ -20,27 +20,27 @@ For substantive business work, use the [Hormozi advisor](../werkflow-business/.a
 
 WerkFlow is the digital operations backbone for German SHK businesses (`Sanitär-Heizungs-Klima`). Adjacent trades may follow later. It is a TypeScript web app today, with a React Native app planned.
 
-The buyer is the business owner. The users are the whole company: owners, office staff, project leads, field workers (`Handwerker/in`) and apprentices. The commercial target is medium-to-large SHK businesses whose leadership wants to modernize. Nobody needs technical knowledge. The bar for field workers is the lowest: clear, forgiving, hard to misuse.
+The buyer is the business owner. The users are the whole company: owners, office staff, project leads, field workers (`Handwerker/in`) and apprentices. The commercial target is medium-to-large SHK businesses whose leadership wants to modernize. Nobody needs technical knowledge. Field workers set the bar: clear, forgiving, hard to misuse.
 
 These businesses lose time to paperwork, scattered information, slow legacy software and physical folders, and the owner holds it all together. WerkFlow is the one place that answers: what work is due, for which customer or project, who is assigned, when, in which state, how much time was recorded, and which documents and materials belong to it.
 
 The product has two phases. Phase 1 builds a complete operational core with the depth of serious Handwerkersoftware. Phase 2 builds AI assistance and automation on that data. [The capability map](docs/product/product-capability-map.md) owns the dependency model. [The roadmap](docs/plans/phase-1/roadmap.md) owns the order of work and the current checkpoint. Each feature spec's **Current Product Baseline** owns implemented behavior. A planned capability is not an implemented feature.
 
-Before you add a feature, ask three questions. Does it reduce paperwork? Does it make the work more organized? Does it save time for employees or the owner? If all three answers are no, it is probably bloat: raise it with the owner.
+Before you add a feature, ask three questions. Does it reduce paperwork? Does it make the work more organized? Does it save time for employees or the owner? If all three answers are no, raise it with the owner as likely bloat.
 
 ## The six virtues
 
-These six virtues define quality in WerkFlow and apply to every change, whatever its size. Each rule names its mechanism by tier ([decision 0005](docs/decisions/0005-enforcement-ladder.md)): Tier 1 makes the mistake unwritable, Tier 2 is an automated check that fails on it, Tier 3 is judgment that a reviewer exercises and records.
+These six virtues define quality in WerkFlow and apply to every change. Each rule names its mechanism by tier ([decision 0005](docs/decisions/0005-enforcement-ladder.md)): Tier 1 makes the mistake unwritable, Tier 2 is an automated check that fails on it, Tier 3 is judgment that a reviewer exercises and records.
 
 ### How to read the virtues
 
-**The owner docs.** Each virtue's owner doc holds five sections: "How to work" (a procedure per recurring task, with each step's fast check and the wrong turn it prevents), "Checklist" (every item a new implementation ticks, with its mechanism), "Never" (the prohibitions and what catches each), "Verify your work" (the commands at the end) and "Examples" (real files to copy).
+**The owner docs.** Each virtue's owner doc holds five sections: "How to work" (a procedure per recurring task, each step with its fast check), "Checklist" (what a new implementation ticks, with its mechanism), "Never" (the prohibitions and what catches each), "Verify your work" and "Examples" (real files to copy).
 
-**Order of use.** [The docs index](docs/README.md) says which sections to read before you write; build from their defaults. While you work, run each step's fast check. At the end, run the Verify commands.
+**Order of use.** [The docs index](docs/README.md) says which sections to read before you write; build from their defaults. While you work, run each step's fast check. Finish with the Verify commands.
 
-**Hard rules and defaults.** A Tier 1 or Tier 2 rule is a hard rule: a mechanism enforces it, and you never break it. To change one, change its mechanism in the same change, with the owner. Every security rule is hard, even where only review enforces it, except the two defaults of virtue 3. Every other Tier 3 rule and every procedure step is a verified default, not a law. Diverge when it clearly does not fit, for example in a Phase 2 AI feature whose interface differs from the rest of the app. Record every divergence in one place: a `Divergences` note in the slice record, or, outside a slice, the commit message body. The note names the default, why it does not fit here, what you did instead, and whether the default should change; if so, change the owner doc in the same change.
+**Hard rules and defaults.** A Tier 1 or Tier 2 rule is a hard rule: a mechanism enforces it, and you never break it. To change one, change its mechanism in the same change, with the owner. Every security rule is hard, even where only review enforces it, except the two defaults of virtue 3. Every other Tier 3 rule and every procedure step is a verified default, not a law. Diverge when it clearly does not fit. Record every divergence in one place: a `Divergences` note in the slice record, or, outside a slice, the commit message body. The note names the default, why it does not fit here, what you did instead, and whether the default should change; if so, change the owner doc in the same change.
 
-**Improve the virtues.** The virtues evolve, testing system and docs rules included. When a rule is missing, wrong, outdated or costs more than it protects, raise it with the owner and change the rule with its mechanism in the same change. A new rule comes with its mechanism at the highest reachable tier and a plan for the existing code: fix it now, or add a row to the [enforcement-ladder backlog](docs/technical/enforcement-ladder-backlog.md). When you fix a diagnosed defect or keep a review finding, name the tier where its prevention landed.
+**Improve the virtues.** The virtues are a strict baseline, not a fixed one: they evolve with the product, testing system and docs rules included. When a rule is missing, wrong, outdated or costs more than it protects, raise it with the owner and change the rule with its mechanism in the same change. A new rule comes with its mechanism at the highest reachable tier and a plan for the existing code: fix it now, or add a row to the [enforcement-ladder backlog](docs/technical/enforcement-ladder-backlog.md). When you fix a diagnosed defect or keep a review finding, name the tier where its prevention landed.
 
 A change is done when its Verify commands pass and its Tier 3 points have a recorded answer.
 
@@ -84,7 +84,7 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 - **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. Review every change through `bun run review` and record a disposition for each finding.
 - **Never.** Retry until green. Weaken an assertion, skip a test, add a fixed sleep or raise a timeout to pass. Treat a review score or an old report as acceptance. Call the CodeRabbit CLI directly, or install it. Push without the publication gate.
-- **Enforced by.** Tier 1, once `core.hooksPath` names it: `.githooks/pre-push` refuses a push without a passing report and review records held by `lib/testing/publication/evidence-ledger.ts` that cover the tree, a deletion pass per commit, and for `main` the release evidence; `scripts/guard-edits-during-verification.ts` refuses edits to proof inputs during a run and to that evidence always, `scripts/unit-test-preload.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis, an unwired gate), the tests under `lib/testing/`, `lib/conventions/` and `lib/docs/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `.claude/hooks/refuse-publication-bypass.ts` (prepared, unwired), `bun run review`, `bun run test:runs`.
+- **Enforced by.** Tier 1, once `core.hooksPath` names it: `.githooks/pre-push` refuses a push without a passing report and review records held by `lib/testing/publication/evidence-ledger.ts` that cover the tree, a deletion pass per commit, and for `main` the release evidence; `scripts/guard-edits-during-verification.ts` refuses edits to proof inputs during a run and to that evidence always, `.claude/hooks/refuse-publication-bypass.ts` refuses an agent shell command that skips the gate, `scripts/unit-test-preload.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis, an unwired gate), the tests under `lib/testing/`, `lib/conventions/` and `lib/docs/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `bun run review`, `bun run test:runs`.
 - **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, and the disposition of each review finding.
 - **Verify.** `bun run test:plan`, `bun run test:verify`, `bun run review`. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
 - **Owner doc.** [Testing](docs/technical/testing.md), with [CodeRabbit](docs/technical/coderabbit.md) for reviews. Start from its [How to work](docs/technical/testing.md#how-to-work).
@@ -108,6 +108,7 @@ A rule below without a named mechanism is a Tier 3 default.
 
 - Route every task through the matching skill: [the docs index](docs/README.md#skills) pairs each kind of task with its skill.
 - Ask a short clarifying question before you code when scope, acceptance or an edge case is ambiguous. When business context is uncertain, ask the owner or leave a clear TODO; never invent strategy.
+- The owner decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question yourself with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
 - Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
 - Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`). Keep field-worker flows simple and mobile-friendly; favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
@@ -138,4 +139,4 @@ Tamay owns product and offer. John owns leads, marketing, sales and customer wor
 
 ## Maintain this file
 
-Change this file when the product direction or a virtue changes. `CLAUDE.md` imports it, and Codex reads it directly.
+Change this file when the product direction or a virtue changes. `CLAUDE.md` imports it; Codex reads it directly.

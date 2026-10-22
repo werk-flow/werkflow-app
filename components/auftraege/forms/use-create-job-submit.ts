@@ -7,6 +7,7 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { createJob } from '@/lib/jobs/actions';
+import { ownWrites } from '@/lib/realtime/own-writes';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { CreateJobFormContentProps } from './create-job-form-content';
 import {
@@ -68,7 +69,7 @@ export function useCreateJobSubmit({
 
     await runSubmit(async () => {
       try {
-        const result = await createJob(input);
+        const result = ownWrites.recorded(await createJob(input));
 
         if (!result.success) {
           if (

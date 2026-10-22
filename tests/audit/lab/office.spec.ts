@@ -35,6 +35,7 @@ import {
   holdPointerDrag,
   pendingApprovalCard,
   seededBoardCard,
+  settleLiveShell,
   usableListCount,
 } from '../support/performance-steps';
 
@@ -100,6 +101,8 @@ test.describe('Lab counts of the office @AUDIT-LAB-OFFICE', () => {
     try {
       await lab.page.goto('/auftraege');
       await expect(jobListReady(lab.page)).toBeVisible();
+      // The create dialog suspends every live view: the Realtime join's catch-up must land before it opens.
+      await settleLiveShell(lab.page);
       await workCreateButton(lab.page).click();
       const dialog = workCreateDialog(lab.page);
       await workCreateTab(dialog, 'job').click();

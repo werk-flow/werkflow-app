@@ -40,7 +40,8 @@ export function MaintenanceContent({
   query,
 }: {
   initial: MaintenanceWorkspace;
-  catalogs: MaintenanceCatalogs;
+  /** Null: the catalog read failed; the dialog fields that need it show the failure. */
+  catalogs: MaintenanceCatalogs | null;
   query: MaintenanceWorkspaceQuery;
 }): ReactElement {
   const navigation = useListNavigation();
@@ -98,7 +99,7 @@ function MaintenanceWorkspaceView({
   onPageChange,
 }: {
   initial: MaintenanceWorkspace;
-  catalogs: MaintenanceCatalogs;
+  catalogs: MaintenanceCatalogs | null;
   query: MaintenanceWorkspaceQuery;
   tab: MaintenanceList;
   onTabChange: (tab: MaintenanceList) => void;
@@ -237,7 +238,7 @@ function MaintenanceWorkspaceView({
           }}
           coverage={coverageFollowUp}
           currentActorId={workspace.currentActorId}
-          owners={catalogs.followUpOwners}
+          owners={catalogs?.followUpOwners ?? null}
         />
       )}
       {editPlan && (
@@ -246,7 +247,7 @@ function MaintenanceWorkspaceView({
           onOpenChange={(open) => {
             if (!open) setEditPlan(null);
           }}
-          templates={catalogs.templates}
+          templates={catalogs?.templates ?? null}
           initial={editPlan}
           onSaved={settleOn(editPlan.id)}
         />
@@ -280,7 +281,10 @@ function MaintenanceWorkspaceView({
 /** The toolbar actions; the page renders them beside the h2, ahead of the workspace. */
 export function MaintenanceCreateButtons({
   templates,
-}: Pick<MaintenanceCatalogs, 'templates'>): ReactElement {
+}: {
+  /** Null: the catalog read failed, and the plan dialog's template field shows it. */
+  templates: MaintenanceCatalogs['templates'] | null;
+}): ReactElement {
   const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [coverageDialogOpen, setCoverageDialogOpen] = useState(false);
   return (

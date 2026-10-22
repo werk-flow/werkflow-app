@@ -37,7 +37,8 @@ type ProjectDetailDialogsProps = {
   setLiveProject: Dispatch<SetStateAction<Project>>;
   setLiveJobs: Dispatch<SetStateAction<Job[]>>;
   dialogState: ProjectDetailDialogState;
-  members: OrgMemberOption[];
+  /** Null while the member read has failed: the create-job action is not offered then. */
+  members: OrgMemberOption[] | null;
 };
 
 export function ProjectDetailDialogs({
@@ -57,23 +58,25 @@ export function ProjectDetailDialogs({
 
   return (
     <>
-      <CreateJobDialog
-        members={members}
-        defaultProject={knownProjectOption(liveProject, liveClient?.name ?? null)}
-        defaultClient={liveClient ?? undefined}
-        readOnlyProject
-        readOnlyClient
-        open={showCreateJob}
-        onOpenChange={setShowCreateJob}
-        onJobCreated={({ job }) => {
-          setShowCreateJob(false);
-          setLiveJobs((prev) => {
-            const next = prev.filter((entry) => entry.id !== job.id);
-            next.push(job);
-            return next;
-          });
-        }}
-      />
+      {members && (
+        <CreateJobDialog
+          members={members}
+          defaultProject={knownProjectOption(liveProject, liveClient?.name ?? null)}
+          defaultClient={liveClient ?? undefined}
+          readOnlyProject
+          readOnlyClient
+          open={showCreateJob}
+          onOpenChange={setShowCreateJob}
+          onJobCreated={({ job }) => {
+            setShowCreateJob(false);
+            setLiveJobs((prev) => {
+              const next = prev.filter((entry) => entry.id !== job.id);
+              next.push(job);
+              return next;
+            });
+          }}
+        />
+      )}
 
       <EditProjectDialog
         project={{

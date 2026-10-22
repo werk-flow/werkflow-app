@@ -17,6 +17,8 @@ const ERROR_MESSAGES = {
   job_not_found: 'Auftrag nicht gefunden.',
   client_not_found: 'Kunde nicht gefunden.',
   no_changes: 'Keine Änderungen vorgenommen.',
+  job_has_several_visits:
+    'Dieser Auftrag hat inzwischen mehrere Termine. Datum, Uhrzeit und Dauer änderst du in der Plantafel.',
   update_failed: 'Fehler beim Aktualisieren des Auftrags.',
 } satisfies Record<string, string>;
 

@@ -24,7 +24,7 @@ const SHORTCUTS: ReadonlyArray<[string, string]> = [
   ['Esc', 'Ziehen abbrechen; Übersicht, Dialog oder Parkplatz schließen'],
   ['?', 'Diese Übersicht'],
   ['+ / -', 'Nur Tag: vergrößern / verkleinern'],
-  ['Pfeiltasten', 'Nur Plantafel: zwischen Zellen bewegen (Tab erreicht die erste Zelle)'],
+  ['Pfeiltasten, Enter', 'Plantafel und Monat: zwischen Zellen bewegen; im Monat öffnet Enter den Tag'],
   ['Alt + Ziehen', 'Nur Plantafel: Termin kopieren statt verschieben'],
   ['Shift + Ziehen', 'Ablage trotz Hinweis; im Tag feines 5-Minuten-Raster'],
 ];

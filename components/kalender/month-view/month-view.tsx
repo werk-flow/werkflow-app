@@ -23,6 +23,7 @@ import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { useClock, useNowTick } from '../surface/use-now-tick';
 import { MonthCellEntry } from './month-cell-entry';
 import { MonthWeek } from './month-week';
+import { useMonthKeyboard } from './use-month-keyboard';
 import { useMonthSurface } from './use-month-surface';
 
 export type MonthViewProps = {
@@ -134,6 +135,7 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
     nowMs: clock,
   });
   useDragSurface(surface);
+  const keyboard = useMonthKeyboard({ weeks, rootRef, onOpenDay });
 
   const draggable = isAdminOrManager;
   const roleByUser = useMemo(
@@ -166,35 +168,19 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
   );
 
   return (
+    // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- APG grid with a roving tab stop: the day cells take tabIndex (use-month-keyboard.ts), the grid itself is no tab stop
     <div
       ref={rootRef}
       role="grid"
       aria-label="Monatskalender"
       data-month-view={anchorIso.slice(0, 7)}
       className="relative flex min-h-full min-w-[640px] flex-col"
+      onFocus={keyboard.onFocus}
+      onKeyDown={keyboard.onKeyDown}
     >
-      <div
-        role="row"
-        className={cn(
-          'sticky top-0 grid grid-cols-7 border-b border-calendar-grid-strong bg-background',
-          CALENDAR_LAYER_CLASS.sticky,
-        )}
-      >
-        {WEEKDAY_SHORT.map((weekday, index) => (
-          <div
-            key={weekday}
-            role="columnheader"
-            className={cn(
-              'px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground',
-              index >= 5 && 'bg-calendar-cell-off',
-            )}
-          >
-            {weekday}
-          </div>
-        ))}
-      </div>
+      <MonthWeekdayHeader />
       <div role="rowgroup" className="grid flex-1 auto-rows-fr">
-        {weeks.map((week) => (
+        {keyboard.weeks.map((week) => (
           <MonthWeek
             key={week[0]?.date}
             week={week}
@@ -224,6 +210,32 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
           CALENDAR_LAYER_CLASS.overlay,
         )}
       />
+    </div>
+  );
+}
+
+/** The sticky weekday names above the grid, the weekend columns tinted. */
+function MonthWeekdayHeader(): React.JSX.Element {
+  return (
+    <div
+      role="row"
+      className={cn(
+        'sticky top-0 grid grid-cols-7 border-b border-calendar-grid-strong bg-background',
+        CALENDAR_LAYER_CLASS.sticky,
+      )}
+    >
+      {WEEKDAY_SHORT.map((weekday, index) => (
+        <div
+          key={weekday}
+          role="columnheader"
+          className={cn(
+            'px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground',
+            index >= 5 && 'bg-calendar-cell-off',
+          )}
+        >
+          {weekday}
+        </div>
+      ))}
     </div>
   );
 }

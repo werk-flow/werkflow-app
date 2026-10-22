@@ -341,7 +341,7 @@ export function AppShell({
   initialOrganizationId?: string | null;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const { isSwitchingOrg } = useOrganization();
+  const { isSwitchingOrg, activeOrg } = useOrganization();
   const mainRef = useRef<HTMLElement>(null);
   usePageBodyKeyboardScroll(mainRef);
 
@@ -359,6 +359,8 @@ export function AppShell({
             <main
               ref={mainRef}
               aria-hidden={isSwitchingOrg}
+              // The field worker's phone gets 44 px touch targets (components/ui/field-worker-targets.ts).
+              data-field-worker={activeOrg?.role === 'employee' ? '' : undefined}
               className={cn('h-full overflow-hidden', isSwitchingOrg && 'pointer-events-none opacity-0')}
             >
               {children}

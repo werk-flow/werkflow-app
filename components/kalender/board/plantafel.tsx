@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
 import { boardArrowTarget } from '@/lib/calendar/board-row-filters';
 import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
-import { getHolidayContextDays, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
+import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import type { VacationCalendarEntry } from '@/lib/vacation/actions';
@@ -16,7 +16,7 @@ import { useCalendarDrag, useDragSurface } from '../drag-engine/drag-engine';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { useClock, useNowTick } from '../surface/use-now-tick';
-import { BoardHeader } from './board-header';
+import { BoardHeader, useBoardHeaderLabels } from './board-header';
 import { BoardRow } from './board-row';
 import { BoardTeamHeader } from './board-team-header';
 import { PhoneBoard } from './phone-board';
@@ -44,6 +44,21 @@ export type PlantafelProps = {
   /** Phone width: every visible row renders as one day list (names per card when there is more than one row), never a cropped grid. */
   phone: boolean;
 };
+
+/**
+ * One stable handler that calls the latest row isolation. The calendar passes
+ * a new function on every render, such as the one an opened card causes, and
+ * a new handler would render every memoized row again.
+ */
+function useStableIsolate(
+  onIsolateRow: (employeeRecordId: string) => void,
+): (employeeRecordId: string) => void {
+  const latest = useRef(onIsolateRow);
+  useLayoutEffect(() => {
+    latest.current = onIsolateRow;
+  });
+  return useCallback((employeeRecordId: string) => latest.current(employeeRecordId), []);
+}
 
 /**
  * The Plantafel (P1-24a, criteria 1 to 22): people rows against day
@@ -78,6 +93,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
   const [hoveredOccurrenceId, setHoveredOccurrenceId] = useState<string | null>(null);
   const nowTick = useNowTick();
   const clock = useClock();
+  const isolateRow = useStableIsolate(onIsolateRow);
 
   const { columns, days, dispatch, materialDemandJobIds, planned, actual, groups, rowModels, jobsByRow } =
     usePlantafelModel({
@@ -119,15 +135,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
 
   const scrollable = preferences.horizonWeeks > 1;
   const compact = preferences.density === 'compact';
-  const headerLabels = useMemo(() => {
-    const labels = new Map<string, string>();
-    const year = Number(anchorIso.slice(0, 4));
-    for (const holiday of getHolidayContextDays(holidays, year - 1, year + 1))
-      labels.set(holiday.date, holiday.name);
-    for (const closure of holidays.closureDays)
-      labels.set(closure.closureDate, closure.label ?? 'Betriebsruhe');
-    return labels;
-  }, [anchorIso, holidays]);
+  const headerLabels = useBoardHeaderLabels(anchorIso, holidays);
 
   // Arrow keys move between cells; Tab reaches the cards.
   const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -217,7 +225,7 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
                           startDrag={startDrag}
                           hoveredOccurrenceId={hoveredOccurrenceId}
                           onHoverLink={setHoveredOccurrenceId}
-                          isolate={onIsolateRow}
+                          isolate={isolateRow}
                         />
                       );
                     })}

@@ -14,6 +14,7 @@ import {
 import { logError } from '@/lib/logging';
 import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
+import { useHeldReadFlag } from '@/lib/ui/route-refresh-signal';
 
 /**
  * The live-view primitive (client freshness contract,
@@ -151,7 +152,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
   const statusGenerationRef = useRef(0);
   const readControllerRef = useRef<AbortController | null>(null);
   const schedulerRef = useRef<TrailingScheduler | null>(null);
-  const pendingWhileSuspendedRef = useRef(false);
+  const pendingWhileSuspendedRef = useHeldReadFlag();
   const suspendedRef = useRef(suspended);
   const readRef = useRef(read);
   const eventFilterRef = useRef(eventFilter);
@@ -248,7 +249,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
       });
       schedulerRef.current.schedule();
     },
-    [runRead],
+    [runRead, pendingWhileSuspendedRef],
   );
 
   // Suspension boundary: entering drops a pending timer into the queue flag;
@@ -265,7 +266,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
       pendingWhileSuspendedRef.current = false;
       scheduleRead(false);
     }
-  }, [suspended, clearTimer, scheduleRead]);
+  }, [suspended, clearTimer, scheduleRead, pendingWhileSuspendedRef]);
 
   // Subscribe to the table list. The provider keeps callbacks in a set, so
   // one effect can register the whole list; identity comes from the joined
@@ -323,7 +324,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     clearTimer();
     pendingWhileSuspendedRef.current = false;
     await runRead();
-  }, [clearTimer, runRead]);
+  }, [clearTimer, runRead, pendingWhileSuspendedRef]);
 
   const invalidate = useCallback(() => {
     supersedeReads();

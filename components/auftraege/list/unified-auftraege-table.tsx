@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 
 import { Table, TableBody, TableHeader } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
 import { type Job, type Project, type UnifiedListEntry, type SortColumn } from '@/lib/jobs/types';
+import { sameRecords } from '@/lib/ui/memo-equality';
 import {
   DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,
   resolveVisibleAuftraegeColumns,
@@ -129,14 +130,10 @@ export function UnifiedAuftraegeTable({
 }: UnifiedAuftraegeTableProps) {
   const { activeJobIds } = useActiveJobs();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
-  const memberLookup = buildMemberLookup(members);
-  const allProjects = useMemo(
-    () =>
-      entries
-        .filter((item): item is Extract<UnifiedListEntry, { type: 'project' }> => item.type === 'project')
-        .map((item) => item.project),
-    [entries],
-  );
+  // A route render rebuilds equal members; keeping the shown list keeps every row's memo.
+  const [shownMembers, setShownMembers] = useState(members);
+  if (shownMembers !== members && !sameRecords(shownMembers, members)) setShownMembers(members);
+  const memberLookup = useMemo(() => buildMemberLookup(shownMembers), [shownMembers]);
   const allJobs = useMemo(
     () => entries.flatMap((item) => (item.type === 'standalone-job' ? [item.job] : item.childJobs)),
     [entries],
@@ -149,17 +146,20 @@ export function UnifiedAuftraegeTable({
     [hideClientColumn, visibleColumns],
   );
 
-  const toggleProject = (projectId: string) => {
+  const toggleProject = useCallback((projectId: string) => {
     setExpandedProjects((prev) => {
       const next = new Set(prev);
       if (next.has(projectId)) next.delete(projectId);
       else next.add(projectId);
       return next;
     });
-  };
+  }, []);
 
   const sort: AuftraegeSortState = { column: sortColumn, direction: sortDirection, onSort, isArchive };
-  const columns = auftraegeColumns(effectiveVisibleColumns, isAdminOrManager);
+  const columns = useMemo(
+    () => auftraegeColumns(effectiveVisibleColumns, isAdminOrManager),
+    [effectiveVisibleColumns, isAdminOrManager],
+  );
 
   // No loading prop on purpose: the table never turns into a skeleton over
   // data it already has (feedback canon); `AuftraegeTableSkeleton` serves the
@@ -185,8 +185,7 @@ export function UnifiedAuftraegeTable({
     memberLookup,
     jobAssignmentMap,
     jobMenuProps: {
-      members,
-      projects: allProjects,
+      members: shownMembers,
       onJobUpdated,
       onJobDeleted,
       onJobDeleteRequested,

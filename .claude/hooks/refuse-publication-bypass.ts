@@ -1,10 +1,10 @@
 import { publicationBypass } from '../../lib/testing/publication/push-bypass';
 
 /**
- * Prepared PreToolUse hook for Bash and PowerShell calls (audit finding B6, 2026-10-16): exits 2
- * with the reason when the command would push past the publication gate or switch it off
- * (lib/testing/publication/push-bypass.ts). Wiring it into .claude/settings.json is the owner's
- * act; until then nothing runs it. A call it cannot read passes, as in the edit guard.
+ * PreToolUse hook for Bash and PowerShell calls, wired in .claude/settings.json and .codex/hooks.json
+ * (pinned by lib/testing/runner/guard-wiring.test.ts): exits 2 with the reason when the command would
+ * push past the publication gate or switch it off (lib/testing/publication/push-bypass.ts). A call it
+ * cannot read passes, as in the edit guard.
  */
 let command: unknown;
 try {

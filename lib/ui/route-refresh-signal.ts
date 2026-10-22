@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 /**
  * The busy signal of a route refresh. While a refresh is queued (a Realtime
  * event waits out the debounce) or in flight (the router transition runs),
@@ -25,10 +27,57 @@ export function countRealtimeRefresh(): void {
   root.setAttribute(REALTIME_REFRESH_COUNT_ATTRIBUTE, String(count + 1));
 }
 
-export function markRouteRefresh(holder: symbol, busy: boolean): void {
-  if (busy) holders.add(holder);
-  else holders.delete(holder);
+/** Adds or removes one holder of an `<html>` marker; the marker stands while any holder remains. */
+function markHolder(holderSet: Set<symbol>, attribute: string, holder: symbol, on: boolean): void {
+  if (on) holderSet.add(holder);
+  else holderSet.delete(holder);
   if (typeof document === 'undefined') return;
-  if (holders.size > 0) document.documentElement.setAttribute(ROUTE_REFRESH_ATTRIBUTE, 'true');
-  else document.documentElement.removeAttribute(ROUTE_REFRESH_ATTRIBUTE);
+  if (holderSet.size > 0) document.documentElement.setAttribute(attribute, 'true');
+  else document.documentElement.removeAttribute(attribute);
+}
+
+export function markRouteRefresh(holder: symbol, busy: boolean): void {
+  markHolder(holders, ROUTE_REFRESH_ATTRIBUTE, holder, busy);
+}
+
+/**
+ * Marks a read that a live view holds back while a dialog suspends it: `<html
+ * data-live-read-held>` is set while any view holds one. The view reads once
+ * the dialog closes, so a lab step that starts with a held read would count
+ * that catch-up as its own work (tests/audit/support/lab-recorder.ts refuses
+ * to start then). Use the flag where the hook kept `pendingWhileSuspendedRef`.
+ */
+export const LIVE_READ_HELD_ATTRIBUTE = 'data-live-read-held';
+const heldReadHolders = new Set<symbol>();
+
+function markHeldRead(holder: symbol, held: boolean): void {
+  markHolder(heldReadHolders, LIVE_READ_HELD_ATTRIBUTE, holder, held);
+}
+
+type HeldReadFlag = { current: boolean; release: () => void };
+
+/** A live view's "read held while suspended" flag that publishes itself on `<html>`. */
+function createHeldReadFlag(): HeldReadFlag {
+  const holder = Symbol('held live read');
+  let held = false;
+  return {
+    get current() {
+      return held;
+    },
+    set current(next: boolean) {
+      held = next;
+      markHeldRead(holder, next);
+    },
+    release: () => {
+      held = false;
+      markHeldRead(holder, false);
+    },
+  };
+}
+
+/** The held-read flag of one live view, released when the view unmounts. */
+export function useHeldReadFlag(): HeldReadFlag {
+  const [flag] = useState(createHeldReadFlag);
+  useEffect(() => flag.release, [flag]);
+  return flag;
 }

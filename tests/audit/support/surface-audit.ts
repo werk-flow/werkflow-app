@@ -10,6 +10,7 @@ import {
   expectDialogFits,
   expectNoSidewaysOverflow,
   expectPhoneMeasures,
+  expectTouchTargets,
   nextFrames,
 } from './layout-measure';
 import { expectKeyboardPath } from './keyboard-path';
@@ -65,7 +66,7 @@ async function softly(label: string, check: () => Promise<void>): Promise<void> 
   });
 }
 
-/** The page's default view: axe in both themes at 375 and 1280 px. */
+/** The page's default view: axe in both themes at 375 and 1280 px, and the field worker's 44 px targets on the phone. */
 async function auditDefaultView(context: SurfaceContext): Promise<void> {
   const { page, role, route } = context;
   const fieldWorker = role === 'employee';
@@ -73,6 +74,8 @@ async function auditDefaultView(context: SurfaceContext): Promise<void> {
     await page.setViewportSize(viewport);
     await settled(page);
     await axeBothThemes(page, `${role} ${route} at ${viewport.width} px`, { fieldWorker });
+    if (fieldWorker && viewport.width === PHONE.width)
+      await expectTouchTargets(page.getByRole('main'), `${route} at 375 px`);
   }
   await page.setViewportSize(DESKTOP);
 }
@@ -101,11 +104,13 @@ async function auditPageTab(context: SurfaceContext, value: string): Promise<voi
     );
     if (viewport.width === PHONE.width || viewport.width === DESKTOP.width)
       await axeBothThemes(page, at, { fieldWorker: role === 'employee' });
+    if (viewport.width === PHONE.width && role === 'employee')
+      await expectTouchTargets(page.getByRole('main'), at);
   }
   await page.setViewportSize(DESKTOP);
 }
 
-/** The dialog measures at the current width and axe at 375 and 1280 px. */
+/** The dialog measures at the current width, the field worker's targets and axe at 375 and 1280 px. */
 async function measureLayer(
   page: Page,
   layer: Locator,
@@ -114,6 +119,7 @@ async function measureLayer(
 ): Promise<void> {
   const width = page.viewportSize()?.width ?? DESKTOP.width;
   await softly(label, () => expectDialogFits(layer, label));
+  if (width === PHONE.width && role === 'employee') await expectTouchTargets(layer, label);
   if (width !== 768)
     await axeBothThemes(page, label, {
       include: '[role="dialog"], [role="alertdialog"]',

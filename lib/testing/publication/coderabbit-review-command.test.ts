@@ -6,6 +6,8 @@ import {
   CODERABBIT_WSL_BINARY,
   findCodeRabbitInstructionViolations,
   isStoredReviewCommand,
+  toWslPath,
+  untrackedScopeProblem,
 } from './coderabbit-review-command';
 
 describe('CodeRabbit review command', () => {
@@ -169,6 +171,7 @@ describe('CodeRabbit review command', () => {
     const command = buildWindowsCodeRabbitCommand({
       workingDirectory: 'C:\\workspace with spaces\\werkflow-app',
       reviewArguments: ['review', '--agent'],
+      windowsExcludesFile: null,
     });
 
     expect(command).toEqual([
@@ -183,6 +186,29 @@ describe('CodeRabbit review command', () => {
       '--agent',
     ]);
     expect(command.filter((argument) => argument === 'coderabbit')).toHaveLength(0);
+  });
+
+  test('git in WSL reads the Windows global ignore file, so local settings stay out of the review', () => {
+    const command = buildWindowsCodeRabbitCommand({
+      workingDirectory: 'C:\\repo',
+      reviewArguments: ['review', '--agent', '--uncommitted'],
+      windowsExcludesFile: 'C:\\Users\\someone\\.config\\git\\ignore',
+    });
+
+    expect(command.slice(command.indexOf('--exec') + 1, command.indexOf(CODERABBIT_WSL_BINARY))).toEqual([
+      '/usr/bin/env',
+      'GIT_CONFIG_COUNT=1',
+      'GIT_CONFIG_KEY_0=core.excludesFile',
+      'GIT_CONFIG_VALUE_0=/mnt/c/Users/someone/.config/git/ignore',
+    ]);
+    expect(toWslPath('D:/work/ignore')).toBe('/mnt/d/work/ignore');
+  });
+
+  test('a review refuses an untracked file that WSL would send and Windows ignores', () => {
+    expect(untrackedScopeProblem(['lib/new.ts'], ['lib/new.ts'])).toBeNull();
+    expect(untrackedScopeProblem(['lib/new.ts'], ['lib/new.ts', '.claude/settings.local.json'])).toContain(
+      '.claude/settings.local.json',
+    );
   });
 });
 

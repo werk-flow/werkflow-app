@@ -109,4 +109,18 @@ function uiRoundCaptures(): AcceptanceSet {
   };
 }
 
-export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [uiRoundCaptures()];
+/** Package D2 of 2026-10-22: the field worker's 44 px targets on the phone, the contact role field, the job form. */
+function fieldTargetCaptures(): AcceptanceSet {
+  const changedDialogs: ReadonlySet<string> = new Set(['customers.contact', 'work.edit-job']);
+  return {
+    id: 'd2-2026-10-22',
+    captures: inventoryCaptures().flatMap((capture): CaptureSpec[] => {
+      if (capture.role === 'employee') return [{ ...capture, widths: [375] }];
+      if (capture.view.kind === 'dialog' && changedDialogs.has(capture.view.opener)) return [capture];
+      return [];
+    }),
+    standalone: [],
+  };
+}
+
+export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [uiRoundCaptures(), fieldTargetCaptures()];

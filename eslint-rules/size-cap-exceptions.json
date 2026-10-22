@@ -11,8 +11,8 @@
     "lib/dispatch/server.ts": 853,
     "lib/documents/actions.ts": 1585,
     "lib/inventory/actions.ts": 1591,
-    "lib/jobs/actions.ts": 1052,
-    "lib/jobs/types.ts": 893,
+    "lib/jobs/actions.ts": 1027,
+    "lib/jobs/types.ts": 890,
     "lib/personnel/actions.ts": 891,
     "lib/personnel/lifecycle-actions.ts": 1260,
     "lib/planning/actions.ts": 811,
@@ -32,7 +32,7 @@
     "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
     "app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page.tsx": { "NestedJobDetailData": 149 },
     "app/(app)/auftraege/projekt/[projectNumber]/loading.tsx": { "ProjectDetailLoading": 85 },
-    "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 159 },
+    "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 156 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/kunden/[clientId]/page.tsx": { "KundenDetailData": 85 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
@@ -43,7 +43,7 @@
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
     "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
     "app/(auth)/signup/signup-form.tsx": { "SignupForm": 146 },
-    "components/anfragen/anfragen-content.tsx": { "AnfragenContent": 164 },
+    "components/anfragen/anfragen-content.tsx": { "AnfragenContent": 163 },
     "components/anfragen/close-request-dialog.tsx": { "CloseRequestDialog": 92 },
     "components/anfragen/convert-request-dialog.tsx": { "ConvertRequestDialog": 114 },
     "components/anfragen/create-request-customer-fields.tsx": { "CreateRequestCustomerFields": 90 },
@@ -96,7 +96,7 @@
     "components/auftraege/forms/create-job-form-sections.tsx": { "CreateJobPlanningFields": 101 },
     "components/auftraege/forms/create-project-form-content.tsx": { "useCreateProjectSubmit": 83 },
     "components/auftraege/forms/create-project-form-fields.tsx": { "CreateProjectFormFields": 135 },
-    "components/auftraege/forms/edit-job-form-fields.tsx": { "EditJobPlanningFields": 109 },
+    "components/auftraege/forms/edit-job-form-fields.tsx": { "EditJobPlanningFields": 90 },
     "components/auftraege/forms/edit-project-form-fields.tsx": { "EditProjectFormFields": 119 },
     "components/auftraege/forms/park-confirmation-dialog.tsx": { "ParkConfirmationDialog": 91 },
     "components/auftraege/forms/use-create-job-form.ts": { "useCreateJobForm": 87 },
@@ -125,7 +125,7 @@
     "components/auftraege/job-detail/job-qualification-section.tsx": { "JobQualificationSection": 105 },
     "components/auftraege/job-detail/use-job-detail-assignments.ts": { "useJobDetailAssignments": 122 },
     "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": {
-      "buildJobDetailPlanningFields": 140
+      "buildJobDetailPlanningFields": 134
     },
     "components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx": {
       "ArtifactApprovalDependencyDialog": 104
@@ -150,22 +150,22 @@
     "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
     "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
     "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
-    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 119 },
+    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 118 },
     "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 114 },
-    "components/auftraege/list/unified-auftraege-desktop-rows.tsx": { "ProjectRow": 125 },
-    "components/auftraege/list/unified-auftraege-mobile-cards.tsx": { "ProjectCard": 143 },
+    "components/auftraege/list/unified-auftraege-desktop-rows.tsx": { "ProjectRow": 111 },
+    "components/auftraege/list/unified-auftraege-mobile-cards.tsx": { "ProjectCard": 141 },
     "components/auftraege/list/unified-auftraege-row-cells.tsx": {
       "UnifiedAuftraegeJobRowCells": 82,
       "UnifiedAuftraegeProjectRowCells": 110
     },
-    "components/auftraege/list/unified-auftraege-table.tsx": { "UnifiedAuftraegeTable": 111 },
+    "components/auftraege/list/unified-auftraege-table.tsx": { "UnifiedAuftraegeTable": 108 },
     "components/auftraege/list/use-auftraege-create-actions.ts": { "useAuftraegeCreateActions": 111 },
     "components/auftraege/list/use-auftraege-local-updates.ts": { "useAuftraegeLocalUpdates": 88 },
     "components/auftraege/list/use-auftraege-optimistic-list.ts": { "useAuftraegeOptimisticList": 93 },
     "components/auftraege/list/use-auftraege-row-actions.ts": { "useAuftraegeRowActions": 100 },
     "components/auftraege/project-detail/project-detail-content.tsx": {
       "useProjectDetailState": 98,
-      "ProjectDetailContent": 158
+      "ProjectDetailContent": 153
     },
     "components/auftraege/project-detail/project-detail-metadata-fields.tsx": {
       "buildProjectDetailMetadataFields": 90
@@ -252,11 +252,11 @@
     "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 96 },
     "components/job-picker-modal.tsx": { "JobPickerModal": 168 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
-    "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 106 },
-    "components/kalender/board/board-row.tsx": { "BoardRow": 139 },
+    "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
+    "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
     "components/kalender/board/board-toolbar.tsx": { "BoardToolbar": 132 },
     "components/kalender/board/phone-board.tsx": { "PhoneBoard": 85 },
-    "components/kalender/board/plantafel.tsx": { "Plantafel": 183 },
+    "components/kalender/board/plantafel.tsx": { "Plantafel": 176 },
     "components/kalender/board/use-board-surface.ts": { "useBoardSurface": 190 },
     "components/kalender/board/use-plantafel-model.ts": { "usePlantafelModel": 83 },
     "components/kalender/calendar-body.tsx": { "CalendarSurface": 98 },
@@ -286,7 +286,7 @@
     "components/kalender/job-event-popover.tsx": { "CardPopover": 181, "MoveForm": 92 },
     "components/kalender/month-view/month-cell-entry.tsx": { "MonthCellEntry": 89 },
     "components/kalender/month-view/month-day-cell.tsx": { "MonthDayCell": 92 },
-    "components/kalender/month-view/month-view.tsx": { "MonthView": 169 },
+    "components/kalender/month-view/month-view.tsx": { "MonthView": 153 },
     "components/kalender/month-view/month-week.tsx": { "MonthWeek": 107 },
     "components/kalender/month-view/use-month-surface.ts": { "useMonthSurface": 191 },
     "components/kalender/mutations/use-calendar-park-mutations.ts": { "useCalendarParkMutations": 140 },
@@ -306,12 +306,12 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/kunden/client-contact-dialog.tsx": { "ClientContactDialog": 128 },
+    "components/kunden/client-contact-dialog.tsx": { "ClientContactDialog": 116 },
     "components/kunden/client-contacts-card.tsx": { "ClientContactRow": 103 },
     "components/kunden/client-metadata-fields.tsx": { "buildClientMetadataFields": 98 },
     "components/kunden/client-site-dialog.tsx": { "ClientSiteDialog": 120 },
     "components/kunden/client-sites-card.tsx": { "ClientSiteRow": 97, "ClientSitesCard": 92 },
-    "components/kunden/clients-table.tsx": { "ClientsTable": 97 },
+    "components/kunden/clients-table.tsx": { "ClientsTable": 96 },
     "components/kunden/communication-preference-dialog.tsx": { "CommunicationPreferenceDialog": 125 },
     "components/kunden/communication-preferences-section.tsx": { "CommunicationPreferencesSection": 137 },
     "components/kunden/communication-settings-dialog.tsx": { "CommunicationSettingsDialog": 120 },
@@ -339,7 +339,7 @@
     "components/mitarbeiter/member-actions-menu.tsx": { "MemberActionsMenu": 99 },
     "components/mitarbeiter/members-table.tsx": {
       "MemberCard": 82,
-      "MemberTableRow": 92,
+      "MemberTableRow": 91,
       "MembersTable": 93
     },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
@@ -354,7 +354,7 @@
     "components/mitarbeiter/personnel-lifecycle-overview.tsx": { "PersonnelLifecycleStatusCards": 92 },
     "components/mitarbeiter/personnel-lifecycle-section.tsx": { "PersonnelLifecycleSection": 108 },
     "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 172 },
-    "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 114 },
+    "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 113 },
     "components/mitarbeiter/qualification-management-definitions.tsx": {
       "QualificationManagementDefinitionForm": 111
     },
@@ -409,13 +409,13 @@
       "EquipmentDetailContent": 123
     },
     "components/service/equipment-form-dialog.tsx": { "EquipmentClassificationFields": 107 },
-    "components/service/equipment-list-content.tsx": { "EquipmentTable": 91, "EquipmentListResults": 81 },
+    "components/service/equipment-list-content.tsx": { "EquipmentTable": 90, "EquipmentListResults": 81 },
     "components/service/equipment-source-dialog.tsx": { "EquipmentSourceDialog": 178 },
     "components/service/equipment-work-link-dialog.tsx": { "EquipmentWorkLinkDialog": 122 },
     "components/service/maintenance-content.tsx": { "MaintenanceWorkspaceView": 183 },
     "components/service/maintenance-coverage-dialog.tsx": { "MaintenanceCoverageDialog": 151 },
     "components/service/maintenance-coverage-follow-up-dialog.tsx": {
-      "MaintenanceCoverageFollowUpDialog": 116
+      "MaintenanceCoverageFollowUpDialog": 109
     },
     "components/service/maintenance-due-action-dialog.tsx": { "MaintenanceDueActionDialog": 96 },
     "components/service/maintenance-lists.tsx": { "MaintenanceDueList": 106, "MaintenanceCoverageList": 98 },
@@ -424,17 +424,14 @@
       "MaintenancePlanCards": 164,
       "MaintenancePlanCards > map#2": 94
     },
-    "components/service/maintenance-plan-form-sections.tsx": {
-      "MaintenancePlanScopeFields": 95,
-      "MaintenancePlanScheduleFields": 97
-    },
+    "components/service/maintenance-plan-form-sections.tsx": { "MaintenancePlanScheduleFields": 97 },
     "components/service/service-case-detail-content.tsx": { "ServiceCaseDetailContent": 136 },
     "components/service/service-case-detail-dialogs.tsx": { "RelationDialog": 126, "FollowUpDialog": 108 },
     "components/service/service-case-detail-sections.tsx": { "ServiceCaseDetailSidebar": 89 },
     "components/service/service-case-evidence-link.tsx": { "ServiceCaseEvidenceLink": 97 },
     "components/service/service-case-form-sections.tsx": { "ServiceCaseTriageFields": 105 },
     "components/service/service-case-list-content.tsx": {
-      "ServiceCaseTable": 87,
+      "ServiceCaseTable": 86,
       "ServiceCaseListResults": 85
     },
     "components/service/use-equipment-form.ts": {
@@ -533,7 +530,7 @@
     "hooks/use-job-entity-options.ts": { "useJobEntityOptions": 121 },
     "hooks/use-live-view.ts": { "useLiveView": 197 },
     "hooks/use-member-status.ts": { "useMemberStatus": 97 },
-    "hooks/use-optimistic-list.ts": { "useOptimisticList": 124 },
+    "hooks/use-optimistic-list.ts": { "useOptimisticList": 120 },
     "hooks/use-planning-options.ts": { "usePlanningOptions": 141 },
     "hooks/use-weekly-time-data.ts": { "useWeeklyTimeData": 96 },
     "lib/attention/actions.ts": {
@@ -585,7 +582,7 @@
     },
     "lib/invites/send-invite.ts": { "createAndMailOrganizationInvite": 120 },
     "lib/jobs/actions.ts": {
-      "readJobDetails": 104,
+      "readJobDetails": 102,
       "getJobsForClient": 131,
       "getJobsForMember": 147,
       "getParkedJobs": 140

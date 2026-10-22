@@ -1,5 +1,6 @@
 'use client';
 
+import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -241,8 +242,7 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
                   key={client.id}
                   interactive
                   onClick={() => router.push(`/kunden/${client.id}`)}
-                  onMouseEnter={() => router.prefetch(`/kunden/${client.id}`)}
-                  onFocus={() => router.prefetch(`/kunden/${client.id}`)}
+                  {...rowIntentPrefetch(() => router.prefetch(`/kunden/${client.id}`))}
                 >
                   <TableCell className="font-medium">
                     <span className="flex items-center gap-2">

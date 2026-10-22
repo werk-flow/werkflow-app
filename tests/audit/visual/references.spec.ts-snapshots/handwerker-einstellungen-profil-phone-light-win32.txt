@@ -15,4 +15,3 @@ Anzeigename
 Diese Angaben erscheinen in der Sidebar und an weiteren Stellen der App als dein Name.
 Vorname
 *
-Pflichtfeld

@@ -27,7 +27,7 @@ describe('calendar shortcuts', () => {
   test('a line that holds in one view only names the view', () => {
     const viewBound: Record<string, RegExp> = {
       '+ / -': /^Nur Tag:/,
-      Pfeiltasten: /^Nur Plantafel:/,
+      'Pfeiltasten, Enter': /^Plantafel und Monat:/,
       'Alt + Ziehen': /^Nur Plantafel:/,
     };
     for (const [keys, pattern] of Object.entries(viewBound)) {

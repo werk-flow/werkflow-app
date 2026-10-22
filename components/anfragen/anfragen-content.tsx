@@ -1,5 +1,6 @@
 'use client';
 
+import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { EmptyState } from '@/components/ui/empty-state';
 import { formatBerlinDateTime as formatReceivedAt } from '@/lib/utils';
 import { useState } from 'react';
@@ -238,8 +239,7 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
                     key={entry.request.id}
                     interactive
                     onClick={() => router.push(`/anfragen/${entry.request.id}`)}
-                    onMouseEnter={() => router.prefetch(`/anfragen/${entry.request.id}`)}
-                    onFocus={() => router.prefetch(`/anfragen/${entry.request.id}`)}
+                    {...rowIntentPrefetch(() => router.prefetch(`/anfragen/${entry.request.id}`))}
                   >
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {entry.request.requestNumber || '—'}

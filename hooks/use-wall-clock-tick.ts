@@ -1,15 +1,27 @@
 'use client';
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { delayToNextTickBoundary } from '@/lib/date-time/tick-boundary';
 
 /**
  * The one interval of product code (`realtime/no-interval`): calls `onTick`
- * every `periodMs` and returns the stop function. It reads the clock only,
+ * on every whole multiple of `periodMs` of the wall clock (a minute tick when
+ * the minute changes) and returns the stop function. It reads the clock only,
  * never the server; live data comes from useLiveView.
  */
 export function startWallClockInterval(onTick: () => void, periodMs: number): () => void {
-  const interval = window.setInterval(onTick, periodMs);
-  return () => window.clearInterval(interval);
+  let interval: number | null = null;
+  const alignment = window.setTimeout(
+    () => {
+      interval = window.setInterval(onTick, periodMs);
+      onTick();
+    },
+    delayToNextTickBoundary(Date.now(), periodMs),
+  );
+  return () => {
+    window.clearTimeout(alignment);
+    if (interval !== null) window.clearInterval(interval);
+  };
 }
 
 // The stored instant while it is younger than one period, else the clock: a

@@ -16,6 +16,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-publication-bypass.ts\"",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }

@@ -33,7 +33,6 @@ import { TrafficLight } from '../project-detail/project-detail-status';
 /** What a row hands to its `JobActionsMenu`. */
 export type UnifiedAuftraegeJobMenuProps = {
   members: OrgMemberOption[];
-  projects: ProjectWithDetails[];
   onJobUpdated?:
     | ((payload: { job: Job; selectedEmployeeIds?: string[] }) => void | Promise<void>)
     | undefined;
@@ -53,6 +52,8 @@ export type UnifiedAuftraegeProjectMenuProps = {
 
 export type UnifiedAuftraegeJobRowCellsProps = UnifiedAuftraegeJobMenuProps & {
   job: Job;
+  /** The parent project of a child job. */
+  project?: ProjectWithDetails | undefined;
   detailHref: string;
   clientName: string;
   isAdminOrManager: boolean;
@@ -68,6 +69,7 @@ export type UnifiedAuftraegeJobRowCellsProps = UnifiedAuftraegeJobMenuProps & {
 /** The cells of one job row; the owning table keeps the `TableRow`. */
 export function UnifiedAuftraegeJobRowCells({
   job,
+  project,
   detailHref,
   clientName,
   isAdminOrManager,
@@ -78,7 +80,6 @@ export function UnifiedAuftraegeJobRowCells({
   assignedUserIds,
   visibleColumns,
   members,
-  projects,
   onJobUpdated,
   onJobDeleted,
   onJobDeleteRequested,
@@ -138,7 +139,7 @@ export function UnifiedAuftraegeJobRowCells({
             detailHref={detailHref}
             clientName={clientName}
             members={members}
-            projects={projects}
+            knownProject={project}
             onJobUpdated={onJobUpdated}
             onJobDeleted={onJobDeleted}
             onDeleteRequested={onJobDeleteRequested}

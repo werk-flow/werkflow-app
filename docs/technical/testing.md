@@ -204,7 +204,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Unit tests assert no duration and set no timeout of their own: the preload and the runner set one hang guard for every file, and a slow test is made cheaper. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
 - A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`]
-- An agent shell command that pushes with `--no-verify` or overrides `core.hooksPath` is refused once the owner wires the prepared hook. [code `.claude/hooks/refuse-publication-bypass.ts`, test `lib/testing/publication/push-bypass.test.ts`]
+- An agent shell command that pushes with `--no-verify` or overrides `core.hooksPath` is refused. [code `.claude/hooks/refuse-publication-bypass.ts`, test `lib/testing/publication/push-bypass.test.ts`, test `lib/testing/runner/guard-wiring.test.ts`]
 
 ## Never
 

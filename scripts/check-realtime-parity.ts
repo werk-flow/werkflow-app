@@ -21,7 +21,13 @@ select coalesce(json_agg(row_to_json(state)), '[]'::json) from (
       where i.indrelid=c.oid and i.indisreplident), '') as replident_index_columns,
     exists(select 1 from pg_trigger t where t.tgrelid=c.oid and not t.tgisinternal
       and t.tgname='emit_realtime_deletion' and t.tgenabled='O' and t.tgtype=9
-      and t.tgfoid=to_regprocedure('app_private.emit_realtime_deletion()')) as deletion_trigger_valid
+      and t.tgfoid=to_regprocedure('app_private.emit_realtime_deletion()')) as deletion_trigger_valid,
+    (exists(select 1 from pg_attribute a join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+      where a.attrelid=c.oid and a.attname='updated_at' and pg_get_expr(d.adbin, d.adrelid)='now()')
+    and exists(select 1 from pg_trigger t join pg_proc p on p.oid=t.tgfoid
+      where t.tgrelid=c.oid and not t.tgisinternal and t.tgenabled='O'
+      and (t.tgtype & 1)=1 and (t.tgtype & 2)=2 and (t.tgtype & 16)=16
+      and p.prosrc ~* 'new[.]updated_at[[:space:]]*:?=[[:space:]]*now[(][)]')) as transaction_stamp_valid
   from pg_publication_tables pt
   join pg_namespace n on n.nspname=pt.schemaname
   join pg_class c on c.relname=pt.tablename and c.relnamespace=n.oid

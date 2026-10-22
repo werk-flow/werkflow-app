@@ -3,6 +3,7 @@
 import type { ReactElement } from 'react';
 
 import { ClientSelectWithCreate } from '@/components/auftraege/shared/client-select-with-create';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { ErrorText } from '@/components/ui/error-text';
@@ -30,7 +31,8 @@ type MaintenancePlanFieldsProps = Pick<MaintenancePlanFormController, 'form' | '
 
 type MaintenancePlanScopeFieldsProps = {
   controller: MaintenancePlanFormController;
-  templates: MaintenanceTemplateOption[];
+  /** Null: the catalog read failed, and the template field shows the failure. */
+  templates: MaintenanceTemplateOption[] | null;
   /** The plan a revision starts from; its customer and site stay fixed. */
   initial: MaintenancePlanItem | undefined;
 };
@@ -115,13 +117,26 @@ export function MaintenancePlanScopeFields({
           noneLabel="Keine Abdeckung verknüpfen"
         />
       </Field>
-      <Field
-        label="Veröffentlichte Arbeitsvorlage"
-        htmlFor="maintenance-template"
-        required
-        error={fieldErrors.templateVersionId}
-        className="sm:col-span-2"
-      >
+      <MaintenanceTemplateField controller={controller} templates={templates} />
+    </>
+  );
+}
+
+/** The published template; a failed catalog read shows in its place with its retry. */
+function MaintenanceTemplateField({
+  controller,
+  templates,
+}: Pick<MaintenancePlanScopeFieldsProps, 'controller' | 'templates'>): ReactElement {
+  const { form, setForm, fieldErrors } = controller;
+  return (
+    <Field
+      label="Veröffentlichte Arbeitsvorlage"
+      htmlFor="maintenance-template"
+      required
+      error={fieldErrors.templateVersionId}
+      className="sm:col-span-2"
+    >
+      {templates ? (
         <SearchableSelect
           value={form.templateVersionId}
           onChange={(templateVersionId) => setForm((value) => ({ ...value, templateVersionId }))}
@@ -133,8 +148,10 @@ export function MaintenancePlanScopeFields({
           searchPlaceholder="Arbeitsvorlage suchen…"
           emptyMessage="Keine veröffentlichte Arbeitsvorlage gefunden"
         />
-      </Field>
-    </>
+      ) : (
+        <RegionLoadError>Die Arbeitsvorlagen konnten nicht geladen werden.</RegionLoadError>
+      )}
+    </Field>
   );
 }
 

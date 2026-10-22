@@ -2,6 +2,7 @@ import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cva, type VariantProps } from 'class-variance-authority';
 
+import { FIELD_WORKER_TARGET_CLASS } from '@/components/ui/field-worker-targets';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
@@ -58,6 +59,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         data-slot="button"
         className={cn(
           buttonVariants({ variant, size, className }),
+          FIELD_WORKER_TARGET_CLASS,
           busy && '[&>svg:not([data-slot=spinner])]:hidden',
         )}
         ref={ref}

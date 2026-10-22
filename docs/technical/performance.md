@@ -77,10 +77,17 @@ A metric earns its gate by two jobs: it repeats across five runs within its tole
 A prefetch loads a route's static shell, its loading state and its code before the click. It never carries data: the destination reads its data when the user opens it.
 
 - A link inside a page keeps the framework's prefetch when it comes into view. Turning that off made navigations slower in the lab, and the extra prefetches after a save cost bytes, not waiting time.
-- A table row that navigates on click has no link to prefetch, so it warms its destination on pointer enter and on focus with `router.prefetch`. People point at a row before they click it, and the open then starts from a ready shell.
+- A table row that navigates on click has no link to prefetch, so it warms its destination through `rowIntentPrefetch` (`lib/ui/row-intent.ts`): on the first pointer movement inside the row and on focus. People point at a row before they click it, and the open then starts from a ready shell. A pointer enter alone is no intent: rows that move under a resting pointer after a save would prefetch inside the save and slow it.
 - Sidebar links prefetch on intent only, because a prefetch in view would re-read every sidebar route after each invalidation.
 - A prefetch with data is refused: it made a job open faster, but the detail would show data from the moment of the hover, as old as the framework's prefetch cache allows, without an unconfirmed marker.
 - A calendar entry opens its overview from the window the board already holds, so there is nothing to prefetch.
+
+## Accepted limits
+
+- The clock button shows „—“ until it hydrates, because the server cannot know the browser's clock state; a guess would flash a false state.
+- A change plan selects each lab group whose scopes own a changed file and fails it on budgets, ceilings and floors; an improvement that was not lowered fails in release mode only.
+- The idle glow (`animate-live`) stays: the idle lab step records no request, commit or long task while it runs.
+- There is no real-user telemetry. Field timings come back on the table when the beta runs daily, and they need the owner's consent for the analytics they imply.
 
 ## Taste defaults
 
@@ -97,13 +104,14 @@ These are Tier 3 defaults. Diverge with the note that `AGENTS.md` describes, aft
 A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - Every journey names its role, start action, usable result and catalog flows, and has a lab step that a lab spec records. [test `lib/testing/journeys.test.ts`]
-- A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. [code `tests/audit/support/lab-recorder.ts`, group `audit:lab:field`, group `audit:lab:office`]
+- A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. A step fails when it released a live read that a dialog held since before the step (`<html data-live-read-held>`), because it would count that catch-up as its own work: settle the page before you open the dialog. [code `tests/audit/support/lab-recorder.ts`, code `lib/ui/route-refresh-signal.ts`, group `audit:lab:field`, group `audit:lab:office`]
 - Every required lab step has a reference at the digest of its measured test, within its budgets, with a reason for every raise and every accepted floor, and its history replays to its stored bounds. The recorder never reads the reference file, so lowering a reference keeps the lab groups' passes. [code `lib/testing/lab-count-context.ts`, test `lib/testing/lab-count-references.test.ts`, test `lib/testing/lab-count-reference-carryover.test.ts`]
 - The runner judges lab evidence: missing or malformed records, ceilings, budgets and floors fail in every mode, and an improvement that was not lowered in release mode. A change plan runs each lab group whose scopes own a changed product file. [test `lib/testing/lab-evidence.test.ts`, code `scripts/verify.ts`, test `lib/testing/selection/group-selection.test.ts`]
 - References change only through the lab command, which refuses failed, uncleaned, diagnostic and stale runs. [code `scripts/lab-counts.ts`, test `lib/testing/lab-counts.test.ts`]
 - A request shape is named by its route pattern or its background-read kind, never by ids or query values. [test `lib/testing/lab-shapes.test.ts`]
 - Nothing on an audited page moves after it is usable. [code `tests/audit/support/layout-shifts.ts`, group `audit:layout`]
-- A table row that navigates on click warms its destination on intent. [test `lib/ui/row-contracts.test.ts`]
+- A table row that navigates on click warms its destination on intent through `rowIntentPrefetch`. [code `lib/ui/row-intent.ts`, test `lib/ui/row-contracts.test.ts`]
+- A list row or a board row and day cell renders again only when something it shows changed: its memo compares every prop, by identity unless a content check names it, and a test per check proves that each shown field re-renders. [code `lib/ui/memo-equality.ts`, test `lib/ui/memo-equality.test.ts`, test `lib/calendar/board-row-memo.test.ts`]
 - A flow that people repeat many times a day is a journey, and the slice record names the decision. [judgment]
 - A performance change states its result in absolute numbers before and after, keeps every freshness read, and was felt by a person on the preview when the user can see it. [judgment]
 

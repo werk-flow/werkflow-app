@@ -47,7 +47,8 @@ interface ProjectDetailContentProps {
   client: Client | null;
   jobs: Job[];
   derivedStatus: DerivedProjectStatus;
-  members: OrgMemberOption[];
+  /** Null: the member read failed; creating a job needs it, so the jobs card shows the failure. */
+  members: OrgMemberOption[] | null;
   isAdminOrManager: boolean;
   canApproveWorkArtifacts: boolean;
   currentUserId: string;
@@ -226,13 +227,7 @@ export function ProjectDetailContent({
     inProgressCount,
     parkedCount,
     liveDerivedStatus,
-  } = useProjectDetailState({
-    project,
-    jobs,
-    client,
-    isAdminOrManager,
-    instructionItems,
-  });
+  } = useProjectDetailState({ project, jobs, client, isAdminOrManager, instructionItems });
 
   const metadataFields = buildProjectDetailMetadataFields({
     project,
@@ -248,7 +243,7 @@ export function ProjectDetailContent({
         liveProject={liveProject}
         liveDerivedStatus={liveDerivedStatus}
         isAdminOrManager={isAdminOrManager}
-        setShowCreateJob={dialogState.setShowCreateJob}
+        setShowCreateJob={members ? dialogState.setShowCreateJob : null}
         setShowEditDialog={dialogState.setShowEditDialog}
         setShowDeleteDialog={dialogState.setShowDeleteDialog}
       />
@@ -286,6 +281,7 @@ export function ProjectDetailContent({
               project={liveProject}
               isAdminOrManager={isAdminOrManager}
               onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
+              membersFailed={members === null}
             />
 
             {isAdminOrManager ? (

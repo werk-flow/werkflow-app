@@ -11,6 +11,17 @@
             "statusMessage": "Checking for a running verification"
           }
         ]
+      },
+      {
+        "matcher": "^(Bash)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/refuse-publication-bypass.ts",
+            "timeout": 20,
+            "statusMessage": "Checking for a publication gate bypass"
+          }
+        ]
       }
     ]
   }

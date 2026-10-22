@@ -67,9 +67,9 @@ export function ratchetProblems(value: unknown): string[] {
 
 /**
  * Judges one save. The saving session's own renders are compared, without
- * the Realtime refreshes its own write echoed back (an owner decision on
- * echo coalescing is open), so the count does not depend on when the echo
- * arrives. Above the entry fails; below it fails too, so the ratchet only
+ * the Realtime refreshes its own write echoed back (lib/realtime/own-writes.ts
+ * skips most of them; an unstamped table still echoes), so the count does not
+ * depend on when the echo arrives. Above the entry fails; below it fails too, so the ratchet only
  * moves down and a fix lowers the entry in the same change.
  */
 export function judgeRouteRenders(input: {

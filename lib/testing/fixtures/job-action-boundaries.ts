@@ -61,7 +61,10 @@ const world = installActionWorld({
     assignment('51000000-0000-4000-8000-000000000002', ORGANIZATION_A, unassignedJobId, colleagueId),
     assignment('51000000-0000-4000-8000-000000000009', ORGANIZATION_B, foreignJobId, CALLER_ID),
   ],
-  planning_occurrences: [],
+  // Two scheduled visits: the assigned job is planned on the Plantafel.
+  planning_occurrences: ['52000000-0000-4000-8000-000000000001', '52000000-0000-4000-8000-000000000002'].map(
+    (id) => ({ id, organization_id: ORGANIZATION_A, job_id: assignedJobId, status: 'scheduled' }),
+  ),
   profiles: [{ id: CALLER_ID, first_name: 'Erika', last_name: 'Muster', email: null, avatar_path: null }],
 });
 const actions = await import('@/lib/jobs/actions');
@@ -107,6 +110,14 @@ assert.deepEqual(await actions.updateJobAssignments(foreignJobId, [CALLER_ID]), 
 signInAs(world, 'admin');
 assert.deepEqual(await actions.deleteJob(foreignJobId), jobNotFound);
 assert.equal(databaseSnapshot(), initialDatabase, 'no denied call may write');
+assert.deepEqual(world.rpcCalls, []);
+
+// A job with several scheduled visits keeps its schedule: the edit is refused before any write.
+assert.deepEqual(await actions.updateJob(assignedJobId, { plannedDate: '2026-11-02' }), {
+  success: false,
+  error: 'job_has_several_visits',
+});
+assert.equal(databaseSnapshot(), initialDatabase, 'a refused schedule edit writes nothing');
 assert.deepEqual(world.rpcCalls, []);
 
 // The same manager deletes an own job: exactly that row goes, organization B's job stays.

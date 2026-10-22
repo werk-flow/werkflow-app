@@ -49,11 +49,17 @@ async function normalizeText(
   clockText: boolean,
 ): Promise<void> {
   await page.evaluate(
-    ({ exact, patterns }) => {
+    ({ exact, patterns, segments }) => {
       const compiled = patterns.map(
         ([source, replacement]) => [new RegExp(source, 'g'), replacement] as const,
       );
-      const rewrite = (value: string): string => {
+      // A date field shows its day, month and year in separate segments, which no date pattern sees whole.
+      const segmentStandIns: Record<string, string> = segments
+        ? { day: '01', month: '01', year: '2026' }
+        : {};
+      const rewrite = (value: string, node: Node): string => {
+        const segment = node.parentElement?.getAttribute('data-segment');
+        if (segment && segmentStandIns[segment] && value.trim()) return segmentStandIns[segment];
         let next = value;
         for (const [from, to] of exact) next = next.split(from).join(to);
         for (const [pattern, to] of compiled) next = next.replace(pattern, to);
@@ -63,21 +69,21 @@ async function normalizeText(
         // A TreeWalker never yields its own root, so a changed or added bare Text node is rewritten here.
         if (root.nodeType === Node.TEXT_NODE) {
           const value = root.nodeValue ?? '';
-          const next = rewrite(value);
+          const next = rewrite(value, root);
           if (next !== value) root.nodeValue = next;
           return;
         }
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
         for (let node = walker.nextNode(); node; node = walker.nextNode()) {
           const value = node.nodeValue ?? '';
-          const next = rewrite(value);
+          const next = rewrite(value, node);
           if (next !== value) node.nodeValue = next;
         }
         const element = root instanceof Element ? root : root.parentElement;
         for (const field of element?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
           'input, textarea',
         ) ?? []) {
-          const next = rewrite(field.value);
+          const next = rewrite(field.value, field);
           if (next !== field.value) field.value = next;
         }
       };
@@ -93,7 +99,7 @@ async function normalizeText(
       observer.observe(document.body, { subtree: true, childList: true, characterData: true });
       holder.__visualReferenceObserver = observer;
     },
-    { exact: replacements, patterns: clockText ? CLOCK_TEXT : [] },
+    { exact: replacements, patterns: clockText ? CLOCK_TEXT : [], segments: clockText },
   );
 }
 

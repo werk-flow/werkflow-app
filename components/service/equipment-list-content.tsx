@@ -1,5 +1,6 @@
 'use client';
 
+import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { EmptyState } from '@/components/ui/empty-state';
 import { SectionError } from '@/components/ui/section-error';
 import Link from 'next/link';
@@ -189,8 +190,7 @@ function EquipmentTable({ filtered, visiblePending }: EquipmentRowsProps): React
                 key={item.id}
                 interactive
                 onClick={() => router.push(href)}
-                onMouseEnter={() => router.prefetch(href)}
-                onFocus={() => router.prefetch(href)}
+                {...rowIntentPrefetch(() => router.prefetch(href))}
               >
                 <TableCell>
                   <Link href={href} className="font-medium" onClick={(event) => event.stopPropagation()}>

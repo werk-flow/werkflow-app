@@ -10,7 +10,7 @@ import {
   addSiteOnCustomerDetail,
   adoptCustomerAddressAsSite,
   archiveCustomerRelation,
-  contactRoleSuggestions,
+  openContactRoleSuggestions,
   CUSTOMER_TEXT,
   customerDialogField,
   customerNumberField,
@@ -69,15 +69,10 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
     await openSeededCustomerDetail(adminPage, seeded.clientId);
     await addContactButton(adminPage).click();
     const contactDialog = adminPage.getByRole('dialog');
-    await expect(customerDialogField(contactDialog, 'contactRole')).toHaveAttribute(
-      'list',
-      'contact-role-suggestions',
-    );
-    expect(
-      await contactRoleSuggestions(contactDialog).evaluateAll((options) =>
-        options.map((option) => option.getAttribute('value')),
-      ),
-    ).toEqual([...CONTACT_ROLE_SUGGESTIONS]);
+    const roleSuggestions = await openContactRoleSuggestions(contactDialog);
+    await expect(roleSuggestions).toHaveText([...CONTACT_ROLE_SUGGESTIONS]);
+    await roleSuggestions.filter({ hasText: CONTACT_ROLE_SUGGESTIONS[0] }).click();
+    await expect(customerDialogField(contactDialog, 'contactRole')).toHaveValue(CONTACT_ROLE_SUGGESTIONS[0]);
     await contactDialog.getByRole('button', { name: SHARED_COPY.action.cancel }).click();
     await addContactOnCustomerDetail(adminPage, {
       name: firstContact,

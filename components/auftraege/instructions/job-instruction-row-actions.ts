@@ -10,6 +10,7 @@ import type {
   JobInstructionActor,
   JobInstructionItemWithDetails,
 } from '@/lib/jobs/types';
+import { ownWrites } from '@/lib/realtime/own-writes';
 import { ERROR_MESSAGES, getJobInstructionErrorMessage } from './job-instruction-errors';
 import type { JobInstructionItemList } from './use-job-instruction-item-list';
 
@@ -56,7 +57,7 @@ export function createJobInstructionRowActions({
         toggleJobInstructionItemCompletion({
           itemId: item.id,
           isCompleted: !item.isCompleted,
-        }),
+        }).then((toggled) => ownWrites.recorded(toggled)),
       );
       if (result.success) {
         replaceItem(result.item);

@@ -214,6 +214,13 @@ const registrySelectors = [
       'Native <select> is banned — use SearchableSelect or the shadcn Select per the werkflow-design skill registry.',
   },
   {
+    // The browser draws a <datalist> popup in its own style, outside the
+    // tokens, the dialog layer and the Field wiring (rendered review 2026-10-15).
+    selector: 'JSXOpeningElement[name.name="datalist"]',
+    message:
+      'Native <datalist> is banned — offer suggestions through SearchableSelect (components/ui/searchable-select), with the typed text as an option where free text is allowed, per the werkflow-design skill registry.',
+  },
+  {
     selector: 'JSXOpeningElement[name.name="details"]',
     message:
       'Native <details> is banned — use FormDisclosure (components/ui/form-disclosure) per the werkflow-design skill registry.',

@@ -7,6 +7,10 @@ import { cn } from '@/lib/utils';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { scrollRegion } from '@/components/ui/scroll-region';
 import { inlineScrollDelta } from '@/lib/ui/tab-strip-scroll';
+import {
+  FIELD_WORKER_TAB_STRIP_CLASS,
+  FIELD_WORKER_TARGET_CLASS,
+} from '@/components/ui/field-worker-targets';
 
 /** False when the tab set switches a view or a filter without `TabsContent` panels. */
 const TabsPanelsContext = React.createContext(true);
@@ -40,6 +44,7 @@ function TabsList({ className, ...props }: React.ComponentProps<typeof TabsPrimi
         // phones instead of widening the page (design canon: no page-level
         // horizontal scroll). justify-start keeps the first tab reachable.
         'bg-muted/60 inline-flex h-9 w-fit max-w-full shrink-0 items-center justify-start overflow-x-auto rounded-md p-0.5 gap-0.5 [scrollbar-width:none]',
+        FIELD_WORKER_TAB_STRIP_CLASS,
         className,
       )}
       {...props}
@@ -95,6 +100,7 @@ function TabsTrigger({
         'disabled:pointer-events-none disabled:opacity-50',
         'data-[state=active]:bg-background data-[state=active]:text-foreground',
         '[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*="size-"])]:size-4',
+        FIELD_WORKER_TARGET_CLASS,
         className,
       )}
       {...props}

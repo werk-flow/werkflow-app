@@ -4,13 +4,14 @@ import { useMemo } from 'react';
 import { packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
 import { absenceItems } from '@/lib/calendar/board-model';
 import { isMultiDay, type MonthCellItem } from '@/lib/calendar/month-cell-items';
-import { monthRowTemplate, type MonthCell } from '@/lib/calendar/month-layout';
+import { monthRowTemplate } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 import { BarSegment } from '../surface/bar-segment';
 import { CalendarCard } from '../surface/calendar-card';
 import { MonthDayCell } from './month-day-cell';
+import type { MonthGridCell } from './use-month-keyboard';
 
 type MonthBar = BoardSpanItem &
   (
@@ -19,7 +20,7 @@ type MonthBar = BoardSpanItem &
   );
 
 type MonthWeekProps = {
-  week: MonthCell[];
+  week: MonthGridCell[];
   labels: ReadonlyMap<string, string>;
   vacation: VacationCalendarEntry[];
   sickness: SicknessCalendarEntry[];

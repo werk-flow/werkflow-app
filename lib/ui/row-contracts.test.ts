@@ -107,6 +107,35 @@ function rowInteractions(source: string): Array<{ kind: string; skeleton: boolea
   return rows;
 }
 
+const ROW_TAGS = ['TableRow', 'ListRow'];
+
+/** Where a row prefetches on pointer enter, or a navigating table row skips `rowIntentPrefetch`. */
+function rowPrefetchViolations(file: string, source: string): string[] {
+  if (!source.includes('router.push') && !source.includes('prefetch')) return [];
+  const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const violations: string[] = [];
+  function visit(node: ts.Node): void {
+    if (isOpening(node) && ROW_TAGS.includes(node.tagName.getText())) {
+      for (const handler of ['onMouseEnter', 'onPointerEnter'])
+        if (attribute(node, handler)?.getText().includes('prefetch'))
+          violations.push(`${file}: ${handler} prefetches on pointer enter`);
+      const push = attribute(node, 'onClick')
+        ?.getText()
+        .match(/router\.push\(([^)]+)\)/)?.[1];
+      const intent = node.attributes.properties.some(
+        (item) =>
+          ts.isJsxSpreadAttribute(item) &&
+          item.expression.getText() === `rowIntentPrefetch(() => router.prefetch(${push}))`,
+      );
+      if (push && node.tagName.getText() === 'TableRow' && !intent)
+        violations.push(`${file}: ${push} does not warm through rowIntentPrefetch`);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(syntax);
+  return violations;
+}
+
 function desktopOnly(node: ts.Node): boolean {
   for (let current: ts.Node | undefined = node; current; current = current.parent) {
     const opening = ts.isJsxElement(current)
@@ -163,30 +192,29 @@ describe('row interaction and mobile-table contracts', () => {
 
   // Load on intent (docs/technical/performance.md, "Prefetch"): a table row that
   // navigates on click carries no link the router could prefetch, so it warms
-  // its destination's shell when the pointer or the keyboard reaches it. The
-  // office points at a row before it clicks; the shell, its loading state and
-  // its code are then ready, and the data is still read at the click.
+  // its destination's shell on the person's intent through `rowIntentPrefetch`
+  // (lib/ui/row-intent.ts): the first pointer movement inside the row and
+  // keyboard focus. A pointer enter is no intent: a row that moved or appeared
+  // under a resting pointer, as the rows below a new job do when its create
+  // dialog closes, receives one, and its prefetch competed with the save's
+  // route render (job create 501 to 640 ms in the lab).
   test('a clickable table row that navigates warms the same destination on intent', () => {
-    const violations: string[] = [];
-    for (const [file, source] of sources) {
-      if (!source.includes('router.push') || !source.includes('TableRow')) continue;
-      const syntax = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-      function visit(node: ts.Node): void {
-        const opening = isOpening(node) ? node : undefined;
-        if (opening && opening.tagName.getText() === 'TableRow') {
-          const push = attribute(opening, 'onClick')
-            ?.getText()
-            .match(/router\.push\(([^)]+)\)/)?.[1];
-          if (push)
-            for (const handler of ['onMouseEnter', 'onFocus'])
-              if (!attribute(opening, handler)?.getText().includes(`router.prefetch(${push})`))
-                violations.push(`${file}: ${handler} does not prefetch ${push}`);
-        }
-        ts.forEachChild(node, visit);
-      }
-      visit(syntax);
-    }
-    expect(violations).toEqual([]);
+    expect([...sources].flatMap(([file, source]) => rowPrefetchViolations(file, source))).toEqual([]);
+  });
+
+  test('the intent rule refuses a row that warms on pointer enter or without the helper', () => {
+    const probe = `<>
+      <TableRow onClick={() => router.push(a)} onMouseEnter={() => router.prefetch(a)} onFocus={() => router.prefetch(a)} />
+      <TableRow onClick={() => router.push(b)} {...rowIntentPrefetch(() => router.prefetch(c))} />
+      <ListRow onClick={() => router.push(d)} onPointerEnter={() => router.prefetch(d)} />
+      <TableRow onClick={() => router.push(e)} {...rowIntentPrefetch(() => router.prefetch(e))} />
+    </>`;
+    expect(rowPrefetchViolations('probe.tsx', probe)).toEqual([
+      'probe.tsx: onMouseEnter prefetches on pointer enter',
+      'probe.tsx: a does not warm through rowIntentPrefetch',
+      'probe.tsx: b does not warm through rowIntentPrefetch',
+      'probe.tsx: onPointerEnter prefetches on pointer enter',
+    ]);
   });
 
   test('detects a skeleton losing hover independently of its live row', () => {

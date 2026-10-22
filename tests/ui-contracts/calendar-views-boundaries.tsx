@@ -16,6 +16,7 @@ import { getCalendarFetchRange } from '@/lib/calendar/navigation';
 import { DEFAULT_CALENDAR_PREFERENCES } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { TimeEntry } from '@/lib/time-tracking/types';
+import { toLocalDateString } from '@/lib/utils';
 import { getDefaultTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import { contractJob, CalendarOrganizationContext } from './calendar-service-boundaries';
 
@@ -488,7 +489,9 @@ export function CalendarMonthContractFixture(): React.JSX.Element {
             actions={actions}
             parkingContexts={new Map()}
             onParkedContextMissing={() => {}}
-            onOpenDay={() => {}}
+            onOpenDay={(day) => {
+              window.calendarViewContract.opened.push(`Tag ${toLocalDateString(day)}`);
+            }}
             onSessionClick={() => {}}
             verticalScroller={scroller}
           />

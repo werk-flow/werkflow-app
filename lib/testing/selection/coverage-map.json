@@ -7912,6 +7912,15 @@
           ]
         },
         {
+          "file": "tests/ui-contracts/calendar-month-keyboard.spec.ts",
+          "kind": "browser",
+          "description": "the keyboard path through the month grid: one day stop, arrow moves with a visible ring, Enter and Space open the day",
+          "titles": [
+            "Tab reaches today as the one day stop and arrow keys move inside the grid",
+            "Enter and Space open the focused day, Enter on a chip opens the chip"
+          ]
+        },
+        {
           "file": "lib/calendar/month-layout.test.ts",
           "kind": "unit",
           "description": "the weeks a month spans and their today, past and out-of-month marks",

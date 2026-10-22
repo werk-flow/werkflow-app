@@ -2,6 +2,7 @@
 
 import { useState, type ReactElement } from 'react';
 
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { DateTimeField } from '@/components/ui/date-time-field';
@@ -35,12 +36,13 @@ export function MaintenanceCoverageFollowUpDialog({
   onOpenChange: (open: boolean) => void;
   coverage: MaintenanceCoverageItem;
   currentActorId: string;
-  owners: MaintenanceCatalogs['followUpOwners'];
+  /** Null: the catalog read failed, and the owner field shows the failure. */
+  owners: FollowUpOwners | null;
 }): ReactElement {
   const [title, setTitle] = useState(`Abdeckung ${coverage.coverageNumber} prüfen`);
   const [note, setNote] = useState(coverage.operationalNote ?? '');
   const [ownerUserId, setOwnerUserId] = useState(
-    owners.find((owner) => owner.userId === currentActorId)?.userId ?? owners[0]?.userId ?? '',
+    owners?.find((owner) => owner.userId === currentActorId)?.userId ?? owners?.[0]?.userId ?? '',
   );
   const [dueAt, setDueAt] = useState(() => tomorrowMorningInBerlin());
   const [error, setError] = useState<string | null>(null);
@@ -105,19 +107,12 @@ export function MaintenanceCoverageFollowUpDialog({
           <Field label="Titel" htmlFor="coverage-follow-up-title" required error={titleError}>
             <Input value={title} onChange={(event) => setTitle(event.target.value)} maxLength={160} />
           </Field>
-          <Field label="Zuständig" htmlFor="coverage-follow-up-owner" required error={ownerError}>
-            <SearchableSelect
-              value={ownerUserId}
-              onChange={setOwnerUserId}
-              options={owners.map((owner) => ({
-                value: owner.userId,
-                label: owner.name,
-              }))}
-              placeholder="Person wählen"
-              searchPlaceholder="Person suchen…"
-              emptyMessage="Keine Person gefunden"
-            />
-          </Field>
+          <FollowUpOwnerField
+            owners={owners}
+            value={ownerUserId}
+            onChange={setOwnerUserId}
+            error={ownerError}
+          />
           <Field label="Fällig am" htmlFor="coverage-follow-up-due-date" required error={dueError}>
             <DateTimeField
               idPrefix="coverage-follow-up-due"
@@ -142,5 +137,37 @@ export function MaintenanceCoverageFollowUpDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type FollowUpOwners = MaintenanceCatalogs['followUpOwners'];
+
+/** The follow-up's owner; a failed catalog read shows in its place with its retry. */
+function FollowUpOwnerField({
+  owners,
+  value,
+  onChange,
+  error,
+}: {
+  owners: FollowUpOwners | null;
+  value: string;
+  onChange: (ownerUserId: string) => void;
+  error: string | undefined;
+}): ReactElement {
+  return (
+    <Field label="Zuständig" htmlFor="coverage-follow-up-owner" required error={error}>
+      {owners ? (
+        <SearchableSelect
+          value={value}
+          onChange={onChange}
+          options={owners.map((owner) => ({ value: owner.userId, label: owner.name }))}
+          placeholder="Person wählen"
+          searchPlaceholder="Person suchen…"
+          emptyMessage="Keine Person gefunden"
+        />
+      ) : (
+        <RegionLoadError>Die zuständigen Personen konnten nicht geladen werden.</RegionLoadError>
+      )}
+    </Field>
   );
 }

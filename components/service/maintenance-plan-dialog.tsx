@@ -37,7 +37,8 @@ export function MaintenancePlanDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  templates: MaintenanceTemplateOption[];
+  /** Null: the catalog read failed, and the template field shows the failure. */
+  templates: MaintenanceTemplateOption[] | null;
   initial?: MaintenancePlanItem;
   /**
    * Create from the workspace (feedback canon): the dialog closes at once and

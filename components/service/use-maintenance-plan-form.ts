@@ -45,7 +45,8 @@ export type MaintenancePlanCreateSubmission = {
 
 type UseMaintenancePlanFormOptions = {
   onOpenChange: (open: boolean) => void;
-  templates: MaintenanceTemplateOption[];
+  /** Null: the catalog read failed, and the template field shows the failure. */
+  templates: MaintenanceTemplateOption[] | null;
   initial: MaintenancePlanItem | undefined;
   onSubmitted: ((submission: MaintenancePlanCreateSubmission) => void) | undefined;
   onSaved: (() => void) | undefined;
@@ -128,7 +129,7 @@ export function useMaintenancePlanForm({
           clientName: client?.name ?? '',
           siteName: site?.name ?? '',
           templateName:
-            templates.find((template) => template.versionId === form.templateVersionId)?.name ?? '',
+            templates?.find((template) => template.versionId === form.templateVersionId)?.name ?? '',
           intervalMonths: Number(form.intervalMonths),
           status: form.status,
         },

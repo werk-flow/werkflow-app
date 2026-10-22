@@ -95,14 +95,14 @@ test('loading preserves available toolbar slots and normal/upload emphasis heigh
     }),
   );
   expect(normal).toContain('h-8 w-28');
-  expect(normal).toContain('h-11');
+  expect(normal.split(/[\s"]/)).toContain('h-11');
   const emphasized = renderToStaticMarkup(
     createElement(ContextualDocumentsSkeleton, {
       description,
       canUpload: true,
     }),
   );
-  expect(emphasized).not.toContain('h-11');
+  expect(emphasized.split(/[\s"]/)).not.toContain('h-11');
 });
 
 test('the real document implementation delegates frame and row layout to the shared owners', () => {

@@ -20,7 +20,8 @@ type ProjectDetailHeaderProps = {
   liveProject: Project;
   liveDerivedStatus: DerivedProjectStatus;
   isAdminOrManager: boolean;
-  setShowCreateJob: (open: boolean) => void;
+  /** Null while the member read has failed: a new job needs the team list. */
+  setShowCreateJob: ((open: boolean) => void) | null;
   setShowEditDialog: (open: boolean) => void;
   setShowDeleteDialog: (open: boolean) => void;
 };
@@ -51,10 +52,12 @@ export function ProjectDetailHeader({
       actions={
         isAdminOrManager ? (
           <div className="flex items-center gap-2">
-            <Button size="sm" className="gap-1.5" onClick={() => setShowCreateJob(true)}>
-              <Plus className="size-3.5" />
-              <span className="sr-only sm:not-sr-only">Auftrag hinzufügen</span>
-            </Button>
+            {setShowCreateJob && (
+              <Button size="sm" className="gap-1.5" onClick={() => setShowCreateJob(true)}>
+                <Plus className="size-3.5" />
+                <span className="sr-only sm:not-sr-only">Auftrag hinzufügen</span>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="size-8" aria-label="Aktionen öffnen">

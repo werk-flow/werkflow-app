@@ -68,8 +68,9 @@ export default function MaintenancePage({
 
 async function MaintenanceActions({ searchParams }: { searchParams: SearchParams }) {
   const [{ result }, catalogs] = await Promise.all([readWorkspace(searchParams), loadMaintenanceCatalogs()]);
-  if (!result.success || !catalogs.success) return null;
-  return <MaintenanceCreateButtons templates={catalogs.catalogs.templates} />;
+  // The workspace shows its own failure; a failed catalog shows in the field that needs it.
+  if (!result.success) return null;
+  return <MaintenanceCreateButtons templates={catalogs.success ? catalogs.catalogs.templates : null} />;
 }
 
 async function MaintenanceWorkspace({ searchParams }: { searchParams: SearchParams }) {
@@ -90,8 +91,12 @@ async function MaintenanceWorkspace({ searchParams }: { searchParams: SearchPara
       </RegionLoadError>
     );
   }
-  if (!catalogs.success) {
-    return <RegionLoadError>Die Wartungsübersicht konnte nicht geladen werden.</RegionLoadError>;
-  }
-  return <MaintenanceContent initial={result.workspace} catalogs={catalogs.catalogs} query={query} />;
+  // A failed catalog read leaves the lists in place: the dialog field that needs it shows the failure.
+  return (
+    <MaintenanceContent
+      initial={result.workspace}
+      catalogs={catalogs.success ? catalogs.catalogs : null}
+      query={query}
+    />
+  );
 }

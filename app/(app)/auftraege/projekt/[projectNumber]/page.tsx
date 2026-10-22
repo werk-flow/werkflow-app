@@ -112,19 +112,18 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     );
   }
 
-  if (membersResult && !membersResult.success) {
-    return (
-      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
-        Die Mitarbeiterliste ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
-    );
-  }
-  const members: OrgMemberOption[] = (membersResult?.members ?? []).map((member) => ({
-    userId: member.user_id,
-    firstName: member.first_name,
-    lastName: member.last_name,
-    role: member.role,
-  }));
+  // Null: the manager's member read failed, and the jobs card shows the failure
+  // instead of the create-job action. An employee never reads the members.
+  const members: OrgMemberOption[] | null = !membersResult
+    ? []
+    : membersResult.success
+      ? membersResult.members.map((member) => ({
+          userId: member.user_id,
+          firstName: member.first_name,
+          lastName: member.last_name,
+          role: member.role,
+        }))
+      : null;
 
   const { project, client, jobs, derivedStatus } = result.details;
 

@@ -1,13 +1,31 @@
 'use client';
 
+import { memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
 import { formatRefusalDate } from '@/lib/calendar/messages';
+import { getHolidayContextDays, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import { BOARD_COLUMN_MIN_PX, BOARD_NAME_COLUMN_PX } from './types';
 
+/** The holiday and closure label per date around the anchor's year, for the header row. */
+export function useBoardHeaderLabels(
+  anchorIso: string,
+  holidays: OrganizationHolidayCalendar,
+): ReadonlyMap<string, string> {
+  return useMemo(() => {
+    const labels = new Map<string, string>();
+    const year = Number(anchorIso.slice(0, 4));
+    for (const holiday of getHolidayContextDays(holidays, year - 1, year + 1))
+      labels.set(holiday.date, holiday.name);
+    for (const closure of holidays.closureDays)
+      labels.set(closure.closureDate, closure.label ?? 'Betriebsruhe');
+    return labels;
+  }, [anchorIso, holidays]);
+}
+
 /** The Plantafel's sticky header row: the name column and one header per day with its holiday label. */
-export function BoardHeader({
+export const BoardHeader = memo(function BoardHeader({
   columns,
   scrollable,
   labels,
@@ -71,4 +89,4 @@ export function BoardHeader({
       })}
     </div>
   );
-}
+});

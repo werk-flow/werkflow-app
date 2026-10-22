@@ -36,7 +36,8 @@ import {
   toJobAssignment,
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
-import { toClientContact, toClientSite, type ClientContact, type ClientSite } from '@/lib/clients/types';
+import { loadJobDetailRelations, readJobVisitPlan, refuseScheduleOfSeveralVisits } from './job-detail-reads';
+import type { JobVisitPlan } from './visit-schedule';
 import { logError } from '@/lib/logging';
 import { timeWriteFailure } from '@/lib/time-tracking/closed-periods';
 import { CUSTOMER_REFERENCE_REFUSALS, workWriteFailure } from './write-refusals';
@@ -133,40 +134,6 @@ async function replaceJobAssignmentsAfterAssessment(
   };
 }
 
-// Site/contact context for the job detail surfaces (office and assigned
-// field workers alike). Null when a read failed: a missing site or contact
-// would look like none.
-async function loadJobSiteAndContact(
-  admin: AdminClient,
-  orgId: string,
-  siteId: string | null,
-  contactId: string | null,
-): Promise<{ site: ClientSite | null; contact: ClientContact | null } | null> {
-  const [siteResult, contactResult] = await Promise.all([
-    siteId
-      ? admin.from('client_sites').select('*').eq('organization_id', orgId).eq('id', siteId).maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    contactId
-      ? admin
-          .from('client_contacts')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('id', contactId)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-  ]);
-  const error = siteResult.error ?? contactResult.error;
-  if (error) {
-    logReadFailure('loadJobSiteAndContact: site or contact failed', error);
-    return null;
-  }
-
-  return {
-    site: siteResult.data ? toClientSite(siteResult.data) : null,
-    contact: contactResult.data ? toClientContact(contactResult.data) : null,
-  };
-}
-
 // ============================================
 // Actions
 // ============================================
@@ -226,6 +193,8 @@ export async function updateJob(rawJobId: string, rawInput: UpdateJobInput): Pro
     }
 
     const admin = createSupabaseAdminClient();
+    const scheduleRefusal = await refuseScheduleOfSeveralVisits({ admin, orgId, jobId, changes: input });
+    if (scheduleRefusal) return scheduleRefusal;
     const prepared = await prepareJobUpdate({ admin, orgId, actorId: auth.context.userId, jobId, input });
     if (!prepared.success) return prepared;
     // tenant-scope: built-from-context — prepareJobUpdate sets p_organization_id from the orgId passed above, which authenticateAndAuthorize resolved.
@@ -478,23 +447,24 @@ async function readJobDetails(input: {
       }
     : null;
 
-  const siteAndContact = await loadJobSiteAndContact(admin, orgId, jobData.site_id, jobData.contact_id);
-  if (!siteAndContact) return { success: false, error: 'fetch_failed' };
-  const { site, contact } = siteAndContact;
+  const relations = await loadJobDetailRelations(admin, orgId, jobData);
+  if (!relations) return { success: false, error: 'fetch_failed' };
 
   const job: JobWithDetails = {
     ...toJob({ ...jobData, client_id: effectiveClientId }),
     assignments,
     client,
     project,
-    site,
-    contact,
+    ...relations,
   };
 
   return { success: true, job };
 }
 
-export async function getJobDetails(rawJobId: string): Promise<ActionResult<{ job: JobWithDetails }>> {
+/** The job form's reader: the job with its details and its scheduled visits. */
+export async function getJobDetails(
+  rawJobId: string,
+): Promise<ActionResult<{ job: JobWithDetails; visits: JobVisitPlan }>> {
   const parsedJobId = uuidSchema.safeParse(rawJobId);
   if (!parsedJobId.success) return { success: false, error: 'job_not_found' };
   const jobId = parsedJobId.data;
@@ -517,7 +487,12 @@ export async function getJobDetails(rawJobId: string): Promise<ActionResult<{ jo
       return { success: false, error: 'job_not_found' };
     }
 
-    return await readJobDetails({ admin, context: auth.context, jobData, operation: 'getJobDetails' });
+    const [details, visits] = await Promise.all([
+      readJobDetails({ admin, context: auth.context, jobData, operation: 'getJobDetails' }),
+      readJobVisitPlan(admin, orgId, jobId),
+    ]);
+    if (!details.success) return details;
+    return visits ? { ...details, visits } : { success: false, error: 'load_failed' };
   } catch (error) {
     logError('Unexpected error in getJobDetails:', error);
     return { success: false, error: 'unexpected_error' };

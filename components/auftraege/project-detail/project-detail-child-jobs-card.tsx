@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
 import { ListRow } from '@/components/ui/list-row';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { getJobDisplayTitle, type Job, type Project, JOB_PRIORITY_LABELS } from '@/lib/jobs/types';
 import { jobDetailHref } from '@/lib/jobs/routes';
@@ -20,6 +21,8 @@ type ProjectDetailChildJobsCardProps = {
   project: Pick<Project, 'id' | 'projectNumber'>;
   isAdminOrManager: boolean;
   onAssignJobs: () => void;
+  /** The member read failed: a new job cannot be created until it loads. */
+  membersFailed: boolean;
 };
 
 export function ProjectDetailChildJobsCard({
@@ -27,6 +30,7 @@ export function ProjectDetailChildJobsCard({
   project,
   isAdminOrManager,
   onAssignJobs,
+  membersFailed,
 }: ProjectDetailChildJobsCardProps) {
   return (
     <div className="rounded-lg border bg-card">
@@ -41,6 +45,12 @@ export function ProjectDetailChildJobsCard({
           </Button>
         )}
       </div>
+
+      {membersFailed && (
+        <RegionLoadError title="Die Mitarbeiterliste konnte nicht geladen werden" className="m-3">
+          Neue Aufträge kannst du anlegen, sobald sie wieder geladen ist.
+        </RegionLoadError>
+      )}
 
       {jobs.length === 0 ? (
         <EmptyState size="compact" className="p-4" title="Noch keine Aufträge in diesem Projekt." />

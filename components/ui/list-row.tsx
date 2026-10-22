@@ -1,6 +1,7 @@
 import { Slot } from '@radix-ui/react-slot';
 import * as React from 'react';
 
+import { FIELD_WORKER_ROW_LINK_CLASS } from '@/components/ui/field-worker-targets';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
 import { cn } from '@/lib/utils';
 
@@ -41,6 +42,7 @@ export function listRowClassName(
   return cn(
     variant === 'plain' ? LIST_ROW_PLAIN_CLASS : LIST_ROW_BASE_CLASS,
     interactive && LIST_ROW_INTERACTIVE_CLASS,
+    FIELD_WORKER_ROW_LINK_CLASS,
     className,
   );
 }

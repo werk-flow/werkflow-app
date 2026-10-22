@@ -6,7 +6,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "c347dd1973dbe86bc60bbee9a87558da74b6a34a9c3a82ecf70ce8d40bab7bff",
+        "measurementDigest": "f38feaa248341c8210a8676130b94e49b6b4b586d1e41ce2c01316a80a719d39",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -22,7 +22,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 94, "tolerance": 1 },
-        "componentRenders": { "reference": 22550, "tolerance": 451 }
+        "componentRenders": { "reference": 11247, "tolerance": 451 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -51,8 +51,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 27883, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 533448, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 28215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 540501, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 50, "tolerance": 1 }
         },
         "font": {
@@ -190,6 +190,38 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "c347dd1973dbe86bc60bbee9a87558da74b6a34a9c3a82ecf70ce8d40bab7bff",
+          "toDigest": "f38feaa248341c8210a8676130b94e49b6b4b586d1e41ce2c01316a80a719d39",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 22550, "tolerance": 451 },
+          "to": { "reference": 11247, "tolerance": 451 },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": null
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "document:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 27883, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 533448, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 50, "tolerance": 1 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 28215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 540501, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 50, "tolerance": 1 }
+          },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "The field worker's 44 px targets (components/ui/field-worker-targets.ts) add their class strings to every Button, tab and list row, so the server-rendered document carries those classes."
         }
       ]
     },
@@ -198,7 +230,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "56e6d9808b3fd8ce969d76e397f04bc721da4463d3eac57332ed117b3d55dac5",
+        "measurementDigest": "8efa557c3c87804c76f240ff5876e2a16ed6a499dd0838f3b0517aca750d6f01",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -332,6 +364,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "56e6d9808b3fd8ce969d76e397f04bc721da4463d3eac57332ed117b3d55dac5",
+          "toDigest": "8efa557c3c87804c76f240ff5876e2a16ed6a499dd0838f3b0517aca750d6f01",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -340,7 +378,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "5c92562aa0a1fd4ce4e373192a3c1282881d33a4afff5fd75aad9bdd77751526",
+        "measurementDigest": "1e5b28a1cb3bb38f0b574ee5fc2f4aed8950f91e89cd683c6a803a4872a04b06",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -402,6 +440,12 @@
             "componentRenders": { "reference": 799, "tolerance": 15 }
           },
           "payloads": {}
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "5c92562aa0a1fd4ce4e373192a3c1282881d33a4afff5fd75aad9bdd77751526",
+          "toDigest": "1e5b28a1cb3bb38f0b574ee5fc2f4aed8950f91e89cd683c6a803a4872a04b06",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -410,7 +454,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "d2f614aeca8d56fe1bb85d5194a91efa22a62477ed37685c35f3c5aba80964c8",
+        "measurementDigest": "983821fefceec86b359302cb9ca7f06c69bf4d378ac7dd768190c0e5dc4d7a97",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -486,6 +530,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "d2f614aeca8d56fe1bb85d5194a91efa22a62477ed37685c35f3c5aba80964c8",
+          "toDigest": "983821fefceec86b359302cb9ca7f06c69bf4d378ac7dd768190c0e5dc4d7a97",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -494,7 +544,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "7232aff153f1abf110bf36a737ce8c9480ddd5431691e4fa2912a9977fcbf8af",
+        "measurementDigest": "698ce2650bdb399b0401a87552205c5793f3d7c88f0c3ec892c845bfac4d67ab",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -504,12 +554,12 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 19, "tolerance": 1 },
+        "requests": { "reference": 3, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
-        "echoRenders": { "reference": 2, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 97, "tolerance": 1 }
+        "backendRequests": { "reference": 44, "tolerance": 1 }
       },
       "payloads": {
         "action:/auftraege": {
@@ -525,39 +575,15 @@
           "rows": null
         },
         "api:/api/time-tracking-state": {
-          "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 3954, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 821, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 1105, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 56, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 0, "tolerance": 0 }
-        },
-        "direct:/auth/v1/user": {
-          "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1536, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1169, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": { "reference": 1, "tolerance": 0 }
-        },
-        "direct:/rest/v1/organization_members": {
-          "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": { "reference": 1, "tolerance": 0 }
         },
         "prefetch:/auftraege/[jobNumber]": {
           "requests": { "reference": 3, "tolerance": 0 },
           "encodedBytes": { "reference": 8453, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": { "reference": 27672, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
-        "route:/auftraege": {
-          "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 28835, "tolerance": { "relative": 0.5173, "absolute": 512 } },
-          "decodedBytes": { "reference": 188000, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
-        "script": {
-          "requests": { "reference": 6, "tolerance": 0 },
-          "encodedBytes": { "reference": 105810, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": null,
           "rows": null
         }
       },
@@ -668,6 +694,106 @@
             "2026-10-21T221950616Z-4b520c"
           ],
           "reason": "Takes two values: 37488-37517 in these six runs, 33292-33598 in 2026-10-16T154711103Z-de8e59 and 2026-10-17T073731141Z-0799c3 and 37353-37594 in other runs of the same days; the two echo renders of the new row sometimes coalesce into one (the 2026-10-09 ungate of this step)."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "7232aff153f1abf110bf36a737ce8c9480ddd5431691e4fa2912a9977fcbf8af",
+          "toDigest": "698ce2650bdb399b0401a87552205c5793f3d7c88f0c3ec892c845bfac4d67ab",
+          "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 19, "tolerance": 1 },
+          "to": { "reference": 3, "tolerance": 1 },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "echoRenders",
+          "from": { "reference": 2, "tolerance": 0 },
+          "to": { "reference": 0, "tolerance": 0 },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 97, "tolerance": 1 },
+          "to": { "reference": 44, "tolerance": 1 },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": null
+        },
+        {
+          "kind": "shape-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 28835, "tolerance": { "relative": 0.5173, "absolute": 512 } },
+            "decodedBytes": { "reference": 188000, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": null,
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "The own save's Realtime echo no longer re-renders the list route (lib/realtime/own-writes.ts): the create action's response already rendered it."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 6, "tolerance": 0 },
+            "encodedBytes": { "reference": 105810, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": null,
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "The job rows warm a job detail only on a pointer movement (lib/ui/row-intent.ts); the rows that move under the resting pointer after the dialog closes no longer prefetch the detail's scripts inside the save."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "direct:/auth/v1/user",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1536, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 1169, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "to": null,
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "LAB-O3 settles the live shell before it opens the create dialog, so the Realtime join catch-up (the membership bridge's user and membership reads) no longer lands inside the step."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "direct:/rest/v1/organization_members",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "to": null,
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "LAB-O3 settles the live shell before it opens the create dialog, so the Realtime join catch-up (the membership bridge's user and membership reads) no longer lands inside the step."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "api:/api/time-tracking-state",
+          "from": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 3954, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 821, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 0, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1105, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 56, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 0, "tolerance": 0 }
+          },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": "The step now reads only the active jobs after the job insert (56 bytes); the clock-state reads of the Realtime join catch-up no longer land in the step because LAB-O3 settles the live shell before it opens the dialog."
         }
       ]
     },
@@ -676,7 +802,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "5f79d527bf5ea4c604e5a9b4e608c8ae48fbd15f7c0b4f8fdb92ac8cb277056d",
+        "measurementDigest": "e3af776cfed284780ca8e13383ca048120d5a60f6c4dfb23210682376f64ad15",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -692,7 +818,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 5379, "tolerance": 107 }
+        "componentRenders": { "reference": 2259, "tolerance": 107 }
       },
       "payloads": {},
       "source": {
@@ -738,6 +864,20 @@
             "componentRenders": { "reference": 5379, "tolerance": 107 }
           },
           "payloads": {}
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "5f79d527bf5ea4c604e5a9b4e608c8ae48fbd15f7c0b4f8fdb92ac8cb277056d",
+          "toDigest": "e3af776cfed284780ca8e13383ca048120d5a60f6c4dfb23210682376f64ad15",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 5379, "tolerance": 107 },
+          "to": { "reference": 2259, "tolerance": 107 },
+          "runKeys": ["2026-10-22T152820321Z-4c45dc"],
+          "reason": null
         }
       ]
     },
@@ -746,7 +886,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "8dfd9e6d8ca38020b167991ad7035fcf1b48bccae3b762164116ed9f050e5824",
+        "measurementDigest": "3bb90f1cd704248e04843cd5e8de6d8d991621acdc3f6f4f9bf6a0945681ab11",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -908,6 +1048,12 @@
             "2026-10-21T221950616Z-4b520c"
           ],
           "reason": "Follows the coalesced refreshes: 116 in these six runs, 84 in 2026-10-16T191852374Z-fcc231 together with 7 requests; the 2026-10-09 calibration left it ungated for the same reason."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "8dfd9e6d8ca38020b167991ad7035fcf1b48bccae3b762164116ed9f050e5824",
+          "toDigest": "3bb90f1cd704248e04843cd5e8de6d8d991621acdc3f6f4f9bf6a0945681ab11",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -916,7 +1062,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "1565ad50d1ad24e4d3d212ac9a897523106a1f3c902379055c06f4372388dc6e",
+        "measurementDigest": "1448873023a3b5d1380838709fe1dcb8fe2fd2a33aedd11f44a984f2c9eabdc9",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1028,6 +1174,12 @@
               "rows": { "reference": 5, "tolerance": 0 }
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "1565ad50d1ad24e4d3d212ac9a897523106a1f3c902379055c06f4372388dc6e",
+          "toDigest": "1448873023a3b5d1380838709fe1dcb8fe2fd2a33aedd11f44a984f2c9eabdc9",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -1036,7 +1188,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "308e23ec12b99abc494fee7a14f187e65db722fc8739fd361d61134381b9a0de",
+        "measurementDigest": "27443d306c7cae049224a539632deefa1006b7582c3eb3beee34ab53e82cbec7",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1170,6 +1322,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "308e23ec12b99abc494fee7a14f187e65db722fc8739fd361d61134381b9a0de",
+          "toDigest": "27443d306c7cae049224a539632deefa1006b7582c3eb3beee34ab53e82cbec7",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -1178,7 +1336,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "5b8ac564f17010dfdbdaec0ca86f31e30fb1998e51de0cd9a4daaadcde8c0089",
+        "measurementDigest": "57137c3be4ed0ab99db952d4569b63c9d949e0e203cd8dc6b5e92a3e3a2f3548",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1266,6 +1424,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "5b8ac564f17010dfdbdaec0ca86f31e30fb1998e51de0cd9a4daaadcde8c0089",
+          "toDigest": "57137c3be4ed0ab99db952d4569b63c9d949e0e203cd8dc6b5e92a3e3a2f3548",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -1274,7 +1438,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "2fbb4f1e817fa4ca4b15ef76c1ff2e93d72f4ece1e7720617d1da7954f793186",
+        "measurementDigest": "9995ef32e18f85f53ac5d955f5a6b7c7be267ad94b322756139cd55495216840",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1318,8 +1482,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 17910, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 126840, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 18117, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 128554, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 1, "tolerance": 0 }
         },
         "font": {
@@ -1468,6 +1632,30 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "2fbb4f1e817fa4ca4b15ef76c1ff2e93d72f4ece1e7720617d1da7954f793186",
+          "toDigest": "9995ef32e18f85f53ac5d955f5a6b7c7be267ad94b322756139cd55495216840",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "document:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 17910, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 126840, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 18117, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 128554, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "runKeys": ["2026-10-22T152820321Z-ddebd8"],
+          "reason": "The field worker's 44 px targets (components/ui/field-worker-targets.ts) add their class strings to every Button, tab and list row, so the server-rendered document carries those classes."
         }
       ]
     },
@@ -1476,7 +1664,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "835c02b82e983531e6c1ceeb1f4093212311ffa798dfef3974fd6c4f0057371d",
+        "measurementDigest": "7d123e394608940b1992f50174f876ac15dac20e72fa1b7ca951b94476b31fbe",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1564,6 +1752,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "835c02b82e983531e6c1ceeb1f4093212311ffa798dfef3974fd6c4f0057371d",
+          "toDigest": "7d123e394608940b1992f50174f876ac15dac20e72fa1b7ca951b94476b31fbe",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
         }
       ]
     },
@@ -1572,7 +1766,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "cf85df5725df9d68ea0406c86646b5906383388ecd7b398f3cb8a08c7437cffc",
+        "measurementDigest": "ec1730a45ac603d24b5f7e3d5106a2bf1c3708cb470a694e1a3b514b287f5c76",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1583,10 +1777,10 @@
       },
       "counts": {
         "routeRenders": { "reference": 1, "tolerance": 0 },
-        "echoRenders": { "reference": 1, "tolerance": 0 },
+        "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 1, "tolerance": 0 },
-        "backendRequests": { "reference": 116, "tolerance": 2 }
+        "backendRequests": { "reference": 68, "tolerance": 2 }
       },
       "payloads": {
         "action:/auftraege/[jobNumber]": {
@@ -1605,12 +1799,6 @@
           "requests": { "reference": 2, "tolerance": 0 },
           "encodedBytes": { "reference": 6217, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": { "reference": 17723, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
-        "route:/auftraege/[jobNumber]": {
-          "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 21626, "tolerance": { "relative": 0.9999, "absolute": 512 } },
-          "decodedBytes": { "reference": 74997, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -1696,6 +1884,41 @@
             "2026-10-21T221950616Z-cbbd60"
           ],
           "reason": "Takes two values: 5 in these six runs, 6 in field runs 2026-10-16T100324580Z-a96dd9, 2026-10-16T154711103Z-ab8c37 and 2026-10-17T113742515Z-1b0c4b; the work-lifecycle echo sometimes lands inside the step. The earlier reference held it with a tolerance of one from runs that showed both values."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "cf85df5725df9d68ea0406c86646b5906383388ecd7b398f3cb8a08c7437cffc",
+          "toDigest": "ec1730a45ac603d24b5f7e3d5106a2bf1c3708cb470a694e1a3b514b287f5c76",
+          "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "ratchet",
+          "target": "echoRenders",
+          "from": { "reference": 1, "tolerance": 0 },
+          "to": { "reference": 0, "tolerance": 0 },
+          "runKeys": ["2026-10-22T152820321Z-ddebd8"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 116, "tolerance": 2 },
+          "to": { "reference": 68, "tolerance": 2 },
+          "runKeys": ["2026-10-22T152820321Z-ddebd8"],
+          "reason": null
+        },
+        {
+          "kind": "shape-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 21626, "tolerance": { "relative": 0.9999, "absolute": 512 } },
+            "decodedBytes": { "reference": 74997, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": null,
+          "runKeys": ["2026-10-22T152820321Z-ddebd8"],
+          "reason": "The own save's Realtime echo no longer re-renders the route (lib/realtime/own-writes.ts): the toggle's response already rendered it, and job_instruction_items is now transaction-stamped."
         }
       ]
     },
@@ -1704,7 +1927,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "91f1fe032a1289d0d33a946bc6392879edb84c9c8d0ee76fe6e933d90d785694",
+        "measurementDigest": "4d4f65cd7bb8c92920fbebd9d0a1a65bc4e5a6cb6e0560c488295922df3e37cc",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1790,6 +2013,12 @@
               "rows": null
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "91f1fe032a1289d0d33a946bc6392879edb84c9c8d0ee76fe6e933d90d785694",
+          "toDigest": "4d4f65cd7bb8c92920fbebd9d0a1a65bc4e5a6cb6e0560c488295922df3e37cc",
+          "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
         }
       ]
     },
@@ -1798,7 +2027,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "210d2690647679f657ce1c43ae2718955d89b77e3c7cb723f4a3677ad8a8e64d",
+        "measurementDigest": "b6dfe842c9b0b6e634c3b2ac20edc674d0b01787e5f86287d6e8b2950c5cc0c6",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1880,6 +2109,12 @@
               "rows": { "reference": 0, "tolerance": 0 }
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "210d2690647679f657ce1c43ae2718955d89b77e3c7cb723f4a3677ad8a8e64d",
+          "toDigest": "b6dfe842c9b0b6e634c3b2ac20edc674d0b01787e5f86287d6e8b2950c5cc0c6",
+          "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
         }
       ]
     },
@@ -1888,7 +2123,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "e8743deb39f1cce253993ec6704c1124a6fff1932b73851afc98fe02482cf17c",
+        "measurementDigest": "6ed7ce7fc150206af8905f6df067549d55b0c4a769f27032570baaf23056ae57",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1950,6 +2185,12 @@
             "componentRenders": { "reference": 0, "tolerance": 0 }
           },
           "payloads": {}
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "e8743deb39f1cce253993ec6704c1124a6fff1932b73851afc98fe02482cf17c",
+          "toDigest": "6ed7ce7fc150206af8905f6df067549d55b0c4a769f27032570baaf23056ae57",
+          "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
         }
       ]
     },
@@ -1958,7 +2199,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "59d23c068e791f846b8f5d70cbde15493f1aed61ae4f6468439e6c9ff3963765",
+        "measurementDigest": "7d1be6659c7dd15e5332a1f85a9e255b60282ea10e8240bc296dc9f2df71b811",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -2046,6 +2287,12 @@
               "rows": { "reference": 0, "tolerance": 0 }
             }
           }
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "59d23c068e791f846b8f5d70cbde15493f1aed61ae4f6468439e6c9ff3963765",
+          "toDigest": "7d1be6659c7dd15e5332a1f85a9e255b60282ea10e8240bc296dc9f2df71b811",
+          "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
         }
       ]
     }

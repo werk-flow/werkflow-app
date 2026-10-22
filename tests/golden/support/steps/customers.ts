@@ -128,9 +128,10 @@ export function customerDialogField(dialog: Locator, field: keyof typeof CUSTOME
   return dialog.locator(`#${CUSTOMER_DIALOG_FIELD_IDS[field]}`);
 }
 
-/** The role suggestions the contact dialog offers its role field. */
-export function contactRoleSuggestions(dialog: Locator): Locator {
-  return dialog.locator('#contact-role-suggestions option');
+/** Opens the role suggestions beside the contact dialog's role field and returns their menu items. */
+export async function openContactRoleSuggestions(dialog: Locator): Promise<Locator> {
+  await dialog.getByRole('button', { name: 'Vorschläge' }).click();
+  return dialog.page().getByRole('menu').getByRole('menuitem');
 }
 
 export function customerCreateSubmit(scope: Page | Locator): Locator {

@@ -1,5 +1,6 @@
 'use client';
 
+import { rowIntentPrefetch } from '@/lib/ui/row-intent';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -239,8 +240,7 @@ function MemberTableRow({
     <TableRow
       interactive
       onClick={() => router.push(`/mitarbeiter/${member.user_id}`)}
-      onMouseEnter={() => router.prefetch(`/mitarbeiter/${member.user_id}`)}
-      onFocus={() => router.prefetch(`/mitarbeiter/${member.user_id}`)}
+      {...rowIntentPrefetch(() => router.prefetch(`/mitarbeiter/${member.user_id}`))}
     >
       <TableCell className="font-medium">
         <div className="space-y-1">

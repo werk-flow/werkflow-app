@@ -14,9 +14,9 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { CONTACT_ROLE_SUGGESTIONS } from '@/lib/clients/types';
 
 import type { ContactDialogState } from './client-relation-drafts';
+import { ContactRoleField } from './contact-role-field';
 
 interface ClientContactDialogProps {
   /** Null while the dialog is closed; the parent keeps the draft. */
@@ -64,24 +64,12 @@ export function ClientContactDialog({
                 placeholder="z. B. Sabine Krause"
               />
             </Field>
-            <Field label="Rolle" htmlFor="contact-role">
-              <Input
-                value={contactDialog.draft.role ?? ''}
-                onChange={(e) =>
-                  onContactDialogChange({
-                    ...contactDialog,
-                    draft: { ...contactDialog.draft, role: e.target.value },
-                  })
-                }
-                list="contact-role-suggestions"
-                placeholder="z. B. Hausverwaltung"
-              />
-              <datalist id="contact-role-suggestions">
-                {CONTACT_ROLE_SUGGESTIONS.map((role) => (
-                  <option key={role} value={role} />
-                ))}
-              </datalist>
-            </Field>
+            <ContactRoleField
+              role={contactDialog.draft.role ?? ''}
+              onRoleChange={(role) =>
+                onContactDialogChange({ ...contactDialog, draft: { ...contactDialog.draft, role } })
+              }
+            />
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Telefon" htmlFor="contact-phone">
                 <Input

@@ -1,6 +1,6 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-22
 
 This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability.
 
@@ -76,6 +76,7 @@ A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.
 - A live surface consumes Realtime through `useLiveView` or `useRealtimeRouterRefresh`, never a channel, an auth listener or a focus listener of its own. [lint `realtimeSelectors`, lint `channelSelector`, lint `authListenerSelector`, lint `visibilitySelector`, lint `focusSelector`, lint `importRestrictions`]
 - A failed refresh keeps the data, marks it stale and makes its dependent actions inert until a retry succeeds. [code `components/shared/stale-region.tsx`, test `lib/conventions/live-view-stale.test.ts`]
 - A new published table is registered in the migration and in `REALTIME_TABLES`, with its deletion trigger. [script `realtime:check`, group `sql:security`]
+- The echo of the tab's own save starts no route refresh, and only a transaction-stamped table's event can count as one. [code `lib/realtime/own-writes.ts`, test `lib/realtime/own-writes.test.ts`, script `realtime:check`, test `lib/realtime/publication-contract.test.ts`]
 - A reader that needs a whole collection reads it in ordered pages through `readAllRows` or `readCompleteRows` and reports an overflow as a failure. Any other read of an organization-sized table has a page boundary or a reviewed parent bound. [code `lib/supabase/query-batches.ts`, test `lib/conventions/unpaged-reads.test.ts`, group `sql:list-pagination`]
 - An organization-sized id list goes through `readInBatches`. [test `lib/conventions/id-list-batches.test.ts`]
 - An id list written into a PostgREST filter string (`.not`, `.filter`, `.or`) is a literal or a reviewed bounded site. [test `lib/conventions/id-list-string-filters.test.ts`]
@@ -94,7 +95,7 @@ A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.
 
 - Wait for the network before you acknowledge an action, or write pending state by hand. A client write outside an owner hook or an optimistic change fails a convention test, and so does a hand-raised pending flag outside `HAND_PENDING_STATE`. [code `hooks/use-server-action.ts`, code `hooks/use-optimistic-list.ts`, test `lib/conventions/server-action-feedback.test.ts`, group `ui:contracts`]
 - Bind pending state to a router transition: no `useTransition` and no async `startTransition` callback in product code. Recorded exceptions: `RefreshButton`, and the document library's navigation, whose pending flag gates its controls until the new route props commit. [lint `transitionSelectors`, lint `asyncTransitionSelectors`]
-- Poll. The one interval in product code is the wall-clock tick in `hooks/use-wall-clock-tick.ts`, and no inline disable lifts the rule. [lint `realtime/no-interval`, lint `@eslint-community/eslint-comments/no-restricted-disable`]
+- Poll. The one interval in product code is the wall-clock tick in `hooks/use-wall-clock-tick.ts`, which ticks on the boundary of its period, and no inline disable lifts the rule. [lint `realtime/no-interval`, lint `@eslint-community/eslint-comments/no-restricted-disable`]
 - Show a toast. Feedback goes through `Banner` and the inline states. [lint `sonnerImportPath`]
 - Truncate a list silently, or turn an overflow or a failed related read into an empty list. [code `lib/supabase/query-batches.ts`, test `lib/conventions/read-error-visibility.test.ts`, judgment]
 - Pass an organization-sized list to `.in()`. [test `lib/conventions/id-list-batches.test.ts`]
@@ -125,15 +126,15 @@ Use `unstable_cache()` with tags, or the `'use cache'` directive with `cacheTag(
 - A failed read throws. It never caches an empty or default result.
 - The surface does not need the live value. Calendar windows, list pages and attention derivations read per request after authorization.
 
-The caller establishes identity and current permission before it uses the data. A cache hit is never an authorization proof. `CACHE_TAGS` in `lib/data/cached.ts` is the one list of tag names. A call on a tag without a reader invalidates nothing and re-renders the route inside the action response. `updateTag()` works only inside a Server Action. A route handler calls `revalidateTag(tag, 'max')`.
+A cache hit is never an authorization proof: the caller establishes identity and permission first. `CACHE_TAGS` in `lib/data/cached.ts` is the one list of tag names. A route handler calls `revalidateTag(tag, 'max')`, because `updateTag()` works only inside a Server Action.
 
 ### Permission facts
 
-`loadMembershipCandidates` shares membership facts only within one GET request or one React render. Every later request reloads membership, role, lifecycle and access blockers. Responsibility facts follow the same rule: every approval action reloads the stored configuration and uses the current server timestamp and the Berlin business date. A stale render around midnight can affect display freshness. It can never extend an expired substitute's authority.
+`loadMembershipCandidates` shares membership facts only within one GET request or one React render; every later request reloads them. Every approval action reloads the responsibility configuration with the current server time and Berlin business date, so a stale render around midnight never extends an expired substitute's authority.
 
 ### Backend request capacity
 
-One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. Page rendering, Server Actions and calendar window reads run at foreground priority. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`. The fetch timeout includes time in the queue.
+One scheduler per server process (`lib/supabase/request-scheduler.ts`) caps concurrent Supabase fetches and reserves part of that capacity for foreground work. A GET handler that serves optional shell or section data passes `{ priority: 'background' }` to `withReadRequest`.
 
 ## Complete reads and id lists
 
@@ -168,7 +169,7 @@ Supabase applies RLS to INSERT and UPDATE events but not to raw DELETE events. T
 
 ### Domain invalidation ownership
 
-Each feature chooses the mutable rows that signal a new authoritative read. Most immutable revisions, links and event ledgers stay unpublished, and their mutations touch an owning root. A published row must not become a second cache, task list or copied domain model. The [conceptual data model](data-model.md) explains root and history ownership. A provider mounted on every page filters events to the rows it shows.
+Each feature publishes the mutable rows that signal a new authoritative read; immutable revisions, links and ledgers stay unpublished and touch an owning root ([data model](data-model.md)). A published row never becomes a second cache or copied domain model. A provider mounted on every page filters events to the rows it shows.
 
 ## Refresh patterns
 
@@ -178,7 +179,7 @@ The recorded exception to the raw-event ban is the project-detail delete-exit wa
 
 ### Reads outside the Server Action queue
 
-One browser client's Server Actions and router refreshes run one after another, so a read that starts on mount, on channel join or beside a save goes through a GET handler:
+A client runs its Server Actions and router refreshes one after another, so a read on mount, on join or beside a save uses a GET handler:
 
 - `lib/data/background-reads.ts` is the closed registry of readers a page may run in the background. Each kind pairs an input schema with a reader that keeps its own membership and subject checks. Adding a kind adds a public read endpoint. Follow [security](security.md#read-request-authorization-reuse) first.
 - Every such GET authenticates the session, requires the requested organization to equal the active organization, and returns a private, non-cacheable response.
@@ -197,7 +198,7 @@ A surface that reads a window of data owns that window through one typed range s
 - Readiness is derived per needed window and never stored. An uncovered window keeps the grid mounted and inert while data for another window exists, and shows the skeleton only when a required dataset has no data yet. A failed read shows `SectionError` with retry. Old data never counts as coverage of dates it was not read for.
 - All datasets of one window commit together under one generation. One failed read fails the window.
 
-The user's own calendar mutations show pending feedback before the write resolves, and Confirmation and Undo appear only after persistence. A mutation holds the shared mutation owner until it settles, including rollback, failed Undo and transport failure. Range navigation, manual refresh and Realtime queue behind it. Repeated moves of one entry persist in gesture order. When an earlier write fails, the owner discards the dependent queued gestures and restores the last confirmed position with visible feedback. This ordering covers job moves and their Undo. Resizing recorded time and parking have separate mutation paths that still need their own overlap assessment.
+The user's own calendar mutations show pending feedback before the write resolves, and Confirmation and Undo appear only after persistence. A mutation holds the shared mutation owner until it settles, including rollback, failed Undo and transport failure. Range navigation, manual refresh and Realtime queue behind it. Repeated moves of one entry persist in gesture order; when an earlier write fails, the owner discards the dependent gestures and restores the last confirmed position visibly. Resizing recorded time and parking have separate mutation paths that still need their own overlap assessment.
 
 ## Client freshness contract
 
@@ -208,7 +209,8 @@ The contract is the behavior of the two live-view hooks. A surface does not re-i
 3. **Server props are mount-time data for live components.** `initialData` seeds the first paint. After mount, the reader is authoritative. Key a live component by entity id, or pass `resetKey` where a remount is not an option.
 4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with `view.refresh()`. In the reverse order a stale server payload overwrites the fresh read.
 5. **Refetches use generation guards and keep the last known data.** An older success never commits over a newer one. A failed read keeps the data and sets `isStale`. Render dependent actions non-interactive while the view is stale.
-6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh.
+6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh. A held catch-up sets `<html data-live-read-held>`.
+7. **The own save's echo renders nothing**, because its response rendered the route. A save records its result with `ownWrites.recorded` (`useServerAction` does it), and the route refresh skips an event of a row the save named whose `updated_at` is a stamp it returned. `TRANSACTION_STAMPED_TABLES` lists the stamping tables (`realtime:check`).
 
 An `eventFilter` that inspects payload columns treats a missing column as relevant, because a deletion notification carries only `id` and `organization_id`. Synthetic catch-up events bypass every filter.
 

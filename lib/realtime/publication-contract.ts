@@ -3,6 +3,7 @@ import {
   REALTIME_DELETION_TABLE,
   REALTIME_PUBLISHED_TABLES,
   REALTIME_TABLES,
+  TRANSACTION_STAMPED_TABLES,
 } from './tables';
 
 export type PublishedTableState = {
@@ -12,6 +13,8 @@ export type PublishedTableState = {
   replident_index: string;
   replident_index_columns: string;
   deletion_trigger_valid: boolean;
+  /** updated_at defaults to now() and an enabled BEFORE UPDATE row trigger sets it to now(). */
+  transaction_stamp_valid: boolean;
 };
 export type PublicationFlags = {
   pubinsert: boolean;
@@ -27,6 +30,7 @@ export function validateRealtimePublication(
   const problems: string[] = [];
   const expected = new Set<string>(REALTIME_PUBLISHED_TABLES);
   const defaultIdentity = new Set<string>(DEFAULT_IDENTITY_REALTIME_TABLES);
+  const stamped = new Set<string>(TRANSACTION_STAMPED_TABLES);
   for (const name of expected) {
     if (!tables.some((table) => table.schemaname === 'public' && table.tablename === name))
       problems.push(`${name}: missing from public Realtime publication.`);
@@ -44,6 +48,11 @@ export function validateRealtimePublication(
         `${table.tablename}: missing enabled AFTER DELETE row trigger for app_private.emit_realtime_deletion().`,
       );
     }
+    if (stamped.has(table.tablename) && !table.transaction_stamp_valid) {
+      problems.push(
+        `${table.tablename}: listed in TRANSACTION_STAMPED_TABLES without updated_at default now() and a BEFORE UPDATE trigger that sets it to now().`,
+      );
+    }
     if (table.tablename === REALTIME_DELETION_TABLE && table.deletion_trigger_valid) {
       problems.push(`${table.tablename}: deletion transport must not emit its own deletion notifications.`);
     }
@@ -55,6 +64,14 @@ export function validateRealtimePublication(
         'Realtime must publish INSERT and UPDATE only; raw DELETE/TRUNCATE bypass tenant authorization.',
       );
     }
+  }
+  for (const [name, list] of [
+    ['REALTIME_TABLES', REALTIME_TABLES],
+    ['TRANSACTION_STAMPED_TABLES', TRANSACTION_STAMPED_TABLES],
+  ] as const) {
+    const twice = list.filter((table, index) => list.indexOf(table) !== index);
+    if (twice.length)
+      problems.push(`${name} lists ${twice.join(', ')} twice; every subscriber would bind it twice.`);
   }
   // Keep the domain registry separate from the transport-only table.
   if (REALTIME_TABLES.some((table) => String(table) === REALTIME_DELETION_TABLE))

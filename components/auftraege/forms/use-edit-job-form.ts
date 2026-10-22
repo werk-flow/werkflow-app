@@ -49,7 +49,7 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
   const initializedJobIdRef = useRef<string | null>(null);
   const wasOpenRef = useRef(false);
 
-  // The current crew is read each time the dialog opens and adopted during render.
+  // The current crew and the visits are read each time the dialog opens; the crew is adopted during render.
   const assignments = useClientRead({
     read: (signal) => readInBackground('job-details', { jobId: job.id }, signal),
     deps: [job.id],
@@ -61,7 +61,6 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
     setAdoptedAssignments(assignments.data);
     if (assignments.data) setSelectedEmployees(assignments.data.job.assignments.map((a) => a.userId));
   }
-  const isLoadingAssignments = assignments.loading;
 
   useEffect(() => {
     if (!open) {
@@ -100,7 +99,7 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
   const formDisabled = isLoading;
   // Submitting before the current assignments finished loading (or after the
   // load failed) would save an empty assignment list and wipe the job's crew.
-  const submitDisabled = formDisabled || isLoadingAssignments || assignments.failure !== null;
+  const submitDisabled = formDisabled || assignments.loading || assignments.failure !== null;
 
   const clientProjectLink = useEditJobClientProjectLink({
     knownProject,
@@ -171,7 +170,9 @@ export function useEditJobForm({ job, open, knownProject }: EditJobFormInput) {
     handleSelectedEmployeesChange,
     assignmentTeamSourceId,
     setAssignmentTeamSourceId,
-    isLoadingAssignments,
+    isLoadingAssignments: assignments.loading,
+    // Null while the read runs or after it failed; the submit waits for it either way.
+    visitPlan: assignments.data?.visits ?? null,
     assignmentsFailure: assignments.failure,
     isLoading,
     runSubmit,

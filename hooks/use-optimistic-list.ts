@@ -79,8 +79,12 @@ export function useOptimisticList<Item>({
 } {
   const [overlay, setOverlay] = useState<ReadonlyMap<string, OptimisticOverlayEntry<Item>>>(() => new Map());
   const getIdRef = useRef(getId);
+  // The updaters read the list of the latest commit, so their identity stays
+  // stable across server lists and memoized rows keep their callbacks.
+  const serverItemsRef = useRef(serverItems);
   useEffect(() => {
     getIdRef.current = getId;
+    serverItemsRef.current = serverItems;
   });
 
   useOverlayExpiry(setOverlay, serverItems, getId);
@@ -118,40 +122,34 @@ export function useOptimisticList<Item>({
     setOverlay((current) => new Map(current).set(tempId, { kind: 'insert', item: draft, tempId }));
   }, []);
 
-  const update = useCallback(
-    (id: string, next: Item) => {
-      setOverlay((current) => {
-        const existing = current.get(id);
-        const previous =
-          existing?.kind === 'update' || existing?.kind === 'remove'
-            ? existing.previous
-            : serverItems.find((item) => getIdRef.current(item) === id);
-        if (previous === undefined) return current;
-        return new Map(current).set(id, { kind: 'update', item: next, previous });
-      });
-    },
-    [serverItems],
-  );
+  const update = useCallback((id: string, next: Item) => {
+    setOverlay((current) => {
+      const existing = current.get(id);
+      const previous =
+        existing?.kind === 'update' || existing?.kind === 'remove'
+          ? existing.previous
+          : serverItemsRef.current.find((item) => getIdRef.current(item) === id);
+      if (previous === undefined) return current;
+      return new Map(current).set(id, { kind: 'update', item: next, previous });
+    });
+  }, []);
 
-  const remove = useCallback(
-    (id: string) => {
-      setOverlay((current) => {
-        const existing = current.get(id);
-        if (existing?.kind === 'insert') {
-          const next = new Map(current);
-          next.delete(id);
-          return next;
-        }
-        const previous =
-          existing?.kind === 'update'
-            ? existing.previous
-            : serverItems.find((item) => getIdRef.current(item) === id);
-        if (previous === undefined) return current;
-        return new Map(current).set(id, { kind: 'remove', previous });
-      });
-    },
-    [serverItems],
-  );
+  const remove = useCallback((id: string) => {
+    setOverlay((current) => {
+      const existing = current.get(id);
+      if (existing?.kind === 'insert') {
+        const next = new Map(current);
+        next.delete(id);
+        return next;
+      }
+      const previous =
+        existing?.kind === 'update'
+          ? existing.previous
+          : serverItemsRef.current.find((item) => getIdRef.current(item) === id);
+      if (previous === undefined) return current;
+      return new Map(current).set(id, { kind: 'remove', previous });
+    });
+  }, []);
 
   const commit = useCallback((tempId: string, confirmed: Item) => {
     setOverlay((current) => {

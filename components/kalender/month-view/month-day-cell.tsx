@@ -6,10 +6,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { MonthCellItem } from '@/lib/calendar/month-cell-items';
-import { MONTH_MAX_VISIBLE_ITEMS, type MonthCell } from '@/lib/calendar/month-layout';
+import { MONTH_MAX_VISIBLE_ITEMS } from '@/lib/calendar/month-layout';
+import type { MonthGridCell } from './use-month-keyboard';
 
 type MonthDayCellProps = {
-  cell: MonthCell;
+  cell: MonthGridCell;
   /** The cell's position in its week, Monday first. */
   index: number;
   /** Holiday or closure label of the day. */
@@ -41,15 +42,15 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         data-in-month={cell.inMonth ? 'true' : 'false'}
         aria-label={`${formatRefusalDate(cell.date)}${label ? `, ${label}` : ''}${items.length ? `, ${items.length} ${items.length === 1 ? 'Eintrag' : 'Einträge'}` : ''}`}
         className={cn(
-          'min-w-0 border-r border-calendar-grid',
+          'min-w-0 border-r border-calendar-grid outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
           (cell.isWeekend || label) && 'bg-calendar-cell-off',
           cell.isToday && 'bg-calendar-today',
-          cell.isPast && 'opacity-80',
+          cell.isPast && 'opacity-80 focus-visible:opacity-100',
         )}
         style={{ gridColumn: index + 1, gridRow: '1 / -1' }}
-        // Focusable for assistive tech, but no tab stop: the keyboard opens
-        // the day through the day number button above the cell.
-        tabIndex={-1}
+        // The grid's keyboard path: one day is the tab stop, arrow keys move
+        // between days and Enter opens the day (use-month-keyboard.ts).
+        tabIndex={cell.tabStop ? 0 : -1}
         onDoubleClick={() => onOpenDay(cellDate)}
       />
       {/* A row of the grid holds cells only: the date header and the items are cells of the day too. */}
@@ -62,7 +63,8 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         style={{ gridColumn: index + 1, gridRow: 1 }}
       >
         <PlainButton
-          type="button"
+          // A pointer target only: the keyboard opens the day from its cell, one tab stop for the grid.
+          tabIndex={-1}
           data-month-day-number={cell.date}
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full text-sm tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',

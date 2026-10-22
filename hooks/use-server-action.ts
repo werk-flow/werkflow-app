@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ownWrites } from '@/lib/realtime/own-writes';
 
 /**
  * Shared pending gate for a surface with several server-action flows: `run`
@@ -85,7 +86,7 @@ export function useServerAction<Args extends readonly unknown[], Result>(
     setPendingCount((count) => count + 1);
     let result: Result;
     try {
-      result = await actionRef.current(...args);
+      result = ownWrites.recorded(await actionRef.current(...args));
     } finally {
       if (mountedRef.current) {
         setPendingCount((count) => count - 1);

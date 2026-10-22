@@ -3,19 +3,26 @@
 import { PlainButton } from '@/components/ui/plain-button';
 import { memo, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { boardDayKey, type CalendarBoardDay } from '@/lib/calendar/board';
+import {
+  boardDayKey,
+  dispatchStateFor,
+  isStartedOccurrence,
+  type CalendarBoardDay,
+} from '@/lib/calendar/board';
 import { packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
 import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
+import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import { getRoleLabel } from '@/lib/roles';
+import { memoPropsEqual } from '@/lib/ui/memo-equality';
 import { BarSegment } from '../surface/bar-segment';
 import { CALENDAR_LAYER_CLASS } from '../surface/layers';
 import type { DragSession } from '../drag-engine/drag-engine';
 import { BoardCell } from './board-cell';
-import { BoardRowCard } from './board-row-card';
+import { BoardRowCard, boardLaneStyle } from './board-row-card';
 import {
   BOARD_COLUMN_MIN_PX,
   BOARD_LANE_HEIGHT,
@@ -163,11 +170,10 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
           />
         );
       })}
-      {lanes.map(({ item, lane, column, span }) => {
-        const style = { gridColumn: `${column + 2} / span ${span}`, gridRow: lane + 1 } as const;
+      {lanes.map(({ item, ...placement }) => {
         if (item.kind === 'absence') {
           return (
-            <div key={item.key} className="min-w-0 p-0.5" style={style}>
+            <div key={item.key} className="min-w-0 p-0.5" style={boardLaneStyle(placement)}>
               <BarSegment
                 tone={item.pending ? 'absence-pending' : 'absence'}
                 edge="single"
@@ -183,19 +189,19 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
             key={item.key}
             job={item.job}
             startDate={item.startDate}
-            style={style}
+            {...placement}
             row={row}
-            dispatch={dispatch}
-            materialDemandJobIds={materialDemandJobIds}
+            dispatchState={dispatchStateFor(dispatch, item.job.occurrenceId, row?.employeeRecordId ?? null)}
+            materialDemand={materialDemandJobIds.has(item.job.jobId ?? '')}
             compact={compact}
-            nowMs={nowMs}
+            locked={isStartedOccurrence(item.job, nowMs)}
             actions={actions}
             startDrag={startDrag}
-            hoveredOccurrenceId={hoveredOccurrenceId}
+            hovered={hoveredOccurrenceId !== null && hoveredOccurrenceId === item.job.occurrenceId}
             onHoverLink={onHoverLink}
           />
         );
       })}
     </div>
   );
-});
+}, memoPropsEqual<BoardRowProps>(BOARD_ROW_CONTENT_CHECKS));

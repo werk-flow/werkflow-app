@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import {
   buildCodeRabbitReviewArguments,
@@ -7,6 +8,8 @@ import {
   CODERABBIT_WSL_BINARY,
   CODERABBIT_WSL_DISTRIBUTION,
   isStoredReviewCommand,
+  untrackedScopeProblem,
+  wslGitEnvironment,
 } from '../lib/testing/publication/coderabbit-review-command';
 import { writeJsonAtomically } from '../lib/testing/runner/file-lock';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
@@ -118,7 +121,51 @@ try {
 } catch (error) {
   fail(error instanceof Error ? error.message : 'Invalid review arguments.');
 }
-const command = buildWindowsCodeRabbitCommand({ workingDirectory: process.cwd(), reviewArguments });
+/** The global ignore file git reads on Windows: core.excludesFile, else the XDG default, when it exists. */
+function windowsExcludesFile(): string | null {
+  let configured = '';
+  try {
+    configured = execFileSync('git', ['config', '--path', 'core.excludesFile'], {
+      cwd: repository,
+      encoding: 'utf8',
+    }).trim();
+  } catch {
+    // git config exits 1 when the key is unset; the XDG default applies then.
+  }
+  const home = process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config');
+  const candidate = configured || resolve(home, 'git', 'ignore');
+  return existsSync(candidate) ? resolve(candidate) : null;
+}
+
+/** The untracked files git in WSL lists with the same ignore sources, as CodeRabbit collects them. */
+function wslUntrackedFiles(excludesFile: string | null): string[] {
+  return execFileSync(
+    'wsl.exe',
+    [
+      '--distribution',
+      CODERABBIT_WSL_DISTRIBUTION,
+      '--cd',
+      repository,
+      '--exec',
+      ...wslGitEnvironment(excludesFile),
+      'git',
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '-z',
+    ],
+    { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
+  )
+    .split('\0')
+    .filter(Boolean);
+}
+
+const excludesFile = windowsExcludesFile();
+const command = buildWindowsCodeRabbitCommand({
+  workingDirectory: process.cwd(),
+  reviewArguments,
+  windowsExcludesFile: excludesFile,
+});
 
 // Replaying stored findings reviews nothing and certifies nothing.
 if (isStoredReviewCommand(rawArguments)) process.exit(runCommand(command));
@@ -133,6 +180,13 @@ const reviewUnderLock = withWorkspaceTestLock(
     const head = git('rev-parse', 'HEAD')[0]?.trim();
     if (!head) throw new Error('git rev-parse HEAD returned nothing.');
     const scope = reviewScope(reviewArguments);
+    if (!scope.committedOnly) {
+      const problem = untrackedScopeProblem(
+        git('ls-files', '--others', '--exclude-standard', '-z'),
+        wslUntrackedFiles(excludesFile),
+      );
+      if (problem) throw new Error(problem);
+    }
     const before = scopeDigests(scope);
     const reviewExitCode = runCommand(command);
     if (reviewExitCode !== 0) return reviewExitCode;

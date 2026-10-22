@@ -6,7 +6,10 @@ import { expect, test, type Browser, type CDPSession, type Locator, type Page } 
 import { LAB_ARCHIVE, LAB_MEASUREMENT_VERSION, labObservationSchema } from '../../../lib/testing/lab-record';
 import { labMeasurementDigest, labWorkloadDigest } from '../../../lib/testing/lab-count-context';
 import { getLabStep, type LabMetric, type LabRole, type LabStep } from '../../../lib/testing/lab-steps';
-import { REALTIME_REFRESH_COUNT_ATTRIBUTE } from '../../../lib/ui/route-refresh-signal';
+import {
+  LIVE_READ_HELD_ATTRIBUTE,
+  REALTIME_REFRESH_COUNT_ATTRIBUTE,
+} from '../../../lib/ui/route-refresh-signal';
 import { requireEnv } from '../../golden/support/env';
 import { currentRunKey, readRunManifest, runDirectory } from '../../golden/support/run-state';
 import { settled } from '../../golden/support/steps/interaction';
@@ -227,9 +230,13 @@ export async function recordLabStep(
   )
     throw new Error(`${stepId} is registered for another role, viewport or CPU profile than this session.`);
   const { page, network, cdp, backend } = session;
+  const heldLiveRead = async (): Promise<boolean> =>
+    (await page.locator('html').getAttribute(LIVE_READ_HELD_ATTRIBUTE)) !== null;
+  let heldAtStart = false;
   if (page.url() !== 'about:blank') {
     await settleLiveShell(page);
     await untilQuiet(session);
+    heldAtStart = await heldLiveRead();
   }
   const startMark = await backend.mark(`${stepId}-start-${Date.now()}`);
   const engineBefore = await engineCounts(cdp);
@@ -247,6 +254,12 @@ export async function recordLabStep(
   const wallClockMs = Date.now() - started;
   await untilQuiet(session);
   page.off('domcontentloaded', onDocument);
+  // A dialog opened before the live shell settled holds the views' catch-up;
+  // a step that closes the dialog would count that released read as its own.
+  if (heldAtStart && !documents && !(await heldLiveRead()))
+    throw new Error(
+      `${stepId} released a live read that a dialog held since before the step: settle the page (settleLiveShell) before you open the dialog.`,
+    );
   const engineAfter = await engineCounts(cdp);
   const probe: LabProbeCounts | null = await page.evaluate(() => window.__werkflowLab?.read() ?? null);
   if (!probe) throw new Error('The lab probe is not installed on this document.');

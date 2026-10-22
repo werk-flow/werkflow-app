@@ -33,9 +33,9 @@ Pflichtfeld
 Gültig ab
 *
 Pflichtfeld
-17
+01
 .
-10
+01
 .
 2026
 Standardversion bestätigen
@@ -54,30 +54,30 @@ Eröffnungsdatum
 Grund
 Aktion
 Jonas Becker
-17
+01
 .
-10
+01
 .
 2026
 Konto eröffnen
 Kevin Schmid
-17
+01
 .
-10
+01
 .
 2026
 Konto eröffnen
 Martin Krämer
-17
+01
 .
-10
+01
 .
 2026
 Konto eröffnen
 Sabine Vogel
-17
+01
 .
-10
+01
 .
 2026
 Konto eröffnen

@@ -2,6 +2,7 @@
 
 import { useCallback, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { TextLink } from '@/components/ui/text-link';
 import type { MetadataField } from '@/components/shared/metadata-section';
 import { updateJob } from '@/lib/jobs/actions';
 import { formatSiteAddress } from '@/lib/clients/types';
@@ -16,6 +17,7 @@ import {
   JOB_PRIORITY_LABELS,
   normalizeJobPlannedTime,
 } from '@/lib/jobs/types';
+import { jobFormEditsSchedule } from '@/lib/jobs/visit-schedule';
 import { useQualificationWarningConfirmation } from '../shared/qualification-warning-dialog';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
 import { PRIORITY_CLASSES, formatDurationOrDash, formatPlannedTime } from './job-detail-format';
@@ -25,6 +27,8 @@ type JobDetailFieldContext = {
   liveJob: JobWithDetails;
   displayTitle: string;
   isAdminOrManager: boolean;
+  /** False on a job with several visits: its schedule is planned on the Plantafel. */
+  scheduleEditable: boolean;
   applyLiveJobPatch: (updatedJob: Partial<JobWithDetails>) => void;
   updateJobWithQualificationApproval: (
     input: Parameters<typeof updateJob>[1],
@@ -112,18 +116,61 @@ function buildJobDetailIdentityFields({
   ];
 }
 
+/** What removing a job's planned date keeps, in the confirmation before the save. */
+function RemoveDateDescription({
+  jobNumber,
+  displayTitle,
+}: {
+  jobNumber: string | null;
+  displayTitle: string;
+}): React.JSX.Element {
+  return (
+    <div className="space-y-2">
+      <p>
+        Wenn du das geplante Datum von{' '}
+        <span className="font-medium text-foreground">
+          {jobNumber ? `${jobNumber} – ` : ''}
+          {displayTitle}
+        </span>{' '}
+        entfernst, bleibt der Arbeitsstand unverändert.
+      </p>
+      <p className="font-medium text-muted-foreground">
+        Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben ebenfalls unverändert.
+      </p>
+    </div>
+  );
+}
+
+/** The date of a job with several visits: they are planned on the Plantafel, not in the job's fields. */
+function SeveralVisitsDate({ plannedDate }: { plannedDate: string | null }): React.JSX.Element {
+  return (
+    <span>
+      Mehrere Termine ·{' '}
+      <TextLink href={plannedDate ? `/kalender?date=${plannedDate}` : '/kalender'}>
+        In der Plantafel planen
+      </TextLink>
+    </span>
+  );
+}
+
 function buildJobDetailPlanningFields({
   liveJob,
   displayTitle,
   isAdminOrManager,
+  scheduleEditable,
   applyLiveJobPatch,
   updateJobWithQualificationApproval,
 }: JobDetailFieldContext): MetadataField[] {
+  const editsSchedule = isAdminOrManager && scheduleEditable;
   return [
     {
       label: 'Geplantes Datum',
-      value: formatGermanDate(liveJob.plannedDate, { empty: '—' }),
-      editableConfig: isAdminOrManager
+      value: scheduleEditable ? (
+        formatGermanDate(liveJob.plannedDate, { empty: '—' })
+      ) : (
+        <SeveralVisitsDate plannedDate={liveJob.plannedDate} />
+      ),
+      editableConfig: editsSchedule
         ? {
             type: 'date',
             currentValue: liveJob.plannedDate ?? '',
@@ -132,19 +179,7 @@ function buildJobDetailPlanningFields({
                 currentValue.trim().length > 0 && newValue.trim().length === 0,
               title: 'Datum entfernen?',
               description: (
-                <div className="space-y-2">
-                  <p>
-                    Wenn du das geplante Datum von{' '}
-                    <span className="font-medium text-foreground">
-                      {liveJob.jobNumber ? `${liveJob.jobNumber} – ` : ''}
-                      {displayTitle}
-                    </span>{' '}
-                    entfernst, bleibt der Arbeitsstand unverändert.
-                  </p>
-                  <p className="font-medium text-muted-foreground">
-                    Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben ebenfalls unverändert.
-                  </p>
-                </div>
+                <RemoveDateDescription jobNumber={liveJob.jobNumber} displayTitle={displayTitle} />
               ),
               confirmLabel: 'Datum entfernen',
               loadingLabel: 'Wird gespeichert…',
@@ -165,7 +200,7 @@ function buildJobDetailPlanningFields({
     {
       label: 'Geplante Uhrzeit',
       value: formatPlannedTime(liveJob.plannedTime),
-      editableConfig: isAdminOrManager
+      editableConfig: editsSchedule
         ? {
             type: 'time',
             currentValue: normalizeJobPlannedTime(liveJob.plannedTime) ?? '',
@@ -186,7 +221,7 @@ function buildJobDetailPlanningFields({
     {
       label: 'Geschätzte Dauer',
       value: formatDurationOrDash(liveJob.estimatedDurationMinutes),
-      editableConfig: isAdminOrManager
+      editableConfig: editsSchedule
         ? {
             type: 'duration',
             currentValue: formatMinutesAsHoursInput(liveJob.estimatedDurationMinutes),
@@ -312,7 +347,10 @@ function buildJobDetailSiteFields(job: JobWithDetails, liveJob: JobWithDetails):
   ];
 }
 
-type JobDetailMetadataFieldsInput = Omit<JobDetailFieldContext, 'updateJobWithQualificationApproval'> & {
+type JobDetailMetadataFieldsInput = Omit<
+  JobDetailFieldContext,
+  'updateJobWithQualificationApproval' | 'scheduleEditable'
+> & {
   job: JobWithDetails;
 };
 
@@ -355,6 +393,7 @@ export function useJobDetailMetadataFields({
     liveJob,
     displayTitle,
     isAdminOrManager,
+    scheduleEditable: jobFormEditsSchedule(job.scheduledVisitCount ?? 0),
     applyLiveJobPatch,
     updateJobWithQualificationApproval,
   };
