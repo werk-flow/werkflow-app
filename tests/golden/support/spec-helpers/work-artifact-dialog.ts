@@ -12,7 +12,7 @@ import {
   type WorkArtifactMeasurementUnit,
   type WorkArtifactStatus,
 } from '../../../../lib/work-artifacts/types';
-import { pressKey } from '../steps/interaction';
+import { pressKey, settledBeforeTimeout } from '../steps/interaction';
 import { confirmed, escapeRegExp, SHARED_COPY, typeIntoDateTimeField } from '../steps/shared';
 
 /**
@@ -173,10 +173,7 @@ export async function openWorkArtifact(
   const clickOptions = options.clickTimeout !== undefined ? { timeout: options.clickTimeout } : {};
   for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
     await workArtifactEntry(page, title).click(clickOptions);
-    const opened = await dialog
-      .waitFor({ state: 'visible', timeout: options.timeout })
-      .then(() => true)
-      .catch(() => false);
+    const opened = await settledBeforeTimeout(dialog.waitFor({ state: 'visible', timeout: options.timeout }));
     if (opened) return dialog;
   }
   throw new Error(`Artifact dialog for ${title} did not open after ${options.attempts} clicks.`);

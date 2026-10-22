@@ -41,12 +41,12 @@ const SESSION_IDENTITY = 'getAuthenticatedUser';
 
 const OWN_ACCOUNT = "Changes the caller's own account, which belongs to no organization.";
 
-// Actions that run on the verified session identity alone. Keep each reason
-// true; an entry whose action gains an organization check, or disappears,
-// fails as stale.
+// Actions that run on the verified session identity alone. Keep each reason true; an entry
+// whose action gains an organization check, or disappears, fails as stale.
 const IDENTITY_ONLY_ACTIONS: Record<string, string> = {
   'lib/auth/actions.ts#deleteAccount': OWN_ACCOUNT,
   'lib/auth/actions.ts#invalidateProfileCache': OWN_ACCOUNT,
+  'lib/auth/actions.ts#rememberPasswordResetAddress': OWN_ACCOUNT,
   'lib/settings/actions.ts#removeProfileAvatar': OWN_ACCOUNT,
   'lib/settings/actions.ts#updateProfileAvatar': OWN_ACCOUNT,
   'lib/settings/actions.ts#updateProfileSettings': OWN_ACCOUNT,

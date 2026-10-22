@@ -7,16 +7,6 @@ export function cn(...inputs: ClassValue[]): string {
   return twMerge(clsx(inputs));
 }
 
-const germanDate = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-const germanDateTime = new Intl.DateTimeFormat('de-DE', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-const germanMediumDateTime = new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
-
 /**
  * The German label styles on the Berlin calendar and wall clock, each with
  * the text it renders for 3 September 2026, 10:15 Berlin time.
@@ -102,46 +92,27 @@ export function formatLocalCalendarDay(date: Date, style: BerlinLabelStyle): str
   return formatBerlin(toLocalDateString(date), style);
 }
 
-/**
- * A date-only ISO string is a calendar date, not an instant: `new Date('2026-09-13')`
- * is UTC midnight and renders as 12.09. west of Greenwich. Timestamps and Date values
- * keep their instant.
- */
-function toCalendarAwareDate(value: string | Date): Date {
-  const calendarDate = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
-  return calendarDate
-    ? new Date(Number(calendarDate[1]), Number(calendarDate[2]) - 1, Number(calendarDate[3]))
-    : new Date(value);
-}
-
 type MissingDatePlaceholder = { empty: string };
 
-/** 13.09.2026; with `{ empty }`, a missing value renders that placeholder instead. */
-export function formatGermanDate(value: string | Date): string;
-export function formatGermanDate(
-  value: string | Date | null | undefined,
-  options: MissingDatePlaceholder,
-): string;
-export function formatGermanDate(
-  value: string | Date | null | undefined,
-  options?: MissingDatePlaceholder,
-): string {
+/**
+ * 13.09.2026 on the Berlin calendar, on the server (UTC) and in every browser;
+ * with `{ empty }`, a missing value renders that placeholder instead. A
+ * `YYYY-MM-DD` calendar date keeps its digits, and a timestamp shows its
+ * Berlin day. A Date for a local calendar day goes through formatLocalCalendarDay.
+ */
+export function formatGermanDate(value: string): string;
+export function formatGermanDate(value: string | null | undefined, options: MissingDatePlaceholder): string;
+export function formatGermanDate(value: string | null | undefined, options?: MissingDatePlaceholder): string {
   if (!value) return options?.empty ?? '';
-  // A calendar date needs no time zone at all: format its digits directly.
-  const calendarDate = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (calendarDate) return `${calendarDate[3]}.${calendarDate[2]}.${calendarDate[1]}`;
-  return germanDate.format(toCalendarAwareDate(value));
+  return formatBerlin(value, 'date');
 }
 
 /** 13.09.2026 for a single day, 13.09.2026 – 15.09.2026 for several. */
 export function formatGermanDateRange(startDate: string, endDate: string): string {
   if (startDate === endDate) return formatGermanDate(startDate);
   return `${formatGermanDate(startDate)} – ${formatGermanDate(endDate)}`;
-}
-
-/** 13.09.2026, 08:15 */
-export function formatGermanDateTime(value: string | Date): string {
-  return germanDateTime.format(toCalendarAwareDate(value));
 }
 
 /** 13.09.2026, 08:15 in Europe/Berlin, independent of the browser's time zone. */
@@ -152,11 +123,6 @@ export function formatBerlinDateTime(value: string | Date): string {
 /** 08:15 in Europe/Berlin, independent of the browser's and the server's time zone. */
 export function formatBerlinTime(value: string | Date): string {
   return formatBerlin(value, 'time');
-}
-
-/** 13. Sept. 2026, 08:15 in the browser's time zone. */
-export function formatGermanMediumDateTime(value: string | Date): string {
-  return germanMediumDateTime.format(new Date(value));
 }
 
 /**

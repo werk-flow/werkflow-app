@@ -203,6 +203,7 @@ export async function closeDocumentUploadProgressDialog(page: Page): Promise<voi
   const dialog = page.getByRole('dialog').filter({
     has: page.getByRole('button', { name: SHARED_COPY.action.close }),
   });
+  // best-effort: the dialog may close itself before the click lands; the count below asserts it is gone.
   await dialog
     .getByRole('button', { name: SHARED_COPY.action.close })
     .first()
@@ -517,12 +518,9 @@ export async function uploadIntoDocumentsSection(
     .toMatch(/^(complete|closed)$/);
   await expect(page.getByText(SHARED_COPY.upload.failed)).toHaveCount(0);
 
-  const closeButton = uploadDialog.getByRole('button', { name: SHARED_COPY.action.close });
-  if (await closeButton.isVisible().catch(() => false)) {
-    await closeButton.click().catch(() => undefined);
-  }
-  // Dialog must be gone before asserting, so the file name match can only come
-  // from the documents section itself, not from the dialog's row list.
+  // The complete dialog closes itself. It must be gone before asserting, so the
+  // file name match can only come from the documents section itself, not from
+  // the dialog's row list.
   await expect(uploadDialog).toHaveCount(0, { timeout: 10_000 });
 
   const persistedFile = options?.enclosingDialog

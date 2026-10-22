@@ -10,6 +10,7 @@ import { RegionLoadError } from '@/components/shared/region-load-error';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
+import { isUuid } from '@/lib/validation/uuid';
 
 import { SignupForm } from './signup-form';
 
@@ -18,14 +19,17 @@ export const metadata: Metadata = {
 };
 
 type SignupPageProps = {
-  searchParams: Promise<{ email?: string; invite_code?: string }>;
+  searchParams: Promise<{ invite_code?: string }>;
 };
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
   const { session } = await getSupabaseServerSession();
-  const params = await searchParams;
-  const prefillEmail = params.email || '';
-  const inviteCode = params.invite_code || '';
+  const inviteCode = (await searchParams).invite_code || '';
+
+  // Invite codes are generated UUIDs; anything else is neither looked up nor echoed.
+  if (inviteCode && !isUuid(inviteCode)) {
+    redirect('/invite-error?error=invalid_invite');
+  }
 
   // A signed-in person with an invite accepts it on the login page.
   if (session && inviteCode) {
@@ -91,7 +95,8 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       redirect('/invite-error?error=invite_already_used');
     }
 
-    // Store the invited email for validation
+    // The invite row names the address: the invite link carries only the code,
+    // so the address stays out of every URL. It prefills and locks the field.
     invitedEmail = invite.email;
 
     // Get org name for display
@@ -111,7 +116,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <SignupForm prefillEmail={prefillEmail} inviteCode={inviteCode} invitedEmail={invitedEmail} />
+        <SignupForm inviteCode={inviteCode} invitedEmail={invitedEmail} />
       </CardContent>
       <CardFooter className="flex justify-center">
         <p className="text-sm text-muted-foreground">

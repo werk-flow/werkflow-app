@@ -1,4 +1,4 @@
-import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { REQUEST_CATEGORY_LABELS, REQUEST_SOURCE_LABELS, type ClientRequest } from '@/lib/requests/types';
 import { SectionTitle } from '@/components/shared/section-title';
 

@@ -29,6 +29,7 @@ import {
   typeIntoDatePicker,
   visibleText,
 } from './shared';
+import { settledBeforeTimeout } from './interaction';
 import { workCreateButton, workCreateTab } from './work';
 import { getEmployeeRecordById, type PersistedEmployeeRecord } from '../db/personnel';
 
@@ -388,6 +389,8 @@ export async function addConditionViaDialog(
       await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
+      // best-effort: the step already failed; a dialog this probe cannot read counts as interrupted for
+      // the one bounded retry, and a failure on the retry rethrows the step error, not the probe error.
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;
@@ -448,10 +451,7 @@ export async function createPersonnelRecordViaDialog(
   }
 
   await submitPersonnelRecordButton(dialog).click();
-  const reachedDetail = await page
-    .waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/)
-    .then(() => true)
-    .catch(() => false);
+  const reachedDetail = await settledBeforeTimeout(page.waitForURL(/\/mitarbeiter\/[0-9a-f-]{36}/));
   if (!reachedDetail) {
     // Realtime can refresh the list after the insert and win the race against
     // the action's detail redirect. Follow the persisted row instead.
@@ -588,6 +588,8 @@ export async function addWorkScheduleViaDialog(
       await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
+      // best-effort: the step already failed; a dialog this probe cannot read counts as interrupted for
+      // the one bounded retry, and a failure on the retry rethrows the step error, not the probe error.
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;

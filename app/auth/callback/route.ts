@@ -59,18 +59,13 @@ function withSessionCookies(redirect: NextResponse, res: NextResponse): NextResp
 
 // Auth did not answer the link: it may still be valid, so the person sees a
 // failure to retry, never the invalid-link page and never a signed-out state.
-function authUnavailableResponse(): NextResponse {
-  return new NextResponse(
-    'Die Anmeldung ist gerade nicht erreichbar. Öffne den Link in einem Moment erneut.',
-    {
-      status: 503,
-      headers: {
-        'Cache-Control': 'private, no-store',
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Retry-After': '30',
-      },
-    },
-  );
+// A route handler cannot render a page, so it sends the browser to the
+// prerendered /auth/unavailable screen; no session cookie travels with it.
+function authUnavailableResponse(origin: string): NextResponse {
+  return NextResponse.redirect(`${origin}/auth/unavailable`, {
+    status: 303,
+    headers: { 'Cache-Control': 'private, no-store' },
+  });
 }
 
 // Redeems the invite of the account the code exchange just signed in. Only
@@ -153,12 +148,12 @@ export async function GET(req: NextRequest) {
       verification = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
     } catch (thrown) {
       logError('auth.callback: token hash verification threw', thrown);
-      return authUnavailableResponse();
+      return authUnavailableResponse(origin);
     }
     const { error } = verification;
     if (!error) return res;
     logError('auth.callback: token hash verification failed', error);
-    if (!isRejectedSignInLink(error)) return authUnavailableResponse();
+    if (!isRejectedSignInLink(error)) return authUnavailableResponse(origin);
     // A fixed code: the provider's message never travels in a URL.
     return NextResponse.redirect(
       type === 'recovery'
@@ -175,11 +170,11 @@ export async function GET(req: NextRequest) {
       exchange = await supabase.auth.exchangeCodeForSession(code);
     } catch (thrown) {
       logError('auth.callback: code exchange threw', thrown);
-      return authUnavailableResponse();
+      return authUnavailableResponse(origin);
     }
     if (exchange.error) {
       logError('auth.callback: code exchange failed', exchange.error);
-      if (!isRejectedSignInLink(exchange.error)) return authUnavailableResponse();
+      if (!isRejectedSignInLink(exchange.error)) return authUnavailableResponse(origin);
       return NextResponse.redirect(`${origin}/forgot-password?error=invalid_code`);
     }
     if (inviteCode) return redeemAfterCodeExchange(req, res, origin, inviteCode, exchange.data.user.id);

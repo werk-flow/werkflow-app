@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-22
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
 
@@ -29,7 +29,7 @@ Project configuration (auth settings, mail templates, SMTP, rate limits) is not 
 
 Decided and in force: leaked-password protection, custom SMTP through Resend, SSL enforcement for direct database connections, the organization spend cap, daily backups from the plan, anonymous sign-in off, Vercel Authentication on every deployment except the custom domain.
 
-Not adopted, each a future owner decision: point-in-time recovery, signup CAPTCHA, database network restrictions, Supabase branching, the GitHub deploy integration. Owner duties that no API covers: MFA on the Supabase account and a second organization owner.
+Not adopted, each a future owner decision: point-in-time recovery, database network restrictions, Supabase branching, the GitHub deploy integration. Signup CAPTCHA stays off while the rate limits cover sign-up; it turns on when public sign-up opens. Owner duties that no API covers: MFA on the Supabase account and a second organization owner.
 
 ## The local test stack
 

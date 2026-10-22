@@ -185,6 +185,51 @@ end;
 $$;
 drop table public.werkflow_policy_probe;
 
+-- The reverse: a permissive write policy for a command that no client role
+-- holds a grant for never applies. It reads like a permission a reviewer must
+-- check, and a later grant would bring it back to life unreviewed (migration
+-- 20261022100000). A deny-everything policy (`false`) documents the denial
+-- and stays allowed.
+create function pg_temp.write_policies_without_grant() returns text language sql as $$
+  select string_agg(c.relname || ' ' || p.polname, ', ' order by c.relname, p.polname)
+  from pg_policy p
+  join pg_class c on c.oid = p.polrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and p.polpermissive and p.polcmd <> 'r'
+    and coalesce(pg_get_expr(p.polqual, p.polrelid), '') <> 'false'
+    and coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') <> 'false'
+    and not exists (
+      select 1
+      from (values ('anon'), ('authenticated')) as grantee(role),
+        (values ('INSERT', 'a'), ('UPDATE', 'w'), ('DELETE', 'd')) as command(name, code)
+      where p.polcmd in ('*', command.code)
+        and (has_table_privilege(grantee.role, c.oid, command.name)
+          or (command.name <> 'DELETE' and has_any_column_privilege(grantee.role, c.oid, command.name)))
+    );
+$$;
+
+do $$
+declare offender text := pg_temp.write_policies_without_grant();
+begin
+  if offender is not null then
+    raise exception 'Write policy without a client grant: %', offender;
+  end if;
+end;
+$$;
+
+-- Probe: a write policy on a table without a client write grant must be reported.
+create table public.werkflow_inert_policy_probe (id bigint primary key);
+alter table public.werkflow_inert_policy_probe enable row level security;
+create policy "probe writes" on public.werkflow_inert_policy_probe for insert to authenticated with check (true);
+do $$
+begin
+  if coalesce(pg_temp.write_policies_without_grant(), '') <> 'werkflow_inert_policy_probe probe writes' then
+    raise exception 'Write-policy-without-grant check missed the probe: %', pg_temp.write_policies_without_grant();
+  end if;
+end;
+$$;
+drop table public.werkflow_inert_policy_probe;
+
 -- Client roles write no public table directly (migration 20261015100100).
 -- Every client write privilege is in this reviewed inventory with its caller;
 -- a new one fails until it is listed, and a listed one that disappears fails

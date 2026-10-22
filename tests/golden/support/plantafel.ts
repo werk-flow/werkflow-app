@@ -600,7 +600,8 @@ export function scheduledFromParkplatzConfirmation(page: Page): Locator {
 export async function closeBanners(page: Page): Promise<void> {
   const open = banners(page);
   for (let attempt = 0; attempt < 10 && (await open.count()) > 0; attempt += 1) {
-    // A banner auto-dismisses after a few seconds; one that leaves mid-click is closed all the same.
+    // best-effort: a banner auto-dismisses after a few seconds, so one that leaves mid-click is
+    // closed all the same; the count below asserts that none is left.
     await open
       .first()
       .getByRole('button', { name: BOARD_COPY.closeBanner, exact: true })

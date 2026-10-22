@@ -331,6 +331,11 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
   { id: 'passwort-neu', screen: '/reset-password', heading: 'Neues Passwort festlegen' },
   { id: 'verifizierung', screen: '/verify', heading: 'Verifizierungscode eingeben' },
   { id: 'einladung-fehler', screen: '/invite-error', heading: 'Einladung abgelaufen' },
+  {
+    id: 'anmeldung-nicht-erreichbar',
+    screen: '/auth/unavailable',
+    heading: 'Anmeldung gerade nicht erreichbar',
+  },
   { id: 'nicht-gefunden', screen: 'not-found', heading: 'Seite nicht gefunden' },
   { id: 'onboarding-start', screen: '/onboarding/start', heading: 'Willkommen bei WerkFlow' },
   { id: 'onboarding-beitreten', screen: '/onboarding/join-organization', heading: 'Organisation beitreten' },

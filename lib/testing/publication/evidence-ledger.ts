@@ -10,8 +10,8 @@ import { withFileLock } from '../runner/file-lock';
  * writer now appends the file's content digest to this hash chain, and the gate trusts a record
  * only while its bytes equal the last digest the chain holds for its path and the chain is intact.
  * The edit guard refuses agent writes to the evidence folders and to the chain at all times.
- * Residual: a process that runs this module's writer can still record a forged file; only a key
- * outside the agent's reach (an HMAC) closes that, which is an owner question.
+ * Residual: a process that runs this module's writer can still record a forged file. An HMAC
+ * would not close that, because a key on the machine the agents use is within their reach.
  */
 export const EVIDENCE_LEDGER = '.agent-logs/evidence-ledger.jsonl';
 const GENESIS = 'genesis';

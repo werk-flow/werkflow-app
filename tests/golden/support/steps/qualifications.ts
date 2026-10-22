@@ -6,6 +6,7 @@ import {
   type CoverageStatus,
   type EvidenceState,
 } from '../../../../lib/qualifications/types';
+import { settledBeforeTimeout } from './interaction';
 import {
   confirmed,
   employeeAssignmentHeading,
@@ -147,17 +148,17 @@ export async function addTeamMemberViaManagement(
     const card = teamCard(page.getByRole('main'), options.teamName);
     await expect(card).toBeVisible();
     const memberRow = teamMemberRow(card, options.employeeName).first();
-    if (await memberRow.isVisible().catch(() => false)) return;
+    if (await memberRow.isVisible()) return;
 
     await submitTeamMember(page, card, options);
     // The row shows before the server answers; the banner confirms the write.
     if (
-      await page
-        .getByRole('alert')
-        .filter({ hasText: 'Das Teammitglied wurde hinzugefügt.' })
-        .waitFor({ state: 'visible', timeout: 10_000 })
-        .then(() => true)
-        .catch(() => false)
+      await settledBeforeTimeout(
+        page
+          .getByRole('alert')
+          .filter({ hasText: 'Das Teammitglied wurde hinzugefügt.' })
+          .waitFor({ state: 'visible', timeout: 10_000 }),
+      )
     ) {
       await expect(memberRow).toBeVisible();
       return;

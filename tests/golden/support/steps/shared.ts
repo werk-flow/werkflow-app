@@ -4,7 +4,7 @@ import {
   UNCONFIRMED_SIGNAL,
 } from '../../../../lib/testing/spec-support/busy-signals';
 import { retryBeforeSubmit } from '../../../../lib/testing/spec-support/retry-before-submit';
-import { pressKey } from './interaction';
+import { pressKey, settledBeforeTimeout } from './interaction';
 
 /**
  * Copy of the controls that several product areas share, in one place
@@ -392,12 +392,7 @@ export async function openDialogWithRetry(input: {
   const attempts = input.attempts ?? 3;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     await input.trigger.click();
-    if (
-      await input.dialog
-        .waitFor({ state: 'visible', timeout: 2_500 })
-        .then(() => true)
-        .catch(() => false)
-    ) {
+    if (await settledBeforeTimeout(input.dialog.waitFor({ state: 'visible', timeout: 2_500 }))) {
       return;
     }
   }
@@ -526,7 +521,7 @@ export async function selectFromSearchable(
   const triggerId = await trigger.getAttribute('id');
   const stableTrigger = triggerId ? page.locator(`#${triggerId}`) : trigger;
   const openPicker = async (): Promise<void> => {
-    if (await listbox.isVisible().catch(() => false)) return;
+    if (await listbox.isVisible()) return;
     await expect(stableTrigger).toBeVisible();
     await expect(stableTrigger).toBeEnabled();
     let lastError: unknown;

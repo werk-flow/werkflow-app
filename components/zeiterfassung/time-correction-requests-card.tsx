@@ -15,12 +15,12 @@ import {
   TIME_CORRECTION_STATUS_LABELS,
   type TimeCorrectionRequest,
 } from '@/lib/time-corrections/types';
-import { formatGermanDateTime } from '@/lib/utils';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 function summarizeSnapshot(request: TimeCorrectionRequest, state: 'before' | 'proposed'): string {
   const facts =
     state === 'before' ? request.revision.beforeSnapshot.facts : request.revision.proposedSnapshot.facts;
-  const [firstTimestamp, ...laterTimestamps] = facts.map((fact) => formatGermanDateTime(fact.timestamp));
+  const [firstTimestamp, ...laterTimestamps] = facts.map((fact) => formatBerlinDateTime(fact.timestamp));
   if (firstTimestamp === undefined) return state === 'before' ? 'Kein Eintrag' : 'Eintrag entfällt';
   const lastTimestamp = laterTimestamps.at(-1);
   return lastTimestamp === undefined ? firstTimestamp : `${firstTimestamp} bis ${lastTimestamp}`;
@@ -93,7 +93,7 @@ export function TimeCorrectionRequestCard({
               <InlinePending active={requestBusy} />
             </CardTitle>
             <p className="mt-1 text-sm text-muted-foreground">
-              {request.subjectName} · {formatGermanDateTime(request.createdAt)} · Version{' '}
+              {request.subjectName} · {formatBerlinDateTime(request.createdAt)} · Version{' '}
               {request.currentRevision}
             </p>
           </div>

@@ -10,6 +10,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -25,10 +26,14 @@ export function CreateOrganizationForm() {
   const [name, setName] = useState('');
   const { run: runCreate, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const missingName = name.trim().length >= 2 ? undefined : ERROR_MESSAGES.name_too_short;
+    setNameError(missingName ?? null);
+    if (focusFirstInvalidField({ 'org-name': missingName })) return;
 
     await runCreate(async () => {
       try {
@@ -46,16 +51,17 @@ export function CreateOrganizationForm() {
     });
   };
 
-  const isValid = name.trim().length >= 2;
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Field label="Name der Organisation" htmlFor="org-name" required>
+      <Field label="Name der Organisation" htmlFor="org-name" required error={nameError}>
         <Input
           type="text"
           placeholder="z.B. Meine Firma GmbH"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameError(null);
+          }}
           disabled={isLoading}
           autoComplete="organization"
         />
@@ -63,13 +69,7 @@ export function CreateOrganizationForm() {
 
       <ErrorText>{error}</ErrorText>
 
-      <Button
-        type="submit"
-        className="w-full"
-        // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: a form with one required field enables on completeness
-        disabled={!isValid}
-        pending={isLoading}
-      >
+      <Button type="submit" className="w-full" pending={isLoading}>
         {isLoading ? 'Wird erstellt…' : 'Organisation erstellen'}
       </Button>
     </form>

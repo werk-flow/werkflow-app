@@ -12,7 +12,7 @@ import {
   type ServiceCaseDetail,
   type ServiceCaseDetailWorkspace,
 } from '@/lib/service-cases/types';
-import { formatGermanMediumDateTime } from '@/lib/utils';
+import { formatBerlinDateTime } from '@/lib/utils';
 import { Fact } from './fact';
 
 const EVENT_LABELS: Readonly<Record<ServiceCaseDetail['events'][number]['eventType'], string>> = {
@@ -146,9 +146,7 @@ export function ServiceCaseHistorySection({ item }: { item: ServiceCaseDetail })
           <div key={event.id} className="py-3 first:pt-0 last:pb-0">
             <div className="flex items-start justify-between gap-3">
               <span className="text-sm font-medium">{EVENT_LABELS[event.eventType]}</span>
-              <time className="text-xs text-muted-foreground">
-                {formatGermanMediumDateTime(event.recordedAt)}
-              </time>
+              <time className="text-xs text-muted-foreground">{formatBerlinDateTime(event.recordedAt)}</time>
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
               {event.actorName}

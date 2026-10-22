@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
 import { materialRowLocation, materialRowQuantity } from '../../golden/support/steps/inventory';
+import { settledBeforeTimeout } from '../../golden/support/steps/interaction';
 import { detailsRegion, retryDialogTransaction } from '../../golden/support/steps/shared';
 import { lifecycleAction, transitionWork, workLifecycleCard } from '../../golden/support/steps/work';
 import { getOrganizationByJoinCode, type PersistedJoinCode } from '../../golden/support/db/shared';
@@ -51,10 +52,9 @@ export async function setJobStatus(page: Page, state: SettableJobState): Promise
     await transitionWork(page, 'not_started', 'in_progress');
   } else {
     await expect(workLifecycleCard(page)).toBeVisible();
-    const canStart = await lifecycleAction(page, 'not_started', 'in_progress')
-      .waitFor({ state: 'visible', timeout: 2_000 })
-      .then(() => true)
-      .catch(() => false);
+    const canStart = await settledBeforeTimeout(
+      lifecycleAction(page, 'not_started', 'in_progress').waitFor({ state: 'visible', timeout: 2_000 }),
+    );
     if (canStart) await transitionWork(page, 'not_started', 'in_progress');
     await transitionWork(page, 'in_progress', 'execution_complete');
   }
@@ -76,7 +76,7 @@ export async function expectSignedWindowOpen(page: Page, clickDownload: () => Pr
   await expect
     .poll(() => page.evaluate(() => document.documentElement.dataset.signedWindowOpenUrl ?? ''))
     .toMatch(SIGNED_URL_PATTERN);
-  await popup.close().catch(() => undefined);
+  await popup.close();
 }
 
 /** The join code the organization page shows, read back from the organization that owns it. */

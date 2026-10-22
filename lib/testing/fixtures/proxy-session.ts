@@ -27,9 +27,13 @@ mock.module('@supabase/ssr', () => ({
 }));
 const { proxy } = await import('../../../proxy');
 
-async function locationFor(path: string, next: SessionAnswer): Promise<string | null> {
+async function locationFor(
+  path: string,
+  next: SessionAnswer,
+  headers: Record<string, string> = {},
+): Promise<string | null> {
   answer = next;
-  const response = await proxy(new NextRequest(`http://localhost${path}`));
+  const response = await proxy(new NextRequest(`http://localhost${path}`, { headers }));
   const location = response.headers.get('location');
   return location ? new URL(location).pathname : null;
 }
@@ -63,8 +67,22 @@ for (const path of ['/dashboard', '/auftraege/A-1', '/']) {
     null,
   );
 }
-// The signup guard on /verify does not treat an unavailable Auth service as signed out either.
+// The code step needs the address the signup left in its cookie; without it
+// the visitor starts at the signup. An address in the URL counts for nothing.
+// The guard does not treat an unavailable Auth service as signed out either.
 assert.equal(await locationFor('/verify', { session: null, error: null }), '/signup');
+assert.equal(
+  await locationFor('/verify?email=max%40example.test', { session: null, error: null }),
+  '/signup',
+);
+assert.equal(
+  await locationFor(
+    '/verify',
+    { session: null, error: null },
+    { cookie: 'verify_address=max%40example.test' },
+  ),
+  null,
+);
 assert.equal(
   await locationFor('/verify', {
     session: null,

@@ -85,8 +85,13 @@ export function NewPasswordFieldsForm({
         <FormField
           control={form.control}
           name="password"
-          render={({ field }) => (
-            <Field label="Neues Passwort" required>
+          render={({ field, fieldState }) => (
+            // The checklist shows each unmet requirement while typing; a submit marks the field too.
+            <Field
+              label="Neues Passwort"
+              required
+              error={form.formState.isSubmitted ? fieldState.error?.message : undefined}
+            >
               <PasswordInput
                 {...field}
                 autoComplete="new-password"
@@ -128,13 +133,7 @@ export function NewPasswordFieldsForm({
               {backLabel}
             </Button>
           ) : null}
-          <Button
-            className={onBack ? undefined : 'w-full'}
-            type="submit"
-            // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: two fields, and the checklist above shows every unmet requirement live
-            disabled={!requirements.allMet}
-            pending={isSubmitting}
-          >
+          <Button className={onBack ? undefined : 'w-full'} type="submit" pending={isSubmitting}>
             {isSubmitting ? submittingLabel : submitLabel}
           </Button>
         </div>

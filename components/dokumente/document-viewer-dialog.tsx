@@ -1,6 +1,6 @@
 'use client';
 
-import { formatGermanDateTime as formatDate } from '@/lib/utils';
+import { formatBerlinDateTime as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
 import { useEffect, useState } from 'react';
 import { Download, ExternalLink, FileText, Info, Maximize2, Minimize2 } from 'lucide-react';

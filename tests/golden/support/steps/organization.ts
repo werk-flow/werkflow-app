@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import { confirmTestUserEmail } from '../seed';
-import { pressKey } from './interaction';
+import { pressKey, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
 import { confirmed, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
 
@@ -360,19 +360,13 @@ export async function joinOrganizationViaInviteLink(
     const acceptButton = page.getByRole('button', { name: 'Einladung annehmen', exact: true });
     if (await acceptButton.isVisible()) {
       await acceptButton.click();
-      joined = await page
-        .waitForURL(confirmationUrl)
-        .then(() => true)
-        .catch(() => false);
+      joined = await settledBeforeTimeout(page.waitForURL(confirmationUrl));
       continue;
     }
     await page.locator('input[autocomplete="email"]').fill(credentials.email);
     await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
     await loginSubmitButton(page).click();
-    joined = await page
-      .waitForURL(confirmationUrl)
-      .then(() => true)
-      .catch(() => false);
+    joined = await settledBeforeTimeout(page.waitForURL(confirmationUrl));
   }
   if (!joined) {
     throw new Error(`Invited user ${credentials.email} did not reach /dashboard?joined=${expectedOrgId}`);
@@ -410,10 +404,7 @@ export async function loginViaUi(
     await page.locator('input[autocomplete="email"]').fill(credentials.email);
     await page.locator('input[autocomplete="current-password"]').fill(credentials.password);
     await loginSubmitButton(page).click();
-    loggedIn = await page
-      .waitForURL('**/dashboard**')
-      .then(() => true)
-      .catch(() => false);
+    loggedIn = await settledBeforeTimeout(page.waitForURL('**/dashboard**'));
   }
   if (!loggedIn) {
     throw new Error(`Login did not reach the dashboard for ${credentials.email}`);
@@ -423,7 +414,7 @@ export async function loginViaUi(
 export async function signOutViaUi(page: Page): Promise<void> {
   await page.goto('/dashboard');
   const directButton = page.getByRole('button', { name: ORGANIZATION_COPY.signOut });
-  if (await directButton.isVisible().catch(() => false)) {
+  if (await directButton.isVisible()) {
     await directButton.click();
   } else {
     // The sign-out control sits in the sidebar profile card menu.
@@ -438,18 +429,14 @@ export async function signOutViaUi(page: Page): Promise<void> {
       .first();
     for (let attempt = 1; attempt <= 3; attempt++) {
       await accountMenuButton.click();
-      const menuOpened = await menuItem
-        .waitFor({ state: 'visible', timeout: 2_000 })
-        .then(() => true)
-        .catch(() => false);
+      const menuOpened = await settledBeforeTimeout(menuItem.waitFor({ state: 'visible', timeout: 2_000 }));
       if (!menuOpened) {
         await pressKey(page, 'Escape');
         continue;
       }
-      const reachedLogin = page
-        .waitForURL('**/login', { timeout: 5_000 })
-        .then(() => true)
-        .catch(() => false);
+      const reachedLogin = settledBeforeTimeout(page.waitForURL('**/login', { timeout: 5_000 }));
+      // best-effort: the starting navigation may detach the item mid-click; the login URL
+      // awaited next is the outcome.
       await menuItem.click({ force: true, timeout: 2_000 }).catch(() => undefined);
       if (await reachedLogin) return;
       await pressKey(page, 'Escape');

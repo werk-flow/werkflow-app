@@ -31,7 +31,7 @@ import {
 } from './service-case-detail-sections';
 import { ServiceCaseEvidenceLink } from './service-case-evidence-link';
 import { ServiceCaseFormDialog } from './service-case-form-dialog';
-import { formatGermanMediumDateTime } from '@/lib/utils';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 export function ServiceCaseDetailContent({
   initial,
@@ -100,7 +100,7 @@ export function ServiceCaseDetailContent({
             <h2 className="mt-1 break-words text-xl font-semibold">{item.summary}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {item.intakeType === 'request' ? 'Aus Anfrage übernommen' : 'Direkt erfasst'} · Aktualisiert{' '}
-              {formatGermanMediumDateTime(item.updatedAt)}
+              {formatBerlinDateTime(item.updatedAt)}
             </p>
           </div>
           <span className="flex items-center gap-2">

@@ -61,6 +61,8 @@ export async function expectKeyboardPath(
 ): Promise<void> {
   const check = options.soft === false ? expect : expect.soft;
   // The primitive moves focus in an effect after the open frame.
+  // best-effort: this waits for that move; the check below reports a focus that never arrived,
+  // softly unless the caller asks for a hard check.
   await expect
     .poll(() => focusInside(layer), {
       message: `${label}: focus moves into the opened dialog`,

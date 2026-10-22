@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import {
   formatBerlin,
   formatBerlinDateTime,
@@ -6,8 +6,6 @@ import {
   formatLocalCalendarDay,
   formatGermanDate,
   formatGermanDateRange,
-  formatGermanDateTime,
-  formatGermanMediumDateTime,
   parseIsoLocalDate,
   toLocalDateString,
   toLocalTimeOfDay,
@@ -17,20 +15,15 @@ import {
 // The component copies these helpers replaced on 2026-10-01, kept here as the
 // reference: the home must render the same text for every input they handled.
 const dayOptions = { day: '2-digit', month: '2-digit', year: 'numeric' } as const;
-const minuteOptions = { ...dayOptions, hour: '2-digit', minute: '2-digit' } as const;
 const replacedCopies = {
   formatDate: (value: string): string =>
     new Date(`${value}T00:00:00`).toLocaleDateString('de-DE', dayOptions),
-  formatTimestampDate: (value: string): string => new Date(value).toLocaleDateString('de-DE', dayOptions),
-  formatDateTime: (value: string): string => new Date(value).toLocaleString('de-DE', minuteOptions),
   formatBerlinDateTime: (value: string): string =>
     new Intl.DateTimeFormat('de-DE', {
       dateStyle: 'medium',
       timeStyle: 'short',
       timeZone: 'Europe/Berlin',
     }).format(new Date(value)),
-  formatMediumDateTime: (value: string): string =>
-    new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)),
   isoToLocalDate: (value: string): Date | undefined => {
     if (!value) return undefined;
     const [year, month, day] = value.split('-').map(Number);
@@ -47,15 +40,9 @@ describe('formatGermanDate', () => {
     }
   });
 
-  test('keeps local midnight on the same calendar day', () => {
-    expect(formatGermanDate(new Date(2026, 0, 1, 0, 0))).toBe('01.01.2026');
-    expect(formatGermanDate('2026-01-01')).toBe('01.01.2026');
-  });
-
-  test("renders a timestamp's local day like the replaced copies", () => {
-    for (const timestamp of ['2026-09-13T08:15:00.000Z', '2026-09-12T23:30:00+00:00']) {
-      expect(formatGermanDate(timestamp)).toBe(replacedCopies.formatTimestampDate(timestamp));
-    }
+  test("renders a timestamp's Berlin day", () => {
+    expect(formatGermanDate('2026-09-13T08:15:00.000Z')).toBe('13.09.2026');
+    expect(formatGermanDate('2026-09-12T23:30:00+00:00')).toBe('13.09.2026');
   });
 
   test('renders the placeholder for a missing value only when one is given', () => {
@@ -70,25 +57,32 @@ describe('formatGermanDate', () => {
 describe('date-time formatters', () => {
   const timestamps = ['2026-09-13T08:15:00.000Z', '2026-09-13T00:00:00.000Z', '2026-03-29T01:30:00.000Z'];
 
-  test('formatGermanDateTime matches the replaced toLocaleString copies', () => {
-    for (const timestamp of timestamps) {
-      expect(formatGermanDateTime(timestamp)).toBe(replacedCopies.formatDateTime(timestamp));
-    }
-    expect(formatGermanDateTime(new Date(2026, 8, 13, 0, 0))).toBe('13.09.2026, 00:00');
-  });
-
   test('formatBerlinDateTime renders the Berlin wall clock', () => {
     expect(formatBerlinDateTime('2026-09-13T22:30:00.000Z')).toBe('14.09.2026, 00:30');
     for (const timestamp of timestamps) {
       expect(formatBerlinDateTime(timestamp)).toBe(replacedCopies.formatBerlinDateTime(timestamp));
     }
   });
+});
 
-  test('formatGermanMediumDateTime matches the replaced service copies', () => {
-    for (const timestamp of timestamps) {
-      expect(formatGermanMediumDateTime(timestamp)).toBe(replacedCopies.formatMediumDateTime(timestamp));
-    }
+// A server renders in UTC and a browser in any zone: the labels stay on Berlin's calendar and clock.
+describe('date labels outside Berlin', () => {
+  // Restore the zone itself: deleting TZ would leave the last zone in force for the later test files.
+  const zoneBefore = process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  afterEach(() => {
+    process.env.TZ = zoneBefore;
   });
+
+  for (const zone of ['UTC', 'America/Los_Angeles', 'Pacific/Kiritimati']) {
+    test(`renders Berlin's day and wall clock in ${zone}`, () => {
+      process.env.TZ = zone;
+      expect(new Date('2026-09-12T23:30:00.000Z').getTimezoneOffset()).not.toBe(-120);
+      expect(formatGermanDate('2026-09-12T23:30:00.000Z')).toBe('13.09.2026');
+      expect(formatGermanDate('2026-09-13')).toBe('13.09.2026');
+      expect(formatBerlinDateTime('2026-09-12T23:30:00.000Z')).toBe('13.09.2026, 01:30');
+      expect(formatBerlinTime('2026-03-29T01:30:00.000Z')).toBe('03:30');
+    });
+  }
 });
 
 describe('parseIsoLocalDate', () => {

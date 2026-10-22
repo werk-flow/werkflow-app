@@ -1,6 +1,5 @@
 {
   "app/(app)/arbeitsvorlagen/page.tsx": 1,
-  "app/(auth)/verify/page.tsx": 3,
   "app/api/background-read/route.ts": 1,
   "app/auth/callback/route.ts": 1,
   "components/anfragen/anfragen-content.tsx": 1,

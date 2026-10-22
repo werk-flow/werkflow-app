@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Playwright runs under Node, which does not auto-load .env.local the way
@@ -6,12 +6,9 @@ import { resolve } from 'node:path';
 export function loadEnvLocal(): void {
   const envPath = resolve(__dirname, '../../../.env.local');
 
-  let content: string;
-  try {
-    content = readFileSync(envPath, 'utf8');
-  } catch {
-    return;
-  }
+  // A run without the file takes its values from the environment; an unreadable file fails.
+  if (!existsSync(envPath)) return;
+  const content = readFileSync(envPath, 'utf8');
 
   for (const line of content.split(/\r?\n/)) {
     const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);

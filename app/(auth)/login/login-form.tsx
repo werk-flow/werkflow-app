@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { openVerificationStep } from '@/lib/auth/verification-step';
 
 const loginSchema = z.object({
   email: z.string().email('Bitte gib eine gültige E-Mail-Adresse ein.'),
@@ -61,19 +62,12 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
               email: values.email,
             });
 
-            if (resendError) {
-              setFormError(
-                'E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.',
-              );
-              return;
+            if (!resendError && (await openVerificationStep(router, values.email, inviteCode))) {
+              router.refresh();
+              return untilPageLeaves();
             }
-
-            const verifyUrl = inviteCode
-              ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
-              : `/verify?email=${encodeURIComponent(values.email)}`;
-            router.replace(verifyUrl);
-            router.refresh();
-            return untilPageLeaves();
+            setFormError('E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.');
+            return;
           }
 
           setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');

@@ -81,6 +81,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
     authorization: 'writes only an allowlisted flash key into a short-lived cookie',
     mustCall: ['isAuthFlashKey'],
   },
+  'app/auth/verify-address/route.ts': {
+    authorization:
+      'anonymous by design, before any session: same-origin JSON guard, then a parsed address into an httpOnly cookie scoped to /verify that only prefills the code step in this browser',
+    mustCall: ['verifySameOriginJsonRequest', 'safeParse'],
+  },
 };
 
 const ROUTE_FILE = /^route\.(ts|tsx|js|jsx|mjs)$/;

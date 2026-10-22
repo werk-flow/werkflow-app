@@ -325,11 +325,11 @@ export async function completeExecutionAsManager(
   const exception = dialog.getByRole('checkbox', { name: LIFECYCLE_COPY.managerException });
   const reason = dialog.locator('#work-transition-reason');
   if (options.managerException === 'use') {
-    if (await exception.isVisible().catch(() => false)) await exception.check();
+    if (await exception.isVisible()) await exception.check();
     await reason.fill(options.reason);
   } else {
-    if (await exception.isVisible().catch(() => false)) await expect(exception).not.toBeChecked();
-    if (await reason.isVisible().catch(() => false)) await reason.fill(options.reason);
+    if (await exception.isVisible()) await expect(exception).not.toBeChecked();
+    if (await reason.isVisible()) await reason.fill(options.reason);
   }
   await workTransitionSave(dialog).click();
   await expectWorkTransitionSaved(page, workTransitionActionLabel('in_progress', 'execution_complete'));
@@ -1327,7 +1327,7 @@ export async function createJob(
     await expect(projectNumber).toBeVisible();
     const projectRow = projectNumber.locator('xpath=ancestor::tr[1]');
     const expandButton = expandProjectButton(projectRow);
-    if (await expandButton.isVisible().catch(() => false)) {
+    if (await expandButton.isVisible()) {
       await expandButton.click();
     }
   }

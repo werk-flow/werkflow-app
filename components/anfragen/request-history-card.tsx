@@ -1,6 +1,6 @@
 import { History } from 'lucide-react';
 
-import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import type { RequestEventEntry } from './request-detail-content';
 import { SectionTitle } from '@/components/shared/section-title';
 import { EmptyState } from '@/components/ui/empty-state';

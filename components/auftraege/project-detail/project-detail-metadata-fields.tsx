@@ -5,7 +5,7 @@ import type { MetadataField } from '@/components/shared/metadata-section';
 import { type DerivedProjectStatus, type Project, PROJECT_STATUS_LABELS } from '@/lib/jobs/types';
 import { updateProject } from '@/lib/projects/actions';
 import { PROJECT_STATUS_CLASSES } from '../status-classes';
-import { formatGermanDate, formatGermanDateTime } from '@/lib/utils';
+import { formatGermanDate, formatBerlinDateTime } from '@/lib/utils';
 
 type ProjectDetailMetadataOptions = {
   project: Project;
@@ -102,7 +102,7 @@ export function buildProjectDetailMetadataFields({
     },
     {
       label: 'Erstellt am',
-      value: formatGermanDateTime(liveProject.createdAt),
+      value: formatBerlinDateTime(liveProject.createdAt),
     },
   ];
 }

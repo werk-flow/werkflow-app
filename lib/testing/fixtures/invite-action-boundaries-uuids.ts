@@ -198,7 +198,7 @@ assert.deepEqual(signupMail.body, {
   to: 'new.person@example.test',
   inviterName: 'Carla Caller',
   organizationName: 'Muster Haustechnik',
-  inviteUrl: `https://app.example.test/signup?email=${encodeURIComponent('new.person@example.test')}&invite_code=${String(newInvite.invite_code)}`,
+  inviteUrl: `https://app.example.test/signup?invite_code=${String(newInvite.invite_code)}`,
   isExistingUser: false,
 });
 

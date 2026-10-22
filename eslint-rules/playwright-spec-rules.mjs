@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
+import { noSwallowedFailureRule } from './playwright-failure-rules.mjs';
 import { boundedTimeoutRule, noRetriedActionRule } from './playwright-wait-rules.mjs';
 
 export const noUnscopedPageSelectorsRule = {
@@ -892,5 +893,6 @@ export const playwrightSpecRules = {
     'no-one-shot-count-comparison': noOneShotCountComparisonRule,
     'bounded-timeout': boundedTimeoutRule,
     'no-retried-action': noRetriedActionRule,
+    'no-swallowed-failure': noSwallowedFailureRule,
   },
 };

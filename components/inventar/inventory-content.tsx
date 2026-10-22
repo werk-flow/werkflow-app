@@ -21,7 +21,7 @@ import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { isServerRow, withPendingDraft } from '@/lib/inventory/pending-drafts';
 import type { InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
 import { INVENTORY_MOVEMENT_TYPE_LABELS } from '@/lib/inventory/types';
-import { cn, formatGermanDateTime } from '@/lib/utils';
+import { cn, formatBerlinDateTime } from '@/lib/utils';
 import { InventoryFilterBar } from './inventory-filter-bar';
 import type { PendingItemDraft } from './inventory-form-state';
 import { ImportDialog } from './inventory-import-dialog';
@@ -335,7 +335,7 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]} ·{' '}
-                    {formatGermanDateTime(movement.createdAt)}
+                    {formatBerlinDateTime(movement.createdAt)}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {target.from} → {target.to}
@@ -381,7 +381,7 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                 return (
                   <TableRow key={movement.id}>
                     <TableCell className="text-muted-foreground">
-                      {formatGermanDateTime(movement.createdAt)}
+                      {formatBerlinDateTime(movement.createdAt)}
                     </TableCell>
                     <TableCell className="font-medium">{movement.itemName}</TableCell>
                     <TableCell>{movement.locationName}</TableCell>

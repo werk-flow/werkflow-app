@@ -1,7 +1,7 @@
 'use client';
 
 import { EmptyState } from '@/components/ui/empty-state';
-import { formatGermanDateTime as formatReceivedAt } from '@/lib/utils';
+import { formatBerlinDateTime as formatReceivedAt } from '@/lib/utils';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';

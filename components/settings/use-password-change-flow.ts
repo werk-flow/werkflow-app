@@ -9,6 +9,7 @@ import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
+import { rememberPasswordResetAddress } from '@/lib/auth/actions';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import {
   type PasswordWithConfirmationValues,
@@ -62,6 +63,16 @@ type PasswordChangeFlow = {
   handleForgotPassword: () => Promise<void>;
 };
 
+/** Whether the reset form will find the signed-in address in its cookie. */
+async function rememberResetAddress(): Promise<boolean> {
+  try {
+    return (await rememberPasswordResetAddress()).success;
+  } catch {
+    // best-effort: the address only prefills the reset form, which asks for it when it is missing.
+    return false;
+  }
+}
+
 /**
  * The whole password-change state machine: re-authentication with the current
  * password, the in-memory copy of it, and the update with sign-out of other sessions.
@@ -85,10 +96,6 @@ export function usePasswordChangeFlow(): PasswordChangeFlow {
       currentPassword: '',
     },
   });
-
-  const forgotPasswordHref = profile?.email
-    ? `/forgot-password?email=${encodeURIComponent(profile.email)}&source=settings`
-    : '/forgot-password';
 
   const clearCurrentPassword = () => {
     currentPasswordRef.current = '';
@@ -213,6 +220,9 @@ export function usePasswordChangeFlow(): PasswordChangeFlow {
 
     await runForgotPasswordRedirect(async () => {
       await clearEmailChangeChallengeQuietly();
+      // The address reaches the reset form in a cookie the server sets from the
+      // session, so this must run before the sign-out below.
+      const knownAddress = await rememberResetAddress();
 
       // Global on purpose: a password change ends every existing session.
       const { error } = await supabase.auth.signOut({ scope: 'global' });
@@ -222,7 +232,7 @@ export function usePasswordChangeFlow(): PasswordChangeFlow {
         return;
       }
 
-      window.location.replace(forgotPasswordHref);
+      window.location.replace(knownAddress ? '/forgot-password?source=settings' : '/forgot-password');
       return untilPageLeaves();
     });
   }

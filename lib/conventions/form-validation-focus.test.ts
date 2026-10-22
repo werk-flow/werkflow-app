@@ -43,7 +43,7 @@ const REVIEWED_EXCEPTIONS: Readonly<Record<string, string>> = {
   'app/(auth)/signup/signup-form.tsx':
     'react-hook-form consumer (canon: not migrated); flagInvalidSignupFields marks the fields and form.setFocus focuses the first',
   'components/password/new-password-fields-form.tsx':
-    'react-hook-form consumer with two fields (canon exception); the mismatch message sits beside the submit',
+    'react-hook-form consumer: a submit marks the fields and its shouldFocusError focuses the first; the mismatch message sits beside the submit',
   'components/dokumente/attach-document-dialog.tsx':
     'the choice is a checkbox list of documents, not a Field; „Bitte wähle mindestens ein Dokument aus.“ sits beside the submit',
   'components/dokumente/use-document-move-copy.ts':

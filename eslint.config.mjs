@@ -1242,6 +1242,20 @@ const eslintConfig = defineConfig([
       'playwright-spec/no-one-shot-count-comparison': 'error',
     },
   },
+  // Failures in support modules (docs/technical/testing.md): no `.catch` or
+  // `catch` turns a failure into a constant. A timed-out wait branches through
+  // settledBeforeTimeout, and a genuine best effort names its reason in a
+  // `// best-effort: <reason>` comment. Unlike the block above, this one also
+  // covers the interaction module. The measurement and lab digest inputs keep
+  // their bytes (see above), so their catches stay as they are.
+  {
+    files: ['tests/golden/support/**/*.ts', 'tests/audit/support/**/*.ts', 'tests/canary/support/**/*.ts'],
+    ignores: [...MEASUREMENT_DIGEST_SUPPORT_FILES, ...LAB_DIGEST_SUPPORT_FILES],
+    plugins: { 'playwright-spec': playwrightSpecRules },
+    rules: {
+      'playwright-spec/no-swallowed-failure': 'error',
+    },
+  },
   // Waits (docs/technical/testing.md): every spec and support module waits at
   // most the configured expect timeout, or names its slow operation in
   // tests/golden/support/timeouts.ts. The Playwright configs set the defaults

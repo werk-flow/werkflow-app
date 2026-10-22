@@ -25,9 +25,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 ## Security
 
-| Candidate | Gap today | Target tier and mechanism |
-| --- | --- | --- |
-| Nonce script policy | `CSP_POLICY` in `lib/security/csp-report.ts` carries `'unsafe-inline'`, so the policy does not block an injected inline script. A nonce needs every page rendered per request, and `cacheComponents: true` in `next.config.ts` prerenders shells that cannot carry a per-request nonce. The `htmlSinkSelectors` lint set closes the product's own injection points meanwhile. | Tier 1, an owner decision: give up `cacheComponents`, generate a nonce per request in `proxy.ts`, drop `'unsafe-inline'`, and recalibrate the performance references. `lib/security/csp-report.test.ts` pins the policy string. |
+No open candidate.
 
 ## Code quality and maintainability
 
@@ -46,9 +44,8 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
-| Swallowed failures in support modules | `playwright-spec/no-retried-action` refuses a `.catch` that turns a failure into a constant in specs only. The support modules under `tests/golden/support/` and `tests/audit/support/` still hold such catches, some as deliberate probes of optional controls. | Tier 2: review each catch, replace it with the readiness fact it stands for, and extend the rule to the support modules. |
+| Swallowed failures in the digest inputs | `playwright-spec/no-swallowed-failure` covers every support module except the measurement and lab digest inputs (`MEASUREMENT_DIGEST_SUPPORT_FILES`, `LAB_DIGEST_SUPPORT_FILES`): `scenario-measurement.ts`, `lab-network.ts`, `lab-probe.ts` and `lab-recorder.ts` still turn failures into constants, because a byte change there invalidates the performance references. | Tier 2: in the run that recalibrates those references, fix each catch and drop the files from the rule's ignores. |
 | Agent pushes past the gate | `git push --no-verify` and a `core.hooksPath` override for one command skip `.githooks/pre-push`. The refusal is prepared (`.claude/hooks/refuse-publication-bypass.ts`, `lib/testing/publication/push-bypass.ts`) but not wired: changing `.claude/settings.json` is the owner's act. | Tier 1: the owner adds the hook to the `PreToolUse` Bash and PowerShell matcher of `.claude/settings.json` and `.codex/hooks.json`, and `lib/testing/runner/guard-wiring.test.ts` pins it. |
-| Evidence a process can still forge | The evidence ledger (`lib/testing/publication/evidence-ledger.ts`) detects an edited report or review record, and the edit guard refuses agent writes to it, but a process that runs the ledger's writer can still record a forged file. | Tier 1: an HMAC over each ledger entry with a key outside the agent's reach (an owner decision on where the key lives). |
 | Classification of a repaired group | `bun run test:runs classify` refuses a group whose latest attempt passed, and a `ui:contracts` attempt inside a verification run has no run manifest, so a failure that was repaired before it was classified leaves no incident row and no classification. | Tier 2: `classify` accepts the report id and group of a past failed attempt, reads its log, and records the row. |
 
 ## Documentation

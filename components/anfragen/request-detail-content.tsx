@@ -1,6 +1,6 @@
 'use client';
 
-import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { useState } from 'react';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';

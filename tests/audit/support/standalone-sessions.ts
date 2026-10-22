@@ -110,6 +110,11 @@ export async function openStandaloneScreen(input: {
   try {
     const page = await context.newPage();
     const email = await prepareSession(page, input.world, input.screen.session);
+    if (input.screen.cookie) {
+      if (!input.baseURL) throw new Error(`${input.screen.route} needs a base URL for its cookie`);
+      const url = new URL(input.screen.path, input.baseURL).href;
+      await context.addCookies([{ ...input.screen.cookie, url }]);
+    }
     await page.goto(input.screen.path);
     const pathname = input.screen.path.split('?')[0] ?? input.screen.path;
     await expect(page, `${input.screen.route} opens without a redirect`).toHaveURL(

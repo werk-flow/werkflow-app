@@ -66,7 +66,7 @@ function recorderScript(): void {
       }
     }).observe({ type: 'layout-shift', buffered: true });
   } catch {
-    // A browser without the Layout Instability API records nothing.
+    // best-effort: a browser without the Layout Instability API records nothing.
   }
 }
 

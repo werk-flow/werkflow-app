@@ -1,10 +1,12 @@
 'use server';
 
 import { updateTag } from 'next/cache';
+import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import type { ActionResult } from '@/lib/action-result';
+import { RESET_ADDRESS_COOKIE, RESET_ADDRESS_COOKIE_OPTIONS } from '@/lib/auth/address-cookies';
 
 /**
  * Invalidate the authenticated caller's cached profile.
@@ -15,6 +17,22 @@ export async function invalidateProfileCache(): Promise<ActionResult<object, 'no
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
   updateTag(CACHE_TAGS.profile(user.id));
+  return { success: true };
+}
+
+/**
+ * Leaves the caller's own address for the reset form, which the password
+ * change in the settings opens after it has signed out everywhere. The address
+ * comes from the verified session, never from the caller, and travels in an
+ * httpOnly cookie scoped to the form instead of its URL.
+ */
+export async function rememberPasswordResetAddress(): Promise<
+  ActionResult<object, 'not_authenticated' | 'no_address'>
+> {
+  const user = await getAuthenticatedUser();
+  if (!user) return { success: false, error: 'not_authenticated' };
+  if (!user.email) return { success: false, error: 'no_address' };
+  (await cookies()).set(RESET_ADDRESS_COOKIE, user.email, RESET_ADDRESS_COOKIE_OPTIONS);
   return { success: true };
 }
 

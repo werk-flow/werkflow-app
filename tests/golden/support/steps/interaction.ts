@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { errors, expect, type Locator, type Page } from '@playwright/test';
 import {
   BUSY_SIGNAL_SELECTOR,
   ROUTE_REFRESH_SIGNAL,
@@ -142,4 +142,19 @@ export async function dismissDialog(layer: Locator): Promise<void> {
   await expect(layer, 'A pending layer refuses dismissal').not.toHaveAttribute('data-pending', 'true');
   await layer.page().keyboard.press('Escape');
   await expect(layer).toBeHidden();
+}
+
+/**
+ * Whether a bounded wait (a `waitFor`, a `waitForURL`) settled before its
+ * timeout: false only for a timeout. A closed page, a strict-mode violation or
+ * any other failure propagates, so a branch on the result never hides one.
+ */
+export function settledBeforeTimeout(wait: Promise<unknown>): Promise<boolean> {
+  return wait.then(
+    () => true,
+    (error: unknown) => {
+      if (error instanceof errors.TimeoutError) return false;
+      throw error;
+    },
+  );
 }

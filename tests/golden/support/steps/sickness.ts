@@ -265,6 +265,8 @@ export async function recordSicknessForMemberViaSection(
       await expect(page.getByRole('dialog')).toHaveCount(0);
       return;
     } catch (error) {
+      // best-effort: the step already failed; a dialog this probe cannot read counts as interrupted for
+      // the one bounded retry, and a failure on the retry rethrows the step error, not the probe error.
       const interruptedBeforeSubmit = !submitted && !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && interruptedBeforeSubmit) continue;
       throw error;

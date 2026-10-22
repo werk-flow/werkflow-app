@@ -13,7 +13,7 @@ import {
   EQUIPMENT_SUBTYPE_LABELS,
   type EquipmentDetail,
 } from '@/lib/installed-equipment/types';
-import { formatGermanMediumDateTime, formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
+import { formatBerlinDateTime, formatLocalCalendarDay, parseIsoLocalDate } from '@/lib/utils';
 
 const EVENT_LABELS: Readonly<Record<EquipmentDetail['events'][number]['eventType'], string>> = {
   registered: 'Anlage erfasst',
@@ -173,11 +173,11 @@ export function EquipmentHistorySection({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-medium">{EVENT_LABELS[event.eventType]}</h3>
                 <time className="text-xs text-muted-foreground">
-                  {formatGermanMediumDateTime(event.effectiveAt)}
+                  {formatBerlinDateTime(event.effectiveAt)}
                 </time>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {event.actorName} · erfasst {formatGermanMediumDateTime(event.recordedAt)}
+                {event.actorName} · erfasst {formatBerlinDateTime(event.recordedAt)}
               </p>
               {event.reason && <p className="mt-2 text-sm">{event.reason}</p>}
               {event.links.length > 0 && (

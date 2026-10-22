@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-22
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -101,7 +101,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 4. A pushed product file that an `audit:performance:*` group's scopes own has a passing run of that group on its current content.
 5. A push to `main` (production) has a passing release plan as the newest local report and a passing cloud canary, both on the pushed tree.
 
-The gate trusts a report or a review record only while the hash chain of `lib/testing/publication/evidence-ledger.ts` holds its content, and the edit guard refuses agent writes to that evidence at any time. The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid; the files that wire verification and review (`.claude/settings.json`, `.codex/hooks.json`, `.coderabbit.yaml`) are inputs. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`, which the hook logs.
+The gate trusts a report or a review record only while the hash chain of `lib/testing/publication/evidence-ledger.ts` holds its content, and the edit guard refuses agent writes to that evidence at any time. The chain carries no HMAC: a key on the machine the agents use would protect nothing. The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid; the files that wire verification and review (`.claude/settings.json`, `.codex/hooks.json`, `.coderabbit.yaml`) are inputs. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`, which the hook logs.
 
 ## Commands
 
@@ -176,8 +176,6 @@ Classify as product when the application breaks its contract, as harness when se
 
 A preflight failure that creates no run is blocked verification, not a product failure. If the host kills a run, confirm that the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`. After a WSL address change, use `cleanup-local-relocated`.
 
-Testing authorizes no commit, push, deployment, or schema change.
-
 ## Checklist
 
 The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
@@ -186,6 +184,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - A new or rewritten browser case prepares its own prerequisites and runs alone in a fresh world. [test `lib/testing/spec-support/spec-conventions.test.ts`]
 - Locators are scoped to their semantic owner: no raw page-root selector, no positional selection, no zero-count check on visible text. [lint `playwright-spec/no-unscoped-page-selectors`, lint `playwright-spec/no-visible-text-zero-count`, lint `specSelectors`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`, test `lib/testing/spec-support/work-artifact-locators.test.ts`]
 - A spec passes data; its area module owns copy, locator functions and structure hooks (ids, attribute selectors, test ids), and a helper takes copy as a key, never a plain string. No parent hop, xpath or CSS class locates a control, and no spec reads a Server Action payload. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-locator-function-in-spec`, lint `playwright-spec/no-structural-locator`, lint `playwright-spec/no-transport-internals`, lint `playwright-spec/no-scoped-has-locator`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`]
+- A support module never turns a failure into a constant. A wait that may time out branches through `settledBeforeTimeout` in `tests/golden/support/steps/interaction.ts`, and a genuine best effort says why in a `// best-effort: <reason>` comment. [lint `playwright-spec/no-swallowed-failure`, test `lib/testing/spec-support/no-swallowed-failure.test.mjs`]
 - A wait over the 10 s expect timeout names its slow operation in `tests/golden/support/timeouts.ts`, and a step runs once after the fact that enables it, never repeated inside `toPass`. [lint `playwright-spec/bounded-timeout`, lint `playwright-spec/no-retried-action`, test `lib/testing/spec-support/timeout-registry.test.ts`]
 - A key press settles its scope first and never types into a focused field. [lint `playwright-spec/no-raw-key-press`, group `ui:contracts`]
 - A step submits once, waits on the app's busy signals and verifies both the visible confirmation and the persisted row: a mutation helper that returns a value returns `Persisted<Row>`, which only a reader in `tests/golden/support/db/` builds. [code `lib/testing/spec-support/busy-signals.ts`, test `lib/testing/spec-support/busy-signals.test.ts`, lint `testBusySelectors`, lint `specSelectors`, code `tests/golden/support/db/shared.ts`, test `lib/testing/spec-support/persisted-returns.test.ts`, lint `persistedCastSelectors`, lint `persistedImportSelectors`]
@@ -226,10 +225,9 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 
 1. Run `bun run test:plan` and read the reason for each selected group.
 2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
-3. On a failure, follow [Failures](#failures), then run `bun run test:verify` again.
+3. On a failure, follow [Failures](#failures).
 4. Run `bun run review` and record a disposition for each finding.
-5. For a wave end or a release, run `bun run test:verify --mode release` and the cloud canary.
-6. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
+5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
 
 ## Examples
 

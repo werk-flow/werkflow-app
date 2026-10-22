@@ -65,7 +65,7 @@ export function observeRouteRenders(
   const finish = async (request: Request): Promise<void> => {
     const entry = observed.find((candidate) => candidate.request === request);
     if (!entry || !inFlight.has(entry)) return;
-    const response = await request.response().catch(() => null);
+    const response = await request.response();
     entry.kind = classifyRouteRequest({
       method: request.method(),
       requestHeaders: request.headers(),

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { CircleCheck } from 'lucide-react';
 
-import { formatGermanDateTime as formatDateTime } from '@/lib/utils';
+import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
 import { REQUEST_CLOSE_REASON_LABELS, type ClientRequest } from '@/lib/requests/types';
 import type { RequestDetailData } from './request-detail-content';
 

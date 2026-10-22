@@ -1,32 +1,23 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { OTPForm } from '@/components/otp-form';
 import { getSupabaseServerSession } from '@/lib/supabase/server';
 import { getCachedUser } from '@/lib/data/cached';
 import { getAuthenticatedRedirectPath } from '@/lib/auth/redirects';
-
-type SearchParamsInput =
-  | Promise<Record<string, string | string[] | undefined>>
-  | Record<string, string | string[] | undefined>;
-
-type VerifyPageProps = {
-  searchParams: SearchParamsInput;
-};
+import { readAddressCookie, VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
+import { isUuid } from '@/lib/validation/uuid';
 
 export const metadata: Metadata = {
   title: 'E-Mail bestätigen',
 };
 
-function resolveQueryParam(params: Record<string, string | string[] | undefined>, key: string) {
-  const value = params[key];
-  if (Array.isArray(value)) {
-    return value[0];
-  }
-  return value;
-}
-
-export default async function VerifyPage({ searchParams }: VerifyPageProps) {
+export default async function VerifyPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite_code?: string }>;
+}) {
   const { session } = await getSupabaseServerSession();
 
   if (session) {
@@ -38,17 +29,16 @@ export default async function VerifyPage({ searchParams }: VerifyPageProps) {
     }
   }
 
-  const resolvedSearchParams =
-    typeof (searchParams as SearchParamsInput & { then?: unknown }).then === 'function'
-      ? await (searchParams as Promise<Record<string, string | string[] | undefined>>)
-      : (searchParams as Record<string, string | string[] | undefined>);
-
-  const email = resolveQueryParam(resolvedSearchParams, 'email');
-  const inviteCode = resolveQueryParam(resolvedSearchParams, 'invite_code');
-
+  // The signup or the login left the address in a cookie scoped to this page.
+  // Once it has expired, the person starts again where it is set.
+  const email = readAddressCookie((await cookies()).get(VERIFY_ADDRESS_COOKIE)?.value);
   if (!email) {
     redirect('/signup');
   }
+
+  // Invite codes are generated UUIDs; anything else is neither redeemed nor echoed.
+  const rawInviteCode = (await searchParams).invite_code;
+  const inviteCode = rawInviteCode && isUuid(rawInviteCode) ? rawInviteCode : undefined;
 
   return <OTPForm email={email} inviteCode={inviteCode} />;
 }

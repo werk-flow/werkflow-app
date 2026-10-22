@@ -18,6 +18,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { invalidateProfileCache } from '@/lib/auth/actions';
+import { openVerificationStep } from '@/lib/auth/verification-step';
 import {
   getPasswordRequirements,
   getPasswordStrengthLevel,
@@ -33,6 +34,9 @@ const signupSchema = z.object({
 });
 
 type SignupValues = z.infer<typeof signupSchema>;
+
+const VERIFICATION_STEP_FAILED =
+  'Der Bestätigungsschritt ließ sich nicht öffnen. Melde dich mit deiner E-Mail-Adresse und deinem Passwort an, um einen neuen Code zu erhalten.';
 
 // Marks every invalid field on the form and returns the first one to focus.
 function flagInvalidSignupFields(
@@ -122,12 +126,11 @@ function SignupNameFields({
 }
 
 interface SignupFormProps {
-  prefillEmail?: string;
   inviteCode?: string;
   invitedEmail?: string | null;
 }
 
-export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = null }: SignupFormProps) {
+export function SignupForm({ inviteCode = '', invitedEmail = null }: SignupFormProps) {
   // Determine if this is an invite-based signup (email should be locked)
   const isInviteSignup = !!inviteCode && !!invitedEmail;
   const router = useRouter();
@@ -143,7 +146,7 @@ export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = 
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: prefillEmail,
+      email: invitedEmail ?? '',
       password: '',
     },
   });
@@ -232,13 +235,11 @@ export function SignupForm({ prefillEmail = '', inviteCode = '', invitedEmail = 
           await invalidateProfileCache();
         }
 
-        // Include invite_code in the verify redirect if present
-        const verifyUrl = inviteCode
-          ? `/verify?email=${encodeURIComponent(values.email)}&invite_code=${encodeURIComponent(inviteCode)}`
-          : `/verify?email=${encodeURIComponent(values.email)}`;
-        router.replace(verifyUrl);
-        router.refresh();
-        return untilPageLeaves();
+        if (await openVerificationStep(router, values.email, inviteCode)) {
+          router.refresh();
+          return untilPageLeaves();
+        }
+        setFormError(VERIFICATION_STEP_FAILED);
       } catch {
         // A rejected request (network) must not leave the button spinning.
         setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');

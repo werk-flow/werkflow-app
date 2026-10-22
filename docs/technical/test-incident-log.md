@@ -22,6 +22,24 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-22: audit:lab:field harness failure
+
+<!-- incident-run: 2026-10-22T102242015Z-c57225 -->
+
+- Run: run `2026-10-22T102242015Z-c57225`, group `audit:lab:field`, target local, fingerprint `3f326f900092`, world `d8709b6614b54750b197f4bdae2fbc20`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: lab.field.clock-in caught an /api/attention-counts refresh about 700 ms after the clock-in, which the reference lacks (shape-added). The race predates this change: three of the six calibration runs of 2026-10-21 carried the same request, so the calibration left the shape out as unstable (appeared in 3 of 6 runs) while the judge still fails on its presence. The product code of the clock-in, the attention counts and the lab files is unchanged by this diff.
+- Prevention: no prevention claim: the repair is open. Either the lab reference records a shape the calibration found unstable and reports it ungated (lib/testing/lab-counts.ts, lib/testing/lab-history.ts, scripts/lab-counts.ts), or the own-save echo coalescing of package D2 removes the refresh; the coordinator decides.
+
+## 2026-10-22: audit:wave-1:a1-zeiten environment failure
+
+<!-- incident-run: 2026-10-22T102242015Z-4e7ff1 -->
+
+- Run: run `2026-10-22T102242015Z-4e7ff1`, group `audit:wave-1:a1-zeiten`, target local, fingerprint `dfab5b91e27b`, world `4d8d950d39304578a43fec83b13af12b`.
+- Failure point:  >  > wave-1\a1-zeiten.spec.ts > A1 Zeiterfassung @AUDIT-W1-A1 > A1-29: Manuelle Zeiten lehnen falsche Reihenfolge und Überlappung ab: Error: Preference reset failed: TypeError: fetch failed
+- Root cause: The test process lost its connection to the local Supabase gateway in the WSL VM during setup: the admin client's preference reset threw TypeError fetch failed before the test acted; the other three tests of the group passed on the same world and the next groups ran normally.
+- Prevention: Tier 2 existing: the bounded backend probe before every browser group (lib/testing/runner/backend-health.ts) and the environment retry rule; no product or test change.
+
 ## 2026-10-17: audit:lab:office harness failure
 
 <!-- incident-run: 2026-10-17T163504743Z-eed03c -->

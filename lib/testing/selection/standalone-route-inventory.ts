@@ -1,8 +1,11 @@
+import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
+
 /**
  * The screens outside the app shell (`StandaloneScreen`): sign-in and sign-up,
- * onboarding, the upgrade offer, the invitation error and the root not-found
- * page. Each entry names the session the screen needs and the address the
- * audit opens, because these screens refuse or redirect every other visitor.
+ * onboarding, the upgrade offer, the invitation error, the unavailable sign-in
+ * and the root not-found page. Each entry names the session the screen needs
+ * and the address the audit opens, because these screens refuse or redirect
+ * every other visitor.
  * `standalone-route-inventory.test.ts` fails when a page under `app/` outside
  * the app shell is missing here. The standalone audit
  * (`tests/audit/layout/standalone-screens.spec.ts`) opens each screen at 375
@@ -22,6 +25,8 @@ export type StandaloneScreen = {
   session: StandaloneSession;
   /** The address the audit opens, query included. */
   path: string;
+  /** A cookie the browser carries before it opens the screen, as the step before the screen leaves it. */
+  cookie?: { name: string; value: string };
 };
 
 export const STANDALONE_SCREENS = [
@@ -29,8 +34,14 @@ export const STANDALONE_SCREENS = [
   { route: '/signup', session: 'anonymous', path: '/signup' },
   { route: '/forgot-password', session: 'anonymous', path: '/forgot-password' },
   { route: '/reset-password', session: 'anonymous', path: '/reset-password' },
-  { route: '/verify', session: 'anonymous', path: '/verify?email=pruefung%40werkflow-golden.test' },
+  {
+    route: '/verify',
+    session: 'anonymous',
+    path: '/verify',
+    cookie: { name: VERIFY_ADDRESS_COOKIE, value: 'pruefung@werkflow-golden.test' },
+  },
   { route: '/invite-error', session: 'anonymous', path: '/invite-error?error=invite_expired' },
+  { route: '/auth/unavailable', session: 'anonymous', path: '/auth/unavailable' },
   { route: 'not-found', session: 'anonymous', path: '/diese-seite-gibt-es-nicht' },
   { route: '/onboarding/start', session: 'newcomer', path: '/onboarding/start' },
   { route: '/onboarding/join-organization', session: 'newcomer', path: '/onboarding/join-organization' },

@@ -11,7 +11,7 @@ import { SectionError } from '@/components/ui/section-error';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { cn, formatGermanDateTime, parseIsoLocalDate } from '@/lib/utils';
+import { cn, formatBerlinDateTime, parseIsoLocalDate } from '@/lib/utils';
 import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
@@ -257,7 +257,7 @@ function EntryHistoryCards({
             </span>
           </div>
           <p className="text-sm font-medium">{getEntryHistoryDisplayName(entry)}</p>
-          <p className="text-sm text-muted-foreground">{formatGermanDateTime(entry.timestamp)}</p>
+          <p className="text-sm text-muted-foreground">{formatBerlinDateTime(entry.timestamp)}</p>
           {entry.isManual && (
             <span className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs">Manuell</span>
           )}
@@ -299,7 +299,7 @@ function EntryHistoryTable({
             <TableRow key={entry.id} data-time-entry={entry.id} data-time-entry-status={entry.status}>
               <TableCell className="font-medium">{getEntryHistoryDisplayName(entry)}</TableCell>
               <TableCell>{getEntryTypeLabel(entry)}</TableCell>
-              <TableCell>{formatGermanDateTime(entry.timestamp)}</TableCell>
+              <TableCell>{formatBerlinDateTime(entry.timestamp)}</TableCell>
               <TableCell>
                 <span
                   className={cn(
@@ -312,7 +312,7 @@ function EntryHistoryTable({
               </TableCell>
               <TableCell>{entry.isManual ? 'Ja' : 'Nein'}</TableCell>
               <TableCell className="text-muted-foreground">
-                {entry.reviewedAt ? formatGermanDateTime(entry.reviewedAt) : '-'}
+                {entry.reviewedAt ? formatBerlinDateTime(entry.reviewedAt) : '-'}
               </TableCell>
               <TableCell className="text-right">
                 {settling.isBusy(entry.id) ? (

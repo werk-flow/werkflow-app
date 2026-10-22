@@ -1,5 +1,5 @@
 import { expect, type Locator } from '@playwright/test';
-import { pressKey, settled } from '../../golden/support/steps/interaction';
+import { pressKey, settled, settledBeforeTimeout } from '../../golden/support/steps/interaction';
 import type { DialogOpener } from './dialog-opener';
 import type { SurfaceContext } from './surface-fixtures';
 import { openSurface } from './surface-routes';
@@ -34,11 +34,7 @@ export async function openLayerAt(
   if (options.fresh) await openSurface(page, { route: context.route });
   let trigger = await opener.trigger(context);
   const onScreen =
-    !desktopFirst &&
-    (await trigger
-      .waitFor({ state: 'visible', timeout: 3_000 })
-      .then(() => true)
-      .catch(() => false));
+    !desktopFirst && (await settledBeforeTimeout(trigger.waitFor({ state: 'visible', timeout: 3_000 })));
   if (!onScreen && !desktopFirst) {
     await page.setViewportSize(DESKTOP);
     await openSurface(page, { route: context.route });

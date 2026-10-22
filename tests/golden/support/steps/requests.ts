@@ -2,6 +2,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { REQUEST_STATUS_LABELS } from '../../../../lib/requests/types';
 import { documentOpenButton, documentsRegion, uploadIntoDocumentsSection } from './documents';
 import { workTemplateSelect } from './work';
+import { settledBeforeTimeout } from './interaction';
 import { getRequestById, type PersistedRequest } from '../db/requests';
 import {
   assignDespiteQualificationWarning,
@@ -497,6 +498,8 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
       await requestCloseSubmit(dialog).click({ timeout: 5_000 });
       await expect(page.getByRole('dialog')).toHaveCount(0);
     } catch (error) {
+      // best-effort: the step already failed; a dialog this probe cannot read counts as interrupted for
+      // the one bounded retry, and a failure on the retry rethrows the step error, not the probe error.
       const dialogWasInterrupted = page.url() !== detailUrl || !(await dialog.isVisible().catch(() => false));
       if (attempt === 0 && dialogWasInterrupted) continue;
       throw error;
@@ -505,10 +508,9 @@ export async function closeRequestViaDialog(page: Page, reasonLabel: string): Pr
     // Reload from the server so success cannot be confused with a client-side
     // modal close that raced the Realtime refresh.
     await page.goto(detailUrl);
-    const persistedClosedReason = await expect(visibleText(page, REQUEST_DETAIL_TEXT.closedWithoutWork))
-      .toBeVisible({ timeout: 5_000 })
-      .then(() => true)
-      .catch(() => false);
+    const persistedClosedReason = await settledBeforeTimeout(
+      visibleText(page, REQUEST_DETAIL_TEXT.closedWithoutWork).waitFor({ state: 'visible', timeout: 5_000 }),
+    );
     if (persistedClosedReason) return;
     if (attempt === 1) {
       throw new Error('closeRequestViaDialog: request remained open after retry');

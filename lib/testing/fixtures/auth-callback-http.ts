@@ -1,6 +1,7 @@
 // Actual GET /auth/callback with only Auth, the cache and the database RPCs
-// replaced: an Auth service that cannot answer is a private 503, never the
-// invalid-link page; a bare invite link redeems nothing, whatever site sent
+// replaced: an Auth service that cannot answer leads to the page that the
+// proxy answers with a private 503 (proxy-session.ts), never the invalid-link
+// page; a bare invite link redeems nothing, whatever site sent
 // the browser; and no provider message, invited address or invite code
 // travels in a redirect URL.
 import assert from 'node:assert/strict';
@@ -61,9 +62,10 @@ function redemptions(): number {
   return rpcNames.filter((name) => name === 'redeem_organization_invite_for_user').length;
 }
 function assertUnavailable(response: Response, label: string): void {
-  assert.equal(response.status, 503, label);
-  assert.equal(response.headers.get('location'), null, label);
+  assert.equal(response.status, 303, label);
+  assert.equal(response.headers.get('location'), 'http://localhost/auth/unavailable', label);
   assert.equal(response.headers.get('cache-control'), 'private, no-store', label);
+  assert.equal(response.headers.get('set-cookie'), null, label);
 }
 
 const unavailableErrors: ReadonlyArray<AuthAnswer> = [
@@ -74,14 +76,13 @@ const unavailableErrors: ReadonlyArray<AuthAnswer> = [
   { error: null, thrown: new Error('fetch failed') },
 ];
 
-// A code exchange that cannot complete is a private 503: no invalid-link page,
-// no session cookie, no redemption.
+// A code exchange that cannot complete leads to the unavailable page: no
+// invalid-link page, no session cookie, no redemption.
 for (const answer of unavailableErrors) {
   authAnswer = answer;
   rpcNames.length = 0;
   const response = await callback(`code=fixture-code&invite_code=${inviteCode}`);
   assertUnavailable(response, `exchange ${answer.error?.name ?? 'thrown'}`);
-  assert.equal(response.headers.get('set-cookie'), null);
   assert.equal(redemptions(), 0);
 }
 

@@ -145,11 +145,12 @@ export async function createAndMailOrganizationInvite(
     [inviterProfile?.first_name, inviterProfile?.last_name].filter(Boolean).join(' ') ||
     send.inviterFallbackName;
 
-  // Existing accounts redeem through auth/callback; new ones sign up with the
-  // address prefilled.
+  // Existing accounts redeem through auth/callback; new ones sign up, where the
+  // page prefills the address from the invite row. The code is the capability;
+  // the address never travels in the link.
   const inviteUrl = isExistingUser
     ? `${origin}/auth/callback?invite_code=${inviteCode}`
-    : `${origin}/signup?email=${encodeURIComponent(email)}&invite_code=${inviteCode}`;
+    : `${origin}/signup?invite_code=${inviteCode}`;
 
   const supabaseSecretKey = getSupabaseSecretKey();
   const { error: emailError } = await admin.functions.invoke('send-invite-email', {

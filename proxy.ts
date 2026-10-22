@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { isRejectedIdentity } from '@/lib/auth/identity-errors';
+import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { logError } from '@/lib/logging';
 
@@ -103,14 +104,12 @@ export async function proxy(req: NextRequest) {
 
   const isVerifyRoute = normalizedPath === '/verify';
 
-  if (isVerifyRoute && !hasSession) {
-    const emailParam = req.nextUrl.searchParams.get('email');
-    if (!emailParam) {
-      const redirectUrl = req.nextUrl.clone();
-      redirectUrl.pathname = '/signup';
-      redirectUrl.search = '';
-      return NextResponse.redirect(redirectUrl);
-    }
+  // The code step needs the address the signup or the login left in its cookie.
+  if (isVerifyRoute && !hasSession && !req.cookies.has(VERIFY_ADDRESS_COOKIE)) {
+    const redirectUrl = req.nextUrl.clone();
+    redirectUrl.pathname = '/signup';
+    redirectUrl.search = '';
+    return NextResponse.redirect(redirectUrl);
   }
 
   const shouldRedirectToLogin = !hasSession && (isProtectedRoute || isRoot);

@@ -40,7 +40,7 @@ import { ProjectDetailProgressCard } from './project-detail-progress-card';
 import { ProjectDetailTimeSummaryCard } from './project-detail-time-summary-card';
 import { useProjectDetailDialogState } from './use-project-detail-dialog-state';
 import { useProjectDetailTime } from './use-project-detail-time';
-import { formatGermanDateTime } from '@/lib/utils';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 interface ProjectDetailContentProps {
   project: Project;
@@ -149,7 +149,7 @@ function useProjectDetailState({
           .map((entry) => ({
             id: entry.canonicalSegmentId ?? entry.id,
             sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
-            label: `${group.jobTitle} · ${formatGermanDateTime(entry.timestamp)}`,
+            label: `${group.jobTitle} · ${formatBerlinDateTime(entry.timestamp)}`,
           })),
       ),
     [projectTimeEntries],

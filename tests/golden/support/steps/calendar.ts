@@ -8,6 +8,7 @@ import {
 } from '../../../../lib/calendar/planning-occurrence-edit';
 import { PLANNING_OCCURRENCE_STATUS_LABELS } from '../../../../lib/planning/types';
 import { calendarStepButton, calendarViewTab } from '../plantafel';
+import { settledBeforeTimeout } from './interaction';
 import {
   confirmed,
   employeeAssignmentPicker,
@@ -276,10 +277,7 @@ export async function confirmPlanningWarning(page: Page, reason: string, require
     await expect(warning).toBeVisible();
   } else {
     // isVisible ignores its timeout; the warning opens after the planning check answers.
-    const appeared = await warning.waitFor({ state: 'visible', timeout: 2_000 }).then(
-      () => true,
-      () => false,
-    );
+    const appeared = await settledBeforeTimeout(warning.waitFor({ state: 'visible', timeout: 2_000 }));
     if (!appeared) return;
   }
   await planningWarningReason(warning).fill(reason);
@@ -340,19 +338,15 @@ async function finishPlanningSave(
   await dialog.getByRole('button', { name: firstButtonName }).click();
   await expect
     .poll(async () => {
-      if (!(await dialog.isVisible().catch(() => false))) return 'closed';
-      if (
-        await planningWarningPanel(dialog)
-          .isVisible()
-          .catch(() => false)
-      ) {
+      if (!(await dialog.isVisible())) return 'closed';
+      if (await planningWarningPanel(dialog).isVisible()) {
         return 'warning';
       }
       return 'pending';
     })
     .not.toBe('pending');
 
-  if (!(await dialog.isVisible().catch(() => false))) {
+  if (!(await dialog.isVisible())) {
     if (overrideReason && beforeSubmit) {
       throw new Error(
         'Planning saved without the expected warning; the measured submission boundary was never marked.',
@@ -642,18 +636,14 @@ export async function saveOccurrenceEditWithOverride(dialog: Locator, overrideRe
   await dialog.getByRole('button', { name: PLANNING_COPY.editSubmit }).click();
   await expect
     .poll(async () => {
-      if (!(await dialog.isVisible().catch(() => false))) return 'closed';
-      if (
-        await planningWarningPanel(dialog)
-          .isVisible()
-          .catch(() => false)
-      ) {
+      if (!(await dialog.isVisible())) return 'closed';
+      if (await planningWarningPanel(dialog).isVisible()) {
         return 'warning';
       }
       return 'pending';
     })
     .not.toBe('pending');
-  if (!(await dialog.isVisible().catch(() => false))) return;
+  if (!(await dialog.isVisible())) return;
   await dialog.locator('#planning-edit-reason').fill(overrideReason);
   await dialog.getByRole('button', { name: PLANNING_COPY.editOverrideSubmit }).click();
   await expect(dialog).toHaveCount(0);

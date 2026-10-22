@@ -508,12 +508,12 @@ export async function confirmBatchReschedule(
   const warning = planningWarningDialog(page);
   await expect
     .poll(async () => {
-      if (await warning.isVisible().catch(() => false)) return 'warning';
-      if (!(await preview.isVisible().catch(() => false))) return 'closed';
+      if (await warning.isVisible()) return 'warning';
+      if (!(await preview.isVisible())) return 'closed';
       return 'pending';
     })
     .not.toBe('pending');
-  if (await warning.isVisible().catch(() => false)) {
+  if (await warning.isVisible()) {
     await planningWarningReason(warning).fill(overrideReason);
     await planningWarningSave(warning).click();
   }

@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 
 import { StandaloneTitle } from '@/components/shared/standalone-screen';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
+import { readAddressCookie, RESET_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
 
 import { ForgotPasswordForm } from './forgot-password-form';
 
@@ -24,10 +26,12 @@ function getErrorMessage(error: string | undefined) {
 export default async function ForgotPasswordPage({
   searchParams,
 }: {
-  searchParams: Promise<{ email?: string; error?: string; source?: string }>;
+  searchParams: Promise<{ error?: string; source?: string }>;
 }) {
   const params = await searchParams;
-  const initialEmail = typeof params.email === 'string' ? params.email : '';
+  // The password change in the settings left the signed-in address in a
+  // cookie scoped to this page; a visitor without it types the address.
+  const initialEmail = readAddressCookie((await cookies()).get(RESET_ADDRESS_COOKIE)?.value) ?? '';
   const errorMessage = getErrorMessage(params.error);
   const isKnownAccountReset = params.source === 'settings';
 

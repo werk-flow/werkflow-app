@@ -19,7 +19,7 @@ import {
 import { useQualificationWarningConfirmation } from '../shared/qualification-warning-dialog';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
 import { PRIORITY_CLASSES, formatDurationOrDash, formatPlannedTime } from './job-detail-format';
-import { formatGermanDate, formatGermanDateTime } from '@/lib/utils';
+import { formatGermanDate, formatBerlinDateTime } from '@/lib/utils';
 
 type JobDetailFieldContext = {
   liveJob: JobWithDetails;
@@ -307,7 +307,7 @@ function buildJobDetailSiteFields(job: JobWithDetails, liveJob: JobWithDetails):
       : []),
     {
       label: 'Erstellt am',
-      value: formatGermanDateTime(liveJob.createdAt),
+      value: formatBerlinDateTime(liveJob.createdAt),
     },
   ];
 }

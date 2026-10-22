@@ -19,6 +19,7 @@ import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages'
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   name_required: 'Bitte gib einen Namen ein.',
@@ -40,10 +41,14 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
   const [name, setName] = useState('');
   const { run: runCreate, isPending: isLoading } = useServerAction(createOrganization);
   const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const missingName = name.trim().length >= 2 ? undefined : ERROR_MESSAGES.name_too_short;
+    setNameError(missingName ?? null);
+    if (focusFirstInvalidField({ 'dialog-org-name': missingName })) return;
 
     try {
       const result = await runCreate(name);
@@ -66,11 +71,10 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
       // Reset form when closing
       setName('');
       setError(null);
+      setNameError(null);
     }
     onOpenChange(newOpen);
   };
-
-  const isValid = name.trim().length >= 2;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -81,13 +85,16 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Field label="Name der Organisation" htmlFor="dialog-org-name" required>
+          <Field label="Name der Organisation" htmlFor="dialog-org-name" required error={nameError}>
             <Input
               id="dialog-org-name"
               type="text"
               placeholder="z.B. Meine Firma GmbH"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameError(null);
+              }}
               disabled={isLoading}
               autoComplete="organization"
             />
@@ -104,12 +111,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
             >
               Abbrechen
             </Button>
-            <Button
-              type="submit"
-              // eslint-disable-next-line ui/submit-disabled-only-while-pending -- canon exception: a form with one required field enables on completeness
-              disabled={!isValid}
-              pending={isLoading}
-            >
+            <Button type="submit" pending={isLoading}>
               {isLoading ? 'Wird erstellt…' : 'Erstellen'}
             </Button>
           </DialogFooter>

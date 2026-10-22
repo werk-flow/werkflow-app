@@ -27,7 +27,7 @@ import { WorkArtifactsSection } from '../artifacts/work-artifacts-section';
 import { JobDetailAssigneesCard } from './job-detail-assignees-card';
 import { JobDetailTimeCard } from './job-detail-time-card';
 import type { JobDetailTimeSummary } from './use-job-detail-time-summary';
-import { formatGermanDateTime } from '@/lib/utils';
+import { formatBerlinDateTime } from '@/lib/utils';
 
 type JobDetailMainColumnProps = {
   liveJob: JobWithDetails;
@@ -103,7 +103,7 @@ export function JobDetailMainColumn({
         .filter((entry) => entry.jobId === liveJob.id && entry.entryType === 'clock_in')
         .map((entry) => ({
           id: entry.canonicalSegmentId ?? entry.id,
-          label: formatGermanDateTime(entry.timestamp),
+          label: formatBerlinDateTime(entry.timestamp),
           sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
         })),
     [liveJob.id, timeEntries],

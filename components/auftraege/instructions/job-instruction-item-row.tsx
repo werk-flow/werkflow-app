@@ -8,7 +8,7 @@ import { PlainButton } from '@/components/ui/plain-button';
 import { Textarea } from '@/components/ui/textarea';
 import type { JobInstructionItemWithDetails } from '@/lib/jobs/types';
 import { unconfirmedMarker } from '@/lib/ui/unconfirmed';
-import { cn, formatGermanDateTime } from '@/lib/utils';
+import { cn, formatBerlinDateTime } from '@/lib/utils';
 import type { JobInstructionRowActions } from './job-instruction-row-actions';
 import { resizeTextareaElement } from './job-instruction-textarea';
 import type { useJobInstructionItemEditing } from './use-job-instruction-item-editing';
@@ -49,9 +49,9 @@ export function JobInstructionItemRow({
   const itemIndex = items.findIndex((currentItem) => currentItem.id === item.id);
   const editingValue = editingValues[item.id] ?? item.content;
   const isRowBusy = isBusy(item.id);
-  const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatGermanDateTime(item.createdAt)}`;
+  const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatBerlinDateTime(item.createdAt)}`;
   const statusLabel = item.lastStatusChangedAt
-    ? `Zuletzt ${item.isCompleted ? 'erledigt' : 'offen'} von ${getActorName(item.lastStatusChangedByProfile)} · ${formatGermanDateTime(item.lastStatusChangedAt)}`
+    ? `Zuletzt ${item.isCompleted ? 'erledigt' : 'offen'} von ${getActorName(item.lastStatusChangedByProfile)} · ${formatBerlinDateTime(item.lastStatusChangedAt)}`
     : null;
 
   return (
