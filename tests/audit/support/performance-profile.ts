@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 import type { Database } from '../../../lib/supabase/database.types';
 import { resolveBerlinWallTime } from '../../../lib/planning/date-time';
 import { shiftIsoDateByDays } from '../../../lib/personnel/types';
-import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
+import { berlinDateAtOffset, ownedBerlinWeekAtOffset } from '../../golden/support/date-ownership';
 import { requireEnv } from '../../golden/support/env';
 import { testSupabaseClientOptions } from '../../golden/support/client-options';
 import type { TestWorld } from '../../golden/support/world';
@@ -48,13 +48,14 @@ function syntheticJobTitle(index: number): string {
 export const MEASURED_VISIT_TITLE = syntheticJobTitle(TYPICAL_PROFILE.jobs - 1);
 
 /**
- * The live week: seven future days with the busy-day load and the measured
- * visit, because a visit that has started cannot be moved (`started_occurrence`).
- * The historical month stays the cold-open load.
+ * The live week: a future week, Monday to Sunday, with the busy-day load and
+ * the measured visit, because a visit that has started cannot be moved
+ * (`started_occurrence`). It starts on a Monday so the Plantafel shows all
+ * seven days on every run day. The historical month stays the cold-open load.
  */
 export const LIVE_WEEK_DAYS = 7;
 export function liveWeekStart(): string {
-  return ownedBerlinDateAtOffset('performance-calendar', 141);
+  return ownedBerlinWeekAtOffset('performance-calendar', 152);
 }
 
 export type TypicalProfileCounts = {

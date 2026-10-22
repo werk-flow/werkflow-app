@@ -11,7 +11,8 @@
 // Only uniqueness-constrained fixtures go through ownedBerlinDateAtOffset;
 // facts without a uniqueness constraint use a purpose-specific bounded helper
 // when one exists. Dispatch-visible visit dates use the panel-window helper
-// below. Other facts, such as expiry horizons, use the unchecked formatter.
+// below, and a week that a week view shows whole uses the week helper. Other
+// facts, such as expiry horizons, use the unchecked formatter.
 
 import { DISPATCH_OVERVIEW_MAX_OFFSET_DAYS } from '@/lib/dispatch/types';
 import { testBusinessDate } from '../../../lib/testing/runner/business-date';
@@ -60,7 +61,8 @@ const AUDIT_DATE_WINDOWS = {
     { from: -7, to: -7 },
     { from: 130, to: 130 },
   ],
-  'performance-calendar': [{ from: 141, to: 147 }],
+  // Thirteen days: the whole week from the first Monday on or after +152 (ownedBerlinWeekAtOffset).
+  'performance-calendar': [{ from: 152, to: 164 }],
   'p1-24a': [{ from: 131, to: 140 }],
 } as const satisfies Record<string, readonly OffsetRange[]>;
 
@@ -117,4 +119,18 @@ export function ownedBerlinDateAtOffset(spec: AuditSpecName, offsetDays: number)
     );
   }
   return berlinDateAtOffset(offsetDays);
+}
+
+/**
+ * The Monday of the first whole week, Monday to Sunday, on or after run-day +
+ * offset, for a fixture that a week view shows. The Plantafel reads the week
+ * of a date, so seven days counted from the run's weekday would put a
+ * different number of them on screen on each run day. Throws unless the spec
+ * owns all seven days.
+ */
+export function ownedBerlinWeekAtOffset(spec: AuditSpecName, offsetDays: number): string {
+  const weekday = new Date(`${berlinDateAtOffset(offsetDays)}T12:00:00Z`).getUTCDay();
+  const monday = offsetDays + ((8 - weekday) % 7);
+  for (let day = 1; day < 7; day += 1) ownedBerlinDateAtOffset(spec, monday + day);
+  return ownedBerlinDateAtOffset(spec, monday);
 }

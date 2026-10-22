@@ -2,10 +2,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { getBerlinWeekFetchRange } from '../../calendar/business-range';
+import { addLocalDays } from '../../date-time/berlin';
+import { liveWeekStart } from '../../../tests/audit/support/performance-profile';
 import {
   berlinDateAtOffset,
   dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
+  ownedBerlinWeekAtOffset,
 } from '../../../tests/golden/support/date-ownership';
 import { specIndependenceProblems } from './spec-independence';
 
@@ -112,6 +116,28 @@ describe('browser spec conventions (testing.md)', () => {
     expect(() => dispatchOverviewBerlinDateAtOffset(15)).toThrow(
       'Dispatch overview offset must be an integer from 0 through 14; received 15.',
     );
+  });
+
+  test('the lab live week is one whole Plantafel week on every run weekday', () => {
+    // The 2026-10-17 incident: seven days from the run day put two to seven of them on the board.
+    const anchor = process.env.WERKFLOW_TEST_BUSINESS_DATE;
+    try {
+      for (let day = 0; day < 7; day += 1) {
+        process.env.WERKFLOW_TEST_BUSINESS_DATE = addLocalDays('2026-10-19', day);
+        const monday = liveWeekStart();
+        expect(new Date(`${monday}T12:00:00Z`).getUTCDay()).toBe(1);
+        const window = getBerlinWeekFetchRange(monday, 1);
+        expect(window.fromIso < monday && addLocalDays(monday, 6) < window.toIso).toBe(true);
+      }
+      // From a Monday run day, +159 is a Saturday: the next whole week ends outside the window.
+      process.env.WERKFLOW_TEST_BUSINESS_DATE = '2026-10-19';
+      expect(() => ownedBerlinWeekAtOffset('performance-calendar', 159)).toThrow(
+        'Spec "performance-calendar" claimed run-day offset +165',
+      );
+    } finally {
+      if (anchor === undefined) delete process.env.WERKFLOW_TEST_BUSINESS_DATE;
+      else process.env.WERKFLOW_TEST_BUSINESS_DATE = anchor;
+    }
   });
 
   test('live correction fixtures own a past date rather than future worked time', () => {

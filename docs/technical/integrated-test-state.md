@@ -1,6 +1,6 @@
 # Integrated test state
 
-Status: living — last reviewed 2026-10-08
+Status: living — last reviewed 2026-10-22
 
 Read this page when you choose a date for a test fixture, compute a date-dependent expectation, or keep a page stable during a browser step. [testing.md](testing.md) owns every other testing rule, including the rule that each test prepares its own state.
 
@@ -20,6 +20,7 @@ A business fact under a uniqueness constraint collides when two tests of one wor
 - Claim an audit date through `ownedBerlinDateAtOffset()` in `tests/golden/support/date-ownership.ts`. The function throws when a spec uses an offset outside its own window. The registry `AUDIT_DATE_WINDOWS` in that module owns the windows and throws at import when two windows overlap.
 - Register the window of a new group in `AUDIT_DATE_WINDOWS` when the slice starts. Take the next free offsets.
 - For a visit that must appear in the manager dispatch panel, use `dispatchOverviewBerlinDateAtOffset()`. It rejects an offset outside the dispatch overview window.
+- For days that a week view must show whole, such as the lab's live week on the Plantafel, claim the week through `ownedBerlinWeekAtOffset()`. It returns the first Monday on or after the offset, so the week holds the same days on every run weekday, and it throws unless the spec owns all seven.
 - Inside one file, a later test must not reuse an effective-date key that an earlier test owns. When a test needs a new effective state, choose a date that does not collide and assess the dependent business action on that same date.
 - Use a past date for an ordinary manual time entry, with times clear of the other entries in the file. An entry later today is still in the future during an early run. Use a future date only when the scenario tests an allowed future-date path.
 

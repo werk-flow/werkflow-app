@@ -12,8 +12,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "cc83f56e36d1739a38076f3771fd303d385add805d211a57ed363c440cb8b66f",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "bc625c107a5d6aeac14431dafbf8f9ed8d35ba2ca16d4cc57ab607a7ea32c2d5",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -30,31 +30,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 821.599853515625,
+      "referenceMs": 860.19970703125,
       "samples": [
-        794.000244140625,
-        799.7998046875,
-        810.39990234375,
-        812.10009765625,
-        821.599853515625,
-        837.699951171875,
-        854,
-        862.599853515625,
-        890.69970703125
+        848.5,
+        851.60009765625,
+        852.7001953125,
+        859.2998046875,
+        860.19970703125,
+        878.69970703125,
+        879.199951171875,
+        881.7998046875,
+        968.60009765625
       ],
       "source": {
-        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-02T204033878Z-b160ca",
-          "2026-10-02T204219672Z-06db1c",
-          "2026-10-02T204400079Z-4ce350"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:44:50.360Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:26.196Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:36.820Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     },
     {
@@ -63,8 +63,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "7135262d9a6972cba61be3b87a2a03ba738aad7a566333107dadaf5b9c0aa640",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "468f767f45913e1f679f30bf50f58583caf61db78c34a7550f65537ef9e54534",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -81,31 +81,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 638.2001953125,
+      "referenceMs": 698.7001953125,
       "samples": [
-        594.7998046875,
-        627.500244140625,
-        632.999755859375,
-        634.800048828125,
-        638.2001953125,
-        645.099853515625,
-        661.400146484375,
-        670.099853515625,
-        686.099853515625
+        601.2998046875,
+        642.5,
+        646.099853515625,
+        681.300048828125,
+        698.7001953125,
+        706,
+        730.099853515625,
+        745.800048828125,
+        821.2001953125
       ],
       "source": {
-        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-02T204033878Z-b160ca",
-          "2026-10-02T204219672Z-06db1c",
-          "2026-10-02T204400079Z-4ce350"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:44:51.303Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:27.276Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:36.820Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     },
     {
@@ -114,8 +114,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "1171b208dd465f6ea7e3b4dcbb8939eb4fb384dcbbbde503349c82842dbd64c8",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "1a1f722c3c564178e6c9790c2f84738a448b9f8e800a28f91a4ae5ab3f160c04",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -132,31 +132,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 476.699951171875,
+      "referenceMs": 505,
       "samples": [
-        437.800048828125,
-        465.800048828125,
-        466.60009765625,
-        469,
-        476.699951171875,
-        481.10009765625,
-        496,
-        533,
-        757.800048828125
+        448.900146484375,
+        452.89990234375,
+        466.199951171875,
+        499.5,
+        505,
+        521.89990234375,
+        529.699951171875,
+        532.5,
+        592.10009765625
       ],
       "source": {
-        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-02T204033878Z-b160ca",
-          "2026-10-02T204219672Z-06db1c",
-          "2026-10-02T204400079Z-4ce350"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:44:52.905Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:28.988Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:36.820Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     },
     {
@@ -165,8 +165,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "0c4cef0d2f66cb03ea1efc5ac20ec4966875b1c85a6486ab082346f8429a96a3",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "23a1bcaadf9aab005a7d93213ca851f7609703b1ac492d90e49180851b569f8a",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -183,31 +183,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 495.500244140625,
+      "referenceMs": 550.39990234375,
       "samples": [
-        471.300048828125,
-        486.400146484375,
-        487.300048828125,
-        488.80029296875,
-        495.500244140625,
-        496.39990234375,
-        516.400146484375,
-        523.300048828125,
-        523.7001953125
+        489.199951171875,
+        502.400146484375,
+        535.89990234375,
+        542.900146484375,
+        550.39990234375,
+        551.89990234375,
+        556.2001953125,
+        569.10009765625,
+        579.300048828125
       ],
       "source": {
-        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-02T204033878Z-b160ca",
-          "2026-10-02T204219672Z-06db1c",
-          "2026-10-02T204400079Z-4ce350"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:44:53.682Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:29.798Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:36.820Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     },
     {
@@ -216,8 +216,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "d3e92c9edd2911e9b5a447296eb88ff927c45e7c201b429e4ed582f7ddb19f28",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "4727edac0bdeaaa39081f2306262c2d4b15334f184d1fbdf6007b8bc18eb68d9",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -234,31 +234,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 778.10009765625,
+      "referenceMs": 814.500244140625,
       "samples": [
-        722.60009765625,
-        763.699951171875,
-        765.7998046875,
-        768,
-        778.10009765625,
-        797.099853515625,
-        801.800048828125,
-        801.900146484375,
-        839.19970703125
+        729.300048828125,
+        737.199951171875,
+        753.599853515625,
+        797.2998046875,
+        814.500244140625,
+        834.199951171875,
+        840.60009765625,
+        863,
+        881
       ],
       "source": {
-        "runKey": "2026-10-02T204033878Z-b160ca",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-02T204033878Z-b160ca",
-          "2026-10-02T204219672Z-06db1c",
-          "2026-10-02T204400079Z-4ce350"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:44:54.723Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:30.775Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:36.820Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     },
     {
@@ -267,8 +267,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "18ddd30355a8373d4b7307a1e4b3ef7ffd4ff4d065a500d37698f73ab18b31cc",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "0123b6697740bb60ed5b485265dfa0ed2e0241cbe2a0fa9bb3452cf9db08d823",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -285,31 +285,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1087.60009765625,
+      "referenceMs": 1207.800048828125,
       "samples": [
-        1018.39990234375,
-        1040.300048828125,
-        1050.60009765625,
-        1066.100341796875,
-        1087.60009765625,
-        1121.39990234375,
-        1143.60009765625,
-        1165.39990234375,
-        1627.10009765625
+        1148,
+        1155.199951171875,
+        1165.999755859375,
+        1180.7001953125,
+        1207.800048828125,
+        1260,
+        1277.89990234375,
+        1306.2001953125,
+        1531.89990234375
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:52:56.766Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:45.732Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -318,8 +318,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "12057d4c920c6a60d23ee4ceb222e76aa84e6f71fc8929851cd91224dd4547be",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "76ad09a0faba683537083f6e206f6a080ad55126ba047e173374c30af2dec014",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -336,31 +336,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 59.800048828125,
+      "referenceMs": 160.2001953125,
       "samples": [
-        55.900146484375,
-        56,
-        56,
-        56.39990234375,
-        59.800048828125,
-        61,
-        68.599853515625,
-        71.199951171875,
-        72.5
+        106.699951171875,
+        128.5,
+        139.5,
+        155.400146484375,
+        160.2001953125,
+        165.2998046875,
+        165.5,
+        168.300048828125,
+        172.699951171875
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:52:59.790Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:50.171Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -369,8 +369,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "0a79c00cef8261bec8c971a54b7fcb7a2e1f38740d01227aabbaccc668ebedbb",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "6e7ff5f118baa9b9f632d78631414c98bab9a03002803a4049eaa146c1c974fc",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -387,31 +387,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 215,
+      "referenceMs": 360.10009765625,
       "samples": [
-        192.5,
-        205.2998046875,
-        208.199951171875,
-        209.199951171875,
-        215,
-        225.5,
-        230.5,
-        231.7001953125,
-        239.39990234375
+        293.89990234375,
+        331.2001953125,
+        347.5,
+        359.199951171875,
+        360.10009765625,
+        373.10009765625,
+        375.300048828125,
+        412.5,
+        426.300048828125
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:01.367Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:52.512Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -420,8 +420,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "c698268982ee8f32fa215458acfd1e4b555156d811f14ec4dff965d4e802cee5",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "3bb856ef26eeefeec6c18f3e486af45c6a2385fb2a51996bf01249c7b9949826",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -438,31 +438,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 118.699951171875,
+      "referenceMs": 180.5,
       "samples": [
-        96.300048828125,
-        105.10009765625,
-        107.400146484375,
-        115.10009765625,
-        118.699951171875,
-        133.199951171875,
-        153.300048828125,
-        203.199951171875,
-        206.60009765625
+        125.300048828125,
+        156.400146484375,
+        173.60009765625,
+        175.5,
+        180.5,
+        184.599853515625,
+        195.400146484375,
+        231.199951171875,
+        238.900146484375
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:01.977Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:53.467Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -471,8 +471,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "e87a907e8fd4f85961bafcb66be8d4b9d0f260b5070faf9c5d05ea9e500e2712",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "64f1a6b31b1a0f88e35f65d3422af4ce6588bd10daf597e2231025f079f30531",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -489,31 +489,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 167.199951171875,
+      "referenceMs": 201.5,
       "samples": [
-        157,
-        165.599853515625,
-        166.099853515625,
-        167.099853515625,
-        167.199951171875,
-        173.800048828125,
-        180.39990234375,
-        181.800048828125,
-        216.7998046875
+        177.400146484375,
+        182,
+        185.099853515625,
+        194.699951171875,
+        201.5,
+        204.699951171875,
+        214.599853515625,
+        214.699951171875,
+        215.199951171875
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:02.703Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:54.193Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -522,8 +522,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "7799a4d7f8dc6426087e5815918ab37fab691c52092218c4c5b52d3596e28665",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "416d5b8cbe03cbd1fd2bfab65a22002aecb6309ccd91842964763b88b25575f1",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -540,31 +540,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 176.400146484375,
+      "referenceMs": 291.39990234375,
       "samples": [
-        129.39990234375,
-        155.099853515625,
-        158.39990234375,
-        166.400146484375,
-        176.400146484375,
-        185,
-        212.800048828125,
-        218.300048828125,
-        225.900146484375
+        255.599853515625,
+        263,
+        279.10009765625,
+        286.39990234375,
+        291.39990234375,
+        293.699951171875,
+        296.5,
+        314,
+        369.800048828125
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:04.485Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:56.430Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -573,8 +573,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "3edcfa80dbc1349f5963dba677633b719c316ede27b6db0033b291b915b2a627",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "eb65fa19ae860418ed862f65ae6669ec0e7e46c7a1bad2cadfe5d62dc41fc938",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -591,31 +591,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 795,
+      "referenceMs": 1103.900146484375,
       "samples": [
-        698,
-        737,
-        738.60009765625,
-        795,
-        795,
-        823.099853515625,
-        840.699951171875,
-        881.2001953125,
-        944.2998046875
+        876.699951171875,
+        1043.800048828125,
+        1073.60009765625,
+        1100.5,
+        1103.900146484375,
+        1108.599853515625,
+        1193.5,
+        1220.800048828125,
+        1230.199951171875
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:05.583Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:57.964Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -624,8 +624,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "f5965876744d3db9c34c63df7c4dfc5092f303adfa4f545423ad3f7033072a86",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "1c9972922e7e125a33dab858d6b64f8c6227b2b471b8e33c2733f09b27b3f350",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -642,31 +642,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 440.099853515625,
+      "referenceMs": 518.5,
       "samples": [
-        383.300048828125,
-        415.199951171875,
-        428.2001953125,
-        436.60009765625,
-        440.099853515625,
-        446.39990234375,
-        452.699951171875,
-        461,
-        478.10009765625
+        410.400146484375,
+        444.300048828125,
+        476.199951171875,
+        499.599853515625,
+        518.5,
+        533.300048828125,
+        539.89990234375,
+        563.699951171875,
+        571.199951171875
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:06.635Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:47:59.369Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -675,8 +675,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "0cc7a85fc0a829e2f8e0f90988c752053b67ab84d9670bad8615b7596eac2d35",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "5d06f7022da56880c634c3d296c2063e2d362e6d68dbe54611fa705dd93f3d64",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -693,31 +693,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 30.39990234375,
+      "referenceMs": 34.10009765625,
       "samples": [
-        19.199951171875,
-        21,
-        25.10009765625,
-        29,
-        30.39990234375,
-        33.599853515625,
-        34.699951171875,
-        42.60009765625,
-        46.7001953125
+        24.699951171875,
+        25.099853515625,
+        26.60009765625,
+        32.199951171875,
+        34.10009765625,
+        38.2001953125,
+        40.60009765625,
+        40.699951171875,
+        41.800048828125
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:07.259Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:48:00.038Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -726,8 +726,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "3e0bff2e01472c1caf672da7a6a9d9533b2cff24b97990c21ba112ed0ac3f6fc",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "adb397ba7b3384b8014e351243ba8c68216cfcaeb70f5652d7a7f263ee085c04",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -744,31 +744,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 162.300048828125,
+      "referenceMs": 195.800048828125,
       "samples": [
-        158.199951171875,
-        158.300048828125,
-        159.599853515625,
-        159.7001953125,
-        162.300048828125,
-        168.099853515625,
-        168.60009765625,
-        170.39990234375,
-        184.300048828125
+        157.5,
+        163,
+        165.400146484375,
+        191,
+        195.800048828125,
+        210,
+        219.800048828125,
+        224,
+        240.300048828125
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:08.568Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:48:01.295Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -777,8 +777,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "52a7b2ea175e9106d2e079ee98d66dcfc217c32b7403d0f29c069770cf642085",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "c3de1d814942e85e2277a68e007c199a6949fea219f38faff710597a7921b229",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -795,31 +795,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 240.400146484375,
+      "referenceMs": 313.099853515625,
       "samples": [
-        211,
-        221.900146484375,
-        223.7001953125,
-        237,
-        240.400146484375,
-        244.199951171875,
-        247.89990234375,
-        256.5,
-        284.10009765625
+        247,
+        307.300048828125,
+        308.800048828125,
+        310,
+        313.099853515625,
+        321.5,
+        322.2998046875,
+        352.89990234375,
+        427.099853515625
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:09.309Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:48:02.127Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -828,8 +828,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "3934d1e345c2e4a50e9a42f7fea20df36968de0f4cbe99211de4e901a1cb62a3",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "497831766676a284597a793fb5fb6e960b8fe23655c1755a02781d100d816e02",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -846,31 +846,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 97.199951171875,
+      "referenceMs": 111.7998046875,
       "samples": [
-        76.400146484375,
-        90.099853515625,
-        90.199951171875,
-        90.900146484375,
-        97.199951171875,
-        100.39990234375,
-        108.300048828125,
-        112.300048828125,
-        127.5
+        90.300048828125,
+        104.7998046875,
+        107.800048828125,
+        108.10009765625,
+        111.7998046875,
+        114,
+        114.099853515625,
+        120.2998046875,
+        121.89990234375
       ],
       "source": {
-        "runKey": "2026-10-02T204659260Z-504a3e",
+        "runKey": "2026-10-21T202256685Z-aac0f4",
         "runKeys": [
-          "2026-10-02T204659260Z-504a3e",
-          "2026-10-02T204930415Z-1a2b31",
-          "2026-10-02T205148904Z-3f5894"
+          "2026-10-21T202256685Z-aac0f4",
+          "2026-10-21T203412815Z-1a8cbe",
+          "2026-10-21T204627226Z-fd8fac"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:53:09.540Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:48:02.392Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:08:49.301Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:22.483Z"
       }
     },
     {
@@ -1032,8 +1032,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "811c75ba5eb3c67f1527cbcadbaf16203270739eadbbb8a5547e492173433f37",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "86d411fd9ee869ebb264891a2241cdea5c06eddbc60a02c25b0d02d2d3087f3b",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1050,31 +1050,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 73.5,
+      "referenceMs": 90,
       "samples": [
-        63.2001953125,
-        69.300048828125,
-        70.2001953125,
-        71,
-        73.5,
-        77.39990234375,
-        82.099853515625,
-        85.599853515625,
-        91.89990234375
+        73.699951171875,
+        76.39990234375,
+        88,
+        88.300048828125,
+        90,
+        92.099853515625,
+        93.89990234375,
+        93.89990234375,
+        99.5
       ],
       "source": {
-        "runKey": "2026-10-02T210249684Z-077926",
+        "runKey": "2026-10-21T202256685Z-2a7655",
         "runKeys": [
-          "2026-10-02T210249684Z-077926",
-          "2026-10-02T210448044Z-257eb7",
-          "2026-10-02T210643434Z-f61e28"
+          "2026-10-21T202256685Z-2a7655",
+          "2026-10-21T203412815Z-3e5001",
+          "2026-10-21T204627226Z-54e18e"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:07:34.565Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:50:56.654Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:13.967Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:49.188Z"
       }
     },
     {
@@ -1083,8 +1083,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "63b5d294d2f6d5b00ab25d86861da32df3f45ffd1492d25d6cc0d29b459d137d",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "f8ee5a3a0a09cc413e318321b1ff80fa8a5e9b2ca4dcfbfed24e58cebd2ad658",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1101,31 +1101,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 62.10009765625,
+      "referenceMs": 69.300048828125,
       "samples": [
-        52.800048828125,
-        54.300048828125,
-        58,
-        61.699951171875,
-        62.10009765625,
-        65,
-        66.199951171875,
-        67.39990234375,
-        78.10009765625
+        63.300048828125,
+        66.400146484375,
+        67,
+        68.5,
+        69.300048828125,
+        70.60009765625,
+        78,
+        80.800048828125,
+        82.300048828125
       ],
       "source": {
-        "runKey": "2026-10-02T210249684Z-077926",
+        "runKey": "2026-10-21T202256685Z-2a7655",
         "runKeys": [
-          "2026-10-02T210249684Z-077926",
-          "2026-10-02T210448044Z-257eb7",
-          "2026-10-02T210643434Z-f61e28"
+          "2026-10-21T202256685Z-2a7655",
+          "2026-10-21T203412815Z-3e5001",
+          "2026-10-21T204627226Z-54e18e"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:07:35.039Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:50:57.097Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:13.967Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:49.188Z"
       }
     },
     {
@@ -1134,8 +1134,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "362a3aca98ca0165644f323e4f099d1c355b59aa83f6c2b0e74d3d7bca3a8fcf",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "ff392e815fbe8be864a99b700170c134d0de7b01a04a20ab95054f16fa206508",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1152,31 +1152,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 209.800048828125,
+      "referenceMs": 223.300048828125,
       "samples": [
-        197,
-        198.5,
-        199.5,
-        206.89990234375,
-        209.800048828125,
-        211.2001953125,
-        235,
-        235.800048828125,
-        275.5
+        198.10009765625,
+        208.89990234375,
+        217.800048828125,
+        219.5,
+        223.300048828125,
+        228.300048828125,
+        233.800048828125,
+        238.800048828125,
+        281.5
       ],
       "source": {
-        "runKey": "2026-10-02T210249684Z-077926",
+        "runKey": "2026-10-21T202256685Z-2a7655",
         "runKeys": [
-          "2026-10-02T210249684Z-077926",
-          "2026-10-02T210448044Z-257eb7",
-          "2026-10-02T210643434Z-f61e28"
+          "2026-10-21T202256685Z-2a7655",
+          "2026-10-21T203412815Z-3e5001",
+          "2026-10-21T204627226Z-54e18e"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:07:35.622Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:50:57.654Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:13.967Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:49.188Z"
       }
     },
     {
@@ -1185,8 +1185,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "0a46fe332413b9579454272219a79cdabc9937ac50527aec8225a9321a2ada00",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "67b7a42aa5071e8bfaea710b9d436f1213e54d28f366bba924bf6ac1ea5bb4c1",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1203,31 +1203,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 195.2998046875,
+      "referenceMs": 200,
       "samples": [
-        173.800048828125,
-        179.7001953125,
-        188.400146484375,
-        189.2001953125,
-        195.2998046875,
-        197.39990234375,
-        203.5,
-        204.5,
-        216.39990234375
+        173.5,
+        179.89990234375,
+        188.199951171875,
+        191.39990234375,
+        200,
+        202.10009765625,
+        214.5,
+        225.599853515625,
+        517.099853515625
       ],
       "source": {
-        "runKey": "2026-10-02T210249684Z-077926",
+        "runKey": "2026-10-21T202256685Z-2a7655",
         "runKeys": [
-          "2026-10-02T210249684Z-077926",
-          "2026-10-02T210448044Z-257eb7",
-          "2026-10-02T210643434Z-f61e28"
+          "2026-10-21T202256685Z-2a7655",
+          "2026-10-21T203412815Z-3e5001",
+          "2026-10-21T204627226Z-54e18e"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:07:36.035Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:50:58.083Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:13.967Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:49.188Z"
       }
     },
     {
@@ -1236,8 +1236,8 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
-        "measurementDigest": "3196c90e43d21f6ee9d600368542f2cf4f3174f4bd34da8e03b6837238c17653",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "measurementDigest": "6a039472b9f7047a5c6ff42919ccaa1afa8147e16938dec51cf329bb3884b88b",
         "protocol": "typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1",
         "role": "buero",
         "browser": "chromium",
@@ -1254,31 +1254,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 633.10009765625,
+      "referenceMs": 712.7001953125,
       "samples": [
-        593.699951171875,
-        610.599853515625,
-        620.89990234375,
-        629.60009765625,
-        633.10009765625,
-        664.800048828125,
-        721.5,
-        727.5,
-        771.400146484375
+        637.599853515625,
+        666.699951171875,
+        698.199951171875,
+        708.800048828125,
+        712.7001953125,
+        729.2998046875,
+        734.099853515625,
+        782.900146484375,
+        810.10009765625
       ],
       "source": {
-        "runKey": "2026-10-02T214009813Z-a1d0a4",
+        "runKey": "2026-10-21T202256685Z-2a7655",
         "runKeys": [
-          "2026-10-02T214009813Z-a1d0a4",
-          "2026-10-02T221229232Z-a15315",
-          "2026-10-02T221405935Z-e8eff3"
+          "2026-10-21T202256685Z-2a7655",
+          "2026-10-21T203412815Z-3e5001",
+          "2026-10-21T204627226Z-54e18e"
         ],
-        "buildId": "cb86ce19-c9df-4cab-ae3d-d27c4ac8ca7f",
-        "recordedAt": "2026-10-02T22:14:57.502Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:51:07.701Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: the employee history keeps names it read and sends one request per live refresh; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T22:16:49.091Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:49.188Z"
       }
     },
     {
@@ -1287,7 +1287,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "5ecb51679d0a908b86f5460c4e83f28230ef934b7a793bab3c171ea2bf1ec3ce",
+        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "measurementDigest": "b861c0a0e0495075a28978cfbbcf7e029eb41113e8b324a63f8bbcca062f8787",
         "protocol": "typical-profile-buero-assigns-three-own-jobs-admin-searched-job-list-browser-raf-v1",
         "role": "admin",
@@ -1305,24 +1305,31 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 650.5,
+      "referenceMs": 610.2998046875,
       "samples": [
-        613.699951171875, 631.10009765625, 642.400146484375, 649.400146484375, 650.5, 661.699951171875,
-        668.800048828125, 679.10009765625, 711.900146484375
+        560.89990234375,
+        583.5,
+        586.199951171875,
+        607.7998046875,
+        610.2998046875,
+        610.800048828125,
+        613.300048828125,
+        659.89990234375,
+        684.10009765625
       ],
       "source": {
-        "runKey": "2026-10-16T094905460Z-c4bb8a",
+        "runKey": "2026-10-21T202256685Z-42481a",
         "runKeys": [
-          "2026-10-16T094905460Z-c4bb8a",
-          "2026-10-16T095155935Z-9196f1",
-          "2026-10-16T095626315Z-f9feee"
+          "2026-10-21T202256685Z-42481a",
+          "2026-10-21T203412815Z-7180e4",
+          "2026-10-21T204627226Z-341f1d"
         ],
-        "buildId": "e9b38f0b-dce7-4f65-a77a-3e5d6a25565a",
-        "recordedAt": "2026-10-16T09:57:42.601Z"
+        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
+        "recordedAt": "2026-10-21T20:49:47.995Z"
       },
       "review": {
-        "reason": "First reference of the job-list assignment cross-session scenario: three fresh passing audit:performance:lists runs on build e9b38f0b of the final audit-v2 tree, nine samples all within the 2,000 ms live target.",
-        "reviewedAt": "2026-10-16T09:58:45.252Z"
+        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
+        "reviewedAt": "2026-10-21T21:01:35.704Z"
       }
     }
   ]
