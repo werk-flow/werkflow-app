@@ -393,7 +393,8 @@ deno_version = 2
 WERKFLOW_LOCAL_MAIL_CAPTURE = "mailpit"
 
 [analytics]
-enabled = true
+# Off locally; docs/technical/environments.md ("The local test stack") owns the reason.
+enabled = false
 port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"

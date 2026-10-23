@@ -27,17 +27,11 @@ import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-sta
 import { localMailpitUrl } from '../lib/testing/local-mailpit';
 import { validateDiagnosticProvenance } from '../lib/testing/evidence/test-evidence';
 import { backendIdentity } from '../lib/testing/evidence/proof-environment';
-import {
-  citedRunKeys,
-  prunableArchiveBytes,
-  prunableRunKeys,
-  PRUNABLE_RUN_DIRECTORIES,
-} from '../lib/testing/runs/run-retention';
-import { readPerformanceBaselines } from '../lib/testing/performance-baselines';
+import { pruneRunArchive } from '../lib/testing/runs/run-retention';
 import { recordGroupDiagnosis } from '../lib/testing/evidence/group-diagnosis';
 import { classificationProblem } from '../lib/testing/evidence/browser-group-evidence';
 import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
-import { readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import {
   incidentPreventionProblem,
   recordsIncident,
@@ -136,41 +130,7 @@ async function main(): Promise<void> {
   if (command === 'prune') {
     const planOnly = process.argv[3] === '--plan';
     if (process.argv.length > (planOnly ? 4 : 3)) throw new Error('Usage: test:runs prune [--plan]');
-    const repositoryRoot = resolve(import.meta.dir, '..');
-    const archiveRoot = resolve(repositoryRoot, '.agent-logs/playwright-runs');
-    const verificationRoot = resolve(repositoryRoot, '.agent-logs/verification');
-    const reports = existsSync(verificationRoot)
-      ? readdirSync(verificationRoot).flatMap((directory) => {
-          const file = resolve(verificationRoot, directory, 'report.json');
-          return existsSync(file)
-            ? [
-                JSON.parse(readFileSync(file, 'utf8')) as {
-                  target: string;
-                  results: { groupId: string; status: string; startedAt: string; runKey: string | null }[];
-                },
-              ]
-            : [];
-        })
-      : [];
-    const cited = citedRunKeys({
-      reports,
-      baselineRunKeys: readPerformanceBaselines().baselines.flatMap((baseline) => baseline.source.runKeys),
-    });
-    const runKeys = prunableRunKeys({ runs: listRunManifests(), cited, now: Date.now() });
-    const bytes = prunableArchiveBytes(archiveRoot, runKeys);
-    console.log(
-      `[werkflow-test] ${runKeys.length} runs hold ${(bytes / 1024 ** 3).toFixed(2)} GB of prunable traces, reports and active state; ${cited.size} cited runs and every retained or unfinished run are kept.`,
-    );
-    if (planOnly) return;
-    const prunedAt = new Date().toISOString();
-    for (const runKey of runKeys) {
-      for (const name of PRUNABLE_RUN_DIRECTORIES)
-        rmSync(resolve(runDirectory(runKey), name), { recursive: true, force: true });
-      updateRunManifest(runKey, { prunedAt });
-    }
-    console.log(
-      `[werkflow-test] pruned ${runKeys.length} runs; manifests, logs, latency and workload archives and archived state stay.`,
-    );
+    console.log(`[werkflow-test] ${pruneRunArchive(planOnly ? 'plan' : 'prune')}`);
     return;
   }
   if (command === 'cleanup-local-relocated') {

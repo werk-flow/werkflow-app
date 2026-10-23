@@ -28,6 +28,7 @@ for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution
     const terminateListeners = process.listenerCount('SIGTERM');
     const previousPlan = process.env[PREPARED_PLAN_ENV];
     let summaries = 0;
+    const prunedAfter: unknown[] = [];
     try {
       await expect(
         withVerificationReport({
@@ -62,9 +63,15 @@ for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution
             });
             expect(summary.wallClockMinutes).toBeGreaterThanOrEqual(2);
           },
+          prune: () => {
+            prunedAfter.push(JSON.parse(readFileSync(reportPath, 'utf8')).status);
+            return 'pruned';
+          },
         }),
       ).rejects.toThrow(`${phase} unavailable`);
       expect(summaries).toBe(1);
+      // A failed run prunes too, once its final report is on disk.
+      expect(prunedAfter).toEqual(['failed']);
       expect(report.status).toBe('failed');
       expect(report.completedAt).not.toBeNull();
       expect(report.results).toHaveLength(2);
@@ -107,6 +114,7 @@ test('a successful run remains passed and restores an enclosing prepared plan', 
         report.status = 'passed';
       },
       summarize: () => {},
+      prune: () => 'nothing to prune',
     });
     expect(publications).toEqual(['running', 'passed']);
     expect(process.env[PREPARED_PLAN_ENV]).toBe('enclosing-plan');
@@ -132,6 +140,7 @@ test('interruption during setup records terminal failure and the unfinished grou
         process.emit('SIGINT');
       },
       summarize: () => {},
+      prune: () => 'nothing to prune',
     }),
   ).rejects.toThrow('Verification interrupted');
   expect(report.status).toBe('failed');
@@ -163,6 +172,7 @@ test('a finalization failure never replaces the verification error, and every st
           summaries += 1;
           throw new Error('summary unavailable');
         },
+        prune: () => 'nothing to prune',
       }),
     ).rejects.toThrow('preflight unavailable');
     expect(summaries).toBe(1);
@@ -181,10 +191,45 @@ test('a finalization failure never replaces the verification error, and every st
         summarize: () => {
           summaries += 1;
         },
+        prune: () => 'nothing to prune',
       }),
     ).rejects.toThrow('report disk full');
     expect(summaries).toBe(1);
   } finally {
     secondary.mockRestore();
+  }
+});
+
+test('a pruning failure is logged after the final report and never fails a passed run', async () => {
+  const report: {
+    status: 'running' | 'passed' | 'failed';
+    completedAt: string | null;
+    results: GroupResult[];
+  } = { status: 'running', completedAt: null, results: [] };
+  const steps: string[] = [];
+  const logged = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await withVerificationReport({
+      report,
+      groups: [],
+      publish: () => {
+        steps.push(`publish ${report.status}`);
+      },
+      run: async () => {
+        report.status = 'passed';
+      },
+      summarize: () => {
+        steps.push('summarize');
+      },
+      prune: () => {
+        steps.push('prune');
+        throw new Error('archive locked');
+      },
+    });
+    expect(steps).toEqual(['publish running', 'publish passed', 'summarize', 'prune']);
+    expect(report.status).toBe('passed');
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('archive locked'));
+  } finally {
+    logged.mockRestore();
   }
 });

@@ -22,6 +22,8 @@ function run(runKey: string, overrides: Partial<RetentionRun> = {}): RetentionRu
     retainedAt: null,
     cleanedAt: old,
     world: { runId: runKey },
+    classification: null,
+    sourceRunKey: null,
     ...overrides,
   };
 }
@@ -79,18 +81,40 @@ test('only completed, cleaned, uncited runs older than a day are prunable', () =
     run('prunable'),
     run('no-world', { world: null, cleanedAt: null }),
     run('cited'),
-    run('retained', { status: 'failed_retained', retainedAt: old, cleanedAt: null }),
-    run('uncleaned', { status: 'failed', cleanedAt: null }),
     run('running', { status: 'running', completedAt: null }),
-    run('interrupted', { status: 'interrupted' }),
     run('fresh', { startedAt: '2026-09-14T00:00:00.000Z', completedAt: '2026-09-14T01:00:00.000Z' }),
     run('already', { prunedAt: old }),
-    run('diagnostic', { status: 'diagnostic_passed' }),
   ];
-  expect(prunableRunKeys({ runs, cited: new Set(['cited']), now })).toEqual([
-    'prunable',
-    'no-world',
-    'diagnostic',
+  expect(prunableRunKeys({ runs, cited: new Set(['cited']), now })).toEqual(['prunable', 'no-world']);
+});
+
+test('a failed run is prunable only once its failure is classified and its world cleaned', () => {
+  const runs = [
+    run('unclassified-failure', { status: 'failed_retained', retainedAt: old }),
+    run('classified-failure', { status: 'failed_retained', retainedAt: old, classification: 'harness' }),
+    run('classified-open-world', {
+      status: 'failed_retained',
+      retainedAt: old,
+      cleanedAt: null,
+      classification: 'product',
+    }),
+    run('cited-failure', { status: 'failed', classification: 'environment' }),
+    run('fresh-failure', {
+      status: 'failed',
+      classification: 'harness',
+      startedAt: '2026-09-14T00:00:00.000Z',
+      completedAt: '2026-09-14T01:00:00.000Z',
+    }),
+    run('unclassified-interruption', { status: 'interrupted', world: null, cleanedAt: null }),
+    run('classified-interruption', { status: 'interrupted', classification: 'environment' }),
+    run('unclassified-timeout', { status: 'timedout' }),
+    run('diagnostic-of-classified', { status: 'diagnostic_passed', sourceRunKey: 'classified-failure' }),
+    run('diagnostic-of-unclassified', { status: 'diagnostic_passed', sourceRunKey: 'unclassified-failure' }),
+  ];
+  expect(prunableRunKeys({ runs, cited: new Set(['cited-failure']), now })).toEqual([
+    'classified-failure',
+    'classified-interruption',
+    'diagnostic-of-classified',
   ]);
 });
 
@@ -99,7 +123,7 @@ afterEach(() => {
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
-test('explicit pruning counts its directories; the run guard checks free space', () => {
+test('pruning weighs the directories of the named runs; the run guard checks free space', () => {
   const root = mkdtempSync(join(tmpdir(), 'werkflow-run-retention-'));
   directories.push(root);
   mkdirSync(join(root, 'run-a/playwright/results'), { recursive: true });
@@ -109,9 +133,8 @@ test('explicit pruning counts its directories; the run guard checks free space',
   writeFileSync(join(root, 'run-a/active/world.json'), Buffer.alloc(200));
   writeFileSync(join(root, 'run-a/state/world.json'), Buffer.alloc(300));
   writeFileSync(join(root, 'run-a/manifest.json'), Buffer.alloc(50));
-  expect(prunableArchiveBytes(root)).toBe(1200);
   expect(prunableArchiveBytes(root, ['run-a'])).toBe(1200);
-  expect(prunableArchiveBytes(join(root, 'missing'))).toBe(0);
+  expect(prunableArchiveBytes(root, ['missing'])).toBe(0);
   expect(availableStorageProblem(3000, 2000)).toBeUndefined();
   expect(availableStorageProblem(1200, 2000)).toContain('bun run test:runs prune');
 });

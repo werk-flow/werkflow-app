@@ -22,6 +22,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-23: audit:lab:field harness failure
+
+<!-- incident-run: 2026-10-23T042502537Z-2f9bd3 -->
+
+- Run: run `2026-10-23T042502537Z-2f9bd3`, group `audit:lab:field`, target local, fingerprint `e8af94924b25`, world `04963324c38a4abcb03bef9b13275794`.
+- Failure point:  >  > lab\field.spec.ts > Lab counts of the field worker @AUDIT-LAB-FIELD > LAB-F4 the field worker clocks in, stays idle, and clocks out @AUDIT-LAB-F4: Error: lab.field.clock-in released a live read that a dialog held since before the step: settle the page (settleLiveShell) before you open the dialog.
+- Root cause: Evidence-add recorded one action and three prefetches, against a reference total of three with two prefetches. Timing-dependent prefetch traffic therefore trips the gated total although each prefetch shape is informational. The clock step began with a held live read despite settleLiveShell, which waits for readiness and networkidle; closing the sheet released it and the recorder refused the contaminated sample. No product latency regression is established.
+- Prevention: Tier 2: tests/audit/support/lab-recorder.ts rejects held-read contamination. Keep that refusal. Follow-up must repair the clock setup precondition and distinguish timing-dependent prefetch traffic in the count gate. No repaired performance proof is claimed.
+
 ## 2026-10-22: audit:layout:documents harness failure
 
 <!-- incident-run: 2026-10-22T231034535Z-16fa3a -->

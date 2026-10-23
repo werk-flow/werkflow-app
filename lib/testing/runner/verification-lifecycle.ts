@@ -14,6 +14,8 @@ export async function withVerificationReport(input: {
   publish: () => void;
   run: (signal: AbortSignal) => Promise<void>;
   summarize: () => void;
+  /** Prunes the run archive after the report and its summary, and returns the line to log. */
+  prune: () => string;
 }): Promise<void> {
   const { report } = input;
   const controller = new AbortController();
@@ -55,7 +57,22 @@ export async function withVerificationReport(input: {
     }
     if (report.status === 'running' || report.results.some((result) => result.status !== 'passed'))
       report.status = 'failed';
-    finalize([input.publish, input.summarize], verificationFailed);
+    try {
+      finalize([input.publish, input.summarize], verificationFailed);
+    } finally {
+      pruneAfterReport(input.prune);
+    }
+  }
+}
+
+/** Every run ends with retention; a pruning failure is logged and never changes the run's result. */
+function pruneAfterReport(prune: () => string): void {
+  try {
+    console.info(`[verify] ${prune()}`);
+  } catch (error) {
+    console.error(
+      `[verify] Pruning the run archive failed; the report stands: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 

@@ -70,7 +70,7 @@ import {
   unresolvedBrowserGroupIds,
 } from '../lib/testing/evidence/browser-group-evidence';
 import { INCIDENT_LOG_PATH, releaseAttemptProblem } from '../lib/testing/publication/release-breaker';
-import { browserStorageProblem } from '../lib/testing/runs/run-retention';
+import { browserStorageProblem, pruneRunArchive } from '../lib/testing/runs/run-retention';
 import {
   discoverPlaywrightSelection,
   selectedDiscoveryArguments,
@@ -858,6 +858,8 @@ async function main(): Promise<void> {
         );
         process.exitCode = report.status === 'passed' ? 0 : 1;
       },
+      // Inside the workspace lock, so no run writes the archive while it shrinks.
+      prune: () => pruneRunArchive('prune'),
     });
   });
 }

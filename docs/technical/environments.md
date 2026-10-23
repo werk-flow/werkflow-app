@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
 
@@ -38,6 +38,7 @@ The application test groups run against the Supabase CLI's Docker composition in
 - `supabase db reset` replays the committed migration history. A failing reset is a finding about that history.
 - The keys are the CLI's shared local defaults. They are not secrets.
 - Auth mail lands in Mailpit, never in a real inbox. Cloud functions reject the local capture configuration.
+- Analytics is off, so the stack runs without the Logflare and Vector containers and Studio has no log explorer. Logflare stored every request in the `_supabase` database without a limit and filled the disk; nothing reads it. The lab recorder reads Kong's access log through `docker logs` instead (`tests/audit/support/lab-recorder.ts`).
 - Leaked-password protection needs the internet and has no local equivalent. The canary owns that check.
 - PostgREST truncates a response at its row limit without an error, locally and on the hosted projects. A read that can exceed the limit reads in pages and reports an overflow ([Realtime and caching](realtime-and-caching.md) owns the rule). Do not raise the limit to hide the bound.
 
