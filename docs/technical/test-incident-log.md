@@ -24,6 +24,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 ## 2026-10-23: audit:lab:field harness failure
 
+<!-- incident-run: 2026-10-23T055721176Z-2e1bc5 -->
+
+- Run: run `2026-10-23T055721176Z-2e1bc5`, group `audit:lab:field`, target local, fingerprint `923b4a4fafb1`, world `04232d3dccad40609a5ce778edadaf8f`.
+- Failure point:  >  > lab\field.spec.ts > Lab counts of the field worker @AUDIT-LAB-FIELD > LAB-F4 the field worker clocks in, stays idle, and clocks out @AUDIT-LAB-F4: Error: lab.field.clock-in released a live read that a dialog held since before the step: settle the page (settleLiveShell) before you open the dialog.
+- Root cause: Two causes. (1) The known clock-step defect from run 2026-10-23T042502537Z-2f9bd3 is still unrepaired: lab.field.clock-in starts with a live read held since before the step, the recorder refuses the sample, and clock-in, idle-clocked-in and clock-out record nothing. (2) Commit 30c67a90 upgraded next 16.3.8 to 16.4.1 (security advisories); the field lab's byte floors for the /auftraege document, route and script payloads and the job-open, checklist-tick and evidence-add payloads now fall 14 to 45 percent below their recorded floors. A shrink is expected from the framework upgrade but needs a reviewer to confirm nothing is missing before bun scripts/lab-counts.ts accept. No product latency regression is established.
+- Prevention: Tier 2: tests/audit/support/lab-recorder.ts rejects held-read contamination and lib/testing/lab-evidence.ts refuses an unreviewed floor shrink. Follow-up: repair the clock setup precondition, then review and accept the 16.4.1 floors per step.
+
+## 2026-10-23: audit:lab:field harness failure
+
 <!-- incident-run: 2026-10-23T042502537Z-2f9bd3 -->
 
 - Run: run `2026-10-23T042502537Z-2f9bd3`, group `audit:lab:field`, target local, fingerprint `e8af94924b25`, world `04963324c38a4abcb03bef9b13275794`.

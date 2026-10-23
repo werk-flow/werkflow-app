@@ -201,7 +201,7 @@
   "scripts/check-realtime-parity.ts": 1,
   "scripts/check-supabase-project.ts": 1,
   "scripts/guard-edits-during-verification.ts": 2,
-  "scripts/manage-playwright-runs.ts": 2,
+  "scripts/manage-playwright-runs.ts": 1,
   "scripts/playwright-preflight.ts": 4,
   "scripts/run-playwright.ts": 6,
   "scripts/seed-demo-data.ts": 7,
