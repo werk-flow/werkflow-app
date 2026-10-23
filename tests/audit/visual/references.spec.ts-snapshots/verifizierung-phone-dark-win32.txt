@@ -1,0 +1,11 @@
+Verifizierungscode eingeben
+Wir haben einen sechsstelligen Code an
+pru***@werkflow-golden.test
+gesendet.
+Verifizierungscode
+Bitte gib den sechsstelligen Code ein, um dein Konto zu bestätigen.
+Code bestätigen
+Code nicht erhalten?
+Erneut senden in
+60
+s

@@ -1,0 +1,29 @@
+Menü öffnen
+Service
+Servicefälle
+Anlagen & Geräte
+Wartung
+Anlagen & Geräte
+Gas-Brennwerttherme
+Aktiv
+ANL-2026-001
+·
+Wärmeerzeugung
+Bearbeiten
+Ersetzen
+Zustand ändern
+Anlagendaten
+Kategorie
+Wärmeerzeugung
+Untertyp
+Nicht erfasst
+Hersteller
+Vaillant
+Modell
+ecoTEC plus VC 206/5-5
+Position
+Nicht erfasst
+Installation
+Nicht erfasst
+Inbetriebnahme
+Nicht erfasst

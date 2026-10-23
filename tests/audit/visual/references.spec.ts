@@ -4,7 +4,7 @@ import { expect, test } from '../support/fixtures';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
 import { openStandaloneScreen } from '../support/standalone-sessions';
 import {
-  APP_FAMILIES,
+  APP_FAMILY_RUN_ORDER,
   STANDALONE_FAMILIES,
   type AppFamily,
   type StandaloneFamily,
@@ -15,28 +15,32 @@ import { prepareVisualWorld, standaloneReplacements, visualReplacements } from '
 // Visual references (release mode only): one reference per page family
 // (tests/audit/support/visual-families.ts), so a change that alters how an
 // accepted screen looks fails until the owner accepts the new picture. Each
-// family renders its desktop reference in light and dark mode and its phone
-// reference in light mode. docs/technical/standards-audit.md owns the
-// acceptance and update rules. Tag: @AUDIT-VISUAL.
+// family renders its desktop and its phone reference, each in light and dark
+// mode. The app families run in `APP_FAMILY_RUN_ORDER`, the calendar last.
+// docs/technical/standards-audit.md owns the acceptance and update rules.
+// Tag: @AUDIT-VISUAL.
 
 type Replacements = readonly (readonly [string, string])[];
 
-/** The desktop in light and dark, then the phone in light, each opened anew at its width. */
+/** The desktop, then the phone, each opened anew at its width and compared in light and dark. */
 async function expectFamilyReferences(
   page: Page,
   id: string,
   open: (viewport: { width: number; height: number }) => Promise<void>,
   replacements: Replacements,
-  options: { clockText: boolean },
+  options: { calendarWeek: boolean },
 ): Promise<void> {
+  for (const [name, viewport] of [
+    ['desktop', DESKTOP],
+    ['phone', PHONE],
+  ] as const) {
+    await page.emulateMedia({ colorScheme: 'light' });
+    await open(viewport);
+    await expectReference(page, `${id}-${name}-light`, replacements, options);
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expectReference(page, `${id}-${name}-dark`, replacements, options);
+  }
   await page.emulateMedia({ colorScheme: 'light' });
-  await open(DESKTOP);
-  await expectReference(page, `${id}-desktop-light`, replacements, options);
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await expectReference(page, `${id}-desktop-dark`, replacements, options);
-  await page.emulateMedia({ colorScheme: 'light' });
-  await open(PHONE);
-  await expectReference(page, `${id}-phone-light`, replacements, options);
 }
 
 async function expectAppFamily(
@@ -54,7 +58,9 @@ async function expectAppFamily(
       await expect(main.getByRole('heading', { level: 2, name: family.title, exact: true })).toBeVisible();
     await settlePage(page, pageBody(main));
   };
-  await expectFamilyReferences(page, family.id, open, replacements, { clockText: family.clockText ?? true });
+  await expectFamilyReferences(page, family.id, open, replacements, {
+    calendarWeek: family.calendarWeek ?? false,
+  });
 }
 
 async function expectStandaloneFamily(
@@ -70,24 +76,23 @@ async function expectStandaloneFamily(
     await expect(main.getByRole('heading', { level: 1, name: family.heading, exact: true })).toBeVisible();
     await settlePage(page, main);
   };
-  await expectFamilyReferences(page, family.id, open, replacements, { clockText: true });
+  await expectFamilyReferences(page, family.id, open, replacements, { calendarWeek: false });
 }
 
 test.describe('@AUDIT-VISUAL rendered references of every page family', () => {
-  for (const family of APP_FAMILIES.filter((entry) => entry.role === 'admin')) {
-    test(`${family.id} matches its references`, async ({ adminPage, world }) => {
-      const details = await prepareVisualWorld(world);
-      const route = await family.route(details, adminPage, world);
-      await expectAppFamily(adminPage, family, route, await visualReplacements(world));
-    });
-  }
-
-  for (const family of APP_FAMILIES.filter((entry) => entry.role === 'employee')) {
-    test(`${family.id} matches its references`, async ({ employeePage, world }) => {
-      const details = await prepareVisualWorld(world);
-      const route = await family.route(details, employeePage, world);
-      await expectAppFamily(employeePage, family, route, await visualReplacements(world));
-    });
+  for (const family of APP_FAMILY_RUN_ORDER) {
+    if (family.role === 'admin')
+      test(`${family.id} matches its references`, async ({ adminPage, world }) => {
+        const details = await prepareVisualWorld(world);
+        const route = await family.route(details, adminPage, world);
+        await expectAppFamily(adminPage, family, route, await visualReplacements(world));
+      });
+    else
+      test(`${family.id} matches its references`, async ({ employeePage, world }) => {
+        const details = await prepareVisualWorld(world);
+        const route = await family.route(details, employeePage, world);
+        await expectAppFamily(employeePage, family, route, await visualReplacements(world));
+      });
   }
 
   for (const family of STANDALONE_FAMILIES) {

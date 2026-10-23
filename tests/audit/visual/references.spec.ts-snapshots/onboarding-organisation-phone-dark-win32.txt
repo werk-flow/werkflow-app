@@ -1,0 +1,6 @@
+Lass uns deine Organisation erstellen
+Gib deiner Organisation einen Namen. Du kannst ihn später jederzeit ändern.
+Name der Organisation
+*
+Pflichtfeld
+Organisation erstellen

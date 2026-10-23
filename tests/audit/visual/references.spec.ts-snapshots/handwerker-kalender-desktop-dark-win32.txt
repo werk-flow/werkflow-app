@@ -10,7 +10,7 @@ KS
 Kevin Schmid
 kevin.schmid@haustechnik-kraemer.de
 Kalender
-Montag, 9. März 2026
+Montag, 1. Januar 2026
 Heute
 Kalendereintrag
 Tag
@@ -56,3 +56,6 @@ Mitarbeiter
 17
 :00
 Kevin Schmid
+Gastherme warten und Abgasmessung
+08:00 · 2,5 h
+Familie Hoffmann · Lindenstraße 4, 71032 Böblingen

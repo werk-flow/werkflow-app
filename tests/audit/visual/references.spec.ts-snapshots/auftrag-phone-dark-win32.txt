@@ -1,0 +1,32 @@
+Menü öffnen
+Aufträge
+A-2026-0101
+Gastherme warten und Abgasmessung
+Nicht begonnen
+Mittel
+Arbeitsstand
+Nächster Schritt:
+Arbeit starten
+Nicht begonnen
+Nicht geplant
+Startbereit
+Ausführung starten
+Stornieren
+Parken
+Einsatzbereitschaft
+Kapazität & Verfügbarkeit
+Erfüllt
+Qualifikationen
+Erfüllt
+Einsatzort
+Erfüllt
+Einfamilienhaus
+Fahrzeit
+Nicht bewertet
+Fahrzeit nicht bewertet.
+Material
+Erfüllt
+Kein Materialbedarf geplant.
+Werkzeuge
+Nicht bewertet
+Werkzeugverfügbarkeit nicht bewertet.

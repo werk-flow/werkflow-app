@@ -1,0 +1,21 @@
+Menü öffnen
+Zeiterfassung
+Zeiterfassung
+Zeitkonto
+Perioden
+Regeln & Export
+Januar 2026
+01.01.2026 – 01.01.2026 · Vorbereitet
+Mitarbeitende
+0
+Freigaben offen
+0
+Abschluss blockiert
+0
+Monatswerte
+Prüfhinweise
+Keine Prüfhinweise.
+Periodenabschluss
+Monat abschließen
+Lohnexport
+Der Export wird nach dem Abschluss freigeschaltet.

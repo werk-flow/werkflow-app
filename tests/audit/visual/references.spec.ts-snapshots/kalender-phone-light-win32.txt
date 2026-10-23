@@ -1,6 +1,6 @@
 Menü öffnen
 Kalender
-9.3. – 15.3.26
+01.01. – 01.01.26
 Heute
 Einsätze
 Parkplatz
@@ -14,23 +14,28 @@ Mitarbeiter (
 4
 )
 Mo
-9.3.
-Keine Termine
+01.01.
+Abluft der Backstube prüfen
+08:00 · 3,5 h
+A-2026-0102
+Bäckerei Sommer GmbH · Marktplatz 3, 71634 Ludwigsburg
+nicht gesendet
+Jonas Becker
+Gastherme warten und Abgasmessung
+08:00 · 2,5 h
+A-2026-0101
+Familie Hoffmann · Lindenstraße 4, 71032 Böblingen
+nicht gesendet
+Kevin Schmid
 Di
-10.3.
-Keine Termine
-Mi
-11.3.
-Keine Termine
-Do
-12.3.
-Keine Termine
-Fr
-13.3.
-Keine Termine
-Sa
-14.3.
-Keine Termine
-So
-15.3.
-Keine Termine
+01.01.
+Heizungsverteilung Haus B erneuern
+A-2026-0201
+Wohnungsbaugenossenschaft Neckartal eG · Uferweg 12, 70190 Stuttgart
+nicht gesendet
+Jonas Becker
+Heizungsverteilung Haus B erneuern
+A-2026-0201
+Wohnungsbaugenossenschaft Neckartal eG · Uferweg 12, 70190 Stuttgart
+nicht gesendet
+Kevin Schmid

@@ -19,7 +19,7 @@ MK
 Martin Krämer
 martin.kraemer@haustechnik-kraemer.de
 Kalender
-9. - 15. März 2026 · KW 11
+1. - 1. Januar 2026 · KW 1
 Diese Woche
 Einsätze
 Parkplatz
@@ -37,17 +37,116 @@ Filter
 Komfortabel
 Mitarbeiter
 Mo
-9
+1
 Di
-10
+2
 Mi
-11
+3
 Do
-12
+4
 Fr
-13
+5
 Sa
-14
+6
 So
-15
+7
 Ohne Zuweisung
+Ohne Team
+4
+Jonas Becker
+Handwerker/in
+3,5 h
+/ 8 h
+8 h
+/ 8 h
+8 h
+/ 8 h
+5 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+Abluft der Backstube prüfen
+08:00 · 3,5 h
+A-2026-0102
+Bäckerei Sommer GmbH · Marktplatz 3, 71634 Ludwigsburg
+nicht gesendet
+Heizungsverteilung Haus B erneuern
+A-2026-0201
+Wohnungsbaugenossenschaft Neckartal eG · Uferweg 12, 70190 Stuttgart
+nicht gesendet
+Strangsanierung Trinkwasser Haus A
+08:00 · 5 h
+A-2026-0202
+Wohnungsbaugenossenschaft Neckartal eG · Uferweg 12, 70190 Stuttgart
+nicht gesendet
+Kevin Schmid
+Handwerker/in
+2,5 h
+/ 8 h
+8 h
+/ 8 h
+8 h
+/ 8 h
+2,5 h
+/ 8 h
+2 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+Gastherme warten und Abgasmessung
+08:00 · 2,5 h
+A-2026-0101
+Familie Hoffmann · Lindenstraße 4, 71032 Böblingen
+nicht gesendet
+Heizungsverteilung Haus B erneuern
+A-2026-0201
+Wohnungsbaugenossenschaft Neckartal eG · Uferweg 12, 70190 Stuttgart
+nicht gesendet
+Waschtisch im Behandlungsraum tauschen
+08:00 · 2,5 h
+A-2026-0103
+Praxis Dr. Wolf · Königstraße 28, 70173 Stuttgart
+nicht gesendet
+Abluft der Backstube prüfen
+08:00 · 2 h
+A-2026-0102
+Bäckerei Sommer GmbH · Marktplatz 3, 71634 Ludwigsburg
+nicht gesendet
+Martin Krämer
+Admin
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+Sabine Vogel
+Büro
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h
+0 h
+/ 8 h

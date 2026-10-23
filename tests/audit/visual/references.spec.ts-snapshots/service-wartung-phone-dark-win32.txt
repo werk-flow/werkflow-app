@@ -1,0 +1,17 @@
+Menü öffnen
+Service
+Servicefälle
+Anlagen & Geräte
+Wartung
+Wartung
+Wiederkehrende Wartung pro Einsatzort planen, fällige Arbeit in Aufträge überführen und mit versionierten Nachweisen abschließen.
+Abdeckung erfassen
+Wartungsplan anlegen
+Fälligkeiten
+0
+Pläne
+0
+Abdeckungen
+0
+Keine offenen Wartungsfälligkeiten
+Aktiviere einen Wartungsplan, damit Fälligkeiten für die nächsten 18 Monate erzeugt werden.

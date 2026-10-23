@@ -1,0 +1,21 @@
+Menü öffnen
+Einstellungen
+Zeiterfassung
+Aufträge & Projekte
+Mitarbeiter
+Mitarbeiter
+Zeigt, wer Freigaben verantwortet und wer diese Verantwortung zeitlich begrenzt vertritt.
+Gilt für Haustechnik Krämer GmbH
+Onboardingvorlagen
+Wiederverwendbare Ausgangspunkte. Es gibt keine automatisch angelegte Standardvorlage.
+Vorlage
+Noch keine Vorlage eingerichtet.
+Meine Verantwortlichkeiten und Vertretungen
+Hier siehst du Freigaben und Vertretungen, die dich betreffen.
+Zeitfreigaben
+Aktuell verantwortlich
+Standard: Admin
+Urlaubsfreigaben
+Aktuell verantwortlich
+Standard: Admin
+Arbeitsnachweise freigeben
