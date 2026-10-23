@@ -15,6 +15,7 @@ import {
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
+import { useTimeApprovalHolder } from '@/components/zeiterfassung/use-time-approval-holder';
 import { SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import type { WorkSession } from '@/lib/time-tracking/types';
 import type { OrgRole } from '@/lib/roles';
@@ -63,13 +64,10 @@ export function EntryDetailsDialog({
   const { showBanner } = useBanner();
   const router = useRouter();
   const snapshot = useEntryDetailsSession(session);
-  const { resolvedJob, jobDetailUrl } = useEntryDetailsResolvedJob({
-    open,
-    session,
-    jobName,
-  });
+  const { resolvedJob, jobDetailUrl } = useEntryDetailsResolvedJob({ open, session, jobName });
   const editFormId = useId();
   const closedPeriods = useClosedTimePeriods(snapshot.entryOrganizationId, open);
+  const approvalHolder = useTimeApprovalHolder(snapshot.entryOrganizationId, open);
   const { canEdit, canApprove, pendingEntries, hasPendingEntry, inClosedPeriod } = getEntryDetailsPermissions(
     {
       snapshot,
@@ -77,6 +75,7 @@ export function EntryDetailsDialog({
       currentUserId,
       entryUserRole,
       closedPeriods,
+      approvalHolder,
     },
   );
   const draft = useEntryDetailsDraft({ open, startInEditMode: startInEditMode && canEdit, snapshot });

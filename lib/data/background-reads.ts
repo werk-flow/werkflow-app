@@ -60,6 +60,7 @@ import {
 } from '@/lib/time-tracking/entry-read-actions';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
 import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
+import { getTimeApprovalHolder } from '@/lib/time-tracking/approval-holder-reads';
 import { getJobsForPicker } from '@/lib/time-tracking/picker-actions';
 import { jobPickerRequestSchema } from '@/lib/time-tracking/picker-types';
 import {
@@ -162,6 +163,10 @@ export const BACKGROUND_READS = {
   ),
   // The closed periods every surface that edits recorded time asks before it offers an edit.
   'closed-time-periods': defineRead(organizationInput, (input) => getClosedTimePeriods(input.organizationId)),
+  // The caller's own time_approval holder, which every surface that offers a time review asks.
+  'time-approval-holder': defineRead(organizationInput, (input) =>
+    getTimeApprovalHolder(input.organizationId),
+  ),
   'time-correction-history': defineRead(
     z.object({ organizationId: uuidSchema, page: z.number().int().min(1).max(1_000_000) }),
     (input) => getTimeCorrectionHistoryPage(input.organizationId, input.page),

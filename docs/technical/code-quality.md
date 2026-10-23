@@ -1,6 +1,6 @@
 # Code quality and maintainability
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-23
 
 This doc owns virtue 4 in `AGENTS.md`. `AGENTS.md` states what good code is; this doc says how to reach it and what checks it. The `typescript-best-practices` skill owns the type patterns. This page owns the checklist, the prohibitions, the deletion pass and the independent review.
 
@@ -83,7 +83,7 @@ A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.
 - Every promise is awaited, returned or handled with `.catch`, or marked `void` with a comment where it cannot reject or handles its failure inside. [lint `@typescript-eslint/no-floating-promises`, test `lib/conventions/typed-lint.test.ts`]
 - A text column with a check constraint is narrowed by `constrainedValue`, and a `jsonb` payload by `isJsonRecord` or `jsonRecordOrEmpty`, never by an `as` cast. [lint `@typescript-eslint/consistent-type-assertions`, test `lib/conventions/type-assertions.test.ts`]
 - A React `key` names a stable identity. A remount for fresh data uses a `resetKey`. [test `lib/conventions/collection-keys.test.ts`]
-- A module, a component or route file, and a function each stay under their line limit in `eslint-rules/size-caps.mjs`. A module or function that predates the limits is listed in `eslint-rules/size-cap-exceptions.json` with its size as its ceiling, and the entry only shrinks. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `quality/function-size`, code `eslint-rules/size-cap-exceptions.json`, test `lib/conventions/module-caps.test.ts`]
+- A module, a component or route file, and a function each stay under their line limit in `eslint-rules/size-caps.mjs`. A module or function that predates the limits is listed in `eslint-rules/size-cap-exceptions.json` with its size as its ceiling, and the entry only shrinks, also against the publication base. A file or function that outgrows its limit is split, never exempted or suppressed. [lint `max-lines`, lint `quality/function-size`, code `eslint-rules/size-cap-exceptions.json`, test `lib/conventions/module-caps.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
 - `lib/` imports nothing from `components/`. [lint `libToComponentsPattern`]
 - Every lint suppression names its rule and carries a `-- reason`. [lint `@eslint-community/eslint-comments/require-description`, lint `reportUnusedDisableDirectives`]
 - Nothing is left unused: no file, export, dependency, local or parameter, and no export that only a unit test imports. A deliberate test seam carries `@internal` with its reason. [group `static:unused`, test `lib/conventions/test-only-exports.test.ts`, group `static:typecheck`]

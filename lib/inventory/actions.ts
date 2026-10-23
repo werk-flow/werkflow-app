@@ -451,15 +451,13 @@ async function takeUnplannedMaterial(
   return { success: true, quantityAfter: toNumber(data) };
 }
 
-type InventoryOrganizationReferenceTable = 'inventory_categories' | 'inventory_locations';
-
-async function resolveInventoryOrganizationReference(
+/** A location id of the caller's organization, null for none, or `location_not_found`. */
+async function resolveInventoryLocation(
   admin: SupabaseAdminClient,
-  table: InventoryOrganizationReferenceTable,
   organizationId: string,
   inputId: string | null | undefined,
-  missingError: 'category_not_found' | 'location_not_found',
 ): Promise<ActionResult<{ referenceId: string | null }>> {
+  const table = 'inventory_locations';
   const referenceId = cleanText(inputId);
   if (!referenceId) return { success: true, referenceId: null };
 
@@ -479,7 +477,7 @@ async function resolveInventoryOrganizationReference(
   }
 
   const resolvedReference = data;
-  if (!resolvedReference) return { success: false, error: missingError };
+  if (!resolvedReference) return { success: false, error: 'location_not_found' };
 
   return { success: true, referenceId: resolvedReference.id };
 }
@@ -628,11 +626,13 @@ export async function createInventoryLocation(
   if (!name) return { success: false, error: 'name_required' };
 
   const admin = createSupabaseAdminClient();
+  const parent = await resolveInventoryLocation(admin, auth.context.orgId, input.parentLocationId);
+  if (!parent.success) return parent;
   const { data, error } = await admin
     .from('inventory_locations')
     .insert({
       organization_id: auth.context.orgId,
-      parent_location_id: input.parentLocationId ?? null,
+      parent_location_id: parent.referenceId,
       name,
       description: cleanText(input.description),
       location_type: input.locationType ?? 'room',
@@ -793,13 +793,7 @@ async function insertMaterialLine(
   const item = itemRow ? toInventoryItem(itemRow) : null;
   if (!item) return { success: false, error: 'item_not_found' };
 
-  const locationReference = await resolveInventoryOrganizationReference(
-    admin,
-    'inventory_locations',
-    context.orgId,
-    input.preferredLocationId,
-    'location_not_found',
-  );
+  const locationReference = await resolveInventoryLocation(admin, context.orgId, input.preferredLocationId);
   if (!locationReference.success) return locationReference;
 
   const { data, error } = await admin
@@ -923,12 +917,10 @@ export async function updateJobMaterialLine(
     updateData.is_billable = item.isBillable;
   }
   if (input.preferredLocationId !== undefined) {
-    const locationReference = await resolveInventoryOrganizationReference(
+    const locationReference = await resolveInventoryLocation(
       admin,
-      'inventory_locations',
       auth.context.orgId,
       input.preferredLocationId,
-      'location_not_found',
     );
     if (!locationReference.success) return locationReference;
     updateData.preferred_location_id = locationReference.referenceId;

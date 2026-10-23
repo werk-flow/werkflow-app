@@ -3,7 +3,7 @@ import type { StandaloneScreen } from '../../../lib/testing/selection/standalone
 import type { TestWorld } from '../../golden/support/world';
 import { expectNoAxeViolations } from './axe';
 import { expectNoSidewaysOverflow, nextFrames } from './layout-measure';
-import { VIEWPORT_HEIGHT } from './open-layer';
+import { VIEWPORT_HEIGHT } from './open-layer-plan';
 import { openStandaloneScreen } from './standalone-sessions';
 
 // The rendered audit of the screens outside the app shell (werkflow-design,

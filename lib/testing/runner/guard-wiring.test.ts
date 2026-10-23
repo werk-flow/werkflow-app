@@ -38,6 +38,12 @@ test('Claude runs the edit guard before every file and shell tool', () => {
   expect(guardedTools('.claude/settings.json', tools)).toEqual(tools);
 });
 
+// Codex names its tools in hook payloads as its hooks documentation states
+// (https://learn.chatgpt.com/docs/hooks, "Tool coverage"): every shell command,
+// unified exec (exec_command) included, matches `Bash`; an edit matches
+// `apply_patch`, `Edit` or `Write` and reports `tool_name: "apply_patch"`; Bash
+// and apply_patch carry `tool_input.command`. So these matchers cover every
+// Codex call; an internal function name such as exec_command never reaches a hook.
 test('Codex runs the edit guard before every file and shell tool', () => {
   const tools = ['apply_patch', 'Edit', 'Write', 'Bash'];
   expect(guardedTools('.codex/hooks.json', tools)).toEqual(tools);

@@ -288,8 +288,9 @@ export const WORK_OPENERS = {
     layer: (page) => workTransitionDialog(page, 'not_started', 'in_progress'),
   },
   'work.list-delete-job': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the work list holds the same JobActionsMenu (components/auftraege/list/unified-auftraege-mobile-cards.tsx).',
     trigger: async (context) => {
       await openListRowMenu(context, 'job');
       return workListRowDeleteItem(context.page);
@@ -298,8 +299,9 @@ export const WORK_OPENERS = {
     returnFocus: (context) => listRowMenuButton(context, 'job'),
   },
   'work.list-delete-project': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the work list holds the same ProjectActionsMenu (components/auftraege/list/unified-auftraege-mobile-cards.tsx).',
     trigger: async (context) => {
       await openListRowMenu(context, 'project');
       return workListRowDeleteItem(context.page);
@@ -308,8 +310,9 @@ export const WORK_OPENERS = {
     returnFocus: (context) => listRowMenuButton(context, 'project'),
   },
   'work.park-confirm': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      "The job detail's actions menu opens the same edit dialog on a phone, and its save asks the same question.",
     // Saving the edit dialog with an emptied planned date asks first; the
     // confirmation opens before any write.
     trigger: async (context) => {

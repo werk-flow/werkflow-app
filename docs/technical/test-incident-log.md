@@ -1,6 +1,6 @@
 # Browser-test incident log
 
-Status: living — last reviewed 2026-10-22; entries from 2026-09-25 on
+Status: living — last reviewed 2026-10-23; entries from 2026-09-25 on
 
 Record here each failed acceptance group and each focused failure that changes shared testing behavior. [Testing](testing.md#failures) owns the procedure. Entries before 2026-09-25 were deleted; Git history keeps them. Read an entry only to investigate that failure. Rules live in their owner docs, not here.
 
@@ -21,6 +21,56 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-22: audit:layout:documents harness failure
+
+<!-- incident-run: 2026-10-22T231034535Z-16fa3a -->
+
+- Run: run `2026-10-22T231034535Z-16fa3a`, group `audit:layout:documents`, target local, fingerprint `9bb154049cb9`, world `a8343868feda48f38094031976d617ec`.
+- Failure point:  >  > layout\surfaces-documents.spec.ts > @AUDIT-LAYOUT-SURFACES documents: tabs and dialogs fit, pass axe and keep their keyboard path > admin /dokumente: Error: the trigger is on screen at 375 px; a trigger this width does not render needs the opener of its own path there, or opensOn: 'desktop' with the phonePath that reaches the dialog
+- Root cause: the documents.rename opener clicked the phone card's file actions button with the mouse; Radix opens the menu on press and an item rendered under the pointer is chosen on release, so the release chose Löschen and opened the delete confirmation instead of showing Umbenennen (trace: one click, then the alertdialog). Package R removed the desktop fallback, so the phone path ran for the first time
+- Prevention: Tier 1: the documents openers open the row menu from the keyboard (libraryFileAction in tests/audit/support/dialog-openers/documents.ts)
+- Focused proof: `audit:layout:documents` passed alone (report `2026-10-22T235636830Z-6ea90877`) and in change plan `2026-10-23T000439910Z-64b7698d`.
+
+## 2026-10-22: audit:layout:field harness failure
+
+<!-- incident-run: 2026-10-22T213250456Z-193668 -->
+
+- Run: run `2026-10-22T213250456Z-193668`, group `audit:layout:field`, target local, fingerprint `eae0c4282485`, world `12a1adbf57cc4820b196b597ea9eb55a`.
+- Failure point:  >  > layout\surfaces-field.spec.ts > @AUDIT-LAYOUT-SURFACES field: tabs and dialogs fit, pass axe and keep their keyboard path > employee /dashboard: Error: the trigger is on screen at 375 px; a trigger this width does not render needs the opener of its own path there, or opensOn: 'desktop' with the phonePath that reaches the dialog
+- Root cause: settings.join-org opened the sidebar organization switcher on the desktop through the silent fallback package R removed; on a phone the switcher sits in the menu sheet, so the opener now declares opensOn desktop with that phonePath
+- Prevention: Tier 2: tests/audit/support/open-layer-plan.ts fails an undeclared trigger off screen at its width by name; Tier 1: tests/audit/support/dialog-opener.ts requires a phonePath with opensOn desktop
+- Focused proof: change plan `2026-10-23T000439910Z-64b7698d` passed the group with the declared opener.
+
+## 2026-10-22: audit:layout:settings harness failure
+
+<!-- incident-run: 2026-10-22T213250456Z-ec38d6 -->
+
+- Run: run `2026-10-22T213250456Z-ec38d6`, group `audit:layout:settings`, target local, fingerprint `5be1ed6e12d1`, world `214a90220f2647878d83b71160a8bcff`.
+- Failure point:  >  > layout\surfaces-settings.spec.ts > @AUDIT-LAYOUT-SURFACES settings: tabs and dialogs fit, pass axe and keep their keyboard path > admin /dashboard: Error: the trigger is on screen at 375 px; a trigger this width does not render needs the opener of its own path there, or opensOn: 'desktop' with the phonePath that reaches the dialog
+- Root cause: settings.create-org opened the sidebar organization switcher on the desktop through the silent fallback package R removed; on a phone the switcher sits in the menu sheet, so the opener now declares opensOn desktop with that phonePath
+- Prevention: Tier 2: tests/audit/support/open-layer-plan.ts fails an undeclared trigger off screen at its width by name; Tier 1: tests/audit/support/dialog-opener.ts requires a phonePath with opensOn desktop
+- Focused proof: change plan `2026-10-23T000439910Z-64b7698d` passed the group with the declared opener.
+
+## 2026-10-22: audit:layout:planning-board harness failure
+
+<!-- incident-run: 2026-10-22T213250456Z-c773bc -->
+
+- Run: run `2026-10-22T213250456Z-c773bc`, group `audit:layout:planning-board`, target local, fingerprint `a11befc5dd15`, world `f2b03a77f6344ea087c5322a05e99bc6`.
+- Failure point:  >  > layout\surfaces-planning-board.spec.ts > @AUDIT-LAYOUT-SURFACES planning-board: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 2 of 2: Error: the trigger is on screen at 375 px; a trigger this width does not render needs the opener of its own path there, or opensOn: 'desktop' with the phonePath that reaches the dialog
+- Root cause: calendar.shortcuts opened its Plantafel toolbar button on the desktop through the silent fallback package R removed; the phone lists render no toolbar, so the opener now declares opensOn desktop with its phonePath (none by design)
+- Prevention: Tier 2: tests/audit/support/open-layer-plan.ts fails an undeclared trigger off screen at its width by name; Tier 1: tests/audit/support/dialog-opener.ts requires a phonePath with opensOn desktop
+- Focused proof: change plan `2026-10-23T000439910Z-64b7698d` passed the group with the declared opener.
+
+## 2026-10-22: unit:all harness failure (pre-push hook override test)
+
+- Run: report `2026-10-22T060509450Z-da730821`, group `unit:all`, target local; no run key and no retained world (a unit group).
+- Failure point: `lib/testing/publication/pre-push-hook.test.ts`, "the owner override passes a refused push only with a log line naming the commit and the reason": `git push` exited 1 instead of 0.
+- Evidence: `unit-all.log` of that report only; the assertion printed no child output.
+- Root cause: not determinable. The test asserted the push's exit code without the push's output, so the log could not say whether the hook refused, the override log append failed, or git could not lock the bare repository's ref. 30 sequential runs and 15 runs beside a full unit run on this machine all passed. Classified harness: the test's assertion hid the failure it guards.
+- Correction: every exit-code assertion of the test carries the child's output.
+- Prevention: Tier 2: `lib/conventions/unit-test-timeouts.test.ts` refuses an exit-code assertion without the child's output in any unit test.
+- Focused proof: `bun test lib/testing/publication/pre-push-hook.test.ts` passed 45 of 45 runs on the corrected test.
 
 ## 2026-10-22: audit:lab:office product failure
 

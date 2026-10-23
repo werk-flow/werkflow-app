@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 
-import { formatDuration, formatSignedDuration, liveMinutes } from './helpers';
+import { canApproveEntries, formatDuration, formatSignedDuration, liveMinutes } from './helpers';
 
 describe('liveMinutes', () => {
   const nowMs = Date.parse('2026-09-03T10:30:00.000Z');
@@ -41,5 +42,43 @@ describe('formatSignedDuration', () => {
 
   test('counts zero as positive', () => {
     expect(formatSignedDuration(0)).toBe('+0 Min.');
+  });
+});
+
+describe('canApproveEntries: the one approval predicate of the server and every review surface', () => {
+  const roleDefault = (role: 'admin' | 'buero'): EffectiveResponsibilityHolder => ({
+    employeeRecordId: `${role}-record`,
+    userId: `${role}-user`,
+    source: { kind: 'role_default', configurationId: null, role },
+  });
+
+  test('an admin holder never approves their own pending entry, as the server refuses it', () => {
+    expect(canApproveEntries(roleDefault('admin'), 'admin-user', 'admin')).toBe(false);
+    expect(canApproveEntries(roleDefault('admin'), 'buero-user', 'buero')).toBe(true);
+  });
+
+  test('a Büro source approves employees only, also when delegated', () => {
+    expect(canApproveEntries(roleDefault('buero'), 'other-buero-user', 'buero')).toBe(false);
+    expect(canApproveEntries(roleDefault('buero'), 'employee-user', 'employee')).toBe(true);
+    const delegated: EffectiveResponsibilityHolder = {
+      employeeRecordId: 'employee-record',
+      userId: 'substitute-user',
+      source: {
+        kind: 'delegation',
+        configurationId: null,
+        delegationId: 'delegation',
+        delegatedFromEmployeeRecordId: 'buero-record',
+        validFrom: '2026-10-01',
+        validUntil: '2026-10-31',
+        inheritedSource: { kind: 'role_default', configurationId: null, role: 'buero' },
+      },
+    };
+    expect(canApproveEntries(delegated, 'buero-user', 'buero')).toBe(false);
+    expect(canApproveEntries(delegated, 'employee-user', 'employee')).toBe(true);
+    expect(canApproveEntries(delegated, 'substitute-user', 'employee')).toBe(false);
+  });
+
+  test('a caller without a time_approval holder approves nothing, whatever the role', () => {
+    expect(canApproveEntries(null, 'employee-user', 'employee')).toBe(false);
   });
 });

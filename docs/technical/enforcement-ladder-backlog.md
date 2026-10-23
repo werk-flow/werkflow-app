@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -8,19 +8,17 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Calendar approvals by the responsibility holder | The calendar's entry details offer approval and block moves by role (`canManageBlock`, `canApproveEntries`), while the server asks the `time_approval` holder. `lib/ui/action-prechecks.ts` marks these rows reviewed, so a manager who is not the holder can start an approval the server refuses. | Tier 2: the calendar reads the holder through the approval read model and the pre-check table pairs the views with `canHolderApproveTarget`. |
+| Calendar block corrections by the responsibility holder | The calendar offers a move or resize of another person's recorded block by role (`canManageBlock`), while `submitTimeCorrection` asks the `time_approval` holder. `lib/ui/action-prechecks.ts` marks the row reviewed, so a manager who is not the holder can draft a correction the server refuses. | Tier 2: `canManageBlock` takes the holder from `useTimeApprovalHolder`, as the entry details' approval does, and the row pairs with `canHolderApproveTarget`. |
 | States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
-| Phone paths of desktop-only dialog openers | Some dialogs of `lib/testing/selection/dialog-inventory.ts` open from a table row menu, the board or the day timeline (`opensOn: 'desktop'` in `tests/audit/support/dialog-openers/`). At 375 px the audit opens them on the desktop and narrows the window, so the phone's own path (a card menu, the day list) is not driven. | Tier 2: an opener per phone path in the area modules, audited at 375 px. |
+| Phone paths of desktop-only dialog openers | Some dialogs of `lib/testing/selection/dialog-inventory.ts` open from a table row menu, the board or the day timeline (`opensOn: 'desktop'` in `tests/audit/support/dialog-openers/`), each with the `phonePath` that reaches the dialog on a phone. At 375 px the audit opens them on the desktop and narrows the window, so that phone path (a card menu, the day list) is not driven; any other trigger off screen at its width fails (`tests/audit/support/open-layer-plan.ts`). | Tier 2: an opener per phone path in the area modules, audited at 375 px. |
 
 ## Performance and immediate feedback
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
-| Set-returning function reads | `lib/conventions/unpaged-reads.test.ts` checks `.from()` reads; a `.rpc()` that returns an unbounded set is cut at the PostgREST row cap without an error. The two attention functions page through `readCompleteRows` (`lib/attention/pending-sets.ts`); the `list_*_page` functions bound their own page. | Tier 2: the test reads each called function's return shape from `lib/supabase/database.types.ts` and requires a page argument or `readCompleteRows` for a set. |
-| Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` follows names across files, not values: a Server Action passed as a prop or parameter, or returned by a hook, and called from an effect is not found. | Tier 1: a branded type on Server Action references that an effect callback or a live-view `read` cannot call. |
+| Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` follows a Server Action passed as a prop or parameter to the caller that passes it, but not one returned by a hook or passed to a component bound through `memo(…)` or `forwardRef(…)`. | Tier 1: a branded type on Server Action references that an effect callback or a live-view `read` cannot call. |
 | Calendar draft reset in an effect | `components/kalender/use-entry-details-draft.ts` resets its draft when the dialog opens from an effect; the calendar has recorded render behaviour, so `derivedStateEffectExceptions` in `eslint.config.mjs` lists it. | Tier 2: in the run that recalibrates the calendar references, adopt the open key during render and delete the exception. |
 | Document library navigation transition | `components/dokumente/document-library-content.tsx` keeps `useTransition` for its folder and search navigation (`transitionExemptFiles` in `eslint.config.mjs`). | Tier 2: bind the pending flag to its `pendingNavigation` state, delete the exemption, and prove it in the documents browser groups. |
-| Delayed refresh after the invite dialog | `components/mitarbeiter/personnel-invite-dialog.tsx` shows success inside the dialog for 1.5 s, then closes and refreshes; `DELAYED_REFRESH_SITES` in `lib/realtime/debounce-ownership.test.ts` lists it. | Tier 2: close at once with a banner, refresh through the settle path, and delete the entry. |
 
 ## Security
 

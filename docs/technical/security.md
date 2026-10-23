@@ -1,6 +1,6 @@
 # Security control map
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 ## How to work
 
@@ -26,7 +26,7 @@ Wrong turn: a policy that checks membership but not the role. Every member can t
 5. An operation that sends mail, redeems a capability or activates billing calls `consumeRateLimit` from `lib/security/rate-limit.ts` before it acts.
 6. Write. Rows that change together change in one database function call ([write related rows](code-quality.md#write-related-rows)). Return `ActionResult` with a stable code, and log a failure through `logError`.
 7. A route handler gets its entry in `lib/security/route-inventory.test.ts`. A handler that sets cookies or redeems a capability from a request body calls `verifySameOriginJsonRequest` first. A GET handler redeems nothing from a query string.
-8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`, and expect a refusal for a foreign organization's id and for a lower role. A new action module needs one.
+8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`, and expect a refusal for a foreign organization's id and for a lower role. Each new action needs one.
 9. Run `bun run test:unit lib/security lib/conventions/server-action-input.test.ts` and the new boundary test.
 
 Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint, and anyone can send any id.
@@ -85,7 +85,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Every export of a `'use server'` module calls an owner function of `lib/org/action-context.ts` or `lib/org/self-service-context.ts`, a named wrapper or a reviewed identity-only function, unconditionally, and checks its failure before the first admin call or write. A helper that needs the admin client or a trusted user id lives in a `server-only` module. [code `lib/org/action-context.ts`, test `lib/security/server-action-authorization.test.ts`]
 - Every parameter of an exported Server Action, inline ones included, goes through a Zod schema parse or a named validator before its first use. [test `lib/conventions/server-action-input.test.ts`]
 - Role, lifecycle and object permission are the right ones for the operation. [judgment]
-- Every action module has a boundary fixture that drives its real actions with a foreign id or a lower role; the shrink-only list names each module without one and why. [test `lib/security/boundary-coverage.test.ts`]
+- Every exported Server Action has a boundary fixture that asserts its refusal of a foreign id or a lower role, unless it is self-scoped and the test proves it takes no id; the `missing` list only shrinks. [test `lib/security/boundary-coverage.test.ts`]
 - A service-role query or function call on organization data passes an organization derived from the resolved context, or carries a reviewed `tenant-scope` reason. [test `lib/conventions/tenant-scope.test.ts`]
 - A route handler calls the authorization its reviewed entry names, and no response body or redirect URL carries an error's message or details. [test `lib/security/route-inventory.test.ts`]
 - A handler that sets cookies or redeems a capability from a request body calls `verifySameOriginJsonRequest`. [test `lib/security/same-origin.test.ts`, test `lib/security/redeem-invite-http.test.ts`]

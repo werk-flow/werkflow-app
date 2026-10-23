@@ -18,7 +18,8 @@ import type { TestWorld } from '../../golden/support/world';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
 import type { CaptureSpec, StandaloneCaptureSpec } from './acceptance-sets';
 import { DIALOG_OPENERS } from './dialog-openers';
-import { DESKTOP, openLayerAt, VIEWPORT_HEIGHT } from './open-layer';
+import { openLayerAt } from './open-layer';
+import { DESKTOP, VIEWPORT_HEIGHT } from './open-layer-plan';
 import { openStandaloneScreen } from './standalone-sessions';
 import { openSurface, surfaceDestination } from './surface-routes';
 

@@ -48,8 +48,10 @@ import {
 } from '../lib/docs/closed-records';
 import { findCaptureCitationProblems } from '../lib/docs/acceptance-captures';
 import {
+  findIdentifierReferences,
   findNumberedRuleReferences,
   findRepositoryPathReferences,
+  holdsIdentifier,
   findRouteHandlerReferences,
   findUnresolvedRulePointers,
   numberedItemsUnder,
@@ -594,6 +596,16 @@ for (const file of livingGuidance) {
     if (!repositoryPathCandidates(reference.name).some((candidate) => existsSync(join(repoRoot, candidate))))
       problems.push(
         `path: ${file}:${reference.line} names ${reference.name}, which does not exist; point it at the current file`,
+      );
+  }
+  // "`Name` in `path`" and "`path` (`Name`)": the named file holds the identifier.
+  for (const reference of findIdentifierReferences(text)) {
+    const target = repositoryPathCandidates(reference.path)
+      .map((candidate) => join(repoRoot, candidate))
+      .find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
+    if (target && !holdsIdentifier(readFileSync(target, 'utf8'), reference.name))
+      problems.push(
+        `identifier: ${file}:${reference.line} names ${reference.name} in ${reference.path}, which does not hold it; name the current symbol or file`,
       );
   }
 }

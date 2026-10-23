@@ -121,3 +121,36 @@ export function findRepositoryPathReferences(text: string): LineReference[] {
 export function repositoryPathCandidates(path: string): string[] {
   return ['', '.ts', '.tsx', '.mjs', '.js', '/index.ts', '/index.tsx'].map((suffix) => `${path}${suffix}`);
 }
+
+/** A code identifier a text names together with the file it lives in. */
+export type IdentifierReference = { line: number; name: string; path: string };
+
+const IDENTIFIER = '[A-Za-z_$][\\w$]*';
+const REPOSITORY_FILE = `(?:${REPOSITORY_ROOTS.join('|')})/[^\`\\s]*[^\`\\s/]`;
+// "`readAllRows` in `lib/supabase/query-batches.ts`", "`describeFailure` from `lib/action-messages.ts`"
+const NAME_IN_FILE_PATTERN = new RegExp(`\`(${IDENTIFIER})\` (?:in|from) \`(${REPOSITORY_FILE})\``, 'g');
+// "`lib/testing/runner/group-schedule.ts` (`MIDNIGHT_START_WINDOW`)"
+const FILE_WITH_NAME_PATTERN = new RegExp(`\`(${REPOSITORY_FILE})\` \\(\`(${IDENTIFIER})\`\\)`, 'g');
+
+/**
+ * Every identifier a text pairs with its file: "`Name` in `path`", "`Name`
+ * from `path`" and "`path` (`Name`)". The caller checks that the file holds
+ * the name, so a renamed or deleted symbol does not leave a dead pointer.
+ */
+export function findIdentifierReferences(text: string): IdentifierReference[] {
+  const references: IdentifierReference[] = [];
+  for (const match of text.matchAll(NAME_IN_FILE_PATTERN)) {
+    if (match[1] !== undefined && match[2] !== undefined)
+      references.push({ line: lineOf(text, match.index), name: match[1], path: match[2] });
+  }
+  for (const match of text.matchAll(FILE_WITH_NAME_PATTERN)) {
+    if (match[1] !== undefined && match[2] !== undefined)
+      references.push({ line: lineOf(text, match.index), name: match[2], path: match[1] });
+  }
+  return references.sort((left, right) => left.line - right.line);
+}
+
+/** True when the file text holds the identifier as a whole word. */
+export function holdsIdentifier(fileText: string, name: string): boolean {
+  return new RegExp(`(?<![\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`).test(fileText);
+}

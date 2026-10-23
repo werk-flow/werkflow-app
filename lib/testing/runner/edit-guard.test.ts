@@ -58,6 +58,22 @@ test('only proof inputs inside the repository are guarded', () => {
   ).toEqual(['lib/a.ts']);
 });
 
+// The Codex hook payloads (https://learn.chatgpt.com/docs/hooks, "Tool coverage"): a shell command,
+// unified exec (exec_command) included, arrives as Bash and an edit as apply_patch, both with
+// tool_input.command. A reviewer that probes the guard with an internal tool name probes no real call.
+test('the documented Codex payloads are guarded: Bash for exec_command, apply_patch for an edit', () => {
+  expect(sourceRewritingCommand({ tool_name: 'Bash', tool_input: { command: 'bun run format' } })).toBe(
+    'bun run format',
+  );
+  const patch = '*** Begin Patch\n*** Update File: lib/a.ts\n*** End Patch';
+  expect(editedFiles({ tool_name: 'apply_patch', tool_input: { command: patch } })).toEqual(['lib/a.ts']);
+  // Defense in depth: a `cmd` without `command` is read too.
+  expect(sourceRewritingCommand({ tool_name: 'Bash', tool_input: { cmd: 'bun run format' } })).toBe(
+    'bun run format',
+  );
+  expect(editedFiles({ tool_name: 'apply_patch', tool_input: { cmd: patch } })).toEqual(['lib/a.ts']);
+});
+
 test('shell commands that rewrite source files are named, checks and plain commands are not', () => {
   const shell = (command: string): string | undefined =>
     sourceRewritingCommand({ tool_name: 'Bash', tool_input: { command } });

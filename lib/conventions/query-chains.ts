@@ -142,6 +142,39 @@ function generatedTypes(): ts.SourceFile {
   );
 }
 
+/** The `Database['public']['Functions']` entries of the generated types, each with its name. */
+function publicFunctions(source: ts.SourceFile): { name: string; variants: readonly ts.TypeNode[] }[] {
+  let declared: ts.TypeNode | undefined;
+  ts.forEachChild(source, function visit(node) {
+    if (ts.isTypeAliasDeclaration(node) && node.name.text === 'Database') {
+      declared = literalMember(literalMember(node.type, 'public', source), 'Functions', source);
+      return;
+    }
+    ts.forEachChild(node, visit);
+  });
+  if (!declared || !ts.isTypeLiteralNode(declared)) return [];
+  return declared.members.map((entry) => ({
+    name: memberName(entry, source),
+    variants: unionMembers(ts.isPropertySignature(entry) ? entry.type : undefined),
+  }));
+}
+
+/** A type member's name without quotes. */
+function memberName(member: ts.TypeElement, source: ts.SourceFile): string {
+  return member.name?.getText(source).replace(/['"]/g, '') ?? '';
+}
+
+/** A property of a type literal by name. */
+function literalMember(
+  type: ts.TypeNode | undefined,
+  name: string,
+  source: ts.SourceFile,
+): ts.TypeNode | undefined {
+  if (!type || !ts.isTypeLiteralNode(type)) return undefined;
+  const member = type.members.find((candidate) => memberName(candidate, source) === name);
+  return member && ts.isPropertySignature(member) ? member.type : undefined;
+}
+
 /**
  * Every function of the public schema, mapped to the name of its organization
  * argument, or to null when no overload takes one. An overloaded function is
@@ -152,39 +185,37 @@ export function functionOrganizationArguments(
   source: ts.SourceFile = generatedTypes(),
 ): Map<string, string | null> {
   const functions = new Map<string, string | null>();
-  const nameOf = (member: ts.TypeElement): string => member.name?.getText(source).replace(/['"]/g, '') ?? '';
-  const memberType = (type: ts.TypeNode | undefined, name: string): ts.TypeNode | undefined => {
-    if (!type || !ts.isTypeLiteralNode(type)) return undefined;
-    const member = type.members.find((candidate) => nameOf(candidate) === name);
-    return member && ts.isPropertySignature(member) ? member.type : undefined;
-  };
-  ts.forEachChild(source, function visit(node) {
-    if (!ts.isTypeAliasDeclaration(node) || node.name.text !== 'Database') {
-      ts.forEachChild(node, visit);
-      return;
-    }
-    const declared = memberType(memberType(node.type, 'public'), 'Functions');
-    if (!declared || !ts.isTypeLiteralNode(declared)) return;
-    for (const entry of declared.members) {
-      const variants = unionMembers(ts.isPropertySignature(entry) ? entry.type : undefined);
-      const overloads = variants.flatMap((variant) => unionMembers(memberType(variant, 'Args')));
-      const names = overloads.flatMap((overload) =>
-        ts.isTypeLiteralNode(overload) ? overload.members.map(nameOf) : [],
-      );
-      functions.set(
-        nameOf(entry),
-        ORGANIZATION_ARGUMENTS.find((argument) => names.includes(argument)) ?? null,
-      );
-    }
-  });
+  for (const { name, variants } of publicFunctions(source)) {
+    const overloads = variants.flatMap((variant) => unionMembers(literalMember(variant, 'Args', source)));
+    const names = overloads.flatMap((overload) =>
+      ts.isTypeLiteralNode(overload) ? overload.members.map((member) => memberName(member, source)) : [],
+    );
+    functions.set(name, ORGANIZATION_ARGUMENTS.find((argument) => names.includes(argument)) ?? null);
+  }
   return functions;
+}
+
+/**
+ * Functions of the public schema whose generated `Returns` is an array in any
+ * overload: a set-returning function, which PostgREST caps at its row limit
+ * as silently as a table read.
+ */
+export function setReturningFunctions(source: ts.SourceFile = generatedTypes()): Set<string> {
+  return new Set(
+    publicFunctions(source)
+      .filter(({ variants }) =>
+        variants.some((variant) => {
+          const returns = literalMember(variant, 'Returns', source);
+          return returns !== undefined && ts.isArrayTypeNode(returns);
+        }),
+      )
+      .map(({ name }) => name),
+  );
 }
 
 /** Tables and views of the public schema whose rows carry `organization_id`. */
 export function organizationTables(): Set<string> {
   const source = generatedTypes();
-  const memberName = (member: ts.TypeElement): string =>
-    member.name?.getText(source).replace(/['"]/g, '') ?? '';
   const memberType = (
     members: ts.NodeArray<ts.TypeElement>,
     name: string,
@@ -192,7 +223,7 @@ export function organizationTables(): Set<string> {
     for (const member of members) {
       if (
         ts.isPropertySignature(member) &&
-        memberName(member) === name &&
+        memberName(member, source) === name &&
         member.type &&
         ts.isTypeLiteralNode(member.type)
       ) {
@@ -214,10 +245,10 @@ export function organizationTables(): Set<string> {
           const row = memberType(relation.type.members, 'Row');
           if (
             row?.members.some(
-              (member) => ts.isPropertySignature(member) && memberName(member) === 'organization_id',
+              (member) => ts.isPropertySignature(member) && memberName(member, source) === 'organization_id',
             )
           )
-            tables.add(memberName(relation));
+            tables.add(memberName(relation, source));
         }
       }
     }

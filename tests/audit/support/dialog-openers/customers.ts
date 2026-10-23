@@ -48,8 +48,9 @@ export const CUSTOMERS_OPENERS = {
     layer: customerCreateDialog,
   },
   'customers.list-delete': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the customer list holds the same actions menu (ClientCard, components/kunden/clients-table.tsx).',
     trigger: async ({ page, world }) => {
       await prepareLayoutDetails(world);
       await page.reload();
@@ -62,8 +63,9 @@ export const CUSTOMERS_OPENERS = {
   },
   // The edit dialog lives in the list's row menu only; the detail page has no edit action.
   'customers.edit': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the customer list holds the same actions menu (ClientCard, components/kunden/clients-table.tsx).',
     trigger: async ({ page, world }) => {
       await prepareLayoutDetails(world);
       await page.reload();

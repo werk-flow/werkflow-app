@@ -4,17 +4,31 @@
 
 /**
  * A doc's last change: today when the working tree changes it, else its last commit, with
- * whether that commit also moved the stamp (then it recorded its own review, whatever its date).
+ * whether that commit also moved the stamp (then it recorded its own review, on its own day or,
+ * for a commit just after midnight, the day before).
  */
 export type LastChange = { date: string; uncommitted: boolean; movedStamp: boolean };
 
+/** The calendar day before a `YYYY-MM-DD` date. */
+function dayBefore(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`);
+  day.setUTCDate(day.getUTCDate() - 1);
+  return day.toISOString().slice(0, 10);
+}
+
 /**
- * The problem with a living doc's review stamp, or null: the stamp names a day after today, or
- * it predates a change that did not move it.
+ * The problem with a living doc's review stamp, or null: the stamp names a day after today, it
+ * predates a change that did not move it, or a commit moved it to a day other than its own or
+ * the day before.
  */
 export function reviewStampProblem(stamp: string, change: LastChange, today: string): string | null {
   if (stamp > today) return `its status line names ${stamp}, a day after today (${today})`;
-  if (stamp >= change.date || (!change.uncommitted && change.movedStamp)) return null;
+  if (stamp >= change.date) return null;
+  if (!change.uncommitted && change.movedStamp) {
+    return stamp === dayBefore(change.date)
+      ? null
+      : `its last commit from ${change.date} set its status line to last reviewed ${stamp}; a moved stamp names the commit's day`;
+  }
   return change.uncommitted
     ? `it changed in the working tree today (${change.date}), but its status line still says last reviewed ${stamp}; set the date to ${change.date}`
     : `its last commit is from ${change.date}, after its status line's last reviewed ${stamp}; review it and set the date`;

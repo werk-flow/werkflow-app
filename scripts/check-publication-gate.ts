@@ -16,7 +16,13 @@ import {
   reviewRecordSchema,
   type ReviewRecord,
 } from '../lib/testing/publication/publication-gate';
-import { parsePushUpdates, publishesProduction, pushDiffBase } from '../lib/testing/publication/push-refs';
+import {
+  EMPTY_TREE,
+  parsePushUpdates,
+  publishesProduction,
+  pushDiffBase,
+} from '../lib/testing/publication/push-refs';
+import { committedFileText, shrinkOnlyProblems } from '../lib/testing/publication/shrink-only-lists';
 import { measuredGroupsForChange } from '../lib/testing/selection/group-selection';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 
@@ -26,7 +32,8 @@ import { getTestGroups } from '../lib/testing/selection/test-groups';
  * verification report passed on the tree being pushed, every wall-clock group
  * that measures a pushed product file passed on its current content, a
  * CodeRabbit review completed on it, and every commit the push publishes
- * records its deletion pass. A push to main also needs a release plan and the
+ * records its deletion pass, and no shrink-only list grew against the commit the
+ * push replaces. A push to main also needs a release plan and the
  * cloud canary. It trusts only evidence whose content the evidence ledger
  * records (lib/testing/publication/evidence-ledger.ts). It reads evidence
  * only; the hook owns the owner override.
@@ -148,6 +155,16 @@ const problems = [
     canaryReport: newestReport('cloud'),
   }),
   ...deletionPassProblems(publishedCommits),
+  // A shrink-only list never grows against the commit the push replaces.
+  ...updates.flatMap((update) => {
+    const base = pushDiffBase(update, knownCommit);
+    return base === EMPTY_TREE
+      ? []
+      : shrinkOnlyProblems(
+          (file) => committedFileText(repository, base, file),
+          (file) => committedFileText(repository, update.local, file),
+        );
+  }),
 ];
 if (problems.length) {
   console.error(`[publication-gate] Push refused; ${problems.length} requirement(s) missing:`);

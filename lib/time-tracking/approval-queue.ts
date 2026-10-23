@@ -3,7 +3,6 @@ import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
-import type { OrgRole } from '@/lib/roles';
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { canApproveEntries } from './helpers';
@@ -32,10 +31,9 @@ type PersonName = { first_name: string | null; last_name: string | null };
 export async function readPendingSessionQueue(input: {
   admin: AdminClient;
   organizationId: string;
-  callerRole: OrgRole;
   holder: EffectiveResponsibilityHolder;
 }): Promise<GetPendingSessionsResult> {
-  const { admin, organizationId, callerRole, holder } = input;
+  const { admin, organizationId, holder } = input;
   const { data: pendingEntries, error: entriesError } = await readCompleteRows(
     (from, to) =>
       admin
@@ -70,9 +68,7 @@ export async function readPendingSessionQueue(input: {
   const roleByUser = new Map(memberRows.map((member) => [member.user_id, member.role]));
   const approvableEntries: TimeEntryRow[] = pendingEntries.filter((entry) => {
     const targetRole = roleByUser.get(entry.user_id);
-    return Boolean(
-      targetRole && canApproveEntries(callerRole, targetRole, { holder, targetUserId: entry.user_id }),
-    );
+    return Boolean(targetRole && canApproveEntries(holder, entry.user_id, targetRole));
   });
 
   // Personal display data only for targets this approver may see:

@@ -19,6 +19,7 @@ import {
   documentsRegionAttachButton,
   documentViewerLayer,
 } from '../../../golden/support/steps/documents';
+import { pressKey } from '../../../golden/support/steps/interaction';
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { prepareLayoutDetails } from '../layout-fixtures';
@@ -54,7 +55,11 @@ async function libraryFileAction(
 ): Promise<Locator> {
   await seedAuditDocument(world);
   await page.reload();
-  await documentFileActionsButton(page, AUDIT_DOCUMENT_NAME).click();
+  // The menu opens from the keyboard: a mouse click opens a Radix menu on
+  // press, and an item that renders under the pointer is chosen on release
+  // (the phone card's menu chose "Löschen", 2026-10-23).
+  await documentFileActionsButton(page, AUDIT_DOCUMENT_NAME).focus();
+  await pressKey(page, 'Enter');
   return documentFileActionItem(page, action);
 }
 

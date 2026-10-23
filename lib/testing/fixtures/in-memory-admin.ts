@@ -95,6 +95,25 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   lt(column: string, value: string): this {
     return this.where((row) => String(row[column]) < value);
   }
+  /** SQL `like` with `%` as its only wildcard. */
+  like(column: string, pattern: string): this {
+    const parts = pattern.split('%');
+    return this.where((row) => {
+      const text = String(row[column] ?? '');
+      if (parts.length === 1) return text === pattern;
+      let position = 0;
+      return parts.every((part, index) => {
+        if (index === 0) {
+          position = part.length;
+          return text.startsWith(part);
+        }
+        if (index === parts.length - 1) return text.length - part.length >= position && text.endsWith(part);
+        const found = text.indexOf(part, position);
+        position = found + part.length;
+        return found !== -1;
+      });
+    });
+  }
   order(): this {
     return this;
   }
@@ -141,7 +160,12 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     if (this.headOnly) return { data: null, error: null, count: affected.length };
     if (this.cardinality === 'many') return { data: affected, error: null, count: affected.length };
     if (this.cardinality === 'single' && affected.length !== 1)
-      return { data: null, error: { code: 'PGRST116' }, count: null };
+      // PostgREST's own answer to a `.single()` that matched no row or several.
+      return {
+        data: null,
+        error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' },
+        count: null,
+      };
     return { data: affected[0] ?? null, error: null, count: null };
   }
 

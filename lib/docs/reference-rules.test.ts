@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import {
   findNumberedRuleReferences,
+  findIdentifierReferences,
   findRepositoryPathReferences,
+  holdsIdentifier,
   findUnresolvedRulePointers,
   numberedItemsUnder,
   findRouteHandlerReferences,
@@ -120,5 +122,32 @@ describe('repository paths in a skill', () => {
   test('a specifier resolves with or without its extension', () => {
     expect(repositoryPathCandidates('components/ui/button')).toContain('components/ui/button.tsx');
     expect(repositoryPathCandidates('lib/ui/decimal.ts')[0]).toBe('lib/ui/decimal.ts');
+  });
+});
+
+describe('identifiers named with their file', () => {
+  test('finds "`Name` in `path`", "`Name` from `path`" and "`path` (`Name`)"', () => {
+    const text = [
+      'Pages come from `readAllRows` in `lib/supabase/query-batches.ts`.',
+      'Turn a code into German with `describeFailure` from `lib/action-messages.ts`.',
+      'The runner waits (`lib/testing/runner/group-schedule.ts` (`MIDNIGHT_START_WINDOW`)).',
+    ].join('\n');
+    expect(findIdentifierReferences(text)).toEqual([
+      { line: 1, name: 'readAllRows', path: 'lib/supabase/query-batches.ts' },
+      { line: 2, name: 'describeFailure', path: 'lib/action-messages.ts' },
+      { line: 3, name: 'MIDNIGHT_START_WINDOW', path: 'lib/testing/runner/group-schedule.ts' },
+    ]);
+  });
+
+  test('ignores a command, a folder and a path outside the repository roots', () => {
+    expect(
+      findIdentifierReferences('Run `bun run lint` in `lib/ui/`, and `x` in `references/README.md`.'),
+    ).toEqual([]);
+  });
+
+  test('a file holds a name only as a whole word: the missing CSP_POLICY symbol fails', () => {
+    const file = 'export const CSP_POLICY_HEADER = 1;\nexport function buildCsp() {}\n';
+    expect(holdsIdentifier(file, 'buildCsp')).toBe(true);
+    expect(holdsIdentifier(file, 'CSP_POLICY')).toBe(false);
   });
 });

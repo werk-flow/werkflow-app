@@ -148,6 +148,9 @@ mock.module('@/lib/time-corrections/actions', () => ({
 mock.module('@/lib/time-tracking/closed-period-reads', () => ({
   getClosedTimePeriods: seam('closed-time-periods'),
 }));
+mock.module('@/lib/time-tracking/approval-holder-reads', () => ({
+  getTimeApprovalHolder: seam('time-approval-holder'),
+}));
 mock.module('@/lib/members/actions', () => ({
   getOrgMembersAction: seam('organization-member-options'),
   getProfilesByIds: async (userIds: string[]) => {
@@ -384,6 +387,7 @@ const inputs: Record<string, unknown> = {
   'time-correction-history': { organizationId, page: 2 },
   'time-correction-form-options': { organizationId },
   'closed-time-periods': { organizationId },
+  'time-approval-holder': { organizationId },
   'time-entries-for-job': { jobId },
   'job-dispatch-cards': { jobId },
   'job-qualification-detail': { jobId },
@@ -443,6 +447,7 @@ const readerArguments: Record<string, unknown> = {
   'time-correction-history': [organizationId, 2],
   'time-correction-form-options': organizationId,
   'closed-time-periods': organizationId,
+  'time-approval-holder': organizationId,
   'time-entries-for-job': jobId,
   'job-dispatch-cards': jobId,
   'job-qualification-detail': jobId,

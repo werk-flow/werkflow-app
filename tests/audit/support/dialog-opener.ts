@@ -24,11 +24,21 @@ export type DialogOpener = {
   parents?: (page: Page) => readonly Locator[];
   /** The viewport the trigger exists at, when it is not the desktop (a phone-only filter button). */
   viewport?: { width: number; height: number };
-  /**
-   * The trigger lives in a layout that only the desktop renders (a table row's
-   * menu, the board, the day timeline). At a narrower width the dialog opens
-   * on the desktop and the window then narrows; the phone's own path to the
-   * dialog (a card menu, the day list) is not part of this audit.
-   */
-  opensOn?: 'desktop';
-};
+} & (
+  | { opensOn?: undefined }
+  | {
+      /**
+       * The trigger lives in a layout that only the desktop renders (a table
+       * row's menu, the board, the day timeline). At a narrower width the
+       * dialog opens on the desktop and the window then narrows.
+       */
+      opensOn: 'desktop';
+      /**
+       * How a phone user reaches the same dialog (a card menu, the day list),
+       * or why a phone user does not need it. Its own opener is still to write
+       * (docs/technical/enforcement-ladder-backlog.md); a dialog no phone path
+       * reaches that a phone user needs is a product defect.
+       */
+      phonePath: string;
+    }
+);

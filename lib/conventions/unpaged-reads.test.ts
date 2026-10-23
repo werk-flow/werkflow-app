@@ -9,6 +9,7 @@ import {
   continuationCalls,
   enclosingFunction,
   organizationTables,
+  setReturningFunctions,
   stringValue,
   unwrap,
   type ChainCall,
@@ -27,6 +28,11 @@ import {
 // factory is. Reads bounded by one parent record (the sites of one customer,
 // the entries of one day) are listed below with their bound; the list only
 // shrinks.
+//
+// A `.rpc('<function>')` call whose generated `Returns` is an array is a
+// set-returning read with the same cap. It is bounded the same way, or by a
+// limit argument (`p_limit`, `p_page_size`); a set that one operation or one
+// person bounds is listed in REVIEWED_UNPAGED_RPC_READS with its bound.
 
 /**
  * Organization tables whose rows stay few per company: settings, policies,
@@ -140,6 +146,38 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
     'the draft items of one handover package',
   'lib/work-handover/actions.ts::loadWorkspace::work_handover_releases':
     'the releases of one handover package',
+};
+
+/**
+ * Set-returning function calls whose result one operation or one person
+ * bounds, keyed `file::function::rpc:<name>`. An entry that matches no call fails as stale.
+ */
+const ONE_INVITE = 'the rows of one invitation';
+const ONE_WORK_TARGET = 'the state rows of one job or project';
+const ONE_SERIES = 'the occurrences of one series inside its 18-month horizon, daily at most about 550';
+const REVIEWED_UNPAGED_RPC_READS: Readonly<Record<string, string>> = {
+  'app/(auth)/login/page.tsx::LoginPage::rpc:get_invite_by_code': ONE_INVITE,
+  'app/(auth)/signup/page.tsx::SignupPage::rpc:get_invite_by_code': ONE_INVITE,
+  'app/api/redeem-invite/route.ts::POST::rpc:redeem_organization_invite_for_user': ONE_INVITE,
+  'app/auth/callback/route.ts::redeemAfterCodeExchange::rpc:redeem_organization_invite_for_user': ONE_INVITE,
+  'lib/dispatch/actions.ts::batchReschedule::rpc:batch_reschedule_planning_occurrences':
+    'the occurrences of one batch, at most 100 by its input schema',
+  'lib/documents/actions.ts::permanentlyDeleteDocument::rpc:permanently_delete_document':
+    'the storage paths of the versions of one document',
+  'lib/documents/links.ts::writeDocumentLinks::rpc:update_document_links': 'the links of one document',
+  'lib/inventory/actions.ts::recordMovement::rpc:record_inventory_movement': 'the stock rows of one movement',
+  'lib/invites/send-invite.ts::createAndMailOrganizationInvite::rpc:check_user_exists_by_email':
+    'the account of one address',
+  'lib/invites/send-invite.ts::createAndMailOrganizationInvite::rpc:create_organization_invite': ONE_INVITE,
+  'lib/members/queries.ts::getOrgMembersForUser::rpc:get_org_members_for_user':
+    'the members of one organization, a small table like organization_members',
+  'lib/parking/actions.ts::setJobParkingContext::rpc:upsert_work_blocker': ONE_WORK_TARGET,
+  'lib/planning/actions.ts::createPlanningEntry::rpc:create_planning_entry_materialized': ONE_SERIES,
+  'lib/planning/actions.ts::extendPlanningSeriesHorizon::rpc:extend_planning_series_materialization':
+    ONE_SERIES,
+  'lib/planning/actions.ts::reschedulePlanningSeries::rpc:reschedule_planning_series': ONE_SERIES,
+  'lib/work-lifecycle/actions.ts::transitionWorkExecution::rpc:transition_work_execution': ONE_WORK_TARGET,
+  'lib/work-lifecycle/actions.ts::saveWorkBlocker::rpc:upsert_work_blocker': ONE_WORK_TARGET,
 };
 
 type UnpagedRead = { key: string; line: number };
@@ -311,6 +349,42 @@ export function unpagedReads(file: string, text: string, tables: ReadonlySet<str
   return found;
 }
 
+const LIMIT_ARGUMENT = /(?:^|_)(?:limit|page_size)$/;
+
+/** True when the call's argument object passes a row limit. */
+function passesLimit(call: ts.CallExpression): boolean {
+  const args = call.arguments[1] && unwrap(call.arguments[1]);
+  return (
+    args !== undefined &&
+    ts.isObjectLiteralExpression(args) &&
+    args.properties.some(
+      (property) =>
+        property.name !== undefined && LIMIT_ARGUMENT.test(property.name.getText().replace(/['"]/g, '')),
+    )
+  );
+}
+
+/** Calls of a set-returning function without a page boundary, a limit argument or a page callback. */
+export function unpagedRpcReads(file: string, text: string, functions: ReadonlySet<string>): UnpagedRead[] {
+  const source = parseProductSource(file, text);
+  const found: UnpagedRead[] = [];
+  ts.forEachChild(source, function visit(node) {
+    ts.forEachChild(node, visit);
+    if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return;
+    if (node.expression.name.text !== 'rpc') return;
+    const name = stringValue(node.arguments[0]);
+    if (name === undefined || !functions.has(name)) return;
+    if (passesLimit(node) || bounded(node) || inPageCallback(node, source)) return;
+    const factory = factoryOf(chainCalls(node).top);
+    if (factory !== undefined && factoryBounded(factory, source)) return;
+    found.push({
+      key: `${file}::${functionName(node)}::rpc:${name}`,
+      line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+    });
+  });
+  return found;
+}
+
 function organizationSizedTables(): Set<string> {
   return new Set([...organizationTables()].filter((table) => !SMALL_ORGANIZATION_TABLES.has(table)));
 }
@@ -392,4 +466,75 @@ test('the scan reports the silently truncated read and accepts the bounded forms
       `async function write(admin, id) { return admin.from('jobs').update({ title: 'x' }).eq('organization_id', id).select('id'); }`,
     ),
   ).toEqual([]);
+});
+
+test('every call of a set-returning function has a page boundary, a limit argument or a reviewed bound', () => {
+  const functions = setReturningFunctions();
+  expect(functions.size).toBeGreaterThan(5);
+  const reads = listProductSources().flatMap((file) => {
+    const text = readFileSync(resolve(repositoryRoot, file), 'utf8');
+    return text.includes('.rpc(') ? unpagedRpcReads(file, text, functions) : [];
+  });
+  const keys = new Set(reads.map((read) => read.key));
+  expect(
+    reads
+      .filter((read) => !(read.key in REVIEWED_UNPAGED_RPC_READS))
+      .map((read) => `${read.key.split('::')[0]}:${read.line} calls ${read.key.split('::')[2]}`),
+    'PostgREST caps a set-returning function at 1,000 rows without an error. Page it with .range inside readCompleteRows or readAllRows, pass a limit argument, or list a set that one operation bounds in REVIEWED_UNPAGED_RPC_READS.',
+  ).toEqual([]);
+  expect(
+    Object.keys(REVIEWED_UNPAGED_RPC_READS).filter((key) => !keys.has(key)),
+    'These REVIEWED_UNPAGED_RPC_READS entries match no call; remove them.',
+  ).toEqual([]);
+});
+
+test('the rpc scan reports an unbounded set-returning call and accepts the bounded forms', () => {
+  const functions = new Set(['list_rows']);
+  const rpc = (code: string): string[] =>
+    unpagedRpcReads('lib/planted.ts', code, functions).map((read) => read.key);
+  expect(
+    rpc(`async function load(admin, id) { return admin.rpc('list_rows', { p_organization_id: id }); }`),
+  ).toEqual(['lib/planted.ts::load::rpc:list_rows']);
+  // A scalar or single-row function is not a set read.
+  expect(
+    rpc(`async function load(admin, id) { return admin.rpc('count_rows', { p_organization_id: id }); }`),
+  ).toEqual([]);
+  expect(
+    rpc(
+      `async function load(admin, id) { return readCompleteRows((from, to) => admin.rpc('list_rows', { p_organization_id: id }).range(from, to), 10); }`,
+    ),
+  ).toEqual([]);
+  // The page callback alone bounds a chain that carries no bound of its own.
+  expect(
+    rpc(
+      `async function load(admin, id) { return readAllRows(() => admin.rpc('list_rows', { p_organization_id: id })); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    rpc(
+      `async function load(admin, id) { return admin.rpc('list_rows', { p_organization_id: id }).limit(50); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    rpc(
+      `async function load(admin, id) { return admin.rpc('list_rows', { p_organization_id: id, p_limit: 50 }); }`,
+    ),
+  ).toEqual([]);
+  expect(
+    rpc(`async function one(admin, id) { return admin.rpc('list_rows', { p_id: id }).single(); }`),
+  ).toEqual([]);
+});
+
+test('set-returning functions come from the array Returns of the generated types', () => {
+  const types = ts.createSourceFile(
+    'types.ts',
+    `export type Database = { public: { Functions: {
+      list_rows: { Args: { p_organization_id: string }; Returns: { id: string }[] };
+      count_rows: { Args: { p_organization_id: string }; Returns: number };
+      overloaded: { Args: { a: string }; Returns: Json } | { Args: { b: string }; Returns: { id: string }[] };
+    } } };`,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  expect([...setReturningFunctions(types)].sort()).toEqual(['list_rows', 'overloaded']);
 });

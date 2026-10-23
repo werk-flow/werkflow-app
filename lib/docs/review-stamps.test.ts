@@ -17,6 +17,14 @@ describe('review stamps', () => {
 
   test('a commit that moved the stamp recorded its review, even when it landed after midnight', () => {
     expect(reviewStampProblem('2026-10-17', committed('2026-10-18', true), '2026-10-18')).toBeNull();
+    expect(reviewStampProblem('2026-10-31', committed('2026-11-01', true), '2026-11-02')).toBeNull();
+  });
+
+  test('probe: a commit that moved the stamp to an earlier day than the day before fails', () => {
+    expect(reviewStampProblem('2026-01-02', committed('2026-10-22', true), '2026-10-22')).toBe(
+      "its last commit from 2026-10-22 set its status line to last reviewed 2026-01-02; a moved stamp names the commit's day",
+    );
+    expect(reviewStampProblem('2026-10-20', committed('2026-10-22', true), '2026-10-22')).not.toBeNull();
   });
 
   test('probe: a doc changed in the working tree needs today, and a future stamp fails', () => {

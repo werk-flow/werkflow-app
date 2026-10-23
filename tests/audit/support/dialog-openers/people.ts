@@ -200,8 +200,9 @@ export const PEOPLE_OPENERS = {
     layer: (page) => peopleDialog(page, 'invite'),
   },
   'people.invite-cancel': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the invitation list holds the same InviteActionsMenu (components/mitarbeiter/invitations-table.tsx).',
     trigger: async (context) => {
       const { page, world } = context;
       await surfaceFixture(world, 'people.pending-invite', () =>
@@ -220,8 +221,9 @@ export const PEOPLE_OPENERS = {
     returnFocus: ({ page, world }) => memberRowActionsButton(memberRow(page, inviteEmail(world, 'pending'))),
   },
   'people.invite-delete': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the invitation list holds the same InviteActionsMenu (components/mitarbeiter/invitations-table.tsx).',
     trigger: async (context) => {
       const { page, world } = context;
       await surfaceFixture(world, 'people.cancelled-invite', () =>
@@ -241,8 +243,9 @@ export const PEOPLE_OPENERS = {
       memberRowActionsButton(memberRow(page, inviteEmail(world, 'cancelled'))),
   },
   'people.member-remove': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the member list holds the same MemberActionsMenu (components/mitarbeiter/members-table.tsx).',
     trigger: async ({ page, world }) =>
       menuItem(memberRowActionsButton(memberRow(page, employeeName(world))), memberMenuItem(page, 'remove')),
     layer: (page) => peopleConfirmation(page, 'memberRemove'),

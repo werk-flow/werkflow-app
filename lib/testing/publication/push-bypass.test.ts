@@ -40,15 +40,24 @@ test('ordinary pushes, the sanctioned setup and reading the setting are not', ()
 
 test('the prepared agent hook refuses a bypass and lets other calls through', () => {
   const script = resolve(import.meta.dir, '../../../.claude/hooks/refuse-publication-bypass.ts');
-  const call = (command: string) =>
-    Bun.spawnSync({
+  const call = (command: string, key = 'command', extra: Record<string, string> = {}) => {
+    const result = Bun.spawnSync({
       cmd: [process.execPath, script],
-      stdin: Buffer.from(JSON.stringify({ tool_name: 'Bash', tool_input: { command } })),
+      stdin: Buffer.from(JSON.stringify({ tool_name: 'Bash', tool_input: { ...extra, [key]: command } })),
       stdout: 'pipe',
       stderr: 'pipe',
     });
+    return { exitCode: result.exitCode, output: `${result.stdout.toString()}${result.stderr.toString()}` };
+  };
   const refused = call('git push --no-verify origin main:partner-preview');
-  expect(refused.exitCode).toBe(2);
-  expect(refused.stderr.toString()).toContain('--no-verify');
-  expect(call('git push origin main:partner-preview').exitCode).toBe(0);
+  expect(refused.exitCode, refused.output).toBe(2);
+  expect(refused.output).toContain('--no-verify');
+  const plain = call('git push origin main:partner-preview');
+  expect(plain.exitCode, plain.output).toBe(0);
+  // Codex reports exec_command as Bash with `command`; a `cmd` without `command` is read too.
+  const fromCmd = call('git push --no-verify origin main:partner-preview', 'cmd');
+  expect(fromCmd.exitCode, fromCmd.output).toBe(2);
+  // A blank `command` beside a `cmd` is absent, so the `cmd` is judged.
+  const blank = call('git push --no-verify origin main:partner-preview', 'cmd', { command: ' ' });
+  expect(blank.exitCode, blank.output).toBe(2);
 });

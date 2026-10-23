@@ -202,7 +202,6 @@ export async function getPendingSessions(organizationId?: string): Promise<GetPe
     return await readPendingSessionQueue({
       admin: createSupabaseAdminClient(),
       organizationId: orgId,
-      callerRole,
       holder: responsibilityHolder,
     });
   } catch (error) {

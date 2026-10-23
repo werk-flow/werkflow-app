@@ -10,7 +10,13 @@ let command: unknown;
 try {
   const call: unknown = JSON.parse(await Bun.stdin.text());
   const input = call && typeof call === 'object' ? Reflect.get(call, 'tool_input') : undefined;
-  command = input && typeof input === 'object' ? Reflect.get(input, 'command') : undefined;
+  // Codex reports exec_command as Bash with `command`; `cmd` is read too when `command` is absent.
+  // A blank `command` counts as absent, as in the edit guard (lib/testing/runner/edit-guard.ts).
+  const field = (name: string): string | undefined => {
+    const value: unknown = input && typeof input === 'object' ? Reflect.get(input, name) : undefined;
+    return typeof value === 'string' && value.trim() ? value : undefined;
+  };
+  command = field('command') ?? field('cmd');
 } catch {
   // An unreadable call is no shell command this hook can judge.
   process.exit(0);

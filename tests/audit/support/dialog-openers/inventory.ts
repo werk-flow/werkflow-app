@@ -71,8 +71,9 @@ export const INVENTORY_OPENERS = {
     layer: (page) => inventoryDialogLayer(page, 'createLocation'),
   },
   'inventory.stock-adjustment': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The phone card of the item list holds the same ItemActionsMenu (components/inventar/inventory-content.tsx).',
     trigger: async (context) => {
       await seededItemActionsButton(context).click();
       return inventoryRowActionItem(context.page, 'adjustStock');

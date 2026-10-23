@@ -272,6 +272,9 @@ export const CALENDAR_OPENERS = {
     layer: calendarEntryDialog,
   },
   'calendar.shortcuts': {
+    opensOn: 'desktop',
+    phonePath:
+      'None by design: the shortcuts serve a keyboard, and the phone lists have no toolbar (calendar spec, Phone).',
     trigger: async ({ page, businessDate }) => {
       // The help button lives in the Plantafel toolbar; the saved view may be another one.
       await openPlantafel(page, businessDate);
@@ -280,21 +283,23 @@ export const CALENDAR_OPENERS = {
     layer: shortcutsDialog,
   },
   'calendar.entry-details': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'A tap on the block in the phone day or week list opens the same details (calendar spec, Phone).',
     trigger: showWorkBlock,
     layer: timeEntryDetailsDialog,
   },
   'calendar.entry-delete': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath: 'The phone opens the entry details from its day list; the delete sits in their footer.',
     trigger: async (context) => timeEntryDeleteButton(await openWorkBlockDetails(context)),
     layer: timeEntryDeleteConfirmation,
     parents: (page) => [timeEntryDetailsDialog(page)],
   },
   'calendar.time-correction': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'None by design: the phone lists have no drag (calendar spec, Phone); a phone user proposes a correction under Zeiterfassung.',
     // No keyboard path: only a pointer drag or resize of a recorded block opens
     // the correction (day-surface-drop.ts, use-month-surface.ts). The opener
     // performs the drag, which only drafts the correction, and hands the open
@@ -316,16 +321,17 @@ export const CALENDAR_OPENERS = {
     returnFocus: ({ page, world }) => workBlock(page, world),
   },
   'calendar.occurrence-edit': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath: 'A tap on the visit in the phone day list opens its card popover with the same edit.',
     trigger: async (context) =>
       occurrenceEditButton(await openCardPopover(context, await plainVisit(context))),
     layer: occurrenceEditDialog,
     parents: (page) => [jobPopover(page)],
   },
   'calendar.planning-warning': {
-    // The trigger lives in the desktop layout (a table row, the board or the day timeline).
     opensOn: 'desktop',
+    phonePath:
+      'The card popover of the phone day list holds the same move form, which meets the same warning.',
     // The move form is the drag's keyboard path. The server refuses the move
     // onto the day of the pending absence with the warning before it writes;
     // Escape on the warning takes the move back.

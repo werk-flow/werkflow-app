@@ -1,0 +1,28 @@
+{
+  "selfScoped": {
+    "lib/attention/actions.ts#getAttentionCounts": "Counts the caller's own attention items in the active organization; no row of another member is addressed.",
+    "lib/attention/actions.ts#getAttentionOverview": "Reads the caller's own attention items in the active organization; what a role sees is decided per item, nothing is refused.",
+    "lib/attention/actions.ts#markAllAttentionNotificationsRead": "Marks the caller's own notifications read; the write filters by the caller's user id.",
+    "lib/auth/actions.ts#deleteAccount": "Deletes the session user's own account; a sole admin is refused by the account deletion rules.",
+    "lib/auth/actions.ts#invalidateProfileCache": "Invalidates the session user's own profile cache entry; no organization or row is addressed.",
+    "lib/auth/actions.ts#rememberPasswordResetAddress": "Stores the session user's own address in an httpOnly cookie for the reset form.",
+    "lib/jobs/auftraege-column-preferences-actions.ts#saveAuftraegeColumnPreferences": "Writes the caller's own column preference in the active organization.",
+    "lib/org/actions.ts#createOrganization": "Creates a new organization owned by the session user; it runs before any membership exists.",
+    "lib/org/join-request-actions.ts#requestOrganizationJoin": "Files the session user's own join request by organization code; the rate limit fixture covers abuse.",
+    "lib/qualifications/actions.ts#getOwnQualificationProfile": "Reads the caller's own qualification profile in the active organization.",
+    "lib/settings/actions.ts#removeProfileAvatar": "Removes the session user's own avatar; the storage key derives from the user id.",
+    "lib/settings/actions.ts#updateProfileSettings": "Writes the session user's own first and last name.",
+    "lib/settings/email-change-actions.ts#clearEmailChangeChallengeBeforeSignOut": "Clears the session user's own pending email challenge before sign-out.",
+    "lib/settings/email-change-actions.ts#requestCurrentEmailChangeOtp": "Sends a code to the session user's own current address.",
+    "lib/settings/email-change-actions.ts#resetEmailChangeWizard": "Clears the session user's own email change wizard state.",
+    "lib/settings/email-change-actions.ts#savePendingNewEmailVerification": "Stores the session user's own pending new address in the email change wizard.",
+    "lib/sickness/actions.ts#getOwnSicknessReports": "Reads the caller's own sickness reports in the active organization.",
+    "lib/sickness/actions.ts#reportOwnSickness": "Records a sickness report for the caller's own employee record.",
+    "lib/subscription/actions.ts#simulatePayment": "Simulates the session user's own payment before any organization exists.",
+    "lib/time-tracking/clock-state-actions.ts#clockOutBeforeSignOut": "Closes the session user's own open clock sessions before sign-out.",
+    "lib/vacation/actions.ts#createVacationRequest": "Files a vacation request for the caller's own employee record.",
+    "lib/vacation/actions.ts#getOwnVacationOverview": "Reads the caller's own vacation balance and requests in the active organization.",
+    "lib/vacation/actions.ts#previewVacationRequest": "Previews a vacation request for the caller's own employee record."
+  },
+  "missing": {}
+}

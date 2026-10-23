@@ -28,7 +28,7 @@ export function editedFiles(call: GuardedToolCall): string[] {
     (file): file is string => file !== undefined,
   );
   if (call.tool_name === 'apply_patch') {
-    const patch = text(input.command) ?? text(input.patch) ?? text(input.input) ?? '';
+    const patch = text(input.command) ?? text(input.cmd) ?? text(input.patch) ?? text(input.input) ?? '';
     for (const line of patch.split(/\r?\n/)) {
       const match = PATCH_FILE_LINE.exec(line) ?? PATCH_MOVE_LINE.exec(line);
       if (match?.[1]) files.push(match[1].trim());
@@ -76,10 +76,16 @@ const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: s
   },
 ];
 
+/**
+ * The command of a shell call. Codex reports every shell command, its
+ * `exec_command` included, as `Bash` with `tool_input.command`; `cmd` is read
+ * too when `command` is absent, as defense in depth.
+ */
 function shellCommand(call: GuardedToolCall): string | undefined {
   if (call.tool_name !== 'Bash' && call.tool_name !== 'PowerShell') return undefined;
   if (!call.tool_input || typeof call.tool_input !== 'object') return undefined;
-  return text((call.tool_input as Record<string, unknown>).command);
+  const input = call.tool_input as Record<string, unknown>;
+  return text(input.command) ?? text(input.cmd);
 }
 
 /** The shared-state command a shell call runs, if any; mentions inside a search or a string do not count. */

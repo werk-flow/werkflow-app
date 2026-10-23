@@ -155,14 +155,20 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     kind: 'time-entry-approval',
     serverCodes: ['not_responsible', 'self_approval_not_allowed'],
     predicate: RESPONSIBILITY_PREDICATE,
-    wrappers: [{ module: 'lib/time-tracking/helpers.ts', exportName: 'canApproveEntries' }],
+    wrappers: [
+      { module: 'lib/time-tracking/helpers.ts', exportName: 'canApproveEntries' },
+      {
+        module: 'components/kalender/entry-details-permissions.ts',
+        exportName: 'getEntryDetailsPermissions',
+      },
+    ],
     actions: [{ module: TIME_REVIEWS, exportName: 'reviewEntries' }],
     screenedReads: ['pending-sessions'],
     props: ['canApprove'],
     server: { kind: 'typescript', guards: [RESPONSIBILITY_GUARD] },
     exempt: {
       'components/kalender/entry-details-commands.ts':
-        'The calendar entry details offer approval by the role rule of getEntryDetailsPermissions; the calendar does not read the time_approval holder yet (open backlog row).',
+        "Runs the review the entry details dialog offers only where getEntryDetailsPermissions allows it, which asks canApproveEntries with the caller's time_approval holder.",
     },
   },
   {

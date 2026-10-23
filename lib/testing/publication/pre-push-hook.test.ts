@@ -4,6 +4,9 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 
+// Every assertion on a child's exit code carries the child's output, so a
+// failure names its cause (a refused gate, an unwritable log, a locked ref).
+
 /**
  * Drives the real hook through a real `git push` into a bare repository, with a stub in place of
  * scripts/check-publication-gate.ts, so the hook's own exit codes and its override log are proven
@@ -74,16 +77,16 @@ afterAll(() => {
 test('a push goes through only when the gate passes', () => {
   nextCommit('first');
   const refused = push(1);
-  expect(refused.exitCode).not.toBe(0);
+  expect(refused.exitCode, refused.output).not.toBe(0);
   expect(refused.output).toContain('gate closed');
   const passed = push(0);
-  expect(passed.exitCode).toBe(0);
+  expect(passed.exitCode, passed.output).toBe(0);
 });
 
 test('the owner override passes a refused push only with a log line naming the commit and the reason', () => {
   nextCommit('second');
   const overridden = push(1, { WERKFLOW_PUSH_OVERRIDE: 'owner release\tafter review' });
-  expect(overridden.exitCode).toBe(0);
+  expect(overridden.exitCode, overridden.output).toBe(0);
   const log = readFileSync(join(work, '.agent-logs/review/overrides.log'), 'utf8').trim().split('\n');
   const head = run(['git', 'rev-parse', 'HEAD'], { cwd: work }).output.trim();
   const [, commit, reason, gateOutput] = (log.at(-1) ?? '').split('\t');
@@ -98,7 +101,7 @@ test('an override that cannot be logged is refused', () => {
   // A file where the log folder belongs makes the log unwritable.
   writeFileSync(join(work, '.agent-logs'), 'not a folder');
   const refused = push(1, { WERKFLOW_PUSH_OVERRIDE: 'owner release' });
-  expect(refused.exitCode).not.toBe(0);
+  expect(refused.exitCode, refused.output).not.toBe(0);
   expect(refused.output).toContain('Owner override refused');
   rmSync(join(work, '.agent-logs'), { force: true });
 });

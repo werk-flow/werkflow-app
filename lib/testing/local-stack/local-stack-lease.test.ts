@@ -185,6 +185,6 @@ test('command output is completely drained before returning', async () => {
       output += chunk.toString();
     },
   });
-  expect(code).toBe(0);
+  expect(code, output.slice(0, 200)).toBe(0);
   expect(output.length).toBe(250000);
 });

@@ -16,18 +16,28 @@ import { REALTIME_DEBOUNCE_MS, REALTIME_MAX_DEFER_MS } from './events';
 //      `invalidate(`), unless the site is a reviewed entry in
 //      DELAYED_REFRESH_SITES whose reason says why it is no debounce. An entry
 //      that matches no call fails too.
+//   4. a setTimeout callback closes a dialog (`setOpen(false)`,
+//      `onOpenChange(false)`, `onClose()`), unless the site is a reviewed entry
+//      in DELAYED_CLOSE_SITES whose reason says the delay holds back no saved
+//      result. Virtue 2: a save's result reaches its views in the answer's
+//      frame, so a success never waits behind a timer (an animation may).
 
 const CONSTANTS_HOME = 'lib/realtime/events.ts';
 const SCHEDULER_HOME = 'lib/realtime/scheduler.ts';
 const TIMED_REFRESH = 'a timed refresh outside the shared scheduler';
+const TIMED_CLOSE = 'a timed dialog close';
 
 /** file -> why its timed refresh is not a Realtime debounce. */
-const DELAYED_REFRESH_SITES: Readonly<Record<string, string>> = {
-  'components/mitarbeiter/personnel-invite-dialog.tsx':
-    'the dialog shows its success state for 1.5 s, then closes and refreshes the route once; no event triggers it',
+const DELAYED_REFRESH_SITES: Readonly<Record<string, string>> = {};
+
+/** file -> why its timed close holds back no saved result. */
+const DELAYED_CLOSE_SITES: Readonly<Record<string, string>> = {
+  'components/dokumente/document-upload-dialog.tsx':
+    'the uploaded documents reach the library through onComplete before the timer starts; the dialog stays 650 ms only so the per-file success marks are seen',
 };
 
 const REFRESH_CALL = /\b(?:refresh|refetch|invalidate)\s*\(/;
+const CLOSE_CALL = /\b(?:set(?:Is)?Open|on(?:Open)?Change|handleOpenChange)\s*\(\s*false\s*\)|\bonClose\s*\(/;
 
 type Finding = { file: string; line: number; problem: string };
 
@@ -67,6 +77,7 @@ function callProblems(call: ts.CallExpression, source: ts.SourceFile): string[] 
   }
   if (name === 'setTimeout' && first && REFRESH_CALL.test(first.getText(source)))
     problems.push(TIMED_REFRESH);
+  if (name === 'setTimeout' && first && CLOSE_CALL.test(first.getText(source))) problems.push(TIMED_CLOSE);
   return problems;
 }
 
@@ -107,13 +118,20 @@ describe('realtime debounce ownership', () => {
       findDebounceProblems(file, parseProductSource(file).getFullText()),
     );
     const unlisted = findings.filter(
-      ({ file, problem }) => !(problem === TIMED_REFRESH && file in DELAYED_REFRESH_SITES),
+      ({ file, problem }) =>
+        !(problem === TIMED_REFRESH && file in DELAYED_REFRESH_SITES) &&
+        !(problem === TIMED_CLOSE && file in DELAYED_CLOSE_SITES),
     );
-    expect(unlisted).toEqual([]);
-    const timedRefreshFiles = new Set(
-      findings.filter(({ problem }) => problem === TIMED_REFRESH).map(({ file }) => file),
+    expect(
+      unlisted,
+      'Close a dialog and refresh in the frame of the answer; a timer may only animate. A reviewed delay names why it holds back no saved result.',
+    ).toEqual([]);
+    const filesWith = (problem: string): Set<string> =>
+      new Set(findings.filter((finding) => finding.problem === problem).map(({ file }) => file));
+    expect(Object.keys(DELAYED_REFRESH_SITES).filter((file) => !filesWith(TIMED_REFRESH).has(file))).toEqual(
+      [],
     );
-    expect(Object.keys(DELAYED_REFRESH_SITES).filter((file) => !timedRefreshFiles.has(file))).toEqual([]);
+    expect(Object.keys(DELAYED_CLOSE_SITES).filter((file) => !filesWith(TIMED_CLOSE).has(file))).toEqual([]);
   });
 
   test('planted debounces fail and the shared scheduler passes', () => {
@@ -126,6 +144,15 @@ describe('realtime debounce ownership', () => {
     ).toEqual(['REALTIME_DEBOUNCE_MS outside the shared scheduler']);
     expect(problems('const timer = window.setTimeout(() => view.refresh(), 50);')).toEqual([TIMED_REFRESH]);
     expect(problems('setTimeout(() => { router.refresh(); }, 200);')).toEqual([TIMED_REFRESH]);
+    // The invite dialog before package R: success, then a 1.5 s timer that closed and refreshed.
+    expect(problems('setTimeout(() => { setOpen(false); router.refresh(); }, 1500);')).toEqual([
+      TIMED_REFRESH,
+      TIMED_CLOSE,
+    ]);
+    expect(problems('window.setTimeout(() => handleOpenChange(false), 650);')).toEqual([TIMED_CLOSE]);
+    expect(problems('setTimeout(() => onClose(), 300);')).toEqual([TIMED_CLOSE]);
+    // An animation or a reset that closes nothing passes.
+    expect(problems('setTimeout(() => setCopied(false), 2000);')).toEqual([]);
     expect(
       problems(
         'createTrailingScheduler({ delayMs: 50, maxWaitMs: REALTIME_MAX_DEFER_MS, run });\ncreateTrailingScheduler({ delayMs: REALTIME_DEBOUNCE_MS, maxWaitMs: 5_000, run });',

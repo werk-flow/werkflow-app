@@ -37,10 +37,16 @@ export const SETTINGS_OPENERS = {
     layer: profileAvatarDialog,
   },
   'settings.create-org': {
+    opensOn: 'desktop',
+    phonePath:
+      'The phone menu (Menü öffnen) holds the same organization switcher with this button (components/sidebar/app-shell.tsx).',
     trigger: async ({ page }) => createOrganizationButton(page),
     layer: createOrganizationDialog,
   },
   'settings.join-org': {
+    opensOn: 'desktop',
+    phonePath:
+      'The phone menu (Menü öffnen) holds the same organization switcher with this button (components/sidebar/app-shell.tsx).',
     trigger: async ({ page }) => joinOrganizationButton(page),
     layer: joinOrganizationDialog,
   },

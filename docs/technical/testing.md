@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -35,8 +35,6 @@ Wrong turn: a test that reads what an earlier test created. It passes in file or
 1. After each edit, run the narrowest check: `bun run test:unit <path>` for a module, `bun run test:ui <spec>` for a contract, `bun run test:verify --group <id>` for one SQL or browser group.
 2. Before you finish, run `bun run test:plan` and read why each group is selected. A group you did not expect points at a file you did not mean to touch.
 3. At the end, run `bun run test:verify` for the whole plan.
-
-Wrong turn: the full plan after every edit hides what broke.
 
 ### Handle a failure
 
@@ -75,13 +73,13 @@ Product code (`app/`, `components/`, `hooks/`, `lib/` outside `lib/testing/`), m
 
 In change mode a product file selects the browser groups that declare its scope; shared UI primitives, the auth path and dependency files add the shell, layout and account groups; a product file without an owner selects `golden:gg-00`; a spec or support file selects the groups that import it; a runner file selects the two runner pilots.
 
-`test-scope-prefixes.test.ts` requires every file under `hooks/` to have one feature owner or to be listed as shared. The static gates run in every plan; the unit, SQL, and component groups run when their inputs changed. Scope ownership is a risk policy, and release mode catches what it misses.
+`test-scope-prefixes.test.ts` requires every file under `hooks/` to have one feature owner or to be listed as shared. The static gates run in every plan; the unit, SQL, and component groups run when their inputs changed.
 
 In a change plan, the browser groups whose own spec or test support under `tests/` changed run first. When one of them fails, the later browser groups are blocked for that attempt and run in the repair plan (`changedTestsFirstBlock` in `lib/testing/runner/group-schedule.ts`). `test:verify` refuses to start while the latest failed attempt of a browser, unit, SQL or component group it would run is unclassified (`unclassifiedFailureProblem`, `undiagnosedAttemptProblem`); a static gate's own message names its cause.
 
 ### Repair mode
 
-When the latest result of a browser group is failed or blocked, a change plan selects those browser groups, the groups whose own test code changed, and the cheap gates. When those groups pass, the repair is verified and the passing report becomes the baseline.
+When the latest result of a browser group is failed or blocked, a change plan selects those browser groups, the groups whose own test code changed, and the cheap gates. Their passing report becomes the baseline.
 
 A failed browser group may run again as soon as any source file changed (`directGroupRetryProblem`). Clean its retained world first. [Failures](#failures) owns a repeat on the identical tree.
 
@@ -93,13 +91,14 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## Publication gate
 
-`.githooks/pre-push` is the one gate before publication. Git runs it only while `core.hooksPath` names `.githooks` (`git config core.hooksPath .githooks` once per clone), so `test:verify` and `docs:check` refuse while it does not (`hooksPathProblem`). The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all five conditions hold:
+`.githooks/pre-push` is the one gate before publication. Git runs it only while `core.hooksPath` names `.githooks` (`git config core.hooksPath .githooks` once per clone), so `test:verify` and `docs:check` refuse while it does not (`hooksPathProblem`). The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all six conditions hold:
 
 1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, and no input file is uncommitted.
 2. A CodeRabbit review completed on the tree being pushed. `bun run review` records the digest of each file in its scope as CodeRabbit saw it ([CodeRabbit](coderabbit.md#run-a-review)). A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
 3. Every commit that no remote has yet carries a `Deletion pass:` line in its body.
 4. A pushed product file that an `audit:performance:*` group's scopes own has a passing run of that group on its current content.
 5. A push to `main` (production) has a passing release plan as the newest local report and a passing cloud canary, both on the pushed tree.
+6. No shrink-only list gained an entry or raised a ceiling since the commit the push replaces (`lib/testing/publication/shrink-only-lists.ts`); unit runs compare with the merge base of `origin/partner-preview`.
 
 The gate trusts a report or a review record only while the hash chain of `lib/testing/publication/evidence-ledger.ts` holds its content, and the edit guard refuses agent writes to that evidence at any time. The chain carries no HMAC: a key on the machine the agents use would protect nothing. The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid; the files that wire verification and review (`.claude/settings.json`, `.codex/hooks.json`, `.coderabbit.yaml`) are inputs. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`, which the hook logs.
 
@@ -130,7 +129,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"   # acceptance captures
 
 ## How a run executes
 
-`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`); both agent tools run it before every file and shell call (`lib/testing/runner/guard-wiring.test.ts`). The run writes `.agent-logs/verification/<id>/report.json`.
+`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`); both agent tools run it before every file and shell call (`lib/testing/runner/guard-wiring.test.ts`). Codex reports every shell command, `exec_command` included, as `Bash` and an edit as `apply_patch`, both with `tool_input.command` ([Codex hooks](https://learn.chatgpt.com/docs/hooks)). The run writes `.agent-logs/verification/<id>/report.json`.
 
 Browser groups run against the recorded production build on port 3000 and a disposable organization in the local Supabase stack. Groups that measure freshness, readiness, or a scenario always run alone, after a Realtime probe. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`).
 
@@ -201,9 +200,9 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - A browser group starts only after a bounded backend probe, and a failed group records a second probe as a hint, never a class. A diagnostic replay prints the source run's completed stages and refuses a second replay of a test on the same world; a fresh-world diagnosis runs once. [test `lib/testing/runner/backend-health.test.ts`, test `lib/testing/runs/replay-checkpoint.test.ts`, test `lib/testing/runner/group-recovery.test.ts`]
 - After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
-- Unit tests assert no duration and set no timeout of their own: the preload and the runner set one hang guard for every file, and a slow test is made cheaper. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
+- Unit tests assert no duration and set no timeout of their own; a slow test is made cheaper. An assertion on a child's exit code carries the child's output. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
-- A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`]
+- A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
 - An agent shell command that pushes with `--no-verify` or overrides `core.hooksPath` is refused. [code `.claude/hooks/refuse-publication-bypass.ts`, test `lib/testing/publication/push-bypass.test.ts`, test `lib/testing/runner/guard-wiring.test.ts`]
 
 ## Never

@@ -27,7 +27,7 @@ type UpdateProfileAvatarInput = {
 
 export type UpdateProfileAvatarResult =
   | { success: true; avatarPath: string }
-  | ActionFailure<'not_authenticated' | 'invalid_input' | 'update_failed'>;
+  | ActionFailure<'not_authenticated' | 'invalid_input' | 'not_authorized' | 'update_failed'>;
 
 export type RemoveProfileAvatarResult =
   | { success: true }
@@ -97,12 +97,13 @@ export async function updateProfileAvatar(
     return { success: false, error: 'not_authenticated' };
   }
 
+  // A path outside the caller's own avatar folder belongs to someone else.
   if (!isValidAvatarPath(user.id, input.avatarPath)) {
-    return { success: false, error: 'invalid_input' };
+    return { success: false, error: 'not_authorized' };
   }
 
   if (input.previousAvatarPath && !isValidAvatarPath(user.id, input.previousAvatarPath)) {
-    return { success: false, error: 'invalid_input' };
+    return { success: false, error: 'not_authorized' };
   }
 
   const supabase = await createSupabaseServerClient();

@@ -441,35 +441,17 @@ export function canManageEntries(callerRole: OrgRole, targetRole: OrgRole, isOwn
 }
 
 /**
- * Check if a user can approve/reject entries
- *
- * Rules:
- * - Admin can approve/reject all pending entries
- * - Manager can approve/reject pending entries for managed roles only
+ * Whether the caller may approve or reject another person's pending entries:
+ * only through the caller's `time_approval` holder, by the one predicate the
+ * server's `authorizeResponsibilityForTarget` asks. A caller without a holder,
+ * and every holder on their own entries, may not.
  */
 export function canApproveEntries(
-  callerRole: OrgRole,
+  holder: EffectiveResponsibilityHolder | null,
+  targetUserId: string,
   targetRole: OrgRole,
-  options?: {
-    holder: EffectiveResponsibilityHolder;
-    targetUserId: string;
-  },
 ): boolean {
-  if (options) {
-    return canHolderApproveTarget(options.holder, options.targetUserId, targetRole);
-  }
-
-  // Admin can approve all entries
-  if (callerRole === 'admin') {
-    return true;
-  }
-
-  // Manager can approve entries for managed roles only
-  if (callerRole === 'buero') {
-    return MANAGED_ROLES.includes(targetRole);
-  }
-
-  return false;
+  return holder !== null && canHolderApproveTarget(holder, targetUserId, targetRole);
 }
 
 /**

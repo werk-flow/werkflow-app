@@ -33,7 +33,8 @@ function withoutExtension(path: string): string {
   return path.replace(/\.(tsx?|mjs)$/, '');
 }
 
-function resolveSpecifier(fromFile: string, specifier: string): string | null {
+/** The repository path (without extension) an `@/` or relative specifier names, or null for a package. */
+export function resolveSpecifier(fromFile: string, specifier: string): string | null {
   if (specifier.startsWith('@/')) return specifier.slice(2);
   if (specifier.startsWith('.')) return posix.normalize(posix.join(posix.dirname(fromFile), specifier));
   return null;
