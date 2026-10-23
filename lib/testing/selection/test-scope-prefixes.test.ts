@@ -49,6 +49,7 @@ test('every hook is either registered under one feature scope or listed as share
     'use-optimistic-channel.ts',
     'use-optimistic-list.ts',
     'use-realtime-router-refresh.ts',
+    'use-realtime-tables.ts',
     'use-report-pending.ts',
     'use-server-action.ts',
     'use-settle-on-change.ts',

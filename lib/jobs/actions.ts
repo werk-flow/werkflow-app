@@ -7,6 +7,7 @@ import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admi
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { authenticateAndAuthorize } from './auth';
+import { readJobAssignmentOfUser } from './job-access-reads';
 import {
   assessAssignmentSelection,
   assignmentReplacementArguments,
@@ -14,7 +15,7 @@ import {
   type AssignmentReplacement,
 } from './assignment-assessment';
 import { CACHE_TAGS } from '@/lib/data/cached';
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import {
   type Job,
   type JobStatus,
@@ -356,15 +357,10 @@ async function readJobDetails(input: {
   const { userId, orgId, isManagerOrAbove } = input.context;
 
   if (!isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      `${input.operation}: job_assignments read failed`,
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('job_id', jobData.id)
-        .eq('user_id', userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      orgId,
+      jobData.id,
+      userId,
     );
     if (assignmentError) return { success: false, error: 'load_failed' };
 

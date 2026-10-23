@@ -10,8 +10,8 @@
     "lib/dispatch/actions.ts": 895,
     "lib/dispatch/server.ts": 853,
     "lib/documents/actions.ts": 1585,
-    "lib/inventory/actions.ts": 1583,
-    "lib/jobs/actions.ts": 1027,
+    "lib/inventory/actions.ts": 1568,
+    "lib/jobs/actions.ts": 1023,
     "lib/jobs/types.ts": 890,
     "lib/personnel/actions.ts": 891,
     "lib/personnel/lifecycle-actions.ts": 1260,
@@ -24,7 +24,7 @@
     "lib/time-corrections/actions.ts": 1439,
     "lib/time-tracking/validation.ts": 806,
     "lib/vacation/actions.ts": 994,
-    "lib/work-handover/actions.ts": 1112,
+    "lib/work-handover/actions.ts": 1100,
     "lib/work-lifecycle/actions.ts": 907
   },
   "functions": {
@@ -286,7 +286,7 @@
     "components/kalender/job-event-popover.tsx": { "CardPopover": 181, "MoveForm": 92 },
     "components/kalender/month-view/month-cell-entry.tsx": { "MonthCellEntry": 89 },
     "components/kalender/month-view/month-day-cell.tsx": { "MonthDayCell": 92 },
-    "components/kalender/month-view/month-view.tsx": { "MonthView": 153 },
+    "components/kalender/month-view/month-view.tsx": { "MonthView": 151 },
     "components/kalender/month-view/month-week.tsx": { "MonthWeek": 107 },
     "components/kalender/month-view/use-month-surface.ts": { "useMonthSurface": 191 },
     "components/kalender/mutations/use-calendar-park-mutations.ts": { "useCalendarParkMutations": 140 },
@@ -397,12 +397,12 @@
     "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/org/delete-org-dialog.tsx": { "DeleteOrgDialog": 98 },
-    "components/organization/organization-context.tsx": { "OrganizationProvider": 165 },
+    "components/organization/organization-context.tsx": { "OrganizationProvider": 146 },
     "components/otp-form.tsx": { "OTPForm": 124 },
     "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 99 },
     "components/realtime/realtime-provider.tsx": {
-      "RealtimeProvider": 147,
-      "RealtimeProvider > useEffect#1": 119
+      "RealtimeProvider": 125,
+      "RealtimeProvider > useEffect#1": 118
     },
     "components/service/equipment-detail-content.tsx": {
       "EquipmentStateForm": 84,
@@ -528,7 +528,7 @@
       "ZeiterfassungDashboardStatusCard": 82
     },
     "hooks/use-job-entity-options.ts": { "useJobEntityOptions": 121 },
-    "hooks/use-live-view.ts": { "useLiveView": 197 },
+    "hooks/use-live-view.ts": { "useLiveView": 192 },
     "hooks/use-member-status.ts": { "useMemberStatus": 97 },
     "hooks/use-optimistic-list.ts": { "useOptimisticList": 120 },
     "hooks/use-planning-options.ts": { "usePlanningOptions": 141 },
@@ -582,7 +582,7 @@
     },
     "lib/invites/send-invite.ts": { "createAndMailOrganizationInvite": 120 },
     "lib/jobs/actions.ts": {
-      "readJobDetails": 102,
+      "readJobDetails": 97,
       "getJobsForClient": 131,
       "getJobsForMember": 147,
       "getParkedJobs": 140
@@ -592,7 +592,7 @@
     "lib/jobs/update-preparation.ts": { "prepareJobUpdate": 177 },
     "lib/maintenance/actions.ts": {
       "createMaintenanceVisit": 154,
-      "getAssignedMaintenanceContextForJob": 155
+      "getAssignedMaintenanceContextForJob": 150
     },
     "lib/maintenance/workspace-reads.ts": {
       "loadMaintenanceCatalogs": 93,
@@ -682,7 +682,7 @@
     "lib/time-tracking/canonical-entries.ts": { "getCanonicalTimeEntries": 151 },
     "lib/time-tracking/clock-actions.ts": { "deriveClockActions": 128 },
     "lib/time-tracking/clock-state-actions.ts": { "clockOutBeforeSignOut": 118, "getCurrentClockState": 90 },
-    "lib/time-tracking/entry-read-actions.ts": { "getTimeEntries": 106, "getTimeEntriesForJob": 113 },
+    "lib/time-tracking/entry-read-actions.ts": { "getTimeEntries": 106, "getTimeEntriesForJob": 108 },
     "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 101, "updateEntry": 99 },
     "lib/time-tracking/review-actions.ts": { "reviewEntries": 94 },
     "lib/time-tracking/segment-actions.ts": { "getCanonicalClockState": 124 },

@@ -3,9 +3,10 @@
 import { revalidatePath } from 'next/cache';
 
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { compareRecordNumbers } from '@/lib/format/record-number';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
@@ -457,22 +458,14 @@ export async function getAssignedEquipmentForJob(
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
   // A failed job or assignment read is a load failure, never a refusal.
-  const { data: job, error: jobError } = await loggedRead(
-    'getAssignedEquipmentForJob: jobs read failed',
-    admin.from('jobs').select('id').eq('id', jobId).eq('organization_id', auth.context.orgId).maybeSingle(),
-  );
+  const { data: job, error: jobError } = await readOrganizationJob(auth.context.orgId, jobId);
   if (jobError) return { success: false, error: 'installed_equipment_load_failed' };
   if (!job) return { success: false, error: 'not_authorized' };
   if (!auth.context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'getAssignedEquipmentForJob: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', auth.context.orgId)
-        .eq('job_id', jobId)
-        .eq('user_id', auth.context.userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      auth.context.orgId,
+      jobId,
+      auth.context.userId,
     );
     if (assignmentError) return { success: false, error: 'installed_equipment_load_failed' };
     if (!assignment) return { success: false, error: 'not_authorized' };

@@ -13,6 +13,7 @@ import {
   materialPlanButton,
   materialPlanLayer,
 } from '../../../golden/support/steps/inventory';
+import { openMenuItem } from '../../../golden/support/steps/shared';
 import type { DialogOpener } from '../dialog-opener';
 import type { SurfaceContext } from '../surface-fixtures';
 
@@ -31,7 +32,7 @@ async function itemPickerCreateAction({ page }: SurfaceContext, picker: ItemDial
   return itemDialogPickerCreateAction(page, picker);
 }
 
-/** The row menu of the world's seeded inventory item. */
+/** The menu button of the world's seeded inventory item: in its row, or on its card on a phone. */
 function seededItemActionsButton({ page, world }: SurfaceContext): Locator {
   return inventoryRowActionsButton(inventoryItemRow(page, world.inventory.itemName));
 }
@@ -71,13 +72,8 @@ export const INVENTORY_OPENERS = {
     layer: (page) => inventoryDialogLayer(page, 'createLocation'),
   },
   'inventory.stock-adjustment': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the item list holds the same ItemActionsMenu (components/inventar/inventory-content.tsx).',
-    trigger: async (context) => {
-      await seededItemActionsButton(context).click();
-      return inventoryRowActionItem(context.page, 'adjustStock');
-    },
+    trigger: (context) =>
+      openMenuItem(seededItemActionsButton(context), inventoryRowActionItem(context.page, 'adjustStock')),
     layer: (page) => inventoryDialogLayer(page, 'adjustStock'),
     returnFocus: seededItemActionsButton,
   },

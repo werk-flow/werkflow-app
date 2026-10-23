@@ -1,3 +1,6 @@
+import { resolveBerlinWallTime } from '../../../lib/date-time/berlin';
+import { shiftIsoDateByDays } from '../../../lib/personnel/types';
+import type { TablesInsert } from '../../../lib/supabase/database.types';
 import type { TestRole, TestWorld } from '../../golden/support/world';
 import { seedCustomer } from '../../golden/support/db/customers';
 import {
@@ -14,8 +17,9 @@ import { createAdminClient } from '../../golden/support/db/shared';
 // The visual reference world: constant, realistic SHK data, so that every
 // reference image shows the same names and numbers on every run. Rows are
 // inserted one by one in a fixed order, so lists sorted by creation time keep
-// their order. Nothing here is dated relative to the run day: the references
-// normalize the dates the app derives from the clock (visual-references.ts).
+// their order. Only the calendar week is dated relative to the run day; the
+// references normalize the dates the app derives from the clock and the week
+// (visual-references.ts).
 
 const VISUAL_ORGANIZATION = 'Haustechnik Krämer GmbH';
 
@@ -378,6 +382,123 @@ async function readVisualDetails(world: TestWorld): Promise<VisualDetails> {
     equipmentNumber: equipment.equipment_number,
     caseNumber: serviceCase.case_number,
   };
+}
+
+/** One visit of the populated calendar week: day 0 is its Monday, a time span or a number of all-day days. */
+type CalendarVisit = {
+  jobNumber: string;
+  day: number;
+  span: { from: string; to: string } | { days: number };
+  assignees: readonly ('employee' | 'removable')[];
+};
+
+/** A realistic SHK week on the visual jobs: the maintenance, a two-day project job, the bakery and the practice. */
+const CALENDAR_VISITS: readonly CalendarVisit[] = [
+  {
+    jobNumber: VISUAL_NAMES.jobNumber,
+    day: 0,
+    span: { from: '07:30', to: '10:00' },
+    assignees: ['employee'],
+  },
+  { jobNumber: 'A-2026-0102', day: 0, span: { from: '11:00', to: '14:30' }, assignees: ['removable'] },
+  {
+    jobNumber: VISUAL_NAMES.projectJobNumber,
+    day: 1,
+    span: { days: 2 },
+    assignees: ['employee', 'removable'],
+  },
+  { jobNumber: 'A-2026-0202', day: 3, span: { from: '07:00', to: '12:00' }, assignees: ['removable'] },
+  { jobNumber: 'A-2026-0103', day: 3, span: { from: '13:00', to: '15:30' }, assignees: ['employee'] },
+  { jobNumber: 'A-2026-0102', day: 4, span: { from: '08:00', to: '10:00' }, assignees: ['employee'] },
+];
+
+function berlinInstant(dateIso: string, time: string): string {
+  const resolved = resolveBerlinWallTime(`${dateIso}T${time}`);
+  if (!resolved) throw new Error(`Visual calendar: ${dateIso} ${time} is no Berlin wall time.`);
+  return resolved.instant.toISOString();
+}
+
+function visitSchedule(
+  monday: string,
+  visit: CalendarVisit,
+): Pick<
+  TablesInsert<'planning_occurrences'>,
+  'time_kind' | 'start_at' | 'end_at' | 'start_date' | 'end_date_exclusive'
+> {
+  const date = shiftIsoDateByDays(monday, visit.day);
+  if ('days' in visit.span)
+    return {
+      time_kind: 'all_day',
+      start_date: date,
+      end_date_exclusive: shiftIsoDateByDays(date, visit.span.days),
+    };
+  return {
+    time_kind: 'timed',
+    start_at: berlinInstant(date, visit.span.from),
+    end_at: berlinInstant(date, visit.span.to),
+  };
+}
+
+/**
+ * Seeds the visits of the populated calendar week once per world. The week
+ * belongs to the run day (`ownedBerlinWeekAtOffset`), because the member
+ * records start on it; the references replace its dates. The visits plan the
+ * visual jobs, so the calendar families run after every family that shows a
+ * job (`APP_FAMILY_RUN_ORDER`).
+ */
+export async function prepareVisualCalendarWeek(world: TestWorld, monday: string): Promise<void> {
+  const admin = createAdminClient();
+  const jobNumbers = [...new Set(CALENDAR_VISITS.map((visit) => visit.jobNumber))];
+  const { data: jobs } = await admin
+    .from('jobs')
+    .select('id, job_number')
+    .eq('organization_id', world.orgId)
+    .in('job_number', jobNumbers)
+    .throwOnError();
+  const { count } = await admin
+    .from('planning_occurrences')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', world.orgId)
+    .in(
+      'job_id',
+      jobs.map((job) => job.id),
+    )
+    .throwOnError();
+  if (count) return;
+  const { data: records } = await admin
+    .from('employee_records')
+    .select('id, user_id')
+    .eq('organization_id', world.orgId)
+    .in('user_id', [world.users.employee.id, world.removableEmployee.id])
+    .throwOnError();
+  const userOf = { employee: world.users.employee.id, removable: world.removableEmployee.id };
+  const occurrences: TablesInsert<'planning_occurrences'>[] = [];
+  const assignments: TablesInsert<'planning_occurrence_assignments'>[] = [];
+  for (const visit of CALENDAR_VISITS) {
+    const job = jobs.find((candidate) => candidate.job_number === visit.jobNumber);
+    if (!job) throw new Error(`Visual calendar: no job ${visit.jobNumber}.`);
+    const id = crypto.randomUUID();
+    occurrences.push({
+      id,
+      organization_id: world.orgId,
+      entry_kind: 'job_visit',
+      job_id: job.id,
+      created_by: world.users.admin.id,
+      ...visitSchedule(monday, visit),
+    });
+    for (const assignee of visit.assignees) {
+      const record = records.find((candidate) => candidate.user_id === userOf[assignee]);
+      if (!record) throw new Error(`Visual calendar: no personnel record of the ${assignee}.`);
+      assignments.push({
+        organization_id: world.orgId,
+        occurrence_id: id,
+        employee_record_id: record.id,
+        assigned_by: world.users.admin.id,
+      });
+    }
+  }
+  await admin.from('planning_occurrences').insert(occurrences).throwOnError();
+  await admin.from('planning_occurrence_assignments').insert(assignments).throwOnError();
 }
 
 /** Exact strings the run generates and their constant stand-ins: e-mail addresses and the join code. */

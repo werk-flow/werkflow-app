@@ -79,8 +79,9 @@ test('every bun test process loads the shared hang guard', () => {
   expect(readRepositoryFile('scripts/unit-test-preload.ts')).toMatch(
     /^setDefaultTimeout\(UNIT_TEST_TIMEOUT_MS\);$/m,
   );
-  // The preload bounds only the first file of a run in Bun 1.3.14; the flag bounds every file.
-  expect(readRepositoryFile('scripts/run-unit-tests.ts')).toContain(
-    "'--timeout',\n      String(UNIT_TEST_TIMEOUT_MS)",
-  );
+  // The preload bounds only the first file of a run in Bun 1.3.14; the flag bounds every file, and
+  // the watchdog bounds the run where a test blocks Bun's timer (unit-run-watchdog.test.ts).
+  const runner = readRepositoryFile('scripts/run-unit-tests.ts').replace(/\s+/g, ' ');
+  expect(runner).toContain("'--timeout', String(UNIT_TEST_TIMEOUT_MS)");
+  expect(runner).toContain('runWatchedUnitTests(');
 });

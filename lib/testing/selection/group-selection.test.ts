@@ -44,7 +44,7 @@ const groups = [
     releaseOnly: true,
   },
 ];
-const CHEAP = ['static:docs', 'unit:all', 'ui:contracts', 'sql:p1-21'];
+const CHEAP = ['static:docs', 'static:dependencies', 'unit:all', 'ui:contracts', 'sql:p1-21'];
 function select(
   changedFiles: string[],
   unresolvedGroupIds: string[] = [],
@@ -54,12 +54,19 @@ function select(
 }
 const browserOnly = (ids: string[]): string[] => ids.filter((id) => /^(golden|audit):/.test(id));
 
-test('the cheap gates are always in a change plan; the dependency audit only for its own inputs', () => {
+test('the cheap gates and the advisory check are always in a change plan', () => {
   expect(select([])).toEqual(CHEAP);
   expect(select(['docs-free/script.ts'])).toEqual(CHEAP);
-  expect(select(['bun.lock'])).toContain('static:dependencies');
-  expect(select([], ['static:dependencies'])).toContain('static:dependencies');
-  expect(select(['app/(app)/kalender/page.tsx'])).not.toContain('static:dependencies');
+  const reason = (changedFiles: string[], unresolved: string[] = []) =>
+    groupSelections({ mode: 'change', groups, changedFiles, unresolvedGroupIds: unresolved }).get(
+      'static:dependencies',
+    );
+  expect(reason(['bun.lock'])).toEqual({ reason: 'Dependency inputs changed', changedFiles: ['bun.lock'] });
+  expect(reason([], ['static:dependencies'])?.reason).toBe('Unresolved result');
+  // Probe: without this row a new advisory surfaced only when the lockfile changed.
+  expect(reason(['app/(app)/kalender/page.tsx'])?.reason).toBe(
+    'Advisory check; a pass stays reusable for 24 hours',
+  );
 });
 
 test('an owned product file selects the browser groups that declare its scope, and nothing else', () => {

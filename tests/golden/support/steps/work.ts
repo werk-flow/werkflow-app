@@ -30,6 +30,7 @@ import {
   employeeAssignmentSearch,
   escapeRegExp,
   expectGone,
+  listEntry,
   listPager,
   metadataField,
   pendingRow,
@@ -939,13 +940,12 @@ export function workListFilterSheet(page: Page): Locator {
   return page.getByRole('dialog', { name: WORK_LIST_COPY.filter, exact: true });
 }
 
-/** The actions menu button of the list row that shows this job or project number. */
+/** The actions menu button of the job or project with this number: its table row, or its card on a phone. */
 export function workListRowActionsButton(page: Page, number: string): Locator {
-  return confirmed(
-    workListSection(page)
-      .getByRole('row')
-      .filter({ has: page.getByText(number, { exact: true }) }),
-  ).getByRole('button', { name: SHARED_COPY.action.openActions, exact: true });
+  return listEntry(workListSection(page), { has: page.getByText(number, { exact: true }) }).getByRole(
+    'button',
+    { name: SHARED_COPY.action.openActions, exact: true },
+  );
 }
 
 /** The delete item of an open list row menu. */

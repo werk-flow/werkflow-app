@@ -1,8 +1,13 @@
-import { expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
-import { posix, resolve } from 'node:path';
+import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { listProductSources, parseProductSource, repositoryRoot } from './product-sources';
+import {
+  moduleSpecifierOf,
+  namedBindings,
+  repositorySources,
+  resolveModuleFile,
+  type SourceHost,
+} from './module-imports';
+import { listProductSources, parseProductSource } from './product-sources';
 
 // Tier 2 for "related writes are one transaction" (docs/technical/code-quality.md).
 // A Server Action that writes in two statements leaves half its change behind
@@ -14,19 +19,22 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // and lib/. A write is an `.insert(`, `.update(`, `.upsert(` or `.delete(` on a
 // `.from(...)` chain (storage excluded) or an `.rpc('name')` whose name does not
 // start with a read verb. Writes of functions declared in the same module count
-// where they are called. A call to an imported write helper counts as one write
-// where it is called: a write helper is an exported function of a lib/ module
-// that writes in its own body or in a function of its own module. The count
+// where they are called. A call to an imported function counts the writes that
+// function performs on its most-writing path, through any number of further
+// imports and re-exports by name (`writeCounts`); import cycles end. The count
 // follows one execution path: the branches of an `if`, a `switch` or a `?:` are
 // alternatives, a branch that returns ends the path, and a write inside a loop
 // or an array callback counts twice. An action with two or more writes on one
-// path is a finding. Writes that a helper reaches through a further import, and
-// calls through an object such as a namespace import, are out of reach.
+// path is a finding. Calls through an object, such as a namespace import or a
+// default import, are out of reach.
 
 const WRITE_METHODS = new Set(['insert', 'update', 'upsert', 'delete']);
 const READ_RPC =
   /^(get|list|search|generate|read|count|is|has|can|find|load|select|resolve|check|preview|evaluate|calculate|compute)_/;
 const REPEATING_CALLBACKS = /^(map|flatMap|forEach|filter|reduce)$/;
+
+const EMAIL_CHANGE_STATE_RECOVERY =
+  'Independent recovery: the wizard state the action returns (getInitialEmailChangeWizardState) completes a claim whose Auth update succeeded but whose response was lost; the action’s own transition is refused while such a completion is pending, so the two never change the same rows together.';
 
 // Reviewed actions, keyed `file::function`, with the reason their writes stay
 // separate by design. A stale entry fails the test.
@@ -41,6 +49,10 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
     'Documented recovery: the export is reserved, its file stored and the export finalized; a failed step marks the reservation failed, and recover_failed_payroll_exports resolves the rest.',
   'lib/personnel/actions.ts::sendPersonnelInvite':
     'Ordered around a mail: the invite is written in one transaction before the mail, and the append-only „Einladung versendet“ history row only after the mail went out, because a mail cannot join a transaction.',
+  'lib/invites/actions.ts::sendOrgInvite':
+    'Ordered around a mail: the rate-limit attempts must persist when the invite is refused, the invite is written in one transaction (create_organization_invite) before the mail, and discard_unsent_organization_invite withdraws it when the mail fails, because a mail cannot join a transaction.',
+  'lib/settings/email-change-actions.ts::verifyCurrentEmailChangeOtp': EMAIL_CHANGE_STATE_RECOVERY,
+  'lib/settings/email-change-actions.ts::resetEmailChangeWizard': EMAIL_CHANGE_STATE_RECOVERY,
   'lib/settings/email-change-actions.ts::requestCurrentEmailChangeOtp':
     'Independent housekeeping: the rate-limit attempt must persist when the email change transition refuses.',
   'lib/settings/email-change-actions.ts::savePendingNewEmailVerification':
@@ -58,8 +70,8 @@ const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
 type Scope = {
   local: Map<string, ts.FunctionLikeDeclaration>;
   calling: Set<string>;
-  /** Local names of imported write helpers. */
-  importedWriters: ReadonlySet<string>;
+  /** Imported functions that write, by local name, with their write count. */
+  importedWriters: ReadonlyMap<string, number>;
 };
 
 function isDirectWrite(call: ts.CallExpression): boolean {
@@ -83,7 +95,8 @@ function functionWrites(declaration: ts.FunctionLikeDeclaration, scope: Scope): 
 function calledLocalWrites(call: ts.CallExpression, scope: Scope): number {
   if (!ts.isIdentifier(call.expression)) return 0;
   const name = call.expression.text;
-  if (scope.importedWriters.has(name)) return 1;
+  const imported = scope.importedWriters.get(name);
+  if (imported !== undefined) return imported;
   const declaration = scope.local.get(name);
   if (!declaration || scope.calling.has(name)) return 0;
   scope.calling.add(name);
@@ -204,85 +217,106 @@ function isExported(statement: ts.Statement): boolean {
   );
 }
 
-/** Exported write helpers per lib/ module, keyed by repository-relative path. */
-function findWriteHelpers(): Map<string, Set<string>> {
-  const helpers = new Map<string, Set<string>>();
-  for (const file of listProductSources(['lib'])) {
-    const source = parseProductSource(file);
-    const local = localFunctions(source);
-    const writers = new Set<string>();
-    for (const statement of source.statements) {
-      if (!isExported(statement)) continue;
-      const names = ts.isVariableStatement(statement)
-        ? statement.declarationList.declarations.map((declaration) => declaration.name.getText())
-        : [ts.isFunctionDeclaration(statement) ? (statement.name?.text ?? '') : ''];
-      for (const name of names) {
-        const declaration = local.get(name);
-        const scope: Scope = { local, calling: new Set([name]), importedWriters: new Set() };
-        if (declaration && functionWrites(declaration, scope) > 0) writers.add(name);
-      }
-    }
-    if (writers.size > 0) helpers.set(file, writers);
-  }
-  return helpers;
+type ImportedName = { file: string; name: string };
+type ModuleFacts = {
+  file: string;
+  useServer: boolean;
+  local: Map<string, ts.FunctionLikeDeclaration>;
+  /** Exported names: declared functions, and names re-exported from a further module. */
+  exported: string[];
+  /** Imported and re-exported names by local name, with the module and name they come from. */
+  imports: Map<string, ImportedName>;
+};
+
+function exportedNames(statement: ts.Statement): string[] {
+  if (ts.isExportDeclaration(statement) && statement.moduleSpecifier)
+    return namedBindings(statement).map((binding) => binding.local);
+  if (!isExported(statement)) return [];
+  if (ts.isVariableStatement(statement))
+    return statement.declarationList.declarations.map((declaration) => declaration.name.getText());
+  return ts.isFunctionDeclaration(statement) && statement.name ? [statement.name.text] : [];
 }
 
-/** The module file an import specifier names, or null outside the repository. */
-function resolveImport(importer: string, specifier: string): string | null {
-  const base = specifier.startsWith('@/')
-    ? specifier.slice(2)
-    : specifier.startsWith('.')
-      ? posix.join(posix.dirname(importer), specifier)
-      : null;
-  if (base === null) return null;
-  const candidates = [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`];
-  return candidates.find((candidate) => existsSync(resolve(repositoryRoot, candidate))) ?? null;
-}
-
-/** Local names under which the module imports a write helper. */
-function importedWriters(
-  file: string,
-  source: ts.SourceFile,
-  helpers: Map<string, Set<string>>,
-): Set<string> {
-  const names = new Set<string>();
+function moduleFacts(file: string, host: SourceHost): ModuleFacts | null {
+  const text = host(file);
+  if (text === null) return null;
+  const source = parseProductSource(file, text);
+  const imports = new Map<string, ImportedName>();
   for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    const target = resolveImport(file, statement.moduleSpecifier.text);
-    const writers = target ? helpers.get(target) : undefined;
-    const bindings = statement.importClause?.namedBindings;
-    if (!writers || !bindings || !ts.isNamedImports(bindings)) continue;
-    for (const element of bindings.elements) {
-      if (writers.has((element.propertyName ?? element.name).text)) names.add(element.name.text);
-    }
+    const specifier = moduleSpecifierOf(statement);
+    const target = specifier === null ? null : resolveModuleFile(file, specifier, host);
+    if (target === null) continue;
+    for (const binding of namedBindings(statement))
+      imports.set(binding.local, { file: target, name: binding.exported });
   }
-  return names;
+  return {
+    file,
+    useServer: isUseServerModule(source),
+    local: localFunctions(source),
+    exported: source.statements.flatMap(exportedNames),
+    imports,
+  };
 }
 
-function findActionsWithSeparateWrites(): string[] {
-  const findings: string[] = [];
-  const helpers = findWriteHelpers();
-  for (const file of listProductSources(['app', 'lib'])) {
-    const source = parseProductSource(file);
-    if (!isUseServerModule(source)) continue;
-    const local = localFunctions(source);
-    const writers = importedWriters(file, source, helpers);
-    for (const statement of source.statements) {
-      if (!ts.isFunctionDeclaration(statement) || !statement.name || !statement.body) continue;
-      if (!isExported(statement)) continue;
-      const writes = functionWrites(statement, {
-        local,
-        calling: new Set([statement.name.text]),
-        importedWriters: writers,
-      });
-      if (writes >= 2) findings.push(`${file}::${statement.name.text}`);
+/** The most writes per exported function: file, then name. Two is the finding, so a count stops there. */
+type WriteCounts = Map<string, Map<string, number>>;
+const FINDING_WRITES = 2;
+
+/** The write count of every imported name that writes, by local name. */
+function importedWriteCounts(facts: ModuleFacts, counts: WriteCounts): Map<string, number> {
+  const writers = new Map<string, number>();
+  for (const [local, imported] of facts.imports) {
+    const writes = counts.get(imported.file)?.get(imported.name);
+    if (writes) writers.set(local, writes);
+  }
+  return writers;
+}
+
+/**
+ * Counts the writes of every exported function, through any number of
+ * imported helpers: each pass counts with the helpers the passes before found,
+ * until a pass changes nothing. Counts only rise and stop at two, so import
+ * cycles end too.
+ */
+function writeCounts(modules: readonly ModuleFacts[]): WriteCounts {
+  const counts: WriteCounts = new Map();
+  for (let changed = true; changed; ) {
+    changed = false;
+    for (const facts of modules) {
+      const writers = importedWriteCounts(facts, counts);
+      const own = counts.get(facts.file) ?? new Map<string, number>();
+      for (const name of facts.exported) {
+        const declaration = facts.local.get(name);
+        const scope: Scope = { local: facts.local, calling: new Set([name]), importedWriters: writers };
+        const writes = Math.min(
+          FINDING_WRITES,
+          declaration ? functionWrites(declaration, scope) : (writers.get(name) ?? 0),
+        );
+        if (writes <= (own.get(name) ?? 0)) continue;
+        own.set(name, writes);
+        changed = true;
+      }
+      if (own.size > 0) counts.set(facts.file, own);
     }
   }
-  return findings;
+  return counts;
+}
+
+/** `file::function` of every exported function of a `'use server'` module that writes twice on one path. */
+function actionsWithSeparateWrites(files: readonly string[], host: SourceHost): string[] {
+  const modules = files.flatMap((file) => moduleFacts(file, host) ?? []);
+  const counts = writeCounts(modules);
+  return modules
+    .filter((facts) => facts.useServer)
+    .flatMap((facts) =>
+      [...(counts.get(facts.file) ?? [])]
+        .filter(([name, writes]) => writes >= FINDING_WRITES && facts.local.has(name))
+        .map(([name]) => `${facts.file}::${name}`),
+    );
 }
 
 test('Server Actions write related rows in one database function', () => {
-  const findings = findActionsWithSeparateWrites();
+  const findings = actionsWithSeparateWrites(listProductSources(['app', 'lib']), repositorySources);
   const unreviewed = findings.filter((finding) => !(finding in ALLOWED_SEPARATE_WRITES));
   expect(
     unreviewed,
@@ -290,4 +324,39 @@ test('Server Actions write related rows in one database function', () => {
   ).toEqual([]);
   const stale = Object.keys(ALLOWED_SEPARATE_WRITES).filter((key) => !findings.includes(key));
   expect(stale, 'These allowlist entries no longer write twice; remove them.').toEqual([]);
+});
+
+describe('the scan follows writes through imported helpers', () => {
+  const planted: Record<string, string> = {
+    'lib/probe/actions.ts': [
+      "'use server';",
+      "import { saveBoth } from './outer';",
+      "import { saveOne } from '@/lib/probe/barrel';",
+      "import { first } from './cycle-a';",
+      'export async function twiceThroughHelpers() { await saveBoth(); }',
+      'export async function onceThroughHelpers() { await saveOne(); }',
+      'export async function twiceDirect() { await saveOne(); await saveOne(); }',
+      'export async function eitherOne(flag: boolean) { if (flag) return saveOne(); await saveOne(); }',
+      'export async function throughCycle() { await first(); }',
+      '',
+    ].join('\n'),
+    'lib/probe/outer.ts': `import { saveOne as one } from './barrel';\nexport async function saveBoth() { await one(); await one(); }\n`,
+    'lib/probe/barrel.ts': `export { saveOne } from './inner';\n`,
+    'lib/probe/inner.ts': `import { db } from './db';\nexport async function saveOne() { await db.from('jobs').insert({}); }\n`,
+    'lib/probe/cycle-a.ts': `import { second } from './cycle-b';\nexport async function first(): Promise<void> { await second(); }\n`,
+    'lib/probe/cycle-b.ts': `import { first } from './cycle-a';\nimport { saveOne } from './inner';\nexport async function second(): Promise<void> { if (Date.now() < 0) return first(); await saveOne(); }\n`,
+  };
+  const findings = actionsWithSeparateWrites(Object.keys(planted), (file) => planted[file] ?? null);
+
+  test('two writes three imports deep, through a renamed import and a re-export, are found at the action', () => {
+    expect(findings).toContain('lib/probe/actions.ts::twiceThroughHelpers');
+    expect(findings).toContain('lib/probe/actions.ts::twiceDirect');
+  });
+
+  test('one write through helpers, alternative branches and an import cycle stay clean', () => {
+    expect(findings.sort()).toEqual([
+      'lib/probe/actions.ts::twiceDirect',
+      'lib/probe/actions.ts::twiceThroughHelpers',
+    ]);
+  });
 });

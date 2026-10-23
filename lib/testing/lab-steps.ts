@@ -9,7 +9,7 @@
 
 /** Every count a step records, gated or not. A gated metric has a reference; the others print only. */
 export const LAB_METRICS = [
-  /** Every request the page started, the Realtime socket excluded. */
+  /** Every request the page started, the Realtime socket and router prefetches excluded. */
   'requests',
   /** Route renders the step asked for: documents, route GETs and revalidating actions, echoes excluded. */
   'routeRenders',
@@ -19,7 +19,7 @@ export const LAB_METRICS = [
   'actionRoundTrips',
   /** GETs to the background-read registry. */
   'backgroundReads',
-  /** Router prefetches. */
+  /** Router prefetches: their number follows the timing of a link entering view or a cache invalidation, so it prints only. */
   'prefetches',
   /** Requests the server sent to the local Supabase gateway while the step ran. */
   'backendRequests',

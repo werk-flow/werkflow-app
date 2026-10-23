@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations and materials needed to deliver it.
 
@@ -65,7 +65,7 @@ The calendar reduces telephone coordination, paper schedules, duplicate entry, a
 - **Templates and readiness on jobs.** Work-creation dialogs offer a published work template. Applying one never creates or changes series, occurrences, assignments, dispatches, commitments or time. Job detail and the field work pack reuse the same readiness picture. The first job-linked clock-in starts execution. Schedule and dispatch changes never do.
 - **Service visits.** A reactive service case links to one existing job and then uses the normal visit and dispatch path. A manager creates a maintenance visit job, then schedules its occurrence in a separate action. Compatible due items can share a visit. The plan owns cadence and next-due, and the calendar owns the appointment. Moving the appointment never rewrites the maintenance definition.
 - **Actual time.** Working-time blocks show the same effective time as every other time reader, with open proposals shown as provisional. Planning moves and dispatches never create or rewrite actual time. A correction never reschedules planned work.
-- **Recorded-time correction gestures (owner decision).** Dragging or resizing a completed recorded block opens a form with the proposed times and the employee prefilled. The gesture itself saves nothing. A reason is required. Submission uses the audited correction process of [time tracking](time-tracking.md), with its authority, second-person approval and closed-period rules. The calendar refuses active, partial, stale or mixed sources and leaves the form open. An approved correction preserves work, break, travel and standby details. A pending approval does not become confirmed time. Planning Undo is separate.
+- **Recorded-time correction gestures (owner decision).** Dragging or resizing a completed recorded block opens a form with the proposed times and the employee prefilled. The gesture itself saves nothing. A reason is required. Submission uses the audited correction process of [time tracking](time-tracking.md), with its authority, second-person approval and closed-period rules. A manager may drag their own blocks; another person's block offers the gesture only to that person's `time_approval` holder, by the predicate the submission asks. The calendar refuses active, partial, stale or mixed sources and leaves the form open. An approved correction preserves work, break, travel and standby details. A pending approval does not become confirmed time. Planning Undo is separate.
 
 ### Important Current Limitations
 

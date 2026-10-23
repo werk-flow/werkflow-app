@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import { WORK_EXECUTION_LABELS, workTransitionActionLabel } from '@/lib/work-lifecycle/types';
+import { LIVE_READ_PENDING_ATTRIBUTE } from '@/lib/ui/route-refresh-signal';
 
 const pageErrors = new WeakMap<Page, string[]>();
 
@@ -116,21 +117,29 @@ test(
   },
   async ({ page }) => {
     const section = page.getByRole('region', { name: 'Leseaktivierung' });
+    // The pending-read marker the lab settle step waits on stands exactly while a read runs.
+    const pendingMarker = (): Promise<string | null> =>
+      page.evaluate((name) => document.documentElement.getAttribute(name), LIVE_READ_PENDING_ATTRIBUTE);
+    await expect.poll(pendingMarker).toBeNull();
     await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
     await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('1');
     await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Lädt');
     await expect(section.getByLabel('Lesesignal 1', { exact: true })).toHaveText('Aktiv');
+    await expect.poll(pendingMarker).toBe('true');
     await section.getByRole('button', { name: 'Lesen deaktivieren', exact: true }).click();
     await expect(section.getByLabel('Lesesignal 1', { exact: true })).toHaveText('Abgebrochen');
     await expect(section.getByLabel('Abgebrochene Lesevorgänge', { exact: true })).toHaveText('1');
     await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+    await expect.poll(pendingMarker).toBeNull();
     await section.getByRole('button', { name: 'Lesen aktivieren', exact: true }).click();
     await expect(section.getByLabel('Lesevorgänge', { exact: true })).toHaveText('2');
     await expect(section.getByLabel('Lesesignal 2', { exact: true })).toHaveText('Aktiv');
     await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Lädt');
+    await expect.poll(pendingMarker).toBe('true');
     await section.getByRole('button', { name: 'Lesen 2 abschließen', exact: true }).click();
     await expect(section.getByLabel('Leseergebnis', { exact: true })).toHaveText('2');
     await expect(section.getByLabel('Lesezustand', { exact: true })).toHaveText('Ruhend');
+    await expect.poll(pendingMarker).toBeNull();
     await section.getByRole('button', { name: 'Lesen 1 abschließen', exact: true }).click();
     await page.evaluate(
       () =>

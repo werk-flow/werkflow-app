@@ -1,6 +1,6 @@
 # Performance
 
-Status: living — last reviewed 2026-10-22
+Status: living — last reviewed 2026-10-23
 
 This doc owns how WerkFlow measures speed and feel: the journeys people repeat, the lab counts and payload budgets that guard them, layout stability, and the procedure for making a flow faster. [Realtime and caching](realtime-and-caching.md) owns feedback, freshness and the latency targets. [Testing](testing.md#deadlines-and-measured-scenarios) owns how wall-clock scenarios are recorded and calibrated.
 
@@ -34,7 +34,7 @@ A journey is a step that one role repeats many times a day, measured from the us
 
 - `regressed` or `budget-exceeded`: the step does more work than its reference or its budget allows. Find the cause; do not raise the reference.
 - `ratchet-pending`: the step does less work. Lower the reference with the command the table names.
-- `grew`: a response carries more bytes than its ceiling. `shrank`: fewer than its floor, which is either a deliberate cut or missing data. Open the response, then accept with `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`.
+- `grew`: a response carries more bytes than its ceiling. `shrank`: fewer than its floor, which is either a deliberate cut or missing data. Open the response, then accept with `bun scripts/lab-counts.ts accept --run <run key> --step <id> --target <shape> --reason "<what changed>"`. A framework upgrade can shrink every payload at once: compare the step's `backendByPath` and rows with the last passing run before it, open one response, and accept each target naming that comparison. `measurement-missing`: a bounded value was not recorded (a body that could not be read or parsed is named in `lab-diagnosis.ndjson`); it fails like a regression.
 - `shape-added` or `shape-removed`: a request the reference does not know, or one that stopped. Either is a behavior change that needs its reason.
 - `ungated`: a metric that is recorded but failed one of its two jobs.
 
@@ -84,6 +84,7 @@ A prefetch loads a route's static shell, its loading state and its code before t
 
 ## Accepted limits
 
+- A cold start renders its route twice: the document and the route refresh of the join catch-up, which covers writes made before the database listener was ready.
 - The clock button shows „—“ until it hydrates, because the server cannot know the browser's clock state; a guess would flash a false state.
 - A change plan selects each lab group whose scopes own a changed file and fails it on budgets, ceilings and floors; an improvement that was not lowered fails in release mode only.
 - The idle glow (`animate-live`) stays: the idle lab step records no request, commit or long task while it runs.
@@ -104,9 +105,9 @@ These are Tier 3 defaults. Diverge with the note that `AGENTS.md` describes, aft
 A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
 - Every journey names its role, start action, usable result and catalog flows, and has a lab step that a lab spec records. [test `lib/testing/journeys.test.ts`]
-- A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. A step fails when it released a live read that a dialog held since before the step (`<html data-live-read-held>`), because it would count that catch-up as its own work: settle the page before you open the dialog. [code `tests/audit/support/lab-recorder.ts`, code `lib/ui/route-refresh-signal.ts`, group `audit:lab:field`, group `audit:lab:office`]
+- A lab step records its counts and payloads from the user action until the page is quiet, after the live shell joined, and writes one record per run. A step fails when it released a live read that a dialog held since before the step (`<html data-live-read-held>`), because it would count that catch-up as its own work: settle the page before you open the dialog; `settleLiveShell` waits until no live read is queued or running (`<html data-live-read-pending>`). `requests` leaves out router prefetches, whose number follows timing; `prefetches` prints beside it. [code `tests/audit/support/lab-recorder.ts`, code `lib/ui/route-refresh-signal.ts`, group `audit:lab:field`, group `audit:lab:office`]
 - Every required lab step has a reference at the digest of its measured test, within its budgets, with a reason for every raise and every accepted floor, and its history replays to its stored bounds. The recorder never reads the reference file, so lowering a reference keeps the lab groups' passes. [code `lib/testing/lab-count-context.ts`, test `lib/testing/lab-count-references.test.ts`, test `lib/testing/lab-count-reference-carryover.test.ts`]
-- The runner judges lab evidence: missing or malformed records, ceilings, budgets and floors fail in every mode, and an improvement that was not lowered in release mode. A change plan runs each lab group whose scopes own a changed product file. [test `lib/testing/lab-evidence.test.ts`, code `scripts/verify.ts`, test `lib/testing/selection/group-selection.test.ts`]
+- The runner judges lab evidence: missing or malformed records, a bound without its measurement, ceilings, budgets and floors fail in every mode, and an improvement that was not lowered in release mode. A change plan runs each lab group whose scopes own a changed product file. [test `lib/testing/lab-evidence.test.ts`, test `lib/testing/lab-counts.test.ts`, code `scripts/verify.ts`, test `lib/testing/selection/group-selection.test.ts`]
 - References change only through the lab command, which refuses failed, uncleaned, diagnostic and stale runs. [code `scripts/lab-counts.ts`, test `lib/testing/lab-counts.test.ts`]
 - A request shape is named by its route pattern or its background-read kind, never by ids or query values. [test `lib/testing/lab-shapes.test.ts`]
 - Nothing on an audited page moves after it is usable. [code `tests/audit/support/layout-shifts.ts`, group `audit:layout`]

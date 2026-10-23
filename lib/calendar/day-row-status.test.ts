@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarBoardDay } from './board';
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { canManageBlock, dayRowLabel, isDayRowOff } from './day-row-status';
@@ -86,23 +87,67 @@ describe('dayRowLabel and isDayRowOff', () => {
   });
 });
 
-describe('canManageBlock', () => {
-  test('admins manage every block, Büro own and employee blocks, employees none', () => {
-    expect(canManageBlock(block(), 'admin', 'me', 'admin', [])).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'me', 'employee', [])).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'owner', 'buero', [])).toBe(true);
-    expect(canManageBlock(block(), 'buero', 'me', 'admin', [])).toBe(false);
-    expect(canManageBlock(block(), 'employee', 'owner', 'employee', [])).toBe(false);
+describe('canManageBlock: the time_approval holder decides, as submitTimeCorrection does', () => {
+  const holder = (role: 'admin' | 'buero', userId = `${role}-user`): EffectiveResponsibilityHolder => ({
+    employeeRecordId: `${role}-record`,
+    userId,
+    source: { kind: 'role_default', configurationId: null, role },
+  });
+  type Case = Partial<Parameters<typeof canManageBlock>[2]> & {
+    block?: CalendarWorkBlock;
+    entryUserRole?: string | undefined;
+  };
+  // The case names what differs from an admin holder looking at an employee's block.
+  const manage = (overrides: Case = {}): boolean => {
+    const { block: managed = block(), ...viewer } = overrides;
+    const entryUserRole = 'entryUserRole' in overrides ? overrides.entryUserRole : 'employee';
+    return canManageBlock(managed, entryUserRole, {
+      currentUserRole: 'admin',
+      currentUserId: 'admin-user',
+      approvalHolder: holder('admin'),
+      closedPeriods: [],
+      ...viewer,
+    });
+  };
+
+  test("a holder manages another person's block the way the holder may approve it", () => {
+    expect(manage()).toBe(true);
+    expect(manage({ entryUserRole: 'buero' })).toBe(true);
+    expect(
+      manage({ currentUserRole: 'buero', currentUserId: 'buero-user', approvalHolder: holder('buero') }),
+    ).toBe(true);
+    expect(
+      manage({
+        currentUserRole: 'buero',
+        currentUserId: 'buero-user',
+        approvalHolder: holder('buero'),
+        entryUserRole: 'buero',
+      }),
+    ).toBe(false);
+  });
+
+  test("a manager without the holder role may not move another person's block, whatever the role", () => {
+    expect(manage({ approvalHolder: null })).toBe(false);
+    expect(manage({ currentUserRole: 'buero', currentUserId: 'buero-user', approvalHolder: null })).toBe(
+      false,
+    );
+    expect(manage({ entryUserRole: undefined })).toBe(false);
+  });
+
+  test('a manager moves their own block without a holder; an employee moves none', () => {
+    expect(manage({ currentUserId: 'owner', approvalHolder: null, entryUserRole: 'admin' })).toBe(true);
+    expect(manage({ currentUserRole: 'employee', currentUserId: 'owner', approvalHolder: null })).toBe(false);
+    expect(manage({ currentUserRole: 'employee', currentUserId: 'someone' })).toBe(false);
   });
 
   test('a block with a pending deletion stays locked for everyone', () => {
-    expect(canManageBlock(block('pending_delete'), 'admin', 'me', 'employee', [])).toBe(false);
+    expect(manage({ block: block('pending_delete') })).toBe(false);
   });
 
   test('a block of a closed period stays locked for everyone, the month after it does not', () => {
     const october = [{ startDate: '2026-10-01', endDate: '2026-10-31' }];
     const september = [{ startDate: '2026-09-01', endDate: '2026-09-30' }];
-    expect(canManageBlock(block(), 'admin', 'me', 'employee', october)).toBe(false);
-    expect(canManageBlock(block(), 'admin', 'me', 'employee', september)).toBe(true);
+    expect(manage({ closedPeriods: october })).toBe(false);
+    expect(manage({ closedPeriods: september })).toBe(true);
   });
 });

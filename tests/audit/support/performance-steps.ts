@@ -2,18 +2,24 @@ import { expect, type Locator, type Page } from '@playwright/test';
 import { MEASURED_VISIT_TITLE } from './performance-profile';
 import { realtimeSubscribed } from '../../golden/support/live';
 import { createRolePage } from '../../golden/support/sessions';
+import { LIVE_READ_PENDING_ATTRIBUTE, ROUTE_REFRESH_ATTRIBUTE } from '../../../lib/ui/route-refresh-signal';
 export { realtimeSubscribed };
 
 /**
  * Waits until a loaded page has finished its Realtime join: the channel is
  * subscribed, the database listener is ready, and the catch-up that readiness
  * dispatches (a route refresh and every subscribed read, about 1.5 s after
- * load) has drained.
+ * load) has drained. The `networkidle` load state is reached once per
+ * document, usually before readiness, so the drain waits on the markers of a
+ * queued or running live read and route refresh instead.
  */
 export async function settleLiveShell(page: Page): Promise<void> {
   await expect(realtimeSubscribed(page)).toBeAttached();
   await expect(page.locator('html')).toHaveAttribute('data-realtime-postgres-state', 'ready');
   await page.waitForLoadState('networkidle');
+  await expect(
+    page.locator(`html:not([${LIVE_READ_PENDING_ATTRIBUTE}]):not([${ROUTE_REFRESH_ATTRIBUTE}])`),
+  ).toBeAttached();
 }
 
 /**

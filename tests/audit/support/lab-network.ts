@@ -21,6 +21,8 @@ type Tracked = {
   decodedBytes: number;
   json: boolean;
   rows: number | null;
+  /** Why the row count of a JSON body is missing: the body could not be read or parsed. */
+  rowsMissing: string | null;
 };
 
 type LabNetworkRead = {
@@ -39,6 +41,8 @@ type LabNetworkRead = {
   routeRenderRequests: string[];
   /** Diagnosis: every request shape with its start, in milliseconds after the step began. */
   sequence: string[];
+  /** Each JSON body whose row count is missing, with the cause; its shape records no rows. */
+  missingRows: string[];
 };
 
 export type LabNetwork = {
@@ -58,12 +62,15 @@ function lowerCaseHeaders(headers: Record<string, unknown>): Record<string, stri
   );
 }
 
-function rowsOf(text: string): number | null {
+/** The row count of a JSON body; a body that does not parse is a missing measurement, not zero rows. */
+function rowsOf(text: string): { rows: number | null; missing: string | null } {
+  let body: unknown;
   try {
-    return jsonRows(JSON.parse(text));
-  } catch {
-    return null;
+    body = JSON.parse(text);
+  } catch (error) {
+    return { rows: null, missing: `the JSON body did not parse: ${String(error)}` };
   }
+  return { rows: jsonRows(body), missing: null };
 }
 
 export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promise<LabNetwork> {
@@ -98,6 +105,7 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
       decodedBytes: 0,
       json: false,
       rows: null,
+      rowsMissing: null,
     });
   });
   cdp.on('Network.responseReceived', (event) => {
@@ -129,11 +137,15 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
     const body: Promise<void> = cdp
       .send('Network.getResponseBody', { requestId: event.requestId })
       .then((response) => {
-        entry.rows = rowsOf(
+        const read = rowsOf(
           response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body,
         );
+        entry.rows = read.rows;
+        entry.rowsMissing = read.missing;
       })
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        entry.rowsMissing = `the body could not be read: ${String(error)}`;
+      })
       .finally(() => {
         entry.finished = true;
         touch();
@@ -181,7 +193,9 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
           current.rows === null || entry.rows === null ? null : Math.max(current.rows, entry.rows);
       }
       return {
-        requests: entries.length,
+        // A prefetch follows timing (a link entering view, a cache invalidation), so the
+        // gated total counts the app's own requests and `prefetches` prints beside it.
+        requests: entries.filter((entry) => !entry.shape.startsWith('prefetch:')).length,
         routeRenders: entries.filter((entry) => entry.routeRender).length,
         actionRoundTrips: entries.filter((entry) => entry.shape.startsWith('action:')).length,
         backgroundReads: entries.filter((entry) => entry.shape.startsWith('background:')).length,
@@ -189,6 +203,9 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
         payloads: [...payloads.values()].sort((left, right) => left.shape.localeCompare(right.shape)),
         routeRenderRequests: entries.filter((entry) => entry.routeRender).map((entry) => entry.shape),
         sequence: entries.map((entry) => `${entry.startedAt - resetAt} ${entry.shape}`),
+        missingRows: entries
+          .filter((entry) => entry.rowsMissing !== null)
+          .map((entry) => `${entry.shape}: ${entry.rowsMissing}`),
       };
     },
   };

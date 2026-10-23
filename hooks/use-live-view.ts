@@ -14,7 +14,8 @@ import {
 import { logError } from '@/lib/logging';
 import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/scheduler';
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
-import { useHeldReadFlag } from '@/lib/ui/route-refresh-signal';
+import { useHeldReadFlag, useLiveReadMarker, type LiveReadMarker } from '@/lib/ui/route-refresh-signal';
+import { useRealtimeTables } from '@/hooks/use-realtime-tables';
 
 /**
  * The live-view primitive (client freshness contract,
@@ -119,6 +120,33 @@ export type LiveViewState<T> = {
   setData: (updater: (previous: T | undefined) => T | undefined) => void;
 };
 
+/**
+ * The shared debounce with a bounded maximum deferral: a burst lands as one
+ * read, a sustained stream reads at least once a second. The marker shows the
+ * queued read until it runs or a suspension or reset cancels it.
+ */
+function createMarkedScheduler(run: () => void, marker: LiveReadMarker): TrailingScheduler {
+  const scheduler = createTrailingScheduler({
+    delayMs: REALTIME_DEBOUNCE_MS,
+    maxWaitMs: REALTIME_MAX_DEFER_MS,
+    run: () => {
+      marker.queued(false);
+      run();
+    },
+  });
+  return {
+    schedule: () => {
+      marker.queued(true);
+      scheduler.schedule();
+    },
+    cancel: () => {
+      marker.queued(false);
+      return scheduler.cancel();
+    },
+    pending: scheduler.pending,
+  };
+}
+
 export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T> {
   const {
     tables,
@@ -153,6 +181,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
   const readControllerRef = useRef<AbortController | null>(null);
   const schedulerRef = useRef<TrailingScheduler | null>(null);
   const pendingWhileSuspendedRef = useHeldReadFlag();
+  const liveRead = useLiveReadMarker();
   const suspendedRef = useRef(suspended);
   const readRef = useRef(read);
   const eventFilterRef = useRef(eventFilter);
@@ -160,13 +189,10 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
   const enabledRef = useRef(enabled);
   const invalidatedAtRef = useRef(0);
 
-  const tablesRef = useRef<readonly RealtimeTable[]>(tables);
-
   useEffect(() => {
     readRef.current = read;
     eventFilterRef.current = eventFilter;
     enabledRef.current = enabled;
-    tablesRef.current = tables;
   });
 
   const clearTimer = useCallback(() => {
@@ -176,7 +202,9 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
   /** Every read allocated so far becomes obsolete: its result must not commit. */
   const supersedeReads = useCallback(() => {
     floorGenerationRef.current = ++generationRef.current;
-  }, []);
+    // A superseded read can no longer clear its own marker.
+    liveRead.reading(false);
+  }, [liveRead]);
 
   const runRead = useCallback(async (): Promise<void> => {
     if (!enabledRef.current) return;
@@ -184,6 +212,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     readControllerRef.current?.abort();
     const controller = new AbortController();
     readControllerRef.current = controller;
+    liveRead.reading(true);
     setIsRefreshing(true);
     const obsolete = () => generation <= floorGenerationRef.current;
     try {
@@ -226,11 +255,12 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     } finally {
       if (readControllerRef.current === controller) readControllerRef.current = null;
       if (generation === generationRef.current) {
+        liveRead.reading(false);
         setIsRefreshing(false);
         setHasSettled(true);
       }
     }
-  }, []);
+  }, [liveRead]);
 
   const scheduleRead = useCallback(
     (recordInvalidation = true) => {
@@ -240,16 +270,10 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
         pendingWhileSuspendedRef.current = true;
         return;
       }
-      // The shared debounce with a bounded maximum deferral: a burst
-      // lands as one read, a sustained stream reads at least once a second.
-      schedulerRef.current ??= createTrailingScheduler({
-        delayMs: REALTIME_DEBOUNCE_MS,
-        maxWaitMs: REALTIME_MAX_DEFER_MS,
-        run: () => void runRead(),
-      });
+      schedulerRef.current ??= createMarkedScheduler(() => void runRead(), liveRead);
       schedulerRef.current.schedule();
     },
-    [runRead, pendingWhileSuspendedRef],
+    [runRead, pendingWhileSuspendedRef, liveRead],
   );
 
   // Suspension boundary: entering drops a pending timer into the queue flag;
@@ -268,21 +292,15 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     }
   }, [suspended, clearTimer, scheduleRead, pendingWhileSuspendedRef]);
 
-  // Subscribe to the table list. The provider keeps callbacks in a set, so
-  // one effect can register the whole list; identity comes from the joined
-  // table names, not the (usually inline) array reference.
-  const tablesKey = tables.join(',');
-  useEffect(() => {
-    if (!subscribe || !enabled) return;
-    const onEvent = (event: RealtimeChangeEvent) => {
-      if (!shouldScheduleRealtimeRefresh(event, eventFilterRef.current)) return;
-      scheduleRead();
-    };
-    const unsubscribes = tablesRef.current.map((table) => subscribe(table, onEvent));
-    return () => {
-      for (const unsubscribe of unsubscribes) unsubscribe();
-    };
-  }, [subscribe, enabled, tablesKey, scheduleRead]);
+  useRealtimeTables({
+    subscribe,
+    tables,
+    enabled,
+    serverData: initialData !== undefined,
+    onEvent: (event: RealtimeChangeEvent) => {
+      if (shouldScheduleRealtimeRefresh(event, eventFilterRef.current)) scheduleRead();
+    },
+  });
 
   // Initial read, reset handling, and enable transitions. `initialData` only
   // suppresses the very first read; a resetKey change always reads fresh.

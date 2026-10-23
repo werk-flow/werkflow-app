@@ -6,6 +6,7 @@ import type { OrgRole } from '@/lib/roles';
 import type { InteractiveCalendarSession, WorkSession } from '@/lib/time-tracking/types';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
+import { useTimeApprovalHolder } from '@/components/zeiterfassung/use-time-approval-holder';
 import type { CalendarSurfaceActions } from './board/types';
 import type { OpenCard } from './job-event-popover';
 import { memberDisplayName, type CalendarMember } from './members';
@@ -62,6 +63,7 @@ export function useCalendarSurfaceActions({
   // The calendar is scoped to the active organization, so its closed periods are that organization's.
   const { activeOrgId } = useOrganization();
   const closedPeriods = useClosedTimePeriods(activeOrgId);
+  const approvalHolder = useTimeApprovalHolder(activeOrgId, isAdminOrManager);
   const surfaceActions = useMemo<CalendarSurfaceActions>(
     () => ({
       isManager: isAdminOrManager,
@@ -69,8 +71,9 @@ export function useCalendarSurfaceActions({
       onAddEntry: (input) => setAddEntry(input),
       onPark,
       closedPeriods,
+      approvalHolder,
     }),
-    [onPark, isAdminOrManager, setOpenCard, setAddEntry, closedPeriods],
+    [onPark, isAdminOrManager, setOpenCard, setAddEntry, closedPeriods, approvalHolder],
   );
 
   const handleSessionClick = useCallback(

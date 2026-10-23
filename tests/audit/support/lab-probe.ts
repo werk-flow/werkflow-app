@@ -19,6 +19,8 @@ export type LabProbeCounts = {
   longTasks: number;
   longTaskMs: number;
   longAnimationFrames: number;
+  /** Entry types the browser does not report: their counts are missing, not zero. */
+  unobserved: string[];
 };
 
 declare global {
@@ -37,6 +39,7 @@ function probeScript(): void {
     longTaskMs: 0,
     longAnimationFrames: 0,
   };
+  const unobserved: string[] = [];
   const renderers = new Map<number, unknown>();
   // Function, class, forwardRef, memo and simple memo components (React's fiber tags).
   const COMPONENT_TAGS = new Set([0, 1, 11, 14, 15]);
@@ -86,14 +89,11 @@ function probeScript(): void {
     counts.domMutations += records.length;
   }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
   const observe = (type: string, onEntry: (entry: PerformanceEntry) => void): void => {
-    try {
-      new PerformanceObserver((list) => list.getEntries().forEach(onEntry)).observe({
-        type,
-        buffered: false,
-      });
-    } catch {
-      // An entry type the browser does not support stays at zero.
+    if (!PerformanceObserver.supportedEntryTypes.includes(type)) {
+      unobserved.push(type);
+      return;
     }
+    new PerformanceObserver((list) => list.getEntries().forEach(onEntry)).observe({ type, buffered: false });
   };
   observe('longtask', (entry) => {
     counts.longTasks += 1;
@@ -111,7 +111,7 @@ function probeScript(): void {
       counts.longTaskMs = 0;
       counts.longAnimationFrames = 0;
     },
-    read: () => ({ ...counts }),
+    read: () => ({ ...counts, unobserved: [...unobserved] }),
   };
 }
 

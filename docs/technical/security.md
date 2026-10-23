@@ -4,8 +4,6 @@ Status: living — last reviewed 2026-10-23
 
 ## How to work
 
-Every rule on this page is hard.
-
 ### Add a table
 
 1. Copy `supabase/migrations/20261001104036_limit_organization_join_attempts.sql`: RLS enabled, a full revoke, then exactly the grants the code uses. Follow [the migration rule](environments.md#the-migration-rule). The table carries `organization_id` or joins the global-table list in `supabase/tests/security_boundaries.sql`.
@@ -38,7 +36,7 @@ Wrong turn: trusting an id because the UI offers only the caller's own records. 
 3. Resolve the organization and the role in the server caller before it calls the function.
 4. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
 
-Wrong turn: granting `authenticated` so that the browser can call the function. It then runs with its owner's rights for every signed-in user, past every policy.
+Wrong turn: granting `authenticated` so the browser can call the function; it then runs with its owner's rights past every policy.
 
 ### Add a storage path
 
@@ -46,7 +44,7 @@ Wrong turn: granting `authenticated` so that the browser can call the function. 
 2. Authorize the target on the server, then sign a short-lived URL. The browser moves the bytes. [Document storage and access](document-storage-and-access.md) owns the access classes.
 3. Run `bun run test:unit lib/storage lib/security/storage-import-boundary.test.ts`.
 
-Wrong turn: bytes through a Server Action. The body limit breaks large files, and the server holds uploads in memory.
+Wrong turn: bytes through a Server Action.
 
 ### Log a failure
 
@@ -54,7 +52,7 @@ Wrong turn: bytes through a Server Action. The body limit breaks large files, an
 2. Keep the label free of recipients, codes, links, row values and provider bodies.
 3. Run `bun run lint <files>`.
 
-Wrong turn: `console.error(error)`. A database or provider message can quote row values and email addresses.
+Wrong turn: `console.error(error)`; a provider message can quote row values.
 
 ## Trust boundaries
 
@@ -76,7 +74,7 @@ Wrong turn: `console.error(error)`. A database or provider message can quote row
 | Email change | One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles cannot read either state table. | `supabase/tests/email_change_boundaries.sql`, `lib/security/account-boundaries.test.ts`. |
 | Mail | The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a failure. Logs hold fixed error codes and status numbers, never recipients, codes, invitation links or provider bodies. | `supabase/functions/_shared/`, `lib/settings/otp-hash.ts`, `lib/security/mail-handlers.test.ts`. |
 | Browser | Responses carry the hardening headers and the enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. The script policy allows the app's own origin and inline scripts. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink and no `eval`. | `lib/security/headers.test.ts` calls the real builder. `lib/security/csp-report.test.ts` pins the directives. The `htmlSinkSelectors` lint set rejects the sinks. |
-| Dependencies | A dependency or gate change, and every release plan, runs the advisory check. An unknown finding, a changed applicability input and an expired exception fail. A network failure leaves the check unverified. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
+| Dependencies | Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input and an expired exception fail. A network failure leaves the check unverified. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
 
 ## Checklist
 
@@ -113,7 +111,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Account and email-change transitions stay atomic and server-only. [test `lib/security/account-boundaries.test.ts`]
 - Responses keep the hardening headers and the enforced Content-Security-Policy. [test `lib/security/headers.test.ts`, test `lib/security/csp-report.test.ts`]
 - Product code imports Zod through `lib/zod.ts`, which turns off its `eval` probe. [code `lib/zod.ts`, test `lib/conventions/zod-entry.test.ts`]
-- A dependency or gate change runs the advisory check. An exception names its exact path, reason, digest and expiry. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
+- Every plan carries an advisory pass under 24 hours old. An exception names its exact path, reason, digest and expiry. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
 - Live DEV grants and Realtime delivery to foreign and removed receivers pass before a release. [group `canary:security`]
 - Every residual exposure the owner accepted is listed below until it closes. [judgment]
 
@@ -148,7 +146,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify` in the browser that signed up or signed in.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
 - A reviewed dependency exception is open for the lint toolchain; `lib/security/dependency-exceptions.json` holds its reason and expiry.
-- Two provider facts are unverified: the full CORS configuration of the R2 buckets, and the scoping of the Vercel environment variables. The runtime credentials cannot read either.
+- Two provider facts are unverified: the R2 buckets' CORS rules (runtime tokens get `AccessDenied` on `GetBucketCors`; a check needs an R2 token with Admin Read) and the Vercel environment scopes (a check needs a Vercel token that reads the project's environment).
 
 ## Revocation boundaries
 
@@ -180,7 +178,7 @@ A GET handler may share the identity and membership reads of one request through
 - Never wrap a Server Action or a mutation, and never pass caller-supplied authorization context into a `'use server'` export.
 - A handler that takes an organization from the request requires it to equal the resolved active organization.
 - The privileged profile lookup reads through the caller's own RLS on every call.
-- A new consumer extends `lib/data/read-request-cache.test.ts`, which pins the reviewed consumers.
+- A new consumer extends `lib/data/read-request-cache.test.ts`, which pins the reviewed consumers. Job-access facts share one read per render or GET scope (`lib/jobs/job-access-reads.ts`) and read fresh in a Server Action.
 
 Membership alone authorizes no retained data of a removed employee: the clock-state reads check current membership in the action itself, and `lib/time-tracking/state-http.test.ts` drives the denied identities.
 

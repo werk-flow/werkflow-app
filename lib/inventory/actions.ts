@@ -10,6 +10,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import type { AuthContext } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import type {
   InventoryItem,
   InventoryItemType,
@@ -257,36 +258,20 @@ async function ensureInventoryDefaults(admin: SupabaseAdminClient, context: Auth
 }
 
 async function getJobContext(
-  admin: SupabaseAdminClient,
   context: AuthContext,
   jobId: string,
 ): Promise<ActionResult<{ job: { id: string; project_id: string | null } }>> {
-  const { data, error } = await loggedRead(
-    'getJobContext: jobs read failed',
-    admin
-      .from('jobs')
-      .select('id, project_id')
-      .eq('id', jobId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
-
-  const job = data;
+  const { data: job, error } = await readOrganizationJob(context.orgId, jobId);
   if (error) return { success: false, error: 'load_failed' };
   if (!job) {
     return { success: false, error: 'job_not_found' };
   }
 
   if (!context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'getJobContext: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', context.orgId)
-        .eq('job_id', jobId)
-        .eq('user_id', context.userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      context.orgId,
+      jobId,
+      context.userId,
     );
     if (assignmentError) return { success: false, error: 'load_failed' };
 
@@ -603,7 +588,7 @@ export async function getInventoryPickerOptionsForJob(
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const jobContext = await getJobContext(admin, auth.context, jobId);
+  const jobContext = await getJobContext(auth.context, jobId);
   if (!jobContext.success) return jobContext;
 
   return loadInventoryPickerOptions(admin, auth.context.orgId, auth.context.isManagerOrAbove, {
@@ -834,7 +819,7 @@ export async function createJobMaterialLine(
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const jobContext = await getJobContext(admin, auth.context, input.jobId);
+  const jobContext = await getJobContext(auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
   return insertMaterialLine(admin, auth.context, {
@@ -1029,7 +1014,7 @@ export async function getJobMaterialLines(
   if (!auth.success) return auth;
 
   const admin = createSupabaseAdminClient();
-  const jobContext = await getJobContext(admin, auth.context, jobId);
+  const jobContext = await getJobContext(auth.context, jobId);
   if (!jobContext.success) return jobContext;
 
   const { data, error } = await readCompleteRows(
@@ -1289,7 +1274,7 @@ export async function takeJobMaterial(
   if (!input.locationId) return { success: false, error: 'location_required' };
 
   const admin = createSupabaseAdminClient();
-  const jobContext = await getJobContext(admin, auth.context, input.jobId);
+  const jobContext = await getJobContext(auth.context, input.jobId);
   if (!jobContext.success) return jobContext;
 
   let result: ActionResult<{ quantityAfter: number }>;
@@ -1428,7 +1413,7 @@ export async function returnJobMaterial(
   let projectId: string | null = null;
 
   if (line.job_id) {
-    const jobContext = await getJobContext(admin, auth.context, line.job_id);
+    const jobContext = await getJobContext(auth.context, line.job_id);
     if (!jobContext.success) return jobContext;
     jobId = jobContext.job.id;
     projectId = jobContext.job.project_id;

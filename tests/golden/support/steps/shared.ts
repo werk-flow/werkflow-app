@@ -4,7 +4,7 @@ import {
   UNCONFIRMED_SIGNAL,
 } from '../../../../lib/testing/spec-support/busy-signals';
 import { retryBeforeSubmit } from '../../../../lib/testing/spec-support/retry-before-submit';
-import { pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
 
 /**
  * Copy of the controls that several product areas share, in one place
@@ -255,6 +255,34 @@ export async function expectGone(locator: Locator, options: { timeout?: number }
  */
 export function pendingRow(page: Page, text: string): Locator {
   return page.locator('[data-pending-row]').filter({ hasText: text });
+}
+
+/**
+ * A record of a list that renders a table from the tablet width and a card
+ * (`ListRow`) below it: the row or the card that the current width shows, so
+ * one step reaches the record's controls on a desktop and on a phone.
+ */
+export function listEntry(scope: Page | Locator, record: { has: Locator } | { hasText: string }): Locator {
+  return confirmed(
+    scope
+      .getByRole('row')
+      .or(scope.locator('[data-slot="list-row"]'))
+      .filter({ ...record, visible: true }),
+  );
+}
+
+/**
+ * Opens an actions menu from the keyboard (focus, Enter) once the page
+ * hydrated and returns the item. A click opens a Radix menu on press, and on
+ * a phone card the release can choose the item that renders under the pointer.
+ */
+export async function openMenuItem(button: Locator, item: Locator): Promise<Locator> {
+  const page = button.page();
+  await hydratedAndSettled(page);
+  await button.focus();
+  await pressKey(page, 'Enter');
+  await expect(item, 'Enter on the menu button opens the menu').toBeVisible();
+  return item;
 }
 
 /** The „Details“ card of a job or project detail (a MetadataSection named by its title). */

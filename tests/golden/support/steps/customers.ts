@@ -14,6 +14,7 @@ import {
   confirmed,
   expectBannerAfter,
   expectVisibleAfterSave,
+  listEntry,
   listPager,
   metadataField,
   selectFromSearchable,
@@ -175,11 +176,12 @@ export function customerCountLabel(page: Page): Locator {
     .first();
 }
 
-/** The actions menu button of a customer's row in the desktop list. */
+/** The actions menu button of a customer in the list: its table row, or its card on a phone. */
 export function customerRowActionsButton(page: Page, customerName: string): Locator {
-  return confirmed(
-    page.getByRole('row').filter({ has: page.getByRole('link', { name: customerName, exact: true }) }),
-  ).getByRole('button', { name: CUSTOMER_COPY.openActions });
+  return listEntry(page, { has: page.getByRole('link', { name: customerName, exact: true }) }).getByRole(
+    'button',
+    { name: CUSTOMER_COPY.openActions },
+  );
 }
 
 /** The delete item of an open customer row menu. */

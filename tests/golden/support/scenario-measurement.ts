@@ -31,12 +31,9 @@ function currentBackend(): 'local' | 'cloud' {
   return process.env.WERKFLOW_TEST_TARGET === 'cloud' ? 'cloud' : 'local';
 }
 
+/** A scenario runs inside a recorded run; a missing manifest fails it instead of recording no build. */
 function currentBuildId(): string | null {
-  try {
-    return readRunManifest(currentRunKey()).buildId;
-  } catch {
-    return null;
-  }
+  return readRunManifest(currentRunKey()).buildId;
 }
 
 const recordedSamples = new Map<string, number>();
@@ -77,11 +74,9 @@ function recordScenario(
 
 type BrowserClockMark = { timeOrigin: number; now: number };
 
-/** A mark that could not be read yields no attribution; a zero origin would count every resource as fresh. */
-async function markBrowserClock(page: Page): Promise<BrowserClockMark | null> {
-  return page
-    .evaluate(() => ({ timeOrigin: performance.timeOrigin, now: performance.now() }))
-    .catch(() => null);
+/** Read on the settled page before the trigger; a page that cannot answer fails the scenario. */
+async function markBrowserClock(page: Page): Promise<BrowserClockMark> {
+  return page.evaluate(() => ({ timeOrigin: performance.timeOrigin, now: performance.now() }));
 }
 
 /**
@@ -91,10 +86,9 @@ async function markBrowserClock(page: Page): Promise<BrowserClockMark | null> {
  */
 async function readAttribution(
   page: Page,
-  mark: BrowserClockMark | null,
+  mark: BrowserClockMark,
   rscUrls: readonly string[],
 ): Promise<ScenarioAttribution | undefined> {
-  if (!mark) return undefined;
   try {
     return await page.evaluate(
       ({ timeOrigin, now, rscUrls: confirmedRscUrls }) => {
@@ -124,6 +118,8 @@ async function readAttribution(
       { ...mark, rscUrls: [...rscUrls] },
     );
   } catch {
+    // best-effort: attribution is diagnosis only and never compared; a navigation that
+    // replaced the document during the read leaves the record without it.
     return undefined;
   }
 }

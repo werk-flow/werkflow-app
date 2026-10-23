@@ -150,13 +150,11 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
       draggable={draggable}
       canManage={
         item.kind === 'block' &&
-        canManageBlock(
-          item.block,
+        canManageBlock(item.block, roleByUser.get(item.block.userId), {
+          ...actions,
           currentUserRole,
           currentUserId,
-          roleByUser.get(item.block.userId),
-          actions.closedPeriods,
-        )
+        })
       }
       isAdminOrManager={isAdminOrManager}
       nowTick={nowTick}

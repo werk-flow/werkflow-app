@@ -1253,11 +1253,9 @@ const eslintConfig = defineConfig([
   // `catch` turns a failure into a constant. A timed-out wait branches through
   // settledBeforeTimeout, and a genuine best effort names its reason in a
   // `// best-effort: <reason>` comment. Unlike the block above, this one also
-  // covers the interaction module. The measurement and lab digest inputs keep
-  // their bytes (see above), so their catches stay as they are.
+  // covers the interaction module and the measurement and lab digest inputs.
   {
     files: ['tests/golden/support/**/*.ts', 'tests/audit/support/**/*.ts', 'tests/canary/support/**/*.ts'],
-    ignores: [...MEASUREMENT_DIGEST_SUPPORT_FILES, ...LAB_DIGEST_SUPPORT_FILES],
     plugins: { 'playwright-spec': playwrightSpecRules },
     rules: {
       'playwright-spec/no-swallowed-failure': 'error',

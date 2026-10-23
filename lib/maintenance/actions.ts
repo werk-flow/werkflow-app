@@ -3,8 +3,9 @@
 import { revalidatePath, updateTag } from 'next/cache';
 
 import type { ActionResult } from '@/lib/action-result';
-import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser } from '@/lib/jobs/job-access-reads';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { JOB_CREATION_REFUSALS, prepareJobCreation } from '@/lib/jobs/creation';
 import { addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/date-time/berlin';
@@ -621,17 +622,12 @@ export async function getAssignedMaintenanceContextForJob(
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
   if (!auth.context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await admin
-      .from('job_assignments')
-      .select('id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('job_id', jobId)
-      .eq('user_id', auth.context.userId)
-      .maybeSingle();
-    if (assignmentError) {
-      logReadErrors('getAssignedMaintenanceContextForJob: read failed', assignmentError);
-      return { success: false, error: 'maintenance_context_load_failed' };
-    }
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      auth.context.orgId,
+      jobId,
+      auth.context.userId,
+    );
+    if (assignmentError) return { success: false, error: 'maintenance_context_load_failed' };
     if (!assignment) return { success: false, error: 'not_authorized' };
   }
   const { data: dueRows, error } = await readCompleteRows(

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dependencyDigest": "2e7c3e54c485ae81662872eac1693bc5789e0a7a29ba8f191a7487dd1c6f3e88",
+  "dependencyDigest": "755a8796803627b74d8dea2bddfdad981522b0717ba55f4e48800b96f299a391",
   "exceptions": [
     {
       "package": "braces",
@@ -19,7 +19,8 @@
         "Re-reviewed 2026-10-08 after next 16.3.8, sharp 0.35.5, smol-toml 1.9.0 and source-map-js 1.2.2: bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 is still the latest published version.",
         "Re-reviewed 2026-10-09 after adding @axe-core/playwright 4.11.0 and eslint-plugin-jsx-a11y 6.10.2 as dev dependencies: bun audit shows the same two lint-toolchain paths to braces (neither new package depends on braces), and braces 3.0.3 is still the latest published version.",
         "Re-reviewed 2026-10-22 by the agent: bun audit shows the same two lint-toolchain paths to braces, braces 3.0.3 is still the latest published version, and micromatch 4.0.8 (latest) still requires braces ^3.0.3.",
-        "Re-reviewed 2026-10-23 by the agent after next 16.4.1 (security update for GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r): bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 and micromatch 4.0.8 are still the latest published versions."
+        "Re-reviewed 2026-10-23 by the agent after next 16.4.1 (security update for GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r): bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 and micromatch 4.0.8 are still the latest published versions.",
+        "Re-reviewed 2026-10-23 by the agent after next 16.4.2: bun audit shows the same two lint-toolchain paths to braces, and braces 3.0.3 and micromatch 4.0.8 are still the latest published versions."
       ]
     }
   ]

@@ -180,6 +180,12 @@ function ViewHarness({
       flow.saved(async () => {});
     },
     closedPeriods: [],
+    // The admin's role-default time_approval holder: the manager may correct the workers' blocks.
+    approvalHolder: {
+      employeeRecordId: 'manager-record',
+      userId: 'manager',
+      source: { kind: 'role_default', configurationId: null, role: 'admin' },
+    },
   };
   return (
     <section aria-label="Kalenderansicht">

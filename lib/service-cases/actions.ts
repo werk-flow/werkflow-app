@@ -6,6 +6,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { compareRecordNumbers } from '@/lib/format/record-number';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { formatSiteRowAddress } from '@/lib/clients/types';
 import { toJson } from '@/lib/supabase/json';
@@ -664,15 +665,10 @@ export async function getAssignedServiceContextForJob(rawJobId: string): Promise
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
   if (!auth.context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'getAssignedServiceContextForJob: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', auth.context.orgId)
-        .eq('job_id', jobId)
-        .eq('user_id', auth.context.userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      auth.context.orgId,
+      jobId,
+      auth.context.userId,
     );
     // A failed assignment read is a load failure, never a refusal.
     if (assignmentError) return { success: false, error: 'service_context_load_failed' };

@@ -26,6 +26,7 @@ import {
   employeeAssignmentDialog,
   employeeAssignmentSave,
   openEmployeeAssignmentDialog,
+  openMenuItem,
   qualificationWarningDialog,
   testData,
 } from '../../../golden/support/steps/shared';
@@ -133,8 +134,11 @@ const noRows = async (): Promise<void> => {};
 
 type LayoutRecord = 'job' | 'project';
 
-/** Opens the list row menu of a layout record, found through the list's search. */
-async function openListRowMenu(context: SurfaceContext, record: LayoutRecord): Promise<void> {
+/**
+ * Opens the list menu of a layout record, found through the list's search: in
+ * its table row, or on its card on a phone. Returns the delete item.
+ */
+async function listRowDeleteItem(context: SurfaceContext, record: LayoutRecord): Promise<Locator> {
   const { page, world } = context;
   const details = await prepareLayoutDetails(world);
   await page.reload();
@@ -147,12 +151,10 @@ async function openListRowMenu(context: SurfaceContext, record: LayoutRecord): P
     [...url.searchParams].some(([key, value]) => key.endsWith('_q') && value === number),
   );
   await settled(page);
-  const actions = workListRowActionsButton(page, number);
-  await actions.click();
-  await expect(actions, 'the row actions menu opened').toHaveAttribute('aria-expanded', 'true');
+  return openMenuItem(workListRowActionsButton(page, number), workListRowDeleteItem(page));
 }
 
-/** The row menu button that `openListRowMenu` opened; the trigger saved the layout details before. */
+/** The menu button that `listRowDeleteItem` opened; the trigger saved the layout details before. */
 function listRowMenuButton({ page }: SurfaceContext, record: LayoutRecord): Locator {
   const details = auditCheckpoint('layout.details');
   if (!details) throw new Error('The list row menu opener runs after the layout details were prepared.');
@@ -288,32 +290,18 @@ export const WORK_OPENERS = {
     layer: (page) => workTransitionDialog(page, 'not_started', 'in_progress'),
   },
   'work.list-delete-job': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the work list holds the same JobActionsMenu (components/auftraege/list/unified-auftraege-mobile-cards.tsx).',
-    trigger: async (context) => {
-      await openListRowMenu(context, 'job');
-      return workListRowDeleteItem(context.page);
-    },
+    trigger: (context) => listRowDeleteItem(context, 'job'),
     layer: jobDeleteConfirmation,
     returnFocus: (context) => listRowMenuButton(context, 'job'),
   },
   'work.list-delete-project': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the work list holds the same ProjectActionsMenu (components/auftraege/list/unified-auftraege-mobile-cards.tsx).',
-    trigger: async (context) => {
-      await openListRowMenu(context, 'project');
-      return workListRowDeleteItem(context.page);
-    },
+    trigger: (context) => listRowDeleteItem(context, 'project'),
     layer: projectDeleteConfirmation,
     returnFocus: (context) => listRowMenuButton(context, 'project'),
   },
   'work.park-confirm': {
-    opensOn: 'desktop',
-    phonePath:
-      "The job detail's actions menu opens the same edit dialog on a phone, and its save asks the same question.",
-    // Saving the edit dialog with an emptied planned date asks first; the
+    // The job detail's actions menu offers the edit at every width. Saving
+    // the edit dialog with an emptied planned date asks first; the
     // confirmation opens before any write.
     trigger: async (context) => {
       await openAuditJob(context, 'dated', noRows, context.businessDate);

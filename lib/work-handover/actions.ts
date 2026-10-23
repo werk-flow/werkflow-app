@@ -8,6 +8,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize, type AuthContext } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { getEffectiveResponsibilityHolderForActor } from '@/lib/responsibilities/server';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
@@ -1048,29 +1049,16 @@ export async function getWorkHandoverFieldStatus(
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
-  const { data: job, error: jobError } = await admin
-    .from('jobs')
-    .select('id')
-    .eq('id', parsed.data)
-    .eq('organization_id', auth.context.orgId)
-    .maybeSingle();
-  if (jobError) {
-    logError('Failed to load work handover field job', jobError);
-    return { success: false, error: 'work_handover_status_load_failed' };
-  }
+  const { data: job, error: jobError } = await readOrganizationJob(auth.context.orgId, parsed.data);
+  if (jobError) return { success: false, error: 'work_handover_status_load_failed' };
   if (!job) return { success: false, error: 'not_authorized' };
   if (!auth.context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await admin
-      .from('job_assignments')
-      .select('id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('job_id', parsed.data)
-      .eq('user_id', auth.context.userId)
-      .maybeSingle();
-    if (assignmentError) {
-      logError('Failed to load work handover field assignment', assignmentError);
-      return { success: false, error: 'work_handover_status_load_failed' };
-    }
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      auth.context.orgId,
+      parsed.data,
+      auth.context.userId,
+    );
+    if (assignmentError) return { success: false, error: 'work_handover_status_load_failed' };
     if (!assignment) return { success: false, error: 'not_authorized' };
   }
   const { data: handoverPackage, error } = await admin

@@ -7,7 +7,10 @@ import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 // settled page: no skeleton, fonts loaded, the clock launcher ready, and every
 // text the app derives from the wall clock replaced by a constant stand-in.
 // Replacing text keeps the layout of the stand-in constant, where a mask would
-// still let a longer weekday or month name move its neighbours.
+// still let a longer weekday or month name move its neighbours. The calendar
+// shows a week owned relative to the run day, so its range, week number and
+// day numbers get stand-ins too; that week never holds today, so no now line
+// or today mark is drawn.
 
 export const DESKTOP = { width: 1440, height: 900 } as const;
 export const PHONE = { width: 375, height: 812 } as const;
@@ -39,27 +42,48 @@ const CLOCK_TEXT: readonly (readonly [string, string])[] = [
 ];
 
 /**
+ * The labels of a calendar week that the run day moves, applied before the
+ * clock text: a whole range at once, so a week across two months or years
+ * reads like one inside a month, and a horizon of several weeks like one week.
+ */
+const CALENDAR_WEEK_TEXT: readonly (readonly [string, string])[] = [
+  [`\\b\\d{1,2}\\.(\\s(${MONTHS}))?\\s-\\s\\d{1,2}\\.\\s(${MONTHS})\\s\\d{4}`, '1. - 1. Januar 2026'],
+  ['\\b\\d{1,2}\\.\\d{1,2}\\.(\\d{2})?\\s–\\s\\d{1,2}\\.\\d{1,2}\\.\\d{2}\\b', '01.01. – 01.01.26'],
+  ['\\bKW\\s?\\d{1,2}(–\\d{1,2})?\\b', 'KW 1'],
+];
+
+/** The clock-text patterns a reference applies, in order: a calendar week's labels first. */
+export function standInPatterns(calendarWeek: boolean): readonly (readonly [string, string])[] {
+  return calendarWeek ? [...CALENDAR_WEEK_TEXT, ...CLOCK_TEXT] : CLOCK_TEXT;
+}
+
+/** The Plantafel's day header; its bare day of the month becomes the column's position. */
+const BOARD_DAY_COLUMN = '[data-board-column]';
+
+/**
  * Replaces run-specific strings (e-mail addresses, the join code) and
  * clock-derived text in the rendered page, and keeps replacing it when the
  * page re-renders. Inputs keep their element; only their shown value changes.
+ * A calendar week also replaces its range, week number and day numbers.
  */
 async function normalizeText(
   page: Page,
   replacements: readonly (readonly [string, string])[],
-  clockText: boolean,
+  calendarWeek: boolean,
 ): Promise<void> {
   await page.evaluate(
-    ({ exact, patterns, segments }) => {
+    ({ exact, patterns, dayColumn }) => {
       const compiled = patterns.map(
         ([source, replacement]) => [new RegExp(source, 'g'), replacement] as const,
       );
       // A date field shows its day, month and year in separate segments, which no date pattern sees whole.
-      const segmentStandIns: Record<string, string> = segments
-        ? { day: '01', month: '01', year: '2026' }
-        : {};
+      const segmentStandIns: Record<string, string> = { day: '01', month: '01', year: '2026' };
       const rewrite = (value: string, node: Node): string => {
         const segment = node.parentElement?.getAttribute('data-segment');
         if (segment && segmentStandIns[segment] && value.trim()) return segmentStandIns[segment];
+        const column = dayColumn ? node.parentElement?.closest(dayColumn) : null;
+        if (dayColumn && column && /^\d{1,2}$/.test(value.trim()))
+          return String([...document.querySelectorAll<Element>(dayColumn)].indexOf(column) + 1);
         let next = value;
         for (const [from, to] of exact) next = next.split(from).join(to);
         for (const [pattern, to] of compiled) next = next.replace(pattern, to);
@@ -99,7 +123,11 @@ async function normalizeText(
       observer.observe(document.body, { subtree: true, childList: true, characterData: true });
       holder.__visualReferenceObserver = observer;
     },
-    { exact: replacements, patterns: clockText ? CLOCK_TEXT : [], segments: clockText },
+    {
+      exact: replacements,
+      patterns: standInPatterns(calendarWeek),
+      dayColumn: calendarWeek ? BOARD_DAY_COLUMN : null,
+    },
   );
 }
 
@@ -163,9 +191,9 @@ export async function expectReference(
   page: Page,
   name: string,
   replacements: readonly (readonly [string, string])[],
-  options: { clockText?: boolean; mask?: readonly Locator[] } = {},
+  options: { calendarWeek?: boolean; mask?: readonly Locator[] } = {},
 ): Promise<void> {
-  await normalizeText(page, replacements, options.clockText ?? true);
+  await normalizeText(page, replacements, options.calendarWeek ?? false);
   await expect(page).toHaveScreenshot(`${name}.png`, {
     animations: 'disabled',
     caret: 'hide',

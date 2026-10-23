@@ -194,18 +194,17 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
   },
   {
     kind: 'calendar-block-correction',
-    serverCodes: ['not_responsible', 'period_closed'],
-    predicate: { module: 'lib/calendar/day-row-status.ts', exportName: 'canManageBlock' },
-    wrappers: [],
+    serverCodes: ['not_responsible'],
+    predicate: RESPONSIBILITY_PREDICATE,
+    wrappers: [
+      { module: 'lib/time-tracking/helpers.ts', exportName: 'canApproveEntries' },
+      { module: 'lib/calendar/day-row-status.ts', exportName: 'canManageBlock' },
+    ],
     actions: [{ module: CORRECTION_ACTIONS, exportName: 'submitTimeCorrection' }],
     screenedReads: [],
     props: ['canManage'],
     views: ['components/kalender/'],
-    server: {
-      kind: 'reviewed',
-      reason:
-        "canManageBlock approximates the server by role: submitTimeCorrection asks authorizeResponsibilityForTarget for another person's block, and the calendar does not read the time_approval holder yet.",
-    },
+    server: { kind: 'typescript', guards: [RESPONSIBILITY_GUARD] },
     exempt: {
       'components/kalender/calendar-time-correction-dialog.tsx':
         'Opens only for a block drag, which the day and month views start only for a block canManageBlock allows.',

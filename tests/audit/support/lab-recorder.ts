@@ -73,7 +73,8 @@ function followBackendLog(): BackendLog {
       await expect
         .poll(
           async () => {
-            await fetch(`${gateway}/rest/v1/?${token}`).catch(() => null);
+            // A failed marker request fails the step: the count needs both markers.
+            await fetch(`${gateway}/rest/v1/?${token}`);
             return lines.findIndex((line) => line.includes(token));
           },
           { message: 'The gateway log follower sees the marker request', timeout: 20_000, intervals: [500] },
@@ -140,6 +141,7 @@ export async function openLabSession(input: {
     backend,
     dispose: async () => {
       backend.stop();
+      // best-effort: a closed page has detached its session already; dispose closes the context either way.
       await cdp.detach().catch(() => undefined);
       await dispose();
     },
@@ -202,12 +204,9 @@ function delta(before: number, after: number): number {
   return Math.round(after >= before ? after - before : after);
 }
 
+/** A step runs inside a recorded run; a missing manifest fails the step instead of recording no build. */
 function currentBuildId(): string | null {
-  try {
-    return readRunManifest(currentRunKey()).buildId;
-  } catch {
-    return null;
-  }
+  return readRunManifest(currentRunKey()).buildId;
 }
 
 /**
@@ -241,7 +240,7 @@ export async function recordLabStep(
   const startMark = await backend.mark(`${stepId}-start-${Date.now()}`);
   const engineBefore = await engineCounts(cdp);
   const echoesBefore = page.url() === 'about:blank' ? 0 : await realtimeRefreshes(page);
-  await resetLabProbe(page).catch(() => undefined);
+  await resetLabProbe(page);
   network.reset();
   let documents = 0;
   const onDocument = (): void => {
@@ -263,6 +262,10 @@ export async function recordLabStep(
   const engineAfter = await engineCounts(cdp);
   const probe: LabProbeCounts | null = await page.evaluate(() => window.__werkflowLab?.read() ?? null);
   if (!probe) throw new Error('The lab probe is not installed on this document.');
+  if (probe.unobserved.length)
+    throw new Error(
+      `${stepId}: measurement missing, the browser reports no ${probe.unobserved.join(', ')} entries.`,
+    );
   const traffic = network.read();
   const echoRenders = (await realtimeRefreshes(page)) - (documents ? 0 : echoesBefore);
   const endMark = await backend.mark(`${stepId}-end-${Date.now()}`);
@@ -318,7 +321,7 @@ export async function recordLabStep(
   for (const request of backendRequests) backendByPath[request] = (backendByPath[request] ?? 0) + 1;
   appendFileSync(
     resolve(directory, LAB_DIAGNOSIS),
-    `${JSON.stringify({ stepId, routeRenders: traffic.routeRenderRequests, sequence: traffic.sequence, longTaskMs: Math.round(probe.longTaskMs), mainThreadMs: Math.round((engineAfter.taskSeconds - engineBefore.taskSeconds) * 1000), backendByPath })}\n`,
+    `${JSON.stringify({ stepId, routeRenders: traffic.routeRenderRequests, sequence: traffic.sequence, longTaskMs: Math.round(probe.longTaskMs), mainThreadMs: Math.round((engineAfter.taskSeconds - engineBefore.taskSeconds) * 1000), backendByPath, missingRows: traffic.missingRows })}\n`,
   );
   test.info().annotations.push({
     type: 'lab-step',

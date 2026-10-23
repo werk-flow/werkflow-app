@@ -64,6 +64,8 @@ const AUDIT_DATE_WINDOWS = {
   // Thirteen days: the whole week from the first Monday on or after +152 (ownedBerlinWeekAtOffset).
   'performance-calendar': [{ from: 152, to: 164 }],
   'p1-24a': [{ from: 131, to: 140 }],
+  // Thirteen days: the populated week of the visual calendar references, Monday on or after +165.
+  'visual-references': [{ from: 165, to: 177 }],
 } as const satisfies Record<string, readonly OffsetRange[]>;
 
 export type AuditSpecName = keyof typeof AUDIT_DATE_WINDOWS;

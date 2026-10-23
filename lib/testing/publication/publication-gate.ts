@@ -14,7 +14,8 @@ import { contentDigest } from '../evidence/source-content';
  * every changed file the push adds or modifies. A pushed product file that a
  * wall-clock group measures also needs a passing run of that group on its
  * current content. The pre-push hook
- * (.githooks/pre-push) runs scripts/check-publication-gate.ts, which reads the
+ * (.githooks/pre-push, through scripts/pre-push.ts) runs
+ * scripts/check-publication-gate.ts, which reads the
  * evidence and calls `publicationGateProblems`.
  */
 export const REVIEW_RECORD_DIRECTORY = '.agent-logs/review';

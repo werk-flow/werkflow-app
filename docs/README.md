@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-17; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-23; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
@@ -135,6 +135,7 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 6. **A closed record is history.** A slice record or a cross-slice record is read again only when someone is sent there. A bare "see the record" pointer is not a home: the living doc states the substance. `docs:check` rejects a closed plan record without a `## Durable homes` section; records closed before the rule are exempt.
 7. **Sibling repositories.** `docs:check` needs the sibling clones of the [workspace setup](../../werkflow-business/docs/workflow.md#prepare-a-new-machine). It reads them and never edits them. A missing clone fails the check once, with the number of links it left unchecked.
 8. **Decision record growth.** An accepted decision record changes only by a section appended at its end under the heading `## Amendment YYYY-MM-DD: <title>`. `docs:check` fails while the committed or the published text of a record is not a prefix of its current text.
+9. **Backlog audit.** A row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) describes code that keeps changing, and no check sees a gap close. A release, and a change that lands a mechanism, checks every row against the code it names and deletes or corrects a stale one.
 
 `docs:check` cannot judge meaning. Whether a sentence is derivable from code, whether a paraphrase gives a fact a second home, and whether a living doc carries history are review judgments under virtue 6 in `AGENTS.md`.
 

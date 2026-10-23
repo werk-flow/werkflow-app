@@ -7,6 +7,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
@@ -79,27 +80,14 @@ async function authorizeTarget(
   // A failed read is never a refusal: the caller sees that the check could not run.
   const loadFailed: ActionResult = { success: false, error: 'load_failed' };
   if (target.targetType === 'job') {
-    const { data: job, error: jobError } = await loggedRead(
-      'authorizeTarget: jobs read failed',
-      admin
-        .from('jobs')
-        .select('id')
-        .eq('id', target.targetId)
-        .eq('organization_id', context.context.orgId)
-        .maybeSingle(),
-    );
+    const { data: job, error: jobError } = await readOrganizationJob(context.context.orgId, target.targetId);
     if (jobError) return loadFailed;
     if (!job) return refused;
     if (context.context.isManagerOrAbove) return allowed;
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'authorizeTarget: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', context.context.orgId)
-        .eq('job_id', target.targetId)
-        .eq('user_id', context.context.userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      context.context.orgId,
+      target.targetId,
+      context.context.userId,
     );
     if (assignmentError) return loadFailed;
     return assignment ? allowed : refused;

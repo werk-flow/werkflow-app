@@ -7,6 +7,7 @@ import {
 import {
   confirmed,
   expectBannerAfter,
+  listEntry,
   listPager,
   selectFromSearchable,
   SHARED_COPY,
@@ -204,14 +205,9 @@ export function inventoryItemPager(page: Page): Locator {
   return listPager(page, ITEM_LIST_COPY.pager);
 }
 
-/** The item row whose name cell shows exactly this name. */
+/** The item whose name shows exactly this name: its table row, or its card on a phone. */
 export function inventoryItemRow(page: Page, name: string): Locator {
-  return confirmed(
-    page
-      .getByRole('main')
-      .getByRole('row')
-      .filter({ has: page.getByText(name, { exact: true }) }),
-  );
+  return listEntry(page.getByRole('main'), { has: page.getByText(name, { exact: true }) });
 }
 
 export function inventoryItemCreatedMessage(page: Page): Locator {

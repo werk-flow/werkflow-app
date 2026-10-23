@@ -25,20 +25,27 @@ export type DialogOpener = {
   /** The viewport the trigger exists at, when it is not the desktop (a phone-only filter button). */
   viewport?: { width: number; height: number };
 } & (
-  | { opensOn?: undefined }
   | {
       /**
-       * The trigger lives in a layout that only the desktop renders (a table
-       * row's menu, the board, the day timeline). At a narrower width the
+       * The trigger is on screen at every audited width; where the phone
+       * renders another layout (a card's menu, the day list, the menu sheet),
+       * the opener drives that path, as a phone user does.
+       */
+      opensOn?: undefined;
+      phoneUse?: undefined;
+    }
+  | {
+      /**
+       * The trigger lives in a layout that only the desktop renders (the
+       * board's toolbar, a drag on the day timeline). At a narrower width the
        * dialog opens on the desktop and the window then narrows.
        */
       opensOn: 'desktop';
       /**
-       * How a phone user reaches the same dialog (a card menu, the day list),
-       * or why a phone user does not need it. Its own opener is still to write
-       * (docs/technical/enforcement-ladder-backlog.md); a dialog no phone path
-       * reaches that a phone user needs is a product defect.
+       * Why a phone user does not need this dialog by design. A dialog that a
+       * phone user needs gets an opener of its phone path instead; when the
+       * product offers no such path, that is a product defect.
        */
-      phonePath: string;
+      phoneUse: { kind: 'none'; reason: string };
     }
 );

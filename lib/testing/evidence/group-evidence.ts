@@ -95,8 +95,21 @@ export function changedInputs(previous: InputSnapshot | undefined, current: Inpu
   return changed;
 }
 
-function isWithin(file: string, prefix: string): boolean {
-  return file === prefix || file.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`);
+/**
+ * Whether a file is one of the prefixes or lies under one: `lib/x` and `lib/x/` both own
+ * `lib/x/y.ts`, never `lib/xy.ts`. It looks up the file and each of its folders, so a planner
+ * with thousands of files and prefixes does not compare every pair (until 2026-10-23 that
+ * comparison was 40 s of every `bun run test:plan`).
+ */
+function prefixMatcher(prefixes: readonly string[]): (file: string) => boolean {
+  const exact = new Set(prefixes);
+  const folders = new Set(prefixes.map((prefix) => (prefix.endsWith('/') ? prefix.slice(0, -1) : prefix)));
+  return (file) => {
+    if (exact.has(file)) return true;
+    for (let slash = file.indexOf('/'); slash >= 0; slash = file.indexOf('/', slash + 1))
+      if (folders.has(file.slice(0, slash))) return true;
+    return false;
+  };
 }
 
 /** An unresolved local or computed import requires all repository inputs. */
@@ -248,20 +261,15 @@ export function groupInputFiles(input: {
   graph: ReadonlyMap<string, readonly string[]>;
 }): string[] {
   const selected = new Set<string>();
-  const declared = [
+  const declared = prefixMatcher([
     ...input.groups.flatMap((group) => [...group.sourcePrefixes, ...group.files]),
     ...IMPORT_QUALIFIED_PREFIXES,
-  ];
+  ]);
+  const ownGroup = prefixMatcher(input.group.sourcePrefixes);
   for (const file of input.files) {
-    const owned =
-      declared.some((prefix) => isWithin(file, prefix)) && !FRAMEWORK_LOADED_HELPERS.includes(file);
+    const owned = declared(file) && !FRAMEWORK_LOADED_HELPERS.includes(file);
     // A new or unowned input is global until somebody declares and reviews its ownership.
-    if (
-      !owned ||
-      input.group.files.includes(file) ||
-      input.group.sourcePrefixes.some((prefix) => isWithin(file, prefix))
-    )
-      selected.add(file);
+    if (!owned || input.group.files.includes(file) || ownGroup(file)) selected.add(file);
   }
   // Global entries can import feature-owned code too. Selection is not visitation:
   // an already-selected shared module must still contribute its own dependencies.

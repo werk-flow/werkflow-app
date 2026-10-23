@@ -30,7 +30,9 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
         expect(names).toEqual(
           path === 'lib/data/cached.ts'
             ? ['getAuthenticatedUser', 'getCachedMemberships', 'getCachedPrestartMemberships']
-            : ['loadResponsibilityRuntimeState'],
+            : path === 'lib/jobs/job-access-reads.ts'
+              ? ['readOrganizationJob', 'readJobAssignmentOfUser']
+              : ['loadResponsibilityRuntimeState'],
         );
         if (path === 'lib/responsibilities/server.ts')
           expect(source).toContain("{ outsideRequest: 'fresh' }");
@@ -45,5 +47,9 @@ test('read-request scopes stay confined to the reviewed GET handlers and identit
     'app/api/customer-page/route.ts',
     'app/api/time-tracking-state/route.ts',
   ]);
-  expect(readerOwners.sort()).toEqual(['lib/data/cached.ts', 'lib/responsibilities/server.ts']);
+  expect(readerOwners.sort()).toEqual([
+    'lib/data/cached.ts',
+    'lib/jobs/job-access-reads.ts',
+    'lib/responsibilities/server.ts',
+  ]);
 });

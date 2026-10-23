@@ -6,7 +6,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "f38feaa248341c8210a8676130b94e49b6b4b586d1e41ce2c01316a80a719d39",
+        "measurementDigest": "257e17552a7a1d0260694cfe9032db61607d26f0e0e10ae46edfdee6ac7e6a37",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -16,13 +16,13 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 65, "tolerance": 1 },
+        "requests": { "reference": 55, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 94, "tolerance": 1 },
-        "componentRenders": { "reference": 11247, "tolerance": 451 }
+        "backendRequests": { "reference": 90, "tolerance": 1 },
+        "componentRenders": { "reference": 10137, "tolerance": 451 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -37,12 +37,6 @@
           "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 0, "tolerance": 0 }
         },
-        "direct:/auth/v1/user": {
-          "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 3071, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 2336, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
         "direct:/rest/v1/organization_members": {
           "requests": { "reference": 3, "tolerance": 0 },
           "encodedBytes": { "reference": 1839, "tolerance": { "relative": 0.01, "absolute": 512 } },
@@ -51,8 +45,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 28215, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 540501, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 27418, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 521021, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 50, "tolerance": 1 }
         },
         "font": {
@@ -69,13 +63,13 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 17111, "tolerance": { "relative": 0.1295, "absolute": 512 } },
-          "decodedBytes": { "reference": 94584, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 13419, "tolerance": { "relative": 0.1295, "absolute": 512 } },
+          "decodedBytes": { "reference": 75698, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 45, "tolerance": 1 },
-          "encodedBytes": { "reference": 706533, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 39, "tolerance": 1 },
+          "encodedBytes": { "reference": 614373, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -222,6 +216,103 @@
           },
           "runKeys": ["2026-10-22T152820321Z-4c45dc"],
           "reason": "The field worker's 44 px targets (components/ui/field-worker-targets.ts) add their class strings to every Button, tab and list row, so the server-rendered document carries those classes."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "f38feaa248341c8210a8676130b94e49b6b4b586d1e41ce2c01316a80a719d39",
+          "toDigest": "257e17552a7a1d0260694cfe9032db61607d26f0e0e10ae46edfdee6ac7e6a37",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "document:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 28215, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 540501, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 50, "tolerance": 1 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 27418, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 521021, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 50, "tolerance": 1 }
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 17111, "tolerance": { "relative": 0.1295, "absolute": 512 } },
+            "decodedBytes": { "reference": 94584, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 13419, "tolerance": { "relative": 0.1295, "absolute": 512 } },
+            "decodedBytes": { "reference": 75698, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 45, "tolerance": 1 },
+            "encodedBytes": { "reference": 706533, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 39, "tolerance": 1 },
+            "encodedBytes": { "reference": 614373, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2 bundles the same client code in fewer, smaller script files (office cold start 45 to 39 files); server reads (apart from the S7 cuts) and data rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc, and the step readiness assertions pass."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "direct:/auth/v1/user",
+          "from": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 3071, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 2336, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": null,
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "S7: the membership refresh takes the user id from the stored session instead of an Auth round trip (row-level security checks the token on the membership read), and the shell no longer reads memberships on mount: the layout render supplied them and the join catch-up reads them again."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 65, "tolerance": 1 },
+          "to": { "reference": 55, "tolerance": 1 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 94, "tolerance": 1 },
+          "to": { "reference": 90, "tolerance": 1 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "componentRenders",
+          "from": { "reference": 11247, "tolerance": 451 },
+          "to": { "reference": 10137, "tolerance": 451 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
         }
       ]
     },
@@ -230,7 +321,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "8efa557c3c87804c76f240ff5876e2a16ed6a499dd0838f3b0517aca750d6f01",
+        "measurementDigest": "117e324a6da510576e3c50c8241b3f6b7a3001e5e3326851eb073750938bb5e9",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -240,12 +331,12 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 7, "tolerance": 0 },
+        "requests": { "reference": 5, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
-        "backendRequests": { "reference": 75, "tolerance": 1 }
+        "backendRequests": { "reference": 72, "tolerance": 1 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -280,7 +371,7 @@
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9328, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8488, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -370,6 +461,46 @@
           "fromDigest": "56e6d9808b3fd8ce969d76e397f04bc721da4463d3eac57332ed117b3d55dac5",
           "toDigest": "8efa557c3c87804c76f240ff5876e2a16ed6a499dd0838f3b0517aca750d6f01",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "8efa557c3c87804c76f240ff5876e2a16ed6a499dd0838f3b0517aca750d6f01",
+          "toDigest": "117e324a6da510576e3c50c8241b3f6b7a3001e5e3326851eb073750938bb5e9",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9328, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8488, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2 bundles the same client code in fewer, smaller script files (office cold start 45 to 39 files); server reads (apart from the S7 cuts) and data rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc, and the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 7, "tolerance": 0 },
+          "to": { "reference": 5, "tolerance": 0 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 75, "tolerance": 1 },
+          "to": { "reference": 72, "tolerance": 1 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
         }
       ]
     },
@@ -378,7 +509,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "1e5b28a1cb3bb38f0b574ee5fc2f4aed8950f91e89cd683c6a803a4872a04b06",
+        "measurementDigest": "746d1630fcff5cc3a89cf280b9d7ef88b69c3f16737796242a213f8b285fc295",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -446,6 +577,12 @@
           "fromDigest": "5c92562aa0a1fd4ce4e373192a3c1282881d33a4afff5fd75aad9bdd77751526",
           "toDigest": "1e5b28a1cb3bb38f0b574ee5fc2f4aed8950f91e89cd683c6a803a4872a04b06",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "1e5b28a1cb3bb38f0b574ee5fc2f4aed8950f91e89cd683c6a803a4872a04b06",
+          "toDigest": "746d1630fcff5cc3a89cf280b9d7ef88b69c3f16737796242a213f8b285fc295",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
         }
       ]
     },
@@ -454,7 +591,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "983821fefceec86b359302cb9ca7f06c69bf4d378ac7dd768190c0e5dc4d7a97",
+        "measurementDigest": "1407195245b5be549b218f1f190f940c510b82bc1877f5a9c3dad214ffcb6566",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -475,8 +612,8 @@
       "payloads": {
         "route:/kunden": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 3953, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 9092, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 2597, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 5790, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -536,6 +673,30 @@
           "fromDigest": "d2f614aeca8d56fe1bb85d5194a91efa22a62477ed37685c35f3c5aba80964c8",
           "toDigest": "983821fefceec86b359302cb9ca7f06c69bf4d378ac7dd768190c0e5dc4d7a97",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "983821fefceec86b359302cb9ca7f06c69bf4d378ac7dd768190c0e5dc4d7a97",
+          "toDigest": "1407195245b5be549b218f1f190f940c510b82bc1877f5a9c3dad214ffcb6566",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/kunden",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 3953, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 9092, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 2597, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 5790, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
         }
       ]
     },
@@ -544,7 +705,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "698ce2650bdb399b0401a87552205c5793f3d7c88f0c3ec892c845bfac4d67ab",
+        "measurementDigest": "f2a616890b9781184f63af9574c198472f2eb5312535ddcc58e66c1c4769c565",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -564,8 +725,8 @@
       "payloads": {
         "action:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 18461, "tolerance": { "relative": 0.1394, "absolute": 512 } },
-          "decodedBytes": { "reference": 94518, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 14816, "tolerance": { "relative": 0.1394, "absolute": 512 } },
+          "decodedBytes": { "reference": 75633, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/attention-counts": {
@@ -794,6 +955,30 @@
           },
           "runKeys": ["2026-10-22T152820321Z-4c45dc"],
           "reason": "The step now reads only the active jobs after the job insert (56 bytes); the clock-state reads of the Realtime join catch-up no longer land in the step because LAB-O3 settles the live shell before it opens the dialog."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "698ce2650bdb399b0401a87552205c5793f3d7c88f0c3ec892c845bfac4d67ab",
+          "toDigest": "f2a616890b9781184f63af9574c198472f2eb5312535ddcc58e66c1c4769c565",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 18461, "tolerance": { "relative": 0.1394, "absolute": 512 } },
+            "decodedBytes": { "reference": 94518, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 14816, "tolerance": { "relative": 0.1394, "absolute": 512 } },
+            "decodedBytes": { "reference": 75633, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
         }
       ]
     },
@@ -802,7 +987,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "e3af776cfed284780ca8e13383ca048120d5a60f6c4dfb23210682376f64ad15",
+        "measurementDigest": "8e4dc52b7ac6d1c6cd48f017cef6955ad4d4551db0d9754db7b2c4f3c7700def",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -878,6 +1063,12 @@
           "to": { "reference": 2259, "tolerance": 107 },
           "runKeys": ["2026-10-22T152820321Z-4c45dc"],
           "reason": null
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "e3af776cfed284780ca8e13383ca048120d5a60f6c4dfb23210682376f64ad15",
+          "toDigest": "8e4dc52b7ac6d1c6cd48f017cef6955ad4d4551db0d9754db7b2c4f3c7700def",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
         }
       ]
     },
@@ -886,7 +1077,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "3bb90f1cd704248e04843cd5e8de6d8d991621acdc3f6f4f9bf6a0945681ab11",
+        "measurementDigest": "096239834041aa5430530433fcfc9534acbb60251c491b141fce2d890fd6d0e1",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1054,6 +1245,12 @@
           "fromDigest": "8dfd9e6d8ca38020b167991ad7035fcf1b48bccae3b762164116ed9f050e5824",
           "toDigest": "3bb90f1cd704248e04843cd5e8de6d8d991621acdc3f6f4f9bf6a0945681ab11",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "3bb90f1cd704248e04843cd5e8de6d8d991621acdc3f6f4f9bf6a0945681ab11",
+          "toDigest": "096239834041aa5430530433fcfc9534acbb60251c491b141fce2d890fd6d0e1",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
         }
       ]
     },
@@ -1062,7 +1259,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "1448873023a3b5d1380838709fe1dcb8fe2fd2a33aedd11f44a984f2c9eabdc9",
+        "measurementDigest": "4d514fa54231e6e074036d474ba22b6a529a9b1f5c164d6ecedb6f7942cfd027",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1180,6 +1377,12 @@
           "fromDigest": "1565ad50d1ad24e4d3d212ac9a897523106a1f3c902379055c06f4372388dc6e",
           "toDigest": "1448873023a3b5d1380838709fe1dcb8fe2fd2a33aedd11f44a984f2c9eabdc9",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "1448873023a3b5d1380838709fe1dcb8fe2fd2a33aedd11f44a984f2c9eabdc9",
+          "toDigest": "4d514fa54231e6e074036d474ba22b6a529a9b1f5c164d6ecedb6f7942cfd027",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
         }
       ]
     },
@@ -1188,7 +1391,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "27443d306c7cae049224a539632deefa1006b7582c3eb3beee34ab53e82cbec7",
+        "measurementDigest": "d27a58762a1f6f675c4b30e7d35dff497cfef88f2d16ed0c5262cd5a4050881c",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1198,7 +1401,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 13, "tolerance": 1 },
+        "requests": { "reference": 8, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -1232,13 +1435,13 @@
         },
         "route:/aufgaben": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 2266, "tolerance": { "relative": 0.9876, "absolute": 512 } },
-          "decodedBytes": { "reference": 5760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 2078, "tolerance": { "relative": 0.9876, "absolute": 512 } },
+          "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 33624, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 29428, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -1328,6 +1531,56 @@
           "fromDigest": "308e23ec12b99abc494fee7a14f187e65db722fc8739fd361d61134381b9a0de",
           "toDigest": "27443d306c7cae049224a539632deefa1006b7582c3eb3beee34ab53e82cbec7",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "27443d306c7cae049224a539632deefa1006b7582c3eb3beee34ab53e82cbec7",
+          "toDigest": "d27a58762a1f6f675c4b30e7d35dff497cfef88f2d16ed0c5262cd5a4050881c",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/aufgaben",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 2266, "tolerance": { "relative": 0.9876, "absolute": 512 } },
+            "decodedBytes": { "reference": 5760, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 2078, "tolerance": { "relative": 0.9876, "absolute": 512 } },
+            "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 33624, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 29428, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2 bundles the same client code in fewer, smaller script files (office cold start 45 to 39 files); server reads (apart from the S7 cuts) and data rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc, and the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 13, "tolerance": 1 },
+          "to": { "reference": 8, "tolerance": 1 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
         }
       ]
     },
@@ -1336,7 +1589,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "57137c3be4ed0ab99db952d4569b63c9d949e0e203cd8dc6b5e92a3e3a2f3548",
+        "measurementDigest": "ceef21605c030f2ce11dcfda676bccd651c3ac248d8ba9e2cdf1842ac1406c0c",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1346,7 +1599,7 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 3, "tolerance": 0 },
+        "requests": { "reference": 2, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
@@ -1357,13 +1610,13 @@
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 4497, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 12623, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 4187, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 11500, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 10824, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 1, "tolerance": 0 },
+          "encodedBytes": { "reference": 8374, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -1430,6 +1683,56 @@
           "fromDigest": "5b8ac564f17010dfdbdaec0ca86f31e30fb1998e51de0cd9a4daaadcde8c0089",
           "toDigest": "57137c3be4ed0ab99db952d4569b63c9d949e0e203cd8dc6b5e92a3e3a2f3548",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "57137c3be4ed0ab99db952d4569b63c9d949e0e203cd8dc6b5e92a3e3a2f3548",
+          "toDigest": "ceef21605c030f2ce11dcfda676bccd651c3ac248d8ba9e2cdf1842ac1406c0c",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/einstellungen/mitarbeiter",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 4497, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 12623, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 4187, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 11500, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path (apart from the S7 cuts of Auth, membership and job reads), request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 2, "tolerance": 0 },
+            "encodedBytes": { "reference": 10824, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8374, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": "next 16.3.8 to 16.4.2 bundles the same client code in fewer, smaller script files (office cold start 45 to 39 files); server reads (apart from the S7 cuts) and data rows equal the pre-upgrade run 2026-10-23T001410261Z-93affc, and the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 3, "tolerance": 0 },
+          "to": { "reference": 2, "tolerance": 0 },
+          "runKeys": ["2026-10-23T085001267Z-14feb3"],
+          "reason": null
         }
       ]
     },
@@ -1438,7 +1741,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "9995ef32e18f85f53ac5d955f5a6b7c7be267ad94b322756139cd55495216840",
+        "measurementDigest": "d806177f10b3005832291c14133f882276354f72ff6ddbf77d42e132f15a50ac",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1448,12 +1751,12 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 76, "tolerance": 1 },
+        "requests": { "reference": 59, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 68, "tolerance": 1 }
+        "backendRequests": { "reference": 64, "tolerance": 1 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -1468,12 +1771,6 @@
           "decodedBytes": { "reference": 1530, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 0, "tolerance": 0 }
         },
-        "direct:/auth/v1/user": {
-          "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 3088, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 2354, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": null
-        },
         "direct:/rest/v1/organization_members": {
           "requests": { "reference": 3, "tolerance": 0 },
           "encodedBytes": { "reference": 1844, "tolerance": { "relative": 0.01, "absolute": 512 } },
@@ -1482,8 +1779,8 @@
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 18117, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 128554, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 17368, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 110275, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 1, "tolerance": 0 }
         },
         "font": {
@@ -1506,13 +1803,13 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 13100, "tolerance": { "relative": 0.3965, "absolute": 512 } },
-          "decodedBytes": { "reference": 45394, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 5167, "tolerance": { "relative": 0.3965, "absolute": 512 } },
+          "decodedBytes": { "reference": 27699, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
-          "requests": { "reference": 51, "tolerance": 1 },
-          "encodedBytes": { "reference": 812343, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 43, "tolerance": 1 },
+          "encodedBytes": { "reference": 700150, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1656,6 +1953,95 @@
           },
           "runKeys": ["2026-10-22T152820321Z-ddebd8"],
           "reason": "The field worker's 44 px targets (components/ui/field-worker-targets.ts) add their class strings to every Button, tab and list row, so the server-rendered document carries those classes."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "9995ef32e18f85f53ac5d955f5a6b7c7be267ad94b322756139cd55495216840",
+          "toDigest": "d806177f10b3005832291c14133f882276354f72ff6ddbf77d42e132f15a50ac",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "document:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 18117, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 128554, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 17368, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 110275, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 13100, "tolerance": { "relative": 0.3965, "absolute": 512 } },
+            "decodedBytes": { "reference": 45394, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 5167, "tolerance": { "relative": 0.3965, "absolute": 512 } },
+            "decodedBytes": { "reference": 27699, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 51, "tolerance": 1 },
+            "encodedBytes": { "reference": 812343, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 700150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2 bundles the same client code in fewer script files (cold start 51 to 43); server reads, request sequence and data rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79, and the step readiness assertions pass."
+        },
+        {
+          "kind": "shape-accept",
+          "target": "direct:/auth/v1/user",
+          "from": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 3088, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 2354, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": null,
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "S7: the membership refresh takes the user id from the stored session instead of an Auth round trip (row-level security checks the token on the membership read), and the shell no longer reads memberships on mount: the layout render supplied them and the join catch-up reads them again."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 76, "tolerance": 1 },
+          "to": { "reference": 59, "tolerance": 1 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 68, "tolerance": 1 },
+          "to": { "reference": 64, "tolerance": 1 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
         }
       ]
     },
@@ -1664,7 +2050,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "7d123e394608940b1992f50174f876ac15dac20e72fa1b7ca951b94476b31fbe",
+        "measurementDigest": "b961c0108238666438a8e5ec02e174859c4b13139ed0afdf699822acfb6b6566",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1674,12 +2060,12 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 2, "tolerance": 0 },
+        "requests": { "reference": 1, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 46, "tolerance": 1 },
+        "backendRequests": { "reference": 31, "tolerance": 1 },
         "componentRenders": { "reference": 512, "tolerance": 10 }
       },
       "payloads": {
@@ -1691,8 +2077,8 @@
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1076, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 31552, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7242, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
@@ -1758,6 +2144,46 @@
           "fromDigest": "835c02b82e983531e6c1ceeb1f4093212311ffa798dfef3974fd6c4f0057371d",
           "toDigest": "7d123e394608940b1992f50174f876ac15dac20e72fa1b7ca951b94476b31fbe",
           "reason": "lab-recorder.ts only adds a precondition: a step refuses to start while a dialog holds a live read (data-live-read-held). A step that starts counts exactly what it counted before."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "7d123e394608940b1992f50174f876ac15dac20e72fa1b7ca951b94476b31fbe",
+          "toDigest": "b961c0108238666438a8e5ec02e174859c4b13139ed0afdf699822acfb6b6566",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "route:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 1076, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 31552, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7242, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 2, "tolerance": 0 },
+          "to": { "reference": 1, "tolerance": 0 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 46, "tolerance": 1 },
+          "to": { "reference": 31, "tolerance": 1 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
         }
       ]
     },
@@ -1766,7 +2192,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "ec1730a45ac603d24b5f7e3d5106a2bf1c3708cb470a694e1a3b514b287f5c76",
+        "measurementDigest": "cd6efde4a24d236dcc8719e9e3901048426e1596891ab276add8527ff46c385a",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1780,13 +2206,13 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 1, "tolerance": 0 },
-        "backendRequests": { "reference": 68, "tolerance": 2 }
+        "backendRequests": { "reference": 52, "tolerance": 2 }
       },
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 7754, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 76079, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 15567, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 47535, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "background:work-lifecycle-snapshot": {
@@ -1919,6 +2345,38 @@
           "to": null,
           "runKeys": ["2026-10-22T152820321Z-ddebd8"],
           "reason": "The own save's Realtime echo no longer re-renders the route (lib/realtime/own-writes.ts): the toggle's response already rendered it, and job_instruction_items is now transaction-stamped."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "ec1730a45ac603d24b5f7e3d5106a2bf1c3708cb470a694e1a3b514b287f5c76",
+          "toDigest": "cd6efde4a24d236dcc8719e9e3901048426e1596891ab276add8527ff46c385a",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 7754, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 76079, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 15567, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 47535, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 68, "tolerance": 2 },
+          "to": { "reference": 52, "tolerance": 2 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
         }
       ]
     },
@@ -1927,7 +2385,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "4d4f65cd7bb8c92920fbebd9d0a1a65bc4e5a6cb6e0560c488295922df3e37cc",
+        "measurementDigest": "81b7a222a977255fba812aebd028295400a45007461807c7820a85cdf61e4b6c",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -1937,18 +2395,18 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 3, "tolerance": 0 },
+        "requests": { "reference": 1, "tolerance": 0 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
-        "backendRequests": { "reference": 68, "tolerance": 1 }
+        "backendRequests": { "reference": 53, "tolerance": 1 }
       },
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 23142, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 78594, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 16682, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 50044, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "prefetch:/auftraege": {
@@ -2019,6 +2477,46 @@
           "fromDigest": "91f1fe032a1289d0d33a946bc6392879edb84c9c8d0ee76fe6e933d90d785694",
           "toDigest": "4d4f65cd7bb8c92920fbebd9d0a1a65bc4e5a6cb6e0560c488295922df3e37cc",
           "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "4d4f65cd7bb8c92920fbebd9d0a1a65bc4e5a6cb6e0560c488295922df3e37cc",
+          "toDigest": "81b7a222a977255fba812aebd028295400a45007461807c7820a85cdf61e4b6c",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/auftraege/[jobNumber]",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 23142, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 78594, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 16682, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 50044, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
+        },
+        {
+          "kind": "ratchet",
+          "target": "requests",
+          "from": { "reference": 3, "tolerance": 0 },
+          "to": { "reference": 1, "tolerance": 0 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
+        },
+        {
+          "kind": "ratchet",
+          "target": "backendRequests",
+          "from": { "reference": 68, "tolerance": 1 },
+          "to": { "reference": 53, "tolerance": 1 },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": null
         }
       ]
     },
@@ -2027,7 +2525,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "b6dfe842c9b0b6e634c3b2ac20edc674d0b01787e5f86287d6e8b2950c5cc0c6",
+        "measurementDigest": "e0726f7677d62ca0b7a476bcd8f7d57ac616743f582e6a4748b660730fabb6b2",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -2045,8 +2543,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 10835, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 41164, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9230, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26204, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -2115,6 +2613,30 @@
           "fromDigest": "210d2690647679f657ce1c43ae2718955d89b77e3c7cb723f4a3677ad8a8e64d",
           "toDigest": "b6dfe842c9b0b6e634c3b2ac20edc674d0b01787e5f86287d6e8b2950c5cc0c6",
           "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "b6dfe842c9b0b6e634c3b2ac20edc674d0b01787e5f86287d6e8b2950c5cc0c6",
+          "toDigest": "e0726f7677d62ca0b7a476bcd8f7d57ac616743f582e6a4748b660730fabb6b2",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10835, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 41164, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 9230, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 26204, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
         }
       ]
     },
@@ -2123,7 +2645,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "6ed7ce7fc150206af8905f6df067549d55b0c4a769f27032570baaf23056ae57",
+        "measurementDigest": "91831eb13e3552ac72e3a568058040ed15c2763840d1e57aa5691c2a5bc065c7",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -2191,6 +2713,12 @@
           "fromDigest": "e8743deb39f1cce253993ec6704c1124a6fff1932b73851afc98fe02482cf17c",
           "toDigest": "6ed7ce7fc150206af8905f6df067549d55b0c4a769f27032570baaf23056ae57",
           "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "6ed7ce7fc150206af8905f6df067549d55b0c4a769f27032570baaf23056ae57",
+          "toDigest": "91831eb13e3552ac72e3a568058040ed15c2763840d1e57aa5691c2a5bc065c7",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
         }
       ]
     },
@@ -2199,7 +2727,7 @@
       "stepVersion": 1,
       "labMeasurementVersion": 1,
       "context": {
-        "measurementDigest": "7d1be6659c7dd15e5332a1f85a9e255b60282ea10e8240bc296dc9f2df71b811",
+        "measurementDigest": "f7f759d21b99475e66cd30dda708ca4a4d2e4c0b3e7f8ced70def791291a14c3",
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
@@ -2220,8 +2748,8 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 10833, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 41163, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 5155, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 26203, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -2293,6 +2821,30 @@
           "fromDigest": "59d23c068e791f846b8f5d70cbde15493f1aed61ae4f6468439e6c9ff3963765",
           "toDigest": "7d1be6659c7dd15e5332a1f85a9e255b60282ea10e8240bc296dc9f2df71b811",
           "reason": "The test now settles the live shell before it opens its dialog, and lab-recorder.ts refuses a step that starts on a held live read. Trigger, usable result and window are unchanged; only the Realtime join catch-up, which the calibration already excluded as unstable, can no longer land in the step."
+        },
+        {
+          "kind": "carry-over",
+          "fromDigest": "7d1be6659c7dd15e5332a1f85a9e255b60282ea10e8240bc296dc9f2df71b811",
+          "toDigest": "f7f759d21b99475e66cd30dda708ca4a4d2e4c0b3e7f8ced70def791291a14c3",
+          "reason": "Package S edits the lab digest inputs without changing what a step counts when the measurement succeeds: lab-network.ts names a body it could not read (rows stay null, as before) and counts router prefetches beside the gated request total instead of inside it (a step that prefetched records fewer requests; the ratchet lowers that reference from a passing run); lab-probe.ts reports an unsupported entry type as missing instead of zero (Chromium supports both); lab-recorder.ts fails a step on a failed marker request, a missing run manifest or a missing measurement instead of recording a constant; performance-steps.ts settleLiveShell also waits until no live read or route refresh is queued or running. Trigger, usable result and window are unchanged."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "action:/dashboard",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 10833, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 41163, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 5155, "tolerance": { "relative": 1, "absolute": 512 } },
+            "decodedBytes": { "reference": 26203, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": null
+          },
+          "runKeys": ["2026-10-23T084528911Z-c7526e"],
+          "reason": "next 16.3.8 to 16.4.2: React Flight now writes each chunk path once and client-reference rows point to it instead of repeating the path list (probe of the /auftraege refresh: 26.2 KB, about 40 KB with the paths inlined; layout props and organization data still present). Server reads per path, request sequence, data API bytes and rows equal the pre-upgrade run 2026-10-23T001410261Z-d0ab79; the step readiness assertions pass."
         }
       ]
     }

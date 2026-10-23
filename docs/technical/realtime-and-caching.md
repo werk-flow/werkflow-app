@@ -35,7 +35,7 @@ Wrong turn: publishing a ledger or a link table. Publish the mutable owning root
 4. A picker of an organization-sized kind passes the whole `useJobEntityOptions` result to the registry select; a new need adds a kind or purpose in `lib/jobs/option-types.ts`, never a preloaded array.
 5. Run `bun run test:unit lib/conventions/id-list-batches.test.ts lib/conventions/unpaged-reads.test.ts lib/conventions/entity-pickers.test.ts lib/ui/list-pagination.test.ts`. For a paging or search function, run `bun run test:verify --group sql:list-pagination`.
 
-Wrong turn: one `.select()` without pages. PostgREST cuts the response at its cap without an error, and rows vanish.
+Wrong turn: one `.select()` without pages; PostgREST cuts the response at its cap silently.
 
 ### Add a reader
 
@@ -54,7 +54,7 @@ Wrong turn: a Server Action for a background read. One client's actions run one 
 4. Build every dialog on the registry's `Dialog`, `AlertDialog` or `Sheet`, so that reads suspend while it is open.
 5. Run `bun run lint <files>`.
 
-Wrong turn: a channel, an interval or a focus listener of your own. It races the shared debounce and the provider's catch-up.
+Wrong turn: a channel, an interval or a focus listener of your own; it races the shared debounce.
 
 ### Check for a regression while you work
 
@@ -62,7 +62,7 @@ Wrong turn: a channel, an interval or a focus listener of your own. It races the
 2. Run `bun run test:plan`. It selects each lab group and names each wall-clock group whose scopes own a changed file. Before the change is done, serve the build with `bun run test:server local` and run that group with `bun run test:verify --group <id>`. [Performance](performance.md#how-to-work) owns journeys and the procedure to make a flow faster.
 3. Open the change in two signed-in sessions and watch the second one.
 
-Wrong turn: leaving the measurement to the release run. By then other changes hide the cause.
+Wrong turn: leaving the measurement to the release run.
 
 ## Checklist
 
@@ -160,7 +160,7 @@ A picker receives its whole list only when the list is bounded by nature. The co
 ### Transport posture
 
 - The transport is `postgres_changes` on one channel per organization. The provider in `components/realtime/realtime-provider.tsx` owns the channel and binds every table in `REALTIME_TABLES`.
-- Events are invalidation signals. They never authorize a record read. A client-supplied organization filter is not an authorization boundary.
+- Events are invalidation signals that never authorize a record read; a client-supplied organization filter is no authorization boundary.
 - Published organization-scoped tables use `REPLICA IDENTITY USING INDEX` on `(id, organization_id)`. `bun run realtime:check` rejects FULL identity.
 
 ### Deletion transport
@@ -214,7 +214,7 @@ The contract is the behavior of the two live-view hooks. A surface does not re-i
 
 An `eventFilter` that inspects payload columns treats a missing column as relevant, because a deletion notification carries only `id` and `organization_id`. Synthetic catch-up events bypass every filter.
 
-Connection catch-up runs after database readiness, not after channel join: the database listener can start after the `SUBSCRIBED` callback, and a read at join cannot cover a write in that gap. The provider dispatches synthetic invalidations when the `system` message reports `postgres_changes` ready. A read counts as recovery only when it has the same scope and window and started after that invalidation. `tests/ui-contracts/calendar.spec.ts` checks these orderings through the real provider.
+Connection catch-up runs after database readiness, not after channel join: the database listener can start after the `SUBSCRIBED` callback, and a read at join cannot cover a write in that gap. The provider dispatches synthetic invalidations when the `system` message reports `postgres_changes` ready. A read counts as recovery only when it has the same scope and window and started after that invalidation. A view with hydrated server data that subscribes after readiness gets its catch-up then (`lib/realtime/listener-registry.ts`). `tests/ui-contracts/calendar.spec.ts` checks these orderings through the real provider.
 
 ## Latency targets
 

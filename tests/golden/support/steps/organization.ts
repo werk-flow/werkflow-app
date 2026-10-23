@@ -1,9 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { ROLE_LABELS } from '../../../../lib/roles';
 import { confirmTestUserEmail } from '../seed';
-import { pressKey, settledBeforeTimeout } from './interaction';
+import { hydratedAndSettled, pressKey, settledBeforeTimeout } from './interaction';
 import { openMemberDetailFromList } from './personnel';
-import { confirmed, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
+import { listEntry, openDialogWithRetry, pendingRow, SHARED_COPY, visibleText } from './shared';
 
 /** Copy of accounts, organizations, membership and the member list. */
 const ORGANIZATION_COPY = {
@@ -21,6 +21,8 @@ const ORGANIZATION_COPY = {
   },
   signOut: 'Abmelden',
   accountMenu: 'Kontomenü öffnen',
+  /** The phone header's button that opens the sidebar as a sheet, and the sheet's close button. */
+  phoneMenu: { open: 'Menü öffnen', close: 'Menü schließen' },
   simulatePayment: 'Zahlung simulieren / Fortfahren',
   organizationName: 'Name der Organisation',
   createOrganization: 'Organisation erstellen',
@@ -184,6 +186,21 @@ export function joinOrganizationDialog(page: Page): Locator {
   return page.getByRole('dialog', { name: ORGANIZATION_COPY.joinOrganization, exact: true });
 }
 
+/**
+ * Brings the sidebar's organization switcher on screen. From the tablet width
+ * the sidebar is always shown; below it the switcher sits in the sheet that
+ * the phone header's menu button opens (components/sidebar/app-shell.tsx).
+ */
+export async function showOrganizationSwitcher(page: Page): Promise<void> {
+  const openMenu = page.getByRole('button', { name: ORGANIZATION_COPY.phoneMenu.open, exact: true });
+  if (!(await openMenu.isVisible())) return;
+  await hydratedAndSettled(page);
+  await openMenu.click();
+  await expect(
+    page.getByRole('button', { name: ORGANIZATION_COPY.phoneMenu.close, exact: true }),
+  ).toBeVisible();
+}
+
 /** The admin's delete action on the organization settings; its confirmation shares the name. */
 export function deleteOrganizationButton(page: Page): Locator {
   return page.getByRole('button', { name: ORGANIZATION_DIALOG_COPY.deleteOrganization, exact: true });
@@ -260,8 +277,9 @@ export function memberJoinedBanner(page: Page): Locator {
 }
 
 /** A row of the member list or the invitations tab, by member name or invited email. */
+/** A member or invitation that shows this name or email: its table row, or its card on a phone. */
 export function memberRow(page: Page, nameOrEmail: string): Locator {
-  return confirmed(page.getByRole('row').filter({ hasText: nameOrEmail }));
+  return listEntry(page, { hasText: nameOrEmail });
 }
 
 export function memberRowActionsButton(row: Locator): Locator {

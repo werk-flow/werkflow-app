@@ -1,6 +1,7 @@
 'use server';
 import type { ActionFailure } from '@/lib/action-result';
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
+import { readJobAssignmentOfUser } from '@/lib/jobs/job-access-reads';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
@@ -330,15 +331,10 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
     }
 
     if (callerRole !== 'admin' && callerRole !== 'buero') {
-      const { data: assignment, error: assignmentError } = await loggedRead(
-        'getTimeEntriesForJob: job_assignments read failed',
-        admin
-          .from('job_assignments')
-          .select('id')
-          .eq('organization_id', job.organization_id)
-          .eq('job_id', jobId)
-          .eq('user_id', user.id)
-          .maybeSingle(),
+      const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+        job.organization_id,
+        jobId,
+        user.id,
       );
       if (assignmentError) return { success: false, error: 'fetch_failed' };
 

@@ -44,6 +44,48 @@ type MembershipRow = {
   organizations: { name: string; unique_code: string } | null;
 };
 
+type MembershipRead =
+  | { kind: 'failed'; label: string; error: unknown }
+  | { kind: 'signed-out' }
+  | { kind: 'rows'; rows: MembershipRow[] };
+
+/**
+ * The caller's memberships through the browser client. The stored session
+ * names the user without an Auth round trip; it is no authority, because
+ * row-level security checks the token on the membership read. A session read
+ * that could not complete (a failed token refresh) is a failure, never a
+ * sign-out.
+ */
+async function readOwnMemberships(): Promise<MembershipRead> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+  if (sessionError)
+    return { kind: 'failed', label: 'OrganizationProvider: session read failed', error: sessionError };
+  if (!session) return { kind: 'signed-out' };
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select(
+      `
+      organization_id,
+      role,
+      joined_at,
+      organizations (
+        id,
+        name,
+        unique_code
+      )
+    `,
+    )
+    .eq('user_id', session.user.id);
+  if (error) return { kind: 'failed', label: 'OrganizationProvider: membership read failed', error };
+  // The browser client is untyped; the row shape follows the select above.
+  const rows: MembershipRow[] = data ?? [];
+  return { kind: 'rows', rows };
+}
+
 function getParentListPath(pathname: string): string | null {
   const detailRoutePatterns = [
     { pattern: /^\/auftraege\/[^/]+$/, parent: '/auftraege' },
@@ -131,48 +173,24 @@ export function OrganizationProvider({
   const refreshMemberships = useCallback(async () => {
     const generation = ++refreshGenerationRef.current;
     try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
+      const read = await readOwnMemberships();
       if (generation !== refreshGenerationRef.current) return;
 
-      if (!user) {
-        setMemberships([]);
-        setActiveOrgId(null);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('organization_members')
-        .select(
-          `
-          organization_id,
-          role,
-          joined_at,
-          organizations (
-            id,
-            name,
-            unique_code
-          )
-        `,
-        )
-        .eq('user_id', user.id);
-
-      if (generation !== refreshGenerationRef.current) return;
-
-      if (error) {
-        logError('OrganizationProvider: membership read failed', error);
+      if (read.kind === 'failed') {
+        logError(read.label, read.error);
         showBanner({
           variant: 'error',
           message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
         });
         return;
       }
+      if (read.kind === 'signed-out') {
+        setMemberships([]);
+        setActiveOrgId(null);
+        return;
+      }
 
-      // The browser client is untyped; the row shape follows the select above.
-      const newMemberships: UserOrg[] = (data ?? []).flatMap((m: MembershipRow) => {
+      const newMemberships: UserOrg[] = read.rows.flatMap((m) => {
         const org = m.organizations;
         return org
           ? [

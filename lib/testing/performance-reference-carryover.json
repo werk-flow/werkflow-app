@@ -1,20 +1,4 @@
 {
-  "reason": "The measurement digest narrowed from the whole spec file to the tests that record the scenario. Each reference was re-keyed on one unchanged tree on which its file digest matched; performance-reference-carryover.test.ts repeats that proof while the files stay unchanged. browser-observation.ts then gained the job-row-assignee target kind, which no carried scenario observes: each entry was re-keyed again to the digest that differs from the previous one only in that file's content, and the test repeats the file-digest proof with the content the references were reviewed with.",
-  "entries": [
-    {
-      "scenarioId": "planning.occurrence.cross-session",
-      "fileDigest": "428ca5232235274916c4387639d77f3bc30393be7f8a451a1b1580e6059d1bea",
-      "measuredTestDigest": "04f68216240b096c676848f72ba58febc28d2ce1e582b68c650f1941b40ba0c7"
-    },
-    {
-      "scenarioId": "calendar.month.employee-open-to-event",
-      "fileDigest": "4a7ae613252ac1faa76c28d0f5b105dd2be09182297f3f742682ba7aa316fe35",
-      "measuredTestDigest": "cad3f96ff4bfb5299df7a354f6c86a40e6a208f708a7c507173f5d605b2f00de"
-    },
-    {
-      "scenarioId": "calendar.month.admin-open-to-legacy-event",
-      "fileDigest": "4f021b308b698a58a431e3d83d9bec6bc22c01d06d38fa1955d2ac4d2d432084",
-      "measuredTestDigest": "263fca12a2dbcd46d0bebf42fb0607eab25e0ddd4dd4e50df27f13130658b9d0"
-    }
-  ]
+  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it.",
+  "entries": []
 }

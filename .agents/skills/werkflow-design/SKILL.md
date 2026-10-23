@@ -139,7 +139,7 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 - A state is a label, an action is a button: a state renders as `Badge`, a lifecycle button names its step, never the state it ends in, and a reversible step is not a filled red button. [code `components/ui/badge.tsx`, test `lib/work-lifecycle/types.test.ts`, judgment]
 - A job, project or work state reads its color from `components/auftraege/status-classes.ts`; no other file maps such a state to a color. [test `lib/conventions/status-colors.test.ts`]
 - Hierarchy, density, shadows, natural German and fit for the role pass [rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance) for a major UI change. [judgment]
-- An accepted screen keeps its look: every page of the inventories belongs to a page family with a desktop reference in both themes and a phone reference, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, test `lib/testing/selection/visual-families.test.ts`, judgment]
+- An accepted screen keeps its look: every page of the inventories belongs to a page family with a desktop and a phone reference in both themes, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, test `lib/testing/selection/visual-families.test.ts`, test `lib/testing/spec-support/visual-reference-text.test.ts`, test `lib/testing/spec-support/acceptance-state-plan.test.ts`, judgment]
 
 ## Never
 
@@ -172,7 +172,7 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 2. Run `bun run test:unit`. The tests under `lib/ui/` and `lib/conventions/` pass.
 3. Run `bun run test:ui`. The component suite passes.
 4. Run `bun run test:verify`. The change plan selects `audit:layout` when a shared control or a token changed, and the surface groups `audit:layout:<area>` of the areas you changed. For a release, or after an accepted redesign, run `bun run test:verify --group audit:visual`. It compares each page family's image and its exact visible text, so a changed label fails. To accept a design change, follow the reference rules in `docs/technical/standards-audit.md`.
-5. Look at the screen yourself: both themes, 375 px and desktop, the keyboard path, and the empty, loading and error states. For each changed screen, add it to a set in `tests/audit/support/acceptance-sets.ts` (a screen outside the shell as a standalone capture), capture it before and after with `bun run test:audit:focused --grep "@ACCEPT <set>"`, and judge the pair. A screenshot does not prove an interaction.
+5. Look at the screen yourself: both themes, 375 px and desktop, the keyboard path, and the empty, loading and error states; a capture id ending in `-loading` or `-error` captures that state of a client read or `loading.tsx` ([standards audit](../../../docs/technical/standards-audit.md#rendered-design-acceptance)). For each changed screen, add it to a set in `tests/audit/support/acceptance-sets.ts` (a screen outside the shell as a standalone capture), capture it before and after with `bun run test:audit:focused --grep "@ACCEPT <set>"`, and judge the pair. A screenshot does not prove an interaction.
 6. For a major UI change, follow rendered design acceptance in `docs/technical/standards-audit.md` and record each visual finding with its disposition in the slice record.
 
 ## Examples

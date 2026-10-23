@@ -3,6 +3,7 @@ import 'server-only';
 import type { ActionResult } from '@/lib/action-result';
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
@@ -98,15 +99,7 @@ export async function ensureJobAccess(
   context: AuthorizedDocumentContext,
   jobId: string,
 ): Promise<ActionResult> {
-  const { data: job, error: jobError } = await loggedRead(
-    'ensureJobAccess: jobs read failed',
-    context.admin
-      .from('jobs')
-      .select('id')
-      .eq('id', jobId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
+  const { data: job, error: jobError } = await readOrganizationJob(context.orgId, jobId);
   if (jobError) return { success: false, error: 'load_failed' };
 
   if (!job) {
@@ -117,15 +110,10 @@ export async function ensureJobAccess(
     return { success: true };
   }
 
-  const { data: assignment, error: assignmentError } = await loggedRead(
-    'ensureJobAccess: job_assignments read failed',
-    context.admin
-      .from('job_assignments')
-      .select('id')
-      .eq('organization_id', context.orgId)
-      .eq('job_id', jobId)
-      .eq('user_id', context.userId)
-      .maybeSingle(),
+  const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+    context.orgId,
+    jobId,
+    context.userId,
   );
   if (assignmentError) return { success: false, error: 'load_failed' };
 

@@ -9,16 +9,16 @@ import { useLiveView } from '@/hooks/use-live-view';
  * active org id), so it cannot subscribe itself; this bridge mounts just
  * below the provider and routes `organization_members` events — and the
  * provider's focus/visibility catch-up — into `refreshMemberships`.
- * The mount read is intentional: another tab or browser context can change
- * memberships while this shell is absent, and the browser query reconciles
- * that state without coupling it to a cookie-writing Server Action or an RSC
- * refresh of the route that happened to mount the shell.
+ * There is no mount read: the layout render that mounted the shell just
+ * produced the memberships, and the provider's join catch-up reads once the
+ * channel listens, which covers a change made meanwhile in another tab.
  */
 export function OrganizationRealtimeBridge() {
   const { refreshMemberships } = useOrganization();
 
   useLiveView<null>({
     tables: ['organization_members'],
+    initialData: null,
     read: async () => {
       await refreshMemberships();
       return { ok: true, data: null };

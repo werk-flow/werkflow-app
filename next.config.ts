@@ -37,6 +37,10 @@ export function buildSecurityHeaders(env: HeaderEnvironment): Array<{ key: strin
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // Keeps the prefetch behaviour the lab references measured (Next 16.4 warns
+  // while this is unset). Partial Prefetching changes what every <Link> and
+  // row-intent prefetch downloads, so adopting it is its own measured change.
+  partialPrefetching: false,
   // `next dev` would otherwise append its own block to the repository's
   // AGENTS.md on every start and dirty the tree (found 2026-09-18, P1-24a).
   agentRules: false,

@@ -1,5 +1,6 @@
 import type { CalendarBoardRow } from '@/lib/calendar/board';
 import type { CalendarJob } from '@/lib/jobs/types';
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 
 /** What a view needs from the container to open, create and park things. */
@@ -18,6 +19,8 @@ export type CalendarSurfaceActions = {
   onPark: (job: CalendarJob) => void;
   /** The organization's closed periods: recorded time in them is locked. */
   closedPeriods: readonly ClosedTimePeriod[];
+  /** The caller's `time_approval` holder: whose recorded blocks a manager may correct (`canManageBlock`). */
+  approvalHolder: EffectiveResponsibilityHolder | null;
 };
 
 export const BOARD_NAME_COLUMN_PX = 160;

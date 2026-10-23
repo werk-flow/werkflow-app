@@ -16,6 +16,7 @@ import { createTrailingScheduler, type TrailingScheduler } from '@/lib/realtime/
 import { useAnyDialogOpen } from '@/components/ui/open-dialog-context';
 import { countRealtimeRefresh, useHeldReadFlag, markRouteRefresh } from '@/lib/ui/route-refresh-signal';
 import { ownWrites } from '@/lib/realtime/own-writes';
+import { useRealtimeTables } from '@/hooks/use-realtime-tables';
 
 type UseRealtimeRouterRefreshOptions = {
   tables: readonly RealtimeTable[];
@@ -52,12 +53,10 @@ export function useRealtimeRouterRefresh({
   const pendingWhileSuspendedRef = useHeldReadFlag();
   const enabledRef = useRef(enabled);
   const eventFilterRef = useRef(eventFilter);
-  const tablesRef = useRef<readonly RealtimeTable[]>(tables);
 
   useEffect(() => {
     enabledRef.current = enabled;
     eventFilterRef.current = eventFilter;
-    tablesRef.current = tables;
   });
 
   const scheduleRefresh = useCallback(
@@ -120,13 +119,6 @@ export function useRealtimeRouterRefresh({
     markRouteRefresh(queuedHolder, false);
   }, [enabled, queuedHolder]);
 
-  const tablesKey = tables.join(',');
-  useEffect(() => {
-    if (!subscribe || !enabled) return;
-    const onEvent = (event: RealtimeChangeEvent) => scheduleRefresh(event);
-    const unsubscribes = tablesRef.current.map((table) => subscribe(table, onEvent));
-    return () => {
-      for (const unsubscribe of unsubscribes) unsubscribe();
-    };
-  }, [subscribe, enabled, tablesKey, scheduleRefresh]);
+  // Server-rendered surfaces always show server data.
+  useRealtimeTables({ subscribe, tables, enabled, serverData: true, onEvent: scheduleRefresh });
 }

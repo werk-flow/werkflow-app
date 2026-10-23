@@ -5,6 +5,7 @@ import {
   type StandaloneRoute,
 } from '../../../lib/testing/selection/standalone-route-inventory';
 import { SURFACE_GROUPS, surfaceTargets } from '../../../lib/testing/selection/surface-groups';
+import { stateCaptureId, type CaptureState } from './acceptance-state-plan';
 
 /**
  * Rendered acceptance captures (docs/technical/standards-audit.md, "Rendered
@@ -27,6 +28,8 @@ export type CaptureSpec = {
   view: CaptureView;
   widths: readonly (375 | 768 | 1024 | 1280 | 1680)[];
   schemes: readonly ('light' | 'dark')[];
+  /** A loading or error state instead of the settled screen; the id ends in it (`stateCaptureId`). */
+  state?: CaptureState;
 };
 
 /** A screen outside the app shell, opened with the session its inventory entry names. */
@@ -123,4 +126,35 @@ function fieldTargetCaptures(): AcceptanceSet {
   };
 }
 
-export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [uiRoundCaptures(), fieldTargetCaptures()];
+/**
+ * Package S, item S3 of 2026-10-23: one state capture per way a state is
+ * reached: a route's loading.tsx behind its held navigation (office and field
+ * worker), a client section's failure on a page, a dialog's held and failed
+ * option read.
+ */
+function stateCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  const templates = { kind: 'dialog', opener: 'templates.apply' } as const;
+  const specs: readonly Omit<CaptureSpec, 'id' | 'widths' | 'schemes'>[] = [
+    { role: 'admin', route: '/auftraege', view: { kind: 'page' }, state: 'loading' },
+    { role: 'employee', route: '/dashboard', view: { kind: 'page' }, state: 'loading' },
+    { role: 'admin', route: '/auftraege/projekt/[projectNumber]', view: { kind: 'page' }, state: 'error' },
+    { role: 'admin', route: '/auftraege/[jobNumber]', view: templates, state: 'loading' },
+    { role: 'admin', route: '/auftraege/[jobNumber]', view: templates, state: 'error' },
+  ];
+  return {
+    id: 's3-states-2026-10-23',
+    captures: specs.map((spec): CaptureSpec => {
+      const view = spec.view.kind === 'dialog' ? `-dialog-${spec.view.opener.replace('.', '-')}` : '';
+      const base = `${spec.role}-${slug(spec.route)}${view}`;
+      return { ...spec, id: spec.state ? stateCaptureId(base, spec.state) : base, ...both };
+    }),
+    standalone: [],
+  };
+}
+
+export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
+  uiRoundCaptures(),
+  fieldTargetCaptures(),
+  stateCaptures(),
+];

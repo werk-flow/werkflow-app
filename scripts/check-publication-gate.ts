@@ -6,6 +6,7 @@ import {
   isDocumentationInput,
   type InputSnapshot,
 } from '../lib/testing/evidence/group-evidence';
+import { advisoryFreshnessProblem, advisoryReportSchema } from '../lib/testing/evidence/advisory-freshness';
 import { deletionPassProblems, parsePublishedCommits } from '../lib/testing/publication/deletion-pass';
 import { readRepositoryLedger, recordedEvidence } from '../lib/testing/publication/evidence-ledger';
 import {
@@ -29,7 +30,8 @@ import { getTestGroups } from '../lib/testing/selection/test-groups';
 /**
  * The pre-push gate (.githooks/pre-push pipes git's ref list into this
  * script): exits 1 and prints what is missing unless the newest local
- * verification report passed on the tree being pushed, every wall-clock group
+ * verification report passed on the tree being pushed and holds a dependency
+ * advisory pass under 24 hours old, every wall-clock group
  * that measures a pushed product file passed on its current content, a
  * CodeRabbit review completed on it, and every commit the push publishes
  * records its deletion pass, and no shrink-only list grew against the commit the
@@ -59,14 +61,24 @@ function reportDirectories(): string[] {
   return existsSync(archive) ? readdirSync(archive).sort().reverse() : [];
 }
 
-function newestReport(
-  target: 'local' | 'cloud',
-): ReturnType<typeof publicationReportSchema.parse> | undefined {
+function newestReport(target: 'local' | 'cloud'):
+  | {
+      report: ReturnType<typeof publicationReportSchema.parse>;
+      advisory: ReturnType<typeof advisoryReportSchema.parse>;
+    }
+  | undefined {
   for (const directory of reportDirectories()) {
     const text = recordedText(`${VERIFICATION_DIRECTORY}/${directory}/report.json`);
     if (!text) continue;
-    const report = publicationReportSchema.safeParse(JSON.parse(text));
-    if (report.success && report.data.target === target) return report.data;
+    const json: unknown = JSON.parse(text);
+    const report = publicationReportSchema.safeParse(json);
+    if (!report.success || report.data.target !== target) continue;
+    const advisory = advisoryReportSchema.safeParse(json);
+    // A report whose results do not parse holds no advisory pass.
+    return {
+      report: report.data,
+      advisory: advisory.success ? advisory.data : { id: report.data.id, results: [] },
+    };
   }
   return undefined;
 }
@@ -135,6 +147,7 @@ const publishedCommits = parsePublishedCommits(
 
 const publishedFiles = [...new Set(pushedFiles.filter(Boolean))].sort();
 const measuredGroups = measuredGroupsForChange(getTestGroups(repository), publishedFiles);
+const local = newestReport('local');
 const problems = [
   ...(ledger.problems.length
     ? [
@@ -142,7 +155,7 @@ const problems = [
       ]
     : []),
   ...publicationGateProblems({
-    newestReport: newestReport('local'),
+    newestReport: local?.report,
     current: captureInputSnapshot(repository),
     uncommitted: [...new Set(uncommitted)].sort(),
     head: git('rev-parse', 'HEAD').trim(),
@@ -152,8 +165,12 @@ const problems = [
     measuredGroups,
     measuredPasses: measuredPasses(new Set(measuredGroups.map((group) => group.id))),
     production: publishesProduction(updates),
-    canaryReport: newestReport('cloud'),
+    canaryReport: newestReport('cloud')?.report,
   }),
+  // Main and partner-preview alike: the newest local report carries an advisory pass under 24 hours old.
+  ...[local && advisoryFreshnessProblem(local.advisory, new Date())].filter((problem): problem is string =>
+    Boolean(problem),
+  ),
   ...deletionPassProblems(publishedCommits),
   // A shrink-only list never grows against the commit the push replaces.
   ...updates.flatMap((update) => {

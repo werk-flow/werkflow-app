@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import {
   getEmployeeRecordStateByUser,
@@ -9,7 +9,6 @@ import {
   seedWorkSchedule,
 } from '../../../golden/support/db/personnel';
 import { seedTeam } from '../../../golden/support/db/qualifications';
-import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
 import { seedSicknessReport } from '../../../golden/support/db/sickness';
 import {
   memberMenuItem,
@@ -30,7 +29,7 @@ import {
   versionMenuItem,
 } from '../../../golden/support/steps/personnel';
 import { teamDissolveButton, teamDissolveConfirmation } from '../../../golden/support/steps/qualifications';
-import { inPageTab } from '../../../golden/support/steps/shared';
+import { inPageTab, openMenuItem } from '../../../golden/support/steps/shared';
 import {
   recordSicknessButton,
   sicknessManagerDialog,
@@ -74,18 +73,6 @@ async function employeeRecordId(world: TestWorld): Promise<string> {
     'people.employee-record',
     async () => (await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id)).id,
   );
-}
-
-/**
- * Opens a row's actions menu with one click and returns the item. A click on
- * the server HTML before hydration opens nothing, so the click waits for the
- * hydrated, settled page.
- */
-async function menuItem(button: Locator, item: Locator): Promise<Locator> {
-  await hydratedAndSettled(button.page());
-  await button.click();
-  await expect(item).toBeVisible();
-  return item;
 }
 
 /** Reloads the audited page after a seed, so it renders the new row. */
@@ -168,7 +155,7 @@ async function sicknessMenuItem(
 ): Promise<Locator> {
   const range = await seedSickness(context);
   await reloadSurface(context);
-  return menuItem(
+  return openMenuItem(
     sicknessReportActionsButton(context.page, range),
     sicknessReportMenuItem(context.page, item),
   );
@@ -199,10 +186,8 @@ export const PEOPLE_OPENERS = {
     trigger: async ({ page }) => memberInviteButton(page),
     layer: (page) => peopleDialog(page, 'invite'),
   },
+  // memberRow is the table row, or the card on a phone, with the same actions menu.
   'people.invite-cancel': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the invitation list holds the same InviteActionsMenu (components/mitarbeiter/invitations-table.tsx).',
     trigger: async (context) => {
       const { page, world } = context;
       await surfaceFixture(world, 'people.pending-invite', () =>
@@ -215,15 +200,12 @@ export const PEOPLE_OPENERS = {
       await reloadSurface(context);
       await inPageTab(page, 'invitations').click();
       const row = memberRow(page, inviteEmail(world, 'pending'));
-      return menuItem(memberRowActionsButton(row), memberMenuItem(page, 'cancelInvitation'));
+      return openMenuItem(memberRowActionsButton(row), memberMenuItem(page, 'cancelInvitation'));
     },
     layer: (page) => peopleConfirmation(page, 'inviteCancel'),
     returnFocus: ({ page, world }) => memberRowActionsButton(memberRow(page, inviteEmail(world, 'pending'))),
   },
   'people.invite-delete': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the invitation list holds the same InviteActionsMenu (components/mitarbeiter/invitations-table.tsx).',
     trigger: async (context) => {
       const { page, world } = context;
       await surfaceFixture(world, 'people.cancelled-invite', () =>
@@ -236,18 +218,18 @@ export const PEOPLE_OPENERS = {
       await reloadSurface(context);
       await inPageTab(page, 'invitations').click();
       const row = memberRow(page, inviteEmail(world, 'cancelled'));
-      return menuItem(memberRowActionsButton(row), versionMenuItem(page, 'delete'));
+      return openMenuItem(memberRowActionsButton(row), versionMenuItem(page, 'delete'));
     },
     layer: (page) => peopleConfirmation(page, 'inviteDelete'),
     returnFocus: ({ page, world }) =>
       memberRowActionsButton(memberRow(page, inviteEmail(world, 'cancelled'))),
   },
   'people.member-remove': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the member list holds the same MemberActionsMenu (components/mitarbeiter/members-table.tsx).',
     trigger: async ({ page, world }) =>
-      menuItem(memberRowActionsButton(memberRow(page, employeeName(world))), memberMenuItem(page, 'remove')),
+      openMenuItem(
+        memberRowActionsButton(memberRow(page, employeeName(world))),
+        memberMenuItem(page, 'remove'),
+      ),
     layer: (page) => peopleConfirmation(page, 'memberRemove'),
     returnFocus: ({ page, world }) => memberRowActionsButton(memberRow(page, employeeName(world))),
   },
@@ -283,7 +265,7 @@ export const PEOPLE_OPENERS = {
     trigger: async (context) => {
       const validFrom = await seedCondition(context);
       await reloadSurface(context);
-      return menuItem(
+      return openMenuItem(
         versionActionsButton(context.page, 'condition', validFrom),
         versionMenuItem(context.page, 'delete'),
       );
@@ -300,7 +282,7 @@ export const PEOPLE_OPENERS = {
     trigger: async (context) => {
       const validFrom = await seedSchedule(context);
       await reloadSurface(context);
-      return menuItem(
+      return openMenuItem(
         versionActionsButton(context.page, 'schedule', validFrom),
         versionMenuItem(context.page, 'delete'),
       );

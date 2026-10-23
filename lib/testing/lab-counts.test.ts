@@ -181,6 +181,27 @@ describe('lab counts', () => {
     ).toBe(true);
   });
 
+  test('a bound whose observation is missing fails as a missing measurement, never as within', () => {
+    const shape = 'action:/auftraege/[jobNumber]';
+    const base = reference();
+    const payload = base.payloads[shape];
+    if (!payload) throw new Error('The reference holds no payload for the probe shape.');
+    const withRows: LabStepReference = {
+      ...base,
+      payloads: { ...base.payloads, [shape]: { ...payload, rows: { reference: 4, tolerance: 0 } } },
+    };
+    const missing = observation();
+    missing.payloads = missing.payloads.map((entry) => ({ ...entry, decodedBytes: null, rows: null }));
+    const rows = compareLabStep({ step: STEP, observation: missing, reference: withRows });
+    for (const target of [`${shape}#decodedBytes`, `${shape}#rows`]) {
+      const row = rowOf(rows, target);
+      expect(row.status).toBe('measurement-missing');
+      expect(isFailingRow(row, false)).toBe(true);
+    }
+    // The encoded bytes stay informational beside a decoded bound, so they print and never fail.
+    expect(rowOf(rows, `${shape}#encodedBytes`).status).toBe('ungated');
+  });
+
   test('the ratchet only lowers counts and records each lowering', () => {
     const base = reference();
     const lowered = ratchetLabReference(base, observation({ counts: { requests: 2 } }), 'run-6');

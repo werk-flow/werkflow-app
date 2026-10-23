@@ -11,6 +11,7 @@ import { toProfileReference, type ProfileReferenceRow } from '@/lib/profile-refe
 import type { Json } from '@/lib/supabase/database.types';
 
 import { authenticateAndAuthorize } from './auth';
+import { readJobAssignmentOfUser, readOrganizationJob } from './job-access-reads';
 import { workWriteFailure } from './write-refusals';
 import {
   toJobInstructionItem,
@@ -116,10 +117,7 @@ async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobCont
   const admin = createSupabaseAdminClient();
   const { userId, orgId, isManagerOrAbove } = auth.context;
 
-  const { data: job, error: jobError } = await loggedRead(
-    'getAuthorizedJobContext: jobs read failed',
-    admin.from('jobs').select('id').eq('id', jobId).eq('organization_id', orgId).maybeSingle(),
-  );
+  const { data: job, error: jobError } = await readOrganizationJob(orgId, jobId);
   if (jobError) return { success: false, error: 'load_failed' };
 
   if (!job) {
@@ -127,16 +125,7 @@ async function getAuthorizedJobContext(jobId: string): Promise<AuthorizedJobCont
   }
 
   if (!isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'getAuthorizedJobContext: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('job_id', jobId)
-        .eq('user_id', userId)
-        .maybeSingle(),
-    );
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(orgId, jobId, userId);
     if (assignmentError) return { success: false, error: 'load_failed' };
 
     if (!assignment) {
@@ -181,15 +170,10 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
     if (item.job_id === null) {
       return { success: false, error: 'not_authorized' };
     }
-    const { data: assignment, error: assignmentError } = await loggedRead(
-      'getAuthorizedItemContext: job_assignments read failed',
-      admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', orgId)
-        .eq('job_id', item.job_id)
-        .eq('user_id', userId)
-        .maybeSingle(),
+    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
+      orgId,
+      item.job_id,
+      userId,
     );
     if (assignmentError) return { success: false, error: 'load_failed' };
 

@@ -55,7 +55,7 @@ function DayLaneBlock({
   organizationSettings,
 }: DayLaneItemProps & { item: Extract<DayRowItem, { kind: 'block' }> }): React.JSX.Element {
   const { model, role } = row;
-  const manage = canManageBlock(item.block, currentUserRole, currentUserId, role, actions.closedPeriods);
+  const manage = canManageBlock(item.block, role, { ...actions, currentUserRole, currentUserId });
   const clock = useClock();
   return (
     <TimeBlock

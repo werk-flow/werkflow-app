@@ -11,23 +11,29 @@ import {
   undiagnosedAttemptProblem,
 } from './group-diagnosis';
 
-const failedSql = {
+type Report = Parameters<typeof diagnosableGroupAttempt>[0][number];
+type Result = Report['results'][number];
+const failedSql: Result = {
   groupId: 'sql:security',
-  status: 'failed' as const,
+  status: 'failed',
   startedAt: '2026-10-03T10:00:00.000Z',
   runKey: null,
   reason: 'Command exited 1',
+  fingerprint: 'f'.repeat(64),
+  logPath: null,
 };
-const reports = [
+const reports: Report[] = [
   {
     id: 'report-a',
-    results: [{ ...failedSql, status: 'passed' as const, startedAt: '2026-10-02T10:00:00.000Z' }],
+    target: 'local',
+    results: [{ ...failedSql, status: 'passed', startedAt: '2026-10-02T10:00:00.000Z' }],
   },
-  { id: 'report-b', results: [failedSql] },
+  { id: 'report-b', target: 'local', results: [failedSql] },
   {
     id: 'report-c',
+    target: 'local',
     results: [
-      { ...failedSql, status: 'blocked' as const, startedAt: '2026-10-03T11:00:00.000Z' },
+      { ...failedSql, status: 'blocked', startedAt: '2026-10-03T11:00:00.000Z' },
       { ...failedSql, startedAt: '2026-10-03T12:00:00.000Z', reason: `${INPUT_DRIFT_REASON}: lib/x.ts` },
     ],
   },
@@ -42,12 +48,36 @@ test('a diagnosis names the latest executed failure of a group without a browser
   // Blocked and drift-voided results are no attempts, so the failure in report-b is the one diagnosed.
   expect(diagnosableGroupAttempt(reports, 'sql:security')).toEqual({
     reportId: 'report-b',
-    startedAt: failedSql.startedAt,
+    target: 'local',
+    result: failedSql,
   });
   expect(() => diagnosableGroupAttempt(reports.slice(0, 1), 'sql:security')).toThrow('passed');
   expect(() => diagnosableGroupAttempt(reports, 'unit:all')).toThrow('No verification report');
-  const browser = [{ id: 'report-d', results: [{ ...failedSql, groupId: 'golden:p1-01', runKey: 'run-1' }] }];
+  const browser: Report[] = [
+    {
+      id: 'report-d',
+      target: 'local',
+      results: [{ ...failedSql, groupId: 'golden:p1-01', runKey: 'run-1' }],
+    },
+  ];
   expect(() => diagnosableGroupAttempt(browser, 'golden:p1-01')).toThrow('Classify the run');
+});
+
+test('probe: a failed attempt named by its report stays classifiable after a later pass', () => {
+  const repaired: Report[] = [
+    ...reports,
+    {
+      id: 'report-e',
+      target: 'local',
+      results: [{ ...failedSql, status: 'passed', startedAt: '2026-10-04T10:00:00.000Z' }],
+    },
+  ];
+  expect(() => diagnosableGroupAttempt(repaired, 'sql:security')).toThrow('passed');
+  expect(diagnosableGroupAttempt(repaired, 'sql:security', 'report-b').result).toEqual(failedSql);
+  // The named report must hold an executed failure of the group: a pass, a blocked or voided attempt does not.
+  expect(() => diagnosableGroupAttempt(repaired, 'sql:security', 'report-e')).toThrow('no executed failed');
+  expect(() => diagnosableGroupAttempt(repaired, 'sql:security', 'report-c')).toThrow('no executed failed');
+  expect(() => diagnosableGroupAttempt(repaired, 'sql:security', 'report-x')).toThrow('no executed failed');
 });
 
 test('the diagnosis is stored beside its report, replaces an earlier one of the attempt, and only environment recovers', () => {
@@ -65,7 +95,7 @@ test('the diagnosis is stored beside its report, replaces an earlier one of the 
       prevention: 'SQL tests run only through the runner.',
       now: new Date('2026-10-03T13:00:00.000Z'),
     });
-  expect(record('product').reportId).toBe('report-b');
+  expect(record('product').attempt.reportId).toBe('report-b');
   expect(recoveredGroupAttempts(readGroupDiagnoses(archive))).toEqual([]);
   record('environment');
   expect(JSON.parse(readFileSync(join(archive, 'report-b', 'diagnoses.json'), 'utf8'))).toHaveLength(1);
@@ -79,6 +109,27 @@ test('the diagnosis is stored beside its report, replaces an earlier one of the 
       now: new Date(),
     }),
   ).toThrow();
+  // A named report is read alone, and only a folder name can name it.
+  const named = recordGroupDiagnosis(archive, {
+    groupId: 'sql:security',
+    reportId: 'report-b',
+    classification: 'harness',
+    rootCause: 'cause',
+    prevention: 'Tier 3: judgment',
+    now: new Date('2026-10-05T10:00:00.000Z'),
+  });
+  expect(named.attempt.reportId).toBe('report-b');
+  expect(JSON.parse(readFileSync(join(archive, 'report-b', 'diagnoses.json'), 'utf8'))).toHaveLength(1);
+  expect(() =>
+    recordGroupDiagnosis(archive, {
+      groupId: 'sql:security',
+      reportId: '../report-b',
+      classification: 'harness',
+      rootCause: 'cause',
+      prevention: 'prevention',
+      now: new Date(),
+    }),
+  ).toThrow('no report id');
 });
 
 test('verification waits for the diagnosis of a failed unit, SQL or component attempt', () => {

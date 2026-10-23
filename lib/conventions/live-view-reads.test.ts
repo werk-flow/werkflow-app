@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import ts from 'typescript';
-import { resolveSpecifier } from './action-prechecks-scan';
+import {
+  moduleSpecifierOf,
+  namedBindings,
+  repositorySources,
+  resolveModuleFile,
+  type SourceHost,
+} from './module-imports';
 import { listProductSources, parseProductSource, repositoryRoot } from './product-sources';
 
 // Tier 2 for the background-read registry: a live view reads on mount, on a
@@ -38,16 +42,6 @@ import { listProductSources, parseProductSource, repositoryRoot } from './produc
 // - a package outside the repository: it cannot import a product Server Action.
 // The TypeScript checker would resolve these values too, but a program over the
 // product tree costs about twenty seconds per run against two for this scan.
-
-const MODULE_EXTENSIONS = ['.ts', '.tsx', '/index.ts', '/index.tsx'];
-
-/** Repository-relative source text by path, or null when no such file exists. */
-type SourceHost = (file: string) => string | null;
-
-const repositorySources: SourceHost = (file) => {
-  const path = resolve(repositoryRoot, file);
-  return existsSync(path) ? readFileSync(path, 'utf8') : null;
-};
 
 type ImportedName = { file: string; name: string };
 /** A parameter of a named function: a whole parameter (`prop: null`) or one prop of it. */
@@ -89,34 +83,6 @@ function localFunctions(source: ts.SourceFile): Map<string, ts.Node> {
   }
   visit(source);
   return functions;
-}
-
-/** The named, non-type bindings of an import or re-export declaration, as local name and exported name. */
-function namedBindings(statement: ts.Statement): Array<{ local: string; exported: string }> {
-  if (ts.isImportDeclaration(statement)) {
-    const bindings = statement.importClause?.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings) || statement.importClause?.isTypeOnly) return [];
-    return bindings.elements
-      .filter((element) => !element.isTypeOnly)
-      .map((element) => ({
-        local: element.name.text,
-        exported: (element.propertyName ?? element.name).text,
-      }));
-  }
-  if (
-    ts.isExportDeclaration(statement) &&
-    statement.exportClause &&
-    ts.isNamedExports(statement.exportClause)
-  ) {
-    if (statement.isTypeOnly) return [];
-    return statement.exportClause.elements
-      .filter((element) => !element.isTypeOnly)
-      .map((element) => ({
-        local: element.name.text,
-        exported: (element.propertyName ?? element.name).text,
-      }));
-  }
-  return [];
 }
 
 /** The name a function is declared or bound under: `function F`, `const F = () => …`. */
@@ -190,14 +156,6 @@ function createScanner(host: SourceHost, siteFiles: () => readonly string[] = ()
   const contexts = new Map<string, FileContext | null>();
   let callSites: Map<string, CallSite[]> | null = null;
 
-  function resolveModule(importer: string, specifier: string): string | null {
-    const base = resolveSpecifier(importer, specifier);
-    if (base === null) return null;
-    return (
-      MODULE_EXTENSIONS.map((extension) => `${base}${extension}`).find((path) => host(path) !== null) ?? null
-    );
-  }
-
   function sourceOf(file: string): ts.SourceFile | null {
     if (!sources.has(file)) {
       const text = host(file);
@@ -219,14 +177,9 @@ function createScanner(host: SourceHost, siteFiles: () => readonly string[] = ()
     const serverNames = new Set<string>();
     const imports = new Map<string, ImportedName>();
     for (const statement of source.statements) {
-      const specifier =
-        (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) &&
-        statement.moduleSpecifier &&
-        ts.isStringLiteral(statement.moduleSpecifier)
-          ? statement.moduleSpecifier.text
-          : null;
+      const specifier = moduleSpecifierOf(statement);
       if (specifier === null) continue;
-      const target = resolveModule(file, specifier);
+      const target = resolveModuleFile(file, specifier, host);
       const targetSource = target === null ? null : sourceOf(target);
       if (target === null || !targetSource) continue;
       for (const binding of namedBindings(statement)) {

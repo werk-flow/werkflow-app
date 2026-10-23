@@ -13,7 +13,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "bc625c107a5d6aeac14431dafbf8f9ed8d35ba2ca16d4cc57ab607a7ea32c2d5",
+        "measurementDigest": "07afb1015150b8e8e712761b167866d60aa03f7b63f9fd9bb0bddef3e0647a9c",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -30,31 +30,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 860.19970703125,
+      "referenceMs": 875.599853515625,
       "samples": [
-        848.5,
-        851.60009765625,
-        852.7001953125,
-        859.2998046875,
-        860.19970703125,
-        878.69970703125,
-        879.199951171875,
-        881.7998046875,
-        968.60009765625
+        837.500244140625,
+        875.599853515625,
+        900.39990234375
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:26.196Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:48:40.872Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -64,7 +56,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "468f767f45913e1f679f30bf50f58583caf61db78c34a7550f65537ef9e54534",
+        "measurementDigest": "0e994f33f23d976e278089103097bee2687dcb65d9de2ba4863818fb4745bfc6",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -81,31 +73,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 698.7001953125,
+      "referenceMs": 725.10009765625,
       "samples": [
-        601.2998046875,
-        642.5,
-        646.099853515625,
-        681.300048828125,
-        698.7001953125,
-        706,
-        730.099853515625,
-        745.800048828125,
-        821.2001953125
+        713.599853515625,
+        725.10009765625,
+        897.800048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:27.276Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:48:42.114Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -115,7 +99,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "1a1f722c3c564178e6c9790c2f84738a448b9f8e800a28f91a4ae5ab3f160c04",
+        "measurementDigest": "9d1594fa66185b1d92b4d038aa1669ab89e4b5eaaed5ce616aa230795a103372",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -132,31 +116,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 505,
+      "referenceMs": 518.89990234375,
       "samples": [
-        448.900146484375,
-        452.89990234375,
-        466.199951171875,
-        499.5,
-        505,
-        521.89990234375,
-        529.699951171875,
-        532.5,
-        592.10009765625
+        487.400146484375,
+        518.89990234375,
+        773.800048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:28.988Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:48:43.858Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -166,7 +142,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "23a1bcaadf9aab005a7d93213ca851f7609703b1ac492d90e49180851b569f8a",
+        "measurementDigest": "bfd64e509c78cc0b4f8390ed35b4c80f6878e6b8d9555965245f7487b947295f",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -183,31 +159,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 550.39990234375,
+      "referenceMs": 545.5,
       "samples": [
-        489.199951171875,
-        502.400146484375,
-        535.89990234375,
-        542.900146484375,
-        550.39990234375,
-        551.89990234375,
-        556.2001953125,
-        569.10009765625,
-        579.300048828125
+        524.300048828125,
+        545.5,
+        595.800048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:29.798Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:48:44.648Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -217,7 +185,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "4727edac0bdeaaa39081f2306262c2d4b15334f184d1fbdf6007b8bc18eb68d9",
+        "measurementDigest": "0f523b5a331615e0eec19de1be88d1148985dfe2e6c4145302db35e03a2d435f",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -234,31 +202,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 814.500244140625,
+      "referenceMs": 921.60009765625,
       "samples": [
-        729.300048828125,
-        737.199951171875,
-        753.599853515625,
-        797.2998046875,
-        814.500244140625,
-        834.199951171875,
-        840.60009765625,
-        863,
-        881
+        890,
+        921.60009765625,
+        981.699951171875
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:30.775Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:48:45.871Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -268,7 +228,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "0123b6697740bb60ed5b485265dfa0ed2e0241cbe2a0fa9bb3452cf9db08d823",
+        "measurementDigest": "7a4c3569d0626a36f9b1d4c4bdda926684c1e361004c4fc9e97aee312056b0dc",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -285,31 +245,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1207.800048828125,
+      "referenceMs": 1227.5,
       "samples": [
-        1148,
-        1155.199951171875,
-        1165.999755859375,
-        1180.7001953125,
-        1207.800048828125,
-        1260,
-        1277.89990234375,
-        1306.2001953125,
-        1531.89990234375
+        1204.300048828125,
+        1227.5,
+        1254.10009765625
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:45.732Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:02.722Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -319,7 +271,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "76ad09a0faba683537083f6e206f6a080ad55126ba047e173374c30af2dec014",
+        "measurementDigest": "8b0bb56497e9c82d07764e30d9af3177df8b1deae0c8d5fe612554e05357c179",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -336,31 +288,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 160.2001953125,
+      "referenceMs": 162.5,
       "samples": [
-        106.699951171875,
-        128.5,
-        139.5,
-        155.400146484375,
-        160.2001953125,
-        165.2998046875,
-        165.5,
-        168.300048828125,
-        172.699951171875
+        122.599853515625,
+        162.5,
+        200.300048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:50.171Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:07.051Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -370,7 +314,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "6e7ff5f118baa9b9f632d78631414c98bab9a03002803a4049eaa146c1c974fc",
+        "measurementDigest": "d0f9b730905d2ef0730d9ea8c2403543170a588ba5a35b7a51c85926831baace",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -387,31 +331,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 360.10009765625,
+      "referenceMs": 359.89990234375,
       "samples": [
-        293.89990234375,
-        331.2001953125,
-        347.5,
-        359.199951171875,
-        360.10009765625,
-        373.10009765625,
-        375.300048828125,
-        412.5,
-        426.300048828125
+        355.599853515625,
+        359.89990234375,
+        369.5
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:52.512Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:09.257Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -421,7 +357,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "3bb856ef26eeefeec6c18f3e486af45c6a2385fb2a51996bf01249c7b9949826",
+        "measurementDigest": "8effe4db215e86b2462001e3ebe03eb807402071287d7b33483ab14afbcdf76e",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -438,31 +374,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 180.5,
+      "referenceMs": 212.800048828125,
       "samples": [
-        125.300048828125,
-        156.400146484375,
-        173.60009765625,
-        175.5,
-        180.5,
-        184.599853515625,
-        195.400146484375,
-        231.199951171875,
-        238.900146484375
+        204.699951171875,
+        212.800048828125,
+        232.699951171875
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:53.467Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:10.172Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -472,7 +400,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "64f1a6b31b1a0f88e35f65d3422af4ce6588bd10daf597e2231025f079f30531",
+        "measurementDigest": "33b3061e91ed5bc4372819da44d55a854cf7652ce3aa1fec4a684063418335fa",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -489,31 +417,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 201.5,
+      "referenceMs": 201,
       "samples": [
-        177.400146484375,
-        182,
-        185.099853515625,
-        194.699951171875,
-        201.5,
-        204.699951171875,
-        214.599853515625,
-        214.699951171875,
-        215.199951171875
+        156.7998046875,
+        201,
+        223.800048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:54.193Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:10.813Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -523,7 +443,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "416d5b8cbe03cbd1fd2bfab65a22002aecb6309ccd91842964763b88b25575f1",
+        "measurementDigest": "d1c8833fce076ec994b5e87930f26f724592b61ff75b4e069385f1c2b1d21813",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -540,31 +460,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 291.39990234375,
+      "referenceMs": 222.699951171875,
       "samples": [
-        255.599853515625,
-        263,
-        279.10009765625,
-        286.39990234375,
-        291.39990234375,
-        293.699951171875,
-        296.5,
-        314,
-        369.800048828125
+        169.60009765625,
+        222.699951171875,
+        227.800048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:56.430Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:12.662Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -574,7 +486,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "eb65fa19ae860418ed862f65ae6669ec0e7e46c7a1bad2cadfe5d62dc41fc938",
+        "measurementDigest": "c89db5bbee032a7644252beb85d32771ad3c589c5837e0446e7b32697a0830a4",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -591,31 +503,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1103.900146484375,
+      "referenceMs": 1075.39990234375,
       "samples": [
-        876.699951171875,
-        1043.800048828125,
-        1073.60009765625,
-        1100.5,
-        1103.900146484375,
-        1108.599853515625,
-        1193.5,
-        1220.800048828125,
-        1230.199951171875
+        968.199951171875,
+        1075.39990234375,
+        1102.199951171875
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:57.964Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:14.294Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -625,7 +529,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "1c9972922e7e125a33dab858d6b64f8c6227b2b471b8e33c2733f09b27b3f350",
+        "measurementDigest": "bd9a27b5dd9494e7d7fca951ee34d530c81bcffd6fceafb3f0377a5ff567fd00",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -642,31 +546,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 518.5,
+      "referenceMs": 559.800048828125,
       "samples": [
-        410.400146484375,
-        444.300048828125,
-        476.199951171875,
-        499.599853515625,
-        518.5,
-        533.300048828125,
-        539.89990234375,
-        563.699951171875,
-        571.199951171875
+        545.10009765625,
+        559.800048828125,
+        560.099853515625
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:47:59.369Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:15.831Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -676,7 +572,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "5d06f7022da56880c634c3d296c2063e2d362e6d68dbe54611fa705dd93f3d64",
+        "measurementDigest": "dacbe5fe62e57a3e3a2e64f1103791ca7ac078067da30d4fe3d34517855b33d6",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -693,31 +589,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 34.10009765625,
+      "referenceMs": 31.60009765625,
       "samples": [
-        24.699951171875,
-        25.099853515625,
-        26.60009765625,
-        32.199951171875,
-        34.10009765625,
-        38.2001953125,
-        40.60009765625,
-        40.699951171875,
-        41.800048828125
+        28.199951171875,
+        31.60009765625,
+        42.60009765625
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:48:00.038Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:16.542Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -727,7 +615,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "adb397ba7b3384b8014e351243ba8c68216cfcaeb70f5652d7a7f263ee085c04",
+        "measurementDigest": "7872095de7dbd8e20fffbde5521651f4ecfcf9ffcae36d6b8d89859ea2860b08",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -744,31 +632,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 195.800048828125,
+      "referenceMs": 195.199951171875,
       "samples": [
-        157.5,
-        163,
-        165.400146484375,
-        191,
-        195.800048828125,
-        210,
-        219.800048828125,
-        224,
-        240.300048828125
+        190.699951171875,
+        195.199951171875,
+        202.89990234375
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:48:01.295Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:17.899Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -778,7 +658,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "c3de1d814942e85e2277a68e007c199a6949fea219f38faff710597a7921b229",
+        "measurementDigest": "e488eaa6e46ddacdeb9eee7be1fe555cc2cf4169e926919524dd0c4cfff711c2",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -795,31 +675,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 313.099853515625,
+      "referenceMs": 347.2001953125,
       "samples": [
-        247,
-        307.300048828125,
-        308.800048828125,
-        310,
-        313.099853515625,
-        321.5,
-        322.2998046875,
-        352.89990234375,
-        427.099853515625
+        303.300048828125,
+        347.2001953125,
+        412.400146484375
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:48:02.127Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:18.702Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -829,7 +701,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "497831766676a284597a793fb5fb6e960b8fe23655c1755a02781d100d816e02",
+        "measurementDigest": "9f5125860f6a4e432f1b08a8a82f821354881c67da5b50064a69011ee2353a7b",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -846,31 +718,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 111.7998046875,
+      "referenceMs": 195.2001953125,
       "samples": [
-        90.300048828125,
-        104.7998046875,
-        107.800048828125,
-        108.10009765625,
-        111.7998046875,
-        114,
-        114.099853515625,
-        120.2998046875,
-        121.89990234375
+        177.900146484375,
+        195.2001953125,
+        224.300048828125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-aac0f4",
+        "runKey": "2026-10-23T114544582Z-dc8254",
         "runKeys": [
-          "2026-10-21T202256685Z-aac0f4",
-          "2026-10-21T203412815Z-1a8cbe",
-          "2026-10-21T204627226Z-fd8fac"
+          "2026-10-23T114544582Z-dc8254"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:48:02.392Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:47:19.237Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:22.483Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -880,7 +744,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "428ca5232235274916c4387639d77f3bc30393be7f8a451a1b1580e6059d1bea",
+        "measurementDigest": "39c1d4f10a2bdd58dafa5905423481cbc2f9651a08b344871ed0ed1124d75cf8",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -897,31 +761,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 683.800048828125,
+      "referenceMs": 698,
       "samples": [
-        669.60009765625,
-        673.7001953125,
-        674.39990234375,
-        674.5,
-        683.800048828125,
-        690.300048828125,
-        711.800048828125,
-        728,
-        834.2998046875
+        678.800048828125,
+        698,
+        740.7998046875
       ],
       "source": {
-        "runKey": "2026-10-02T205405601Z-0a341d",
+        "runKey": "2026-10-23T114544582Z-77e7ea",
         "runKeys": [
-          "2026-10-02T205405601Z-0a341d",
-          "2026-10-02T205624610Z-6f8bc8",
-          "2026-10-02T205856537Z-fc9ed4"
+          "2026-10-23T114544582Z-77e7ea"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T20:59:54.259Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:50:22.739Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:01.540Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -931,7 +787,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "4a7ae613252ac1faa76c28d0f5b105dd2be09182297f3f742682ba7aa316fe35",
+        "measurementDigest": "37f89342558a7f83971fc5e21ef9c6bf0e255502898c27680aa39c62c4a1e01c",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
         "browser": "chromium",
@@ -948,31 +804,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 434.5,
+      "referenceMs": 447.099853515625,
       "samples": [
-        415.5,
-        419,
-        428.400146484375,
-        432.60009765625,
-        434.5,
-        447.900146484375,
-        523.7998046875,
-        529.800048828125,
-        531.499755859375
+        413.099853515625,
+        447.099853515625,
+        458.2001953125
       ],
       "source": {
-        "runKey": "2026-10-02T205405601Z-0a341d",
+        "runKey": "2026-10-23T114544582Z-77e7ea",
         "runKeys": [
-          "2026-10-02T205405601Z-0a341d",
-          "2026-10-02T205624610Z-6f8bc8",
-          "2026-10-02T205856537Z-fc9ed4"
+          "2026-10-23T114544582Z-77e7ea"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:00:07.762Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:50:35.246Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:01.540Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -982,7 +830,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "4f021b308b698a58a431e3d83d9bec6bc22c01d06d38fa1955d2ac4d2d432084",
+        "measurementDigest": "e6f61e62c3ca677d89a7c40b3e532c57891ea0d9ba9252fc32a8c3879b8843de",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -999,31 +847,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 454.39990234375,
+      "referenceMs": 555.89990234375,
       "samples": [
-        421.60009765625,
-        424.39990234375,
-        444.499755859375,
-        447.39990234375,
-        454.39990234375,
-        493.900146484375,
-        541.199951171875,
-        638.60009765625,
-        894.89990234375
+        456.599853515625,
+        555.89990234375,
+        642.199951171875
       ],
       "source": {
-        "runKey": "2026-10-02T205405601Z-0a341d",
+        "runKey": "2026-10-23T114544582Z-77e7ea",
         "runKeys": [
-          "2026-10-02T205405601Z-0a341d",
-          "2026-10-02T205624610Z-6f8bc8",
-          "2026-10-02T205856537Z-fc9ed4"
+          "2026-10-23T114544582Z-77e7ea"
         ],
-        "buildId": "3ad8932e-a87b-4aaa-a6db-8749b5b63fa5",
-        "recordedAt": "2026-10-02T21:00:15.740Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:50:43.768Z"
       },
       "review": {
-        "reason": "Virtue-2 closure: warm-up settles and closes before a measured context, cross-session comparisons leave out the Realtime provider's delivery, new daily-journey scenarios, typical profile with Anlagen and open submissions; all three runs passed on one build",
-        "reviewedAt": "2026-10-02T21:09:01.540Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     },
     {
@@ -1033,7 +873,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "86d411fd9ee869ebb264891a2241cdea5c06eddbc60a02c25b0d02d2d3087f3b",
+        "measurementDigest": "814a4b5ce999f66b1f53a2e10fae3b9218f31eef99b8152b7c58f8b7e4615509",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1050,31 +890,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 90,
+      "referenceMs": 84.800048828125,
       "samples": [
-        73.699951171875,
-        76.39990234375,
-        88,
-        88.300048828125,
-        90,
-        92.099853515625,
-        93.89990234375,
-        93.89990234375,
-        99.5
+        77.5,
+        84.800048828125,
+        100.2001953125
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-2a7655",
+        "runKey": "2026-10-23T114544582Z-7c83d8",
         "runKeys": [
-          "2026-10-21T202256685Z-2a7655",
-          "2026-10-21T203412815Z-3e5001",
-          "2026-10-21T204627226Z-54e18e"
+          "2026-10-23T114544582Z-7c83d8"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:50:56.654Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:51:50.715Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:49.188Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:14.630Z"
       }
     },
     {
@@ -1084,7 +916,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "f8ee5a3a0a09cc413e318321b1ff80fa8a5e9b2ca4dcfbfed24e58cebd2ad658",
+        "measurementDigest": "a5ea9d94dc40472a71951b6d82fe6a2907e186ab9dc71ce625b1484e7b5d5d3f",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1101,31 +933,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 69.300048828125,
+      "referenceMs": 73.900146484375,
       "samples": [
-        63.300048828125,
-        66.400146484375,
-        67,
-        68.5,
-        69.300048828125,
-        70.60009765625,
-        78,
-        80.800048828125,
-        82.300048828125
+        72.800048828125,
+        73.900146484375,
+        80.89990234375
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-2a7655",
+        "runKey": "2026-10-23T114544582Z-7c83d8",
         "runKeys": [
-          "2026-10-21T202256685Z-2a7655",
-          "2026-10-21T203412815Z-3e5001",
-          "2026-10-21T204627226Z-54e18e"
+          "2026-10-23T114544582Z-7c83d8"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:50:57.097Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:51:51.225Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:49.188Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:14.630Z"
       }
     },
     {
@@ -1135,7 +959,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "ff392e815fbe8be864a99b700170c134d0de7b01a04a20ab95054f16fa206508",
+        "measurementDigest": "17608a6e1eaa05049b0976d0fc7d64334afaf4cc98995f7aafad43dc52f2bcea",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1152,31 +976,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 223.300048828125,
+      "referenceMs": 232.7998046875,
       "samples": [
-        198.10009765625,
-        208.89990234375,
-        217.800048828125,
-        219.5,
-        223.300048828125,
-        228.300048828125,
-        233.800048828125,
-        238.800048828125,
-        281.5
+        228.400146484375,
+        232.7998046875,
+        258.599853515625
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-2a7655",
+        "runKey": "2026-10-23T114544582Z-7c83d8",
         "runKeys": [
-          "2026-10-21T202256685Z-2a7655",
-          "2026-10-21T203412815Z-3e5001",
-          "2026-10-21T204627226Z-54e18e"
+          "2026-10-23T114544582Z-7c83d8"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:50:57.654Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:51:51.893Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:49.188Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:14.630Z"
       }
     },
     {
@@ -1186,7 +1002,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "67b7a42aa5071e8bfaea710b9d436f1213e54d28f366bba924bf6ac1ea5bb4c1",
+        "measurementDigest": "fa69cd5865626fa76653fc274805eb8a430ab43c3abf1b345fac783d4b694e76",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1203,31 +1019,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 200,
+      "referenceMs": 206.400146484375,
       "samples": [
-        173.5,
-        179.89990234375,
-        188.199951171875,
-        191.39990234375,
-        200,
-        202.10009765625,
-        214.5,
-        225.599853515625,
-        517.099853515625
+        206,
+        206.400146484375,
+        222.89990234375
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-2a7655",
+        "runKey": "2026-10-23T114544582Z-7c83d8",
         "runKeys": [
-          "2026-10-21T202256685Z-2a7655",
-          "2026-10-21T203412815Z-3e5001",
-          "2026-10-21T204627226Z-54e18e"
+          "2026-10-23T114544582Z-7c83d8"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:50:58.083Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:51:52.309Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:49.188Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:14.630Z"
       }
     },
     {
@@ -1237,7 +1045,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "6a039472b9f7047a5c6ff42919ccaa1afa8147e16938dec51cf329bb3884b88b",
+        "measurementDigest": "5fae7b7ae99c8ca8441240d5b3e15995777bb4acac716abefb19fc62547f78df",
         "protocol": "typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1",
         "role": "buero",
         "browser": "chromium",
@@ -1254,31 +1062,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 712.7001953125,
+      "referenceMs": 787.5,
       "samples": [
-        637.599853515625,
-        666.699951171875,
-        698.199951171875,
-        708.800048828125,
-        712.7001953125,
-        729.2998046875,
-        734.099853515625,
-        782.900146484375,
-        810.10009765625
+        711.300048828125,
+        787.5,
+        870.5
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-2a7655",
+        "runKey": "2026-10-23T114544582Z-7c83d8",
         "runKeys": [
-          "2026-10-21T202256685Z-2a7655",
-          "2026-10-21T203412815Z-3e5001",
-          "2026-10-21T204627226Z-54e18e"
+          "2026-10-23T114544582Z-7c83d8"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:51:07.701Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:52:02.386Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:49.188Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:14.630Z"
       }
     },
     {
@@ -1288,7 +1088,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "b861c0a0e0495075a28978cfbbcf7e029eb41113e8b324a63f8bbcca062f8787",
+        "measurementDigest": "a07f130f9ac6f9c694ccd16171279b6bc1987c086abef0996d347bdee4178b6e",
         "protocol": "typical-profile-buero-assigns-three-own-jobs-admin-searched-job-list-browser-raf-v1",
         "role": "admin",
         "browser": "chromium",
@@ -1305,31 +1105,23 @@
         "memoryGiB": 31,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 610.2998046875,
+      "referenceMs": 664.800048828125,
       "samples": [
-        560.89990234375,
-        583.5,
-        586.199951171875,
-        607.7998046875,
-        610.2998046875,
-        610.800048828125,
-        613.300048828125,
-        659.89990234375,
-        684.10009765625
+        580.800048828125,
+        664.800048828125,
+        722.10009765625
       ],
       "source": {
-        "runKey": "2026-10-21T202256685Z-42481a",
+        "runKey": "2026-10-23T114544582Z-7e4d71",
         "runKeys": [
-          "2026-10-21T202256685Z-42481a",
-          "2026-10-21T203412815Z-7180e4",
-          "2026-10-21T204627226Z-341f1d"
+          "2026-10-23T114544582Z-7e4d71"
         ],
-        "buildId": "5d6d65ee-357d-45ba-b8b1-7337ff742577",
-        "recordedAt": "2026-10-21T20:49:47.995Z"
+        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
+        "recordedAt": "2026-10-23T11:49:04.497Z"
       },
       "review": {
-        "reason": "The typical profile's live week now starts on a Monday (tests/golden/support/date-ownership.ts ownedBerlinWeekAtOffset), so the Plantafel shows all seven seeded days on every run day; the profile change moved the workload digest of every typical scenario. Three fresh passing runs on one build (5d6d65ee) on Wednesday 2026-10-21, quiet machine, nothing else running.",
-        "reviewedAt": "2026-10-21T21:01:35.704Z"
+        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
+        "reviewedAt": "2026-10-23T11:53:05.202Z"
       }
     }
   ]

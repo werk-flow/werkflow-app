@@ -1,5 +1,7 @@
 import type { CalendarBoardDay } from './board';
-import type { OrgRole } from '@/lib/roles';
+import { isManagerRole, isOrgRole, type OrgRole } from '@/lib/roles';
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
+import { canApproveEntries } from '@/lib/time-tracking/helpers';
 import type { CalendarWorkBlock } from '@/lib/time-tracking/calendar-blocks';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
 
@@ -40,19 +42,27 @@ function isBlockInClosedPeriod(
 }
 
 /**
- * Who may move or resize a recorded block: admins everything, Büro their own
- * and employees' blocks, employees nothing; nobody a block of a closed period.
+ * Who may move or resize a recorded block, as `submitTimeCorrection` decides it:
+ * a manager their own block, and another person's block only through the
+ * caller's `time_approval` holder (`canApproveEntries`); employees correct
+ * their time under Zeiterfassung; nobody a block of a closed period or with a
+ * pending deletion.
  */
 export function canManageBlock(
   block: CalendarWorkBlock,
-  currentUserRole: OrgRole,
-  currentUserId: string,
-  entryUserRole: string | undefined,
-  closedPeriods: readonly ClosedTimePeriod[],
+  entryUserRole: string | null | undefined,
+  viewer: {
+    currentUserRole: OrgRole;
+    currentUserId: string;
+    approvalHolder: EffectiveResponsibilityHolder | null;
+    closedPeriods: readonly ClosedTimePeriod[];
+  },
 ): boolean {
+  const { currentUserRole, currentUserId, approvalHolder, closedPeriods } = viewer;
   if (block.sourceEntries.some((entry) => entry.status === 'pending_delete')) return false;
   if (isBlockInClosedPeriod(block, closedPeriods)) return false;
-  if (currentUserRole === 'admin') return true;
-  if (currentUserRole === 'buero') return entryUserRole === 'employee' || block.userId === currentUserId;
-  return false;
+  if (!isManagerRole(currentUserRole)) return false;
+  if (block.userId === currentUserId) return true;
+  if (!entryUserRole || !isOrgRole(entryUserRole)) return false;
+  return canApproveEntries(approvalHolder, block.userId, entryUserRole);
 }

@@ -14,6 +14,7 @@ import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
 import { ESLint } from 'eslint';
 import { getBusinessTodayIso } from '../lib/date-time/berlin';
 import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
+import { readRepositoryLedger, recordedEvidence } from '../lib/testing/publication/evidence-ledger';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
 import { findSliceRecordProblems } from '../lib/docs/slice-records';
 import {
@@ -331,13 +332,27 @@ const hooksProblem = hooksPathProblem(configuredHooksPath(repoRoot), repoRoot);
 if (hooksProblem) problems.push(`publication-gate: ${hooksProblem}`);
 
 // Closed records: the deletion pass of a slice record, the durable homes of a plan record and the banner.
+const changedNow = uncommittedPaths(
+  gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
+);
+// Review records are machine-local evidence: a record is checked against the ledger while it is
+// uncommitted, on the machine that closes it. A committed record, or a fresh clone, checks the citation alone.
+const evidenceLedger = readRepositoryLedger(repoRoot);
+const ledgerHolds = (path: string): boolean => {
+  const file = join(repoRoot, path);
+  return existsSync(file) && recordedEvidence(evidenceLedger, path, readFileSync(file));
+};
 for (const [path, status] of statuses) {
   if (status?.kind !== 'closed') continue;
   const markdown = docMarkdown(path);
   if (path.startsWith('plans/phase-1/slices/') && status.date >= DELETION_PASS_SINCE)
     report(
       'deletion-pass',
-      deletionPassProblems(markdown).map((problem) => `docs/${path} ${problem}`),
+      deletionPassProblems({
+        markdown,
+        closedOn: status.date,
+        recordedReview: changedNow.has(`docs/${path}`) ? ledgerHolds : null,
+      }).map((problem) => `docs/${path} ${problem}`),
     );
   if (
     path.startsWith('plans/') &&
@@ -406,9 +421,6 @@ const lastChanged = lastCommits(gitOut(['log', '--name-only', commitFormat, '--'
 // The commits whose diff of a doc adds or removes its stamp line: they recorded a review.
 const lastStamped = lastCommits(
   gitOut(['log', '--name-only', commitFormat, '-G^Status: living — last reviewed', '--', 'docs']),
-);
-const changedNow = uncommittedPaths(
-  gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
 );
 for (const path of livingDocs) {
   const stamp = statuses.get(path.slice('docs/'.length))?.date;

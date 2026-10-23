@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useRef, useMemo, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useMemo, useState, type ReactNode } from 'react';
 import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -16,15 +16,18 @@ import {
   UNFILTERED_REALTIME_TABLES,
   type RealtimeTable,
 } from '@/lib/realtime/tables';
+import {
+  createListenerRegistry,
+  type ListenerRegistry,
+  type RealtimeCallback,
+} from '@/lib/realtime/listener-registry';
 
 export type { RealtimeTable } from '@/lib/realtime/tables';
 
 export type { RealtimeChangeEvent };
 
-type RealtimeCallback = (event: RealtimeChangeEvent) => void;
-
 type RealtimeContextValue = {
-  subscribe: (table: RealtimeTable, cb: RealtimeCallback) => () => void;
+  subscribe: ListenerRegistry['subscribe'];
 };
 
 const RealtimeContext = createContext<RealtimeContextValue | null>(null);
@@ -32,23 +35,7 @@ const RealtimeContext = createContext<RealtimeContextValue | null>(null);
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { activeOrgId } = useOrganization();
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const listenersRef = useRef<Map<RealtimeTable, Set<RealtimeCallback>>>(
-    new Map(REALTIME_TABLES.map((t) => [t, new Set<RealtimeCallback>()])),
-  );
-
-  const dispatchAll = useCallback(() => {
-    for (const table of REALTIME_TABLES) {
-      const listeners = listenersRef.current.get(table);
-      if (!listeners || listeners.size === 0) continue;
-      const syntheticEvent: RealtimeChangeEvent = {
-        table,
-        eventType: 'UPDATE',
-        new: null,
-        old: null,
-      };
-      listeners.forEach((cb) => cb(syntheticEvent));
-    }
-  }, []);
+  const [registry] = useState(createListenerRegistry);
 
   useEffect(() => {
     if (!activeOrgId) return;
@@ -57,15 +44,11 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const supabase = createSupabaseBrowserClient();
     let cancelled = false;
 
+    // Preserve every event identity. The two read/refresh hooks coalesce
+    // their complete table set once, with the shared 150 ms guard.
+    // A second provider timer delays delivery and can swallow a DELETE.
     function dispatch(event: RealtimeChangeEvent) {
-      if (cancelled) return;
-      const listeners = listenersRef.current.get(event.table);
-      if (!listeners || listeners.size === 0) return;
-
-      // Preserve every event identity. The two read/refresh hooks coalesce
-      // their complete table set once, with the shared 150 ms guard.
-      // A second provider timer delays delivery and can swallow a DELETE.
-      listeners.forEach((callback) => callback(event));
+      if (!cancelled) registry.dispatch(event);
     }
 
     async function setup() {
@@ -98,7 +81,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           document.documentElement.dataset.realtimePostgresState = 'ready';
           // Channel join can precede database-listener readiness. Read after
           // this signal on initial connection and reconnect to cover that gap.
-          dispatchAll();
+          registry.dispatchAll({ joined: true });
         } else if (payload.status === 'error') {
           document.documentElement.dataset.realtimePostgresState = 'error';
           logError('realtime.database_subscription_unavailable');
@@ -142,6 +125,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         document.documentElement.dataset.realtimeState = status.toLowerCase();
         if (err) logError('realtime.subscription_error', err);
         if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+          registry.leave();
           delete document.documentElement.dataset.realtimePostgresState;
           // The client reconnects by itself; the log keeps the interruption.
           logError('realtime.channel_interrupted', status);
@@ -176,7 +160,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (awaySince === null) return;
       const absenceMs = Date.now() - awaySince;
       awaySince = null;
-      if (absenceMs >= REALTIME_FOCUS_CATCH_UP_MIN_ABSENCE_MS) dispatchAll();
+      if (absenceMs >= REALTIME_FOCUS_CATCH_UP_MIN_ABSENCE_MS) registry.dispatchAll();
     }
     function handleVisibilityChange() {
       if (document.visibilityState === 'hidden') markAway();
@@ -188,6 +172,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      registry.leave();
       delete document.documentElement.dataset.realtimeState;
       delete document.documentElement.dataset.realtimePostgresState;
       authListener.unsubscribe();
@@ -199,16 +184,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         channelRef.current = null;
       }
     };
-  }, [activeOrgId, dispatchAll]);
+  }, [activeOrgId, registry]);
 
-  const subscribe = useCallback((table: RealtimeTable, cb: RealtimeCallback) => {
-    listenersRef.current.get(table)?.add(cb);
-    return () => {
-      listenersRef.current.get(table)?.delete(cb);
-    };
-  }, []);
-
-  const ctxValue = useMemo<RealtimeContextValue>(() => ({ subscribe }), [subscribe]);
+  const ctxValue = useMemo<RealtimeContextValue>(() => ({ subscribe: registry.subscribe }), [registry]);
 
   return <RealtimeContext.Provider value={ctxValue}>{children}</RealtimeContext.Provider>;
 }

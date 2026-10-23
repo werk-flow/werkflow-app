@@ -22,6 +22,116 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-23: audit:layout environment failure
+
+<!-- incident-run: 2026-10-23T133525904Z-c4f984 -->
+
+- Run: run `2026-10-23T133525904Z-c4f984`, group `audit:layout`, target local, fingerprint `9695fd82642a`, world `f64cc01a40d0401f9c52b630d908a3cc`.
+- Failure point:  >  > layout\mobile-viewport.spec.ts > @AUDIT-LAYOUT phone viewport: no horizontal scroll, shell-owned scroll, no native controls > admin /anfragen fits a 375 px viewport: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: The browser failed to load a JavaScript chunk with net::ERR_NETWORK_CHANGED (a host network change on this workstation), so /anfragen at 375 px never hydrated and the refresh and clock buttons stayed disabled
+- Prevention: Tier 2: the playwright-spec/no-swallowed-failure rule keeps the audit failing loudly on an unhydrated page; a host network change has no repository mechanism
+- Focused proof: the replay on the retained world passed (diagnostic run `2026-10-23T152704796Z-b34d22`), and `audit:layout` passed in the repair plan, report `2026-10-23T152746796Z-a6297c81`.
+
+## 2026-10-23: audit:performance:calendar harness failure
+
+<!-- incident-run: 2026-10-23T113225946Z-cb0cac -->
+
+- Run: run `2026-10-23T113225946Z-cb0cac`, group `audit:performance:calendar`, target local, fingerprint `fd2ea4c7c1b5`, world `fb65159f5ff044589db7b6eb9bba94fc`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (calendar.board.cold-open median): comparison is unverified (no reviewed baseline for this scenario, version, profile, and backend); a required scenario cannot pass without a reviewed baseline and valid samples.
+- Root cause: Package S changed the measured support files tests/golden/support/scenario-measurement.ts and tests/audit/support/performance-steps.ts, so every scenario's measurement digest moved and no reviewed reference matches; every scenario stayed within its budget
+- Prevention: Tier 2: lib/testing/performance-references.test.ts names the orphaned references; recalibrated through scripts/calibrate-performance.ts
+- Correction: the scenarios were recalibrated from passing runs `2026-10-23T114544582Z-dc8254`, `-7e4d71`, `-77e7ea` and `-7c83d8` through `scripts/calibrate-performance.ts` (comparison set to calibrating for those runs only), and the emptied carry-over drops its retired proof.
+- Focused proof: all five `audit:performance:*` groups passed against the new references in report `2026-10-23T115718115Z-24f50736`.
+
+## 2026-10-23: audit:performance:field harness failure
+
+<!-- incident-run: 2026-10-23T113225946Z-9526bf -->
+
+- Run: run `2026-10-23T113225946Z-9526bf`, group `audit:performance:field`, target local, fingerprint `4fb05b48c01b`, world `7ad3491748964a0cb4237498208aa4f5`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (time.clock-in.visible median): comparison is unverified (no reviewed baseline for this scenario, version, profile, and backend); a required scenario cannot pass without a reviewed baseline and valid samples.
+- Root cause: Package S changed the measured support files tests/golden/support/scenario-measurement.ts and tests/audit/support/performance-steps.ts, so every scenario's measurement digest moved and no reviewed reference matches; every scenario stayed within its budget
+- Prevention: Tier 2: lib/testing/performance-references.test.ts names the orphaned references; recalibrated through scripts/calibrate-performance.ts
+- Correction: the scenarios were recalibrated from passing runs `2026-10-23T114544582Z-dc8254`, `-7e4d71`, `-77e7ea` and `-7c83d8` through `scripts/calibrate-performance.ts` (comparison set to calibrating for those runs only), and the emptied carry-over drops its retired proof.
+- Focused proof: all five `audit:performance:*` groups passed against the new references in report `2026-10-23T115718115Z-24f50736`.
+
+## 2026-10-23: audit:performance:planning harness failure
+
+<!-- incident-run: 2026-10-23T113225946Z-c1789c -->
+
+- Run: run `2026-10-23T113225946Z-c1789c`, group `audit:performance:planning`, target local, fingerprint `f02cba0f12d6`, world `c706e41056a4412891fd196860b4bb23`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (planning.occurrence.cross-session median): comparison is unverified (no reviewed baseline for this scenario, version, profile, and backend); a required scenario cannot pass without a reviewed baseline and valid s…
+- Root cause: Package S changed the measured support files tests/golden/support/scenario-measurement.ts and tests/audit/support/performance-steps.ts, so every scenario's measurement digest moved and no reviewed reference matches; every scenario stayed within its budget
+- Prevention: Tier 2: lib/testing/performance-references.test.ts names the orphaned references; recalibrated through scripts/calibrate-performance.ts
+- Correction: the scenarios were recalibrated from passing runs `2026-10-23T114544582Z-dc8254`, `-7e4d71`, `-77e7ea` and `-7c83d8` through `scripts/calibrate-performance.ts` (comparison set to calibrating for those runs only), and the emptied carry-over drops its retired proof.
+- Focused proof: all five `audit:performance:*` groups passed against the new references in report `2026-10-23T115718115Z-24f50736`.
+
+## 2026-10-23: audit:performance:lists harness failure
+
+<!-- incident-run: 2026-10-23T113225946Z-f74add -->
+
+- Run: run `2026-10-23T113225946Z-f74add`, group `audit:performance:lists`, target local, fingerprint `f981f34ceceb`, world `8b55b804a0e943f5a0cde0d9ceed64f5`.
+- Failure point: Execution evidence: scenario-latencies.ndjson (customers.list.open median): comparison is unverified (no reviewed baseline for this scenario, version, profile, and backend); a required scenario cannot pass without a reviewed baseline and valid samples.
+- Root cause: Package S changed the measured support files tests/golden/support/scenario-measurement.ts and tests/audit/support/performance-steps.ts, so every scenario's measurement digest moved and no reviewed reference matches; every scenario stayed within its budget
+- Prevention: Tier 2: lib/testing/performance-references.test.ts names the orphaned references; recalibrated through scripts/calibrate-performance.ts
+- Correction: the scenarios were recalibrated from passing runs `2026-10-23T114544582Z-dc8254`, `-7e4d71`, `-77e7ea` and `-7c83d8` through `scripts/calibrate-performance.ts` (comparison set to calibrating for those runs only), and the emptied carry-over drops its retired proof.
+- Focused proof: all five `audit:performance:*` groups passed against the new references in report `2026-10-23T115718115Z-24f50736`.
+
+## 2026-10-23: audit:layout:planning harness failure
+
+<!-- incident-run: 2026-10-23T101831902Z-794dc4 -->
+
+- Run: run `2026-10-23T101831902Z-794dc4`, group `audit:layout:planning`, target local, fingerprint `c0df77463938`, world `6ee6c2eb7001494c9b4591936ae9f3ed`.
+- Failure point:  >  > layout\surfaces-planning.spec.ts > @AUDIT-LAYOUT-SURFACES planning: tabs and dialogs fit, pass axe and keep their keyboard path > admin /kalender part 1 of 2: Error: expect(locator).toBeVisible() failed
+- Root cause: calendar.time-correction dragged the recorded block before the calendar's time_approval holder read had rendered (canManageBlock now waits for that background read), so the block offered no drag and no correction dialog opened (third opening, 155 ms after the read answered)
+- Prevention: Tier 2: tests/audit/support/dialog-openers/calendar.ts waits until the block shows the grab cursor (canManage) before it drags
+- Focused proof: `audit:layout:planning` passed in report `2026-10-23T102443704Z-27b8fb49`.
+
+## 2026-10-23: audit:layout:field harness failure
+
+<!-- incident-run: 2026-10-23T100936845Z-af14b9 -->
+
+- Run: run `2026-10-23T100936845Z-af14b9`, group `audit:layout:field`, target local, fingerprint `4d1d74d34882`, world `88334292a65f4bcebfcb76cce5cef8e0`.
+- Failure point:  >  > layout\surfaces-field.spec.ts > @AUDIT-LAYOUT-SURFACES field: tabs and dialogs fit, pass axe and keep their keyboard path > employee /aufgaben: Error: Enter on the trigger opens the dialog
+- Root cause: field.evidence-upload reloads /aufgaben after its seed and the audit pressed Enter on the server-rendered Nachweis hochladen button at 768 px before hydration, so no dialog opened
+- Prevention: Tier 2: the reloading openers in tests/audit/support/dialog-openers/time.ts wait for hydratedAndSettled before returning the trigger; proposed for the lead: openLayerAt waits for hydration before it focuses any trigger
+- Focused proof: `audit:layout:field` passed in report `2026-10-23T111616575Z-3f1d49bb`.
+
+## 2026-10-23: audit:lab:office product failure
+
+<!-- incident-run: 2026-10-23T085001267Z-14feb3 -->
+
+- Run: run `2026-10-23T085001267Z-14feb3`, group `audit:lab:office`, target local, fingerprint `15c6c328daa8`, world `bcfc82bdea444bb8bb07e72560e88c17`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: the next 16.4 byte floors (React Flight writes each chunk path once, fewer script files) and the cold-start Auth user shape that S7 removed on purpose; counts all at or below reference
+- Prevention: Tier 2: the lab floors and shape check caught both; each target accepted through bun scripts/lab-counts.ts accept with its proof, counts lowered with ratchet
+
+## 2026-10-23: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-23T084528911Z-c7526e -->
+
+- Run: run `2026-10-23T084528911Z-c7526e`, group `audit:lab:field`, target local, fingerprint `8c9714003be6`, world `84d8fde64bab4a6fa7d0331a1d6131f1`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: the next 16.4 byte floors (React Flight writes each chunk path once) and the cold-start Auth user shape that S7 removed on purpose; counts all at or below reference
+- Prevention: Tier 2: the lab floors and shape check caught both; each target accepted through bun scripts/lab-counts.ts accept with its proof, counts lowered with ratchet
+
+## 2026-10-23: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-23T082231574Z-341de5 -->
+
+- Run: run `2026-10-23T082231574Z-341de5`, group `audit:lab:field`, target local, fingerprint `8c9714003be6`, world `24693a5a746d402bab005058bc48d27c`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: the Realtime join catch-up reached only views subscribed at database readiness; with the faster join (no mount getUser holding the auth lock) the streamed job list hydrated after readiness and missed its catch-up route refresh
+- Prevention: Tier 2: lib/realtime/listener-registry.test.ts; a view hydrated with server data that subscribes after readiness now gets one catch-up (lib/realtime/listener-registry.ts, hooks/use-realtime-tables.ts)
+
+## 2026-10-23: audit:lab:field product failure
+
+<!-- incident-run: 2026-10-23T075613413Z-20c142 -->
+
+- Run: run `2026-10-23T075613413Z-20c142`, group `audit:lab:field`, target local, fingerprint `062caabcaecf`, world `9fb950339e904482ab449fbf53164d04`.
+- Failure point: no failed test recorded; read the run log.
+- Root cause: next 16.4 React Flight writes each chunk path once instead of in every client-reference row, so RSC payload bytes fell 14 to 45 % below the lab floors; server reads, request sequence and data rows are unchanged
+- Prevention: Tier 2: the lab byte floors caught the framework change; each shrunken target is accepted through bun scripts/lab-counts.ts accept with a reason naming the proof
+
 ## 2026-10-23: audit:lab:field harness failure
 
 <!-- incident-run: 2026-10-23T055721176Z-2e1bc5 -->
@@ -30,6 +140,8 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Failure point:  >  > lab\field.spec.ts > Lab counts of the field worker @AUDIT-LAB-FIELD > LAB-F4 the field worker clocks in, stays idle, and clocks out @AUDIT-LAB-F4: Error: lab.field.clock-in released a live read that a dialog held since before the step: settle the page (settleLiveShell) before you open the dialog.
 - Root cause: Two causes. (1) The known clock-step defect from run 2026-10-23T042502537Z-2f9bd3 is still unrepaired: lab.field.clock-in starts with a live read held since before the step, the recorder refuses the sample, and clock-in, idle-clocked-in and clock-out record nothing. (2) Commit 30c67a90 upgraded next 16.3.8 to 16.4.1 (security advisories); the field lab's byte floors for the /auftraege document, route and script payloads and the job-open, checklist-tick and evidence-add payloads now fall 14 to 45 percent below their recorded floors. A shrink is expected from the framework upgrade but needs a reviewer to confirm nothing is missing before bun scripts/lab-counts.ts accept. No product latency regression is established.
 - Prevention: Tier 2: tests/audit/support/lab-recorder.ts rejects held-read contamination and lib/testing/lab-evidence.ts refuses an unreviewed floor shrink. Follow-up: repair the clock setup precondition, then review and accept the 16.4.1 floors per step.
+- Correction (2026-10-23): the held read is the join catch-up. Database readiness queues a debounced read in every live view, and `settleLiveShell` waited on the `networkidle` load state, which a document reaches once, before readiness; the clock sheet opened inside the debounce and held the read. `settleLiveShell` now waits until `<html data-live-read-pending>` and `data-route-refresh` clear (`hooks/use-live-view.ts`, probe in `tests/ui-contracts/controls.spec.ts`), and the gated `requests` count leaves out router prefetches, which `prefetches` reports beside it.
+- Focused proof: `audit:lab:field` runs `2026-10-23T085545465Z-6fd13e`, `2026-10-23T090054965Z-ebd7df`, `2026-10-23T090553043Z-b2c041` and `audit:lab:office` runs `2026-10-23T085801675Z-2211c9`, `2026-10-23T090305882Z-7b2458`, `2026-10-23T090806549Z-359741` passed in a row.
 
 ## 2026-10-23: audit:lab:field harness failure
 
@@ -39,6 +151,8 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Failure point:  >  > lab\field.spec.ts > Lab counts of the field worker @AUDIT-LAB-FIELD > LAB-F4 the field worker clocks in, stays idle, and clocks out @AUDIT-LAB-F4: Error: lab.field.clock-in released a live read that a dialog held since before the step: settle the page (settleLiveShell) before you open the dialog.
 - Root cause: Evidence-add recorded one action and three prefetches, against a reference total of three with two prefetches. Timing-dependent prefetch traffic therefore trips the gated total although each prefetch shape is informational. The clock step began with a held live read despite settleLiveShell, which waits for readiness and networkidle; closing the sheet released it and the recorder refused the contaminated sample. No product latency regression is established.
 - Prevention: Tier 2: tests/audit/support/lab-recorder.ts rejects held-read contamination. Keep that refusal. Follow-up must repair the clock setup precondition and distinguish timing-dependent prefetch traffic in the count gate. No repaired performance proof is claimed.
+- Correction (2026-10-23): the held read is the join catch-up. Database readiness queues a debounced read in every live view, and `settleLiveShell` waited on the `networkidle` load state, which a document reaches once, before readiness; the clock sheet opened inside the debounce and held the read. `settleLiveShell` now waits until `<html data-live-read-pending>` and `data-route-refresh` clear (`hooks/use-live-view.ts`, probe in `tests/ui-contracts/controls.spec.ts`), and the gated `requests` count leaves out router prefetches, which `prefetches` reports beside it.
+- Focused proof: `audit:lab:field` runs `2026-10-23T085545465Z-6fd13e`, `2026-10-23T090054965Z-ebd7df`, `2026-10-23T090553043Z-b2c041` and `audit:lab:office` runs `2026-10-23T085801675Z-2211c9`, `2026-10-23T090305882Z-7b2458`, `2026-10-23T090806549Z-359741` passed in a row.
 
 ## 2026-10-22: audit:layout:documents harness failure
 
@@ -85,10 +199,11 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: report `2026-10-22T060509450Z-da730821`, group `unit:all`, target local; no run key and no retained world (a unit group).
 - Failure point: `lib/testing/publication/pre-push-hook.test.ts`, "the owner override passes a refused push only with a log line naming the commit and the reason": `git push` exited 1 instead of 0.
 - Evidence: `unit-all.log` of that report only; the assertion printed no child output.
-- Root cause: not determinable. The test asserted the push's exit code without the push's output, so the log could not say whether the hook refused, the override log append failed, or git could not lock the bare repository's ref. 30 sequential runs and 15 runs beside a full unit run on this machine all passed. Classified harness: the test's assertion hid the failure it guards.
+- Root cause: the hook script called `cat`, `tr`, `mkdir` and `date`, which a shell whose PATH lacks Git's `usr/bin` does not have (a Codex PowerShell session); with such a PATH the hook refuses the override and the test fails the same way, exit 1 without output. Found on 2026-10-23 after Codex hit it and took it for its environment; the failed run's PATH was not recorded. 30 sequential runs and 15 runs beside a full unit run, all with Git's `usr/bin` on the PATH, passed. Classified harness: the hook depended on its caller's PATH, and the test's assertion hid the failure.
 - Correction: every exit-code assertion of the test carries the child's output.
-- Prevention: Tier 2: `lib/conventions/unit-test-timeouts.test.ts` refuses an exit-code assertion without the child's output in any unit test.
-- Focused proof: `bun test lib/testing/publication/pre-push-hook.test.ts` passed 45 of 45 runs on the corrected test.
+- Correction (2026-10-23): `.githooks/pre-push` only execs `scripts/pre-push.ts`, which reads the refs, runs the gate and logs an override with Bun and git alone.
+- Prevention: Tier 1: `scripts/pre-push.ts` needs no shell utility. Tier 2: `lib/conventions/unit-test-timeouts.test.ts` refuses an exit-code assertion without the child's output, and `lib/testing/publication/pre-push-hook.test.ts` runs the hook with a PATH of only Bun's and git's directories.
+- Focused proof: `bun test lib/testing/publication/pre-push-hook.test.ts` passed 45 of 45 runs on the corrected test; the PATH probe fails on the old hook and passes on the new one.
 
 ## 2026-10-22: audit:lab:office product failure
 

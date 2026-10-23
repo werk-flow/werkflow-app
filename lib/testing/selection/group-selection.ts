@@ -1,3 +1,4 @@
+import { ADVISORY_GROUP_ID } from '../evidence/advisory-freshness';
 import { isLabSpec } from '../lab-steps';
 import { DEPENDENCY_GATE_INPUTS } from '../publication/dependency-audit';
 import { SURFACE_GROUPS } from './surface-groups';
@@ -144,14 +145,20 @@ export function groupSelections(input: {
       selections.set(group.id, { reason: 'Release coverage', changedFiles: [] });
     } else if (group.releaseOnly) {
       continue;
-    } else if (group.id === 'static:dependencies') {
+    } else if (group.id === ADVISORY_GROUP_ID) {
+      // Every change plan carries an advisory result; the plan reuses a pass under 24 hours old
+      // (lib/testing/evidence/advisory-freshness.ts), so a new advisory surfaces within a day.
       const changedFiles = input.changedFiles.filter((file) =>
         DEPENDENCY_GATE_INPUTS.some((dependency) => dependency === file),
       );
-      if (changedFiles.length)
-        selections.set(group.id, { reason: 'Dependency inputs changed', changedFiles });
-      else if (input.unresolvedGroupIds.includes(group.id))
-        selections.set(group.id, { reason: 'Unresolved result', changedFiles: [] });
+      selections.set(
+        group.id,
+        changedFiles.length
+          ? { reason: 'Dependency inputs changed', changedFiles }
+          : input.unresolvedGroupIds.includes(group.id)
+            ? { reason: 'Unresolved result', changedFiles: [] }
+            : { reason: 'Advisory check; a pass stays reusable for 24 hours', changedFiles: [] },
+      );
     } else if (group.kind === 'static') {
       selections.set(group.id, { reason: 'Current policy check', changedFiles: [] });
     } else if (!isBrowser(group)) {

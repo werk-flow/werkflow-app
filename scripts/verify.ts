@@ -1,10 +1,11 @@
 import { withVerificationReport } from '../lib/testing/runner/verification-lifecycle';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { readBuildReceipt } from '../lib/testing/evidence/build-identity';
+import { readReportHistory } from '../lib/testing/evidence/report-history';
 import {
   captureInputSnapshot,
   changedInputs,
@@ -15,7 +16,9 @@ import {
   inputSnapshotSchema,
   isDocumentationInput,
   reusableGroupResult,
+  type GroupResult,
 } from '../lib/testing/evidence/group-evidence';
+import { ADVISORY_GROUP_ID, freshAdvisoryPass } from '../lib/testing/evidence/advisory-freshness';
 import {
   getGroupTimingRequirements,
   getTestGroups,
@@ -96,6 +99,8 @@ import {
 
 const repository = resolve(import.meta.dir, '..');
 const archive = resolve(repository, '.agent-logs/verification');
+/** What the plan reads of the archive, cached beside it (lib/testing/evidence/report-history.ts). */
+const historyCache = resolve(repository, '.agent-logs/verification-history.json');
 const BROWSER_KINDS: ReadonlySet<TestGroup['kind']> = new Set(['golden', 'audit', 'canary']);
 /** Browser workers share one application server and one local stack; beyond eight the server, not the groups, is the bottleneck. */
 const MAX_JOBS = 8;
@@ -122,16 +127,6 @@ const reportSchema = z.object({
   /** The lab tables of the lab groups (docs/technical/performance.md), as the author and the reviewer read them. */
   labCounts: z.record(z.string(), labEvidenceSchema).default({}),
 });
-
-function readHistory(): z.infer<typeof reportSchema>[] {
-  if (!existsSync(archive)) return [];
-  return readdirSync(archive)
-    .sort()
-    .flatMap((directory) => {
-      const file = resolve(archive, directory, 'report.json');
-      return existsSync(file) ? [reportSchema.parse(JSON.parse(readFileSync(file, 'utf8')))] : [];
-    });
-}
 
 function uncommittedInputChanges(snapshot: z.infer<typeof inputSnapshotSchema>): string[] {
   const options = { cwd: repository, encoding: 'utf8' as const, maxBuffer: 16 * 1024 * 1024 };
@@ -265,10 +260,13 @@ async function main(): Promise<void> {
   const options = parseArguments();
   loadEnvLocal();
   const planningStarted = performance.now();
+  const planningTime = new Date();
   console.log('[verify] Reading current inputs and prior evidence...');
   const groups = getTestGroups(repository);
   const snapshot = captureInputSnapshot(repository);
-  const history = readHistory().filter((report) => report.target === options.target);
+  const history = readReportHistory(archive, historyCache).filter(
+    (report) => report.target === options.target,
+  );
   const priorResults = history.flatMap((report) =>
     report.results.map((result) => ({ ...result, snapshot: report.snapshot })),
   );
@@ -334,17 +332,26 @@ async function main(): Promise<void> {
   const automatic = !options.groupIds && options.target !== 'cloud';
   const planning = (automatic ? qualified.filter((entry) => selections.has(entry.group.id)) : qualified).map(
     (entry) => {
-      // Cheap current-policy checks always execute, including documentation and catalog validation.
+      const priorResult = (): GroupResult | undefined =>
+        reusableGroupResult({
+          groupId: entry.group.id,
+          fingerprint: entry.fingerprint,
+          inputs: entry.inputs,
+          snapshot,
+          results: priorResults,
+        });
+      // Cheap current-policy checks always execute, including documentation and catalog validation;
+      // an automatic change plan copies an advisory pass while it is under 24 hours old.
       let reusable =
-        entry.group.kind === 'static' || entry.group.kind === 'canary' || options.fresh
+        entry.group.kind === 'canary' || options.fresh
           ? undefined
-          : reusableGroupResult({
-              groupId: entry.group.id,
-              fingerprint: entry.fingerprint,
-              inputs: entry.inputs,
-              snapshot,
-              results: priorResults,
-            });
+          : entry.group.id === ADVISORY_GROUP_ID
+            ? automatic && options.mode === 'change'
+              ? freshAdvisoryPass(priorResult(), planningTime)
+              : undefined
+            : entry.group.kind === 'static'
+              ? undefined
+              : priorResult();
       // A browser proof fingerprints test code only, so its pass must also have run on the current content of the files that selected it.
       if (
         reusable &&
@@ -521,7 +528,9 @@ async function main(): Promise<void> {
       report.results.sort(
         (left, right) => (planIndex.get(left.groupId) ?? 0) - (planIndex.get(right.groupId) ?? 0),
       );
-      writeJsonAtomically(resolve(directory, 'report.json'), report);
+      // Parsing drops the snapshot that reading the history attaches to a reused result: until
+      // 2026-10-23 every copy carried its report's whole snapshot, and one plan's report grew to 39 MB.
+      writeJsonAtomically(resolve(directory, 'report.json'), reportSchema.parse(report));
       // The publication gate trusts a finished report only through its ledger entry (evidence-ledger.ts).
       if (report.status !== 'running')
         recordEvidence(repository, `.agent-logs/verification/${id}/report.json`, 'verification report');

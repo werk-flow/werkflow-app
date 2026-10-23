@@ -18,8 +18,6 @@ Write each test at its boundary while you build the behavior, and run the narrow
 6. Map the catalog clause in `lib/testing/selection/coverage-map.json` to the titles of the tests that prove it (for SQL, the `raise exception` message).
 7. Probe a lint rule with `createProbeLinter()` from `eslint-rules/probe-linter.mjs`, never `new ESLint()`.
 
-Wrong turn: a browser test for a rule a unit test can expose. It costs minutes and fails for reasons the rule does not own.
-
 ### Write a spec that stands alone
 
 1. Seed each test's preconditions through the helpers in `tests/golden/support/db/`, and drive the claimed operation through the real UI.
@@ -28,20 +26,16 @@ Wrong turn: a browser test for a rule a unit test can expose. It costs minutes a
 4. Locate controls through the area module under `tests/golden/support/steps/`: it owns copy (from a pure product label owner where one exists), structure hooks and key presses, and the spec passes data. Act through `steps/interaction.ts` and wait for the exact changed fact.
 5. Run `bun run test:unit lib/testing/spec-support` and `bun run lint <spec>`. Then run the test alone with `bun run test:audit:focused --grep "<title>"` (or `test:golden:focused`) while `bun run test:server local` serves the build.
 
-Wrong turn: a test that reads what an earlier test created. It passes in file order and fails alone or reordered.
-
 ### Run checks while you work
 
 1. After each edit, run the narrowest check: `bun run test:unit <path>` for a module, `bun run test:ui <spec>` for a contract, `bun run test:verify --group <id>` for one SQL or browser group.
-2. Before you finish, run `bun run test:plan` and read why each group is selected. A group you did not expect points at a file you did not mean to touch.
+2. Before you finish, run `bun run test:plan` and read why each group is selected.
 3. At the end, run `bun run test:verify` for the whole plan.
 
 ### Handle a failure
 
 1. Read the evidence before you run anything again, then follow [Failures](#failures).
 2. Repair the cause. When the test seems wrong, compare it with the catalog clause and the feature spec before you touch the assertion.
-
-Wrong turn: running again to see whether it passes; the runner refuses an unchanged repeat.
 
 ### Review the change
 
@@ -91,9 +85,9 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## Publication gate
 
-`.githooks/pre-push` is the one gate before publication. Git runs it only while `core.hooksPath` names `.githooks` (`git config core.hooksPath .githooks` once per clone), so `test:verify` and `docs:check` refuse while it does not (`hooksPathProblem`). The hook runs `scripts/check-publication-gate.ts` and refuses the push unless all six conditions hold:
+`.githooks/pre-push` is the one gate before publication. Git runs it only while `core.hooksPath` names `.githooks` (`git config core.hooksPath .githooks` once per clone), so `test:verify` and `docs:check` refuse while it does not (`hooksPathProblem`). The hook execs `scripts/pre-push.ts`, which needs only `bun` and `git` on the PATH, runs `scripts/check-publication-gate.ts` and refuses the push unless all six conditions hold:
 
-1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, and no input file is uncommitted.
+1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, no input file is uncommitted, and it holds an advisory check that passed within 24 hours (`lib/testing/evidence/advisory-freshness.ts`).
 2. A CodeRabbit review completed on the tree being pushed. `bun run review` records the digest of each file in its scope as CodeRabbit saw it ([CodeRabbit](coderabbit.md#run-a-review)). A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
 3. Every commit that no remote has yet carries a `Deletion pass:` line in its body.
 4. A pushed product file that an `audit:performance:*` group's scopes own has a passing run of that group on its current content.
@@ -111,13 +105,12 @@ bun run test:plan --mode release               # the complete release selection
 bun run test:server local                      # build and serve the recorded production build
 bun run test:verify                            # run the plan
 bun run test:verify --group <ids> --fresh      # run even when a proof exists; --jobs 2 adds a second browser worker
-bun run test:campaign                          # verification cost since the last commit
 bun run test:runs list|classify|cleanup|prune|recover-interrupted|cleanup-local-relocated
 bun run test:verify --target cloud             # the canary groups against DEV (after bun run env:dev and test:server cloud)
 bun run test:golden:focused --grep "<titles>"  # a focused fresh-world run; test:audit:focused and test:canary:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
 bun run test:diagnostic:audit --fresh-for <run-key>   # the failed group on a fresh world, same build
-WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep @AUDIT-VISUAL   # rewrite changed visual references
+WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"   # rewrite changed visual references
 bun run test:audit:focused --grep "@ACCEPT <set>"   # acceptance captures
 ```
 
@@ -155,7 +148,7 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. `exp
 Scenario measurements use the ids, budgets, and sample counts in `lib/testing/measured-scenarios.ts` and the reviewed references in `lib/testing/performance-baselines.json`. [Performance](performance.md) owns journeys, lab counts and payload budgets.
 
 - **Budget and basis.** A new scenario takes the budget of its boundary's scenarios, a cross-session one the live target. The median, without the provider's delivery time, meets the reference; the budget judges the whole interval (`comparableMs` in `lib/testing/latency-evidence.ts`).
-- **References.** Every required scenario has a reviewed reference at its current measurement digest. Calibration refuses failed, diagnostic, stale or undersampled runs and never replaces a reviewed reference by itself. To calibrate, pass the measured groups, run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`, and review the draft under `.agent-logs/performance-calibration/` before you copy it. A support-file edit that cannot change what a scenario measures re-keys the references in `lib/testing/performance-reference-carryover.json` with its reason; any other recalibrates.
+- **References.** Every required scenario has a reviewed reference at its current measurement digest. Calibration refuses failed, diagnostic, stale or undersampled runs and never replaces a reviewed reference by itself. To calibrate, pass the measured groups (a scenario without a reference passes only as `comparison: 'calibrating'`; restore `'required'` after the copy), run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`, and review the draft under `.agent-logs/performance-calibration/` before you copy it. A support-file edit that cannot change what a scenario measures re-keys the references in `lib/testing/performance-reference-carryover.json` with its reason; any other recalibrates.
 
 ### Visual references
 
@@ -165,7 +158,7 @@ Scenario measurements use the ids, budgets, and sample counts in `lib/testing/me
 
 1. Open the failed browser group's `error-context.md`, screenshot, and trace under `.agent-logs/playwright-runs/<run-key>/`; the verification log names the run key, and `.agent-logs/test-server/` holds the server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
 2. Find the cause and fix it. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
-3. Record the cause with `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. For a verification run it writes the [incident log](test-incident-log.md) entry. A group without a run key takes its group id (`classify sql:security environment ...`), and the diagnosis is stored beside its report.
+3. Record the cause with `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. For a verification run it writes the [incident log](test-incident-log.md) entry. A group without a run key takes its group id (`classify sql:security environment ...`), or `<group-id>@<report-id>` for a failed attempt in that report, also after a later pass; the diagnosis is stored beside its report.
 4. Clean the retained world with `bun run test:runs cleanup <run-key>`.
 5. Run `bun run test:verify`. Repair mode selects the failed groups. Their pass closes the repair.
 
@@ -200,9 +193,9 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - A browser group starts only after a bounded backend probe, and a failed group records a second probe as a hint, never a class. A diagnostic replay prints the source run's completed stages and refuses a second replay of a test on the same world; a fresh-world diagnosis runs once. [test `lib/testing/runner/backend-health.test.ts`, test `lib/testing/runs/replay-checkpoint.test.ts`, test `lib/testing/runner/group-recovery.test.ts`]
 - After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
-- Unit tests assert no duration and set no timeout of their own; a slow test is made cheaper. An assertion on a child's exit code carries the child's output. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
+- Unit tests assert no duration and set no timeout of their own; a slow test is made cheaper. The runner's watchdog stops a run in which no test starts for twice Bun's per-test bound, which fires only while a test yields, or that passes its deadline. An assertion on a child's exit code carries the child's output. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, code `lib/testing/runner/unit-run-watchdog.ts`, test `lib/testing/runner/unit-run-watchdog.test.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
 - Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
-- A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
+- A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, code `scripts/pre-push.ts`, test `lib/testing/evidence/advisory-freshness.test.ts`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
 - An agent shell command that pushes with `--no-verify` or overrides `core.hooksPath` is refused. [code `.claude/hooks/refuse-publication-bypass.ts`, test `lib/testing/publication/push-bypass.test.ts`, test `lib/testing/runner/guard-wiring.test.ts`]
 
 ## Never

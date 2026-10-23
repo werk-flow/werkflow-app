@@ -10,6 +10,7 @@ import {
   joinOrganizationDialog,
   profileAvatarDialog,
   profileAvatarUploadButton,
+  showOrganizationSwitcher,
 } from '../../../golden/support/steps/organization';
 import {
   addDelegationButton,
@@ -36,18 +37,19 @@ export const SETTINGS_OPENERS = {
     },
     layer: profileAvatarDialog,
   },
+  // On a phone the organization switcher sits in the menu sheet.
   'settings.create-org': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone menu (Menü öffnen) holds the same organization switcher with this button (components/sidebar/app-shell.tsx).',
-    trigger: async ({ page }) => createOrganizationButton(page),
+    trigger: async ({ page }) => {
+      await showOrganizationSwitcher(page);
+      return createOrganizationButton(page);
+    },
     layer: createOrganizationDialog,
   },
   'settings.join-org': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone menu (Menü öffnen) holds the same organization switcher with this button (components/sidebar/app-shell.tsx).',
-    trigger: async ({ page }) => joinOrganizationButton(page),
+    trigger: async ({ page }) => {
+      await showOrganizationSwitcher(page);
+      return joinOrganizationButton(page);
+    },
     layer: joinOrganizationDialog,
   },
   'settings.delete-org': {

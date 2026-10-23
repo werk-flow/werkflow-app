@@ -7,7 +7,7 @@ import { readTypeAssertionRatchet } from './type-assertions';
 // the assertion ban. Each rule must fail its planted violation in product
 // code, tests and scripts, and pass the correct form.
 
-const eslint = createProbeLinter();
+const eslint = createProbeLinter({ typed: true });
 
 async function ruleMessages(ruleId: string, source: string, filePath: string): Promise<string[]> {
   const [result] = await eslint.lintText(source, { filePath });
@@ -54,6 +54,15 @@ describe('type-aware lint rules', () => {
         ),
       ).toEqual([]);
     }
+  });
+
+  test('a typed probe at an existing path keeps the type-aware rules and reports its typed configuration', async () => {
+    const rule = '@typescript-eslint/no-floating-promises';
+    const floating =
+      'async function load(): Promise<number> {\n  return 1;\n}\nexport function start(): void {\n  load();\n}\n';
+    expect(await ruleMessages(rule, floating, 'lib/utils.ts')).toHaveLength(1);
+    const config = await eslint.calculateConfigForFile('lib/utils.ts');
+    expect(config.rules[rule]?.[0]).toBe(2);
   });
 
   test('a promise is awaited, handled or voided; Bun mock.module is a known safe call', async () => {

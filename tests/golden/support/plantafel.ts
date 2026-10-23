@@ -249,6 +249,21 @@ export function boardRowCards(page: Page, title: string): Locator {
   return confirmed(boardRows(page).locator('[data-calendar-card]').filter({ hasText: title }));
 }
 
+/**
+ * The cards with this title on the Plantafel as the width shows it: in the
+ * board rows, or in the day lists that replace the grid on a phone
+ * (components/kalender/board/phone-board.tsx).
+ */
+export function plantafelCards(page: Page, title: string): Locator {
+  const main = page.getByRole('main');
+  return confirmed(
+    main
+      .locator('[data-plantafel] [data-board-row] [data-calendar-card]')
+      .or(main.locator('[data-plantafel][data-layout="list"] [data-calendar-card]'))
+      .filter({ hasText: title }),
+  );
+}
+
 /** The cards with this title that are not marked cancelled. */
 export function activeBoardRowCards(page: Page, title: string): Locator {
   return boardRowCards(page, title).filter({ hasNotText: occurrenceStatusLabel('cancelled') });
@@ -402,6 +417,26 @@ export function scheduleParkedSubmit(dialog: Locator): Locator {
 
 export function dayRow(page: Page, userId: string): Locator {
   return confirmed(page.getByRole('main').locator(`[data-day-view] [data-day-row-user="${userId}"]`));
+}
+
+/**
+ * A person's recorded block by its times (HH:MM) as the day view shows it: in
+ * the person's timeline row, or in their section of the day list that replaces
+ * the timeline on a phone, which names the block by its times alone.
+ */
+export function dayWorkTimeBlock(
+  page: Page,
+  person: { userId: string; name: string },
+  from: string,
+  to: string,
+): Locator {
+  const phoneSection = page
+    .getByRole('main')
+    .locator('[data-day-view][data-layout="list"]')
+    .getByRole('region', { name: person.name, exact: true });
+  return calendarWorkTimeBlock(dayRow(page, person.userId), from, to).or(
+    phoneSection.getByRole('button', { name: new RegExp(`${from}–${to}`) }),
+  );
 }
 
 export function dayTimeline(row: Locator): Locator {

@@ -29,6 +29,7 @@ const diagnosesSchema = z.array(groupDiagnosisSchema);
 
 const archivedReportSchema = z.object({
   id: z.string(),
+  target: z.string().default('local'),
   results: z.array(
     z.object({
       groupId: z.string(),
@@ -36,35 +37,56 @@ const archivedReportSchema = z.object({
       startedAt: z.string(),
       runKey: z.string().nullable(),
       reason: z.string().nullable().default(null),
+      fingerprint: z.string().nullable().default(null),
+      logPath: z.string().nullable().default(null),
     }),
   ),
 });
 type ArchivedReport = z.infer<typeof archivedReportSchema>;
+type ArchivedResult = ArchivedReport['results'][number];
+
+/** A failed attempt of a group without a browser run, and the report that executed it. */
+export type DiagnosableAttempt = { reportId: string; target: string; result: ArchivedResult };
 
 /**
- * The attempt a diagnosis of the group names: its latest executed attempt that
- * the runner did not void. It must have failed and must have no browser run.
+ * The attempt a diagnosis of the group names: with a report id, the group's failed attempt in that
+ * report, even when a later attempt passed (a failure repaired before its classification still gets
+ * its class and incident entry); without one, its latest executed attempt. Attempts the runner
+ * voided do not count. The attempt must have failed and must have no browser run.
  */
 export function diagnosableGroupAttempt(
   reports: readonly ArchivedReport[],
   groupId: string,
-): { reportId: string; startedAt: string } {
+  reportId?: string,
+): DiagnosableAttempt {
   const attempts = reports
-    .flatMap((report) => report.results.map((result) => ({ reportId: report.id, result })))
+    .filter((report) => reportId === undefined || report.id === reportId)
+    .flatMap((report) =>
+      report.results.map((result) => ({ reportId: report.id, target: report.target, result })),
+    )
     .filter(
       ({ result }) => result.groupId === groupId && result.status !== 'blocked' && !voidedByDrift(result),
     )
     .sort((left, right) => left.result.startedAt.localeCompare(right.result.startedAt));
-  const latest = attempts.at(-1);
-  if (!latest) throw new Error(`No verification report holds an attempt of ${groupId}.`);
-  if (latest.result.status !== 'failed')
-    throw new Error(`The latest attempt of ${groupId} passed; there is no failure to classify.`);
-  if (latest.result.runKey)
+  const chosen = reportId === undefined ? attempts.at(-1) : attempts.find(isFailed);
+  const where = reportId === undefined ? 'The latest attempt' : `The attempt in report ${reportId}`;
+  if (!chosen)
     throw new Error(
-      `The latest attempt of ${groupId} is browser run ${latest.result.runKey}. Classify the run: bun run test:runs classify ${latest.result.runKey} ...`,
+      reportId === undefined
+        ? `No verification report holds an attempt of ${groupId}.`
+        : `Report ${reportId} holds no executed failed attempt of ${groupId}.`,
+    );
+  if (!isFailed(chosen)) throw new Error(`${where} of ${groupId} passed; there is no failure to classify.`);
+  if (chosen.result.runKey)
+    throw new Error(
+      `${where} of ${groupId} is browser run ${chosen.result.runKey}. Classify the run: bun run test:runs classify ${chosen.result.runKey} ...`,
     );
   // Only a pass is ever reused into a later report, so a failure sits in the report that executed it.
-  return { reportId: latest.reportId, startedAt: latest.result.startedAt };
+  return chosen;
+}
+
+function isFailed(attempt: { result: ArchivedResult }): boolean {
+  return attempt.result.status === 'failed';
 }
 
 function readReportDiagnoses(reportDirectory: string): GroupDiagnosis[] {
@@ -79,29 +101,38 @@ export function readGroupDiagnoses(archive: string): GroupDiagnosis[] {
     .flatMap((entry) => readReportDiagnoses(resolve(archive, entry.name)));
 }
 
-/** Records the diagnosis of the group's latest failed attempt; a new diagnosis of the same attempt replaces the old one. */
+/**
+ * Records the diagnosis of the group's failed attempt (`diagnosableGroupAttempt`); a new diagnosis
+ * of the same attempt replaces the old one. A report id reads that report alone.
+ */
 export function recordGroupDiagnosis(
   archive: string,
   input: {
     groupId: string;
+    reportId?: string;
     classification: IncidentClass;
     rootCause: string;
     prevention: string;
     now: Date;
   },
-): { reportId: string; diagnosis: GroupDiagnosis } {
-  const reports = existsSync(archive)
-    ? readdirSync(archive)
-        .sort()
-        .flatMap((directory) => {
-          const file = resolve(archive, directory, 'report.json');
-          return existsSync(file) ? [archivedReportSchema.parse(JSON.parse(readFileSync(file, 'utf8')))] : [];
-        })
-    : [];
-  const attempt = diagnosableGroupAttempt(reports, input.groupId);
+): { attempt: DiagnosableAttempt; diagnosis: GroupDiagnosis } {
+  if (input.reportId !== undefined && !/^[\w-]+$/.test(input.reportId))
+    throw new Error(
+      `${input.reportId} is no report id: give the folder name under .agent-logs/verification.`,
+    );
+  const directories = !existsSync(archive)
+    ? []
+    : input.reportId === undefined
+      ? readdirSync(archive).sort()
+      : [input.reportId];
+  const reports = directories.flatMap((directory) => {
+    const file = resolve(archive, directory, 'report.json');
+    return existsSync(file) ? [archivedReportSchema.parse(JSON.parse(readFileSync(file, 'utf8')))] : [];
+  });
+  const attempt = diagnosableGroupAttempt(reports, input.groupId, input.reportId);
   const diagnosis = groupDiagnosisSchema.parse({
     groupId: input.groupId,
-    startedAt: attempt.startedAt,
+    startedAt: attempt.result.startedAt,
     classification: input.classification,
     classifiedAt: input.now.toISOString(),
     rootCause: input.rootCause,
@@ -112,7 +143,7 @@ export function recordGroupDiagnosis(
     (existing) => groupAttemptKey(existing) !== groupAttemptKey(diagnosis),
   );
   writeJsonAtomically(resolve(reportDirectory, DIAGNOSES_FILE), [...kept, diagnosis]);
-  return { reportId: attempt.reportId, diagnosis };
+  return { attempt, diagnosis };
 }
 
 /** Group kinds whose failed attempt needs a recorded diagnosis before `test:verify` starts again. */

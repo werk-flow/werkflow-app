@@ -75,6 +75,54 @@ function createHeldReadFlag(): HeldReadFlag {
   };
 }
 
+/**
+ * Marks a live view's read that is queued (a Realtime event or the join
+ * catch-up waits out the debounce) or in flight: `<html data-live-read-pending>`
+ * stands while any view has one. The Realtime ready signal queues a catch-up
+ * read in every view, so the lab settle step (`settleLiveShell` in
+ * tests/audit/support/performance-steps.ts) waits until the marker clears;
+ * a dialog opened before would hold that read and release it inside the
+ * next measured step.
+ */
+export const LIVE_READ_PENDING_ATTRIBUTE = 'data-live-read-pending';
+const pendingReadHolders = new Set<symbol>();
+
+export type LiveReadMarker = {
+  queued: (on: boolean) => void;
+  reading: (on: boolean) => void;
+  release: () => void;
+};
+
+function createLiveReadMarker(): LiveReadMarker {
+  const holder = Symbol('pending live read');
+  let queued = false;
+  let reading = false;
+  const publish = (): void =>
+    markHolder(pendingReadHolders, LIVE_READ_PENDING_ATTRIBUTE, holder, queued || reading);
+  return {
+    queued: (on) => {
+      queued = on;
+      publish();
+    },
+    reading: (on) => {
+      reading = on;
+      publish();
+    },
+    release: () => {
+      queued = false;
+      reading = false;
+      publish();
+    },
+  };
+}
+
+/** The pending-read marker of one live view, released when the view unmounts. */
+export function useLiveReadMarker(): LiveReadMarker {
+  const [marker] = useState(createLiveReadMarker);
+  useEffect(() => marker.release, [marker]);
+  return marker;
+}
+
 /** The held-read flag of one live view, released when the view unmounts. */
 export function useHeldReadFlag(): HeldReadFlag {
   const [flag] = useState(createHeldReadFlag);

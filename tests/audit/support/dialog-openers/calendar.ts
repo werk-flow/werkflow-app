@@ -8,15 +8,14 @@ import { seedPendingVacationRequest } from '../../../golden/support/db/vacation'
 import { seedJob } from '../../../golden/support/db/work';
 import { seedPlanningVisit } from '../../../golden/support/planning-fixture';
 import {
-  boardRowCards,
   calendarLayerCheckbox,
-  calendarWorkTimeBlock,
   cardPopoverAction,
-  dayRow,
+  dayWorkTimeBlock,
   jobPopover,
   openCalendarView,
   openPlantafel,
   parkplatzScheduleButton,
+  plantafelCards,
   scheduleParkedDialog,
   shiftIsoDate,
   shortcutsButton,
@@ -191,8 +190,15 @@ function recordedTime({ world, businessDate }: SurfaceContext): Promise<string> 
   });
 }
 
+/** The recorded block in the employee's timeline row, or in their section of the phone day list. */
 function workBlock(page: Page, world: TestWorld): Locator {
-  return calendarWorkTimeBlock(dayRow(page, world.users.employee.id), TIME_BLOCK.from, TIME_BLOCK.to);
+  const { id, firstName, lastName } = world.users.employee;
+  return dayWorkTimeBlock(
+    page,
+    { userId: id, name: `${firstName} ${lastName}` },
+    TIME_BLOCK.from,
+    TIME_BLOCK.to,
+  );
 }
 
 /** The day view of the recorded block with the „Arbeitszeiten“ layer on; returns the block. */
@@ -222,8 +228,9 @@ function seededValue(name: `calendar.${string}`): string {
   return value;
 }
 
+/** The visit's card on the board, or in the day list of the phone Plantafel. */
 function visitCard(page: Page, title: string): Locator {
-  return boardRowCards(page, title);
+  return plantafelCards(page, title);
 }
 
 /** The Plantafel of the visit day; returns the visit's card. */
@@ -273,8 +280,10 @@ export const CALENDAR_OPENERS = {
   },
   'calendar.shortcuts': {
     opensOn: 'desktop',
-    phonePath:
-      'None by design: the shortcuts serve a keyboard, and the phone lists have no toolbar (calendar spec, Phone).',
+    phoneUse: {
+      kind: 'none',
+      reason: 'The shortcuts serve a keyboard, and the phone lists have no toolbar (calendar spec, Phone).',
+    },
     trigger: async ({ page, businessDate }) => {
       // The help button lives in the Plantafel toolbar; the saved view may be another one.
       await openPlantafel(page, businessDate);
@@ -282,24 +291,23 @@ export const CALENDAR_OPENERS = {
     },
     layer: shortcutsDialog,
   },
+  // On a phone the block is a row of the day list; Enter on it opens the same details.
   'calendar.entry-details': {
-    opensOn: 'desktop',
-    phonePath:
-      'A tap on the block in the phone day or week list opens the same details (calendar spec, Phone).',
     trigger: showWorkBlock,
     layer: timeEntryDetailsDialog,
   },
   'calendar.entry-delete': {
-    opensOn: 'desktop',
-    phonePath: 'The phone opens the entry details from its day list; the delete sits in their footer.',
     trigger: async (context) => timeEntryDeleteButton(await openWorkBlockDetails(context)),
     layer: timeEntryDeleteConfirmation,
     parents: (page) => [timeEntryDetailsDialog(page)],
   },
   'calendar.time-correction': {
     opensOn: 'desktop',
-    phonePath:
-      'None by design: the phone lists have no drag (calendar spec, Phone); a phone user proposes a correction under Zeiterfassung.',
+    phoneUse: {
+      kind: 'none',
+      reason:
+        'Only a drag opens it, and the phone lists have no drag (calendar spec, Phone); a phone user proposes a correction under Zeiterfassung.',
+    },
     // No keyboard path: only a pointer drag or resize of a recorded block opens
     // the correction (day-surface-drop.ts, use-month-surface.ts). The opener
     // performs the drag, which only drafts the correction, and hands the open
@@ -308,6 +316,9 @@ export const CALENDAR_OPENERS = {
       const { page, world } = context;
       const block = await showWorkBlock(context);
       await block.scrollIntoViewIfNeeded();
+      // The block offers the drag (canManageBlock) once the caller's
+      // time_approval holder read has landed; the grab cursor shows it.
+      await expect(block, 'the recorded block offers the drag').toHaveCSS('cursor', 'grab');
       await moveCalendarBlockToMember(
         page,
         block,
@@ -320,21 +331,18 @@ export const CALENDAR_OPENERS = {
     layer: calendarTimeCorrectionDialog,
     returnFocus: ({ page, world }) => workBlock(page, world),
   },
+  // On a phone the visit is a card of the Plantafel's day list with the same popover.
   'calendar.occurrence-edit': {
-    opensOn: 'desktop',
-    phonePath: 'A tap on the visit in the phone day list opens its card popover with the same edit.',
     trigger: async (context) =>
       occurrenceEditButton(await openCardPopover(context, await plainVisit(context))),
     layer: occurrenceEditDialog,
     parents: (page) => [jobPopover(page)],
   },
   'calendar.planning-warning': {
-    opensOn: 'desktop',
-    phonePath:
-      'The card popover of the phone day list holds the same move form, which meets the same warning.',
-    // The move form is the drag's keyboard path. The server refuses the move
-    // onto the day of the pending absence with the warning before it writes;
-    // Escape on the warning takes the move back.
+    // The move form is the drag's keyboard path, in the popover of the board
+    // card or of the phone list's card. The server refuses the move onto the
+    // day of the pending absence with the warning before it writes; Escape on
+    // the warning takes the move back.
     trigger: async (context) => {
       const popover = await openCardPopover(context, await warningVisit(context));
       await cardPopoverAction(popover, 'openMoveForm').click();

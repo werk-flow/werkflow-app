@@ -13,6 +13,7 @@ import {
   newWorkArtifactButton,
   workArtifactCreateDialog,
 } from '../../../golden/support/spec-helpers/work-artifact-dialog';
+import { hydratedAndSettled } from '../../../golden/support/steps/interaction';
 import { ownEvidenceUploadButton, ownEvidenceUploadDialog } from '../../../golden/support/steps/personnel';
 import {
   ownSicknessCancelButton,
@@ -123,6 +124,8 @@ async function ownSicknessRange({ page, world, businessDate }: SurfaceContext): 
     return report.startDate;
   });
   await page.reload();
+  // Enter on server-rendered HTML before hydration opens nothing.
+  await hydratedAndSettled(page);
   return formatSicknessRange(report);
 }
 
@@ -207,6 +210,7 @@ export const TIME_OPENERS = {
         }),
       );
       await page.reload();
+      await hydratedAndSettled(page);
       return ownEvidenceUploadButton(page);
     },
     layer: ownEvidenceUploadDialog,

@@ -190,6 +190,7 @@ type LabRowStatus =
   | 'shrank'
   | 'shape-added'
   | 'shape-removed'
+  | 'measurement-missing'
   | 'ungated';
 
 export type LabRow = {
@@ -231,6 +232,55 @@ function countRow(
           ? 'ratchet-pending'
           : 'within';
   return { target, reference: reference.reference, now: measured, ceiling, floor, status };
+}
+
+// A bound whose observation is missing fails: the recorder writes null when it could
+// not read the body, and a missing measurement must never read as within its bounds.
+function missingRow(target: string, bound: number, informational: boolean): LabRow {
+  return {
+    target,
+    reference: bound,
+    now: null,
+    ceiling: null,
+    floor: null,
+    status: informational ? 'ungated' : 'measurement-missing',
+  };
+}
+
+/** The encoded and decoded byte rows of one shape that has a reference. */
+function byteRows(
+  shape: string,
+  observed: LabPayload,
+  reference: PayloadReference,
+  ungated: boolean,
+): LabRow[] {
+  const rows: LabRow[] = [];
+  const bytes: [string, number | null, ByteReference | null, boolean][] = [
+    [
+      'encodedBytes',
+      observed.encodedBytes,
+      reference.encodedBytes,
+      ungated || reference.decodedBytes !== null,
+    ],
+    ['decodedBytes', observed.decodedBytes, reference.decodedBytes, ungated],
+  ];
+  for (const [field, now, bound, informational] of bytes) {
+    if (!bound) continue;
+    if (now === null) {
+      rows.push(missingRow(`${shape}#${field}`, bound.reference, informational));
+      continue;
+    }
+    const { ceiling, floor } = byteBounds(bound);
+    const status: LabRowStatus = informational
+      ? 'ungated'
+      : now > ceiling
+        ? 'grew'
+        : now < floor
+          ? 'shrank'
+          : 'within';
+    rows.push({ target: `${shape}#${field}`, reference: bound.reference, now, ceiling, floor, status });
+  }
+  return rows;
 }
 
 function payloadRows(
@@ -277,28 +327,10 @@ function payloadRows(
       status: 'ungated',
     },
   ];
-  const bytes: [string, number | null, ByteReference | null, boolean][] = [
-    [
-      'encodedBytes',
-      observed.encodedBytes,
-      reference.encodedBytes,
-      ungated || reference.decodedBytes !== null,
-    ],
-    ['decodedBytes', observed.decodedBytes, reference.decodedBytes, ungated],
-  ];
-  for (const [field, now, bound, informational] of bytes) {
-    if (!bound || now === null) continue;
-    const { ceiling, floor } = byteBounds(bound);
-    const status: LabRowStatus = informational
-      ? 'ungated'
-      : now > ceiling
-        ? 'grew'
-        : now < floor
-          ? 'shrank'
-          : 'within';
-    rows.push({ target: `${shape}#${field}`, reference: bound.reference, now, ceiling, floor, status });
-  }
-  if (reference.rows && observed.rows !== null) {
+  rows.push(...byteRows(shape, observed, reference, ungated));
+  if (reference.rows && observed.rows === null)
+    rows.push(missingRow(`${shape}#rows`, reference.rows.reference, ungated));
+  else if (reference.rows && observed.rows !== null) {
     const row = countRow(`${shape}#rows`, observed.rows, reference.rows, undefined);
     rows.push(
       row.status === 'ratchet-pending'

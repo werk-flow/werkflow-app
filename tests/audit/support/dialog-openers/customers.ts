@@ -1,4 +1,4 @@
-import { expect } from '@playwright/test';
+import { expect, type Locator } from '@playwright/test';
 import type { DialogOpenerId } from '../../../../lib/testing/selection/dialog-inventory';
 import { seedDoNotContactPolicy } from '../../../golden/support/db/customers';
 import { seedJob } from '../../../golden/support/db/work';
@@ -32,15 +32,23 @@ import {
   metadataDiscardConfirmation,
   metadataEditButton,
   metadataField,
+  openMenuItem,
 } from '../../../golden/support/steps/shared';
 import { plannedDateControl, plannedDateRemovalConfirmation } from '../../../golden/support/steps/work';
 import type { DialogOpener } from '../dialog-opener';
 import { layoutNames, prepareLayoutDetails } from '../layout-fixtures';
-import { surfaceFixture } from '../surface-fixtures';
+import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { openSurface } from '../surface-routes';
 
 /** The phone number of the contact whose call conflicts with the customer's do-not-contact instruction. */
 const GUARDED_CONTACT_PHONE = '030 5550123';
+
+/** Opens the list menu of the layout customer (its row, or its card on a phone) and returns the item. */
+async function customerListMenuItem({ page, world }: SurfaceContext, item: Locator): Promise<Locator> {
+  await prepareLayoutDetails(world);
+  await page.reload();
+  return openMenuItem(customerRowActionsButton(page, layoutNames(world).client), item);
+}
 
 export const CUSTOMERS_OPENERS = {
   'customers.create': {
@@ -48,31 +56,13 @@ export const CUSTOMERS_OPENERS = {
     layer: customerCreateDialog,
   },
   'customers.list-delete': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the customer list holds the same actions menu (ClientCard, components/kunden/clients-table.tsx).',
-    trigger: async ({ page, world }) => {
-      await prepareLayoutDetails(world);
-      await page.reload();
-      const menu = customerRowActionsButton(page, layoutNames(world).client);
-      await menu.click();
-      return customerRowDeleteItem(page);
-    },
+    trigger: (context) => customerListMenuItem(context, customerRowDeleteItem(context.page)),
     layer: customerDeleteConfirmation,
     returnFocus: ({ page, world }) => customerRowActionsButton(page, layoutNames(world).client),
   },
   // The edit dialog lives in the list's row menu only; the detail page has no edit action.
   'customers.edit': {
-    opensOn: 'desktop',
-    phonePath:
-      'The phone card of the customer list holds the same actions menu (ClientCard, components/kunden/clients-table.tsx).',
-    trigger: async ({ page, world }) => {
-      await prepareLayoutDetails(world);
-      await page.reload();
-      const menu = customerRowActionsButton(page, layoutNames(world).client);
-      await menu.click();
-      return customerRowEditItem(page);
-    },
+    trigger: (context) => customerListMenuItem(context, customerRowEditItem(context.page)),
     layer: customerEditDialog,
     returnFocus: ({ page, world }) => customerRowActionsButton(page, layoutNames(world).client),
   },

@@ -36,6 +36,7 @@ import {
   incidentPreventionProblem,
   recordsIncident,
   withIncidentEntry,
+  type IncidentRecord,
 } from '../lib/testing/runs/incident-record';
 
 function printRuns(): void {
@@ -110,6 +111,91 @@ async function cleanupRun(runKey: string, relocationReason?: string): Promise<vo
   console.log(`[werkflow-test] cleaned retained world ${world.runId}`);
 }
 
+/** An incident entry's prevention names its tier and, for Tier 1 or 2, an existing mechanism. */
+function incidentPrevention(prevention: string): string | null {
+  return (
+    incidentPreventionProblem(prevention) ??
+    tierClaimProblem(prevention, repositoryMechanismIndex(resolve(import.meta.dir, '..')))
+  );
+}
+
+function writeIncident(record: IncidentRecord): void {
+  const incidentLog = resolve(import.meta.dir, '../docs/technical/test-incident-log.md');
+  writeFileSync(incidentLog, withIncidentEntry(readFileSync(incidentLog, 'utf8'), record));
+  console.log(
+    `[werkflow-test] wrote the incident entry of ${record.runKey} into docs/technical/test-incident-log.md; add the evidence, correction and focused proof under it when the repair lands.`,
+  );
+}
+
+const LOG_TAIL_LINES = 20;
+
+/**
+ * Classifies a failed attempt of a group without a browser run: `<group-id>` names its latest
+ * attempt, `<group-id>@<report-id>` the failed attempt in that report, also after a later pass.
+ * It prints the end of the attempt's log and writes the incident entry, as a browser run's does.
+ */
+function classifyGroupAttempt(
+  target: string,
+  classification: IncidentClass,
+  rootCause: string,
+  prevention: string,
+): void {
+  if (classification === 'accepted-change')
+    throw new Error('accepted-change applies to a failed audit:visual browser run only; give its run key.');
+  const [groupId = '', reportId, ...extra] = target.split('@');
+  if (extra.length)
+    throw new Error(`Give the attempt as <group-id> or <group-id>@<report-id>, not ${target}.`);
+  const writesIncident = recordsIncident({ lane: 'group', groupId }, classification);
+  const preventionProblem = writesIncident ? incidentPrevention(prevention) : null;
+  if (preventionProblem) throw new Error(preventionProblem);
+  const { attempt, diagnosis } = recordGroupDiagnosis(
+    resolve(import.meta.dir, '../.agent-logs/verification'),
+    {
+      groupId,
+      ...(reportId === undefined ? {} : { reportId }),
+      classification,
+      rootCause,
+      prevention,
+      now: new Date(),
+    },
+  );
+  const logPath = attempt.result.logPath;
+  const logLines =
+    logPath && existsSync(logPath)
+      ? readFileSync(logPath, 'utf8')
+          .split(/\r?\n/)
+          .filter((line) => line.trim())
+      : [];
+  console.log(
+    logLines.length
+      ? `[werkflow-test] last lines of ${logPath}:\n${logLines.slice(-LOG_TAIL_LINES).join('\n')}`
+      : `[werkflow-test] the attempt's log ${logPath ?? '(none recorded)'} is gone; its recorded reason stays the evidence.`,
+  );
+  console.log(
+    `[werkflow-test] classified ${groupId} attempt ${diagnosis.startedAt} of report ${attempt.reportId} as ${classification}. ${
+      classification === 'environment'
+        ? 'One retry on unchanged inputs is allowed; a second failure on them needs a change.'
+        : 'The group runs again once its inputs change.'
+    }`,
+  );
+  if (!writesIncident) return;
+  writeIncident({
+    runKey: `${groupId}@${attempt.reportId}`,
+    groupId,
+    target: attempt.target,
+    groupFingerprint: attempt.result.fingerprint,
+    worldId: null,
+    startedAt: diagnosis.startedAt,
+    classification,
+    firstFailure: {
+      title: `${groupId} in report ${attempt.reportId}`,
+      message: attempt.result.reason ?? logLines.at(-1) ?? 'no reason recorded; read the attempt log.',
+    },
+    rootCause,
+    prevention,
+  });
+}
+
 async function main(): Promise<void> {
   loadEnvLocal();
   const command = process.argv[2] ?? 'list';
@@ -174,33 +260,16 @@ async function main(): Promise<void> {
     const [runKey, classification, rootCause, prevention, ...extra] = process.argv.slice(3);
     if (!runKey || !classification || !rootCause?.trim() || !prevention?.trim() || extra.length) {
       throw new Error(
-        `Usage: ... classify <run-key|group-id> <${INCIDENT_CLASSES.join('|')}> "<root-cause>" "<prevention>"`,
+        `Usage: ... classify <run-key|group-id|group-id@report-id> <${INCIDENT_CLASSES.join('|')}> "<root-cause>" "<prevention>"`,
       );
     }
     if (!isIncidentClass(classification)) {
       throw new Error(`Unknown incident class: ${classification}`);
     }
     // A run key never holds a colon and a group id always does: a group without a browser run
-    // (static, unit, SQL, component) records the diagnosis of its latest failed attempt.
+    // (static, unit, SQL, component) records the diagnosis of a failed attempt.
     if (runKey.includes(':')) {
-      if (classification === 'accepted-change')
-        throw new Error(
-          'accepted-change applies to a failed audit:visual browser run only; give its run key.',
-        );
-      const recorded = recordGroupDiagnosis(resolve(import.meta.dir, '../.agent-logs/verification'), {
-        groupId: runKey,
-        classification,
-        rootCause,
-        prevention,
-        now: new Date(),
-      });
-      console.log(
-        `[werkflow-test] classified ${runKey} attempt ${recorded.diagnosis.startedAt} of report ${recorded.reportId} as ${classification}. ${
-          classification === 'environment'
-            ? 'One retry on unchanged inputs is allowed; a second failure on them needs a change.'
-            : 'The group runs again once its inputs change.'
-        }`,
-      );
+      classifyGroupAttempt(runKey, classification, rootCause, prevention);
       return;
     }
     const run = readRunManifest(runKey);
@@ -208,10 +277,7 @@ async function main(): Promise<void> {
     if (refusal) throw new Error(refusal);
     // A failed acceptance run gets its incident-log entry from this command (testing.md, "Failures").
     const writesIncident = recordsIncident(run, classification);
-    const preventionProblem = writesIncident
-      ? (incidentPreventionProblem(prevention) ??
-        tierClaimProblem(prevention, repositoryMechanismIndex(resolve(import.meta.dir, '..'))))
-      : null;
+    const preventionProblem = writesIncident ? incidentPrevention(prevention) : null;
     if (preventionProblem) throw new Error(preventionProblem);
     updateRunManifest(runKey, {
       classification,
@@ -221,26 +287,19 @@ async function main(): Promise<void> {
     });
     console.log(`[werkflow-test] classified ${runKey} as ${classification}`);
     if (!writesIncident || !run.groupId) return;
-    const incidentLog = resolve(import.meta.dir, '../docs/technical/test-incident-log.md');
     const firstFailure = run.failures[0];
-    writeFileSync(
-      incidentLog,
-      withIncidentEntry(readFileSync(incidentLog, 'utf8'), {
-        runKey,
-        groupId: run.groupId,
-        target: run.target ?? 'cloud',
-        groupFingerprint: run.groupFingerprint ?? null,
-        worldId: run.world?.runId ?? null,
-        startedAt: run.startedAt,
-        classification,
-        firstFailure: firstFailure ? { title: firstFailure.title, message: firstFailure.message } : null,
-        rootCause,
-        prevention,
-      }),
-    );
-    console.log(
-      `[werkflow-test] wrote the incident entry of ${runKey} into docs/technical/test-incident-log.md; add the evidence, correction and focused proof under it when the repair lands.`,
-    );
+    writeIncident({
+      runKey,
+      groupId: run.groupId,
+      target: run.target ?? 'cloud',
+      groupFingerprint: run.groupFingerprint ?? null,
+      worldId: run.world?.runId ?? null,
+      startedAt: run.startedAt,
+      classification,
+      firstFailure: firstFailure ? { title: firstFailure.title, message: firstFailure.message } : null,
+      rootCause,
+      prevention,
+    });
     return;
   }
   throw new Error(`Unknown command: ${command}`);

@@ -10,18 +10,24 @@ import {
   TIME_ACCOUNT_COPY,
   TIME_AREA_HEADER,
 } from '../../golden/support/steps/time-tracking';
+import { ownedBerlinWeekAtOffset } from '../../golden/support/date-ownership';
 import type { TestWorld } from '../../golden/support/world';
-import { VISUAL_NAMES, type VisualDetails } from './visual-fixtures';
+import { prepareVisualCalendarWeek, VISUAL_NAMES, type VisualDetails } from './visual-fixtures';
 
 // The page families of the visual references (tests/audit/visual/references.spec.ts):
-// one reference per family, desktop and phone in light and the desktop in dark
-// mode. A family stands for the inventory routes that render its page
-// (`covers`); lib/testing/selection/visual-families.test.ts fails when a route
-// of the inventories has no family or a family lacks one of its references.
+// one reference per family, desktop and phone, each in light and dark mode.
+// A family stands for the inventory routes that render its page (`covers`);
+// lib/testing/selection/visual-families.test.ts fails when a route of the
+// inventories has no family or a family lacks one of its references.
 // docs/technical/standards-audit.md owns the acceptance and update rules.
 
-/** A fixed week before any seeded record keeps the calendar independent of the run day. */
-const CALENDAR_WEEK = '2026-03-09';
+/** Seeds the populated calendar week once per world and returns its address. */
+async function visualCalendarRoute(world: TestWorld): Promise<string> {
+  // The member records start on the run day, so the week belongs to it: the first whole week on or after +165.
+  const monday = ownedBerlinWeekAtOffset('visual-references', 165);
+  await prepareVisualCalendarWeek(world, monday);
+  return `/kalender?date=${monday}`;
+}
 /** A fixed month for the prepared period: before the seeded entry dates, so its result is constant. */
 const PERIOD_MONTH = '2026-03';
 
@@ -37,8 +43,12 @@ export type AppFamily = {
   heading: string;
   /** The record's own heading below an area heading. */
   title?: string;
-  /** False where the route pins its own date, so its date text is already constant. */
-  clockText?: boolean;
+  /**
+   * The calendar of the populated week: its preparation plans the visual jobs,
+   * so it runs after every other family (`APP_FAMILY_RUN_ORDER`), and its
+   * references also replace the week's range, week number and day numbers.
+   */
+  calendarWeek?: true;
 };
 
 export type StandaloneFamily = {
@@ -252,9 +262,9 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     id: 'kalender',
     role: 'admin',
     covers: ['/kalender'],
-    route: fixed(`/kalender?date=${CALENDAR_WEEK}`),
+    route: (_details, _page, world) => visualCalendarRoute(world),
     heading: CALENDAR_PAGE_TITLE,
-    clockText: false,
+    calendarWeek: true,
   },
   {
     // Last: the preparation adds the period that the list above would show.
@@ -290,9 +300,9 @@ export const APP_FAMILIES: readonly AppFamily[] = [
     id: 'handwerker-kalender',
     role: 'employee',
     covers: ['/kalender'],
-    route: fixed(`/kalender?date=${CALENDAR_WEEK}`),
+    route: (_details, _page, world) => visualCalendarRoute(world),
     heading: CALENDAR_PAGE_TITLE,
-    clockText: false,
+    calendarWeek: true,
   },
   {
     id: 'handwerker-zeiterfassung',
@@ -348,7 +358,17 @@ export const STANDALONE_FAMILIES: readonly StandaloneFamily[] = [
   { id: 'onboarding-vorstart', screen: '/onboarding/meine-aufgaben', heading: 'Dein Start bei WerkFlow' },
 ];
 
-/** Every reference name of a family: the desktop in both schemes and the phone in light mode. */
+/**
+ * The order the spec runs the app families in: a calendar family plans the
+ * visual jobs, so every family that shows a job renders before it, in a whole
+ * run and in a focused one alike.
+ */
+export const APP_FAMILY_RUN_ORDER: readonly AppFamily[] = [
+  ...APP_FAMILIES.filter((family) => !family.calendarWeek),
+  ...APP_FAMILIES.filter((family) => family.calendarWeek),
+];
+
+/** Every reference name of a family: the desktop and the phone, each in both schemes. */
 export function familyReferenceNames(id: string): readonly string[] {
-  return [`${id}-desktop-light`, `${id}-desktop-dark`, `${id}-phone-light`];
+  return [`${id}-desktop-light`, `${id}-desktop-dark`, `${id}-phone-light`, `${id}-phone-dark`];
 }

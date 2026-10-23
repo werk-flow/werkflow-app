@@ -17,6 +17,8 @@ import { currentRunKey } from '../../golden/support/run-state';
 import type { TestWorld } from '../../golden/support/world';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
 import type { CaptureSpec, StandaloneCaptureSpec } from './acceptance-sets';
+import { stateCapturePlan, type CaptureState } from './acceptance-state-plan';
+import { withState } from './acceptance-states';
 import { DIALOG_OPENERS } from './dialog-openers';
 import { openLayerAt } from './open-layer';
 import { DESKTOP, VIEWPORT_HEIGHT } from './open-layer-plan';
@@ -27,7 +29,9 @@ import { openSurface, surfaceDestination } from './surface-routes';
 // "Rendered design acceptance"). It refuses to write a capture of a screen that
 // is not ready: the URL must be the requested page (never the login), the page
 // title visible, every busy signal settled, the fonts loaded, the clock button
-// ready and no failed region on screen. Each image lands under
+// ready and no failed region on screen. A capture that declares a `state`
+// asks for its loading or error state instead, which the fixture produces and
+// proves (captureState below). Each image lands under
 // `<run>/acceptance/<set>/` with an entry in `<run>/acceptance/index.json`;
 // the entry turns `passed` only when its test passed, which is what
 // `docs:check` requires before a record may cite it.
@@ -130,6 +134,36 @@ async function writeCapture(
 }
 
 /**
+ * Captures a spec in its declared loading or error state at each width and
+ * scheme: each width reaches the state anew through the test's route
+ * interception (acceptance-states.ts), and the image is written only while
+ * exactly that state is on screen.
+ */
+async function captureState(
+  input: { page: Page; world: TestWorld; businessDate: string; testInfo: TestInfo },
+  set: string,
+  capture: CaptureSpec & { state: CaptureState },
+  route: string,
+): Promise<void> {
+  const { page, world, businessDate, testInfo } = input;
+  const plan = stateCapturePlan(capture.state, capture.view.kind);
+  const context = { page, role: capture.role, world, businessDate, route };
+  const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
+  try {
+    for (const width of capture.widths)
+      await withState(context, capture.view, plan, width, async (prove) => {
+        for (const scheme of capture.schemes) {
+          await page.emulateMedia({ colorScheme: scheme });
+          await prove();
+          await writeCapture(page, testInfo, set, identity, route, width, scheme);
+        }
+      });
+  } finally {
+    await page.emulateMedia({ colorScheme: 'light' });
+  }
+}
+
+/**
  * Captures one spec of a set at each of its widths and schemes: the page, one
  * of its tabs, or one of its dialogs opened the way the layout audit opens it.
  */
@@ -141,6 +175,10 @@ export async function captureAcceptance(
   const { page, world, businessDate, testInfo } = input;
   await page.setViewportSize(DESKTOP);
   const destination = await surfaceDestination(capture.route, page, world, businessDate);
+  if (capture.state) {
+    await captureState(input, set, { ...capture, state: capture.state }, destination.route);
+    return;
+  }
   await openSurface(page, destination);
   const context = { page, role: capture.role, world, businessDate, route: destination.route };
   try {
