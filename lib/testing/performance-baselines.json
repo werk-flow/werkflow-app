@@ -13,7 +13,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "07afb1015150b8e8e712761b167866d60aa03f7b63f9fd9bb0bddef3e0647a9c",
+        "measurementDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -23,30 +23,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 875.599853515625,
+      "referenceMs": 835.999755859375,
       "samples": [
-        837.500244140625,
-        875.599853515625,
-        900.39990234375
+        790.199951171875,
+        812.60009765625,
+        814.7998046875,
+        825.199951171875,
+        835.999755859375,
+        920.199951171875,
+        964.199951171875,
+        973.800048828125,
+        1180.5
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:48:40.872Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:53:50.518Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     },
     {
@@ -56,7 +64,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "0e994f33f23d976e278089103097bee2687dcb65d9de2ba4863818fb4745bfc6",
+        "measurementDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -66,30 +74,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 725.10009765625,
+      "referenceMs": 648.800048828125,
       "samples": [
-        713.599853515625,
-        725.10009765625,
-        897.800048828125
+        609.900146484375,
+        640.400146484375,
+        641.000244140625,
+        648.699951171875,
+        648.800048828125,
+        654.89990234375,
+        662.699951171875,
+        687.2998046875,
+        746
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:48:42.114Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:53:51.469Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     },
     {
@@ -99,7 +115,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "9d1594fa66185b1d92b4d038aa1669ab89e4b5eaaed5ce616aa230795a103372",
+        "measurementDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -109,30 +125,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 518.89990234375,
+      "referenceMs": 503.199951171875,
       "samples": [
-        487.400146484375,
-        518.89990234375,
-        773.800048828125
+        438.2001953125,
+        490.7998046875,
+        491.800048828125,
+        495.60009765625,
+        503.199951171875,
+        509.699951171875,
+        515.10009765625,
+        521.89990234375,
+        533.199951171875
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:48:43.858Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:53:53.037Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     },
     {
@@ -142,7 +166,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "bfd64e509c78cc0b4f8390ed35b4c80f6878e6b8d9555965245f7487b947295f",
+        "measurementDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -152,30 +176,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 545.5,
+      "referenceMs": 547.499755859375,
       "samples": [
-        524.300048828125,
-        545.5,
-        595.800048828125
+        514.60009765625,
+        526.300048828125,
+        538.10009765625,
+        545.199951171875,
+        547.499755859375,
+        550.2998046875,
+        552.10009765625,
+        553.5,
+        576.900146484375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:48:44.648Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:53:53.763Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     },
     {
@@ -185,7 +217,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "0f523b5a331615e0eec19de1be88d1148985dfe2e6c4145302db35e03a2d435f",
+        "measurementDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
         "browser": "chromium",
@@ -195,30 +227,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 921.60009765625,
+      "referenceMs": 751.800048828125,
       "samples": [
-        890,
-        921.60009765625,
-        981.699951171875
+        684.800048828125,
+        695.699951171875,
+        702.099853515625,
+        738.2001953125,
+        751.800048828125,
+        758,
+        765.199951171875,
+        806.2998046875,
+        847.800048828125
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:48:45.871Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:53:54.677Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     },
     {
@@ -228,7 +268,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "7a4c3569d0626a36f9b1d4c4bdda926684c1e361004c4fc9e97aee312056b0dc",
+        "measurementDigest": "4bb343c5da235475950de6c831677754c8a1455fee30696c6427a1be32e14325",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -238,30 +278,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1227.5,
+      "referenceMs": 1290,
       "samples": [
-        1204.300048828125,
-        1227.5,
-        1254.10009765625
+        1178.599853515625,
+        1186.60009765625,
+        1215.30029296875,
+        1225.099853515625,
+        1290,
+        1356.699951171875,
+        1414,
+        1439.5,
+        1625
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:02.722Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:36.475Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -271,7 +319,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "8b0bb56497e9c82d07764e30d9af3177df8b1deae0c8d5fe612554e05357c179",
+        "measurementDigest": "b4331101020f8e2bf3e916f75e607c5a5dca3765338fc561290018b8c38b5046",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -281,30 +329,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 162.5,
+      "referenceMs": 131.699951171875,
       "samples": [
-        122.599853515625,
-        162.5,
-        200.300048828125
+        113.10009765625,
+        124.2998046875,
+        127.099853515625,
+        130.199951171875,
+        131.699951171875,
+        132.599853515625,
+        138.400146484375,
+        143.10009765625,
+        187
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:07.051Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:41.075Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -314,7 +370,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "d0f9b730905d2ef0730d9ea8c2403543170a588ba5a35b7a51c85926831baace",
+        "measurementDigest": "6bd087a37b39bbdefdf075c13b2acdd4d8f2bfeaff16b15f17bbf11fdfee138b",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -324,30 +380,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 359.89990234375,
+      "referenceMs": 304.099853515625,
       "samples": [
-        355.599853515625,
-        359.89990234375,
-        369.5
+        272.699951171875,
+        295.199951171875,
+        298.699951171875,
+        301.10009765625,
+        304.099853515625,
+        310,
+        323.400146484375,
+        354.900146484375,
+        360.5
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:09.257Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:43.119Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -357,7 +421,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "8effe4db215e86b2462001e3ebe03eb807402071287d7b33483ab14afbcdf76e",
+        "measurementDigest": "adff044f6e470e78b946c09d7f96fb683d620a4f0e4b45a6830338fa42a59f7a",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -367,30 +431,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 212.800048828125,
+      "referenceMs": 155.89990234375,
       "samples": [
-        204.699951171875,
-        212.800048828125,
-        232.699951171875
+        137.5,
+        148.199951171875,
+        148.800048828125,
+        153.60009765625,
+        155.89990234375,
+        156.60009765625,
+        158.39990234375,
+        176.5,
+        238.099853515625
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:10.172Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:44.005Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -400,7 +472,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "33b3061e91ed5bc4372819da44d55a854cf7652ce3aa1fec4a684063418335fa",
+        "measurementDigest": "7878116154778397f646126b0a84cd1c97fc683f0dca00acc52f7169a45fff6c",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -410,30 +482,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 201,
+      "referenceMs": 195.900146484375,
       "samples": [
-        156.7998046875,
-        201,
-        223.800048828125
+        192.60009765625,
+        193.699951171875,
+        194.300048828125,
+        195.7001953125,
+        195.900146484375,
+        199.900146484375,
+        203.5,
+        204.7998046875,
+        252.39990234375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:10.813Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:44.690Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -443,7 +523,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "d1c8833fce076ec994b5e87930f26f724592b61ff75b4e069385f1c2b1d21813",
+        "measurementDigest": "5cbf169cc1d63a5d7a1ae2c8432853a810a57dafd99482dd28bfecc6ade85e96",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -453,30 +533,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 222.699951171875,
+      "referenceMs": 253.5,
       "samples": [
-        169.60009765625,
-        222.699951171875,
-        227.800048828125
+        168.7001953125,
+        175.199951171875,
+        222.199951171875,
+        243.5,
+        253.5,
+        258.800048828125,
+        258.900146484375,
+        279.199951171875,
+        298.199951171875
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:12.662Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:46.660Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -486,7 +574,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "c89db5bbee032a7644252beb85d32771ad3c589c5837e0446e7b32697a0830a4",
+        "measurementDigest": "0b8ac2741de02953f5534a6e82c395c82f668d5308545ce9670b4f872c56059c",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -496,30 +584,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1075.39990234375,
+      "referenceMs": 875.599853515625,
       "samples": [
-        968.199951171875,
-        1075.39990234375,
-        1102.199951171875
+        810.5,
+        817.300048828125,
+        837.7001953125,
+        843.199951171875,
+        875.599853515625,
+        934.800048828125,
+        940,
+        1005.89990234375,
+        1099.39990234375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:14.294Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:47.820Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -529,7 +625,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "bd9a27b5dd9494e7d7fca951ee34d530c81bcffd6fceafb3f0377a5ff567fd00",
+        "measurementDigest": "7bc6306e46c28f5b7b78bc716410f1a4ac33b43aae398cbca0e31553cb4e7533",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -539,30 +635,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 559.800048828125,
+      "referenceMs": 358.400146484375,
       "samples": [
-        545.10009765625,
-        559.800048828125,
-        560.099853515625
+        333.60009765625,
+        335.2001953125,
+        347.5,
+        347.699951171875,
+        358.400146484375,
+        378.89990234375,
+        384,
+        419.699951171875,
+        536.199951171875
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:15.831Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:48.894Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -572,7 +676,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "dacbe5fe62e57a3e3a2e64f1103791ca7ac078067da30d4fe3d34517855b33d6",
+        "measurementDigest": "70441f0c809d269ce7ba72fc8450f9bf527d9b1eed60b188a747682a8f5f6196",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -582,30 +686,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 31.60009765625,
+      "referenceMs": 31.900146484375,
       "samples": [
-        28.199951171875,
-        31.60009765625,
-        42.60009765625
+        25.300048828125,
+        27,
+        27.800048828125,
+        28.5,
+        31.900146484375,
+        35.60009765625,
+        37,
+        38.89990234375,
+        44.39990234375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:16.542Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:49.560Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -615,7 +727,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "7872095de7dbd8e20fffbde5521651f4ecfcf9ffcae36d6b8d89859ea2860b08",
+        "measurementDigest": "02e66b907a66456c5b4ab79e904fc0c6b700ba9dc104da3907728d3c8ee2c9fe",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -625,30 +737,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 195.199951171875,
+      "referenceMs": 174.099853515625,
       "samples": [
-        190.699951171875,
-        195.199951171875,
-        202.89990234375
+        151.599853515625,
+        154.2001953125,
+        160.60009765625,
+        163.199951171875,
+        174.099853515625,
+        175.800048828125,
+        179.699951171875,
+        181.300048828125,
+        181.89990234375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:17.899Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:50.785Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -658,7 +778,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "e488eaa6e46ddacdeb9eee7be1fe555cc2cf4169e926919524dd0c4cfff711c2",
+        "measurementDigest": "c2d4093fed2fe039882e0021288f1e0ce2e74c6878261222a3c1fdecbbf8a790",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -668,30 +788,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 347.2001953125,
+      "referenceMs": 286.5,
       "samples": [
-        303.300048828125,
-        347.2001953125,
-        412.400146484375
+        253,
+        255.300048828125,
+        266.5,
+        273.10009765625,
+        286.5,
+        294.39990234375,
+        312,
+        329.099853515625,
+        403.60009765625
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:18.702Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:51.547Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -701,7 +829,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "9f5125860f6a4e432f1b08a8a82f821354881c67da5b50064a69011ee2353a7b",
+        "measurementDigest": "73f947a69043c49743e01c857f41a32f687d38712edc5a4e4777f9a90076df9e",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
         "browser": "chromium",
@@ -711,30 +839,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 195.2001953125,
+      "referenceMs": 173,
       "samples": [
-        177.900146484375,
-        195.2001953125,
-        224.300048828125
+        165.300048828125,
+        167.699951171875,
+        168.199951171875,
+        170.199951171875,
+        173,
+        177.300048828125,
+        179.300048828125,
+        181.5,
+        208.5
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-dc8254",
+        "runKey": "2026-10-25T164054029Z-72bd5e",
         "runKeys": [
-          "2026-10-23T114544582Z-dc8254"
+          "2026-10-25T164054029Z-72bd5e",
+          "2026-10-25T164612625Z-65ba5e",
+          "2026-10-25T165128733Z-45893c"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:47:19.237Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:52:52.034Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:34.889Z"
       }
     },
     {
@@ -744,7 +880,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "39c1d4f10a2bdd58dafa5905423481cbc2f9651a08b344871ed0ed1124d75cf8",
+        "measurementDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
         "browser": "chromium",
@@ -754,30 +890,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 698,
+      "referenceMs": 521.2998046875,
       "samples": [
-        678.800048828125,
-        698,
-        740.7998046875
+        482.599853515625,
+        493.300048828125,
+        504.300048828125,
+        520.099853515625,
+        521.2998046875,
+        537.400146484375,
+        608.5,
+        616.7001953125,
+        650.39990234375
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-77e7ea",
+        "runKey": "2026-10-25T164054030Z-d655e9",
         "runKeys": [
-          "2026-10-23T114544582Z-77e7ea"
+          "2026-10-25T164054030Z-d655e9",
+          "2026-10-25T164612625Z-ac5813",
+          "2026-10-25T165128733Z-c2660b"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:50:22.739Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:55:01.539Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:43.462Z"
       }
     },
     {
@@ -787,7 +931,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "37f89342558a7f83971fc5e21ef9c6bf0e255502898c27680aa39c62c4a1e01c",
+        "measurementDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
         "browser": "chromium",
@@ -797,30 +941,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 447.099853515625,
+      "referenceMs": 396.400146484375,
       "samples": [
-        413.099853515625,
-        447.099853515625,
-        458.2001953125
+        379.89990234375,
+        386.900146484375,
+        390.89990234375,
+        396.199951171875,
+        396.400146484375,
+        410.400146484375,
+        413.600341796875,
+        418.7001953125,
+        420.199951171875
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-77e7ea",
+        "runKey": "2026-10-25T164054030Z-d655e9",
         "runKeys": [
-          "2026-10-23T114544582Z-77e7ea"
+          "2026-10-25T164054030Z-d655e9",
+          "2026-10-25T164612625Z-ac5813",
+          "2026-10-25T165128733Z-c2660b"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:50:35.246Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:55:10.605Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:43.462Z"
       }
     },
     {
@@ -830,7 +982,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
-        "measurementDigest": "e6f61e62c3ca677d89a7c40b3e532c57891ea0d9ba9252fc32a8c3879b8843de",
+        "measurementDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
         "browser": "chromium",
@@ -840,30 +992,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 555.89990234375,
+      "referenceMs": 423.89990234375,
       "samples": [
-        456.599853515625,
-        555.89990234375,
-        642.199951171875
+        397.5,
+        398.10009765625,
+        398.300048828125,
+        417,
+        423.89990234375,
+        433.300048828125,
+        446.499755859375,
+        461.60009765625,
+        917.7001953125
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-77e7ea",
+        "runKey": "2026-10-25T164054030Z-d655e9",
         "runKeys": [
-          "2026-10-23T114544582Z-77e7ea"
+          "2026-10-25T164054030Z-d655e9",
+          "2026-10-25T164612625Z-ac5813",
+          "2026-10-25T165128733Z-c2660b"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:50:43.768Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:55:16.936Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:43.462Z"
       }
     },
     {
@@ -873,7 +1033,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "814a4b5ce999f66b1f53a2e10fae3b9218f31eef99b8152b7c58f8b7e4615509",
+        "measurementDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -883,30 +1043,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 84.800048828125,
+      "referenceMs": 87.800048828125,
       "samples": [
-        77.5,
-        84.800048828125,
-        100.2001953125
+        72.5,
+        79.599853515625,
+        84.2001953125,
+        86.599853515625,
+        87.800048828125,
+        101.10009765625,
+        103.10009765625,
+        105.39990234375,
+        119.599853515625
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7c83d8",
+        "runKey": "2026-10-25T164054030Z-69f234",
         "runKeys": [
-          "2026-10-23T114544582Z-7c83d8"
+          "2026-10-25T164054030Z-69f234",
+          "2026-10-25T164612625Z-069367",
+          "2026-10-25T165128733Z-3f5168"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:51:50.715Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:55:59.870Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:14.630Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:47.901Z"
       }
     },
     {
@@ -916,7 +1084,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "a5ea9d94dc40472a71951b6d82fe6a2907e186ab9dc71ce625b1484e7b5d5d3f",
+        "measurementDigest": "b60aad81d7b68c3d9a99b8ef0910928c7ded576a147649a6fde411a243815f97",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -926,30 +1094,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 73.900146484375,
+      "referenceMs": 83.300048828125,
       "samples": [
-        72.800048828125,
-        73.900146484375,
-        80.89990234375
+        62.7998046875,
+        69.099853515625,
+        74.400146484375,
+        80.699951171875,
+        83.300048828125,
+        84.300048828125,
+        87.5,
+        90.199951171875,
+        93.60009765625
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7c83d8",
+        "runKey": "2026-10-25T164054030Z-69f234",
         "runKeys": [
-          "2026-10-23T114544582Z-7c83d8"
+          "2026-10-25T164054030Z-69f234",
+          "2026-10-25T164612625Z-069367",
+          "2026-10-25T165128733Z-3f5168"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:51:51.225Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:56:00.328Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:14.630Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:47.901Z"
       }
     },
     {
@@ -959,7 +1135,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "17608a6e1eaa05049b0976d0fc7d64334afaf4cc98995f7aafad43dc52f2bcea",
+        "measurementDigest": "24bdf2f40428d55dfd61e19d8416ae61aa7bd6b6243eddea18a87d0fe5c3b0f9",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -969,30 +1145,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 232.7998046875,
+      "referenceMs": 240.800048828125,
       "samples": [
-        228.400146484375,
-        232.7998046875,
-        258.599853515625
+        202.300048828125,
+        213.599853515625,
+        226.89990234375,
+        240,
+        240.800048828125,
+        258.099853515625,
+        260.099853515625,
+        278.5,
+        289.300048828125
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7c83d8",
+        "runKey": "2026-10-25T164054030Z-69f234",
         "runKeys": [
-          "2026-10-23T114544582Z-7c83d8"
+          "2026-10-25T164054030Z-69f234",
+          "2026-10-25T164612625Z-069367",
+          "2026-10-25T165128733Z-3f5168"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:51:51.893Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:56:00.879Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:14.630Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:47.901Z"
       }
     },
     {
@@ -1002,7 +1186,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "fa69cd5865626fa76653fc274805eb8a430ab43c3abf1b345fac783d4b694e76",
+        "measurementDigest": "cf4402065a992c8bf33400ea3c1f3ad43b10a024a2ed1880994fd472b9f3be19",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
         "browser": "chromium",
@@ -1012,30 +1196,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 206.400146484375,
+      "referenceMs": 190,
       "samples": [
-        206,
-        206.400146484375,
-        222.89990234375
+        163.800048828125,
+        172.89990234375,
+        179.10009765625,
+        184.400146484375,
+        190,
+        208.10009765625,
+        220.5,
+        232.400146484375,
+        249.699951171875
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7c83d8",
+        "runKey": "2026-10-25T164054030Z-69f234",
         "runKeys": [
-          "2026-10-23T114544582Z-7c83d8"
+          "2026-10-25T164054030Z-69f234",
+          "2026-10-25T164612625Z-069367",
+          "2026-10-25T165128733Z-3f5168"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:51:52.309Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:56:01.213Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:14.630Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:47.901Z"
       }
     },
     {
@@ -1045,7 +1237,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "5fae7b7ae99c8ca8441240d5b3e15995777bb4acac716abefb19fc62547f78df",
+        "measurementDigest": "6a8f7c231dfc3a12154a8dd3109738094609704b795c90bd7bac82a75b252447",
         "protocol": "typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1",
         "role": "buero",
         "browser": "chromium",
@@ -1055,30 +1247,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 787.5,
+      "referenceMs": 671.39990234375,
       "samples": [
-        711.300048828125,
-        787.5,
-        870.5
+        619.7001953125,
+        629.39990234375,
+        654.199951171875,
+        667.39990234375,
+        671.39990234375,
+        707.699951171875,
+        716.60009765625,
+        721.2001953125,
+        805.5
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7c83d8",
+        "runKey": "2026-10-25T164054030Z-69f234",
         "runKeys": [
-          "2026-10-23T114544582Z-7c83d8"
+          "2026-10-25T164054030Z-69f234",
+          "2026-10-25T164612625Z-069367",
+          "2026-10-25T165128733Z-3f5168"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:52:02.386Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:56:09.456Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:14.630Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:47.901Z"
       }
     },
     {
@@ -1088,7 +1288,7 @@
       "backend": "local",
       "context": {
         "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
-        "measurementDigest": "a07f130f9ac6f9c694ccd16171279b6bc1987c086abef0996d347bdee4178b6e",
+        "measurementDigest": "b03c80816efba57da1ddff3f9359a7fc262d8d3d2a130d7c013907683c8ee18f",
         "protocol": "typical-profile-buero-assigns-three-own-jobs-admin-searched-job-list-browser-raf-v1",
         "role": "admin",
         "browser": "chromium",
@@ -1098,30 +1298,38 @@
           "height": 900
         },
         "deviceScaleFactor": 1,
-        "platform": "win32",
+        "platform": "linux",
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 31,
+        "memoryGiB": 12,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 664.800048828125,
+      "referenceMs": 578.39990234375,
       "samples": [
-        580.800048828125,
-        664.800048828125,
-        722.10009765625
+        548.300048828125,
+        553.89990234375,
+        562.400146484375,
+        570,
+        578.39990234375,
+        594.900146484375,
+        605.89990234375,
+        609.199951171875,
+        615
       ],
       "source": {
-        "runKey": "2026-10-23T114544582Z-7e4d71",
+        "runKey": "2026-10-25T164054030Z-4e9871",
         "runKeys": [
-          "2026-10-23T114544582Z-7e4d71"
+          "2026-10-25T164054030Z-4e9871",
+          "2026-10-25T164612625Z-90a496",
+          "2026-10-25T165128733Z-e0700d"
         ],
-        "buildId": "bcd19e77-8e27-4e1b-8ef7-9426b8756024",
-        "recordedAt": "2026-10-23T11:49:04.497Z"
+        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
+        "recordedAt": "2026-10-25T16:54:08.707Z"
       },
       "review": {
-        "reason": "Package S changed the measured support files scenario-measurement.ts (a failed build or clock read now fails instead of recording null) and performance-steps.ts (settleLiveShell also waits until no live read or route refresh is queued or running), which moved every measurement digest. Fresh runs on next 16.4.2; every sample within its budget.",
-        "reviewedAt": "2026-10-23T11:53:05.202Z"
+        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
+        "reviewedAt": "2026-10-25T17:12:38.892Z"
       }
     }
   ]
