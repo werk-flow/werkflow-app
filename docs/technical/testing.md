@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-25
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -29,8 +29,9 @@ Write each test at its boundary while you build the behavior, and run the narrow
 ### Run checks while you work
 
 1. After each edit, run the narrowest check: `bun run test:unit <path>` for a module, `bun run test:ui <spec>` for a contract, `bun run test:verify --group <id>` for one SQL or browser group.
-2. Before you finish, run `bun run test:plan` and read why each group is selected.
-3. At the end, run `bun run test:verify` for the whole plan.
+2. Before you push, run `bun run check:changed`: in under a minute it checks every file changed since the merge base with `origin/partner-preview`, committed or not.
+3. Before you finish, run `bun run test:plan` and read why each group is selected.
+4. At the end, run `bun run test:verify` for the whole plan.
 
 ### Handle a failure
 
@@ -42,8 +43,6 @@ Write each test at its boundary while you build the behavior, and run the narrow
 1. Run `bun run review`. Its default scope is the uncommitted diff, and [CodeRabbit](coderabbit.md) owns the other scopes.
 2. Give each finding one disposition: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
 3. Record the dispositions in the slice record, or outside a slice in the commit message body.
-
-Wrong turn: a clean review score taken as acceptance; CodeRabbit does not replace the independent reviewer.
 
 ## What browser tests are for
 
@@ -105,7 +104,7 @@ bun run test:plan --mode release               # the complete release selection
 bun run test:server local                      # build and serve the recorded production build
 bun run test:verify                            # run the plan
 bun run test:verify --group <ids> --fresh      # run even when a proof exists; --jobs 2 adds a second browser worker
-bun run test:runs list|classify|cleanup|prune|recover-interrupted|cleanup-local-relocated
+bun run test:runs list|classify|cleanup|prune|recover-interrupted
 bun run test:verify --target cloud             # the canary groups against DEV (after bun run env:dev and test:server cloud)
 bun run test:golden:focused --grep "<titles>"  # a focused fresh-world run; test:audit:focused and test:canary:focused likewise
 bun run test:diagnostic --grep "<title>" --reuse-run <run-key>   # replay on a retained world
@@ -122,9 +121,9 @@ bun run test:audit:focused --grep "@ACCEPT <set>"   # acceptance captures
 
 ## How a run executes
 
-`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`); both agent tools run it before every file and shell call (`lib/testing/runner/guard-wiring.test.ts`). The run writes `.agent-logs/verification/<id>/report.json`, then prunes the traces of old, uncited and classified runs (`pruneRunArchive`); a pruning error never fails it.
+`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run (which voids the attempt), an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs (`scripts/guard-edits-during-verification.ts`, `lib/testing/runner/edit-guard.test.ts`); both agent tools run it before every file and shell call (`lib/testing/runner/guard-wiring.test.ts`).
 
-Browser groups run against the recorded production build on port 3000 and a disposable organization in the local Supabase stack. Groups that measure freshness, readiness, or a scenario always run alone, after a Realtime probe. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`).
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree) and a disposable organization in the local Supabase stack. Groups that measure freshness, readiness, or a scenario run alone, after a Realtime probe, also against other worktrees. Visual specs render in Playwright's pinned image. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits (`MIDNIGHT_START_WINDOW` in `lib/testing/runner/group-schedule.ts`).
 
 ## Specs
 
@@ -164,9 +163,9 @@ Scenario measurements use the ids, budgets, and sample counts in `lib/testing/me
 
 An `environment` class allows one retry on unchanged inputs: a browser group's after a passing diagnostic and the cleanup, any other group's at once. The diagnostic replays the failed test on the retained world (`--reuse-run`). When that test wrote to its world before it failed, its replay meets another state, so the first fresh-world run of the whole group on the same build qualifies instead (`--fresh-for`, `freshDiagnosisProblem` in `lib/testing/runner/group-recovery.ts`). A second failure on those inputs needs a change. A product or harness class allows no retry, because its repair changes the inputs.
 
-Classify as product when the application breaks its contract, as harness when setup, selection, timing, or an assertion of a proven test misrepresents the behavior, and as environment when a provider, process, network, or WSL problem prevents a valid observation. Transient needs evidence of the temporary event. A later pass alone is not evidence. Classify as authoring when test code that never passed on its current content fails; the command refuses it for test inputs that passed. Classify as accepted-change when an accepted design made an `audit:visual` reference stale.
+Classify as product when the application breaks its contract, as harness when setup, selection, timing, or an assertion of a proven test misrepresents the behavior, and as environment when a provider, process, network, or host problem prevents a valid observation. Transient needs evidence of the temporary event. A later pass alone is not evidence. Classify as authoring when test code that never passed on its current content fails; the command refuses it for test inputs that passed. Classify as accepted-change when an accepted design made an `audit:visual` reference stale.
 
-A preflight failure that creates no run is blocked verification, not a product failure. If the host kills a run, confirm that the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`. After a WSL address change, use `cleanup-local-relocated`.
+A preflight failure that creates no run is blocked verification, not a product failure. If the host kills a run, confirm that the lock owner is gone, then run `bun run test:runs recover-interrupted <run-key> "<observed interruption>"`.
 
 ## Checklist
 

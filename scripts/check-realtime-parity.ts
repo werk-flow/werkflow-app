@@ -53,9 +53,7 @@ function runLocalQuery<T>(query: string): T {
     '-c',
     query,
   ];
-  const [executable, arguments_]: [string, string[]] =
-    process.platform === 'win32' ? ['wsl', ['docker', ...args]] : ['docker', args];
-  const raw = execFileSync(executable, arguments_, { encoding: 'utf8', timeout: 30_000 }).trim();
+  const raw = execFileSync('docker', args, { encoding: 'utf8', timeout: 30_000 }).trim();
   if (!raw) throw new Error('No response from the local stack.');
   return JSON.parse(raw) as T;
 }

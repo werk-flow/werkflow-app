@@ -29,10 +29,9 @@ const dockerCommand = [
   '-v',
   'ON_ERROR_STOP=1',
 ];
-const command = process.platform === 'win32' ? ['wsl', ...dockerCommand] : dockerCommand;
 
 export async function runSqlAssertionFile(assertionFile: string): Promise<void> {
-  const child = Bun.spawn(command, {
+  const child = Bun.spawn(dockerCommand, {
     stdin: Bun.file(assertionFile),
     stdout: 'inherit',
     stderr: 'inherit',

@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { errorCode } from './error-code';
 
 const WAIT_BUFFER = new Int32Array(new SharedArrayBuffer(4));
 
@@ -13,16 +14,7 @@ export function writeJsonAtomically(path: string, value: unknown): void {
   const temporaryPath = `${path}.${process.pid}.${randomBytes(3).toString('hex')}.tmp`;
   try {
     writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`);
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        renameSync(temporaryPath, path);
-        return;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (attempt >= 20 || (code !== 'EPERM' && code !== 'EACCES')) throw error;
-        sleepSynchronously(25);
-      }
-    }
+    renameSync(temporaryPath, path);
   } finally {
     rmSync(temporaryPath, { force: true });
   }
@@ -49,13 +41,8 @@ export function withFileLock<T>(
         throw error;
       }
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      // EEXIST: another process holds the lock. EPERM/EACCES/EBUSY: Windows
-      // rejects creating a file whose previous incarnation is delete-pending
-      // (racing another holder's release) — observed verbatim in the
-      // four-process stress test. Both are transient contention; a genuinely
-      // broken path surfaces as the timeout below, which names it.
-      if (!['EEXIST', 'EPERM', 'EACCES', 'EBUSY'].includes(code ?? '')) throw error;
+      // EEXIST: another process holds the lock; any other error is a broken path.
+      if (errorCode(error) !== 'EEXIST') throw error;
       if (Date.now() >= deadline) {
         throw new Error(
           `Timed out waiting for file lock ${path}. Locks are never stolen automatically; if no test process is running, a killed process left this lock behind — delete that file manually to recover.`,
@@ -63,7 +50,7 @@ export function withFileLock<T>(
       }
       // Jittered retry: a fixed sleep convoys competing processes into
       // lock-step reacquisition attempts and pathological serialization
-      // latency (observed in the four-process stress test on Windows).
+      // latency (observed in the four-process stress test).
       sleepSynchronously(15 + Math.floor(Math.random() * 20));
     }
   }
@@ -71,22 +58,12 @@ export function withFileLock<T>(
     return operation();
   } finally {
     closeSync(descriptor);
-    // Windows can briefly deny deleting a freshly-closed file (antivirus or
-    // indexer handles) — same bounded retry as the atomic rename above. The
-    // final failure still throws: silently leaving the lock behind would turn
-    // into unexplained 10s timeouts for every later writer.
-    for (let attempt = 1; ; attempt += 1) {
-      try {
-        if (readFileSync(path, 'utf8') === token) rmSync(path);
-        break;
-      } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === 'ENOENT') break;
-        if (attempt >= 20 || (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY')) {
-          throw error;
-        }
-        sleepSynchronously(25);
-      }
+    // A failed release throws: a lock left behind would turn into unexplained
+    // 10 s timeouts for every later writer.
+    try {
+      if (readFileSync(path, 'utf8') === token) rmSync(path);
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') throw error;
     }
   }
 }

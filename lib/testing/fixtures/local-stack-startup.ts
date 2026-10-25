@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 let results = ['starting\nstarting\nstarting\n', 'healthy\nhealthy\nhealthy\n'];
 let exitCode = 0;
 let calls = 0;
-mock.module(resolve(import.meta.dir, '../local-stack/local-stack-lease.ts'), () => ({
+mock.module(resolve(import.meta.dir, '../local-stack/test-session.ts'), () => ({
   runSessionCommand: async (
     command: string[],
     options: { signal: AbortSignal; onStdout: (chunk: Buffer) => void },

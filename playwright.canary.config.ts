@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { workspaceAppOrigin } from './lib/testing/runner/app-port';
 import { browserRunPaths } from './lib/testing/runs/run-paths';
 
 import { loadEnvLocal } from './tests/golden/support/env';
@@ -40,7 +41,7 @@ export default defineConfig({
       ],
   outputDir: runPaths.results,
   use: {
-    baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    baseURL: workspaceAppOrigin(__dirname),
     // Provider checks retain their own waits; locator actions stay bounded.
     actionTimeout: 30_000,
     navigationTimeout: 60_000,

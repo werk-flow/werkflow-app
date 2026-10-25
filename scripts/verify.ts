@@ -32,7 +32,9 @@ import {
 } from '../lib/testing/evidence/group-qualification';
 import { writeJsonAtomically } from '../lib/testing/runner/file-lock';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
-import { runSessionCommand } from '../lib/testing/local-stack/local-stack-lease';
+import { runSessionCommand } from '../lib/testing/local-stack/test-session';
+import { withStackLock } from '../lib/testing/runner/stack-lock';
+import { workspaceAppOrigin } from '../lib/testing/runner/app-port';
 import { runWithLogCleanup } from '../lib/testing/runner/command-log';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
@@ -248,7 +250,7 @@ function readRunManifestIfPresent(runKey: string): RunManifest | undefined {
 function probeBrowserBackend(): Promise<BackendHealth> {
   return checkBackendHealth(
     backendHealthProbes({
-      appOrigin: 'http://localhost:3000',
+      appOrigin: workspaceAppOrigin(repository),
       supabaseUrl: requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
       publishableKey: requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
       storageEndpoint: getR2Endpoint(),
@@ -658,8 +660,13 @@ async function main(): Promise<void> {
               publish();
               return;
             }
+            // Preparation and the probe reach the shared gateway, so they wait for another worktree's measuring group.
+            const sharedHold = <T>(operation: string, work: () => Promise<T>): Promise<T> =>
+              options.target === 'local'
+                ? withStackLock({ mode: 'shared', operation, repositoryRoot: repository, signal }, work)
+                : work();
             if (browser) {
-              preparation ??= prepareBrowsers();
+              preparation ??= sharedHold('browser preparation', prepareBrowsers);
               await preparation;
               await waitOutsideMidnightWindow({
                 groupId: entry.group.id,
@@ -667,10 +674,12 @@ async function main(): Promise<void> {
                 log: (line) => console.log(`[verify] ${line}`),
               });
               // The preflight proved the backend once per run; one that died since blocks the group instead of failing it.
-              const before = await backendHealthBeforeGroup({
-                check: probeBrowserBackend,
-                wait: (milliseconds) => new Promise((done) => setTimeout(done, milliseconds)),
-              });
+              const before = await sharedHold(`${entry.group.id} backend probe`, () =>
+                backendHealthBeforeGroup({
+                  check: probeBrowserBackend,
+                  wait: (milliseconds) => new Promise((done) => setTimeout(done, milliseconds)),
+                }),
+              );
               if (!before.healthy) {
                 const reason = backendDownBeforeGroupReason(before);
                 console.log(`[verify] ${entry.group.id}: blocked; ${reason}`);
@@ -697,44 +706,59 @@ async function main(): Promise<void> {
             console.log(
               `[verify] starting ${entry.group.id}${runKey ? ` as run ${runKey}` : ''}; log ${logPath}`,
             );
-            // A timing-sensitive group measures against the local Realtime service; a lagging tenant is
-            // restarted before the group, never blamed on the group afterwards.
-            if (browser && entry.timing.exclusive && options.target === 'local') {
-              await ensureRealtimeHealthy({
-                probe: () =>
-                  probeRealtimeReadiness({
-                    url: requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
-                    publishableKey: requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
-                    secretKey: requireEnv('SUPABASE_SECRET_KEY'),
-                  }),
-                restart: restartLocalRealtimeContainer,
-                maxElapsedMs: REALTIME_HEALTHY_MS,
-                log: (line) => console.log(`[verify] ${entry.group.id}: ${line}`),
-              });
-            }
             const log = createWriteStream(logPath);
             log.on('error', () => undefined);
             let errorMessage: string | undefined;
             let exitCode = 1;
-            try {
-              exitCode = await runWithLogCleanup({
-                command: () =>
-                  runSessionCommand(commandForGroup(entry.group, options.target), {
-                    cwd: repository,
-                    env: process.env,
-                    signal: signal,
-                    onStdout: (chunk) => log.write(chunk),
-                    onStderr: (chunk) => log.write(chunk),
-                  }),
-                closeLog: () =>
-                  new Promise<void>((done, reject) =>
-                    log.end((error?: Error | null) => (error ? reject(error) : done())),
-                  ),
-                reportSecondaryFailure: (error) => console.error(`Log finalization failed: ${String(error)}`),
-              });
-            } catch (error) {
-              errorMessage = error instanceof Error ? error.message : String(error);
-            }
+            const execute = async (holdEnvironment: Readonly<Record<string, string>>): Promise<void> => {
+              // A timing-sensitive group measures against the local Realtime service; a lagging tenant is
+              // restarted before the group, never blamed on the group afterwards.
+              if (browser && entry.timing.exclusive && options.target === 'local') {
+                await ensureRealtimeHealthy({
+                  probe: () =>
+                    probeRealtimeReadiness({
+                      url: requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
+                      publishableKey: requireEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'),
+                      secretKey: requireEnv('SUPABASE_SECRET_KEY'),
+                    }),
+                  restart: restartLocalRealtimeContainer,
+                  maxElapsedMs: REALTIME_HEALTHY_MS,
+                  log: (line) => console.log(`[verify] ${entry.group.id}: ${line}`),
+                });
+              }
+              try {
+                exitCode = await runWithLogCleanup({
+                  command: () =>
+                    runSessionCommand(commandForGroup(entry.group, options.target), {
+                      cwd: repository,
+                      env: { ...process.env, ...holdEnvironment },
+                      signal: signal,
+                      onStdout: (chunk) => log.write(chunk),
+                      onStderr: (chunk) => log.write(chunk),
+                    }),
+                  closeLog: () =>
+                    new Promise<void>((done, reject) =>
+                      log.end((error?: Error | null) => (error ? reject(error) : done())),
+                    ),
+                  reportSecondaryFailure: (error) =>
+                    console.error(`Log finalization failed: ${String(error)}`),
+                });
+              } catch (error) {
+                errorMessage = error instanceof Error ? error.message : String(error);
+              }
+            };
+            // Other worktrees share the local stack; a measuring group holds it alone (stack-lock.ts).
+            if (browser && options.target === 'local')
+              await withStackLock(
+                {
+                  mode: entry.timing.exclusive ? 'exclusive' : 'shared',
+                  operation: entry.group.id,
+                  repositoryRoot: repository,
+                  signal,
+                },
+                execute,
+              );
+            else await execute({});
             const run = runKey ? readRunManifestIfPresent(runKey) : undefined;
             const current = captureInputSnapshot(repository);
             const drift = changedInputs(snapshot, current);

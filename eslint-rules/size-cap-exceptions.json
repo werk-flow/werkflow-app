@@ -641,7 +641,6 @@
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
     "lib/testing/performance-calibration.ts": { "draftPerformanceBaselines": 98 },
-    "lib/testing/runner/workspace-test-lock.ts": { "withWorkspaceTestLock": 83 },
     "lib/testing/selection/test-groups.ts": { "getTestGroups": 114 },
     "lib/testing/spec-support/spec-independence.ts": { "specIndependenceProblems": 82 },
     "lib/time-accounts/actions.ts": {

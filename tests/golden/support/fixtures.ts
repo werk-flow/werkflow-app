@@ -1,5 +1,7 @@
 import { expect, test as base, type Browser, type Page } from '@playwright/test';
 
+import { resolve } from 'node:path';
+import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { testBusinessDate } from '../../../lib/testing/runner/business-date';
 import { createRolePage, type SessionRole } from './sessions';
 import { resetPersistedPreferences } from './preferences-reset';
@@ -20,7 +22,7 @@ type GoldenFixtures = {
   outsiderPage: Page;
 };
 
-const DEFAULT_BASE_URL = process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000';
+const DEFAULT_BASE_URL = workspaceAppOrigin(resolve(__dirname, '../../..'));
 
 async function rolePage(
   browser: Browser,

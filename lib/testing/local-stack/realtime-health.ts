@@ -32,7 +32,7 @@ export async function ensureRealtimeHealthy(input: {
   const second = await input.probe();
   if (!second.ok)
     throw new Error(
-      `The local Realtime service is not healthy after a restart (${second.detail}). Restart the local stack (wsl supabase stop, wsl supabase start, bun run env:local) and rerun.`,
+      `The local Realtime service is not healthy after a restart (${second.detail}). Restart the local stack (supabase stop, supabase start, bun run env:local) and rerun.`,
     );
   if (second.elapsedMs > input.maxElapsedMs)
     throw new Error(

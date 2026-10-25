@@ -1,13 +1,15 @@
-export const CODERABBIT_WSL_BINARY = '/root/.local/bin/coderabbit';
-export const CODERABBIT_WSL_DISTRIBUTION = 'Ubuntu';
+import { join } from 'node:path';
+
+/** Where the CodeRabbit installer puts the CLI for the developer's own account. */
+export function codeRabbitBinary(home: string): string {
+  return join(home, '.local/bin/coderabbit');
+}
 
 const SCOPE_ARGUMENTS = new Set(['--uncommitted', '--committed', '--base', '--base-commit']);
 const CONFIG_ARGUMENTS = new Set(['-c', '--config']);
 
 const RAW_CODERABBIT_COMMAND_PATTERN =
-  /^\s*(?:\$\s*)?(?:(?:sudo|command)\s+|env(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S+)*\s+|cmd(?:\.exe)?\s+\/c\s+|powershell(?:\.exe)?\s+(?:-Command|-c)\s+)*(?:(?:bunx|npx|pnpx)\s+|yarn\s+dlx\s+)?(?:(?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|\/)(?:\S+[\\/])*)?(?:coderabbit|cr)(?:\.(?:exe|cmd))?(?:\s|$)/m;
-const DIRECT_WSL_CODERABBIT_PATTERN =
-  /^\s*(?:\$\s*)?wsl(?:\.exe)?\b.*(?:coderabbit|cr)(?:\.(?:exe|cmd))?(?:\s|$)/m;
+  /^\s*(?:\$\s*)?(?:(?:sudo|command)\s+|env(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S+)*\s+)*(?:(?:bunx|npx|pnpx)\s+|yarn\s+dlx\s+)?(?:(?:~|\$HOME|\$\{HOME\}|\.{1,2})?\/(?:[^\s/]*\/)*)?(?:coderabbit|cr)(?:\s|$)/m;
 
 function hasArgument(argumentsToCheck: readonly string[], acceptedArguments: ReadonlySet<string>): boolean {
   return argumentsToCheck.some((argument) => acceptedArguments.has(argument.split('=')[0] ?? argument));
@@ -20,9 +22,6 @@ export function findCodeRabbitInstructionViolations(content: string): string[] {
   }
   if (RAW_CODERABBIT_COMMAND_PATTERN.test(content)) {
     violations.push('raw-command');
-  }
-  if (DIRECT_WSL_CODERABBIT_PATTERN.test(content)) {
-    violations.push('direct-wsl-command');
   }
   return violations;
 }
@@ -94,58 +93,22 @@ export function buildCodeRabbitReviewArguments(rawArguments: readonly string[]):
   return [...argumentsWithDefaults, ...reviewArguments];
 }
 
-/** A Windows path (`C:\Users\…` or `C:/Users/…`) as WSL mounts it (`/mnt/c/Users/…`). */
-export function toWslPath(windowsPath: string): string {
-  const match = /^([A-Za-z]):[\\/](.*)$/.exec(windowsPath);
-  if (!match?.[1]) throw new Error(`Not an absolute Windows path: ${windowsPath}`);
-  return `/mnt/${match[1].toLowerCase()}/${(match[2] ?? '').replaceAll('\\', '/')}`;
-}
-
-/**
- * The git environment of a WSL command: git in WSL reads the Windows user's
- * global ignore file too, so an untracked file that git ignores on Windows
- * (local settings, env files) stays out of what CodeRabbit collects.
- */
-export function wslGitEnvironment(windowsExcludesFile: string | null): string[] {
-  if (!windowsExcludesFile) return [];
-  return [
-    '/usr/bin/env',
-    'GIT_CONFIG_COUNT=1',
-    'GIT_CONFIG_KEY_0=core.excludesFile',
-    `GIT_CONFIG_VALUE_0=${toWslPath(windowsExcludesFile)}`,
-  ];
-}
-
-export function buildWindowsCodeRabbitCommand(input: {
-  readonly workingDirectory: string;
-  readonly reviewArguments: readonly string[];
-  /** The Windows user's global git ignore file, when one exists. */
-  readonly windowsExcludesFile: string | null;
-}): string[] {
-  return [
-    'wsl.exe',
-    '--distribution',
-    CODERABBIT_WSL_DISTRIBUTION,
-    '--cd',
-    input.workingDirectory,
-    '--exec',
-    ...wslGitEnvironment(input.windowsExcludesFile),
-    CODERABBIT_WSL_BINARY,
-    ...input.reviewArguments,
-  ];
-}
-
-/**
- * Refuses a review whose untracked scope in WSL holds a file that git on
- * Windows ignores or does not list: CodeRabbit would read a file the review
- * record never names, such as `.claude/settings.local.json`.
- */
-export function untrackedScopeProblem(
-  windowsUntracked: readonly string[],
-  wslUntracked: readonly string[],
-): string | null {
-  const listed = new Set(windowsUntracked);
-  const extra = wslUntracked.filter((file) => !listed.has(file));
-  if (!extra.length) return null;
-  return `CodeRabbit would read untracked files that git on Windows ignores: ${extra.slice(0, 5).join(', ')}. Add them to an ignore file both sides read, or move them out of the repository.`;
+/** `coderabbit auth status --agent` exits 0 either way; only its status line says whether a review can run. */
+export function isCodeRabbitAuthenticated(agentOutput: string): boolean {
+  return agentOutput.split('\n').some((line) => {
+    try {
+      const status: unknown = JSON.parse(line);
+      return (
+        typeof status === 'object' &&
+        status !== null &&
+        'phase' in status &&
+        status.phase === 'auth' &&
+        'authenticated' in status &&
+        status.authenticated === true
+      );
+    } catch {
+      // A line that is not JSON is CLI chatter, never a status.
+      return false;
+    }
+  });
 }

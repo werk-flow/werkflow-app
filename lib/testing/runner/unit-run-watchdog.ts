@@ -90,7 +90,7 @@ function createAppendReader(path: string): { read: () => string; close: () => vo
 
 /**
  * Runs `bun test` with the arguments in `repositoryRoot`, its output inherited, and stops it at the
- * first deadline it passes. Only the test process stops; a process a test started outlives it on Windows.
+ * first deadline it passes. Only the test process stops; a process a test started outlives it.
  */
 export async function runWatchedUnitTests(
   testArguments: readonly string[],

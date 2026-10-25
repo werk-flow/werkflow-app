@@ -2,12 +2,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   buildCodeRabbitReviewArguments,
-  buildWindowsCodeRabbitCommand,
-  CODERABBIT_WSL_BINARY,
+  codeRabbitBinary,
   findCodeRabbitInstructionViolations,
+  isCodeRabbitAuthenticated,
   isStoredReviewCommand,
-  toWslPath,
-  untrackedScopeProblem,
 } from './coderabbit-review-command';
 
 describe('CodeRabbit review command', () => {
@@ -137,26 +135,20 @@ describe('CodeRabbit review command', () => {
     'npx coderabbit review --agent',
     'sudo coderabbit review --agent',
     'env DEBUG=1 coderabbit review --agent',
-    'cmd /c coderabbit review --agent',
-    'powershell -Command coderabbit review --agent',
     '/root/.local/bin/coderabbit review --agent',
+    '~/.local/bin/coderabbit review --agent',
+    '$HOME/.local/bin/coderabbit review --agent',
+    '${HOME}/.local/bin/cr review --agent',
     '/usr/local/bin/cr review --agent',
-    'C:\\tools\\coderabbit.exe review --agent',
-    '.\\cr.cmd review --agent',
+    './cr review --agent',
   ])('detects the raw command bypass: %s', (command) => {
     expect(findCodeRabbitInstructionViolations(command)).toContain('raw-command');
   });
 
-  test('detects installer and direct WSL bypass instructions', () => {
+  test('detects installer instructions', () => {
     expect(
       findCodeRabbitInstructionViolations('curl -fsSL https://cli.coderabbit.ai/install.sh | sh'),
     ).toContain('installer');
-    expect(
-      findCodeRabbitInstructionViolations('wsl.exe --exec /root/.local/bin/coderabbit review --agent'),
-    ).toContain('direct-wsl-command');
-    expect(findCodeRabbitInstructionViolations('wsl.exe --exec cr review --type uncommitted')).toContain(
-      'direct-wsl-command',
-    );
   });
 
   test('allows wrapper commands and ordinary prose', () => {
@@ -167,48 +159,22 @@ describe('CodeRabbit review command', () => {
     expect(buildCodeRabbitReviewArguments(['findings'])).toEqual(['review', 'findings']);
   });
 
-  test('invokes the absolute WSL binary from the Windows repository path', () => {
-    const command = buildWindowsCodeRabbitCommand({
-      workingDirectory: 'C:\\workspace with spaces\\werkflow-app',
-      reviewArguments: ['review', '--agent'],
-      windowsExcludesFile: null,
-    });
-
-    expect(command).toEqual([
-      'wsl.exe',
-      '--distribution',
-      'Ubuntu',
-      '--cd',
-      'C:\\workspace with spaces\\werkflow-app',
-      '--exec',
-      CODERABBIT_WSL_BINARY,
-      'review',
-      '--agent',
-    ]);
-    expect(command.filter((argument) => argument === 'coderabbit')).toHaveLength(0);
+  test("runs the CLI the installer put into the developer's own account", () => {
+    expect(codeRabbitBinary('/home/someone')).toBe('/home/someone/.local/bin/coderabbit');
   });
 
-  test('git in WSL reads the Windows global ignore file, so local settings stay out of the review', () => {
-    const command = buildWindowsCodeRabbitCommand({
-      workingDirectory: 'C:\\repo',
-      reviewArguments: ['review', '--agent', '--uncommitted'],
-      windowsExcludesFile: 'C:\\Users\\someone\\.config\\git\\ignore',
-    });
-
-    expect(command.slice(command.indexOf('--exec') + 1, command.indexOf(CODERABBIT_WSL_BINARY))).toEqual([
-      '/usr/bin/env',
-      'GIT_CONFIG_COUNT=1',
-      'GIT_CONFIG_KEY_0=core.excludesFile',
-      'GIT_CONFIG_VALUE_0=/mnt/c/Users/someone/.config/git/ignore',
-    ]);
-    expect(toWslPath('D:/work/ignore')).toBe('/mnt/d/work/ignore');
-  });
-
-  test('a review refuses an untracked file that WSL would send and Windows ignores', () => {
-    expect(untrackedScopeProblem(['lib/new.ts'], ['lib/new.ts'])).toBeNull();
-    expect(untrackedScopeProblem(['lib/new.ts'], ['lib/new.ts', '.claude/settings.local.json'])).toContain(
-      '.claude/settings.local.json',
-    );
+  test('a review starts only after the agent status line reports an authenticated CLI', () => {
+    expect(
+      isCodeRabbitAuthenticated(
+        '{"type":"status","phase":"auth","status":"authenticated","authenticated":true}\n',
+      ),
+    ).toBe(true);
+    expect(
+      isCodeRabbitAuthenticated(
+        'Checking\n{"type":"status","phase":"auth","status":"not_authenticated","authenticated":false}',
+      ),
+    ).toBe(false);
+    expect(isCodeRabbitAuthenticated('')).toBe(false);
   });
 });
 

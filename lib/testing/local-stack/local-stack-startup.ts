@@ -1,5 +1,5 @@
 import { setTimeout as delay } from 'node:timers/promises';
-import { runSessionCommand } from './local-stack-lease';
+import { runSessionCommand } from './test-session';
 
 /** Docker auto-restarts these containers before their services can answer requests. */
 export async function waitForLocalStackHealth(signal: AbortSignal): Promise<void> {
@@ -11,8 +11,6 @@ export async function waitForLocalStackHealth(signal: AbortSignal): Promise<void
       let output = '';
       const code = await runSessionCommand(
         [
-          'wsl.exe',
-          '--exec',
           'docker',
           'inspect',
           '--format',

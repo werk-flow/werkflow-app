@@ -1,8 +1,8 @@
 # Environments
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-25
 
-WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, and how to set up a new machine.
+WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, how worktrees share the local stack, and how to set up a new machine.
 
 ## The two cloud backends
 
@@ -33,7 +33,7 @@ Not adopted, each a future owner decision: point-in-time recovery, database netw
 
 ## The local test stack
 
-The application test groups run against the Supabase CLI's Docker composition inside WSL Ubuntu (Docker Engine, not Docker Desktop). `supabase/config.toml` owns its ports, auth posture, storage bucket and mail capture.
+The application test groups run against the Supabase CLI's Docker composition on the development machine: Docker Engine in WSL Ubuntu on the Windows laptop, Docker Desktop on a Mac. Every repository command runs inside Linux or macOS; no command calls a Windows tool. `supabase/config.toml` owns its ports, auth posture, storage bucket and mail capture.
 
 - `supabase db reset` replays the committed migration history. A failing reset is a finding about that history.
 - The keys are the CLI's shared local defaults. They are not secrets.
@@ -42,10 +42,11 @@ The application test groups run against the Supabase CLI's Docker composition in
 - Leaked-password protection needs the internet and has no local equivalent. The canary owns that check.
 - PostgREST truncates a response at its row limit without an error, locally and on the hosted projects. A read that can exceed the limit reads in pages and reports an overflow ([Realtime and caching](realtime-and-caching.md) owns the rule). Do not raise the limit to hide the bound.
 
-Facts for this workstation:
+Facts for the development machine:
 
-- Windows reaches the stack through the WSL address, not `localhost`. `bun run env:local` resolves the current address and rewrites `.env.local`. Run it again after every WSL restart, and rebuild before the next browser run, because `NEXT_PUBLIC_*` values are baked into the build. The preflight fails with the remedy when the address is stale.
-- WSL shuts down when it idles. `bun run test:server local` holds WSL alive from environment generation through the build and the server's lifetime, and waits for the stack to become healthy. Keep that process alive while you verify.
+- The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin (`NEXT_PUBLIC_SITE_URL`, so invite and password links reach the server that sent them) into `.env.local`. Rebuild before the next browser run after a switch, because `NEXT_PUBLIC_*` values are baked into the build.
+- `bun run test:server local` waits for the stack to become healthy before it builds. Keep that process alive while you verify.
+- Node's default heap on a machine with less than 16 GB is too small for this repository's type check. `bun run typecheck`, `bun run build` and `check:changed` give it 4 GB.
 - `supabase db reset` can leave the edge-runtime container stopped. The preflight detects it and prints the remedy.
 - A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime through the local Supabase CLI and verify the capture endpoint before an email browser group.
 
@@ -69,12 +70,13 @@ Vercel holds its own variables, so a local file never affects the deployed app. 
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
-| claude.ai Supabase connector (OAuth) | read and write | read and write | Scoped to the "WerkFlow" organization. Address projects by ref. Production writes are forbidden outside the migration rule. |
-| Supabase MCP server (`.mcp.json`) | yes | yes | Authenticated by `SUPABASE_ACCESS_TOKEN` from the shell environment. Routine writes go to DEV only. |
+| claude.ai Supabase connector (OAuth) | not in the agents | not in the agents | Scoped to the whole "WerkFlow" organization, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`) and agents use the scoped servers below. The owner keeps it on claude.ai. |
+| Supabase MCP server (`supabase` in the user configuration of Claude Code and Codex) | never | read and write | The hosted server at `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn`, signed in with the owner's Supabase account (OAuth). The `project_ref` scope keeps it on DEV. |
+| Supabase MCP server `supabase-prod-readonly` (same configuration) | read only | never | The hosted server at `https://mcp.supabase.com/mcp?project_ref=jbgaqpdjauzoocplgdsn&read_only=true`. Its queries run as a read-only database user. |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
 | Management API | yes | yes | Read-only production inspection and DEV configuration. |
 | R2 tokens | prod bucket only | dev bucket only | Each backup carries its own bucket-scoped credentials. Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
-| Local stack | n/a | n/a | The Supabase CLI inside WSL and direct psql. MCP does not reach it. |
+| Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP does not reach it. |
 
 ## The migration rule
 
@@ -91,15 +93,26 @@ This section is the one home of the rule. Skills and decision records link here.
 
 Between releases, migrations wait on DEV. Read the two migration ledgers before you claim parity. `bun run migrations:check`, `bun run types:check` and `bun run realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When production parity matters, compare the live object definitions with the procedure in the `supabase-live-workflow` skill.
 
+## Work in a worktree
+
+T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree.ts` in the background (`t3.json`). The script installs from the frozen lockfile, links the main checkout's env backups and `supabase/.temp`, and writes the worktree's own `.env.local` with `bun run env:local`. It writes `.t3/setup-running` while it works, then `.t3/setup-done` or `.t3/setup-failed` with the tail of the failing output.
+
+- Wait for `.t3/setup-done` before you run any command in a worktree. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
+- A checkout keeps its own `.next`, workspace lock and `.agent-logs/` run archive, because they live inside it. The main checkout serves on port 3000. A linked worktree derives its test-server port and its `bun run dev` port from its path (`workspacePorts` in `lib/testing/runner/app-port.ts`). A collision of two paths fails at the port check of the build.
+- Every worktree uses the one local stack. Each browser group seeds its own organization, so ordinary groups of several worktrees run side by side. A group that measures, or restarts a stack service, holds the stack alone: `lib/testing/runner/stack-lock.ts` keeps the holders in the git common directory, and a waiting run prints what it waits for.
+- `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
+
 ## Set up a new machine
 
-1. Make the owner's Supabase personal access token available as `SUPABASE_ACCESS_TOKEN` to the CLI and the scripts. Keep a copy in every env backup, because a switch overwrites `.env.local`. Never commit or print the token.
-2. Get `.env.local` with the DEV values from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only when production sessions are expected.
-3. Claude Code: approve the project's `.mcp.json` server on first start. Codex: add the same server to `~/.codex/config.toml`.
-4. Local stack: install Docker Engine and the Supabase CLI inside WSL Ubuntu. From the repository root in WSL run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from the values that `supabase status` prints.
-5. Run `bunx playwright install chromium` once.
-6. Run `git config core.hooksPath .githooks` to enable the [publication gate](testing.md#publication-gate).
-7. Verify: `bunx supabase projects list` shows both cloud projects, and `bun scripts/check-r2.ts` passes against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` in another terminal.
+1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker (Docker Engine on Linux or in WSL Ubuntu, Docker Desktop on a Mac) and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
+2. Make the owner's Supabase personal access token available as `SUPABASE_ACCESS_TOKEN` to the CLI and the scripts. Keep a copy in every env backup, because a switch overwrites `.env.local`. Never commit or print the token.
+3. Get `.env.local` with the DEV values from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only when production sessions are expected.
+4. Agent tools, the same for Claude Code and Codex: the two scoped Supabase MCP servers above (`claude mcp add --scope user --transport http <name> "<url>"`, and `[mcp_servers.<name>]` with that `url` in `~/.codex/config.toml`), then the owner signs in once per server in each tool (`/mcp` in Claude Code, `codex mcp login <name>`). The Vercel CLI, signed in as the owner, serves both; each tool also carries its Vercel plugin.
+5. Local stack: from the repository root run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from the values that `supabase status` prints, then run `bun run env:local`.
+6. Run `bunx playwright install --with-deps chromium` once. The first visual run pulls the pinned Playwright image (`lib/testing/runner/visual-browser.ts`).
+7. CodeRabbit: install the CLI into your own account with `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (it lands in `~/.local/bin`). The owner signs in once with `coderabbit auth login`; `bun run review:doctor` confirms both. This step is the only time an agent installs CodeRabbit.
+8. Run `git config core.hooksPath .githooks` to enable the [publication gate](testing.md#publication-gate).
+9. Verify: `bunx supabase projects list` shows both cloud projects, and `bun scripts/check-r2.ts` passes against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` in another terminal.
 
 ## Work on production
 

@@ -89,13 +89,8 @@ test('the Playwright configs keep one worker, no retries, no failure caps and th
   }
 });
 
-test('standalone local cleanup keeps WSL alive and cancels the owned child before lease release', () => {
+test('standalone cleanup holds the workspace lock', () => {
   const cleanup = sourceAt('scripts/manage-playwright-runs.ts').text;
-  for (const command of ['cleanup', 'cleanup-all', 'cleanup-local-relocated'])
-    expect(cleanup).toContain(`'${command}'`);
-  expect(cleanup).toContain('localMailpitUrl');
-  expect(cleanup).toMatch(/withLocalStackLease\(\s*true,\s*\(signal\) =>\s*runSessionCommand\(/);
-  expect(cleanup).toMatch(/\{\s*signal,\s*env:/);
-  expect(cleanup).toContain('AbortSignal.timeout(180_000)');
+  for (const command of ['cleanup', 'cleanup-all']) expect(cleanup).toContain(`'${command}'`);
   expect(cleanup).toContain('withWorkspaceTestLock');
 });

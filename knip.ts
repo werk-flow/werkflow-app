@@ -69,7 +69,6 @@ const config: KnipConfig = {
   // The pinned Supabase CLI runs through bunx inside scripts/generate-supabase-types.ts;
   // tailwindcss is imported by app/globals.css, which knip does not compile.
   ignoreDependencies: ['supabase', 'tailwindcss'],
-  ignoreBinaries: ['taskkill.exe', 'netstat.exe', 'wsl.exe'],
 };
 
 export default config;

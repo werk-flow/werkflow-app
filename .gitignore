@@ -56,4 +56,7 @@ tests/canary/.report/
 
 # Agent logs and run-owned verification archives
 .agent-logs/
+
+# T3 Code worktree setup markers (scripts/setup-worktree.ts)
+.t3/
 .coderabbit-*.jsonl

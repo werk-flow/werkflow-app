@@ -6,7 +6,9 @@ import {
   evidenceWriteRefusal,
   guardedInputs,
   refusalMessage,
+  resetsLocalStack,
   sharedStateCommand,
+  stackResetRefusal,
   sourceRewritingCommand,
   type GuardedToolCall,
 } from '../lib/testing/runner/edit-guard';
@@ -15,9 +17,10 @@ import {
  * Pre-edit hook of the agent tools (.claude/settings.json, .codex/hooks.json).
  * It reads the pending tool call on stdin and exits 2 with a reason when the
  * call would change a proof input while a test operation holds the workspace
- * lock (docs/technical/testing.md, "How a run executes"). Every other case
- * exits 0, including a guard that cannot decide: the runner's own drift check
- * still voids a run whose inputs changed.
+ * lock (docs/technical/testing.md, "How a run executes"), or would reset or
+ * stop the local stack while any worktree holds it. Every other case exits 0,
+ * including a guard that cannot decide: the runner's own drift check still
+ * voids a run whose inputs changed.
  */
 const repositoryRoot = resolve(import.meta.dir, '..');
 const lockPath = resolve(repositoryRoot, '.agent-logs/workspace-test-operation.lock');
@@ -63,6 +66,16 @@ const evidenceRefusal = evidenceWriteRefusal(
 if (evidenceRefusal) {
   console.error(evidenceRefusal);
   process.exit(2);
+}
+
+// A stack reset or stop reaches every worktree, so any worktree's hold on the local stack refuses it.
+if (resetsLocalStack(call)) {
+  const { readStackLockHolders, stackLockDirectory } = await import('../lib/testing/runner/stack-lock');
+  const refusal = stackResetRefusal(call, readStackLockHolders(stackLockDirectory(repositoryRoot)));
+  if (refusal) {
+    console.error(refusal);
+    process.exit(2);
+  }
 }
 
 const owner = liveLockOwner();

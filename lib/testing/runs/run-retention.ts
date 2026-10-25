@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, statfsSync } from 'node:fs';
 import { join } from 'node:path';
+import { errorCode } from '../runner/error-code';
 import { z } from 'zod';
 import { listRunManifests, runDirectory, updateRunManifest } from '../../../tests/golden/support/run-state';
 import { readPerformanceBaselines } from '../performance-baselines';
@@ -135,16 +136,14 @@ export function pruneRunArchive(mode: 'plan' | 'prune'): string {
  * A live run's `active/` directory holds atomic-write temp files for a few
  * milliseconds. With several workers the next runner's size scan can list one and
  * find it renamed away at stat time (release run of 2026-09-18, the
- * list-pagination runner crashed on the layout run's manifest temp file), or
- * still locked by the rename on Windows. A vanished or transiently locked
- * entry weighs nothing; every other error still propagates.
+ * list-pagination runner crashed on the layout run's manifest temp file). A
+ * vanished entry weighs nothing; every other error still propagates.
  */
-const TRANSIENT_STAT_ERRORS = new Set(['ENOENT', 'EPERM', 'EBUSY']);
 export function fileSizeOrZero(path: string): number {
   try {
     return statSync(path).size;
   } catch (error) {
-    if (TRANSIENT_STAT_ERRORS.has((error as NodeJS.ErrnoException).code ?? '')) return 0;
+    if (errorCode(error) === 'ENOENT') return 0;
     throw error;
   }
 }

@@ -71,6 +71,7 @@ test('runtime Markdown remains qualified while agent guidance uses current stati
   expect(isDocumentationInput('.claude/skills/werkflow-design/SKILL.md')).toBe(true);
   for (const file of [
     '.mcp.json',
+    't3.json',
     '.gitignore',
     'supabase/.gitignore',
     'tests/audit/README.md',

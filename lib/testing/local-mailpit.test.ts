@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { localMailpitUrl } from './local-mailpit';
 
-test('Mailpit follows the local stack host, including Windows WSL NAT', () => {
+test('Mailpit follows the local stack host, loopback or private', () => {
   expect(localMailpitUrl('http://172.24.20.8:54321')?.origin).toBe('http://172.24.20.8:54324');
   expect(localMailpitUrl('http://127.0.0.1:54321')?.origin).toBe('http://127.0.0.1:54324');
 });

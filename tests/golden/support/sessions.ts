@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
+import { resolve } from 'node:path';
+import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { requireEnv } from './env';
 import { testSupabaseClientOptions } from './client-options';
 import type { TestRole, TestWorld } from './world';
@@ -15,7 +17,7 @@ export async function createRolePage(input: {
 }): Promise<{ context: BrowserContext; page: Page }> {
   const user = input.role === 'outsider' ? input.world.outsider.admin : input.world.users[input.role];
   const organizationId = input.role === 'outsider' ? input.world.outsider.orgId : input.world.orgId;
-  const baseUrl = input.baseUrl ?? process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000';
+  const baseUrl = input.baseUrl ?? workspaceAppOrigin(resolve(__dirname, '../../..'));
   const origin = new URL(baseUrl);
   const context = await input.browser.newContext({
     baseURL: baseUrl,

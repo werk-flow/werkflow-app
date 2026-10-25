@@ -27,7 +27,7 @@ export function hashValue(value: unknown): string {
 }
 
 /** Files no test executes: agent tooling, and the ignore files that only shape this listing. */
-const AGENT_TOOLING_INPUTS: readonly string[] = ['.mcp.json'];
+const AGENT_TOOLING_INPUTS: readonly string[] = ['.mcp.json', 't3.json'];
 
 /**
  * Files that wire the verification itself: the agent hooks that install the edit guard, and the

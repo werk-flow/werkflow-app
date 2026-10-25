@@ -1,13 +1,15 @@
 import { createWriteStream, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseRunnerArguments } from '../lib/testing/runner/runner-arguments';
+import { withStackLock } from '../lib/testing/runner/stack-lock';
+import { selectsVisualBrowser, startVisualBrowser } from '../lib/testing/runner/visual-browser';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import {
   validateDiagnosticProvenance,
   validateExecutedSelection,
 } from '../lib/testing/evidence/test-evidence';
 import { calculateCandidateFingerprint } from '../lib/testing/evidence/candidate-identity';
-import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack/local-stack-lease';
+import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { resolveBusinessDate } from '../lib/testing/runner/business-date';
 import { runWithLogCleanup } from '../lib/testing/runner/command-log';
 import {
@@ -71,10 +73,6 @@ import {
 async function main(signal: AbortSignal): Promise<number> {
   signal.throwIfAborted();
   loadEnvLocal();
-  if (process.env.GOLDEN_BASE_URL && process.env.GOLDEN_BASE_URL !== 'http://localhost:3000')
-    throw new Error(
-      'Browser runs require http://localhost:3000. Remove the GOLDEN_BASE_URL override before continuing.',
-    );
   const lane = process.argv[2] as PlaywrightLane | undefined;
   const suite = process.argv[3] as PlaywrightSuite | undefined;
   if (!lane || !(RUNNABLE_LANES as readonly string[]).includes(lane)) {
@@ -294,6 +292,10 @@ async function main(signal: AbortSignal): Promise<number> {
     ...(groupFingerprint !== undefined ? { groupFingerprint } : {}),
   });
 
+  // Started before the log and the progress timer, so a container that fails to start leaks neither.
+  const visualBrowser = selectsVisualBrowser(requestedSelection.tests.map((test) => test.file))
+    ? await startVisualBrowser(repositoryRoot)
+    : null;
   const logPath = resolve(runDirectory(runKey), 'runner.log');
   const log = createWriteStream(logPath, { flags: 'a' });
   log.on('error', () => undefined);
@@ -315,7 +317,7 @@ async function main(signal: AbortSignal): Promise<number> {
       runSessionCommand([process.execPath, ...commandArgs], {
         signal,
         cwd: repositoryRoot,
-        env: process.env,
+        env: { ...process.env, ...visualBrowser?.environment },
         onStdout: (chunk) => {
           log.write(chunk);
         },
@@ -337,7 +339,7 @@ async function main(signal: AbortSignal): Promise<number> {
         `[werkflow-test] Log cleanup also failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     },
-  });
+  }).finally(() => visualBrowser?.stop());
 
   let manifest;
   try {
@@ -443,17 +445,23 @@ function recordRunnerFailure(error: unknown): void {
 try {
   const requestedOptions = parseRunnerArguments(process.argv[2] as PlaywrightLane, process.argv.slice(4));
   const localTarget = process.argv[3] !== 'canary' && requestedOptions['--target'] !== 'cloud';
-  process.exitCode = await withWorkspaceTestLock(
-    { operation: `Playwright ${process.argv.slice(2, 4).join(' ')}` },
-    async () => {
-      try {
-        return await withLocalStackLease(localTarget, main);
-      } catch (error) {
-        recordRunnerFailure(error);
-        throw error;
-      }
-    },
-  );
+  const operation = `Playwright ${process.argv.slice(2, 4).join(' ')}`;
+  process.exitCode = await withWorkspaceTestLock({ operation }, async () => {
+    try {
+      // A run from test:verify inherits the runner's hold; a focused run shares the stack (stack-lock.ts).
+      return await withTestSession((signal) =>
+        localTarget
+          ? withStackLock(
+              { mode: 'shared', operation, repositoryRoot: resolve(import.meta.dir, '..'), signal },
+              () => main(signal),
+            )
+          : main(signal),
+      );
+    } catch (error) {
+      recordRunnerFailure(error);
+      throw error;
+    }
+  });
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

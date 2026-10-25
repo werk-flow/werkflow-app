@@ -16,6 +16,7 @@ import {
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
 import { assertWorldSeedComplete } from '../../../lib/testing/seed-world-plan';
 import { backendIdentity } from '../../../lib/testing/evidence/proof-environment';
+import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import {
   browserRunPaths,
   configuredRunKey,
@@ -107,8 +108,6 @@ export type RunManifest = {
   campaignId?: string;
   rerunGrantId?: string | null;
   backendProvenance?: BackendProvenance;
-  /** Cleanup-only verification after a local transport change. Original provenance stays immutable. */
-  cleanupRelocation?: { verifiedAt: string; reason: string; backend: BackendProvenance };
   selectedTestIds?: string[];
   outcomes?: TestOutcomeEvidence[];
   currentTestId?: string | null;
@@ -260,7 +259,7 @@ export function createRunManifest(input?: {
     sourceFingerprint: calculateSourceFingerprint(),
     candidateFingerprint: input?.candidateFingerprint,
     buildId: readOptionalFile(resolve(REPOSITORY_ROOT, '.next/BUILD_ID')),
-    baseUrl: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    baseUrl: workspaceAppOrigin(REPOSITORY_ROOT),
     projectRef: backendIdentity(supabaseUrl, REPOSITORY_ROOT),
     r2Bucket: process.env.R2_BUCKET_NAME ?? 'missing',
     total: 0,

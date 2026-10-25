@@ -1,4 +1,4 @@
-import { runSessionCommand } from '../local-stack/local-stack-lease';
+import { runSessionCommand } from '../local-stack/test-session';
 import { z } from 'zod';
 import type { PlaywrightSuite } from './run-policy';
 import { type TestGroup } from '../selection/test-groups';

@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import { subscribeForDatabaseReadiness } from './realtime-probe';
-import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack/local-stack-lease';
+import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
+import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 const target = process.argv[2];
@@ -125,10 +126,14 @@ function openServerLog(): {
   };
 }
 
-await withLocalStackLease(target === 'local', async (signal) => {
+await withTestSession(async (signal) => {
   // Bun loaded the old .env.local at startup. Children must read the newly
   // switched file instead of inheriting its previous backend keys.
-  const childEnvironment: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'production' };
+  const childEnvironment: NodeJS.ProcessEnv = {
+    ...process.env,
+    NODE_ENV: 'production',
+    PORT: String(workspacePorts(repositoryRoot).app),
+  };
   for (const key of Object.keys(childEnvironment)) {
     if (key !== 'SUPABASE_ACCESS_TOKEN' && /^(NEXT_PUBLIC_|SUPABASE_|R2_)/.test(key))
       delete childEnvironment[key];
@@ -152,8 +157,7 @@ await withLocalStackLease(target === 'local', async (signal) => {
   await withWorkspaceTestLock({ operation: `prepare ${target} test server`, repositoryRoot }, async () => {
     if (target === 'local') await waitForLocalStackHealth(signal);
     await run([process.execPath, 'run', target === 'local' ? 'env:local' : 'env:dev']);
-    if (target === 'local')
-      await run(['wsl.exe', '--exec', 'docker', 'start', 'supabase_edge_runtime_werkflow-app']);
+    if (target === 'local') await run(['docker', 'start', 'supabase_edge_runtime_werkflow-app']);
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
     await run([process.execPath, 'run', 'build']);
   });

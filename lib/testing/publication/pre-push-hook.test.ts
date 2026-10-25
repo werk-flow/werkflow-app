@@ -30,8 +30,6 @@ interface RunOptions {
 function run(command: string[], options: RunOptions) {
   const environment: Record<string, string | undefined> = { ...process.env, ...options.env };
   if (!options.env?.WERKFLOW_PUSH_OVERRIDE) delete environment.WERKFLOW_PUSH_OVERRIDE;
-  // Windows also spells the variable Path; dropping it leaves PATH below the only search path.
-  delete environment.Path;
   // The hook calls `bun`; the test's own Bun comes first on the path.
   environment.PATH = options.path ?? `${dirname(process.execPath)}${delimiter}${process.env.PATH ?? ''}`;
   const result = Bun.spawnSync({
@@ -124,14 +122,12 @@ test('an override that cannot be logged is refused', () => {
 });
 
 /**
- * The hook once called cat, tr, mkdir and date, which a shell whose PATH lacks Git's usr/bin (a
- * PowerShell session) does not reach, so its override failed there. Git's own sh runs the hook here
- * with a PATH of only Bun's and git's directories.
+ * The hook once called cat, tr, mkdir and date, which a shell with a minimal PATH does not reach,
+ * so its override failed there. The hook runs here with a PATH of only Bun's and git's directories.
  */
 test('the hook and its override need nothing on the path but bun and git', () => {
   nextCommit('fourth');
-  const execPath = run(['git', '--exec-path'], { cwd: work }).output.trim();
-  const shell = process.platform === 'win32' ? resolve(execPath, '../../../usr/bin/sh.exe') : '/bin/sh';
+  const shell = '/bin/sh';
   writeFileSync(join(work, 'gate-exit'), '1');
   const overridden = run([shell, '.githooks/pre-push', 'origin', join(root, 'remote.git')], {
     cwd: work,

@@ -19,12 +19,12 @@ import {
   type RecoveryResource,
 } from '../lib/testing/runs/recovery-rehearsal';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
-import { withLocalStackLease } from '../lib/testing/local-stack/local-stack-lease';
+import { withTestSession } from '../lib/testing/local-stack/test-session';
 
 // Deliberately has no target/env override or restore-file argument. It can only
 // create a new synthetic pair of databases and private local Storage buckets.
 const databaseContainer = 'supabase_db_werkflow-app';
-let leaseSignal: AbortSignal | undefined;
+let sessionSignal: AbortSignal | undefined;
 const target = createRecoveryTarget();
 const resources: { kind: 'database' | 'bucket'; name: string; state: 'planned' | 'created' | 'cleaned' }[] =
   [];
@@ -48,10 +48,11 @@ function record(stage: string, status: string): void {
 }
 
 async function command(arguments_: string[], input?: string): Promise<string> {
-  leaseSignal?.throwIfAborted();
+  sessionSignal?.throwIfAborted();
   const localArguments =
     arguments_[0] === 'docker' ? ['docker', '--context', 'default', ...arguments_.slice(1)] : arguments_;
-  const child = Bun.spawn(process.platform === 'win32' ? ['wsl', ...localArguments] : localArguments, {
+  const child = Bun.spawn(localArguments, {
+    ...(sessionSignal ? { signal: sessionSignal } : {}),
     stdin: input === undefined ? 'ignore' : new Blob([input]),
     stdout: 'pipe',
     stderr: 'pipe',
@@ -127,8 +128,8 @@ async function main(): Promise<void> {
   if (process.argv.length !== 2)
     throw new Error('This rehearsal accepts no arguments or external backup inputs.');
   await withWorkspaceTestLock({ operation: 'isolated synthetic recovery rehearsal' }, async () => {
-    await withLocalStackLease(true, async (signal) => {
-      leaseSignal = signal;
+    await withTestSession(async (signal) => {
+      sessionSignal = signal;
       // Verify Docker uses the local Unix socket; never accept a remote Docker context.
       const dockerEndpoint = await command([
         'docker',
@@ -166,9 +167,7 @@ async function main(): Promise<void> {
         await Bun.sleep(2_000);
       }
       if (!healthy) throw new Error('Local recovery services did not become healthy.');
-      const localHost =
-        process.platform === 'win32' ? (await command(['hostname', '-I'])).split(/\s+/)[0] : '127.0.0.1';
-      if (localHost === undefined) throw new Error('Could not resolve the local stack address.');
+      const localHost = '127.0.0.1';
       const endpoint = `http://${localHost}:54321/storage/v1/s3`;
       assertLocalRecoveryEndpoint(endpoint, localHost);
       const credentials = localCredentials();

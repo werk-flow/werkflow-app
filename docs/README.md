@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-23; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-25; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
@@ -35,7 +35,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | --- | --- |
 | [architecture.md](technical/architecture.md) | You need the runtime shape: app structure, Supabase access model, auth and organization context, deployment. |
 | [data-model.md](technical/data-model.md) | You need the conceptual domain model: tenant boundary, roles, concept ownership, history rules. |
-| [environments.md](technical/environments.md) | Anything touches Supabase, env files, R2, a migration or a new machine: project identities, tool access, the migration rule. |
+| [environments.md](technical/environments.md) | Anything touches Supabase, env files, R2, a migration, a worktree or a new machine: project identities, tool access, the migration rule. |
 | [security.md](technical/security.md) | You add a route handler, Server Action, table, privileged function, storage path or provider setting: invariants, mechanisms and checks. |
 | [realtime-and-caching.md](technical/realtime-and-caching.md) | You change a cache tag, a Realtime subscription, a list reader or freshness behavior. |
 | [performance.md](technical/performance.md) | You add a step people repeat daily, read a lab table, change a skeleton, or make a flow faster: journeys, lab counts, payload budgets, layout stability. |

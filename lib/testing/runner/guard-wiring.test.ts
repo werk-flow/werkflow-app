@@ -34,7 +34,7 @@ function guardedTools(file: string, tools: readonly string[], script = GUARD): s
 
 // The edit guard (docs/technical/testing.md, "How a run executes") only works while both tools call it.
 test('Claude runs the edit guard before every file and shell tool', () => {
-  const tools = ['Edit', 'Write', 'NotebookEdit', 'Bash', 'PowerShell'];
+  const tools = ['Edit', 'Write', 'NotebookEdit', 'Bash'];
   expect(guardedTools('.claude/settings.json', tools)).toEqual(tools);
 });
 
@@ -51,7 +51,7 @@ test('Codex runs the edit guard before every file and shell tool', () => {
 
 // The bypass refusal (docs/technical/testing.md, "Publication gate") keeps --no-verify and core.hooksPath overrides out of agent shells.
 test('Claude runs the publication-bypass refusal before every shell tool', () => {
-  const tools = ['Bash', 'PowerShell'];
+  const tools = ['Bash'];
   expect(guardedTools('.claude/settings.json', tools, BYPASS_REFUSAL)).toEqual(tools);
 });
 

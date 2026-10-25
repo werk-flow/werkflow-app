@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-
-/** Windows sharing and pending-delete errors that clear within a few milliseconds. */
-const TRANSIENT_FILE_ERRORS: readonly string[] = ['EPERM', 'EACCES', 'EBUSY'];
+import { errorCode } from './error-code';
 
 type WorkspaceLockOwner = {
   token: string;
@@ -84,22 +82,15 @@ export async function withWorkspaceTestLock<T>(
     operation: input.operation,
     startedAt: new Date().toISOString(),
   };
-  let descriptor: number | undefined;
-  // Windows briefly refuses to create a file whose previous owner is still being deleted.
-  for (let attempt = 0; descriptor === undefined; attempt += 1) {
-    try {
-      descriptor = openSync(path, 'wx');
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === 'EEXIST') {
-        const current = readFileSync(path, 'utf8');
-        throw new Error(
-          `Another workspace operation owns ${path}: ${current}. Locks are never stolen automatically. Wait for it to finish; recover a killed owner's lock only after checking that no related test, build or cleanup process remains.`,
-        );
-      }
-      if (attempt >= 19 || !TRANSIENT_FILE_ERRORS.includes(code ?? '')) throw error;
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
-    }
+  let descriptor: number;
+  try {
+    descriptor = openSync(path, 'wx');
+  } catch (error) {
+    if (errorCode(error) !== 'EEXIST') throw error;
+    const current = readFileSync(path, 'utf8');
+    throw new Error(
+      `Another workspace operation owns ${path}: ${current}. Locks are never stolen automatically. Wait for it to finish; recover a killed owner's lock only after checking that no related test, build or cleanup process remains.`,
+    );
   }
   const previousToken = process.env.WERKFLOW_TEST_LOCK_TOKEN;
   const previousPath = process.env.WERKFLOW_TEST_LOCK_PATH;
@@ -119,19 +110,10 @@ export async function withWorkspaceTestLock<T>(
     else process.env.WERKFLOW_TEST_LOCK_PATH = previousPath;
     try {
       closeSync(descriptor);
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          const current = JSON.parse(readFileSync(path, 'utf8')) as WorkspaceLockOwner;
-          if (current.token !== owner.token)
-            throw new Error('Workspace lock ownership changed unexpectedly; refusing to remove it.');
-          rmSync(path);
-          break;
-        } catch (error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (attempt >= 19 || !TRANSIENT_FILE_ERRORS.includes(code ?? '')) throw error;
-          await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
-        }
-      }
+      const current: unknown = JSON.parse(readFileSync(path, 'utf8'));
+      if (!current || typeof current !== 'object' || !('token' in current) || current.token !== owner.token)
+        throw new Error('Workspace lock ownership changed unexpectedly; refusing to remove it.');
+      rmSync(path);
     } catch (error) {
       if (!operationFailed) throw error;
       try {

@@ -10,6 +10,7 @@ import {
   LIVE_READ_HELD_ATTRIBUTE,
   REALTIME_REFRESH_COUNT_ATTRIBUTE,
 } from '../../../lib/ui/route-refresh-signal';
+import { workspaceAppOrigin } from '../../../lib/testing/runner/app-port';
 import { requireEnv } from '../../golden/support/env';
 import { currentRunKey, readRunManifest, runDirectory } from '../../golden/support/run-state';
 import { settled } from '../../golden/support/steps/interaction';
@@ -48,9 +49,11 @@ function followBackendLog(): BackendLog {
   const lines: string[] = [];
   let buffer = '';
   const follower: ChildProcess = spawn(
-    'wsl.exe',
-    ['-e', 'docker', 'logs', '-f', '--tail', '0', `supabase_kong_${projectId}`],
-    { stdio: ['ignore', 'pipe', 'pipe'] },
+    'docker',
+    ['logs', '-f', '--tail', '0', `supabase_kong_${projectId}`],
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
   );
   const collect = (chunk: Buffer): void => {
     buffer += chunk.toString('utf8');
@@ -58,7 +61,7 @@ function followBackendLog(): BackendLog {
     buffer = parts.pop() ?? '';
     lines.push(...parts);
   };
-  // The local stack runs in WSL on this workstation; a follower that cannot start fails the step with its cause.
+  // A follower that cannot start fails the step with its cause.
   let failure: Error | null = null;
   follower.on('error', (error) => {
     failure = error;
@@ -129,7 +132,10 @@ export async function openLabSession(input: {
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Performance.enable');
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: step.cpuThrottle });
-  const network = await trackLabNetwork(cdp, new URL(input.baseURL ?? 'http://localhost:3000').origin);
+  const network = await trackLabNetwork(
+    cdp,
+    new URL(input.baseURL ?? workspaceAppOrigin(REPOSITORY_ROOT)).origin,
+  );
   const backend = followBackendLog();
   return {
     page,

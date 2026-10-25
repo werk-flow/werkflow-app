@@ -12,7 +12,7 @@ const searchSchema = z.object({ messages: z.array(messageSummarySchema) });
 const messageSchema = messageSummarySchema.extend({ Text: z.string(), HTML: z.string() });
 export type OwnedMailpitMessage = z.infer<typeof messageSummarySchema>;
 
-/** The local stack uses a private host on Windows; hosted projects never use Mailpit. */
+/** The local stack answers on a loopback or private host; hosted projects never use Mailpit. */
 function isLocalHost(address: URL): boolean {
   return (
     address.hostname === 'localhost' ||

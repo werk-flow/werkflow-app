@@ -1,15 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
 import {
   buildCodeRabbitReviewArguments,
-  buildWindowsCodeRabbitCommand,
-  CODERABBIT_WSL_BINARY,
-  CODERABBIT_WSL_DISTRIBUTION,
+  codeRabbitBinary,
+  isCodeRabbitAuthenticated,
   isStoredReviewCommand,
-  untrackedScopeProblem,
-  wslGitEnvironment,
 } from '../lib/testing/publication/coderabbit-review-command';
 import { writeJsonAtomically } from '../lib/testing/runner/file-lock';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
@@ -75,43 +72,28 @@ function scopeDigests(scope: ReviewScope): Record<string, string> {
   });
 }
 
-if (process.platform !== 'win32') {
-  fail('This repository command currently supports the configured Windows and WSL workstation only.');
-}
-
-const binaryCheckExitCode = runCommand([
-  'wsl.exe',
-  '--distribution',
-  CODERABBIT_WSL_DISTRIBUTION,
-  '--exec',
-  '/usr/bin/test',
-  '-x',
-  CODERABBIT_WSL_BINARY,
-]);
-if (binaryCheckExitCode !== 0) {
+const binary = codeRabbitBinary(homedir());
+try {
+  accessSync(binary, constants.X_OK);
+} catch {
   fail(
-    `${CODERABBIT_WSL_BINARY} is missing or not executable. Do not install or reinstall CodeRabbit. Report this host problem to the owner.`,
+    `${binary} is missing or not executable. Install it only while setting up a new development machine (docs/technical/environments.md); otherwise report this host problem to the owner.`,
   );
 }
 
-const authExitCode = runCommand([
-  'wsl.exe',
-  '--distribution',
-  CODERABBIT_WSL_DISTRIBUTION,
-  '--exec',
-  CODERABBIT_WSL_BINARY,
-  'auth',
-  'status',
-  '--agent',
-]);
-if (authExitCode !== 0) {
+const authStatus = Bun.spawnSync({
+  cmd: [binary, 'auth', 'status', '--agent'],
+  stdout: 'pipe',
+  stderr: 'inherit',
+});
+if (authStatus.exitCode !== 0 || !isCodeRabbitAuthenticated(authStatus.stdout.toString())) {
   fail(
-    'CodeRabbit is installed but not authenticated. Ask the owner to restore authentication. Do not install or reinstall the CLI.',
+    'CodeRabbit is installed but not authenticated. Ask the owner to run `coderabbit auth login` in a terminal. Do not reinstall the CLI.',
   );
 }
 
 if (doctorOnly) {
-  console.info(`[coderabbit-review] ready: ${CODERABBIT_WSL_BINARY} in ${CODERABBIT_WSL_DISTRIBUTION}`);
+  console.info(`[coderabbit-review] ready: ${binary}`);
   process.exit(0);
 }
 
@@ -121,51 +103,7 @@ try {
 } catch (error) {
   fail(error instanceof Error ? error.message : 'Invalid review arguments.');
 }
-/** The global ignore file git reads on Windows: core.excludesFile, else the XDG default, when it exists. */
-function windowsExcludesFile(): string | null {
-  let configured = '';
-  try {
-    configured = execFileSync('git', ['config', '--path', 'core.excludesFile'], {
-      cwd: repository,
-      encoding: 'utf8',
-    }).trim();
-  } catch {
-    // git config exits 1 when the key is unset; the XDG default applies then.
-  }
-  const home = process.env.XDG_CONFIG_HOME ?? resolve(homedir(), '.config');
-  const candidate = configured || resolve(home, 'git', 'ignore');
-  return existsSync(candidate) ? resolve(candidate) : null;
-}
-
-/** The untracked files git in WSL lists with the same ignore sources, as CodeRabbit collects them. */
-function wslUntrackedFiles(excludesFile: string | null): string[] {
-  return execFileSync(
-    'wsl.exe',
-    [
-      '--distribution',
-      CODERABBIT_WSL_DISTRIBUTION,
-      '--cd',
-      repository,
-      '--exec',
-      ...wslGitEnvironment(excludesFile),
-      'git',
-      'ls-files',
-      '--others',
-      '--exclude-standard',
-      '-z',
-    ],
-    { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 },
-  )
-    .split('\0')
-    .filter(Boolean);
-}
-
-const excludesFile = windowsExcludesFile();
-const command = buildWindowsCodeRabbitCommand({
-  workingDirectory: process.cwd(),
-  reviewArguments,
-  windowsExcludesFile: excludesFile,
-});
+const command = [binary, ...reviewArguments];
 
 // Replaying stored findings reviews nothing and certifies nothing.
 if (isStoredReviewCommand(rawArguments)) process.exit(runCommand(command));
@@ -180,13 +118,6 @@ const reviewUnderLock = withWorkspaceTestLock(
     const head = git('rev-parse', 'HEAD')[0]?.trim();
     if (!head) throw new Error('git rev-parse HEAD returned nothing.');
     const scope = reviewScope(reviewArguments);
-    if (!scope.committedOnly) {
-      const problem = untrackedScopeProblem(
-        git('ls-files', '--others', '--exclude-standard', '-z'),
-        wslUntrackedFiles(excludesFile),
-      );
-      if (problem) throw new Error(problem);
-    }
     const before = scopeDigests(scope);
     const reviewExitCode = runCommand(command);
     if (reviewExitCode !== 0) return reviewExitCode;

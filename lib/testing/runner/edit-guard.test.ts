@@ -6,11 +6,13 @@ import {
   guardedInputs,
   refusalMessage,
   repositoryPath,
+  resetsLocalStack,
   sharedStateCommand,
+  stackResetRefusal,
   sourceRewritingCommand,
 } from './edit-guard';
 
-const root = 'C:/work/werkflow-app';
+const root = '/work/werkflow-app';
 const outsideProof = (path: string): boolean => path.startsWith('docs/') || path.startsWith('.agent-logs/');
 
 test('a file tool names one path and a patch names every file in its headers', () => {
@@ -40,17 +42,16 @@ test('a file tool names one path and a patch names every file in its headers', (
 });
 
 test('only proof inputs inside the repository are guarded', () => {
-  expect(repositoryPath('C:\\work\\werkflow-app\\lib\\a.ts', root)).toBe('lib/a.ts');
-  expect(repositoryPath('/c/work/werkflow-app/lib/a.ts', root)).toBe('lib/a.ts');
+  expect(repositoryPath('/work/werkflow-app/lib/a.ts', root)).toBe('lib/a.ts');
   expect(repositoryPath('lib/a.ts', root, `${root}/`)).toBe('lib/a.ts');
-  expect(repositoryPath('C:/Users/someone/scratch/a.ts', root)).toBeUndefined();
+  expect(repositoryPath('/home/someone/scratch/a.ts', root)).toBeUndefined();
   expect(
     guardedInputs({
       files: [
         `${root}/lib/a.ts`,
         `${root}/docs/technical/testing.md`,
         `${root}/.agent-logs/note.md`,
-        'C:/Users/someone/scratch/a.ts',
+        '/home/someone/scratch/a.ts',
       ],
       repositoryRoot: root,
       outsideProof,
@@ -96,8 +97,7 @@ test('commands that reset the stack or replace the build are named with their ef
   const shell = (command: string): string | undefined =>
     sharedStateCommand({ tool_name: 'Bash', tool_input: { command } })?.name;
   expect(shell('supabase db reset')).toBe('supabase db reset');
-  expect(shell('wsl.exe --exec supabase db reset')).toBe('supabase db reset');
-  expect(shell('wsl -e bash -lc "cd /mnt/c/app && supabase db reset"')).toBe('supabase db reset');
+  expect(shell('bash -lc "cd /work/app && supabase db reset"')).toBe('supabase db reset');
   expect(shell('cd app && bunx supabase stop')).toBe('supabase stop');
   expect(shell('bunx next build')).toBe('next build');
   expect(shell('git grep -n "supabase db reset" docs')).toBeUndefined();
@@ -146,7 +146,6 @@ test('publication evidence is never written by an agent tool, while reading it s
     shell('echo {} > .agent-logs/verification/r1/report.json'),
     shell('cat x >> .agent-logs\\review\\abc.json'),
     shell('rm -rf .agent-logs/verification/r1'),
-    shell("Set-Content -Path .agent-logs/review/abc.json -Value '{}'"),
     shell("bun -e \"require('fs').writeFileSync('.agent-logs/evidence-ledger.jsonl', '')\""),
     shell("sed -i 's/failed/passed/' .agent-logs/verification/r1/report.json"),
   ])
@@ -160,4 +159,26 @@ test('publication evidence is never written by an agent tool, while reading it s
     shell('bun run test:verify'),
   ])
     expect(evidenceWriteRefusal(call, root)).toBeUndefined();
+});
+
+test('a stack reset or stop is refused while another worktree holds the shared local stack', () => {
+  const shell = (command: string) => ({ tool_name: 'Bash', tool_input: { command } });
+  const holder = {
+    operation: 'audit:lab:field',
+    workspace: '/work/werkflow-app-thread-2',
+    mode: 'exclusive',
+    startedAt: '2026-10-25T10:00:00.000Z',
+  };
+  expect(resetsLocalStack(shell('supabase db reset'))).toBe(true);
+  expect(resetsLocalStack(shell('bunx next build'))).toBe(false);
+  const refusal = stackResetRefusal(shell('supabase db reset'), [holder]);
+  expect(refusal).toContain(
+    '"audit:lab:field" holds the shared local stack (exclusive, /work/werkflow-app-thread-2',
+  );
+  expect(refusal).not.toContain('workspace lock');
+  expect(stackResetRefusal(shell('supabase stop'), [holder])).toContain(
+    'would stop the local Supabase stack',
+  );
+  expect(stackResetRefusal(shell('supabase db reset'), [])).toBeUndefined();
+  expect(stackResetRefusal(shell('bunx next build'), [holder])).toBeUndefined();
 });

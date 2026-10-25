@@ -71,8 +71,8 @@ export function configuredHooksPath(repositoryRoot: string): string | undefined 
  */
 export function hooksPathProblem(configured: string | undefined, repositoryRoot: string): string | undefined {
   // Git resolves a relative value against the working tree; this clone may also hold the absolute path.
-  // Windows and macOS compare paths without case; Linux does not.
-  const caseless = process.platform === 'win32' || process.platform === 'darwin';
+  // macOS compares paths without case; Linux does not.
+  const caseless = process.platform === 'darwin';
   const comparable = (path: string): string => {
     const normalized = resolve(repositoryRoot, path).replace(/\\/g, '/').replace(/\/+$/, '');
     return caseless ? normalized.toLowerCase() : normalized;

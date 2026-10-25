@@ -1,14 +1,8 @@
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '../lib/supabase/database.types';
-import { testSupabaseClientOptions } from '../tests/golden/support/client-options';
-import { requireEnv } from '../tests/golden/support/env';
-import {
-  assertLocalCleanupRelocation,
-  assertRelocatedWorldOwnership,
-} from '../lib/testing/runs/local-cleanup-relocation';
 import { INCIDENT_CLASSES, type IncidentClass } from '../lib/testing/runner/run-policy';
 import { formatRunInventory } from '../lib/testing/runs/run-inventory';
 import { loadEnvLocal } from '../tests/golden/support/env';
+import { localMailpitUrl } from '../lib/testing/local-mailpit';
+import { withStackLock } from '../lib/testing/runner/stack-lock';
 import {
   listRunManifests,
   markWorldCleaned,
@@ -23,8 +17,6 @@ import { readRetainedWorldState } from '../lib/testing/runs/archive-state';
 import { resolve } from 'node:path';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { currentBackendProvenance } from '../tests/golden/support/run-state';
-import { runSessionCommand, withLocalStackLease } from '../lib/testing/local-stack/local-stack-lease';
-import { localMailpitUrl } from '../lib/testing/local-mailpit';
 import { validateDiagnosticProvenance } from '../lib/testing/evidence/test-evidence';
 import { backendIdentity } from '../lib/testing/evidence/proof-environment';
 import { pruneRunArchive } from '../lib/testing/runs/run-retention';
@@ -47,7 +39,7 @@ function isIncidentClass(value: string): value is IncidentClass {
   return (INCIDENT_CLASSES as readonly string[]).includes(value);
 }
 
-async function cleanupRun(runKey: string, relocationReason?: string): Promise<void> {
+async function cleanupRun(runKey: string): Promise<void> {
   const manifest = readRunManifest(runKey);
   if (manifest.cleanedAt) {
     console.log(`[werkflow-test] ${runKey} was already cleaned`);
@@ -59,48 +51,19 @@ async function cleanupRun(runKey: string, relocationReason?: string): Promise<vo
   }
   // The seeder follows .env.local. Destroying a world recorded against a
   // different backend would silently "succeed" against the wrong project and
-  // leave the real rows behind; refuse instead. The identity ignores the WSL
-  // address; the exact-origin provenance check below still governs replay.
+  // leave the real rows behind; refuse instead. The exact-origin provenance
+  // check below still governs replay.
   const currentProjectRef = backendIdentity(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     resolve(import.meta.dir, '..'),
   );
-  if (!relocationReason && manifest.projectRef && manifest.projectRef !== currentProjectRef) {
+  if (manifest.projectRef && manifest.projectRef !== currentProjectRef) {
     throw new Error(
       `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`,
     );
   }
   const world = readRetainedWorldState(manifest, worldPath);
-  if (relocationReason) {
-    const requested = currentBackendProvenance(manifest.suite);
-    requested.target = manifest.target ?? 'cloud';
-    assertLocalCleanupRelocation(manifest.backendProvenance, requested);
-    // A verified cleanup may have removed one organization before another resource failed.
-    // Resume only against the exact backend previously verified for that cleanup.
-    if (
-      !manifest.cleanupRelocation ||
-      validateDiagnosticProvenance(manifest.cleanupRelocation.backend, requested).length
-    ) {
-      const admin = createClient<Database>(
-        requireEnv('NEXT_PUBLIC_SUPABASE_URL'),
-        requireEnv('SUPABASE_SECRET_KEY'),
-        testSupabaseClientOptions,
-      );
-      const { data, error } = await admin
-        .from('organizations')
-        .select('id,name,admin_id')
-        .in('id', [world.orgId, world.outsider.orgId]);
-      if (error) throw new Error('Could not verify relocated test organization ownership.');
-      assertRelocatedWorldOwnership(world, data ?? []);
-      updateRunManifest(runKey, {
-        cleanupRelocation: {
-          verifiedAt: new Date().toISOString(),
-          reason: relocationReason,
-          backend: requested,
-        },
-      });
-    }
-  } else if (manifest.backendProvenance) {
+  if (manifest.backendProvenance) {
     const requested = currentBackendProvenance(manifest.suite);
     requested.target = manifest.target ?? 'cloud';
     const problems = validateDiagnosticProvenance(manifest.backendProvenance, requested);
@@ -222,13 +185,6 @@ async function main(): Promise<void> {
     console.log(`[werkflow-test] ${pruneRunArchive(planOnly ? 'plan' : 'prune')}`);
     return;
   }
-  if (command === 'cleanup-local-relocated') {
-    const [runKey, reason, ...extra] = process.argv.slice(3);
-    if (!runKey || !reason?.trim() || extra.length)
-      throw new Error('Usage: test:runs cleanup-local-relocated <run-key> "<observed local address change>"');
-    await cleanupRun(runKey, reason);
-    return;
-  }
   if (command === 'cleanup') {
     const runKey = process.argv[3];
     if (!runKey) throw new Error('Usage: ... cleanup <run-key>');
@@ -311,22 +267,17 @@ async function main(): Promise<void> {
 try {
   const command = process.argv[2] ?? 'list';
   loadEnvLocal();
-  const localCleanup =
-    ['cleanup', 'cleanup-all', 'cleanup-local-relocated'].includes(command) &&
-    localMailpitUrl(requireEnv('NEXT_PUBLIC_SUPABASE_URL')) !== null;
-  if (localCleanup && process.env.WERKFLOW_CLEANUP_STACK_LEASE !== 'owned') {
-    // The child owns cleanup/lock; cancellation stops it before releasing WSL.
-    process.exitCode = await withLocalStackLease(
-      true,
-      (signal) =>
-        runSessionCommand([process.execPath, import.meta.filename, ...process.argv.slice(2)], {
-          signal,
-          env: { ...process.env, WERKFLOW_CLEANUP_STACK_LEASE: 'owned' },
-        }),
-      { signal: AbortSignal.timeout(180_000) },
+  const operation = `Playwright run management ${command}`;
+  // Cleanup deletes worlds through the shared local gateway, which a measuring group counts.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const local = supabaseUrl ? localMailpitUrl(supabaseUrl) !== null : false;
+  if (command === 'list') await main();
+  else
+    await withWorkspaceTestLock({ operation }, () =>
+      ['cleanup', 'cleanup-all'].includes(command) && local
+        ? withStackLock({ mode: 'shared', operation, repositoryRoot: resolve(import.meta.dir, '..') }, main)
+        : main(),
     );
-  } else if (command === 'list') await main();
-  else await withWorkspaceTestLock({ operation: `Playwright run management ${command}` }, main);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;

@@ -119,9 +119,8 @@ export async function probeRealtimeReadiness(input: {
 }
 
 export function restartLocalRealtimeContainer(): void {
-  execFileSync('wsl.exe', ['-e', 'docker', 'restart', 'supabase_realtime_werkflow-app'], {
+  execFileSync('docker', ['restart', 'supabase_realtime_werkflow-app'], {
     stdio: 'ignore',
     timeout: 120_000,
-    windowsHide: true,
   });
 }

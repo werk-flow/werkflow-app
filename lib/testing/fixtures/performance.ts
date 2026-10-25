@@ -10,7 +10,7 @@ export const performanceContextFixture: PerformanceContext = {
   browserVersion: 'test-browser-v1',
   viewport: { width: 1440, height: 900 },
   deviceScaleFactor: 1,
-  platform: 'win32',
+  platform: 'linux',
   architecture: 'x64',
   cpuModel: 'test-cpu',
   logicalProcessors: 8,

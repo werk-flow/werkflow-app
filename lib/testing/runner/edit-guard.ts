@@ -52,10 +52,10 @@ const SOURCE_REWRITING_COMMANDS: readonly { pattern: RegExp; name: string }[] = 
 
 /**
  * A command position: line start, after `;`, `&` or `|`, or behind a launcher
- * such as `wsl --exec` or `bunx`. An opening parenthesis does not count,
+ * such as `bunx` or `sudo`. An opening parenthesis does not count,
  * because prose in a heredoc uses it far more often than a subshell does.
  */
-const AT_COMMAND = String.raw`(?:^|[;&|\n]|\bbash\s+-l?c\s+["']|\b(?:wsl(?:\.exe)?(?:\s+(?:--exec|-e))?|bunx|npx|sudo)\s)\s*`;
+const AT_COMMAND = String.raw`(?:^|[;&|\n]|\bbash\s+-l?c\s+["']|\b(?:bunx|npx|sudo)\s)\s*`;
 
 /** Shell commands that change state a running test operation depends on, with that effect. */
 const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: string }[] = [
@@ -82,7 +82,7 @@ const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: s
  * too when `command` is absent, as defense in depth.
  */
 function shellCommand(call: GuardedToolCall): string | undefined {
-  if (call.tool_name !== 'Bash' && call.tool_name !== 'PowerShell') return undefined;
+  if (call.tool_name !== 'Bash') return undefined;
   if (!call.tool_input || typeof call.tool_input !== 'object') return undefined;
   const input = call.tool_input as Record<string, unknown>;
   return text(input.command) ?? text(input.cmd);
@@ -94,6 +94,29 @@ export function sharedStateCommand(call: GuardedToolCall): { name: string; effec
   if (!command) return undefined;
   const match = SHARED_STATE_COMMANDS.find((entry) => entry.pattern.test(command));
   return match && { name: match.name, effect: match.effect };
+}
+
+/** Whether a shell call resets or stops the local Supabase stack, which every worktree shares. */
+export function resetsLocalStack(call: GuardedToolCall): boolean {
+  return sharedStateCommand(call)?.name.startsWith('supabase ') ?? false;
+}
+
+/**
+ * The refusal of a stack reset or stop while any worktree holds the local
+ * stack (lib/testing/runner/stack-lock.ts), or undefined when none does.
+ */
+export function stackResetRefusal(
+  call: GuardedToolCall,
+  holders: readonly { operation: string; workspace: string; mode: string; startedAt: string }[],
+): string | undefined {
+  const command = sharedStateCommand(call);
+  const [holder] = holders;
+  if (!command?.name.startsWith('supabase ') || !holder) return undefined;
+  return [
+    `Refused: "${holder.operation}" holds the shared local stack (${holder.mode}, ${holder.workspace}, started ${holder.startedAt}).`,
+    `Running ${command.name} ${command.effect}, in every worktree.`,
+    'Wait until that run ends; lib/testing/runner/stack-lock.ts keeps the holders in the git common directory.',
+  ].join(' ');
 }
 
 /** The name of the rewriting command a shell call contains, if any. */
@@ -109,10 +132,8 @@ export function repositoryPath(
   repositoryRoot: string,
   cwd = repositoryRoot,
 ): string | undefined {
-  // Git Bash hands over /c/Users/...; Node resolves only the drive form.
-  const windowsForm = /^\/([a-zA-Z])\//.test(file) ? `${file[1]}:${file.slice(2)}` : file;
-  const absolute = isAbsolute(windowsForm) ? windowsForm : resolve(cwd, windowsForm);
-  const path = relative(resolve(repositoryRoot), absolute).replace(/\\/g, '/');
+  const absolute = isAbsolute(file) ? file : resolve(cwd, file);
+  const path = relative(resolve(repositoryRoot), absolute);
   if (!path || path.startsWith('..') || isAbsolute(path)) return undefined;
   return path;
 }
@@ -123,13 +144,13 @@ export function repositoryPath(
  * them, so an agent tool call that writes there is refused at any time, not only under the lock
  * (audit finding B7, 2026-10-16).
  */
-// Case-insensitive: the Windows file system resolves `.Agent-Logs/Review` to the same folder.
+// Case-insensitive: macOS's default file system resolves `.Agent-Logs/Review` to the same folder.
 const EVIDENCE_PATH = /^\.agent-logs\/(?:(?:verification|review)\/|evidence-ledger\.jsonl)/i;
 const EVIDENCE_IN_COMMAND = /\.agent-logs[\\/]+(?:verification|review)\b|evidence-ledger/i;
 const REDIRECT_INTO_EVIDENCE =
   /(?:^|[^<>])>{1,2}\s*["']?[^\s|;&"']*(?:\.agent-logs[\\/]+(?:verification|review)\b|evidence-ledger)/i;
 const WRITING_COMMAND =
-  /\b(?:rm|rmdir|mv|cp|tee|touch|truncate|ln|dd|Set-Content|Add-Content|Out-File|Remove-Item|Copy-Item|Move-Item|New-Item|Rename-Item|Clear-Content|writeFileSync|writeFile|appendFileSync|appendFile|rmSync|unlinkSync|renameSync|copyFileSync)\b|\bBun\.write\b|\b(?:sed|perl)\b[^|;&]*\s-i/;
+  /\b(?:rm|rmdir|mv|cp|tee|touch|truncate|ln|dd|writeFileSync|writeFile|appendFileSync|appendFile|rmSync|unlinkSync|renameSync|copyFileSync)\b|\bBun\.write\b|\b(?:sed|perl)\b[^|;&]*\s-i/;
 
 /** The evidence files a call would write, or the shell command that would, as a refusal; undefined otherwise. */
 export function evidenceWriteRefusal(

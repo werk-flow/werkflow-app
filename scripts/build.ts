@@ -3,14 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { calculateBuildInputs, type BuildReceipt } from '../lib/testing/evidence/build-identity';
-import { assertAppPortFree } from '../lib/testing/runner/app-port';
+import { assertAppPortFree, workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 // The one local production build (`bun run build`). It records the build the
 // test server serves; Vercel runs plain `next build` (vercel.json buildCommand).
 const repositoryRoot = realpathSync(resolve(import.meta.dir, '..'));
 await withWorkspaceTestLock({ operation: 'production build', repositoryRoot }, async () => {
-  await assertAppPortFree();
+  const ports = workspacePorts(repositoryRoot);
+  for (const port of new Set([ports.app, ports.dev])) await assertAppPortFree(port);
   const receiptPath = resolve(repositoryRoot, '.next/werkflow-build-receipt.json');
   if (existsSync(receiptPath)) rmSync(receiptPath);
   const inputs = calculateBuildInputs(repositoryRoot);
@@ -22,7 +23,13 @@ await withWorkspaceTestLock({ operation: 'production build', repositoryRoot }, a
       {
         cwd: repositoryRoot,
         stdio: 'inherit',
-        env: { ...process.env, NODE_ENV: 'production', WERKFLOW_BUILD_ID: buildId },
+        // Next's type check of this repository needs more than Node's default heap on a machine with less than 16 GB.
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+          WERKFLOW_BUILD_ID: buildId,
+        },
       },
     );
     child.once('error', reject);

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
@@ -9,7 +9,8 @@ import {
 } from '../lib/testing/runner/run-policy';
 import { getR2Endpoint } from '../lib/storage/r2';
 import { assertDevMigrationHistoryParity } from '../lib/testing/local-stack/dev-migration-history';
-import { getWindowsListener } from '../lib/testing/runner/windows-listener';
+import { getAppListener } from '../lib/testing/runner/app-listener';
+import { workspaceAppOrigin, workspacePorts } from '../lib/testing/runner/app-port';
 import {
   assertBuildIdentity,
   calculateBuildInputs,
@@ -69,7 +70,7 @@ function assertRouting(target: PlaywrightTarget): void {
 }
 
 const LOCAL_REMEDY =
-  'Start or repair the local stack: `wsl supabase start` in the repo, then `bun run env:local` (the WSL address changes when WSL restarts; browser runs additionally need a rebuild so the baked NEXT_PUBLIC_* values match).';
+  'Start or repair the local stack: `supabase start` in the repo, then `bun run env:local` (browser runs additionally need a rebuild so the baked NEXT_PUBLIC_* values match).';
 
 async function probeBounded(input: {
   label: string;
@@ -166,7 +167,7 @@ async function assertLocalEdgeRuntimeReachable(): Promise<void> {
     // an undeployed function, 5xx for a dead runtime) is a real problem.
     accept: (response) => response.status === 204,
     remedy:
-      'Restart it with: wsl docker start supabase_edge_runtime_werkflow-app (a `supabase db reset` leaves this container stopped).',
+      'Restart it with: docker start supabase_edge_runtime_werkflow-app (a `supabase db reset` leaves this container stopped).',
   });
 }
 
@@ -189,37 +190,28 @@ async function assertRecordedAppServer(repositoryRoot: string): Promise<void> {
     servedBuildId: receipt.buildId,
   });
 
-  if (process.platform !== 'win32') {
-    throw new Error(`Application server ownership verification is not implemented for ${process.platform}.`);
-  }
-  const listener = getWindowsListener(3000);
+  const port = workspacePorts(repositoryRoot).app;
+  const listener = getAppListener(port);
   if (!listener) {
     throw new Error(
-      'Application browser tests require a recorded, workspace-owned production server on port 3000. Nothing is listening. Start `bun run test:server local` or `bun run test:server cloud` for the selected target.',
+      `Application browser tests require a recorded, workspace-owned production server on port ${port}. Nothing is listening. Start \`bun run test:server local\` or \`bun run test:server cloud\` for the selected target.`,
     );
   }
-  // CommandLine is null for processes this user cannot inspect (elevated or
-  // protected) — refuse with a directive message instead of a TypeError.
-  if (!listener.commandLine) {
+  if (!listener.command.includes('next') || listener.workingDirectory !== realpathSync(repositoryRoot)) {
     throw new Error(
-      `Port 3000 PID ${listener.processId} has no inspectable command line (elevated or protected process). Stop it and start the server from this workspace.`,
+      `Port ${port} PID ${listener.processId} is not a verified WerkFlow Next.js process of this workspace (${listener.workingDirectory}).`,
     );
   }
-  const commandLine = listener.commandLine.toLowerCase().replaceAll('\\', '/');
-  const workspacePath = resolve(repositoryRoot).toLowerCase().replaceAll('\\', '/');
-  if (!commandLine.includes('next') || !commandLine.includes(`${workspacePath}/`)) {
-    throw new Error(`Port 3000 PID ${listener.processId} is not a verified WerkFlow Next.js process.`);
-  }
-  const listenerStartedAt = Date.parse(listener.creationDate);
-  if (!Number.isFinite(listenerStartedAt) || listenerStartedAt < statSync(buildIdPath).mtimeMs) {
+  // ps reports the start to the second.
+  if (listener.startedAt < Math.floor(statSync(buildIdPath).mtimeMs / 1000) * 1000) {
     throw new Error(
-      `Port 3000 PID ${listener.processId} started before build ${buildId}. Restart it from this workspace.`,
+      `Port ${port} PID ${listener.processId} started before build ${buildId}. Restart it from this workspace.`,
     );
   }
 
   let response: Response;
   try {
-    response = await fetch('http://localhost:3000/login', {
+    response = await fetch(`${workspaceAppOrigin(repositoryRoot)}/login`, {
       signal: AbortSignal.timeout(15_000),
     });
   } catch (error) {

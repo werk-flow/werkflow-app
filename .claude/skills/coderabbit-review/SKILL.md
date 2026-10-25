@@ -13,7 +13,7 @@ Run every CodeRabbit operation through the repository wrapper, `bun run review`,
 
 ## Guardrail
 
-Never probe `coderabbit` or `cr` on PATH, never install or reinstall CodeRabbit, and never call the CLI directly or through WSL. The wrapper owns the WSL distribution, the binary path, the working directory and agent mode. A failed PATH lookup is not an installation check.
+Never probe `coderabbit` or `cr` on PATH, never install or reinstall CodeRabbit outside the new-machine setup, and never call the CLI directly. The wrapper owns the binary path, the working directory and agent mode. A failed PATH lookup is not an installation check.
 
 ## Result format
 
