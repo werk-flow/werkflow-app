@@ -4,7 +4,7 @@ import {
   maintenanceCompletionSchema,
   maintenanceCoverageSchema,
   maintenancePlanSchema,
-  maintenanceVisitLinkSchema,
+  maintenanceVisitSchema,
 } from './validation';
 
 const IDENTIFIERS = {
@@ -82,10 +82,9 @@ describe('maintenance validation boundaries', () => {
 
   test('requires aligned visit identities and explicit completion evidence', () => {
     expect(
-      maintenanceVisitLinkSchema.safeParse({
+      maintenanceVisitSchema.safeParse({
         dueWorkIds: [IDENTIFIERS.planId],
         expectedVersions: [1],
-        jobId: IDENTIFIERS.siteId,
         reason: 'Wartungsauftrag verknüpft',
         idempotencyKey: IDENTIFIERS.idempotencyKey,
       }).success,
@@ -104,17 +103,16 @@ describe('maintenance validation boundaries', () => {
   });
 
   test('rejects visit batches without one expected version per due item', () => {
-    const result = maintenanceVisitLinkSchema.safeParse({
+    const batch = {
       dueWorkIds: [IDENTIFIERS.planId, IDENTIFIERS.revisionId],
       expectedVersions: [1],
-      jobId: IDENTIFIERS.siteId,
       reason: 'Wartungsauftrag verknüpft',
       idempotencyKey: IDENTIFIERS.idempotencyKey,
-    });
+    };
+    const result = maintenanceVisitSchema.safeParse(batch);
 
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.issues[0]?.path).toEqual(['expectedVersions']);
-    }
+    expect(result.error?.issues[0]?.path).toEqual(['expectedVersions']);
+    expect(maintenanceVisitSchema.safeParse({ ...batch, expectedVersions: [1, 2] }).success).toBe(true);
   });
 });

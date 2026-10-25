@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-25
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -24,6 +24,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | --- | --- | --- |
 | R2 bucket CORS | The runtime R2 tokens get `AccessDenied` on `GetBucketCors`, so nothing checks that the buckets allow only the app's origins. | Tier 2: a script like `auth:check` that reads the rules with an R2 token with Admin Read on each bucket, once the owner provides one. |
 | Vercel environment scopes | No credential on the workstation can read the project's environment variables, so nothing checks that each value is scoped to Production or to pre-production as [environments](environments.md) requires. | Tier 2: a script that reads the scopes through the Vercel API with a Vercel access token, once the owner provides one. |
+| Bounded client collections | Every array and record in a Server Action or route input schema has a bound, but only review keeps the next one bounded. | Tier 2: a unit test that walks each schema an action parameter is parsed with (the parse sites `lib/conventions/server-action-input.test.ts` already finds) and fails on an array without a maximum or a record with an open key set. |
 
 ## Code quality and maintainability
 

@@ -28,7 +28,8 @@ const audit = { tool: [{ url: advisory, severity: 'high', vulnerable_versions: '
 const input = { stdout: JSON.stringify(audit), exitCode: 1, manifest, lockfile, policy, today: '2026-09-07' };
 
 test('accepts clean audit and narrowly reviewed exact findings', () => {
-  expect(inspectDependencyAudit({ ...input, stdout: '{}', exitCode: 0 }).findings).toEqual([]);
+  const clean = { ...input, stdout: '{}', exitCode: 0, policy: { ...policy, exceptions: [] } };
+  expect(inspectDependencyAudit(clean)).toEqual({ findings: [], problems: [] });
   expect(inspectDependencyAudit(input).findings[0]?.disposition).toBe('reviewed-exception');
   expect(
     inspectDependencyAudit({ ...input, policy: { ...policy, exceptions: [] } }).findings[0]?.disposition,
@@ -50,6 +51,16 @@ test('changed advisory, severity, installed path, version or dependency digest c
   const changed = inspectDependencyAudit({ ...input, manifest: '{"dependencies":{"tool":"^1.2.3"}}' });
   expect(changed.findings[0]?.disposition).toBe('blocked');
   expect(changed.problems).toHaveLength(1);
+});
+
+test('an exception that matches no current finding fails as dead policy', () => {
+  // A withdrawn advisory disappears from the audit while its exception stays behind.
+  const withdrawn = inspectDependencyAudit({ ...input, stdout: '{}', exitCode: 0 });
+  expect(withdrawn.findings).toEqual([]);
+  expect(withdrawn.problems).toEqual([
+    `Exception tool@1.2.3 (${advisory}) matches no current finding; remove it.`,
+  ]);
+  expect(inspectDependencyAudit(input).problems).toEqual([]);
 });
 
 test('expired and future-dated reviews fail closed', () => {

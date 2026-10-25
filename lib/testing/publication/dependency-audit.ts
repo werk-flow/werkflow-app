@@ -67,6 +67,28 @@ export function dependencyDigest(manifest: string, lockfile: string): string {
     .digest('hex');
 }
 
+/** A withdrawn advisory or an upgraded package leaves its exception behind as dead policy. */
+function unmatchedExceptionProblems(
+  exceptions: readonly z.infer<typeof exceptionSchema>[],
+  findings: readonly DependencyFinding[],
+): string[] {
+  return exceptions
+    .filter(
+      (exception) =>
+        !findings.some(
+          (finding) =>
+            finding.package === exception.package &&
+            finding.version === exception.version &&
+            finding.advisory === exception.advisory &&
+            exception.paths.includes(finding.path),
+        ),
+    )
+    .map(
+      (exception) =>
+        `Exception ${exception.package}@${exception.version} (${exception.advisory}) matches no current finding; remove it.`,
+    );
+}
+
 export function inspectDependencyAudit(input: {
   stdout: string;
   exitCode: number;
@@ -138,6 +160,7 @@ export function inspectDependencyAudit(input: {
     problems.push(
       'Dependency declarations or lockfile changed; review exceptions against the new dependency tree.',
     );
+  problems.push(...unmatchedExceptionProblems(policy.exceptions, [...findings.values()]));
   return { findings: [...findings.values()], problems };
 }
 

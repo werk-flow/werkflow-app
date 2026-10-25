@@ -1,6 +1,6 @@
 # Browser-test incident log
 
-Status: living — last reviewed 2026-10-23; entries from 2026-09-25 on
+Status: living — last reviewed 2026-10-25; entries from 2026-09-25 on
 
 Record here each failed acceptance group and each focused failure that changes shared testing behavior. [Testing](testing.md#failures) owns the procedure. Entries before 2026-09-25 were deleted; Git history keeps them. Read an entry only to investigate that failure. Rules live in their owner docs, not here.
 
@@ -21,6 +21,45 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-25: unit:all product failure
+
+<!-- incident-run: unit:all@2026-10-25T094551038Z-6a244fd4 -->
+
+- Run: run `unit:all@2026-10-25T094551038Z-6a244fd4`, group `unit:all`, target local, fingerprint `affd5a312fe6`.
+- Failure point: unit:all in report 2026-10-25T094551038Z-6a244fd4: Command exited 1; inspect .agent-logs/verification/2026-10-25T094551038Z-6a244fd4/unit-all.log
+- Root cause: The maintenance repair shortened createMaintenanceVisit from 154 to 152 counted lines, and the shrink-only size-cap ceiling in eslint-rules/size-cap-exceptions.json still said 154.
+- Prevention: Tier 2: lib/conventions/module-caps.test.ts fails on a ceiling above the function's size, so the ratchet records every reduction.
+- Evidence: the `unit:all` log shows `lib/conventions/module-caps.test.ts` asking to lower the ceiling of `createMaintenanceVisit` from 154 to 152.
+- Correction: the ceiling in `eslint-rules/size-cap-exceptions.json` is 152.
+- Focused proof: `unit:all` passed on target local in report `2026-10-25T101151980Z-b55f3d6a`, fingerprint `77dbccc93257`.
+- Cleanup: a static or unit group owns no world; nothing to clean.
+
+## 2026-10-25: unit:all product failure
+
+<!-- incident-run: unit:all@2026-10-25T083235000Z-caf5ca36 -->
+
+- Run: run `unit:all@2026-10-25T083235000Z-caf5ca36`, group `unit:all`, target local, fingerprint `efef5a6019f5`.
+- Failure point: unit:all in report 2026-10-25T083235000Z-caf5ca36: Command exited 1; inspect .agent-logs/verification/2026-10-25T083235000Z-caf5ca36/unit-all.log
+- Root cause: zod 4.6 refuses .omit() on an object schema with a refinement, so createMaintenanceVisit threw on its first line; zod 4.1.12 had silently dropped the superRefine there, so the pairing of due items and expected versions was enforced only by the database function.
+- Prevention: Tier 2: lib/maintenance/action-boundaries.test.ts drives the real action and caught the throw; the action now parses one refined maintenanceVisitSchema, and a load of every module that derives a schema found no other refined base.
+- Evidence: the `unit:all` log shows `.omit() cannot be used on object schemas containing refinements` thrown from `createMaintenanceVisit` in `lib/maintenance/action-boundaries.test.ts`; the `omit` of zod 4.1.12 sets `checks: []`.
+- Correction: `maintenanceVisitSchema` replaces `maintenanceVisitLinkSchema`, whose `jobId` and `planningOccurrenceId` no action read, so the action parses the refined schema without deriving it.
+- Focused proof: `unit:all` passed on target local in report `2026-10-25T101151980Z-b55f3d6a`, fingerprint `77dbccc93257`.
+- Cleanup: a static or unit group owns no world; nothing to clean.
+
+## 2026-10-25: static:dependencies product failure
+
+<!-- incident-run: static:dependencies@2026-10-25T080711959Z-ff9fbe0b -->
+
+- Run: run `static:dependencies@2026-10-25T080711959Z-ff9fbe0b`, group `static:dependencies`, target local, fingerprint `578258d0666b`.
+- Failure point: static:dependencies in report 2026-10-25T080711959Z-ff9fbe0b: Command exited 1; inspect .agent-logs/verification/2026-10-25T080711959Z-ff9fbe0b/static-dependencies.log
+- Root cause: GHSA-mrhx-c7xc-m3w5 (high, zod below 4.6.6 exhausts memory validating oversized constrained collections) joined the advisory database for the locked zod 4.1.12 and the nested knip copy 4.6.5; zod upgraded to 4.6.7 with one deduplicated copy. The braces exception counted 0 because GHSA-vfj7-8cjw-p6xm was withdrawn on 2026-10-23; the exception is removed.
+- Prevention: Tier 2: static:dependencies caught the advisory before publication, and inspectDependencyAudit now fails on an exception that matches no current finding.
+- Evidence: the audit report under `.agent-logs/security/dependencies/` named zod 4.1.12 at `zod` and 4.6.5 at `knip/zod`; the GitHub advisory API marks GHSA-vfj7-8cjw-p6xm withdrawn.
+- Correction: zod `^4.6.7` with the stale nested lock entries dropped, so one zod 4.6.7 serves the app, knip and eslint-plugin-react-hooks; `nullableTrimmedText` takes the `ZodPreprocess` type of zod 4.6; the withdrawn braces exception leaves `lib/security/dependency-exceptions.json` at the new digest.
+- Focused proof: `static:dependencies` passed on target local in report `2026-10-25T094551038Z-6a244fd4`, fingerprint `4a2753a0d20f`, and its proof carried into the passing report `2026-10-25T101151980Z-b55f3d6a`.
+- Cleanup: a static or unit group owns no world; nothing to clean.
 
 ## 2026-10-23: audit:layout environment failure
 

@@ -45,10 +45,19 @@ const MESSAGE_LIMIT = 240;
 // Playwright messages carry ANSI colour codes; the escape sequences start with the ESC character.
 const ANSI_SEQUENCE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, 'g');
 
-function firstLine(message: string): string {
+/**
+ * The runner names a log by its absolute path, which carries the workstation's user and folders.
+ * The committed log keeps only the part inside the repository, with forward slashes.
+ */
+function withoutCheckoutPath(message: string, repositoryRoot: string): string {
+  return [repositoryRoot, repositoryRoot.replaceAll('\\', '/')]
+    .reduce((text, root) => text.replaceAll(`${root}\\`, '').replaceAll(`${root}/`, ''), message)
+    .replace(/\.agent-logs\\[^\s;,`'")\]]+/g, (path) => path.replaceAll('\\', '/'));
+}
+
+function firstLine(message: string, repositoryRoot: string): string {
   const line =
-    message
-      .replace(ANSI_SEQUENCE, '')
+    withoutCheckoutPath(message.replace(ANSI_SEQUENCE, ''), repositoryRoot)
       .split('\n')
       .map((part) => part.trim())
       .find(Boolean) ?? '';
@@ -59,7 +68,7 @@ function markerOf(runKey: string): string {
   return `<!-- incident-run: ${runKey} -->`;
 }
 
-function incidentEntry(record: IncidentRecord): string {
+function incidentEntry(record: IncidentRecord, repositoryRoot: string): string {
   const run = [
     `run \`${record.runKey}\``,
     `group \`${record.groupId}\``,
@@ -68,7 +77,7 @@ function incidentEntry(record: IncidentRecord): string {
     record.worldId ? `world \`${record.worldId}\`` : null,
   ].filter((part): part is string => part !== null);
   const failure = record.firstFailure
-    ? `${record.firstFailure.title}: ${firstLine(record.firstFailure.message)}`
+    ? `${record.firstFailure.title}: ${firstLine(record.firstFailure.message, repositoryRoot)}`
     : 'no failed test recorded; read the run log.';
   return [
     `## ${record.startedAt.slice(0, 10)}: ${record.groupId} ${record.classification} failure`,
@@ -87,8 +96,8 @@ function incidentEntry(record: IncidentRecord): string {
  * Insert the entry before the newest dated section, or replace the entry of the same run when it is
  * classified again, so the log stays newest first and holds one entry per run.
  */
-export function withIncidentEntry(log: string, record: IncidentRecord): string {
-  const entry = `${incidentEntry(record)}\n`;
+export function withIncidentEntry(log: string, record: IncidentRecord, repositoryRoot: string): string {
+  const entry = `${incidentEntry(record, repositoryRoot)}\n`;
   const sections = log.split(/^(?=## )/m);
   const existing = sections.findIndex((section) => section.includes(markerOf(record.runKey)));
   if (existing >= 0) {

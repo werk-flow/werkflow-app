@@ -97,12 +97,10 @@ export const maintenanceServiceCaseLinkSchema = maintenanceTransitionSchema
     serviceCaseId: uuidSchema,
   });
 
-export const maintenanceVisitLinkSchema = z
+export const maintenanceVisitSchema = z
   .object({
     dueWorkIds: z.array(uuidSchema).min(1).max(20),
     expectedVersions: z.array(z.number().int().positive()).min(1).max(20),
-    jobId: uuidSchema,
-    planningOccurrenceId: uuidSchema.optional().nullable(),
     reason: z.string().trim().min(3).max(1000),
     idempotencyKey: uuidSchema,
   })

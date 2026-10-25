@@ -1,6 +1,6 @@
 # Security control map
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-25
 
 ## How to work
 
@@ -74,7 +74,7 @@ Wrong turn: `console.error(error)`; a provider message can quote row values.
 | Email change | One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles cannot read either state table. | `supabase/tests/email_change_boundaries.sql`, `lib/security/account-boundaries.test.ts`. |
 | Mail | The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a failure. Logs hold fixed error codes and status numbers, never recipients, codes, invitation links or provider bodies. | `supabase/functions/_shared/`, `lib/settings/otp-hash.ts`, `lib/security/mail-handlers.test.ts`. |
 | Browser | Responses carry the hardening headers and the enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. The script policy allows the app's own origin and inline scripts. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink and no `eval`. | `lib/security/headers.test.ts` calls the real builder. `lib/security/csp-report.test.ts` pins the directives. The `htmlSinkSelectors` lint set rejects the sinks. |
-| Dependencies | Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input and an expired exception fail. A network failure leaves the check unverified. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
+| Dependencies | Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input, an expired exception and an exception that matches no current finding fail. A network failure leaves the check unverified. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
 
 ## Checklist
 
@@ -111,7 +111,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Account and email-change transitions stay atomic and server-only. [test `lib/security/account-boundaries.test.ts`]
 - Responses keep the hardening headers and the enforced Content-Security-Policy. [test `lib/security/headers.test.ts`, test `lib/security/csp-report.test.ts`]
 - Product code imports Zod through `lib/zod.ts`, which turns off its `eval` probe. [code `lib/zod.ts`, test `lib/conventions/zod-entry.test.ts`]
-- Every plan carries an advisory pass under 24 hours old. An exception names its exact path, reason, digest and expiry. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
+- Every plan carries an advisory pass under 24 hours old. An exception names its exact path, reason, digest and expiry, and leaves the file once its finding is gone. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
 - Live DEV grants and Realtime delivery to foreign and removed receivers pass before a release. [group `canary:security`]
 - Every residual exposure the owner accepted is listed below until it closes. [judgment]
 
@@ -145,7 +145,6 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with the payment slice.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify` in the browser that signed up or signed in.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
-- A reviewed dependency exception is open for the lint toolchain; `lib/security/dependency-exceptions.json` holds its reason and expiry.
 - Two provider facts are unverified: the R2 buckets' CORS rules (runtime tokens get `AccessDenied` on `GetBucketCors`; a check needs an R2 token with Admin Read) and the Vercel environment scopes (a check needs a Vercel token that reads the project's environment).
 
 ## Revocation boundaries

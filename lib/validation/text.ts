@@ -11,7 +11,7 @@ export function normalizeOptionalText(value: string | null | undefined): string 
 export function nullableTrimmedText(
   minimum: number,
   maximum: number,
-): z.ZodPipe<z.ZodTransform<unknown, unknown>, z.ZodNullable<z.ZodOptional<z.ZodString>>> {
+): z.ZodPreprocess<z.ZodNullable<z.ZodOptional<z.ZodString>>> {
   return z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
     z.string().trim().min(minimum).max(maximum).optional().nullable(),

@@ -113,7 +113,8 @@ const importRowSchema = z.object({
 
 export const importInventoryRowsSchema = z.object({
   fileName: boundedText(300),
-  columnMapping: z.record(boundedText(200), boundedText(200)),
+  // Keyed by the row fields, so a client cannot send an unbounded mapping.
+  columnMapping: z.partialRecord(importRowSchema.keyof(), boundedText(200)),
   // One spreadsheet import; the dialog previews the same rows.
   rows: z.array(importRowSchema).max(5000),
 });

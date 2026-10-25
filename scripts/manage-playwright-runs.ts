@@ -121,7 +121,10 @@ function incidentPrevention(prevention: string): string | null {
 
 function writeIncident(record: IncidentRecord): void {
   const incidentLog = resolve(import.meta.dir, '../docs/technical/test-incident-log.md');
-  writeFileSync(incidentLog, withIncidentEntry(readFileSync(incidentLog, 'utf8'), record));
+  writeFileSync(
+    incidentLog,
+    withIncidentEntry(readFileSync(incidentLog, 'utf8'), record, resolve(import.meta.dir, '..')),
+  );
   console.log(
     `[werkflow-test] wrote the incident entry of ${record.runKey} into docs/technical/test-incident-log.md; add the evidence, correction and focused proof under it when the repair lands.`,
   );

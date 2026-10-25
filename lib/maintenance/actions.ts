@@ -33,7 +33,7 @@ import {
   maintenanceScheduleSchema,
   maintenanceServiceCaseLinkSchema,
   maintenanceTransitionSchema,
-  maintenanceVisitLinkSchema,
+  maintenanceVisitSchema,
 } from './validation';
 import { logError } from '@/lib/logging';
 import { requireServiceManager } from '@/lib/service-cases/manager-context';
@@ -262,9 +262,7 @@ export async function createMaintenanceVisit(input: {
   reason: string;
   idempotencyKey: string;
 }): Promise<ActionResult<{ jobNumber: string }>> {
-  const parsed = maintenanceVisitLinkSchema
-    .omit({ jobId: true, planningOccurrenceId: true })
-    .safeParse(input);
+  const parsed = maintenanceVisitSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, error: 'invalid_input' };
   }

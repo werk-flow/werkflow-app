@@ -38,9 +38,12 @@ const RECORD: IncidentRecord = {
   prevention: 'Tier 2: lint playwright-spec/no-raw-key-press.',
 };
 
+const ROOT = 'C:\\Users\\someone\\Company AG\\werkflow-app';
+const entryOf = (log: string, record: IncidentRecord): string => withIncidentEntry(log, record, ROOT);
+
 describe('incident record', () => {
   test('writes the run facts newest first, after the fixed sections', () => {
-    const written = withIncidentEntry(LOG, RECORD);
+    const written = entryOf(LOG, RECORD);
     const entryAt = written.indexOf('## 2026-10-08: golden:p1-06 harness failure');
     expect(entryAt).toBeGreaterThan(written.indexOf('## Required incident record'));
     expect(entryAt).toBeLessThan(written.indexOf('## 2026-10-04'));
@@ -53,9 +56,29 @@ describe('incident record', () => {
     expect(written).toContain('- Prevention: Tier 2: lint playwright-spec/no-raw-key-press.');
   });
 
+  test('names a run log relative to the repository, without the workstation path', () => {
+    const windows = entryOf(LOG, {
+      ...RECORD,
+      firstFailure: {
+        title: 'static:docs in report r1',
+        message: `Command exited 1; inspect ${ROOT}\\.agent-logs\\verification\\r1\\static-docs.log, then \`C:/Users/someone/Company AG/werkflow-app/.agent-logs/b.log\``,
+      },
+    });
+    expect(windows).toContain(
+      '- Failure point: static:docs in report r1: Command exited 1; inspect .agent-logs/verification/r1/static-docs.log, then `.agent-logs/b.log`\n',
+    );
+    expect(windows).not.toContain('someone');
+    // A path outside the checkout is not the workstation's repository path and stays as written.
+    const outside = entryOf(LOG, {
+      ...RECORD,
+      firstFailure: { title: 'r2', message: 'inspect /tmp/output before writing' },
+    });
+    expect(outside).toContain('- Failure point: r2: inspect /tmp/output before writing\n');
+  });
+
   test('a second classification of the same run replaces its entry', () => {
-    const once = withIncidentEntry(LOG, RECORD);
-    const twice = withIncidentEntry(once, {
+    const once = entryOf(LOG, RECORD);
+    const twice = entryOf(once, {
       ...RECORD,
       classification: 'product',
       rootCause: 'The banner starved.',

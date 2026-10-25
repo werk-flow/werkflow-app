@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { buildImportRows, guessMapping, importResultBanner, parseCsv } from './csv-import';
+import { importInventoryRowsSchema } from './action-schemas';
+import { buildImportRows, guessMapping, IMPORT_COLUMNS, importResultBanner, parseCsv } from './csv-import';
 
 describe('parseCsv', () => {
   test('detects the semicolon delimiter and keeps quoted delimiters and quotes', () => {
@@ -173,5 +174,18 @@ describe('importResultBanner', () => {
       message:
         '2 Artikel importiert, 1 Zeile konnte nicht übernommen werden. 1 Zeile ohne Lager: Artikel übernommen, kein Bestand gebucht. Prüfe die CSV-Datei.',
     });
+  });
+});
+
+describe('importInventoryRowsSchema', () => {
+  const input = { fileName: 'inventar.csv', rows: [{ name: 'Kupferrohr' }] };
+
+  test('accepts a mapping of every import column and refuses a key outside them', () => {
+    const columnMapping = Object.fromEntries(IMPORT_COLUMNS.map((column) => [column.key, column.label]));
+    expect(importInventoryRowsSchema.safeParse({ ...input, columnMapping }).success).toBe(true);
+    expect(
+      importInventoryRowsSchema.safeParse({ ...input, columnMapping: { ...columnMapping, extra: 'Spalte' } })
+        .success,
+    ).toBe(false);
   });
 });
