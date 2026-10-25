@@ -18,6 +18,8 @@ reviews:
     - "!**/*.lock"
     - "!package-lock.json"
     - "!lib/supabase/database.types.ts"
+    # Visual references are rendered artifacts; the owner accepts each changed image (docs/technical/standards-audit.md).
+    - "!tests/audit/visual/**-snapshots/**"
     - "!.agents/**"
     - "!docs/**"
     - "!Transcript_*.txt"

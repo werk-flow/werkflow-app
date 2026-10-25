@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test';
+import { workspaceAppOrigin } from './lib/testing/runner/app-port';
 import { browserRunPaths } from './lib/testing/runs/run-paths';
 import { visualReferenceUpdateMode } from './lib/testing/runner/visual-reference-updates';
 
@@ -49,8 +50,11 @@ export default defineConfig({
   // Visual references (tests/audit/visual/) are written only by an explicit
   // focused update (standards-audit.md, "Rendered design acceptance").
   updateSnapshots: visualReferenceUpdateMode(process.env),
+  // Their browser always runs on Linux, in the pinned image (lib/testing/runner/visual-browser.ts),
+  // so every machine reads and writes the same files.
+  snapshotPathTemplate: '{snapshotDir}/{testFileDir}/{testFileName}-snapshots/{arg}-linux{ext}',
   use: {
-    baseURL: process.env.GOLDEN_BASE_URL ?? 'http://localhost:3000',
+    baseURL: workspaceAppOrigin(__dirname),
     // Missing controls must fail at the action, not consume a whole scenario.
     actionTimeout: 30_000,
     navigationTimeout: 60_000,

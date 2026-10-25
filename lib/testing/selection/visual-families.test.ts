@@ -25,7 +25,7 @@ import { STANDALONE_SCREENS } from './standalone-route-inventory';
 // and dark mode and a phone reference in both modes, image and text.
 
 const SNAPSHOTS = resolve(import.meta.dir, '../../../tests/audit/visual/references.spec.ts-snapshots');
-const PLATFORM_SUFFIX = '-win32';
+const PLATFORM_SUFFIX = '-linux';
 
 /** Every inventoried page as `<session> <route>`. */
 function inventoriedPages(): string[] {
@@ -77,9 +77,9 @@ test('every family has its desktop and phone references in light and dark, and n
 });
 
 test('probe: a missing dark reference and a page without a family are reported', () => {
-  expect(requiredFiles(['probe'])).toContain('probe-desktop-dark-win32.png');
-  expect(requiredFiles(['probe'])).toContain('probe-phone-light-win32.txt');
-  expect(requiredFiles(['probe'])).toContain('probe-phone-dark-win32.png');
+  expect(requiredFiles(['probe'])).toContain('probe-desktop-dark-linux.png');
+  expect(requiredFiles(['probe'])).toContain('probe-phone-light-linux.txt');
+  expect(requiredFiles(['probe'])).toContain('probe-phone-dark-linux.png');
   expect(inventoriedPages()).toContain('admin /einstellungen/kunden');
   expect(inventoriedPages()).toContain('newcomer /onboarding/start');
 });
