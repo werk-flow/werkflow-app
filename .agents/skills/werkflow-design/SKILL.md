@@ -139,6 +139,7 @@ This skill owns virtue 1 in `AGENTS.md`. The tag after each item names its mecha
 - A state is a label, an action is a button: a state renders as `Badge`, a lifecycle button names its step, never the state it ends in, and a reversible step is not a filled red button. [code `components/ui/badge.tsx`, test `lib/work-lifecycle/types.test.ts`, judgment]
 - A job, project or work state reads its color from `components/auftraege/status-classes.ts`; no other file maps such a state to a color. [test `lib/conventions/status-colors.test.ts`]
 - Hierarchy, density, shadows, natural German and fit for the role pass [rendered design acceptance](../../../docs/technical/standards-audit.md#rendered-design-acceptance) for a major UI change. [judgment]
+- Every page renders in Geist: the next/font variables sit on `<html>`, so the theme's font tokens resolve on `:root`, and every visual reference first proves that the body text and the page heading compute to a loaded Geist face. [test `lib/conventions/root-font-wiring.test.ts`, group `audit:visual`]
 - An accepted screen keeps its look: every page of the inventories belongs to a page family with a desktop and a phone reference in both themes, an intended change updates the reference, and the owner accepts each changed image. [group `audit:visual`, test `lib/testing/selection/visual-families.test.ts`, test `lib/testing/spec-support/visual-reference-text.test.ts`, test `lib/testing/spec-support/acceptance-state-plan.test.ts`, judgment]
 
 ## Never

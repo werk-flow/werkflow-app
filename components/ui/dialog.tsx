@@ -248,7 +248,7 @@ const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivEleme
   <div
     data-slot="dialog-footer"
     className={cn(
-      'flex flex-col-reverse gap-2 [&_[data-slot=button]]:min-h-11 sm:flex-row sm:justify-end sm:[&_[data-slot=button]]:min-h-0',
+      'flex flex-col-reverse gap-2 [&_[data-slot=button]]:min-h-11 sm:flex-row sm:flex-wrap sm:justify-end sm:[&_[data-slot=button]]:min-h-0',
       className,
     )}
     {...props}

@@ -23,7 +23,7 @@ export function WorkLifecycleDependenciesSection({
 }: WorkLifecycleDependenciesSectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
         <h3 className="text-sm font-medium">Voraussetzungen</h3>
         {isManager && (
           <Button type="button" size="sm" variant="ghost" onClick={() => setDialog({ type: 'dependency' })}>

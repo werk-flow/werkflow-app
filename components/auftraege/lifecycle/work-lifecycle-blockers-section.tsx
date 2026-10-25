@@ -35,7 +35,7 @@ export function WorkLifecycleBlockersSection({
 }: WorkLifecycleBlockersSectionProps) {
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-x-2">
         <h3 className="text-sm font-medium">Blocker & Parkplatz</h3>
         {!readOnly && (isManager || snapshot.targetType === 'job') && (
           <Button type="button" size="sm" variant="ghost" onClick={() => setDialog({ type: 'blocker' })}>

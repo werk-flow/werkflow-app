@@ -22,6 +22,60 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-25: audit:wave-3:p1-24a environment failure
+
+<!-- incident-run: 2026-10-25T172335872Z-7e33cc -->
+
+- Run: run `2026-10-25T172335872Z-7e33cc`, group `audit:wave-3:p1-24a`, target local, fingerprint `3d6cab4c4294`, world `f20355b95c204cc9a0fef08d668383ee`.
+- Failure point:  >  > wave-3/p1-24a.spec.ts > P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3 > AUDIT-05 the month view: closure label, absence bar, „+n mehr“, a date move and the popover @P1-24A-05: Error: expect(locator).toBeVisible() failed
+- Root cause: The month move's Server Action took 412 ms against 169 ms for the same request earlier in the test, and the confirmed card arrived about 1.0 s after the drop, at the edge of the 1 s window; the card and the banner were correct at failure time.
+- Prevention: Tier 3: the fresh-world diagnostic on the same build decides; a second miss is investigated as product latency.
+
+## 2026-10-25: audit:layout:inventory product failure
+
+<!-- incident-run: 2026-10-25T172335872Z-e402aa -->
+
+- Run: run `2026-10-25T172335872Z-e402aa`, group `audit:layout:inventory`, target local, fingerprint `0cc709efb6dc`, world `d9cc1e3a941c430f8094883584b2806b`.
+- Failure point:  >  > layout/surfaces-inventory.spec.ts > @AUDIT-LAYOUT-SURFACES inventory: tabs and dialogs fit, pass axe and keep their keyboard path > admin /inventar: Error: admin /inventar tab movements at 1280 px, light
+- Root cause: The movements table grew 41 px wider than its region at 1280 px in Geist because item and location names with long tokens could not wrap, and the scrolling region has no focusable content (axe scrollable-region-focusable).
+- Prevention: Tier 2: group audit:layout:inventory runs axe on the tab; the name cells in components/inventar/inventory-content.tsx break anywhere.
+
+## 2026-10-25: audit:layout:documents product failure
+
+<!-- incident-run: 2026-10-25T172335872Z-2810e8 -->
+
+- Run: run `2026-10-25T172335872Z-2810e8`, group `audit:layout:documents`, target local, fingerprint `7dc52f17f5b6`, world `2894b6ea32ef4b158ecf483513a69338`.
+- Failure point:  >  > layout/surfaces-documents.spec.ts > @AUDIT-LAYOUT-SURFACES documents: tabs and dialogs fit, pass axe and keep their keyboard path > admin /dokumente: Error: admin /dokumente dialog documents.details at 1280 px
+- Root cause: The document details dialog showed the uploader name, whose test value ends in a 32-character token, in a grid column that could not shrink below it in Geist; the dialog scrolled sideways.
+- Prevention: Tier 2: group audit:layout:documents finds sideways scrolling; long values in components/dokumente/document-details-dialog.tsx break anywhere.
+
+## 2026-10-25: audit:layout:viewports product failure
+
+<!-- incident-run: 2026-10-25T172335872Z-1264d9 -->
+
+- Run: run `2026-10-25T172335872Z-1264d9`, group `audit:layout:viewports`, target local, fingerprint `c31e3243d2dd`, world `c3e2056e77ff471c989af3aaf9008c00`.
+- Failure point:  >  > layout/viewport-details.spec.ts > @AUDIT-LAYOUT phone details and route aliases > admin /auftraege/[jobNumber] fits a 375 px viewport: Error: /auftraege/AUF-c3e2056e77ff471c989af3aaf9008c00-LAYOUT: content wider than the page body
+- Root cause: At 375 px the job detail's Voraussetzungen and Blocker section headers hold a title and a 224 px Geist button in one non-wrapping row, 2 px wider than the page body.
+- Prevention: Tier 2: group audit:layout:viewports measures the page body; the header rows in components/auftraege/lifecycle/ wrap.
+
+## 2026-10-25: audit:wave-2:p1-20 product failure
+
+<!-- incident-run: 2026-10-25T172335872Z-781946 -->
+
+- Run: run `2026-10-25T172335872Z-781946`, group `audit:wave-2:p1-20`, target local, fingerprint `c0d23fd5c3ca`, world `ffffc1d9470b449dbf37faad98598ff0`.
+- Failure point:  >  > wave-2/p1-20.spec.ts > P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2 > attaches a coverage document and keeps its frame stable while loading: Error: 1280px document actionsX
+- Root cause: The documents toolbar skeleton kept 112 px placeholders while the Geist buttons measure 125 and 119 px, so the toolbar moved 14 px when the documents loaded.
+- Prevention: Tier 2: group audit:wave-2:p1-20 compares the loading and loaded frame; the placeholders in components/dokumente/contextual-documents-layout.tsx take the Geist widths.
+
+## 2026-10-25: audit:wave-1:a6 product failure
+
+<!-- incident-run: 2026-10-25T172335872Z-ed2751 -->
+
+- Run: run `2026-10-25T172335872Z-ed2751`, group `audit:wave-1:a6`, target local, fingerprint `321e2d3f2f8e`, world `fc399b8956f347c2b41a58080440b199`.
+- Failure point:  >  > wave-1/a6-planung.spec.ts > A6 Planung @AUDIT-W1-A6 > A6-T4: Vergangenes und Begonnenes bleibt unverändert; abgesagte und ausgelassene Termine bleiben sichtbar [P1-11-F03]: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: With Geist, the four footer actions of the planning occurrence dialog no longer fit one non-wrapping row; Auslassen sat partly outside the dialog and the overlay took the click.
+- Prevention: Tier 1: DialogFooter in components/ui/dialog.tsx wraps its actions from the sm breakpoint; Tier 2: group audit:wave-1:a6 drives the action.
+
 ## 2026-10-25: unit:all product failure
 
 <!-- incident-run: unit:all@2026-10-25T094551038Z-6a244fd4 -->
@@ -1225,3 +1279,4 @@ The second complete plan (report `2026-09-25T014536329Z-e5cfa145`, 39 groups in 
 - `audit:wave-2:p1-20` ("fetch failed" on a harness read) and `golden:gg-00` ("connect EACCES" on the storage cleanup after all 13 tests passed) hit a healthy stack at an unchanged address (environment, runs `2026-09-25T014545674Z-9eea00`, `2026-09-25T014545674Z-5c1dda`). The harness fetch now sends an idempotent read a second time after a connection-level failure and a write exactly once (`lib/testing/spec-support/transport-diagnostics.ts`, Tier 2).
 
 The closing run on the recalibrated references (report `2026-09-25T043523340Z-a96de618`, 21 groups fresh in 22 minutes, 46 reused from the passed plan before it) compared all 17 scenarios against their baselines. Its campaign line still counted the voided a1 attempt as an unclassified failure and the aborted plan as running since 23:48, about 300 minutes that nobody spent; the summary now skips drift-voided attempts and ends an aborted report at its last group start (Tier 2, `campaign-summary.test.ts`). Corrected campaign line: Campaign since 2026-09-24T15:03:19.000Z: 9 reports, 284 min of verification, 223 groups run, 34 reused, 7 failed (environment 3, harness 2, product 2), 2 blocked. Over budget: 284 minutes of verification against a budget of 240.
+The six failures above came from one change plan on the first Linux machine, right after the app started rendering in Geist as designed (owner decision of 2026-10-25). Geist sets wider glyphs than the Segoe UI fallback the app had shown on Windows, so five layouts that had fit by a few pixels overflowed. Correction: `DialogFooter` wraps its actions, the lifecycle section headers wrap, long names and file values break anywhere, and the documents toolbar placeholders take the measured Geist button widths. Focused proof: repair report `2026-10-25T183654468Z-6055c039` passed all six groups on the corrected build, `audit:wave-3:p1-24a` included, and `audit:visual` passed on references re-recorded after the repair (report `2026-10-25T190003792Z-ebd930a1`).

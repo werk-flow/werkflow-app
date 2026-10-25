@@ -102,11 +102,12 @@ export function ContextualDocumentsSkeleton({
       role="status"
       aria-label="Dokumente werden geladen"
       aria-busy="true"
+      // The placeholders take the widths of the Geist buttons „Verknüpfen“ and „Hochladen“ with their icons.
       actions={
         canUpload ? (
           <>
-            {canAttach && <Skeleton className="h-8 w-28" />}
-            <Skeleton className={cn('w-28', emphasizeUpload ? 'h-8' : 'h-11')} />
+            {canAttach && <Skeleton className="h-8 w-31" />}
+            <Skeleton className={cn('w-30', emphasizeUpload ? 'h-8' : 'h-11')} />
           </>
         ) : undefined
       }

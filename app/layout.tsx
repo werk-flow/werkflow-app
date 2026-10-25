@@ -29,7 +29,9 @@ export default function RootLayout({
   const supabaseUrl = getOptionalSupabaseUrl();
 
   return (
-    <html lang="de">
+    // The font variables sit on <html>: Tailwind declares --font-sans on :root, where
+    // var(--font-geist-sans) must already resolve, or every element falls back to system-ui.
+    <html lang="de" className={`${geistSans.variable} ${geistMono.variable}`}>
       <head>
         {supabaseUrl && (
           <>
@@ -38,11 +40,7 @@ export default function RootLayout({
           </>
         )}
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} min-h-dvh bg-background text-foreground antialiased`}
-      >
-        {children}
-      </body>
+      <body className="min-h-dvh bg-background text-foreground antialiased">{children}</body>
     </html>
   );
 }

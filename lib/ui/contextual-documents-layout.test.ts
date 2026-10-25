@@ -94,7 +94,7 @@ test('loading preserves available toolbar slots and normal/upload emphasis heigh
       emphasizeUpload: false,
     }),
   );
-  expect(normal).toContain('h-8 w-28');
+  expect(normal).toContain('h-8 w-31');
   expect(normal.split(/[\s"]/)).toContain('h-11');
   const emphasized = renderToStaticMarkup(
     createElement(ContextualDocumentsSkeleton, {

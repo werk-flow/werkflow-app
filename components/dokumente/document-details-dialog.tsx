@@ -40,7 +40,7 @@ function DocumentDetailsMetadata({
     <div className="grid gap-3 sm:grid-cols-2">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Originaldatei</p>
-        <p className="mt-1 break-words">{document.originalFileName}</p>
+        <p className="mt-1 wrap-anywhere">{document.originalFileName}</p>
       </div>
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Typ</p>
@@ -80,7 +80,7 @@ function DocumentDetailsMetadata({
       </div>
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Hochgeladen von</p>
-        <p className="mt-1">{getUploaderName(document)}</p>
+        <p className="mt-1 wrap-anywhere">{getUploaderName(document)}</p>
       </div>
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Speicherpfad</p>
@@ -170,7 +170,7 @@ function DocumentDetailsVersions({
       </div>
       <div className="mt-2 rounded-md border">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-          <div>
+          <div className="min-w-0 wrap-anywhere">
             <p className="font-medium">Aktuelle Version {document.currentVersionNumber}</p>
             <p className="text-xs text-muted-foreground">
               {document.originalFileName} · {formatFileSize(document.sizeBytes)}
@@ -202,7 +202,7 @@ function DocumentDetailsVersions({
           <div className="divide-y">
             {details.versions.map((version) => (
               <div key={version.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div>
+                <div className="min-w-0 wrap-anywhere">
                   <p className="font-medium">Version {version.versionNumber}</p>
                   <p className="text-xs text-muted-foreground">
                     {version.originalFileName} · {formatFileSize(version.sizeBytes)} ·{' '}

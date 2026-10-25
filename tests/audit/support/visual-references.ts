@@ -182,6 +182,34 @@ async function viewportText(page: Page): Promise<string> {
 }
 
 /**
+ * The app renders in Geist (app/layout.tsx). A capture of a system-font
+ * fallback would record whatever fonts the machine has installed, so every
+ * reference first proves that the body text and the page heading compute to
+ * Geist and that a Geist face is loaded.
+ */
+async function expectGeistTypography(page: Page): Promise<void> {
+  const typography = await page.evaluate(async () => {
+    await document.fonts.ready;
+    const leadingFamily = (element: Element): string =>
+      (getComputedStyle(element).fontFamily.split(',')[0] ?? '').trim().replace(/^["']|["']$/g, '');
+    const heading = document.querySelector('main h1');
+    return {
+      body: leadingFamily(document.body),
+      heading: heading ? leadingFamily(heading) : 'no page heading',
+      // document.fonts.check passes when no face matches at all; a loaded Geist face proves the font arrived.
+      loaded: [...document.fonts].some(
+        (face) => face.family.replace(/["']/g, '') === 'Geist' && face.status === 'loaded',
+      ),
+    };
+  });
+  expect(typography, 'body text and page heading render in a loaded Geist face').toEqual({
+    body: 'Geist',
+    heading: 'Geist',
+    loaded: true,
+  });
+}
+
+/**
  * Compares the viewport with its reference image and its visible text with the
  * text reference beside it. The pixel tolerance only absorbs anti-aliasing; a
  * moved, recoloured or missing element exceeds it, and a changed word fails
@@ -193,6 +221,7 @@ export async function expectReference(
   replacements: readonly (readonly [string, string])[],
   options: { calendarWeek?: boolean; mask?: readonly Locator[] } = {},
 ): Promise<void> {
+  await expectGeistTypography(page);
   await normalizeText(page, replacements, options.calendarWeek ?? false);
   await expect(page).toHaveScreenshot(`${name}.png`, {
     animations: 'disabled',

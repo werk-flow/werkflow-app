@@ -383,10 +383,10 @@ function MovementsTable({ movements }: { movements: InventoryOverview['movements
                     <TableCell className="text-muted-foreground">
                       {formatBerlinDateTime(movement.createdAt)}
                     </TableCell>
-                    <TableCell className="font-medium">{movement.itemName}</TableCell>
-                    <TableCell>{movement.locationName}</TableCell>
-                    <TableCell>{target.from}</TableCell>
-                    <TableCell>{target.to}</TableCell>
+                    <TableCell className="font-medium wrap-anywhere">{movement.itemName}</TableCell>
+                    <TableCell className="wrap-anywhere">{movement.locationName}</TableCell>
+                    <TableCell className="wrap-anywhere">{target.from}</TableCell>
+                    <TableCell className="wrap-anywhere">{target.to}</TableCell>
                     <TableCell>{INVENTORY_MOVEMENT_TYPE_LABELS[movement.movementType]}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {movement.quantityBefore.toLocaleString('de-DE')}
