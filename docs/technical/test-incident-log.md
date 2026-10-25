@@ -22,6 +22,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-25: unit:all harness failure
+
+<!-- incident-run: unit:all@2026-10-25T211229915Z-12f68025 -->
+
+- Run: run `unit:all@2026-10-25T211229915Z-12f68025`, group `unit:all`, target local, fingerprint `5f5f2782c9c4`.
+- Failure point: unit:all in report 2026-10-25T211229915Z-12f68025: Command exited 1; inspect .agent-logs/verification/2026-10-25T211229915Z-12f68025/unit-all.log
+- Root cause: terminateTree in lib/testing/local-stack/test-session.ts sent SIGKILL to the command's process group and returned at once; on Linux the descendants can still exist for a moment, so the cancellation test saw a live grandchild.
+- Prevention: Tier 1: terminateTree waits, bounded, until no process of the group remains; Tier 2: test lib/testing/local-stack/test-session.test.ts checks the descendant after cancellation.
+
 ## 2026-10-25: audit:wave-3:p1-24a environment failure
 
 <!-- incident-run: 2026-10-25T172335872Z-7e33cc -->
@@ -1280,3 +1289,4 @@ The second complete plan (report `2026-09-25T014536329Z-e5cfa145`, 39 groups in 
 
 The closing run on the recalibrated references (report `2026-09-25T043523340Z-a96de618`, 21 groups fresh in 22 minutes, 46 reused from the passed plan before it) compared all 17 scenarios against their baselines. Its campaign line still counted the voided a1 attempt as an unclassified failure and the aborted plan as running since 23:48, about 300 minutes that nobody spent; the summary now skips drift-voided attempts and ends an aborted report at its last group start (Tier 2, `campaign-summary.test.ts`). Corrected campaign line: Campaign since 2026-09-24T15:03:19.000Z: 9 reports, 284 min of verification, 223 groups run, 34 reused, 7 failed (environment 3, harness 2, product 2), 2 blocked. Over budget: 284 minutes of verification against a budget of 240.
 The six failures above came from one change plan on the first Linux machine, right after the app started rendering in Geist as designed (owner decision of 2026-10-25). Geist sets wider glyphs than the Segoe UI fallback the app had shown on Windows, so five layouts that had fit by a few pixels overflowed. Correction: `DialogFooter` wraps its actions, the lifecycle section headers wrap, long names and file values break anywhere, and the documents toolbar placeholders take the measured Geist button widths. Focused proof: repair report `2026-10-25T183654468Z-6055c039` passed all six groups on the corrected build, `audit:wave-3:p1-24a` included, and `audit:visual` passed on references re-recorded after the repair (report `2026-10-25T190003792Z-ebd930a1`).
+Correction: `terminateTree` now waits, bounded at 5 s, until no process of the cancelled group remains, and treats an already ended group as stopped. The Windows `taskkill /T` it replaced waited by itself. Focused proof: the cancellation tests passed five times in a row, then in `unit:all`.

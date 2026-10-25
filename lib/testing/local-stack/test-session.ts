@@ -5,13 +5,40 @@ function abortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error ? signal.reason : new Error('The test session was cancelled.');
 }
 
-/** The group outlives an exited launcher while a descendant holds its output open, so it is signalled regardless. */
+/** Whether any process of the group still exists; a killed one counts until it has been reaped. */
+function groupExists(groupId: number): boolean {
+  try {
+    process.kill(-groupId, 0);
+    return true;
+  } catch (error) {
+    if (errorCode(error) === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+/**
+ * The group outlives an exited launcher while a descendant holds its output
+ * open, so it is signalled regardless. SIGKILL returns before the processes
+ * are gone, so cancellation waits, bounded, until none of the group remains.
+ */
 async function terminateTree(child: ChildProcess): Promise<void> {
   if (!child.pid) return;
+  const groupId = child.pid;
   try {
-    process.kill(-child.pid, 'SIGKILL');
+    process.kill(-groupId, 'SIGKILL');
   } catch (error) {
-    if (errorCode(error) !== 'ESRCH') throw error;
+    // ESRCH: the whole group already ended.
+    if (errorCode(error) === 'ESRCH') return;
+    throw error;
+  }
+  const deadline = Date.now() + 5_000;
+  while (groupExists(groupId)) {
+    // A member nobody reaps stays visible after it stopped; the cancellation itself stays the outcome.
+    if (Date.now() > deadline) {
+      console.warn(`[werkflow-test] Process group ${groupId} is still listed 5 s after SIGKILL.`);
+      return;
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
   }
 }
 

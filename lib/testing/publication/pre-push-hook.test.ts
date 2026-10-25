@@ -1,6 +1,15 @@
 // Rule test: git runs .githooks/pre-push on a push, which refuses unless the gate passes or the owner's override is logged.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 
@@ -139,4 +148,12 @@ test('the hook and its override need nothing on the path but bun and git', () =>
   const log = readFileSync(join(work, '.agent-logs/review/overrides.log'), 'utf8').trim().split('\n');
   const head = run(['git', 'rev-parse', 'HEAD'], { cwd: work }).output.trim();
   expect((log.at(-1) ?? '').split('\t').slice(1)).toEqual([head, 'owner release', 'gate closed']);
+});
+
+// Git skips a hook that lacks the executable bit and pushes anyway, with only a hint; the
+// Windows checkout never recorded the bit, so the first Linux push ran without the gate.
+test('the pre-push hook is committed executable, so git runs it', () => {
+  const entry = run(['git', 'ls-files', '--stage', '.githooks/pre-push'], { cwd: repository }).output;
+  expect(entry.startsWith('100755'), entry).toBe(true);
+  expect(() => accessSync(join(repository, '.githooks/pre-push'), constants.X_OK)).not.toThrow();
 });
