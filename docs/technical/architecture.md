@@ -1,6 +1,6 @@
 # Technical architecture
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-26
 
 This document describes the runtime shape of WerkFlow and the reasons behind it. For exact schema, inspect the live Supabase project and `lib/supabase/database.types.ts`. Coding standards live in `AGENTS.md`.
 
@@ -14,7 +14,7 @@ WerkFlow is a Next.js App Router application in TypeScript with React, Tailwind 
 
 [Decision 0001](../decisions/0001-infrastructure-stack.md) owns the accepted stack and its rationale. The target state:
 
-- Vercel hosts the Next.js app. `vercel.json` pins functions to Frankfurt, next to the Supabase EU database.
+- Vercel hosts the Next.js app. `vercel.json` pins functions to Frankfurt, next to the Supabase EU database. Every server process runs in Europe/Berlin: Vercel and CI start Node in UTC and reserve `TZ`, so `instrumentation.ts` sets the zone before the first request (`lib/date-time/server-zone.test.ts`).
 - Supabase in the EU provides Postgres as the operational source of truth, Auth and Realtime. Server code enforces authorization. RLS is defense in depth, not the only barrier.
 - Cloudflare R2 with EU jurisdiction stores document bytes. Browser uploads and downloads use signed URLs from `lib/storage/r2.ts`, which avoids the Server Action request-body limit and application-server egress. Server-generated files go to storage through `putStorageObject`. Postgres keeps file metadata.
 - Profile avatars are the exception. They use a public Supabase Storage bucket through `lib/profile-avatar.ts`, and their URLs need no authentication.

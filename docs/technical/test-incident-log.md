@@ -1,6 +1,6 @@
 # Browser-test incident log
 
-Status: living — last reviewed 2026-10-25; entries from 2026-09-25 on
+Status: living — last reviewed 2026-10-26; entries from 2026-09-25 on
 
 Record here each failed acceptance group and each focused failure that changes shared testing behavior. [Testing](testing.md#failures) owns the procedure. Entries before 2026-09-25 were deleted; Git history keeps them. Read an entry only to investigate that failure. Rules live in their owner docs, not here.
 
@@ -21,6 +21,55 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-26: audit:wave-1:a1-zeiten product failure
+
+<!-- incident-run: 2026-10-26T075756883Z-4e98d7 -->
+
+- Run: run `2026-10-26T075756883Z-4e98d7`, group `audit:wave-1:a1-zeiten`, target local, fingerprint `52f81bfed830`, world `e85b6f70969a4eef88b54b3616af9b77`.
+- Failure point:  >  > wave-1/a1-zeiten.spec.ts > A1 Zeiterfassung @AUDIT-W1-A1 > A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke: Error: expect(locator).toBeVisible() failed
+- Root cause: The day view positions a block by elapsed minutes since the day's first instant (lib/calendar/day-layout.ts), so on a DST day every block after the switch is drawn an hour off: the 10:00-11:00 entry of 2026-10-25, the fall-back day the test reads as yesterday, showed at 11:00-12:00. It fails on any day whose previous day is a DST change, in every time zone of the server.
+- Prevention: no prevention claim: the day view's DST positioning is open product work, recorded in docs/technical/enforcement-ladder-backlog.md.
+
+## 2026-10-26: audit:wave-1:a1-zeiten product failure
+
+<!-- incident-run: 2026-10-26T074806663Z-c94839 -->
+
+- Run: run `2026-10-26T074806663Z-c94839`, group `audit:wave-1:a1-zeiten`, target local, fingerprint `52f81bfed830`, world `77ad29b567ed43cca9637ce17731fe25`.
+- Failure point:  >  > wave-1/a1-zeiten.spec.ts > A1 Zeiterfassung @AUDIT-W1-A1 > A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke: Error: expect(locator).toBeVisible() failed
+- Root cause: first read as the server zone, corrected by the evidence of the 2026-10-26 entry for run `2026-10-26T075756883Z-4e98d7`: the stored instant was right (09:00Z), and the run failed the same way with the server zone pinned and in Berlin time. The day view draws by elapsed minutes and misplaces blocks on a DST day.
+- Prevention: no prevention claim: see the entry of run `2026-10-26T075756883Z-4e98d7`.
+
+## 2026-10-26: golden:p1-22 product failure
+
+<!-- incident-run: 2026-10-26T073501330Z-c37883 -->
+
+- Run: run `2026-10-26T073501330Z-c37883`, group `golden:p1-22`, target local, fingerprint `95a9f0feced6`, world `fe5e2a771a0340ea8a935b98be759f95`.
+- Failure point:  >  > p1-22.spec.ts > P1-22 consistent time corrections @P1-22 > calendar resize submits one audited correction and survives reload @P1-22-calendar-correction: Error: expect(locator).toBeVisible() failed
+- Root cause: With the server process in UTC (as on Vercel and CI), the calendar's server render computed its read window in UTC, which differs from the Berlin window the page prefetched; the server HTML marked the calendar scroll region aria-busy and inert, hydration never patches attributes, so every click on the calendar fell through to the page body.
+- Evidence, correction and focused proof: the golden:p1-12 entry of the same day; one cause.
+- Prevention: Tier 1: `instrumentation.ts` pins the server process zone. Tier 2: CI runs every browser group on a UTC runner (`.github/workflows/ci.yml`).
+
+## 2026-10-26: golden:p1-12 product failure
+
+<!-- incident-run: 2026-10-26T073501330Z-e9b4ba -->
+
+- Run: run `2026-10-26T073501330Z-e9b4ba`, group `golden:p1-12`, target local, fingerprint `4d66b2095238`, world `9ca037cd8e98431ba6c4a7e249ac2c3c`.
+- Failure point:  >  > p1-12.spec.ts > P1-12 dispatch, batch rescheduling, readiness, acknowledgement, and commitments @P1-12 @GG-03 > a dispatch is acknowledged, a move invalidates it, and a kept challenge is confirmed again: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: With the server process in UTC (as on Vercel and CI), the calendar's server render computed its read window in UTC, which differs from the Berlin window the page prefetched; the server HTML marked the calendar scroll region aria-busy and inert, hydration never patches attributes, so every click on the calendar fell through to the page body.
+- Evidence: CI run 40274526680 and 40284814449 on PR #4 failed every calendar group (golden:p1-12, golden:p1-22, audit:wave-1:a6, audit:wave-1:a7, audit:wave-1:a1-zeiten, audit:wave-3:p1-24a, audit:lab:office, audit:layout:field, audit:layout:planning-board, audit:visual) while all passed locally, also on two pinned cores. The trace showed the scroll region with `aria-busy="true"` and `inert` while a temporary log of the range hook reported `ready`. With `TZ=UTC` on the local server both groups failed the same way; Vercel sets no `TZ`, so the deployed staging and production servers render in UTC too.
+- Correction: `instrumentation.ts` sets the server process zone to Europe/Berlin before the server handles a request, so the server render computes the window the page prefetched. A first repair in the calendar hook alone also passed, and gave way to the zone pin, which covers every server read of a wall time.
+- Focused proof: with the server and the runner in UTC, `golden:p1-12`, `golden:p1-22` and `audit:wave-1:a7` passed on the build with the pin (report `2026-10-26T075754634Z-419df11c`).
+- Prevention: Tier 1: `instrumentation.ts` pins the server process zone. Tier 2: CI runs every browser group on a UTC runner (`.github/workflows/ci.yml`).
+
+## 2026-10-26: audit:wave-1:a7 environment failure
+
+<!-- incident-run: 2026-10-26T063713853Z-13b89b -->
+
+- Run: run `2026-10-26T063713853Z-13b89b`, group `audit:wave-1:a7`, target local, fingerprint `66a3dddeb91b`, world `6ebc54a2d6eb4eb099bc73bac1bb7041`.
+- Failure point: Test runner: The test session was cancelled.
+- Root cause: The agent session ended mid-run (exit 137) and killed the run with the test server, during a deliberately CPU-pinned diagnostic of CI-only calendar failures.
+- Prevention: no prevention claim: an operator-session kill, not a test fault; the stack containers' CPU pinning was restored.
 
 ## 2026-10-25: unit:all harness failure
 

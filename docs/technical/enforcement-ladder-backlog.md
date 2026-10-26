@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-25
+Status: living — last reviewed 2026-10-26
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -9,6 +9,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
+| Day view on DST days | `lib/calendar/day-layout.ts` places a block by elapsed minutes since the day's first instant, and the drag and drop rules in `components/kalender/day-view/` convert back the same way, so on the 23- or 25-hour day of a DST change every block after the switch sits an hour off. `audit:wave-1:a1-zeiten` (A1-30) fails on the day after each change, because it reads yesterday's entries. | Tier 2: position by Berlin wall-clock minutes through `lib/date-time/berlin.ts`, with unit tests on both DST days for the layout and its inverse. |
 
 ## Performance and immediate feedback
 
@@ -25,6 +26,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | R2 bucket CORS | The runtime R2 tokens get `AccessDenied` on `GetBucketCors`, so nothing checks that the buckets allow only the app's origins. | Tier 2: a script like `auth:check` that reads the rules with an R2 token with Admin Read on each bucket, once the owner provides one. |
 | Vercel environment scopes | No credential on the workstation can read the project's environment variables, so nothing checks that each value is scoped to Production or to pre-production as [environments](environments.md) requires. | Tier 2: a script that reads the scopes through the Vercel API with a Vercel access token, once the owner provides one. |
 | Bounded client collections | Every array and record in a Server Action or route input schema has a bound, but only review keeps the next one bounded. | Tier 2: a unit test that walks each schema an action parameter is parsed with (the parse sites `lib/conventions/server-action-input.test.ts` already finds) and fails on an array without a maximum or a record with an open key set. |
+| Unknown roles fail closed | After an Instant Rollback, older code can meet a role a newer release added. `lib/members/actions.ts` compares `ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['buero']`; for an unknown role that is `undefined <= 2`, false, so a `buero` caller passes the guard and may change or remove that member (fails open). `isManagerRole` and `MANAGED_ROLES.includes` fail closed. | Tier 2: replace the comparison with a membership check that treats an unknown role as out of reach, and a unit test with an unknown role on every role guard in `lib/members/` and `lib/roles.ts`. |
 
 ## Code quality and maintainability
 
@@ -36,6 +38,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Bare `toLocaleString` on a date | `timeOfDaySelectors` catches `toLocaleString` with date options only; `date.toLocaleString()` or `toLocaleString('de-DE')` looks like number formatting without type information. | Tier 2: a typed lint rule that refuses `toLocaleString` on a `Date` receiver outside `lib/utils.ts`. |
 | Schema value lists | `lib/customer-relationships/schemas.ts` repeats the channel, purpose and state values that `lib/customer-relationships/types.ts` derives its unions from. | Tier 1: build the zod enums from the value lists. |
 | Date-time shims kept for digest inputs | `lib/planning/date-time.ts` re-exports `resolveBerlinWallTime`, and `shiftIsoDateByDays` in `lib/personnel/types.ts` delegates to `addLocalDays`, because measurement-digest inputs import them. | Tier 2: in the next run that recalibrates the performance references, import `lib/date-time/berlin.ts` there and delete both shims. |
+| Rollback-tolerant reads | The [migration rule](environments.md#the-migration-rule) keeps a rollback of the code safe for the schema, but older code must also read values a newer release wrote. Today a new enum or CHECK value breaks whole reads: `membershipRowsSchema` in `lib/data/cached.ts` throws in the `(app)` layout, so every page fails for that user; `constrainedValue` (`lib/validation/constrained-value.ts`) throws by design in the vacation, sickness, customer-relationship, inventory and qualification mappers; `toTimeSegmentFact` in `lib/time-tracking/segments.ts` fails the clock state; one unknown value rejects the whole payload in `lib/calendar/window-response.ts`, the occurrence schemas of `lib/planning/server.ts`, `parseWorkLifecycleSnapshot` and `lib/clients/list-page.ts`; `Record<Enum, …>` label lookups without a fallback crash `components/zeiterfassung/entry-history.tsx` and `components/service/equipment-form-dialog.tsx` and blank many badges. `employmentTypeLabel` in `lib/personnel/types.ts` and the `?? fallback` labels are the pattern to copy. | Tier 1: a tolerant enum parser that maps an unknown value to an explicit `unknown` variant, and a label helper that requires a fallback. Tier 2: a convention test that a row schema parses an enum column only through it. |
 
 ## Testing and review
 
