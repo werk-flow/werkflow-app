@@ -16,6 +16,13 @@ runs:
       shell: bash
       run: sudo sysctl -w net.ipv4.ip_local_port_range="55000 65000"
 
+    # Every image from GitHub's registry: public ECR rate-limits anonymous pulls, and the CLI
+    # then falls back to GHCR for some images only, so `supabase gen types --local` looked for
+    # an ECR name the cache did not hold.
+    - name: Pull the stack's images from GHCR
+      shell: bash
+      run: echo "SUPABASE_INTERNAL_IMAGE_REGISTRY=ghcr.io" >> "$GITHUB_ENV"
+
     - uses: supabase/setup-cli@v1
       with:
         version: 2.116.0
@@ -26,7 +33,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/supabase-images.tar
-        key: supabase-images-v2-2.116.0-${{ hashFiles('supabase/config.toml') }}
+        key: supabase-images-v3-ghcr-2.116.0-${{ hashFiles('supabase/config.toml') }}
 
     - name: Load the stack images
       if: steps.images.outputs.cache-hit == 'true'
