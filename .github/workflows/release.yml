@@ -90,7 +90,11 @@ jobs:
               id="$(api "https://api.vercel.com/v6/deployments?${query}" \
                 | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')"
             fi
-            state="$(test -n "$id" && api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
+            # The production build may not be listed yet; keep polling with an empty state.
+            state=""
+            if test -n "$id"; then
+              state="$(api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
+            fi
             case "$state" in
               READY) break ;;
               ERROR | CANCELED)

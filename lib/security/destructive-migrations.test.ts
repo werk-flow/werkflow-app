@@ -48,8 +48,22 @@ const TIGHTENING_STATEMENTS: readonly RegExp[] = [
   /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\b(?:enable|force)\s+row\s+level\s+security\b/,
 ];
 const ALTERED_TABLE = /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)/;
-/** One added column's definition, up to the next comma of the statement. */
-const ADDED_COLUMN = /\badd\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?[^,]+/g;
+/** The comma-separated actions of an ALTER TABLE, split only outside parentheses: `numeric(10,2)` stays whole. */
+function topLevelActions(text: string): string[] {
+  const actions: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of text) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      actions.push(current.trim());
+      current = '';
+    } else current += char;
+  }
+  return [...actions, current.trim()];
+}
+const ADDED_COLUMN = /(?:^|\s)add\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?(.+)$/;
 /** Only a plain CREATE TABLE proves the table is new: IF NOT EXISTS may meet an existing one. */
 const CREATED_TABLE = /^create\s+table\s+(?!if\s+not\s+exists\b)([\w."]+)/;
 
@@ -146,12 +160,15 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
   // A new NOT NULL column without a default, in either order of its clauses, on a table that existed.
   const addsRequiredColumn = (text: string): boolean =>
     onExistingTable(ALTERED_TABLE, text) &&
-    (text.match(ADDED_COLUMN) ?? []).some(
-      (column) =>
+    topLevelActions(text).some((action) => {
+      const column = ADDED_COLUMN.exec(action)?.[1];
+      return (
+        column !== undefined &&
+        !/^(?:constraint|check|unique|primary|foreign|exclude)\b/.test(column) &&
         /\bnot\s+null\b/.test(column) &&
-        !/\b(?:default|generated)\b/.test(column) &&
-        !/^add\s+(?:constraint|check|unique|primary|foreign|exclude)\b/.test(column),
-    );
+        !/\b(?:default|generated)\b/.test(column)
+      );
+    });
   return statements
     .filter(
       (statement) =>
@@ -227,6 +244,8 @@ describe('destructive migration statements', () => {
       'alter table public.jobs enable row level security;',
       'create table if not exists public.jobs (id uuid primary key);',
       'create unique index jobs_id_key on public.jobs (id);',
+      'alter table public.jobs add column amount numeric(10,2) not null;',
+      'alter table public.jobs add column note text, add column total numeric(10,2) not null default 0;',
     ].join('\n');
     expect(unmarkedDestructiveStatements(planted, true)).toEqual([
       "4: alter table public.jobs add constraint jobs_title_check check (title <> 'text' )",
@@ -238,6 +257,7 @@ describe('destructive migration statements', () => {
       '11: alter policy jobs_read on public.jobs using (false)',
       '17: alter table public.jobs enable row level security',
       '19: create unique index jobs_id_key on public.jobs (id)',
+      '20: alter table public.jobs add column amount numeric(10,2) not null',
     ]);
   });
 
