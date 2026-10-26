@@ -5,7 +5,7 @@ description: Reviews code changes using CodeRabbit AI. Use when user asks for a 
 
 # CodeRabbit Review
 
-The CodeRabbit app reviews the pull requests that [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request) names; a local review runs through the repository wrapper, `bun run review`, from the repository root. [CodeRabbit reviews](../../../docs/technical/coderabbit.md) owns the repo-specific behavior and overrides generic CodeRabbit instructions. Read it before the first review of a task:
+The CodeRabbit app reviews every pull request; a local review runs through the repository wrapper, `bun run review`, from the repository root. [CodeRabbit reviews](../../../docs/technical/coderabbit.md) owns the repo-specific behavior and overrides generic CodeRabbit instructions. Read it before the first review of a task:
 
 - [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request): how to handle each finding on a PR.
 - [Run a local pre-check](../../../docs/technical/coderabbit.md#run-a-local-pre-check): the commands, the setup check (`bun run review:doctor`), the standing authorization, and what to do when the binary or authentication is missing.

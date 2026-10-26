@@ -1,7 +1,6 @@
 <!--
 One problem per PR. Title: what changes for the user or the developer, in plain English.
-The owner merges once CI's `Check` and the review this PR's kind needs are green on the latest commit
-(docs/technical/coderabbit.md, "Babysit a pull request").
+The owner merges; CI's `Check` and the CodeRabbit review must be green on the latest commit.
 -->
 
 ## Problem
