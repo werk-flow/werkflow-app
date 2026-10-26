@@ -13,7 +13,7 @@ export function TimePeriodResults({ results }: Pick<TimePeriodDetail, 'results'>
       <div className="space-y-2 md:hidden">
         {results.map((result) => (
           <ListRow key={result.employeeRecordId} className="block space-y-2">
-            <p className="font-medium">{result.employeeName}</p>
+            <p className="break-words font-medium">{result.employeeName}</p>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               <dt className="text-muted-foreground">Soll</dt>
               <dd className="text-right tabular-nums">{formatMinutes(result.targetMinutes)}</dd>
