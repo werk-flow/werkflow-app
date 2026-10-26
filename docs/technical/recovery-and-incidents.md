@@ -1,6 +1,6 @@
 # Recovery and incident runbook
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-26
 
 This runbook states what a backup can restore, what loss the owner accepted, and who acts in an incident. [Environments](environments.md) owns provider identities, plans and access paths.
 
@@ -71,7 +71,7 @@ A confirmed notification setting does not prove that a runtime outage raises an 
 | Step | Who | Action |
 | --- | --- | --- |
 | Detect | Anyone | Confirm on the dashboards. Capture the time, the route and the error code. Do not copy customer data into chat. |
-| Contain | Owner | Pause the Vercel project if data exposure is suspected. Rotate the affected secret in its provider, then update every place that holds it: Vercel env, Supabase function secrets and the gitignored env backups. Deleting a leaked value from a file does not revoke it. |
+| Contain | Owner, then agent | The owner decides whether to pause the Vercel project when data exposure is suspected. Rotate the affected secret in its provider: an agent generates and sets every value it can create; the owner supplies a password or a token of the owner's own accounts. Then update every place that holds it: Vercel env, Supabase function secrets, the gitignored env backups and the owner's password manager, which only the owner updates. Deleting a leaked value from a file does not revoke it. |
 | Revoke access | Owner | Suspend the affected user's operational access, then revoke the Auth sessions and reset the compromised credential. An issued access token and an issued file URL stay valid until they expire, so a sign-out alone is not immediate revocation. For a leaving admin, transfer the organization first. |
 | Preserve evidence | Agent or owner | Export the relevant Supabase and Vercel log excerpts, with identifiers redacted, into `.agent-logs/incidents/<date>/`. |
 | Restore | Owner with agent | Follow the restore procedures above. |
