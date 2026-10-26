@@ -1,4 +1,11 @@
 {
   "reason": "A carry-over entry re-keys one lab reference to a new measurement digest when the measured code changed without changing what it counts; each entry names its own reason.",
-  "entries": []
+  "entries": [
+    {
+      "stepId": "lab.office.job-create",
+      "fromDigest": "ca07276c5cd1402ce3d0d28db215c175c6320ae9d75b0793cdf383cfafbf34d5",
+      "toDigest": "f4b5e02c41eace7afd2f65a9ddfc1779ba10145d1aa2ddf0fb929f458d8ca3cb",
+      "reason": "The spec now waits for the suggested job number before it types one (fillJobNumber). The wait and both fills happen before recordLabStep resets the network count, so the measured submit counts the same requests."
+    }
+  ]
 }

@@ -381,8 +381,8 @@ export async function authorizeResponsibilityForTarget(input: {
   organizationId: string;
   responsibility: OrganizationResponsibility;
   actorUserId: string;
-  targetUserId: string;
-  targetRole: OrgRole;
+  targetUserId: string | null;
+  targetRole: OrgRole | null;
 }): Promise<
   | {
       success: true;

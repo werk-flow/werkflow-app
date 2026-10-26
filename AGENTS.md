@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read this file at the start of every task. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
+Reach every other doc through [the docs index](docs/README.md). Do not glob the docs tree.
 
 ## Workspace
 
@@ -107,37 +107,28 @@ An "Enforced by" line names only mechanisms its owner docs tag, and names every 
 A rule below without a named mechanism is a Tier 3 default.
 
 - Route every task through the matching skill: [the docs index](docs/README.md#skills) pairs each kind of task with its skill.
-- Ask a short clarifying question before you code when scope, acceptance or an edge case is ambiguous. When business context is uncertain, ask the owner or leave a clear TODO; never invent strategy.
-- The owner decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question yourself with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
+- Do yourself whatever your tools can do, including generating, setting and rotating a secret whose value you create. The owner supplies only what the owner alone holds (passwords, tokens and settings of the owner's own accounts) and decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
+- Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask the owner through your harness's ask-user tool and end your turn, so T3 Code marks the thread as needing input and notifies the owner. Never bury an owner action in a status message while you keep working or watching a PR.
 - Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
-- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`). Keep field-worker flows simple and mobile-friendly; favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
-- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, open the PR with `gh pr create`, call `watch_pull_request` and end your turn. Babysit it ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)) until `Check` and the bots are green on the latest commit; the owner merges. Mechanism: the ruleset on `main`.
+- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
+- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it until it is ready ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)): `Check` green on the latest commit, plus one final CodeRabbit review unless the PR changes only docs, agent instructions or CI workflows, which get your own review; the owner merges. Mechanism: the ruleset on `main`.
 
 ## Language
 
 - Everything a user sees is natural German with real umlauts and `ß`: labels, messages, tooltips, aria labels. Mechanism: `lib/conventions/german-copy.test.ts` for spelling, address, ellipsis and quotes.
 - Code, identifiers, comments, commits and developer documents are English. Route names and database values keep the German domain terms of the codebase.
-- Keep user-facing strings out of deep logic where practical.
 
 Domain terms: `Auftrag` (work order), `Projekt` (contains several jobs), `Kunde`, `Mitarbeiter`, `Handwerker/in` (field-worker role label), `Organisation` (the company boundary), `Anfrage` (customer request, converted once into work), `Ansprechpartner` and `Einsatzort` (a customer's contact and work site), `Kalender`, `Einsatz` (dispatched work; `Mein Einsatz` is the worker's view), `Arbeitsvorlage`, `Arbeitsnachweis` (site evidence), `Übergabe` (office-reviewed handover), `Aufgaben` (the one task and approval list), `Qualifikationen`, `Anlage`, `Servicefall`, `Wartungsplan`, `Dokumente`, `Zeiterfassung`, `Zeitkonto`, `Perioden`, `Urlaub`, `Krankmeldung`, `Lager`, `geparkt` (intentionally unscheduled work), `buero` (office role between employee and admin). The owning feature spec defines each term.
 
 ## Tools, branches and releases
 
 - Use Bun: `bun install`, `bun run <script>`, `bunx <tool>`. Keep `bun.lock`. Keep `package-lock.json` as is; add no other lockfile. Mechanism: `vercel.json` installs from the frozen `bun.lock`.
-- Work in Linux or macOS (WSL on Windows). In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
+- In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
 - The infrastructure stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
 - `main` is staging on DEV, `production` is PROD; never push to either. Release only when the owner asks in your thread ("release main"): run `gh workflow run release`, follow it to its end with `gh run watch`, and report. Mechanism: the rulesets.
 - Schema changes follow [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only. Mechanism: `bun run migrations:check`, `bun run types:check`, `sql:security`.
 
-## Brand
-
-The `werkflow-design` skill owns the design language: tokens, color rules, logos and components.
-
 ## Business context
 
-Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Resolve scope changes with Tamay. Do not encode sales positioning into feature logic.
-
-## Maintain this file
-
-Change this file when the product direction or a virtue changes. `CLAUDE.md` imports it; Codex reads it directly.
+Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Do not encode sales positioning into feature logic.

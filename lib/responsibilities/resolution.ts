@@ -246,10 +246,22 @@ export function resolveEffectiveResponsibility({
   };
 }
 
+/**
+ * The role an approval scope sees for a personnel record: the membership role;
+ * a person without a login holds no membership and counts as an employee; a
+ * login without a current membership has no known role, so only an Admin
+ * source or a direct assignment reaches it. The database applies the same rule
+ * in `app_private.can_p1_23_approve_employee`.
+ */
+export function approvalTargetRole(userId: string | null, membershipRole: OrgRole | null): OrgRole | null {
+  return userId === null ? 'employee' : membershipRole;
+}
+
+/** A target without a login has no user id; a target without a known role is out of a Büro holder's reach. */
 export function canHolderApproveTarget(
   holder: EffectiveResponsibilityHolder,
-  targetUserId: string,
-  targetRole: OrgRole,
+  targetUserId: string | null,
+  targetRole: OrgRole | null,
 ): boolean {
   if (holder.userId === targetUserId) return false;
 

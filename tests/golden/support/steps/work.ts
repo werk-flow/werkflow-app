@@ -1130,6 +1130,16 @@ export function jobFormField(scope: Page | Locator, field: keyof typeof JOB_FORM
   return scope.locator(`#${JOB_FORM_FIELD_IDS[field]}`);
 }
 
+/**
+ * Types a job number once the form's suggested number has landed. A fill
+ * before it can land between the fill's selection and its input, so the
+ * saved number becomes the suggestion with the typed number appended.
+ */
+export async function fillJobNumber(field: Locator, jobNumber: string): Promise<void> {
+  await expect(field).not.toHaveValue('');
+  await field.fill(jobNumber);
+}
+
 // ---------------------------------------------------------------------------
 // Handover review (P1-17): the section on the Übergabe page and the summary
 // card on the work page.
@@ -1232,10 +1242,7 @@ export async function createJob(
   await expect(workCreateHeading(page)).toBeVisible();
   await workCreateTab(page, 'job').click();
 
-  // The suggested number arrives after the dialog opens; a fill before it lands
-  // would keep the typed number only until the suggestion replaces or prefixes it.
-  await expect(jobFormField(page, 'number')).not.toHaveValue('');
-  await jobFormField(page, 'number').fill(options.jobNumber);
+  await fillJobNumber(jobFormField(page, 'number'), options.jobNumber);
   await jobFormField(page, 'title').fill(options.title);
   if (options.description) await jobFormField(page, 'description').fill(options.description);
 

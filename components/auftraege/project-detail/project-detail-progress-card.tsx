@@ -5,17 +5,11 @@ import { SectionTitle } from '@/components/shared/section-title';
 
 type ProjectDetailProgressCardProps = {
   liveDerivedStatus: DerivedProjectStatus;
-  completedCount: number;
-  inProgressCount: number;
-  jobCount: number;
+  /** Null for an employee, who sees only their own jobs and no project-wide count. */
+  jobCounts: { completed: number; inProgress: number; total: number } | null;
 };
 
-export function ProjectDetailProgressCard({
-  liveDerivedStatus,
-  completedCount,
-  inProgressCount,
-  jobCount,
-}: ProjectDetailProgressCardProps) {
+export function ProjectDetailProgressCard({ liveDerivedStatus, jobCounts }: ProjectDetailProgressCardProps) {
   return (
     <div className="rounded-lg border bg-muted/30 p-5 sm:p-6">
       <div className="flex items-center justify-between">
@@ -26,12 +20,14 @@ export function ProjectDetailProgressCard({
         </div>
       </div>
       <Progress value={liveDerivedStatus.progress} label="Fortschritt des Projekts" className="mt-4 h-2.5" />
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-        <span>
-          {completedCount} von {jobCount} Aufträgen abgeschlossen
-        </span>
-        {inProgressCount > 0 && <span>{inProgressCount} in Bearbeitung</span>}
-      </div>
+      {jobCounts ? (
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+          <span>
+            {jobCounts.completed} von {jobCounts.total} Aufträgen abgeschlossen
+          </span>
+          {jobCounts.inProgress > 0 && <span>{jobCounts.inProgress} in Bearbeitung</span>}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -313,7 +313,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['p1-21', ['p1_21_time_segments.sql'], ['time', 'personnel', 'work']],
   ['p1-22', ['p1_22_time_corrections.sql'], ['time', 'personnel', 'work']],
   ['a1-time-history', ['a1_time_history.sql'], ['time', 'personnel']],
-  ['p1-23', ['p1_23_time_accounts.sql'], ['time', 'personnel', 'work']],
+  ['p1-23', ['p1_23_time_accounts.sql', 'time_account_approval_scope.sql'], ['time', 'personnel', 'work']],
   ['p1-24', ['p1_24_people_lifecycle.sql'], ['personnel', 'documents', 'time', 'work']],
   ['people', ['people_boundaries.sql'], ['personnel', 'attention', 'time']],
   ['join-requests', ['organization_join_requests.sql'], ['personnel', 'attention']],

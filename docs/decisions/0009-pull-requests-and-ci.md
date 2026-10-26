@@ -69,3 +69,11 @@ The edit guard stays where it protects a running local verification: it refuses 
 ## Amendment 2026-10-26: the owner can approve list growth
 
 The table's ratchet row had no path for a list growth the owner approved, and the ruleset on `main` has no bypass. The owner adds the label `approved: list growth` to such a PR. CI's unit job then waives the growth, and the PR diff shows it. The owner owns the label: agents use the owner's GitHub account, so the label rule binds them only through review (Tier 3). [testing.md](../technical/testing.md#grow-a-shrink-only-list) holds the procedure.
+
+## Amendment 2026-10-26: one CodeRabbit review per code pull request
+
+The owner narrowed rule 4. A pull request that changes product code, tests, migrations or security-relevant code gets one CodeRabbit app review, requested once at the end when `Check` is green, not after every fix. A pull request that changes only docs, agent instructions or CI workflow files merges on a green `Check` with the agent's own review. Requests after every fix spent the app's rate limit, and an early request restarts its window. [coderabbit.md](../technical/coderabbit.md#babysit-a-pull-request) owns the procedure, the rate-limit rule and the order when several pull requests wait.
+
+## Amendment 2026-10-26: merges without an up-to-date branch
+
+The owner turned off "require branches to be up to date before merging" on the `main` ruleset. A green `Check` on the PR's latest commit is enough to merge; the branch need not contain the newest `main`. This supersedes three statements above: the "kept up to date with `main` before merge" part of the plan row in "Where the local gate's guarantees went", the reason given for rejecting a merge queue, and "up-to-date branches" in the GitHub ruleset settings. Two checks catch a merge that breaks `main`: `Check` runs again on every push to `main` (`.github/workflows/ci.yml`), and the `release` workflow refuses a `main` commit without a successful `Check` (`.github/workflows/release.yml`). A merge queue stays rejected while one owner merges.

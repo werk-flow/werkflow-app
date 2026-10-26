@@ -182,6 +182,8 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
       { module: 'lib/vacation/actions.ts', exportName: 'decideVacationRequest' },
       { module: 'lib/vacation/actions.ts', exportName: 'cancelApprovedVacationRequest' },
       { module: 'lib/work-artifacts/actions.ts', exportName: 'recordWorkArtifactAction' },
+      { module: 'lib/time-accounts/decision-actions.ts', exportName: 'decideTimeAccountAdjustment' },
+      { module: 'lib/time-accounts/decision-actions.ts', exportName: 'decidePeriodFinding' },
     ],
     screenedReads: [
       'time-correction-requests',

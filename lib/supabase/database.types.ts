@@ -17394,6 +17394,17 @@ export type Database = {
         };
         Returns: undefined;
       };
+      withdraw_time_account_adjustment: {
+        Args: {
+          p_actor_id: string;
+          p_expected_version: number;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_id: string;
+        };
+        Returns: string;
+      };
       withdraw_time_correction: {
         Args: {
           p_actor_id: string;
@@ -17760,7 +17771,8 @@ export type Database = {
         | "submitted"
         | "approved"
         | "rejected"
-        | "superseded";
+        | "superseded"
+        | "withdrawn";
       time_allocation_kind:
         | "job"
         | "internal_activity"
@@ -18427,6 +18439,7 @@ export const Constants = {
         "approved",
         "rejected",
         "superseded",
+        "withdrawn",
       ],
       time_allocation_kind: ["job", "internal_activity", "unallocated", "none"],
       time_capture_source: [
