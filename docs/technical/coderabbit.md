@@ -10,7 +10,7 @@ The root `.coderabbit.yaml` configures the review. Its path instructions point a
 
 ### Babysit a pull request
 
-1. After `gh pr create`, call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
+1. After `gh pr create`, and after each later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
 2. On each wake, read what is new: the failed CI job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or the new review comments (`gh pr view <number> --comments`, the inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`).
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
 4. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)).
