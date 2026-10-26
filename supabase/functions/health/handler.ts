@@ -2,7 +2,7 @@ import { createMailAuthorizer } from '../_shared/mail-auth.ts';
 import { sha256Hex, timingSafeEquals } from '../_shared/secret-compare.ts';
 
 // The weekly health workflow reads this function (.github/workflows/health.yml)
-// with the HEALTH_CHECK_TOKEN header. verify_jwt is off (supabase/config.toml),
+// with the HEALTH_CHECK_TOKEN header. verify_jwt is off (the deploy steps' --no-verify-jwt),
 // so this guard is the only one: without the token the function answers like
 // the gateway answers for a function that does not exist. The report names
 // each check and its state, never a value or a provider message.

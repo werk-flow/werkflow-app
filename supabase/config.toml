@@ -388,11 +388,6 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
-# The health function checks its own token header (supabase/functions/health/handler.ts);
-# the weekly workflow presents no JWT.
-[functions.health]
-verify_jwt = false
-
 # Local CLI only: actual Mailpit capture, never a production provider fallback.
 [edge_runtime.secrets]
 WERKFLOW_LOCAL_MAIL_CAPTURE = "mailpit"

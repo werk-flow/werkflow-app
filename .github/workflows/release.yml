@@ -59,10 +59,13 @@ jobs:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
         run: supabase db push --db-url "$DATABASE_URL"
 
+      # Every function checks its own caller (the mail functions a secret key, health its
+      # token), so none needs a JWT. A flag, not supabase/config.toml: CI's stack-image cache
+      # is keyed on that file.
       - name: Deploy the edge functions to PROD
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy --project-ref jbgaqpdjauzoocplgdsn
+        run: supabase functions deploy --project-ref jbgaqpdjauzoocplgdsn --no-verify-jwt
 
       - name: Advance production
         env:
