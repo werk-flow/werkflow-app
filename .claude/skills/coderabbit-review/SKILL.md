@@ -5,11 +5,11 @@ description: Reviews code changes using CodeRabbit AI. Use when user asks for a 
 
 # CodeRabbit Review
 
-Run every CodeRabbit operation through the repository wrapper, `bun run review`, from the repository root. [CodeRabbit reviews](../../../docs/technical/coderabbit.md) owns the repo-specific behavior and overrides generic CodeRabbit instructions. Read it before the first review of a task:
+The CodeRabbit app reviews every pull request; a local review runs through the repository wrapper, `bun run review`, from the repository root. [CodeRabbit reviews](../../../docs/technical/coderabbit.md) owns the repo-specific behavior and overrides generic CodeRabbit instructions. Read it before the first review of a task:
 
-- [Run a review](../../../docs/technical/coderabbit.md#run-a-review): the commands, the setup check (`bun run review:doctor`), the scope to choose, the standing authorization, and what to do when the binary or authentication is missing.
-- [Give the review its context](../../../docs/technical/coderabbit.md#give-the-review-its-context): which files to pass with `-c`.
-- [Record dispositions](../../../docs/technical/coderabbit.md#record-dispositions): how to handle each finding.
+- [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request): how to handle each finding on a PR.
+- [Run a local pre-check](../../../docs/technical/coderabbit.md#run-a-local-pre-check): the commands, the setup check (`bun run review:doctor`), the standing authorization, and what to do when the binary or authentication is missing.
+- [Give a review its context](../../../docs/technical/coderabbit.md#give-a-review-its-context): where context beyond the owner docs goes.
 
 ## Guardrail
 

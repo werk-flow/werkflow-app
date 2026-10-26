@@ -1,6 +1,6 @@
 # Performance
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-26
 
 This doc owns how WerkFlow measures speed and feel: the journeys people repeat, the lab counts and payload budgets that guard them, layout stability, and the procedure for making a flow faster. [Realtime and caching](realtime-and-caching.md) owns feedback, freshness and the latency targets. [Testing](testing.md#deadlines-and-measured-scenarios) owns how wall-clock scenarios are recorded and calibrated.
 
@@ -52,7 +52,7 @@ A journey is a step that one role repeats many times a day, measured from the us
 
 ## What each instrument proves
 
-- **Wall-clock scenarios** (`audit:performance:*`) prove that a journey stays within its budget and near its reviewed reference on this machine. They are noisy, so they judge medians with a tolerance and run alone.
+- **Wall-clock scenarios** (`audit:performance:*`) prove that a journey stays within its budget and near its reviewed reference on this machine. They are noisy, so they judge medians with a tolerance and run alone. CI never runs them: on a shared runner the median follows the neighbors' load, so they stay local release checks on a quiet machine (`ciPlan` in `lib/testing/selection/ci-plan.ts`). CI does run the lab groups, because counts repeat on any machine.
 - **Lab counts** (`audit:lab:*`) prove that a step does the same amount of work as its reference: requests, route renders, round trips, backend requests, commits, rendered components, DOM mutations and layouts. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the step's wall-clock time.
 - **Payload budgets** prove that each request shape of a step carries about the reference's bytes on the wire and decoded, and its row count where the response is a list. The ceiling catches growth. The floor catches a payload that lost data.
 - **Layout stability** proves that nothing moves after a page is usable. It does not judge whether a skeleton looks right.

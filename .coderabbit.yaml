@@ -1,118 +1,38 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Reviews every pull request to main (docs/technical/coderabbit.md). Each rule lives in its owner doc;
+# the path instructions only point there. AGENTS.md is read as a guideline file.
 
 language: "en-US"
-tone_instructions: "Be direct and practical. Prioritize correctness, security, data integrity, accessibility, and production-risk findings over style nits."
-
 reviews:
   profile: "assertive"
   request_changes_workflow: false
-  high_level_summary: true
-  review_status: true
-  review_details: true
-  changed_files_summary: true
+  high_level_summary: false
   poem: false
   in_progress_fortune: false
-  enable_prompt_for_ai_agents: true
-  path_filters:
-    - "!bun.lock"
-    - "!**/*.lock"
-    - "!package-lock.json"
-    - "!lib/supabase/database.types.ts"
-    # Visual references are rendered artifacts; the owner accepts each changed image (docs/technical/standards-audit.md).
-    - "!tests/audit/visual/**-snapshots/**"
-    - "!.agents/**"
-    - "!docs/**"
-    - "!Transcript_*.txt"
-    - "!agent-response.md"
-  path_instructions:
-    - path: "app/**"
-      instructions: |
-        Review Next.js App Router code for correct server/client boundaries, auth handling, redirects, cache behavior, and data loading. User-facing copy, aria labels, tooltips, and errors must be natural German; code and identifiers stay English.
-    - path: "components/**"
-      instructions: |
-        Review React components for correctness, accessibility, keyboard/focus behavior, mobile usability, unnecessary client-side work, and consistency with WerkFlow's practical German SHK operations UI. Prioritize findings that could confuse field workers, office staff, or admins.
-    - path: "lib/**"
-      instructions: |
-        Review shared logic, server actions, and Supabase access for input validation, tenant isolation, role checks, RLS-safe assumptions, PII-safe error handling, cache invalidation, realtime freshness, and timezone-sensitive behavior.
-    - path: "lib/documents/**"
-      instructions: |
-        This is WerkFlow document management. Check organization scoping, admin/buero versus employee access, contextual links to jobs/projects/customers/employees, versioning/audit behavior, trash behavior, and guarded R2 storage cleanup. Flag any path that could expose or delete another organization's documents.
-
-        File bytes live in Cloudflare R2 and transfer directly between browser and bucket via short-lived signed URLs; bytes must never travel through Server Actions (Vercel ~4.5 MB body limit). Uploads are two-phase: a ticket action authorizes and signs a PUT URL, a finalize action re-authorizes, recomputes the storage key server-side from the authenticated organization, verifies the object via HEAD (existence, size limit), and only then writes metadata. Flag any change that trusts a client-provided storage path or bucket, skips re-authorization at finalize, leaves uploaded objects behind on failed finalize without cleanup, or reintroduces byte buffering in a Server Action.
-    - path: "lib/inventory/**"
-      instructions: |
-        This is WerkFlow inventory V1. Server actions use a Supabase admin client, so every read and write must authenticate first, derive the active organization and user on the server, and explicitly enforce either admin/buero manager access or assigned-job employee access before bypassing RLS. Re-resolve item, location, material-line, job, project, supplier, category, barcode, and import identifiers inside the active organization; never trust client-provided tenant, role, actor, price, or stock data.
-
-        Preserve the stock ledger model: planning a job/project material line must not change stock; every real stock change must go through the atomic `record_inventory_movement` RPC, keep stock non-negative, and create one append-only movement with matching before/after quantities. Taking and returning material must keep `job_material_lines` taken/returned quantities and status consistent, returns must not exceed the outstanding taken quantity, corrections need a reason, and CSV initial quantities must be recorded as `initial_count` movements. Flag direct stock-level writes, split non-transactional stock/ledger updates, cross-organization references, lost audit history, or retry paths that can double-book stock.
-
-        Current role boundary: admin and buero manage the central catalog, locations, suppliers, imports, prices, corrections, and project material planning. Employees do not get central `/inventar`, catalog editing, prices, imports, corrections, or project-level inventory; they may only view and take/return existing items for jobs assigned to them. Keep future barcode scanning, automated reordering, supplier APIs, invoicing, advanced asset lifecycle, and transfer UX out of V1 unless the diff explicitly implements them.
-    - path: "components/inventar/**"
-      instructions: |
-        Review the inventory UI for practical German SHK workflows, natural German copy, accessible dialogs/tables/comboboxes, keyboard and focus behavior, mobile usability, precise decimal quantity handling, clear loading/empty/error states, and protection against duplicate submissions. Keep planned quantities visually and behaviorally distinct from physical stock movements. Do not expose purchase/sale prices or manager controls to employees.
-    - path: "app/(app)/inventar/**"
-      instructions: |
-        The central inventory route is for admin and buero only. Flag missing server-side role enforcement, redirects that leak data, client-only authorization, stale manager data, or error handling that exposes internal Supabase details.
-    - path: "components/dokumente/**"
-      instructions: |
-        Review document UI for clear German labels, safe upload/download/delete flows, accessible dialogs and tables, correct role-specific affordances, and practical handling of empty, loading, error, and permission-denied states.
-    - path: "app/(app)/dokumente/**"
-      instructions: |
-        Managers use the document library, while employees should rely on contextual job detail documents. Flag route or data access changes that weaken this role separation.
-    - path: "components/kalender/**"
-      instructions: |
-        Review calendar behavior for drag/drop correctness, parked job handling, realtime update loops, assignment conflicts, mobile ergonomics, and Europe/Berlin date/time edge cases.
-    - path: "components/realtime/**"
-      instructions: |
-        Review Supabase Realtime subscriptions for organization filtering, duplicate channels/listeners, cleanup on organization or auth changes, reconnect behavior, refresh storms, and stale cross-organization events. Inventory table changes should refresh inventory and connected job/project material views without loops or excessive full-route refreshes.
-    - path: "lib/time-tracking/**"
-      instructions: |
-        Review time tracking for break handling, manual corrections, overlap/conflict behavior, timezone correctness, role permissions, and auditability of employee working-time changes.
-    - path: "lib/jobs/**"
-      instructions: |
-        Review job and project changes for assignment integrity, state transitions, validation, organization scoping, realtime/cache consistency, and clear operational semantics for planned, in-progress, parked, blocked, and complete work.
-    - path: "components/auftraege/**"
-      instructions: |
-        Review job/project UI for practical German SHK workflows, clear state and assignment controls, safe form validation, accessible dialogs/menus, and mobile-friendly field-worker usage.
-    - path: "lib/storage/**"
-      instructions: |
-        Server-only Cloudflare R2 (S3-compatible) client. R2 credentials must never reach client bundles or logs; signed URLs must stay short-lived; upload URLs must pin the content type into the signature; object keys must remain organization-prefixed. Flag public-bucket assumptions, unbounded expiry times, credential leakage, or helpers that would let callers operate outside an organization prefix without an explicit, reviewed reason.
-    - path: "scripts/**"
-      instructions: |
-        Operational one-off scripts (R2 connectivity, CORS setup, storage migration) run manually with bun and env credentials. Check for destructive defaults (they must never delete source data), idempotency on re-run, clear failure output, and that no credentials or PII are printed. These scripts are not part of the app runtime.
-    - path: "proxy.ts"
-      instructions: |
-        Review authentication/session middleware carefully. Flag redirect loops, public-route leaks, stale sessions, cookie misuse, and any behavior that could expose protected organization data.
-    - path: "next.config.ts"
-      instructions: |
-        Review Next.js configuration for production safety, image/security settings, experimental flags, and compatibility with the app's deployment/runtime assumptions.
   auto_review:
     enabled: true
     drafts: false
-  pre_merge_checks:
-    custom_checks:
-      - mode: "warning"
-        name: "Tenant and role safety"
-        instructions: |
-          Changed code must preserve organization boundaries and intentional role behavior for admin, buero, and employee users. Warn if a data read/write, server action, route, realtime subscription, document access, or storage cleanup can affect another organization or expose manager-only data to employees.
-      - mode: "warning"
-        name: "WerkFlow product fit"
-        instructions: |
-          Changed user-facing behavior should reduce paperwork, improve organization, or save time for German SHK businesses. Warn when new UI or workflow complexity is not justified by those product goals.
-      - mode: "warning"
-        name: "German user-facing copy"
-        instructions: |
-          User-visible labels, empty states, toast messages, validation errors, aria labels, and tooltips must be natural German with proper German characters where appropriate. Developer-facing code, identifiers, comments, and logs should remain English.
-      - mode: "warning"
-        name: "Inventory ledger integrity"
-        instructions: |
-          Inventory changes must preserve an organization-scoped, auditable stock ledger. Planning material must not change stock. Physical stock changes must be atomic, prevent negative stock, append a matching movement, and keep related job/project material quantities consistent. Employee access is limited to assigned-job take/return workflows without prices or catalog controls; admin and buero retain central inventory management. Warn about direct stock writes, cross-tenant identifiers, non-idempotent retry risks, lost movement history, or future-scope assumptions presented as current V1 behavior.
-
-chat:
-  auto_reply: true
-  art: false
-
+  path_filters:
+    - "!bun.lock"
+    - "!package-lock.json"
+    - "!lib/supabase/database.types.ts"
+    - "!tests/audit/visual/**-snapshots/**"
+    - "!.agents/**"
+  path_instructions:
+    - path: "{app,components,hooks}/**"
+      instructions: "Hold UI code to .claude/skills/werkflow-design/SKILL.md and docs/technical/realtime-and-caching.md. User-visible copy is natural German with du."
+    - path: "{app/**,lib/**,proxy.ts}"
+      instructions: "Hold server code to docs/technical/security.md and docs/technical/code-quality.md."
+    - path: "supabase/**"
+      instructions: "Hold SQL to docs/technical/security.md and the migration rule in docs/technical/environments.md: expand-only, at most one migration per PR."
+    - path: "{tests,lib/testing,scripts,.github}/**"
+      instructions: "Hold test and CI code to docs/technical/testing.md."
+    - path: "{docs/**,AGENTS.md}"
+      instructions: "Hold documentation to docs/README.md: one home per fact, nothing the code already says."
 knowledge_base:
   code_guidelines:
     enabled: true
-  learnings:
-    scope: "local"
+    filePatterns:
+      - "AGENTS.md"
+      - "docs/technical/*.md"
+      - ".claude/skills/werkflow-design/SKILL.md"

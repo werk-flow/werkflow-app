@@ -68,3 +68,7 @@ A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2
 > - Vercel: the Supabase URL, publishable key and every other Supabase and R2 variable scoped per environment, Preview to DEV and Production to PROD (the owner does this in the Vercel dashboard before the step 5 preview). Today every environment points at PROD.
 
 > - Pre-Wave-3 step 5 (`../plans/phase-1/pre-wave-3/05-beta-acceptance-and-production-rollout.md`) — the release that adopts this flow.
+
+## Amendment 2026-10-26: superseded by decision 0009
+
+[Decision 0009](0009-pull-requests-and-ci.md) supersedes this decision. Its revisit trigger fired: the first push from Linux skipped the pre-push gate when the hook lost its executable bit, and parallel agents in worktrees outgrew one local `main`. Work now runs as a worktree, a branch and a pull request per task, CI's `Check` is the gate, `main` is staging on DEV, and the `production` branch is production, advanced only by the owner's `release` workflow. The `partner-preview` branch is retired.

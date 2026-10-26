@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-25; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-26; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
@@ -43,7 +43,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | [code-quality.md](technical/code-quality.md) | You write or review code: the code-quality checklist, the deletion pass and the independent review. |
 | [testing.md](technical/testing.md) | You implement or verify a change, investigate a failed test, or prepare a release. |
 | [integrated-test-state.md](technical/integrated-test-state.md) | You seed a test's state, choose fixture dates, or keep a page stable during a browser step. |
-| [coderabbit.md](technical/coderabbit.md) | You run a review or record its dispositions. |
+| [coderabbit.md](technical/coderabbit.md) | You babysit a pull request, handle a review finding or run a local review. |
 | [recovery-and-incidents.md](technical/recovery-and-incidents.md) | Something is lost, leaked or down: backups, restore procedures, incident steps. |
 | [standards-audit.md](technical/standards-audit.md) | You accept a rendered design or audit a wave. |
 | [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You plan a Tier 1 or Tier 2 conversion, or a finding needs a backlog row. Not part of routine reading. |
@@ -104,8 +104,9 @@ A decision record states why a durable choice was made. It is immutable once acc
 | [0004-documentation-structure.md](decisions/0004-documentation-structure.md) | Why the docs look as they do: one home per fact, no restating of code, size budget, what agent memory may hold. |
 | [0005-enforcement-ladder.md](decisions/0005-enforcement-ladder.md) | The three tiers: unwritable, checked, judgment. |
 | [0006-testing-architecture.md](decisions/0006-testing-architecture.md) | Local backend for tests, cloud canary for providers. Decision 0007 supersedes its execution rules. |
-| [0007-independent-test-groups.md](decisions/0007-independent-test-groups.md) | Independent test groups, selection by scope, repair mode, release mode, the publication gate. |
-| [0008-development-workflow.md](decisions/0008-development-workflow.md) | Local `main`, local gates, partner preview on DEV, release by pushing `main`. |
+| [0007-independent-test-groups.md](decisions/0007-independent-test-groups.md) | Independent test groups, selection by scope, repair mode, release mode; decision 0009 retires its publication gate. |
+| [0008-development-workflow.md](decisions/0008-development-workflow.md) | Local `main`, local gates, partner preview on DEV, release by pushing `main`. Decision 0009 supersedes it. |
+| [0009-pull-requests-and-ci.md](decisions/0009-pull-requests-and-ci.md) | A worktree, a branch and a PR per task; CI's `Check` as the gate; `main` as staging on DEV; `production` released by the owner's workflow. |
 
 ## Skills
 
