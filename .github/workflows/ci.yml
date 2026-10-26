@@ -1,0 +1,195 @@
+name: CI
+
+# The gate every pull request to main passes (docs/technical/testing.md, "CI").
+# `Plan` maps the diff to browser groups with the runner's own selection
+# (lib/testing/selection/ci-plan.ts) and fails open: an unreadable diff or a
+# tooling change runs every browser group. Every job runs its groups through
+# scripts/verify.ts, the same engine as a local run. The required check is
+# `Check` at the end of this file.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+    inputs:
+      full:
+        description: Why every browser group runs
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      browser: ${{ steps.plan.outputs.browser }}
+      shards: ${{ steps.plan.outputs.shards }}
+      static: ${{ steps.plan.outputs.static }}
+      sql: ${{ steps.plan.outputs.sql }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Plan the browser groups
+        id: plan
+        env:
+          FULL: ${{ inputs.full || (github.event_name == 'push' && 'Push to main' || '') }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if test -n "$FULL"; then bun scripts/ci-plan.ts --full "$FULL"
+          else bun scripts/ci-plan.ts --base "$BASE"; fi
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: bun scripts/verify.ts run --group static:lint
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: lint
+
+  static:
+    name: Static gates
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # docs:check reads the review dates and the decision records' history.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      # docs:check reads the sibling clones beside the app (docs/README.md, maintenance rule 7).
+      - name: Clone the sibling repositories
+        env:
+          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
+        run: |
+          git clone --quiet --depth 1 https://github.com/werk-flow/werkflow-website ../werkflow-website
+          if test -n "$SIBLING_TOKEN"; then
+            git clone --quiet --depth 1 "https://x-access-token:${SIBLING_TOKEN}@github.com/werk-flow/werkflow-business" ../werkflow-business
+          else
+            echo "::warning::SIBLING_REPOSITORIES_TOKEN is not set, so docs:check cannot read the private werkflow-business clone."
+            echo "WERKFLOW_UNREADABLE_SIBLINGS=werkflow-business" >> "$GITHUB_ENV"
+          fi
+      - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.static }}"
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: static
+
+  unit:
+    name: Unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - run: bun scripts/verify.ts run --group unit:all
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: unit
+
+  components:
+    name: Component contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/playwright
+      - run: bun scripts/verify.ts run --group ui:contracts
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: components
+
+  sql:
+    name: SQL
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/local-stack
+      - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: sql
+
+  browser:
+    name: Browser ${{ matrix.shard }}
+    needs: plan
+    if: needs.plan.outputs.browser == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.shards) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/local-stack
+      - uses: ./.github/actions/playwright
+      # The server builds against the stack, then serves the recorded build for the whole job.
+      - name: Start the test server
+        run: |
+          nohup bun run test:server local > "$RUNNER_TEMP/test-server.log" 2>&1 &
+          deadline=$((SECONDS + 900))
+          until grep -q 'Serving the recorded local build' "$RUNNER_TEMP/test-server.log" \
+            && curl --silent --fail --output /dev/null http://localhost:3000/login; do
+            if ! pgrep -f 'scripts/test-server.ts' > /dev/null || test $SECONDS -ge $deadline; then
+              cat "$RUNNER_TEMP/test-server.log"
+              exit 1
+            fi
+            sleep 5
+          done
+          tail -n 5 "$RUNNER_TEMP/test-server.log"
+      - name: Run browser groups
+        run: bun scripts/verify.ts run --group "${{ matrix.groups }}" --jobs 2
+      - name: Copy the server output
+        if: failure()
+        run: |
+          mkdir -p .agent-logs
+          cp "$RUNNER_TEMP/test-server.log" .agent-logs/
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: browser-${{ matrix.shard }}
+
+  # The one required status check. It fails unless every job passed, or the
+  # browser shards were skipped because the plan selected no browser group.
+  check:
+    name: Check
+    if: always()
+    needs: [plan, lint, static, unit, components, sql, browser]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e '.plan.outputs.browser as $browser | all(to_entries[];
+            .value.result == "success"
+            or (.key == "browser" and .value.result == "skipped" and $browser == "false"))' > /dev/null

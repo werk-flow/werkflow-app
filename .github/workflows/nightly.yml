@@ -1,0 +1,19 @@
+name: Nightly
+
+# Every browser group on main once a night, so a date- or data-dependent
+# failure surfaces without a change. 02:30 UTC stays clear of the runner's
+# Berlin midnight window (MIDNIGHT_START_WINDOW in lib/testing/runner/group-schedule.ts).
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    with:
+      full: Nightly run
+    secrets: inherit

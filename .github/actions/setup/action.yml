@@ -1,0 +1,29 @@
+name: Setup
+description: Bun, Node and the locked dependencies, with the Bun package cache.
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.4.4
+
+    # The app runtime and next build stay on Node (docs/technical/environments.md).
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 22
+
+    - name: Cache Bun packages
+      uses: actions/cache@v6
+      with:
+        path: ~/.bun/install/cache
+        key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+        restore-keys: bun-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # verify.ts and docs:check refuse while core.hooksPath is unset; CI never pushes, so the hook never runs.
+    - name: Point git at the repository hooks
+      shell: bash
+      run: git config core.hooksPath .githooks

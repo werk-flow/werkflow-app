@@ -1,0 +1,66 @@
+name: Local stack
+description: >-
+  Starts the Supabase CLI stack on the runner with every committed migration
+  applied, and points .env.local at it (docs/technical/environments.md, "The
+  local test stack"). The stack's keys are the CLI's shared local defaults.
+runs:
+  using: composite
+  steps:
+    - uses: supabase/setup-cli@v1
+      with:
+        version: 2.116.0
+
+    # The stack's images, saved after the first start. A key change pulls them again.
+    - name: Restore the stack images
+      id: images
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/supabase-images.tar
+        key: supabase-images-v1-2.116.0-${{ hashFiles('supabase/config.toml') }}
+
+    - name: Load the stack images
+      if: steps.images.outputs.cache-hit == 'true'
+      shell: bash
+      run: docker load --quiet --input "$RUNNER_TEMP/supabase-images.tar"
+
+    # Studio, imgproxy and postgres-meta serve people, not tests.
+    - name: Start the stack
+      shell: bash
+      run: supabase start --exclude studio,imgproxy,postgres-meta
+
+    - name: Save the stack images
+      if: steps.images.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        docker ps --filter label=com.supabase.cli.project=werkflow-app --format '{{.Image}}' \
+          | sort -u | xargs docker save --output "$RUNNER_TEMP/supabase-images.tar"
+
+    - name: Cache the stack images
+      if: steps.images.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/supabase-images.tar
+        key: ${{ steps.images.outputs.cache-primary-key }}
+
+    - name: Point .env.local at the stack
+      shell: bash
+      run: |
+        supabase status --output env > "$RUNNER_TEMP/stack.env"
+        set -a
+        . "$RUNNER_TEMP/stack.env"
+        set +a
+        otp_secret="$(openssl rand -hex 32)"
+        echo "::add-mask::$otp_secret"
+        cat > .env.local-stack-backup <<EOF
+        NEXT_PUBLIC_SUPABASE_URL=$API_URL
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY
+        SUPABASE_SECRET_KEY=$SECRET_KEY
+        NEXT_PUBLIC_SITE_URL=http://localhost:3000
+        R2_ACCOUNT_ID=local
+        R2_ACCESS_KEY_ID=$S3_PROTOCOL_ACCESS_KEY_ID
+        R2_SECRET_ACCESS_KEY=$S3_PROTOCOL_ACCESS_KEY_SECRET
+        R2_BUCKET_NAME=werkflow-documents-local
+        R2_ENDPOINT=$STORAGE_S3_URL
+        EMAIL_OTP_HASH_SECRET=$otp_secret
+        EOF
+        bun run env:local

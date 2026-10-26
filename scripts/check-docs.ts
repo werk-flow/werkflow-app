@@ -145,6 +145,9 @@ const workspaceRoot = dirname(repoRoot);
 const missingSiblings = new Set(
   SIBLING_REPOSITORIES.filter((sibling) => !existsSync(join(workspaceRoot, sibling))),
 );
+const unreadableSiblings = new Set(
+  (process.env.WERKFLOW_UNREADABLE_SIBLINGS ?? '').split(',').filter(Boolean),
+);
 const uncheckedSiblingLinks = new Map<SiblingRepository, number>();
 function pointsIntoMissingSibling(path: string): boolean {
   const sibling = siblingOfWorkspacePath(relative(workspaceRoot, path));
@@ -677,9 +680,10 @@ function isInsideApp(path: string): boolean {
 for (const sibling of SIBLING_REPOSITORIES) {
   const siblingRoot = join(workspaceRoot, sibling);
   if (missingSiblings.has(sibling)) {
-    problems.push(
-      `workspace: ../${sibling} is not present beside werkflow-app, so ${uncheckedSiblingLinks.get(sibling) ?? 0} of the app's links into it and all of its links into the app are unchecked; clone it as docs/README.md maintenance rule 7 says`,
-    );
+    const unchecked = `../${sibling} is not present beside werkflow-app, so ${uncheckedSiblingLinks.get(sibling) ?? 0} of the app's links into it and all of its links into the app are unchecked`;
+    // CI names a private sibling it has no read token for; it warns there instead of failing.
+    if (unreadableSiblings.has(sibling)) console.warn(`docs:check: ${unchecked} (no read access in CI)`);
+    else problems.push(`workspace: ${unchecked}; clone it as docs/README.md maintenance rule 7 says`);
     continue;
   }
   const listed = git(['ls-files', '--cached', '--others', '--exclude-standard', '*.md'], siblingRoot);
