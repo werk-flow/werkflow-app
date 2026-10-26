@@ -36,7 +36,8 @@ export function ProjectDetailChildJobsCard({
     <div className="rounded-lg border bg-card">
       <div className="flex items-center justify-between border-b px-4 py-3">
         <h3 className="text-sm font-semibold">
-          Aufträge in diesem Projekt <span className="text-muted-foreground">({jobs.length})</span>
+          {isAdminOrManager ? 'Aufträge in diesem Projekt' : 'Deine Aufträge in diesem Projekt'}{' '}
+          <span className="text-muted-foreground">({jobs.length})</span>
         </h3>
         {isAdminOrManager && (
           <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => onAssignJobs()}>

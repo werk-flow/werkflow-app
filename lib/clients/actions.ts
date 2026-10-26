@@ -544,8 +544,8 @@ export async function updateClientSite(
 }
 
 // Contacts and sites of one customer, for detail sections and work pickers.
-// Managers see everything; employees may load relations only for customers
-// of jobs they are assigned to (the job page needs site/contact context).
+// Manager-only: an assigned employee gets the site and contact of their own
+// job through the job reader, never the customer's full list.
 export async function getClientRelations(
   rawClientId: string,
   rawOptions?: { includeInactive?: boolean },
@@ -556,25 +556,13 @@ export async function getClientRelations(
   try {
     const auth = await authenticateAndAuthorize();
     if (!auth.success) return auth;
-    const { orgId, userId, isManagerOrAbove } = auth.context;
-
-    const admin = createSupabaseAdminClient();
+    const { orgId, isManagerOrAbove } = auth.context;
 
     if (!isManagerOrAbove) {
-      const { data: assignedJob, error: assignedJobError } = await admin
-        .from('jobs')
-        .select('id, job_assignments!inner(user_id)')
-        .eq('organization_id', orgId)
-        .eq('client_id', clientId)
-        .eq('job_assignments.user_id', userId)
-        .limit(1)
-        .maybeSingle();
-
-      if (assignedJobError) logReadFailure('getClientRelations: assigned job read failed', assignedJobError);
-      if (!assignedJob) {
-        return { success: false, error: 'not_authorized' };
-      }
+      return { success: false, error: 'not_authorized' };
     }
+
+    const admin = createSupabaseAdminClient();
 
     let contactsQuery = admin
       .from('client_contacts')

@@ -68,7 +68,7 @@ interface ProjectDetailContentProps {
 
 type ProjectDetailStateOptions = Pick<
   ProjectDetailContentProps,
-  'project' | 'client' | 'jobs' | 'isAdminOrManager' | 'instructionItems'
+  'project' | 'client' | 'jobs' | 'derivedStatus' | 'isAdminOrManager' | 'instructionItems'
 >;
 
 // Live state and Realtime wiring of the page. It stays in this file:
@@ -77,6 +77,7 @@ function useProjectDetailState({
   project,
   jobs,
   client,
+  derivedStatus,
   isAdminOrManager,
   instructionItems,
 }: ProjectDetailStateOptions) {
@@ -160,14 +161,8 @@ function useProjectDetailState({
   const inProgressCount = liveJobs.filter((j) => j.status === 'in_bearbeitung').length;
   const parkedCount = liveJobs.filter((j) => j.status === 'geparkt').length;
 
-  const liveDerivedStatus = useMemo<DerivedProjectStatus>(() => {
-    const status = getEffectiveProjectStatus(liveProject, liveJobs);
-    return {
-      status,
-      progress: calculateProjectProgress(liveJobs),
-      trafficLight: calculateTrafficLight(liveProject, liveJobs),
-    };
-  }, [liveJobs, liveProject]);
+  const serverStatus = isAdminOrManager ? null : derivedStatus;
+  const liveDerivedStatus = useLiveDerivedStatus(liveProject, liveJobs, serverStatus);
 
   return {
     liveProject,
@@ -186,14 +181,38 @@ function useProjectDetailState({
     completedCount,
     inProgressCount,
     parkedCount,
+    progressJobCounts: isAdminOrManager
+      ? { completed: completedCount, inProgress: inProgressCount, total: liveJobs.length }
+      : null,
     liveDerivedStatus,
   };
+}
+
+/**
+ * A manager's status follows the live project and jobs. An employee's job list
+ * holds only their own jobs, so the server's status, which covers every job, stays.
+ */
+function useLiveDerivedStatus(
+  liveProject: Project,
+  liveJobs: Job[],
+  serverStatus: DerivedProjectStatus | null,
+): DerivedProjectStatus {
+  return useMemo(
+    () =>
+      serverStatus ?? {
+        status: getEffectiveProjectStatus(liveProject, liveJobs),
+        progress: calculateProjectProgress(liveJobs),
+        trafficLight: calculateTrafficLight(liveProject, liveJobs),
+      },
+    [liveJobs, liveProject, serverStatus],
+  );
 }
 
 export function ProjectDetailContent({
   project,
   jobs,
   client,
+  derivedStatus,
   members,
   isAdminOrManager,
   canApproveWorkArtifacts,
@@ -226,8 +245,9 @@ export function ProjectDetailContent({
     completedCount,
     inProgressCount,
     parkedCount,
+    progressJobCounts,
     liveDerivedStatus,
-  } = useProjectDetailState({ project, jobs, client, isAdminOrManager, instructionItems });
+  } = useProjectDetailState({ project, jobs, client, derivedStatus, isAdminOrManager, instructionItems });
 
   const metadataFields = buildProjectDetailMetadataFields({
     project,
@@ -269,12 +289,7 @@ export function ProjectDetailContent({
 
           {/* Right Column: Progress + Jobs + Placeholders */}
           <div className="min-w-0 space-y-6">
-            <ProjectDetailProgressCard
-              liveDerivedStatus={liveDerivedStatus}
-              completedCount={completedCount}
-              inProgressCount={inProgressCount}
-              jobCount={liveJobs.length}
-            />
+            <ProjectDetailProgressCard liveDerivedStatus={liveDerivedStatus} jobCounts={progressJobCounts} />
 
             <ProjectDetailChildJobsCard
               jobs={liveJobs}
