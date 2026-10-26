@@ -17,8 +17,8 @@ concurrency:
 jobs:
   release:
     name: Release main
-    # The owner approves every run before the job reaches the PROD secrets, which live in this
-    # environment only: an agent starts a release when the owner asks, and the owner confirms it.
+    # The PROD secrets live in this environment only, and only main may use it. By the owner's
+    # decision it has no approval step: a run is the release the owner asked for.
     environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 45
