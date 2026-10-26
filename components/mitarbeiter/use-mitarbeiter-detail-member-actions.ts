@@ -5,19 +5,13 @@ import { useRouter } from 'next/navigation';
 
 import { updateMemberRole, removeMember, type MemberDetail } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';
-import { ROLE_LABELS } from '@/lib/roles';
+import { bueroMayManage, ROLE_LABELS } from '@/lib/roles';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getMemberActionErrorMessage, getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { untilPageLeaves, usePendingTask, useServerAction } from '@/hooks/use-server-action';
-
-const ROLE_HIERARCHY: Record<OrgRole, number> = {
-  admin: 1,
-  buero: 2,
-  employee: 3,
-};
 
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = ['buero', 'employee'];
 
@@ -61,8 +55,7 @@ export function useMitarbeiterDetailMemberActions({
   const canManage =
     !isOwnRow &&
     member.role !== 'admin' &&
-    (currentUserRole === 'admin' ||
-      (currentUserRole === 'buero' && ROLE_HIERARCHY[member.role] > ROLE_HIERARCHY['buero']));
+    (currentUserRole === 'admin' || (currentUserRole === 'buero' && bueroMayManage(member.role)));
 
   const removalBlockedMessage = useMemo(() => {
     if (personnelLoadFailed) return REMOVAL_CHECK_FAILED_MESSAGE;

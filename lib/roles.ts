@@ -23,6 +23,15 @@ export const INVITE_ROLE_OPTIONS: { value: InviteRole; label: string }[] = (
   ['buero', 'employee'] as const
 ).map((value) => ({ value, label: ROLE_LABELS[value] }));
 
+/**
+ * Whether a Büro member may change or remove a member with this role: an employee only. The
+ * check is an allow-list, so a role this build does not know, such as one a newer release added
+ * before a rollback, stays out of a Büro member's reach.
+ */
+export function bueroMayManage(role: string): boolean {
+  return role === 'employee';
+}
+
 /** Admin and Büro manage other members' records; an employee manages only their own. */
 export function isManagerRole(role: OrgRole): role is 'admin' | 'buero' {
   return role === 'admin' || role === 'buero';
