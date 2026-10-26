@@ -40,6 +40,8 @@ const world = installActionWorld({
       organization_id: ORGANIZATION_A,
       user_id: CALLER_ID,
       exit_date: null,
+      personnel_access_lifecycles: [],
+      personnel_onboarding_requirements: [],
     },
   ],
   organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' }],

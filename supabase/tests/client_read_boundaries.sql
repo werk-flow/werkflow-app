@@ -13,6 +13,8 @@
 -- any table family, although the membership, the employee record link and the
 -- assignments stay (docs/technical/security.md, "Revocation boundaries"). A
 -- prestart employee reads their onboarding state but not their Zeitkonto.
+-- Substitutes: a substitute reads through a delegation only while the holder
+-- who named them has effective access.
 begin;
 
 insert into auth.users (
@@ -423,5 +425,60 @@ select pg_temp.set_access('cb000000-0000-4000-8000-000000000007', 1, 'schedule_a
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
   'work=000 instructions=00 artifacts=000 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
   || 'zeitkonto=000 organization=00000 people=00 onboarding=1');
+
+-- Substitutes. The Büro member names the colleague as substitute for time
+-- approval (a selected holder) and for handover review (the role default).
+-- The colleague reads through both delegations until the Büro member is
+-- suspended; the delegation rows stay.
+create temporary table delegation_people as
+select
+  (select id from public.employee_records where organization_id = 'cb000000-0000-4000-8000-000000000010'
+    and user_id = 'cb000000-0000-4000-8000-000000000002') as delegator_id,
+  (select id from public.employee_records where organization_id = 'cb000000-0000-4000-8000-000000000010'
+    and user_id = 'cb000000-0000-4000-8000-000000000004') as substitute_id;
+set local session_replication_role = replica;
+update public.organization_responsibility_configurations set effective_from = now() - interval '1 day'
+where organization_id = 'cb000000-0000-4000-8000-000000000010';
+insert into public.organization_responsibility_configurations (id, organization_id, responsibility, mode) values
+('cb000000-0000-4000-8000-000000000160', 'cb000000-0000-4000-8000-000000000010', 'time_approval', 'selected');
+insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+select 'cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000160', delegator_id, 'direct'
+from delegation_people;
+insert into public.organization_responsibility_delegations (
+  organization_id, responsibility, delegator_employee_record_id, substitute_employee_record_id, valid_from, valid_until
+)
+select 'cb000000-0000-4000-8000-000000000010', responsibility::public.organization_responsibility, delegator_id,
+  substitute_id, current_date - 1, current_date + 1
+from delegation_people, (values ('time_approval'), ('work_handover_review')) as delegated(responsibility);
+set local session_replication_role = origin;
+
+create function pg_temp.visible_through_delegation() returns text language sql as $$
+  select concat_ws(' ',
+    'periods=' || (select count(*) from public.time_periods where id = 'cb000000-0000-4000-8000-000000000139'),
+    'handover=' || (select count(*) from public.work_handover_packages where id = 'cb000000-0000-4000-8000-000000000125'),
+    'configuration=' || (select count(*) from public.organization_responsibility_configurations
+      where id = 'cb000000-0000-4000-8000-000000000160')
+  );
+$$;
+grant execute on function pg_temp.visible_through_delegation() to authenticated;
+
+create function pg_temp.expect_delegated(p_expected text) returns void language plpgsql as $$
+declare actual text;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"cb000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+  execute 'set local role authenticated';
+  actual := pg_temp.visible_through_delegation();
+  execute 'reset role';
+  if actual is distinct from p_expected then
+    raise exception 'Substitute reads "%", expected "%"', actual, p_expected;
+  end if;
+end;
+$$;
+
+select pg_temp.expect_delegated('periods=1 handover=1 configuration=1');
+select pg_temp.set_access('cb000000-0000-4000-8000-000000000002', 0, 'suspend_now', clock_timestamp(),
+  'cb000000-0000-4000-8000-000000000153');
+select pg_temp.expect_delegated('periods=0 handover=0 configuration=0');
 
 rollback;

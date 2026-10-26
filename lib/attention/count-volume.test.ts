@@ -55,7 +55,14 @@ function rosterRows(): Record<string, Row[]> {
     employee_records: [
       { id: OWN_RECORD, user_id: USER, first_name: 'Erika', last_name: 'Muster', exit_date: null },
       { id: COLLEAGUE_RECORD, user_id: COLLEAGUE, first_name: 'Max', last_name: 'Muster', exit_date: null },
-    ].map(scoped),
+    ]
+      // The responsibility read embeds the access lifecycle and open access blockers as arrays.
+      .map((record) => ({
+        ...record,
+        personnel_access_lifecycles: [],
+        personnel_onboarding_requirements: [],
+      }))
+      .map(scoped),
     profiles: [
       { id: USER, first_name: 'Erika', last_name: 'Muster', email: 'erika@example.test' },
       { id: COLLEAGUE, first_name: 'Max', last_name: 'Muster', email: 'max@example.test' },

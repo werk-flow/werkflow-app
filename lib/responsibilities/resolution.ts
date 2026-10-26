@@ -11,6 +11,8 @@ export type ResponsibilityMember = {
   userId: string;
   role: OrgRole;
   active: boolean;
+  /** Operational personnel access now; a suspended, ended or prestart holder delegates nothing. */
+  hasEffectiveAccess: boolean;
 };
 
 export type ResponsibilityAssignment = {
@@ -118,6 +120,18 @@ function isDelegationEffective(delegation: ResponsibilityDelegation, businessDat
   );
 }
 
+/** The newest delegation wins; then the one that ends first; then the id, so input order never matters. */
+function compareDelegationPrecedence(
+  left: ResponsibilityDelegation,
+  right: ResponsibilityDelegation,
+): number {
+  const startComparison = right.validFrom.localeCompare(left.validFrom);
+  if (startComparison !== 0) return startComparison;
+  const endComparison = left.validUntil.localeCompare(right.validUntil);
+  if (endComparison !== 0) return endComparison;
+  return left.id.localeCompare(right.id);
+}
+
 export function resolveEffectiveResponsibility({
   responsibility,
   actionTime,
@@ -192,15 +206,11 @@ export function resolveEffectiveResponsibility({
   const effectiveDelegations = delegations
     .filter(
       (delegation) =>
-        delegation.responsibility === responsibility && isDelegationEffective(delegation, businessDate),
+        delegation.responsibility === responsibility &&
+        isDelegationEffective(delegation, businessDate) &&
+        activeMemberByRecordId.get(delegation.delegatorEmployeeRecordId)?.hasEffectiveAccess === true,
     )
-    .toSorted((left, right) => {
-      const startComparison = right.validFrom.localeCompare(left.validFrom);
-      if (startComparison !== 0) return startComparison;
-      const endComparison = left.validUntil.localeCompare(right.validUntil);
-      if (endComparison !== 0) return endComparison;
-      return left.id.localeCompare(right.id);
-    });
+    .toSorted(compareDelegationPrecedence);
 
   for (const delegation of effectiveDelegations) {
     if (holders.has(delegation.substituteEmployeeRecordId)) {
