@@ -129,6 +129,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
+        with:
+          save-images: 'true'
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
       - uses: ./.github/actions/upload-evidence
         if: failure()
@@ -154,10 +156,11 @@ jobs:
       - name: Start the test server
         run: |
           nohup bun run test:server local > "$RUNNER_TEMP/test-server.log" 2>&1 &
+          server=$!
           deadline=$((SECONDS + 900))
           until grep -q 'Serving the recorded local build' "$RUNNER_TEMP/test-server.log" \
             && curl --silent --fail --output /dev/null http://localhost:3000/login; do
-            if ! pgrep -f 'scripts/test-server.ts' > /dev/null || test $SECONDS -ge $deadline; then
+            if ! kill -0 "$server" 2> /dev/null || test $SECONDS -ge $deadline; then
               cat "$RUNNER_TEMP/test-server.log"
               exit 1
             fi

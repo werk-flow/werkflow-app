@@ -3,9 +3,19 @@ description: >-
   Starts the Supabase CLI stack on the runner with every committed migration
   applied, and points .env.local at it (docs/technical/environments.md, "The
   local test stack"). The stack's keys are the CLI's shared local defaults.
+inputs:
+  save-images:
+    description: Save the pulled images to the cache; one job per run does it.
+    default: 'false'
 runs:
   using: composite
   steps:
+    # The stack's ports (54321 to 54327) sit inside Linux's default ephemeral range, so an
+    # outgoing connection can hold one before the database binds it. Move the range above them.
+    - name: Keep outgoing connections off the stack's ports
+      shell: bash
+      run: sudo sysctl -w net.ipv4.ip_local_port_range="55000 65000"
+
     - uses: supabase/setup-cli@v1
       with:
         version: 2.116.0
@@ -29,14 +39,14 @@ runs:
       run: supabase start --exclude studio,imgproxy,postgres-meta
 
     - name: Save the stack images
-      if: steps.images.outputs.cache-hit != 'true'
+      if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
       shell: bash
       run: |
         docker ps --filter label=com.supabase.cli.project=werkflow-app --format '{{.Image}}' \
           | sort -u | xargs docker save --output "$RUNNER_TEMP/supabase-images.tar"
 
     - name: Cache the stack images
-      if: steps.images.outputs.cache-hit != 'true'
+      if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
       uses: actions/cache/save@v6
       with:
         path: ${{ runner.temp }}/supabase-images.tar

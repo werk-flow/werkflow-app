@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-25
+Status: living — last reviewed 2026-10-26
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, how worktrees share the local stack, and how to set up a new machine.
 
@@ -95,7 +95,7 @@ Between releases, migrations wait on DEV. Read the two migration ledgers before 
 
 ## Work in a worktree
 
-T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree.ts` in the background (`t3.json`). The script installs from the frozen lockfile, links the main checkout's env backups and `supabase/.temp`, and writes the worktree's own `.env.local` with `bun run env:local`. It writes `.t3/setup-running` while it works, then `.t3/setup-done` or `.t3/setup-failed` with the tail of the failing output.
+T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree.ts` in the background (`t3.json`). The script installs from the frozen lockfile, links the main checkout's env backups and the Supabase CLI's link state, and writes the worktree's own `.env.local` with `bun run env:local`. It writes `.t3/setup-running` while it works, then `.t3/setup-done` or `.t3/setup-failed` with the tail of the failing output.
 
 - Wait for `.t3/setup-done` before you run any command in a worktree. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/` run archive, because they live inside it. The main checkout serves on port 3000. A linked worktree derives its test-server port and its `bun run dev` port from its path (`workspacePorts` in `lib/testing/runner/app-port.ts`). A collision of two paths fails at the port check of the build.
