@@ -26,17 +26,18 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/supabase-images.tar
-        key: supabase-images-v1-2.116.0-${{ hashFiles('supabase/config.toml') }}
+        key: supabase-images-v2-2.116.0-${{ hashFiles('supabase/config.toml') }}
 
     - name: Load the stack images
       if: steps.images.outputs.cache-hit == 'true'
       shell: bash
       run: docker load --quiet --input "$RUNNER_TEMP/supabase-images.tar"
 
-    # Studio, imgproxy and postgres-meta serve people, not tests.
+    # Studio and imgproxy serve people, not tests. postgres-meta stays: `supabase gen types --local`
+    # runs its image, so it must be pulled with the stack and kept in the image cache.
     - name: Start the stack
       shell: bash
-      run: supabase start --exclude studio,imgproxy,postgres-meta
+      run: supabase start --exclude studio,imgproxy
 
     - name: Save the stack images
       if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
