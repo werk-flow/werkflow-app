@@ -112,7 +112,7 @@ A rule below without a named mechanism is a Tier 3 default.
 - Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
 - Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
-- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, open the PR with `gh pr create`, call `watch_pull_request` and end your turn. Babysit it ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)) until `Check` and the bots are green on the latest commit; the owner merges. Mechanism: the ruleset on `main`.
+- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)) until `Check` is green and one CodeRabbit review is clean on the latest commit; the owner merges. Mechanism: the ruleset on `main`.
 
 ## Language
 

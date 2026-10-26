@@ -10,12 +10,13 @@ The root `.coderabbit.yaml` configures the review. Its path instructions point a
 
 ### Babysit a pull request
 
-1. After `gh pr create`, and after each later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
+1. After `gh pr create`, and after a later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. Request it at most once per hour per PR, and never while its latest comment reports a rate limit: an early request restarts the limit's window. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
 2. On each wake, read what is new: the failed CI job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or the new review comments (`gh pr view <number> --comments`, the inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`).
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
 4. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)).
 5. Dismiss a false finding with a written reason in its thread: the evidence that the code is right. Resolve the thread.
-6. Stay quiet when nothing is new. Stop when `Check` and the CodeRabbit review are green on the latest commit, then call `unwatch_pull_request` and hand back: the owner merges.
+6. While the app reports a rate limit, review locally instead: `bun run review -- --committed --base-commit $(git merge-base origin/main HEAD)` covers the PR's changes. Handle each local finding like an app finding (steps 3 to 5), and list its disposition in a PR comment, since it has no thread.
+7. Stay quiet when nothing is new. The PR is ready when `Check` is green on the latest commit and either the app review or the local review of that commit is clean: every finding fixed or dismissed with a reason. Then call `unwatch_pull_request` and hand back, naming the review you used: the owner merges.
 
 Wrong turn: accepting a suggested diff verbatim. CodeRabbit sees the diff, not the product; a fix that weakens a role check or a German label to satisfy it is a regression.
 
@@ -25,7 +26,7 @@ Wrong turn: accepting a suggested diff verbatim. CodeRabbit sees the diff, not t
 
 ### Run a local pre-check
 
-`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional: the app review on the PR is the review of record.
+`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional, except while the app is rate-limited: then it replaces the app review ([step 6](#babysit-a-pull-request)).
 
 ```bash
 bun run review:doctor                                   # the binary and its authentication
