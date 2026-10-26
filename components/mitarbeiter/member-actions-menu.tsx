@@ -18,17 +18,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { removeMember } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';
-import { ROLE_LABELS } from '@/lib/roles';
+import { bueroMayManage, ROLE_LABELS } from '@/lib/roles';
 import { getMemberActionErrorMessage } from '@/lib/members/errors';
 import { MemberRemoveConfirmDialog } from './member-actions-menu-remove-dialog';
 import { loadDocument } from '@/lib/navigation/document-load';
-
-// Role hierarchy - lower number = higher rank
-const ROLE_HIERARCHY: Record<OrgRole, number> = {
-  admin: 1,
-  buero: 2,
-  employee: 3,
-};
 
 const ADMIN_ASSIGNABLE_ROLES: OrgRole[] = ['buero', 'employee'];
 
@@ -72,7 +65,7 @@ export function MemberActionsMenu({
   // Check if this is the current user's own row
   const isOwnRow = memberId === currentUserId;
 
-  const canBueroManage = currentUserRole === 'buero' && ROLE_HIERARCHY[memberRole] > ROLE_HIERARCHY['buero'];
+  const canBueroManage = currentUserRole === 'buero' && bueroMayManage(memberRole);
 
   // Admins can manage anyone except themselves
   const canAdminManage = currentUserRole === 'admin' && !isOwnRow && memberRole !== 'admin';

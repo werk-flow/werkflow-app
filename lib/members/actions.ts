@@ -13,7 +13,7 @@ import { z } from '@/lib/zod';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { Constants } from '@/lib/supabase/database.types';
-import type { OrgRole } from '@/lib/roles';
+import { bueroMayManage, type OrgRole } from '@/lib/roles';
 import { strandedResponsibilityOf, type OrganizationResponsibility } from '@/lib/responsibilities/types';
 
 const memberRoleChangeSchema = z.object({
@@ -22,14 +22,6 @@ const memberRoleChangeSchema = z.object({
 });
 // One page of member names; the callers ask for the people visible in one list.
 const profileIdsSchema = z.array(uuidSchema).max(1000);
-
-// Role hierarchy for permission checks
-// Lower number = higher rank
-const ROLE_HIERARCHY: Record<OrgRole, number> = {
-  admin: 1,
-  buero: 2,
-  employee: 3,
-};
 
 export type UpdateRoleResult = ActionResult;
 
@@ -114,10 +106,10 @@ export async function updateMemberRole(
 
     // Büro users have additional restrictions
     if (callerRole === 'buero') {
-      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['buero']) {
+      if (!bueroMayManage(targetRole)) {
         return { success: false, error: 'insufficient_permissions' };
       }
-      if (ROLE_HIERARCHY[newRole] <= ROLE_HIERARCHY['buero']) {
+      if (!bueroMayManage(newRole)) {
         return { success: false, error: 'cannot_assign_buero_role' };
       }
     }
@@ -208,9 +200,9 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
       return { success: false, error: 'cannot_remove_admin' };
     }
 
-    // Büro users can only remove users below their level
+    // Büro users can only remove employees
     if (callerRole === 'buero') {
-      if (ROLE_HIERARCHY[targetRole] <= ROLE_HIERARCHY['buero']) {
+      if (!bueroMayManage(targetRole)) {
         return { success: false, error: 'insufficient_permissions' };
       }
     }
