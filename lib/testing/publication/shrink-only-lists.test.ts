@@ -15,6 +15,8 @@ import {
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 /** The trunk every pull request merges into: the merge base with it is what the change adds to. */
 const PUBLICATION_REFS = ['origin/main'];
+/** CI sets it from the owner's `approved: list growth` label on the pull request; nobody else sets it. */
+const GROWTH_APPROVED = process.env.SHRINK_ONLY_GROWTH_APPROVED === 'true';
 
 function git(...args: string[]): string {
   return execFileSync('git', args, {
@@ -50,8 +52,13 @@ test('every registered shrink-only list is found in the working tree', () => {
 test('no shrink-only list grew since the merge base with the published preview', () => {
   const base = publicationBase();
   expect(
-    shrinkOnlyProblems((file) => committedFileText(repositoryRoot, base, file), workingTreeText),
-    `A shrink-only list may lose entries and lower ceilings, never gain or raise them (base ${base}). Fix the code instead of widening its exception.`,
+    shrinkOnlyProblems(
+      (file) => committedFileText(repositoryRoot, base, file),
+      workingTreeText,
+      SHRINK_ONLY_LISTS,
+      { growthApproved: GROWTH_APPROVED },
+    ),
+    `A shrink-only list may lose entries and lower ceilings, never gain or raise them (base ${base}). Fix the code instead of widening its exception, or ask the owner (docs/technical/testing.md, "Grow a shrink-only list").`,
   ).toEqual([]);
 });
 
@@ -114,7 +121,7 @@ test('array lists key by their identifying strings, and a setter added to an ent
   expect(growth(list, array(`'setA', 'setB'`), array(`'setA'`))).toEqual([]);
 });
 
-test('a list absent at the base starts its own baseline, and a list gone from the tree is a problem', () => {
+test('a list absent at the base starts its own baseline, a list gone from the tree is a problem, and approval waives only growth', () => {
   expect(growth(plantedRecord, '', record(`  'a.ts::load': 'one job',`))).toEqual([]);
   expect(
     shrinkOnlyProblems(
@@ -137,6 +144,31 @@ test('a list absent at the base starts its own baseline, and a list gone from th
       [plantedRecord],
     ),
   ).toEqual([]);
+  // The owner's approval waives growth, never a list that is gone.
+  const grown = record(`  'a.ts::load': 'one job',\n  'b.ts::read': 'one day',`);
+  expect(
+    shrinkOnlyProblems(
+      () => record(`  'a.ts::load': 'one job',`),
+      () => grown,
+      [plantedRecord],
+    ),
+  ).toEqual(['planted record (lib/planted.test.ts) gained "b.ts::read"']);
+  expect(
+    shrinkOnlyProblems(
+      () => record(`  'a.ts::load': 'one job',`),
+      () => grown,
+      [plantedRecord],
+      { growthApproved: true },
+    ),
+  ).toEqual([]);
+  expect(
+    shrinkOnlyProblems(
+      () => record(`  'a.ts::load': 'one job',`),
+      () => null,
+      [plantedRecord],
+      { growthApproved: true },
+    ),
+  ).toEqual(['planted record: lib/planted.test.ts no longer holds the list; update SHRINK_ONLY_LISTS']);
   // A list rewritten as a computed value is no readable list, never an empty one.
   expect(
     shrinkOnlyProblems(

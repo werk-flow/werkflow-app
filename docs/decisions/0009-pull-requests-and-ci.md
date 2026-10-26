@@ -65,3 +65,7 @@ The edit guard stays where it protects a running local verification: it refuses 
 - [testing.md](../technical/testing.md) — the CI gate and the local commands.
 - [environments.md](../technical/environments.md) — the migration rule, release and rollback.
 - [coderabbit.md](../technical/coderabbit.md) — reviews on pull requests.
+
+## Amendment 2026-10-26: the owner can approve list growth
+
+The table's ratchet row had no path for a list growth the owner approved, and the ruleset on `main` has no bypass. The owner adds the label `approved: list growth` to such a PR. CI's unit job then waives the growth, and the PR diff shows it. The owner owns the label: agents use the owner's GitHub account, so the label rule binds them only through review (Tier 3). [testing.md](../technical/testing.md#grow-a-shrink-only-list) holds the procedure.

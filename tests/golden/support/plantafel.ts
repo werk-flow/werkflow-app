@@ -475,7 +475,15 @@ export function monthDayPopover(page: Page, dateIso: string): Locator {
 }
 
 export function monthCards(scope: Locator, title?: string): Locator {
-  const cards = confirmed(scope.locator('[data-calendar-card]'));
+  return confirmed(monthCardsAsShown(scope, title));
+}
+
+/**
+ * The same cards as the month shows them, an optimistic move included: for
+ * the first-frame feedback of a drop, never for a saved result.
+ */
+export function monthCardsAsShown(scope: Locator, title?: string): Locator {
+  const cards = scope.locator('[data-calendar-card]');
   return title ? cards.filter({ hasText: title }) : cards;
 }
 
