@@ -50,7 +50,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Failure point: sql:p1-23 in report 2026-10-26T194916050Z-ee3e770d: Command exited 1; inspect .agent-logs/verification/2026-10-26T194916050Z-ee3e770d/sql-p1-23.log
 - Root cause: The shared local stack carries migration 20261026120000 from another worktree (PR #15, not on main), which makes decide_time_account_adjustment refuse its own proposer with own_proposal; p1_23_time_accounts.sql on this branch still expects the pre-#15 behavior. This branch does not touch that function.
 - Prevention: Tier 3: one local stack serves every worktree; CI's SQL job applies only this branch's migrations to a fresh stack
-- Evidence: sql-p1-23.log raises own_proposal from decide_time_account_adjustment; the local migration history lists 20261026120000, which is not in this branch. No correction on this branch and no local retry, because the stack keeps that migration; CI's SQL job is the proof.
+- Evidence: sql-p1-23.log raises own_proposal from decide_time_account_adjustment; the local migration history lists 20261026120000, which is not in this branch. No correction on this branch and no local retry, because the stack keeps that migration. Focused proof: after #15 merged and main was merged into the branch, report `2026-10-26T215309713Z-d9061392` passed sql:p1-23.
 
 ## 2026-10-26: unit:all harness failure
 

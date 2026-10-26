@@ -332,3 +332,81 @@ returns setof uuid language sql stable security definer set search_path = '' as 
     )
   );
 $$;
+
+create or replace function app_private.p1_23_time_approval_source(
+  p_organization_id uuid, p_actor_id uuid
+)
+returns text language plpgsql stable security definer set search_path = '' as $$
+declare
+  business_date date := (current_timestamp at time zone 'Europe/Berlin')::date;
+  latest_configuration_id uuid;
+  actor_record_id uuid;
+  actor_source text;
+begin
+  -- A suspended or ended person holds nothing (security.md, "Revocation boundaries").
+  if not app_private.p1_24_has_effective_access(p_organization_id, p_actor_id) then
+    return null;
+  end if;
+
+  select employee.id into actor_record_id
+  from public.employee_records employee
+  join public.organization_members member
+    on member.organization_id = employee.organization_id and member.user_id = employee.user_id
+  where employee.organization_id = p_organization_id and employee.user_id = p_actor_id
+    and (employee.exit_date is null or employee.exit_date > business_date);
+  if actor_record_id is null then return null; end if;
+
+  select configuration.id into latest_configuration_id
+  from public.organization_responsibility_configurations configuration
+  where configuration.organization_id = p_organization_id
+    and configuration.responsibility = 'time_approval'
+    and configuration.effective_from <= current_timestamp
+  order by configuration.effective_from desc, configuration.created_at desc, configuration.id desc
+  limit 1;
+
+  -- The base source of every active member of the organization.
+  with active_member as (
+    select employee.id as record_id, member.role
+    from public.employee_records employee
+    join public.organization_members member
+      on member.organization_id = employee.organization_id and member.user_id = employee.user_id
+    where employee.organization_id = p_organization_id
+      and (employee.exit_date is null or employee.exit_date > business_date)
+  ),
+  base_source as (
+    select active_member.record_id,
+      case
+        when latest_configuration_id is null then
+          case when active_member.role in ('admin', 'buero') then active_member.role::text end
+        when assignment.source = 'direct' then 'direct'
+        when assignment.source = 'role_default' then assignment.role_snapshot::text
+      end as source
+    from active_member
+    left join public.organization_responsibility_assignments assignment
+      on assignment.configuration_id = latest_configuration_id
+     and assignment.employee_record_id = active_member.record_id
+  ),
+  own_source as (
+    select base_source.source from base_source
+    where base_source.record_id = actor_record_id and base_source.source is not null
+  ),
+  inherited_source as (
+    select base_source.source
+    from public.organization_responsibility_delegations delegation
+    join base_source
+      on base_source.record_id = delegation.delegator_employee_record_id
+     and base_source.source is not null
+    where delegation.organization_id = p_organization_id
+      and delegation.responsibility = 'time_approval'
+      and delegation.substitute_employee_record_id = actor_record_id
+      and delegation.valid_from <= business_date and delegation.valid_until >= business_date
+      and (delegation.revoked_from is null or delegation.revoked_from > business_date)
+      and app_private.employee_record_has_effective_access(delegation.delegator_employee_record_id)
+    order by delegation.valid_from desc, delegation.valid_until asc, delegation.id asc
+    limit 1
+  )
+  select coalesce((select source from own_source), (select source from inherited_source))
+  into actor_source;
+  return actor_source;
+end;
+$$;
