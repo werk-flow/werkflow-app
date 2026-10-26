@@ -7,7 +7,7 @@
 // proposal and outside the caller's approval scope (a Büro member deciding for
 // another Büro member). Every other write is one function call in the caller's
 // organization, so the function's org-scoped lookup refuses the foreign id and
-// nothing changes.
+// nothing changes. Only the proposer withdraws an open request.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -110,6 +110,7 @@ const targets: Readonly<Record<string, readonly [string, string, string | typeof
   open_time_account: ['employee_records', 'p_employee_record_id', 'employee_not_found'],
   submit_time_account_adjustment: ['time_accounts', 'p_account_id', 'account_not_found'],
   decide_time_account_adjustment: ['time_account_adjustment_requests', 'p_request_id', 'request_not_found'],
+  withdraw_time_account_adjustment: ['time_account_adjustment_requests', 'p_request_id', 'request_not_found'],
   decide_time_period_finding: ['time_period_findings', 'p_finding_id', 'finding_not_found'],
   close_time_period: ['time_periods', 'p_period_id', 'period_not_found'],
   reopen_time_period: ['time_periods', 'p_period_id', 'period_not_found'],
@@ -149,7 +150,7 @@ const {
   reopenTimePeriod,
   submitTimeAccountAdjustment,
 } = await import('@/lib/time-accounts/actions');
-const { decidePeriodFinding, decideTimeAccountAdjustment } = await import(
+const { decidePeriodFinding, decideTimeAccountAdjustment, withdrawTimeAccountAdjustment } = await import(
   '@/lib/time-accounts/decision-actions'
 );
 
@@ -175,6 +176,7 @@ const forms = {
     }),
   decide: (requestId: string) =>
     form({ requestId, expectedVersion: '1', decision: 'approved', reason: 'Passt' }),
+  withdraw: (requestId: string) => form({ requestId, expectedVersion: '1' }),
   prepare: () => form({ month: '2026-10' }),
   finding: (findingId: string) => form({ findingId, periodId: foreignPeriodId, decision: 'acknowledged' }),
   period: (periodId: string) => form({ periodId }),
@@ -207,6 +209,7 @@ assert.deepEqual(await getTimeAccountAccess(), {
 });
 assert.deepEqual(await submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), forbidden);
 assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId)), forbidden);
+assert.deepEqual(await withdrawTimeAccountAdjustment(forms.withdraw(ownProposalId)), forbidden);
 assert.deepEqual(await prepareTimePeriod(forms.prepare()), forbidden);
 assert.deepEqual(await decidePeriodFinding(forms.finding(foreignFindingId)), forbidden);
 assert.deepEqual(await closeTimePeriod(forms.period(foreignPeriodId)), forbidden);
@@ -239,6 +242,20 @@ assert.deepEqual(await decidePeriodFinding(forms.finding(decidableFindingId)), {
 assert.equal(world.rpcCalls.length, 2);
 assertCallerScopedCalls(world);
 
+// Only the proposer withdraws: a colleague's request is refused before the call, the own one reaches it once.
+world.rpcCalls.length = 0;
+assert.deepEqual(await withdrawTimeAccountAdjustment(forms.withdraw(decidableRequestId)), {
+  success: false,
+  error: 'not_proposer',
+});
+assert.equal(world.rpcCalls.length, 0, 'a withdrawal by another person reached the database');
+assert.deepEqual(await withdrawTimeAccountAdjustment(forms.withdraw(ownProposalId)), { success: true });
+assert.deepEqual(
+  world.rpcCalls.map((call) => [call.name, call.args.p_actor_id]),
+  [['withdraw_time_account_adjustment', CALLER_ID]],
+);
+assertCallerScopedCalls(world);
+
 // An Admin of organization A reaches no row of organization B: each write is refused by its one call.
 signInWithRole('admin');
 for (const [write, expected] of [
@@ -254,7 +271,7 @@ for (const [write, expected] of [
   assertCallerScopedCalls(world);
 }
 
-// A decision loads its request or finding in the caller's organization first, so a foreign id never reaches the database.
+// A decision or withdrawal loads its request or finding in the caller's organization first, so a foreign id never reaches the database.
 world.rpcCalls.length = 0;
 assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId)), {
   success: false,
@@ -263,6 +280,10 @@ assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId
 assert.deepEqual(await decidePeriodFinding(forms.finding(foreignFindingId)), {
   success: false,
   error: 'finding_not_found',
+});
+assert.deepEqual(await withdrawTimeAccountAdjustment(forms.withdraw(foreignRequestId)), {
+  success: false,
+  error: 'request_not_found',
 });
 
 // A foreign period is not a closed period of the caller's organization, and a foreign export is not ready.

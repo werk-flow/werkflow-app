@@ -14,6 +14,10 @@
 --
 -- Signatures, results and grants stay as before; the decisions only refuse
 -- more.
+--
+-- 3. The proposer withdraws their own open request instead. A withdrawal is
+--    not a decision: it has its own status and event type, so the history
+--    never shows a proposer deciding their own request.
 
 -- The source of the actor's effective time-approval responsibility today:
 -- 'direct', 'admin' or 'buero', or null when the actor holds none or has no
@@ -198,3 +202,64 @@ begin
   return p_request_id;
 end;
 $$;
+
+alter type public.time_account_request_status add value if not exists 'withdrawn';
+
+-- @destructive: after release 52803322d588: widens the event types by withdrawn; that build writes only the types the new rule keeps
+alter table public.time_account_adjustment_events
+  drop constraint time_account_adjustment_events_event_type_check,
+  add constraint time_account_adjustment_events_event_type_check
+    check (event_type in ('submitted', 'approved', 'rejected', 'superseded', 'withdrawn'));
+
+-- The proposer, still an Admin or Büro member, closes their own open request
+-- without a decision. A replay of the same operation returns the request.
+create or replace function public.withdraw_time_account_adjustment(
+  p_organization_id uuid,
+  p_request_id uuid,
+  p_expected_version bigint,
+  p_reason text,
+  p_actor_id uuid,
+  p_operation_id uuid
+)
+returns uuid language plpgsql security definer set search_path = '' as $$
+declare
+  request_record public.time_account_adjustment_requests;
+  prior_request_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_organization_id::text || ':adjustment:' || p_request_id::text, 0
+  ));
+  select request_id into prior_request_id
+  from public.time_account_adjustment_events
+  where organization_id = p_organization_id and operation_id = p_operation_id;
+  if found then return prior_request_id; end if;
+  if not app_private.is_p1_23_org_manager(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into request_record from public.time_account_adjustment_requests
+  where id = p_request_id and organization_id = p_organization_id for update;
+  if request_record.id is null then raise exception 'request_not_found'; end if;
+  if request_record.requested_by <> p_actor_id then raise exception 'not_proposer'; end if;
+  if request_record.version <> p_expected_version then raise exception 'stale_version'; end if;
+  if request_record.status <> 'submitted' then raise exception 'request_not_pending'; end if;
+  if nullif(btrim(p_reason), '') is null then raise exception 'reason_required'; end if;
+  update public.time_account_adjustment_requests set
+    status = 'withdrawn',
+    version = version + 1,
+    decided_by = p_actor_id,
+    decision_reason = p_reason,
+    decided_at = clock_timestamp()
+  where id = p_request_id;
+  insert into public.time_account_adjustment_events(
+    organization_id, request_id, event_type, actor_id, operation_id, reason
+  ) values (
+    p_organization_id, p_request_id, 'withdrawn', p_actor_id, p_operation_id, p_reason
+  );
+  return p_request_id;
+end;
+$$;
+
+revoke all on function public.withdraw_time_account_adjustment(uuid, uuid, bigint, text, uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.withdraw_time_account_adjustment(uuid, uuid, bigint, text, uuid, uuid)
+  to service_role;

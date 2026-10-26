@@ -123,19 +123,22 @@ export async function readLatestFindingDecisions(
   return decisionByFinding;
 }
 
-type PendingAdjustment = Pick<
-  Tables<'time_account_adjustment_requests'>,
-  | 'id'
-  | 'employee_record_id'
-  | 'adjustment_kind'
-  | 'minutes'
-  | 'effective_date'
-  | 'reason'
-  | 'version'
-  | 'requested_by'
-> & { canApprove: boolean };
+/** An open adjustment request as the settings page lists it, before the person's name is resolved. */
+export type PendingAdjustment = {
+  id: string;
+  employeeRecordId: string;
+  kind: Tables<'time_account_adjustment_requests'>['adjustment_kind'];
+  minutes: number;
+  effectiveDate: string;
+  reason: string;
+  version: number;
+  /** Neither proposed by the caller nor outside their approval scope. */
+  canApprove: boolean;
+  /** The caller proposed it, so they may withdraw it while it is open. */
+  ownProposal: boolean;
+};
 
-/** The submitted adjustment requests, each with whether the caller may decide it. */
+/** The submitted adjustment requests, each with whether the caller may decide it or proposed it. */
 export async function readPendingAdjustments(
   admin: SupabaseAdmin,
   context: { orgId: string; userId: string },
@@ -158,7 +161,14 @@ export async function readPendingAdjustments(
     ...new Set(requests.map((request) => request.employee_record_id)),
   ]);
   return requests.map((request) => ({
-    ...request,
+    id: request.id,
+    employeeRecordId: request.employee_record_id,
+    kind: request.adjustment_kind,
+    minutes: request.minutes,
+    effectiveDate: request.effective_date,
+    reason: request.reason,
+    version: Number(request.version),
     canApprove: request.requested_by !== context.userId && decidableRecordIds.has(request.employee_record_id),
+    ownProposal: request.requested_by === context.userId,
   }));
 }

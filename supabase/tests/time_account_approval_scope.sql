@@ -1,6 +1,7 @@
--- Time-account decisions: a proposer never decides their own adjustment, and
--- the database applies the holder scope of lib/responsibilities/resolution.ts
--- (canHolderApproveTarget). One rolled-back transaction.
+-- Time-account decisions: a proposer never decides their own adjustment but
+-- may withdraw it while it is open, and the database applies the holder scope
+-- of lib/responsibilities/resolution.ts (canHolderApproveTarget). One
+-- rolled-back transaction.
 begin;
 
 insert into auth.users (
@@ -58,6 +59,20 @@ begin
     (select version from public.time_account_adjustment_requests where id = p_request_id),
     p_decision, 'Geprüft', p_actor_id, gen_random_uuid());
   raise exception 'decision refusal: %', p_label;
+exception when others then
+  if sqlerrm <> p_code then raise; end if;
+end;
+$$;
+
+create function pg_temp.expect_withdrawal_refused(
+  p_label text, p_request_id uuid, p_actor_id uuid, p_code text
+) returns void language plpgsql as $$
+begin
+  perform public.withdraw_time_account_adjustment(
+    '4e000000-0000-4000-8000-000000000010', p_request_id,
+    (select version from public.time_account_adjustment_requests where id = p_request_id),
+    'Zurückgezogen', p_actor_id, gen_random_uuid());
+  raise exception 'withdrawal refusal: %', p_label;
 exception when others then
   if sqlerrm <> p_code then raise; end if;
 end;
@@ -158,6 +173,45 @@ begin
     'not_responsible_or_self_approval');
   perform pg_temp.expect_decision_refused('the admin approves for themselves', request_id, admin, 'approved',
     'not_responsible_or_self_approval');
+end;
+$$;
+
+-- The proposer withdraws an open request without a decision; nobody else
+-- withdraws it, and a closed request stays closed.
+do $$
+declare
+  buero_one uuid := '4e000000-0000-4000-8000-000000000003';
+  buero_two uuid := '4e000000-0000-4000-8000-000000000004';
+  employee uuid := '4e000000-0000-4000-8000-000000000005';
+  employee_account_id uuid := (select id from public.time_accounts
+    where employee_record_id = pg_temp.record_of(employee));
+  balance_before integer := (select current_balance_minutes from public.time_accounts
+    where employee_record_id = pg_temp.record_of(employee));
+  withdrawn_request_id uuid;
+  decided_request_id uuid := (select request.id from public.time_account_adjustment_requests request
+    join public.time_accounts account on account.id = request.account_id
+    where account.employee_record_id = pg_temp.record_of(employee) and request.status = 'approved');
+begin
+  withdrawn_request_id := public.submit_time_account_adjustment(
+    '4e000000-0000-4000-8000-000000000010', employee_account_id,
+    (select version from public.time_accounts where id = employee_account_id),
+    'expiry', -45, '2026-10-03', 'Versehen', buero_one, gen_random_uuid(), repeat('9', 64));
+  perform pg_temp.expect_withdrawal_refused('another person withdraws', withdrawn_request_id, buero_two, 'not_proposer');
+  perform public.withdraw_time_account_adjustment(
+    '4e000000-0000-4000-8000-000000000010', withdrawn_request_id,
+    (select version from public.time_account_adjustment_requests where id = withdrawn_request_id),
+    'Zurückgezogen', buero_one, gen_random_uuid());
+  if (select status from public.time_account_adjustment_requests where id = withdrawn_request_id) <> 'withdrawn'
+    or (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> balance_before
+    or not exists (select 1 from public.time_account_adjustment_events event
+      where event.request_id = withdrawn_request_id and event.event_type = 'withdrawn' and event.actor_id = buero_one)
+    then raise exception 'the proposer could not withdraw an open request without a balance change'; end if;
+  perform pg_temp.expect_decision_refused('a withdrawn request is decided', withdrawn_request_id, buero_two, 'approved',
+    'request_not_pending');
+  perform pg_temp.expect_withdrawal_refused('a withdrawn request is withdrawn again', withdrawn_request_id, buero_one,
+    'request_not_pending');
+  perform pg_temp.expect_withdrawal_refused('a decided request is withdrawn', decided_request_id, buero_one,
+    'request_not_pending');
 end;
 $$;
 

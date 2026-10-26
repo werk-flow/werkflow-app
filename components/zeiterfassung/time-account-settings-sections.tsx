@@ -13,7 +13,10 @@ import {
 import { TimeAccountSubmitButton } from '@/components/zeiterfassung/time-account-submit-button';
 import { useTimeAccountForm } from '@/components/zeiterfassung/use-time-account-form';
 import { assignEmployeeTimePolicy, openMissingTimeAccounts } from '@/lib/time-accounts/actions';
-import { decideTimeAccountAdjustment } from '@/lib/time-accounts/decision-actions';
+import {
+  decideTimeAccountAdjustment,
+  withdrawTimeAccountAdjustment,
+} from '@/lib/time-accounts/decision-actions';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import { formatGermanDate } from '@/lib/utils';
@@ -318,6 +321,44 @@ export function MissingTimeAccountsCard({
   );
 }
 
+const AWAITING_OTHER_PERSON = 'Wartet auf die Freigabe durch eine andere Person.';
+
+/** The proposer's own open request: another person decides it, the proposer may withdraw it. */
+function OwnPendingTimeAccountAdjustment({
+  request,
+}: {
+  request: TimeAccountSettingsData['pendingAdjustments'][number];
+}) {
+  const { handleSubmit, isPending, pendingValue, error } = useTimeAccountForm({
+    action: 'withdrawAdjustment',
+    serverAction: withdrawTimeAccountAdjustment,
+    fallback: 'withdraw_failed',
+    successMessage: () => 'Der Antrag ist zurückgezogen.',
+  });
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-2"
+      aria-label={`Eigener Antrag für ${request.employeeName}`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input type="hidden" name="requestId" value={request.id} />
+        <input type="hidden" name="expectedVersion" value={request.version} />
+        <p className="text-sm text-muted-foreground">{AWAITING_OTHER_PERSON}</p>
+        <TimeAccountSubmitButton
+          variant="outline"
+          isPending={isPending}
+          pendingValue={pendingValue}
+          pendingLabel="Antrag wird zurückgezogen"
+        >
+          Zurückziehen
+        </TimeAccountSubmitButton>
+      </div>
+      <ErrorText>{error}</ErrorText>
+    </form>
+  );
+}
+
 function PendingTimeAccountAdjustment({
   request,
   canApprove,
@@ -381,8 +422,10 @@ function PendingTimeAccountAdjustment({
           </div>
           <ErrorText>{error}</ErrorText>
         </form>
+      ) : request.ownProposal ? (
+        <OwnPendingTimeAccountAdjustment request={request} />
       ) : (
-        <p className="text-sm text-muted-foreground">Wartet auf die Freigabe durch eine andere Person.</p>
+        <p className="text-sm text-muted-foreground">{AWAITING_OTHER_PERSON}</p>
       )}
     </div>
   );

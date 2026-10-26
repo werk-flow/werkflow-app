@@ -10,7 +10,12 @@ import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readTimeAccountManagement, requireAuth } from './access';
-import { readDecidableRecordIds, readLatestFindingDecisions, readPendingAdjustments } from './decision-reads';
+import {
+  type PendingAdjustment,
+  readDecidableRecordIds,
+  readLatestFindingDecisions,
+  readPendingAdjustments,
+} from './decision-reads';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
 import type {
   PayrollExportState,
@@ -139,17 +144,7 @@ export type TimeAccountSettingsData = {
     currentBalanceMinutes: number;
     version: number;
   }>;
-  pendingAdjustments: Array<{
-    id: string;
-    employeeName: string;
-    kind: 'manual_adjustment' | 'expiry' | 'payout';
-    minutes: number;
-    effectiveDate: string;
-    reason: string;
-    version: number;
-    /** Neither proposed by the caller nor outside their approval scope. */
-    canApprove: boolean;
-  }>;
+  pendingAdjustments: Array<Omit<PendingAdjustment, 'employeeRecordId'> & { employeeName: string }>;
 };
 
 // A failed read throws inside a reader and becomes `read_failed` here, so a
@@ -752,15 +747,9 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
         currentBalanceMinutes: account.current_balance_minutes,
         version: Number(account.version),
       })),
-      pendingAdjustments: pending.map((request) => ({
-        id: request.id,
-        employeeName: nameOf(request.employee_record_id),
-        kind: request.adjustment_kind,
-        minutes: request.minutes,
-        effectiveDate: request.effective_date,
-        reason: request.reason,
-        version: Number(request.version),
-        canApprove: request.canApprove,
+      pendingAdjustments: pending.map(({ employeeRecordId, ...request }) => ({
+        ...request,
+        employeeName: nameOf(employeeRecordId),
       })),
     };
   });

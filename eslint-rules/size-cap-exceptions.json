@@ -37,7 +37,6 @@
     "app/(app)/kunden/[clientId]/page.tsx": { "KundenDetailData": 85 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
-    "app/(app)/zeiterfassung/einstellungen/page.tsx": { "TimeAccountSettingsContent": 81 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 137 },
     "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
@@ -664,8 +663,8 @@
       "getTimePeriods > readRegion#1": 96,
       "getTimePeriodDetail": 132,
       "getTimePeriodDetail > readRegion#1": 121,
-      "getTimeAccountSettings": 136,
-      "getTimeAccountSettings > readRegion#1": 131
+      "getTimeAccountSettings": 130,
+      "getTimeAccountSettings > readRegion#1": 125
     },
     "lib/time-corrections/actions.ts": {
       "loadSourceContext": 128,

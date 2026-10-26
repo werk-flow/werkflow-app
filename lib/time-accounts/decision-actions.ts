@@ -16,9 +16,9 @@ import { readApprovalTargets } from './decision-reads';
 import type { TimeAccountActionResult } from './messages';
 
 // The decisions on an adjustment request and on a period finding. Four eyes:
-// the proposer of an adjustment never decides it, and a decision about a
-// person follows the caller's time-approval holder scope. The database
-// functions check both rules again.
+// the proposer of an adjustment never decides it but may withdraw it while it
+// is open, and a decision about a person follows the caller's time-approval
+// holder scope. The database functions check these rules again.
 
 const id = uuidSchema.optional();
 const text = optionalFormText;
@@ -28,6 +28,7 @@ const decideTimeAccountAdjustmentFormSchema = z.object({
   decision: text(40),
   reason: text(2000),
 });
+const withdrawTimeAccountAdjustmentFormSchema = z.object({ requestId: id, expectedVersion: text(12) });
 const decidePeriodFindingFormSchema = z.object({
   findingId: id,
   periodId: id,
@@ -178,5 +179,54 @@ export async function decidePeriodFinding(
       ),
     };
   revalidatePath(`/zeiterfassung/perioden/${periodId}`);
+  return { success: true };
+}
+
+/** Stored as the reason of a withdrawal; the proposer types none. */
+const WITHDRAWAL_REASON = 'Zurückgezogen';
+
+export async function withdrawTimeAccountAdjustment(
+  formInput: FormData,
+): Promise<TimeAccountActionResult<'withdrawAdjustment'>> {
+  const formData = parseFormData(formInput, withdrawTimeAccountAdjustmentFormSchema);
+  if (!formData) return { success: false, error: 'invalid_input' };
+  const context = await requireAuth();
+  if (context.role !== 'admin' && context.role !== 'buero') return { success: false, error: 'forbidden' };
+  const requestId = String(formData.get('requestId') ?? '');
+  const expectedVersion = parseStrictInteger(formData.get('expectedVersion'));
+  if (!requestId || expectedVersion === null) return { success: false, error: 'invalid_input' };
+  const admin = createSupabaseAdminClient();
+  const { data: request, error: requestError } = await admin
+    .from('time_account_adjustment_requests')
+    .select('requested_by')
+    .eq('organization_id', context.orgId)
+    .eq('id', requestId)
+    .maybeSingle();
+  if (requestError) {
+    logError('withdrawTimeAccountAdjustment: request read failed', requestError);
+    return { success: false, error: 'withdraw_failed' };
+  }
+  if (!request) return { success: false, error: 'request_not_found' };
+  if (request.requested_by !== context.userId) return { success: false, error: 'not_proposer' };
+  const { error } = await admin.rpc('withdraw_time_account_adjustment', {
+    p_organization_id: context.orgId,
+    p_request_id: requestId,
+    p_expected_version: expectedVersion,
+    p_reason: WITHDRAWAL_REASON,
+    p_actor_id: context.userId,
+    p_operation_id: randomUUID(),
+  });
+  if (error)
+    return {
+      success: false,
+      error: failureCode(
+        'withdrawAdjustment',
+        'withdraw_failed',
+        'withdrawTimeAccountAdjustment: withdraw_time_account_adjustment failed',
+        error,
+      ),
+    };
+  revalidatePath('/zeiterfassung/einstellungen');
+  revalidatePath('/einstellungen/zeiterfassung');
   return { success: true };
 }
