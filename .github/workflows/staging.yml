@@ -19,6 +19,8 @@ concurrency:
 jobs:
   migrate:
     name: Migrate DEV
+    # A manual run from another branch would push that branch's migrations to DEV.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -39,11 +41,40 @@ jobs:
     name: Deploy staging
     needs: migrate
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 25
     steps:
-      # The hook builds the head of main as a preview with the pre-production (DEV)
-      # variables and moves the branch alias of main, the stable staging URL.
+      # The hook builds the head of main. While a newer commit's run is queued behind this one,
+      # its migrations have not run yet, so only the run whose commit is still the head deploys.
+      - name: Check that this commit is still the head of main
+        id: head
+        run: |
+          head="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}" refs/heads/main | cut -f1)"
+          if test "$head" = "$GITHUB_SHA"; then echo "current=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::main moved to ${head}; its own run deploys it after its migrations."; fi
+
+      # The hook builds main as a preview with the pre-production (DEV) variables and moves the
+      # branch alias of main, the stable staging URL.
       - name: Trigger the deploy hook
+        if: steps.head.outputs.current == 'true'
         env:
           HOOK: ${{ secrets.VERCEL_STAGING_DEPLOY_HOOK }}
         run: curl --fail --silent --show-error --request POST "$HOOK" > /dev/null
+
+      - name: Wait for the staging build
+        if: steps.head.outputs.current == 'true'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN&limit=20"
+          deadline=$((SECONDS + 1200))
+          while :; do
+            state="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?${query}" \
+              | jq -r --arg sha "$GITHUB_SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha and .meta.githubCommitRef == "main")][0].state // empty')"
+            case "$state" in
+              READY) echo "Staging serves ${GITHUB_SHA}."; exit 0 ;;
+              ERROR | CANCELED) echo "::error::The staging build of ${GITHUB_SHA} ended ${state}."; exit 1 ;;
+            esac
+            test $SECONDS -lt $deadline || { echo "::error::No ready staging build of ${GITHUB_SHA} after 20 minutes."; exit 1; }
+            sleep 15
+          done

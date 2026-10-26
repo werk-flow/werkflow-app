@@ -17,6 +17,9 @@ concurrency:
 jobs:
   release:
     name: Release main
+    # The owner approves every run before the job reaches the PROD secrets, which live in this
+    # environment only: an agent starts a release when the owner asks, and the owner confirms it.
+    environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -62,27 +65,37 @@ jobs:
         run: supabase functions deploy --project-ref jbgaqpdjauzoocplgdsn
 
       - name: Advance production
-        run: git push origin "${{ steps.candidate.outputs.sha }}:refs/heads/production"
+        env:
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: git push origin "${SHA}:refs/heads/production"
 
       # Vercel builds production from the production branch. After an Instant Rollback it
       # stops assigning the domain to new production builds, so the release promotes explicitly.
+      # A failed build gets one redeploy: a rerun of this workflow pushes the same commit, which
+      # starts no new build, and lands here too.
       - name: Promote the production build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SHA: ${{ steps.candidate.outputs.sha }}
         run: |
           query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN&target=production&limit=20"
-          deadline=$((SECONDS + 1500))
+          vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
+          deadline=$((SECONDS + 1800))
+          redeployed=false
           while :; do
             deployment="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" \
               "https://api.vercel.com/v6/deployments?${query}" \
               | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0] // empty | "\(.uid) \(.state)"')"
             case "${deployment#* }" in
               READY) break ;;
-              ERROR | CANCELED) echo "::error::Production build ${deployment}"; exit 1 ;;
+              ERROR | CANCELED)
+                if $redeployed; then echo "::error::The production build of ${SHA} failed twice: ${deployment}"; exit 1; fi
+                echo "::warning::Production build ${deployment}; redeploying it once."
+                vercel redeploy "${deployment%% *}" --target production --no-wait
+                redeployed=true ;;
             esac
-            test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 25 minutes."; exit 1; }
+            test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 30 minutes."; exit 1; }
             sleep 15
           done
-          npx --yes vercel@65 promote "${deployment%% *}" --yes --scope werkflows-projects --token "$VERCEL_TOKEN"
+          vercel promote "${deployment%% *}" --yes
           echo "Production serves ${SHA} (${deployment%% *})."

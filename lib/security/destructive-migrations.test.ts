@@ -35,7 +35,6 @@ const DESTRUCTIVE_STATEMENTS: readonly RegExp[] = [
 
 /** What older code may not survive, checked from RELEASE_MARKER_AFTER on. A revoke on a function is a new function's default-grant revoke. */
 const COMPATIBILITY_STATEMENTS: readonly RegExp[] = [
-  /\balter\s+column\s+\S+\s+set\s+not\s+null\b/,
   /^alter\s+type\b.*\brename\s+value\b/,
   /^alter\s+policy\b/,
   /^revoke\b(?!.*\bon\s+(?:all\s+)?functions?\b)/,
@@ -45,10 +44,14 @@ const COMPATIBILITY_STATEMENTS: readonly RegExp[] = [
 const TIGHTENING_STATEMENTS: readonly RegExp[] = [
   /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\badd\s+(?:constraint\s+\S+\s+)?(?:check|unique|foreign\s+key|primary\s+key|exclude)\b/,
   /^create\s+unique\s+index\b.*?\bon\s+(?:only\s+)?([\w."]+)/,
+  /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\balter\s+column\s+\S+\s+set\s+not\s+null\b/,
+  /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\b(?:enable|force)\s+row\s+level\s+security\b/,
 ];
-const NEW_REQUIRED_COLUMN =
-  /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)\b.*\badd\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?\S+\s+[^,]*?\bnot\s+null\b(?![^,]*\b(?:default|generated)\b)/;
-const CREATED_TABLE = /^create\s+table\s+(?:if\s+not\s+exists\s+)?([\w."]+)/;
+const ALTERED_TABLE = /^alter\s+table\s+(?:only\s+)?(?:if\s+exists\s+)?([\w."]+)/;
+/** One added column's definition, up to the next comma of the statement. */
+const ADDED_COLUMN = /\badd\s+(?:column\s+)?(?:if\s+not\s+exists\s+)?[^,]+/g;
+/** Only a plain CREATE TABLE proves the table is new: IF NOT EXISTS may meet an existing one. */
+const CREATED_TABLE = /^create\s+table\s+(?!if\s+not\s+exists\b)([\w."]+)/;
 
 const MARKER = /--\s*@destructive:\s*(\S.{9,})$/m;
 const RELEASE_MARKER = /--\s*@destructive:\s*after release [0-9a-f]{7,40}:\s*(\S.{9,})$/m;
@@ -140,6 +143,15 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
     const name = pattern.exec(text)?.[1];
     return name !== undefined && !created.has(tableName(name));
   };
+  // A new NOT NULL column without a default, in either order of its clauses, on a table that existed.
+  const addsRequiredColumn = (text: string): boolean =>
+    onExistingTable(ALTERED_TABLE, text) &&
+    (text.match(ADDED_COLUMN) ?? []).some(
+      (column) =>
+        /\bnot\s+null\b/.test(column) &&
+        !/\b(?:default|generated)\b/.test(column) &&
+        !/^add\s+(?:constraint|check|unique|primary|foreign|exclude)\b/.test(column),
+    );
   return statements
     .filter(
       (statement) =>
@@ -147,7 +159,7 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
         (releaseRule &&
           (COMPATIBILITY_STATEMENTS.some((pattern) => pattern.test(statement.text)) ||
             TIGHTENING_STATEMENTS.some((pattern) => onExistingTable(pattern, statement.text)) ||
-            onExistingTable(NEW_REQUIRED_COLUMN, statement.text))),
+            addsRequiredColumn(statement.text))),
     )
     .filter((statement) => !marker.test(statement.leadingComments))
     .map((statement) => `${statement.line}: ${statement.text.slice(0, 100)}`);
@@ -209,6 +221,12 @@ describe('destructive migration statements', () => {
       'alter policy jobs_read on public.jobs using (false);',
       'alter table public.fresh add column note text not null;',
       'revoke all on function public.fresh_helper(uuid) from public, anon;',
+      'alter table public.jobs add column rank integer default 0 not null;',
+      'alter table public.fresh alter column name set not null;',
+      'alter table public.fresh enable row level security;',
+      'alter table public.jobs enable row level security;',
+      'create table if not exists public.jobs (id uuid primary key);',
+      'create unique index jobs_id_key on public.jobs (id);',
     ].join('\n');
     expect(unmarkedDestructiveStatements(planted, true)).toEqual([
       "4: alter table public.jobs add constraint jobs_title_check check (title <> 'text' )",
@@ -218,6 +236,8 @@ describe('destructive migration statements', () => {
       "9: alter type public.job_status rename value 'text' to 'text'",
       '10: revoke select on public.jobs from authenticated',
       '11: alter policy jobs_read on public.jobs using (false)',
+      '17: alter table public.jobs enable row level security',
+      '19: create unique index jobs_id_key on public.jobs (id)',
     ]);
   });
 
