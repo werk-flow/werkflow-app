@@ -58,6 +58,7 @@ import {
   jobPopover,
   mondayOf,
   monthCards,
+  monthCardsAsShown,
   monthCell,
   monthDay,
   monthDayPopover,
@@ -582,9 +583,10 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
       monthCards(monthDay(adminPage, monday), movedVisit.title),
       monthCell(adminPage, moveDay),
     );
-    await expect(monthCards(monthDay(adminPage, moveDay), movedVisit.title)).toBeVisible({
+    await expect(monthCardsAsShown(monthDay(adminPage, moveDay), movedVisit.title)).toBeVisible({
       timeout: 1_000,
     });
+    await expect(monthCards(monthDay(adminPage, moveDay), movedVisit.title)).toBeVisible();
     await expect(calendarBanner(adminPage, 'moved')).toBeVisible();
     await closeBanners(adminPage);
     await expect

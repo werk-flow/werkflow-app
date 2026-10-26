@@ -43,6 +43,10 @@ Write each test at its boundary while you build the behavior, and run the narrow
 1. Push the branch and open the PR with `gh pr create`; fill in `.github/pull_request_template.md`.
 2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until `Check` and the review are green on the latest commit. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
 
+### Grow a shrink-only list
+
+CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Once approved, open a PR that names the added entries and ask the owner to add the label `approved: list growth`; CI then waives the growth. Never add the label yourself; it covers the whole PR.
+
 ## What browser tests are for
 
 Browser groups are a rough check that the user flows in the [catalog](../product/user-flow-catalog.md) and the golden journeys still work.

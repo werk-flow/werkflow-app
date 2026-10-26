@@ -46,6 +46,11 @@ export const PENDING_STATE_LOCATORS: readonly { file: string; name: string; reas
     reason: 'a board card with its optimistic placement, for the first frame after a drop',
   },
   {
+    file: 'tests/golden/support/plantafel.ts',
+    name: 'monthCardsAsShown',
+    reason: 'month cards with an optimistic move, for the first frame after a drop',
+  },
+  {
     file: 'tests/golden/support/steps/work.ts',
     name: 'jobInstructionRowAsShown',
     reason: 'a checklist row while a move or toggle on it is pending, for the first-frame feedback',
