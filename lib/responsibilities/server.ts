@@ -1,12 +1,13 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import 'server-only';
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { logReadFailure, memoizeRequestRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { getMembershipAccessMode } from '@/lib/personnel/lifecycle';
 import {
   canHolderApproveTarget,
   getResponsibilitiesStrandedByEmployeeRemoval,
@@ -71,6 +72,7 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
   ): Promise<ResponsibilityRuntimeState | null> {
     const admin = createSupabaseAdminClient();
     const businessDate = getBusinessTodayIso();
+    const now = Date.now();
     const [
       configurationsResult,
       assignmentsResult,
@@ -111,16 +113,7 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
             .range(from, to),
         LIST_ROW_CAP,
       ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('employee_records')
-            .select('id, user_id, first_name, last_name, exit_date')
-            .eq('organization_id', organizationId)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
+      readEmployeeRecordsWithAccess(admin, organizationId),
       readCompleteRows(
         (from, to) =>
           admin
@@ -176,6 +169,7 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
         userId: record.user_id,
         role,
         active: isActive,
+        hasEffectiveAccess: hasOperationalAccess(record, now),
       });
       if (isActive) {
         people.push({
@@ -222,6 +216,50 @@ export const loadResponsibilityRuntimeState = memoizeRequestRead(
   },
   { outsideRequest: 'fresh' },
 );
+
+/** Employee records with their access lifecycle and, at most, one open access blocker. */
+function readEmployeeRecordsWithAccess(admin: AdminClient, organizationId: string) {
+  return readCompleteRows(
+    (from, to) =>
+      admin
+        .from('employee_records')
+        .select(
+          `id, user_id, first_name, last_name, exit_date,
+          personnel_access_lifecycles!personnel_access_lifecycles_employee_org_fkey (state, scheduled_state, scheduled_for),
+          personnel_onboarding_requirements!personnel_onboarding_requirements_employee_org_fkey (id)`,
+        )
+        .eq('organization_id', organizationId)
+        // Only the existence of an open access blocker matters (getMembershipAccessMode).
+        .eq('personnel_onboarding_requirements.blocks_access', true)
+        .not('personnel_onboarding_requirements.state', 'in', '(fulfilled,waived,cancelled)')
+        .limit(1, { referencedTable: 'personnel_onboarding_requirements' })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+}
+
+type EmployeeAccessRow = {
+  personnel_access_lifecycles: Pick<
+    Tables<'personnel_access_lifecycles'>,
+    'state' | 'scheduled_state' | 'scheduled_for'
+  >[];
+  personnel_onboarding_requirements: Pick<Tables<'personnel_onboarding_requirements'>, 'id'>[];
+};
+
+/** Operational access now, the rule of app_private.p1_24_has_effective_access. */
+function hasOperationalAccess(record: EmployeeAccessRow, now: number): boolean {
+  const lifecycle = record.personnel_access_lifecycles[0];
+  const accessLifecycle = lifecycle
+    ? {
+        state: lifecycle.state,
+        scheduledState: lifecycle.scheduled_state,
+        scheduledFor: lifecycle.scheduled_for,
+      }
+    : null;
+  const hasAccessBlocker = record.personnel_onboarding_requirements.length > 0;
+  return getMembershipAccessMode({ hasAccessBlocker, accessLifecycle }, now) === 'operational';
+}
 
 function toResponsibilityDelegation(
   delegation: Tables<'organization_responsibility_delegations'>,

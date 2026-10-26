@@ -245,6 +245,15 @@ begin
   perform pg_temp.expect_approval('the newest delegation, from the Admin, counts', employee,
     pg_temp.record_of(buero_two), true);
 
+  -- A delegator without effective access delegates nothing: the older Büro
+  -- delegation counts again, as resolveEffectiveResponsibility filters it.
+  insert into public.personnel_access_lifecycles (organization_id, employee_record_id, state, state_effective_at)
+  values ('4e000000-0000-4000-8000-000000000010', pg_temp.record_of(admin), 'suspended', now());
+  perform pg_temp.expect_approval('a suspended Admin''s substitute decides büro', employee,
+    pg_temp.record_of(buero_two), false);
+  perform pg_temp.expect_approval('the Büro delegation still decides an employee', employee,
+    '4e000000-0000-4000-8000-000000000020', true);
+  delete from public.personnel_access_lifecycles where employee_record_id = pg_temp.record_of(admin);
 end;
 $$;
 

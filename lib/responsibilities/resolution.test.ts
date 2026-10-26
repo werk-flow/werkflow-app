@@ -16,18 +16,21 @@ const members: ResponsibilityMember[] = [
     userId: 'admin-user',
     role: 'admin',
     active: true,
+    hasEffectiveAccess: true,
   },
   {
     employeeRecordId: 'buero-record',
     userId: 'buero-user',
     role: 'buero',
     active: true,
+    hasEffectiveAccess: true,
   },
   {
     employeeRecordId: 'employee-record',
     userId: 'employee-user',
     role: 'employee',
     active: true,
+    hasEffectiveAccess: true,
   },
 ];
 
@@ -177,6 +180,33 @@ describe('resolveEffectiveResponsibility', () => {
     expect(delegate?.source.kind).toBe('delegation');
     expect(delegate ? canHolderApproveTarget(delegate, 'someone', 'buero') : true).toBe(false);
     expect(delegate ? canHolderApproveTarget(delegate, 'someone', 'employee') : false).toBe(true);
+  });
+
+  test('a suspended, ended or prestart delegator hands no scope to their substitute', () => {
+    const delegation: ResponsibilityDelegation = {
+      id: 'delegation',
+      responsibility: 'time_approval',
+      delegatorEmployeeRecordId: 'buero-record',
+      substituteEmployeeRecordId: 'employee-record',
+      validFrom: '2026-08-10',
+      validUntil: '2026-08-12',
+      revokedFrom: null,
+    };
+    const result = resolveEffectiveResponsibility({
+      responsibility: 'time_approval',
+      actionTime: '2026-08-10T10:00:00.000Z',
+      businessDate: '2026-08-10',
+      members: members.map((member) =>
+        member.employeeRecordId === 'buero-record' ? { ...member, hasEffectiveAccess: false } : member,
+      ),
+      configurations: [directConfiguration],
+      delegations: [delegation],
+    });
+
+    expect(result.holders.map((holder) => holder.employeeRecordId)).toEqual(['buero-record']);
+    expect(
+      resolveWithDelegation('2026-08-10', delegation).holders.map((holder) => holder.employeeRecordId),
+    ).toEqual(['buero-record', 'employee-record']);
   });
 
   test('resolves overlapping anomalous delegations independently of input order', () => {

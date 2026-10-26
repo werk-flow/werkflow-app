@@ -629,8 +629,8 @@
       "loadCertificationExpiryNotifications": 127
     },
     "lib/responsibilities/actions.ts": { "previewResponsibilityConfiguration": 90 },
-    "lib/responsibilities/resolution.ts": { "resolveEffectiveResponsibility": 106 },
-    "lib/responsibilities/server.ts": { "loadResponsibilityRuntimeState": 144 },
+    "lib/responsibilities/resolution.ts": { "resolveEffectiveResponsibility": 102 },
+    "lib/responsibilities/server.ts": { "loadResponsibilityRuntimeState": 137 },
     "lib/service-cases/actions.ts": { "loadClientOption": 113, "getServiceCaseDetailByNumber": 115 },
     "lib/service-cases/list-page-server.ts": { "hydrateListItems": 126 },
     "lib/settings/email-change-state.ts": { "getInitialEmailChangeWizardState": 83 },
