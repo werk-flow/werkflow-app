@@ -1,5 +1,5 @@
 /** The branch `check:changed` compares with: the merge base of HEAD and this ref. */
-export const CHANGED_CHECK_BASE = 'origin/partner-preview';
+export const CHANGED_CHECK_BASE = 'origin/main';
 
 const FORMATTED = /\.(?:ts|tsx|mjs|js|cjs|json|jsonc|css)$/;
 const LINTED = /\.(?:ts|tsx|mjs|js|cjs)$/;

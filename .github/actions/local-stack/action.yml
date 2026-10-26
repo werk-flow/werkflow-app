@@ -26,17 +26,36 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/supabase-images.tar
-        key: supabase-images-v1-2.116.0-${{ hashFiles('supabase/config.toml') }}
+        key: supabase-images-v3-ghcr-2.116.0-${{ hashFiles('supabase/config.toml') }}
 
     - name: Load the stack images
       if: steps.images.outputs.cache-hit == 'true'
       shell: bash
       run: docker load --quiet --input "$RUNNER_TEMP/supabase-images.tar"
 
-    # Studio, imgproxy and postgres-meta serve people, not tests.
+    # Studio and imgproxy serve people, not tests. postgres-meta stays: `supabase gen types --local`
+    # runs its image, so it must be pulled with the stack and kept in the image cache. Every image
+    # comes from GitHub's registry: public ECR rate-limits anonymous pulls, and the CLI then falls
+    # back to GHCR for some images only. The variable is set on the CLI commands alone, because the
+    # build identity fingerprints every SUPABASE_ variable the test runner sees.
     - name: Start the stack
       shell: bash
-      run: supabase start --exclude studio,imgproxy,postgres-meta
+      env:
+        SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+      run: supabase start --exclude studio,imgproxy
+
+    # A fresh runner's edge runtime boots its functions after the stack reports ready, and the
+    # test server's preflight gives it only three attempts. Wait, bounded, for the same answer
+    # the preflight wants: 204 to an OPTIONS request of send-invite-email.
+    - name: Wait for the edge-function runtime
+      shell: bash
+      run: |
+        deadline=$((SECONDS + 180))
+        until test "$(curl --silent --output /dev/null --write-out '%{http_code}' --request OPTIONS \
+          http://127.0.0.1:54321/functions/v1/send-invite-email)" = 204; do
+          test $SECONDS -lt $deadline || { echo "::error::The edge runtime did not answer 204 within 180 s."; exit 1; }
+          sleep 3
+        done
 
     - name: Save the stack images
       if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'

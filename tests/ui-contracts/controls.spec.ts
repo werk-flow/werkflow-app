@@ -398,7 +398,9 @@ test('single choice supports keyboard filtering, selection, none and focus resto
   await expect(trigger).not.toHaveAttribute('aria-controls');
   await expect(section.getByRole('status', { name: 'Gewählte Person' })).toHaveText('bernd');
   await trigger.click();
+  await expect(search).toBeFocused();
   await search.press('ArrowDown');
+  await expect(list.getByRole('option', { name: 'Keine Auswahl' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(section.getByRole('status', { name: 'Gewählte Person' })).toHaveText('Keine');
 });

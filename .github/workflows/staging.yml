@@ -1,0 +1,71 @@
+name: Staging
+
+# A merge to main reaches staging in this order: DEV's schema first, then the
+# app (docs/technical/environments.md, "The migration rule"). vercel.json turns
+# off Git deployments of main, and this workflow deploys the exact commit whose
+# migrations it applied, so staging never runs code ahead of its schema;
+# pull-request previews stay automatic.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate DEV
+    # A manual run from another branch would push that branch's migrations to DEV.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: supabase db push --db-url "$DATABASE_URL"
+      - name: Deploy the edge functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref mbkkzuqjbdvzelqvuzcn
+
+  deploy:
+    name: Deploy staging
+    needs: migrate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      # A Git-source deployment of this commit, not of the branch head: a newer commit on main
+      # waits for its own run's migrations. Vercel builds it as a preview with the pre-production
+      # (DEV) variables and moves the branch alias of main, the stable staging URL, when it is ready.
+      - name: Deploy this commit to staging
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          team="teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN"
+          body="$(jq -n --arg sha "$GITHUB_SHA" --argjson repo "$GITHUB_REPOSITORY_ID" '{name: "werkflow-app",
+            project: "prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R",
+            gitSource: {type: "github", repoId: $repo, ref: "main", sha: $sha}}')"
+          id="$(api -X POST -H "Content-Type: application/json" --data "$body" \
+            "https://api.vercel.com/v13/deployments?${team}" | jq -r .id)"
+          echo "Staging deployment ${id} of ${GITHUB_SHA}."
+          deadline=$((SECONDS + 1200))
+          while :; do
+            state="$(api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
+            case "$state" in
+              READY) echo "Staging serves ${GITHUB_SHA}."; exit 0 ;;
+              ERROR | CANCELED) echo "::error::The staging build ${id} ended ${state}."; exit 1 ;;
+            esac
+            test $SECONDS -lt $deadline || { echo "::error::Staging build ${id} not ready after 20 minutes."; exit 1; }
+            sleep 15
+          done

@@ -132,6 +132,11 @@ jobs:
         with:
           save-images: 'true'
       - run: bun scripts/verify.ts run --group "${{ needs.plan.outputs.sql }}"
+      # The committed types match every committed migration (docs/technical/environments.md, "The migration rule").
+      - name: Check the generated types
+        env:
+          SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
+        run: bun run types:check -- --local
       - uses: ./.github/actions/upload-evidence
         if: failure()
         with:
