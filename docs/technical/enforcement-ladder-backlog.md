@@ -8,6 +8,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
+| Long unbroken names on phones | Every audit-world surname ends in the 32-character run id (`planTestWorld` in `lib/testing/seed-world-plan.ts`). A name without `break-words` or `min-w-0` overflows at 375 px only when that run's id renders wide, so `audit:layout` and the audit overflow checks catch it on some runs and pass on others. | Tier 2: give every world name a fixed worst-case unbroken part, so each run probes the widest name and a missing wrap fails every time. |
 | States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
 
 ## Performance and immediate feedback

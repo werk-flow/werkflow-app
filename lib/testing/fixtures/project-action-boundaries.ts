@@ -1,6 +1,7 @@
 // Actual Projekt actions over the in-memory database: only managers write,
-// a field worker reads a project only through an assigned job, and a project
-// of another organization is unreachable by id and by number.
+// a field worker reads a project only through an assigned job and sees only
+// their own jobs and the field facts of its customer, and a project of another
+// organization is unreachable by id and by number.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -18,6 +19,7 @@ const clientId = '70000000-0000-4000-8000-000000000001';
 const secondClientId = '70000000-0000-4000-8000-000000000002';
 const foreignClientId = '70000000-0000-4000-8000-000000000009';
 const siteId = '80000000-0000-4000-8000-000000000001';
+const colleagueId = '30000000-0000-4000-8000-000000000021';
 const now = '2026-10-01T08:00:00.000Z';
 
 const projectRow = (
@@ -69,11 +71,17 @@ const world = installActionWorld(
       projectRow(foreignProjectId, ORGANIZATION_B, 'P-2026-900', { client_id: foreignClientId }),
     ],
     clients: [
+      // Every office-only field carries a value, so a projection that lets one through fails below.
       {
         id: clientId,
         organization_id: ORGANIZATION_A,
         name: 'Bestandskunde',
         client_type: 'privat',
+        customer_number: 'K-2001',
+        email: 'bestand@example.test',
+        phone: '+49 30 9876',
+        address: 'Rechnungsweg 3, 10115 Berlin',
+        notes: 'Zahlt spät',
         created_at: now,
         updated_at: now,
       },
@@ -98,12 +106,27 @@ const world = installActionWorld(
     client_contacts: [],
     jobs: [
       jobRow('job-in-project', ORGANIZATION_A, projectId, clientId),
+      // A finished sibling job of a colleague: it counts in the project's status, never in the field worker's list.
+      { ...jobRow('sibling-in-project', ORGANIZATION_A, projectId, clientId), status: 'fertig' },
       jobRow('job-elsewhere', ORGANIZATION_A, unassignedProjectId, clientId),
       jobRow('job-foreign', ORGANIZATION_B, foreignProjectId, foreignClientId),
     ],
     // The in-memory database has no joins: the embedded filter column of the
     // access check (`jobs.project_id`) is stored on the assignment row itself.
-    job_assignments: [{ user_id: CALLER_ID, job_id: 'job-in-project', 'jobs.project_id': projectId }],
+    job_assignments: [
+      {
+        organization_id: ORGANIZATION_A,
+        user_id: CALLER_ID,
+        job_id: 'job-in-project',
+        'jobs.project_id': projectId,
+      },
+      {
+        organization_id: ORGANIZATION_A,
+        user_id: colleagueId,
+        job_id: 'sibling-in-project',
+        'jobs.project_id': projectId,
+      },
+    ],
   },
   { projects: () => ({ created_at: now, updated_at: now }) },
 );
@@ -142,14 +165,31 @@ assert.deepEqual(await actions.updateProject(projectId, { name: 'Neu' }), {
 assert.deepEqual(await actions.deleteProject(projectId), { success: false, error: 'not_authorized' });
 assert.equal(world.adminClientRequests, 0);
 
-// A field worker reads a project only when one of its jobs is assigned to them.
+// A field worker reads a project only when one of its jobs is assigned to them,
+// and then sees only their own jobs: the sibling job stays out of the list but
+// counts in the project's derived status.
 const assignedDetails = await actions.getProjectDetails(projectId);
 assert.ok(assignedDetails.success);
 assert.deepEqual(
   assignedDetails.details.jobs.map((job) => job.id),
   ['job-in-project'],
 );
-assert.equal(assignedDetails.details.client?.id, clientId);
+assert.equal(assignedDetails.details.derivedStatus.progress, 50);
+assert.deepEqual(await actions.getProjectByNumber(encodeURIComponent('P/2026 001')), assignedDetails);
+// The customer comes in its field projection: name and phone, no customer record.
+assert.deepEqual(assignedDetails.details.client, {
+  id: clientId,
+  organizationId: ORGANIZATION_A,
+  name: 'Bestandskunde',
+  clientType: 'privat',
+  customerNumber: null,
+  email: null,
+  phone: '+49 30 9876',
+  address: null,
+  notes: null,
+  createdAt: now,
+  updatedAt: now,
+});
 assert.deepEqual(await actions.getProjectDetails(unassignedProjectId), {
   success: false,
   error: 'not_authorized',
@@ -165,6 +205,13 @@ signInAs(world, 'buero');
 const byNumber = await actions.getProjectByNumber(encodeURIComponent('P/2026 001'));
 assert.ok(byNumber.success);
 assert.equal(byNumber.details.project.id, projectId);
+// A manager sees every job and the full customer record.
+assert.deepEqual(
+  byNumber.details.jobs.map((job) => job.id),
+  ['job-in-project', 'sibling-in-project'],
+);
+assert.equal(byNumber.details.derivedStatus.progress, 50);
+assert.equal(byNumber.details.client?.notes, 'Zahlt spät');
 assert.deepEqual(await actions.getProjectDetails(foreignProjectId), {
   success: false,
   error: 'project_not_found',

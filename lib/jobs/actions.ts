@@ -38,6 +38,7 @@ import {
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
 import { loadJobDetailRelations, readJobVisitPlan, refuseScheduleOfSeveralVisits } from './job-detail-reads';
+import { projectFieldJobDetails } from './field-work-pack';
 import type { JobVisitPlan } from './visit-schedule';
 import { logError } from '@/lib/logging';
 import { timeWriteFailure } from '@/lib/time-tracking/closed-periods';
@@ -345,7 +346,7 @@ function compareJobRowsByPlan(left: JobPlanOrderRow, right: JobPlanOrderRow): nu
 /**
  * The shared tail of the job detail readers: an employee reads only a job they
  * are assigned to; the job comes back with its assignees, customer, project,
- * site and contact.
+ * site and contact, for an employee in the field projection.
  */
 async function readJobDetails(input: {
   admin: AdminClient;
@@ -363,10 +364,7 @@ async function readJobDetails(input: {
       userId,
     );
     if (assignmentError) return { success: false, error: 'load_failed' };
-
-    if (!assignment) {
-      return { success: false, error: 'not_authorized' };
-    }
+    if (!assignment) return { success: false, error: 'not_authorized' };
   }
 
   const [assignmentRowsResult, projectResult] = await Promise.all([
@@ -454,7 +452,7 @@ async function readJobDetails(input: {
     ...relations,
   };
 
-  return { success: true, job };
+  return { success: true, job: isManagerOrAbove ? job : projectFieldJobDetails(job) };
 }
 
 /** The job form's reader: the job with its details and its scheduled visits. */

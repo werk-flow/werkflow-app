@@ -26,6 +26,7 @@ import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { createProjectInputSchema, updateProjectArgumentsSchema } from './action-schemas';
+import { projectFieldClient } from '@/lib/jobs/field-work-pack';
 import { PROJECT_CREATION_REFUSALS, projectCreationColumns } from './creation';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { toJson } from '@/lib/supabase/json';
@@ -282,7 +283,9 @@ export async function deleteProject(rawProjectId: string): Promise<DeleteProject
 /**
  * The shared tail of the project detail readers: an employee reads only a
  * project with one of their assigned jobs; the project comes back with its
- * customer, its jobs and the derived status.
+ * customer, its jobs and the derived status. An employee gets only their own
+ * jobs and the field projection of the customer; the derived status still
+ * covers every job.
  */
 async function readProjectDetails(input: {
   admin: AdminClient;
@@ -293,23 +296,17 @@ async function readProjectDetails(input: {
   const { admin, projectData } = input;
   const { userId, orgId, isManagerOrAbove } = input.context;
 
+  let assignedJobIds: Set<string> | null = null;
   if (!isManagerOrAbove) {
-    // One matching assignment proves access; reading every assignment of the
-    // user would truncate at the PostgREST row cap.
-    // tenant-scope: child-of-verified-parent — the inner join keeps only jobs of the project read above with this organization's filter.
-    const { data: assignments, error: accessError } = await admin
-      .from('job_assignments')
-      .select('job_id, jobs!inner(project_id)')
-      .eq('user_id', userId)
-      .eq('jobs.project_id', projectData.id)
-      .limit(1);
-    if (accessError) {
-      logReadFailure(`${input.operation}: project access check failed`, accessError);
+    const assigned = await readAssignedJobIdsInProject(admin, { orgId, userId, projectId: projectData.id });
+    if (assigned.error) {
+      logReadFailure(`${input.operation}: project access check failed`, assigned.error);
       return { success: false, error: 'fetch_failed' };
     }
-    if (assignments.length === 0) {
+    if (assigned.jobIds.size === 0) {
       return { success: false, error: 'not_authorized' };
     }
+    assignedJobIds = assigned.jobIds;
   }
 
   const [jobsResult, clientResult] = await Promise.all([
@@ -340,28 +337,49 @@ async function readProjectDetails(input: {
     logError('Error fetching project jobs or customer:', jobsResult.error ?? clientResult.error);
     return { success: false, error: 'fetch_failed' };
   }
-  const jobs = jobsResult.data.map(toJob);
-
-  let client = null;
-  if (clientResult.data) {
-    client = toClient(clientResult.data);
-  }
+  const allJobs = jobsResult.data.map(toJob);
 
   const project = toProject(projectData);
-  const progress = calculateProjectProgress(jobs);
-  const trafficLight = calculateTrafficLight(project, jobs);
-  const status = getEffectiveProjectStatus(project, jobs);
-
   const derivedStatus: DerivedProjectStatus = {
-    status,
-    progress,
-    trafficLight,
+    status: getEffectiveProjectStatus(project, allJobs),
+    progress: calculateProjectProgress(allJobs),
+    trafficLight: calculateTrafficLight(project, allJobs),
   };
 
+  const client = clientResult.data ? toClient(clientResult.data) : null;
+  if (!assignedJobIds) {
+    return { success: true, details: { project, client, jobs: allJobs, derivedStatus } };
+  }
   return {
     success: true,
-    details: { project, client, jobs, derivedStatus },
+    details: {
+      project,
+      client: client ? projectFieldClient(client) : null,
+      jobs: allJobs.filter((job) => assignedJobIds.has(job.id)),
+      derivedStatus,
+    },
   };
+}
+
+/** The caller's assigned jobs in one project. */
+async function readAssignedJobIdsInProject(
+  admin: AdminClient,
+  scope: { orgId: string; userId: string; projectId: string },
+): Promise<{ jobIds: Set<string>; error: null } | { jobIds: null; error: { message: string } }> {
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('job_assignments')
+        .select('job_id, jobs!inner(project_id)')
+        .eq('organization_id', scope.orgId)
+        .eq('user_id', scope.userId)
+        .eq('jobs.project_id', scope.projectId)
+        .order('job_id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) return { jobIds: null, error };
+  return { jobIds: new Set(data.map((assignment) => assignment.job_id)), error: null };
 }
 
 export async function getProjectDetails(
