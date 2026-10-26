@@ -30,7 +30,7 @@ Wrong turn: calling a change level 0 because it is small. A one-line change to a
 4. A level 2 PR gets one CodeRabbit app review, at the end: once Sol approved and `Check` is green on the latest commit, comment `@coderabbitai review`, because the app does not review a repository with fewer than ten stars by itself. Request it once per PR, not after each fix, and never while the app's latest comment reports a rate limit: an early request restarts the limit's window. When several PRs wait, request the security fixes first.
 5. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with a written reason in its thread: the evidence that the code is right. Resolve the thread. Decline scope creep the same way and list it as a follow-up: tests the change does not need, guards for cases that do not occur, extra compatibility, small performance costs. A CodeRabbit finding on a level 2 PR always gets a disposition, including one that asks for human review.
-7. While the app reports a rate limit, a level 2 PR can take the local review instead: `bun run review -- --committed --base-commit $(git merge-base origin/main HEAD)` covers the PR's changes. Handle each local finding like an app finding (steps 5 and 6), and list its disposition in a PR comment, since it has no thread.
+7. While the app reports a rate limit, a level 2 PR waits: request the review once the window has passed. A local review does not replace the app review.
 8. "Stopped watching, could not read it" usually means GitHub's rate limit is spent. Run `gh api rate_limit --jq .resources.graphql` before you watch again. If `remaining` is near 0, wait for `reset` with one background command, then watch again; never in a tight loop.
 9. When the PR meets [the merge gate](#the-merge-gate), call `unwatch_pull_request` and hand back, naming the level and the reviews it got: the owner merges. Under "full send" you merge. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
 
@@ -54,7 +54,7 @@ Merge only under "full send", with `gh pr merge --squash`, after a fresh `git fe
 
 ### Run a local pre-check
 
-`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional, except while the app is rate-limited: then it can replace a level 2 PR's app review ([step 7](#babysit-a-pull-request)).
+`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional and never replaces a level 2 PR's app review ([step 7](#babysit-a-pull-request)).
 
 ```bash
 bun run review:doctor                                   # the binary and its authentication

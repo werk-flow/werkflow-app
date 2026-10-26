@@ -13,7 +13,7 @@ You own the change; GPT Sol reviews it in a loop until you both agree or the bud
 
 ## Budget
 
-- Level 1: 3 rounds. Level 2: 5 rounds. The owner can raise either. Round 1 is full; later rounds check only changed code and open findings.
+- 3 rounds; 5 for level 2. The owner can raise either. Round 1 is full; later rounds check only changed code and open findings.
 - Stop early when a round returns only nits. Declined nits and comment, doc or format-only fixes need no new round.
 - One reviewer. Sol starts no subagents and no reviewers.
 - Keep a ledger: id, severity, outcome, and the usage T3 reports for the round. Never guess usage; write "not exposed" when T3 shows none.
@@ -33,13 +33,13 @@ You own the change; GPT Sol reviews it in a loop until you both agree or the bud
 3. The `childThreadId` is storage. Never continue a round with `t3_thread_send`, `create_threads` or `t3_thread_launch`.
 4. End your turn and wait for the completion notice. Do not poll and do not start a second reviewer. Do not edit the scoped files while a round runs.
 5. A timeout, an error or no reply is not approval. On a failure, `task_cancel`, confirm with `task_status` that it stopped, and restart the round with the ledger.
-6. On a Sol rate limit or quota message, or when no Sol model is listed, ask the owner through `AskUserQuestion` with what blocks and the options. Never substitute another model.
+6. On a Sol rate limit or quota message, or when no Sol model is listed, ask the owner through your harness's question tool (`AskUserQuestion` in Claude Code) with what blocks and the options. Never substitute another model.
 
 Round 1 brief (a T3 child gets no history, so the brief carries everything):
 
 ```
 Review only. Do not edit files, commit, push, comment on GitHub, or start subagents.
-Repo: <worktree path> Base: <sha> Head: <sha> Review level: <1|2> (<reason>)
+Repo: <worktree path> Base: <sha> Head: <sha> Review level: <0|1|2> (<reason>)
 Intent: <intent> Out of scope: <scope> Checks run: <command: result, one per line>
 Diff: git diff <base>..<head> [-- <paths>]
 Product rules: read AGENTS.md first. Judge against it and these owner docs: <the virtue owner docs the diff touches, e.g. docs/technical/security.md for a permission>.
@@ -70,7 +70,7 @@ Start one only while budget remains and a blocker or should is open, behavior co
 ## 5. Stop and record
 
 - **Agreed**: APPROVE on the current behavior diff, no blocker or should open, and no concern of your own.
-- **Stuck**: an item stays disputed after two replies, or the budget ends. Ask the owner through `AskUserQuestion`: each side in two or three plain sentences, your recommendation first. Budget end is not approval.
+- **Stuck**: an item stays disputed after two replies, or the budget ends. Ask the owner through the question tool: each side in two or three plain sentences, your recommendation first. Budget end is not approval.
 
 Put this line in the PR description, above the model line, with the values of the last round:
 

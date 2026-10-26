@@ -47,7 +47,7 @@ When you cannot prove a change, you do not have full confidence. Ask the owner.
 
 ## Asking the owner
 
-A question in a normal message goes unseen, and the thread looks done. Call `unwatch_pull_request`, then ask through `AskUserQuestion`. Put all the context in the question: the PR link, what blocks you, and the options with your recommendation first. Write for a non-developer: lead with the outcome, plain words, no jargon, no em dashes.
+A question in a normal message goes unseen, and the thread looks done. Call `unwatch_pull_request`, then ask through your harness's question tool (`AskUserQuestion` in Claude Code, the user-input tool in Codex) and end your turn. Put all the context in the question: the PR link, what blocks you, and the options with your recommendation first. Write for a non-developer: lead with the outcome, plain words, no jargon, no em dashes.
 
 Ask only when you cannot continue alone:
 
