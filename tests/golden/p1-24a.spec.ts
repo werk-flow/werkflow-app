@@ -72,7 +72,8 @@ test.describe('P1-24a independent Plantafel scenarios @P1-24a', () => {
     // Reassign to the Büro member: the card is in the target row before the
     // server answers, the banner confirms with Undo, the assignment changed.
     await dragCardTo(adminPage, card, boardCell(adminPage, bueroRecord.id, visitDate));
-    await expect(boardCard(adminPage, bueroRecord.id, title)).toBeVisible({ timeout: 1_000 });
+    await expect(boardCardAsShown(adminPage, bueroRecord.id, title)).toBeVisible({ timeout: 1_000 });
+    await expect(boardCard(adminPage, bueroRecord.id, title)).toBeVisible();
     const banner = calendarBanner(adminPage, 'moved');
     await expect(banner).toBeVisible();
     await expect(bannerUndo(banner)).toBeVisible();

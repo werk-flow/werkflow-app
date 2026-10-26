@@ -22,6 +22,24 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-26: audit:layout:field environment failure
+
+<!-- incident-run: 2026-10-26T094527601Z-794ea2 -->
+
+- Run: run `2026-10-26T094527601Z-794ea2`, group `audit:layout:field`, target local, fingerprint `d1a276fc98c3`.
+- Failure point: Test runner: The test session was cancelled.
+- Root cause: The agent's tool stopped the local plan at its 40-minute background limit; SIGTERM cancelled the test session mid-group.
+- Prevention: no prevention claim: an operator time limit, not a test fault; long plans now run with the tool's longest limit.
+
+## 2026-10-26: audit:layout:service environment failure
+
+<!-- incident-run: 2026-10-26T094527601Z-909408 -->
+
+- Run: run `2026-10-26T094527601Z-909408`, group `audit:layout:service`, target local, fingerprint `169f6a56bd12`, world `21db1bc7a2a046c88f43bcf369cc8ffa`.
+- Failure point: Test runner: The test session was cancelled.
+- Root cause: The agent's tool stopped the local plan at its 40-minute background limit; SIGTERM cancelled the test session mid-group.
+- Prevention: no prevention claim: an operator time limit, not a test fault; long plans now run with the tool's longest limit.
+
 ## 2026-10-26: audit:wave-1:a1-zeiten product failure
 
 <!-- incident-run: 2026-10-26T081244178Z-1825b5 -->
