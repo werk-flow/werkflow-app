@@ -12,17 +12,11 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import type { ActionFailure } from '@/lib/action-result';
 import { readTimeAccountManagement, requireAuth } from './access';
+import { failureCode, parseStrictInteger, refuseNonManager } from './action-support';
 import { DEFAULT_CREDIT_RULES, DEFAULT_SUPPLEMENT_RULES, DEFAULT_WARNING_RULES } from './defaults';
 import { buildPayrollExportPackage, distributeCreditedMinutes } from './export';
-import {
-  type ClosePeriodResult,
-  isTimeAccountFailureCode,
-  type TimeAccountAction,
-  type TimeAccountActionResult,
-  type TimeAccountFailureCode,
-} from './messages';
+import { type ClosePeriodResult, isTimeAccountFailureCode, type TimeAccountActionResult } from './messages';
 import {
   buildTimePeriodPreparation,
   getBerlinInstant,
@@ -72,19 +66,7 @@ const submitTimeAccountAdjustmentFormSchema = z.object({
   effectiveDate: text(10),
   reason: text(2000),
 });
-const decideTimeAccountAdjustmentFormSchema = z.object({
-  requestId: id,
-  expectedVersion: text(12),
-  decision: text(40),
-  reason: text(2000),
-});
 const prepareTimePeriodFormSchema = z.object({ month: text(7) });
-const decidePeriodFindingFormSchema = z.object({
-  findingId: id,
-  periodId: id,
-  decision: text(40),
-  reason: text(2000),
-});
 const closeTimePeriodFormSchema = z.object({ periodId: id });
 const reopenTimePeriodFormSchema = z.object({ periodId: id, reason: text(2000) });
 const generatePayrollExportFormSchema = z.object({ periodId: id });
@@ -114,37 +96,6 @@ export async function getTimeAccountAccess(): Promise<
   };
 }
 
-/** The manager gate of the period actions: a failed responsibility read is its own code. */
-async function refuseNonManager(
-  context: Parameters<typeof readTimeAccountManagement>[0],
-): Promise<ActionFailure<'responsibility_load_failed' | 'forbidden'> | null> {
-  const management = await readTimeAccountManagement(context);
-  if (!management.success) return management;
-  return management.canManage ? null : { success: false, error: 'forbidden' };
-}
-
-/**
- * The stable code of a refused period RPC or of a thrown period step: a known
- * code passes through (also with a detail suffix such as
- * `incomplete_period_population: …`), anything else is logged and becomes
- * the action's catch-all code.
- */
-function failureCode<Action extends TimeAccountAction>(
-  action: Action,
-  fallback: TimeAccountFailureCode<Action>,
-  label: string,
-  error: unknown,
-): TimeAccountFailureCode<Action> {
-  const message =
-    error instanceof Error || (typeof error === 'object' && error !== null && 'message' in error)
-      ? String(error.message)
-      : '';
-  const code = message.split(':')[0]?.trim() ?? '';
-  if (isTimeAccountFailureCode(action, code)) return code;
-  logError(label, error);
-  return fallback;
-}
-
 // `month` is a validated `YYYY-MM` (prepareTimePeriod checks it).
 function monthBounds(month: string): {
   start: string;
@@ -156,13 +107,6 @@ function monthBounds(month: string): {
   nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
   const endExclusive = nextMonth.toISOString().slice(0, 10);
   return { start, end: addLocalDays(endExclusive, -1), endExclusive };
-}
-
-function parseStrictInteger(value: FormDataEntryValue | null): number | null {
-  const text = typeof value === 'string' ? value : '';
-  if (!/^-?\d+$/.test(text)) return null;
-  const parsed = Number(text);
-  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 export async function createStarterTimePolicy(
@@ -393,46 +337,6 @@ export async function submitTimeAccountAdjustment(
   return { success: true };
 }
 
-export async function decideTimeAccountAdjustment(
-  formInput: FormData,
-): Promise<TimeAccountActionResult<'decideAdjustment'>> {
-  const formData = parseFormData(formInput, decideTimeAccountAdjustmentFormSchema);
-  if (!formData) return { success: false, error: 'invalid_input' };
-  const context = await requireAuth();
-  const refusal = await refuseNonManager(context);
-  if (refusal) return refusal;
-  const requestId = String(formData.get('requestId') ?? '');
-  const expectedVersion = parseStrictInteger(formData.get('expectedVersion'));
-  const decision = String(formData.get('decision') ?? '');
-  const reason = String(formData.get('reason') ?? '');
-  if (!requestId || expectedVersion === null || !['approved', 'rejected'].includes(decision))
-    return { success: false, error: 'invalid_input' };
-  if (!reason.trim()) return { success: false, error: 'reason_required' };
-  const { error } = await createSupabaseAdminClient().rpc('decide_time_account_adjustment', {
-    p_organization_id: context.orgId,
-    p_request_id: requestId,
-    p_expected_version: expectedVersion,
-    p_decision: decision as 'approved' | 'rejected',
-    p_reason: reason,
-    p_actor_id: context.userId,
-    p_operation_id: randomUUID(),
-  });
-  if (error)
-    return {
-      success: false,
-      error: failureCode(
-        'decideAdjustment',
-        'decision_failed',
-        'decideTimeAccountAdjustment: decide_time_account_adjustment failed',
-        error,
-      ),
-    };
-  revalidatePath('/zeiterfassung/einstellungen');
-  revalidatePath('/einstellungen/zeiterfassung');
-  revalidatePath('/zeiterfassung/zeitkonto');
-  return { success: true };
-}
-
 /** Prepares a month; the success names the period, so the form opens its detail. */
 export async function prepareTimePeriod(
   formInput: FormData,
@@ -498,47 +402,6 @@ export async function prepareTimePeriod(
       error: failureCode('prepare', 'prepare_failed', 'prepareTimePeriod failed', error),
     };
   }
-}
-
-export async function decidePeriodFinding(
-  formInput: FormData,
-): Promise<TimeAccountActionResult<'decideFinding'>> {
-  const formData = parseFormData(formInput, decidePeriodFindingFormSchema);
-  if (!formData) return { success: false, error: 'invalid_input' };
-  const context = await requireAuth();
-  const refusal = await refuseNonManager(context);
-  if (refusal) return refusal;
-  const findingId = String(formData.get('findingId') ?? '');
-  const periodId = String(formData.get('periodId') ?? '');
-  const decision = String(formData.get('decision') ?? '');
-  const reason = String(formData.get('reason') ?? 'Geprüft');
-  if (
-    !findingId ||
-    !periodId ||
-    !['approved', 'rejected', 'acknowledged'].includes(decision) ||
-    !reason.trim()
-  )
-    return { success: false, error: 'invalid_input' };
-  const { error } = await createSupabaseAdminClient().rpc('decide_time_period_finding', {
-    p_actor_id: context.userId,
-    p_organization_id: context.orgId,
-    p_finding_id: findingId,
-    p_decision: decision as 'approved' | 'rejected' | 'acknowledged',
-    p_reason: reason,
-    p_operation_id: randomUUID(),
-  });
-  if (error)
-    return {
-      success: false,
-      error: failureCode(
-        'decideFinding',
-        'decision_failed',
-        'decidePeriodFinding: decide_time_period_finding failed',
-        error,
-      ),
-    };
-  revalidatePath(`/zeiterfassung/perioden/${periodId}`);
-  return { success: true };
 }
 
 // The names of the employees whose session blocks the close. A failed read

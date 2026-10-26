@@ -10,6 +10,12 @@ import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { readTimeAccountManagement, requireAuth } from './access';
+import {
+  type PendingAdjustment,
+  readDecidableRecordIds,
+  readLatestFindingDecisions,
+  readPendingAdjustments,
+} from './decision-reads';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
 import type {
   PayrollExportState,
@@ -100,6 +106,8 @@ export type TimePeriodDetail = {
     severity: string;
     explanation: Record<string, unknown>;
     decision: TimeFindingDecision | null;
+    /** The caller may decide it: an organization-wide finding, or a person in their approval scope. */
+    canApprove: boolean;
   }>;
   /** Live, not from the calculation: the database refuses the close while one exists. */
   openSessions: OpenPeriodSession[];
@@ -136,15 +144,7 @@ export type TimeAccountSettingsData = {
     currentBalanceMinutes: number;
     version: number;
   }>;
-  pendingAdjustments: Array<{
-    id: string;
-    employeeName: string;
-    kind: 'manual_adjustment' | 'expiry' | 'payout';
-    minutes: number;
-    effectiveDate: string;
-    reason: string;
-    version: number;
-  }>;
+  pendingAdjustments: Array<Omit<PendingAdjustment, 'employeeRecordId'> & { employeeName: string }>;
 };
 
 // A failed read throws inside a reader and becomes `read_failed` here, so a
@@ -549,31 +549,23 @@ export async function getTimePeriodDetail(
         ? Promise.resolve([])
         : readOpenPeriodSessions(admin, context.orgId, period.period_end_date),
     ]);
-    const nameByEmployee = await readEmployeeNames(admin, context.orgId, [
-      ...results.map((result) => result.employee_record_id),
-      ...findings.flatMap((finding) => (finding.employee_record_id ? [finding.employee_record_id] : [])),
+    const findingRecordIds = [
+      ...new Set(
+        findings.flatMap((finding) => (finding.employee_record_id ? [finding.employee_record_id] : [])),
+      ),
+    ];
+    const [nameByEmployee, decisionByFinding, decidableRecordIds] = await Promise.all([
+      readEmployeeNames(admin, context.orgId, [
+        ...results.map((result) => result.employee_record_id),
+        ...findingRecordIds,
+      ]),
+      readLatestFindingDecisions(
+        admin,
+        context.orgId,
+        findings.map((finding) => finding.id),
+      ),
+      readDecidableRecordIds(context, findingRecordIds),
     ]);
-    // A finding sits in one batch, so its newest decision still comes first.
-    const { data: decisions } = await readInBatches(
-      findings.map((finding) => finding.id),
-      (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('time_period_finding_decisions')
-              .select('finding_id, decision, decided_at')
-              .eq('organization_id', context.orgId)
-              .in('finding_id', [...batch])
-              .order('decided_at', { ascending: false })
-              .order('id')
-              .range(from, to),
-          PERIOD_SOURCE_ROW_CAP,
-        ),
-    ).then(requirePeriodRows);
-    const decisionByFinding = new Map<string, TimeFindingDecision>();
-    for (const decision of decisions)
-      if (!decisionByFinding.has(decision.finding_id))
-        decisionByFinding.set(decision.finding_id, decision.decision);
     return {
       period: {
         id: period.id,
@@ -607,6 +599,7 @@ export async function getTimePeriodDetail(
         severity: finding.severity,
         explanation: jsonRecordOrEmpty(finding.explanation),
         decision: decisionByFinding.get(finding.id) ?? null,
+        canApprove: finding.employee_record_id === null || decidableRecordIds.has(finding.employee_record_id),
       })),
       openSessions,
       exports: exports.map((item) => ({
@@ -685,18 +678,7 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
               .range(from, to),
           PERIOD_SOURCE_ROW_CAP,
         ).then(requirePeriodRows),
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('time_account_adjustment_requests')
-              .select('id, employee_record_id, adjustment_kind, minutes, effective_date, reason, version')
-              .eq('organization_id', context.orgId)
-              .eq('status', 'submitted')
-              .order('created_at')
-              .order('id')
-              .range(from, to),
-          PERIOD_SOURCE_ROW_CAP,
-        ).then(requirePeriodRows),
+        readPendingAdjustments(admin, context),
       ]);
     const [profiles, { data: versions }, mappingVersion] = await Promise.all([
       readProfiles(admin, employees),
@@ -765,14 +747,9 @@ export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAcco
         currentBalanceMinutes: account.current_balance_minutes,
         version: Number(account.version),
       })),
-      pendingAdjustments: pending.data.map((request) => ({
-        id: request.id,
-        employeeName: nameOf(request.employee_record_id),
-        kind: request.adjustment_kind,
-        minutes: request.minutes,
-        effectiveDate: request.effective_date,
-        reason: request.reason,
-        version: Number(request.version),
+      pendingAdjustments: pending.map(({ employeeRecordId, ...request }) => ({
+        ...request,
+        employeeName: nameOf(employeeRecordId),
       })),
     };
   });

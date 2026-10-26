@@ -19,7 +19,7 @@
     "lib/planning/server.ts": 1165,
     "lib/qualifications/actions.ts": 1228,
     "lib/security/server-action-authorization.test.ts": 959,
-    "lib/time-accounts/actions.ts": 1469,
+    "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
     "lib/time-corrections/actions.ts": 1439,
     "lib/time-tracking/validation.ts": 806,
@@ -37,7 +37,6 @@
     "app/(app)/kunden/[clientId]/page.tsx": { "KundenDetailData": 85 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
-    "app/(app)/zeiterfassung/einstellungen/page.tsx": { "TimeAccountSettingsContent": 81 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 137 },
     "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
@@ -662,10 +661,10 @@
       "getTimeAccountOverview > readRegion#1": 97,
       "getTimePeriods": 102,
       "getTimePeriods > readRegion#1": 96,
-      "getTimePeriodDetail": 138,
-      "getTimePeriodDetail > readRegion#1": 127,
-      "getTimeAccountSettings": 146,
-      "getTimeAccountSettings > readRegion#1": 141
+      "getTimePeriodDetail": 132,
+      "getTimePeriodDetail > readRegion#1": 121,
+      "getTimeAccountSettings": 130,
+      "getTimeAccountSettings > readRegion#1": 125
     },
     "lib/time-corrections/actions.ts": {
       "loadSourceContext": 128,

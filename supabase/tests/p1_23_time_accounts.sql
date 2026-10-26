@@ -12,7 +12,10 @@ insert into auth.users (
  '{"first_name":"Employee","last_name":"P123"}', now(), now()),
 ('23000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'p1-23-outsider@example.test', '', now(), '{}',
- '{"first_name":"Outsider","last_name":"P123"}', now(), now());
+ '{"first_name":"Outsider","last_name":"P123"}', now(), now()),
+('23000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'p1-23-buero@example.test', '', now(), '{}',
+ '{"first_name":"Buero","last_name":"P123"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code)
 values ('23000000-0000-0000-0000-000000000010', 'P1-23 SQL',
@@ -335,11 +338,15 @@ begin
   perform app_private.assert_p1_23_period_open(
     '23000000-0000-0000-0000-000000000010', '2026-07-15');
 
+  -- A Büro member proposes and the Admin decides: a proposer never decides
+  -- their own request (supabase/tests/time_account_approval_scope.sql).
+  insert into public.organization_members (organization_id, user_id, role)
+  values ('23000000-0000-0000-0000-000000000010', '23000000-0000-0000-0000-000000000004', 'buero');
   adjustment_id := public.submit_time_account_adjustment(
     '23000000-0000-0000-0000-000000000010', employee_account_id,
     (select version from public.time_accounts where id = employee_account_id),
     'manual_adjustment', 30, '2026-07-15', 'Abgelehnter Test',
-    '23000000-0000-0000-0000-000000000001',
+    '23000000-0000-0000-0000-000000000004',
     '23000000-0000-0000-0000-000000000071', repeat('8', 64)
   );
   select version into account_version_after_submit
