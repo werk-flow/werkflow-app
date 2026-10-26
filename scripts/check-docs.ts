@@ -430,8 +430,8 @@ for (const path of livingDocs) {
 
 // Decision records grow only by dated amendment sections: the committed and the published texts
 // stay prefixes of the current one.
-const publishedRef = git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/partner-preview']).ok
-  ? 'origin/partner-preview'
+const publishedRef = git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main']).ok
+  ? 'origin/main'
   : null;
 for (const path of docPaths.filter((doc) => doc.startsWith('decisions/'))) {
   for (const ref of ['HEAD', ...(publishedRef === null ? [] : [publishedRef])]) {

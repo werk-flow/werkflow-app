@@ -59,7 +59,7 @@ describe('CodeRabbit review command', () => {
   });
 
   test('keeps current committed and base scopes without adding local changes', () => {
-    for (const scope of [['--committed'], ['--base', 'partner-preview'], ['--base-commit=abc123']]) {
+    for (const scope of [['--committed'], ['--base', 'main'], ['--base-commit=abc123']]) {
       const argumentsForReview = buildCodeRabbitReviewArguments(scope);
       expect(argumentsForReview).toEqual(['review', '--agent', '-c', 'AGENTS.md', ...scope]);
       expect(argumentsForReview).not.toContain('--uncommitted');
