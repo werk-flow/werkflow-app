@@ -38,6 +38,7 @@ const FAILURE_CODES = {
     'forbidden',
     'responsibility_load_failed',
     'not_responsible_or_self_approval',
+    'own_proposal',
     'request_not_found',
     'request_not_pending',
     'stale_version',
@@ -173,6 +174,7 @@ const MESSAGES: ActionMessages = {
       forbidden: 'Du darfst diesen Antrag nicht entscheiden.',
       not_responsible_or_self_approval:
         'Du darfst diesen Antrag nicht entscheiden. Eigene Anträge gibt eine andere Person frei.',
+      own_proposal: 'Du hast diesen Antrag gestellt. Eine andere Person entscheidet ihn.',
       request_not_found: 'Diesen Antrag gibt es nicht mehr. Lade die Seite neu.',
       request_not_pending: 'Dieser Antrag ist bereits entschieden. Lade die Seite neu.',
       stale_version: 'Der Antrag wurde inzwischen geändert. Lade die Seite neu.',

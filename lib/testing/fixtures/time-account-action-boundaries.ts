@@ -3,11 +3,15 @@
 // adjustments need Admin or Büro, the period and decision actions need a
 // manager or a time-approval holder, and an Admin of organization A reaches
 // no employee, account, request, finding, period or export of organization B.
-// Every write is one function call in the caller's organization, so the
-// function's org-scoped lookup refuses the foreign id and nothing changes.
+// A decision is refused before its function call for the caller's own
+// proposal and outside the caller's approval scope (a Büro member deciding for
+// another Büro member). Every other write is one function call in the caller's
+// organization, so the function's org-scoped lookup refuses the foreign id and
+// nothing changes.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
+  CALLER_ID,
   ORGANIZATION_A,
   ORGANIZATION_B,
   installActionWorld,
@@ -25,20 +29,56 @@ const foreignFindingId = '84000000-0000-4000-8000-000000000006';
 const foreignPeriodId = '84000000-0000-4000-8000-000000000007';
 const foreignExportId = '84000000-0000-4000-8000-000000000008';
 const foreignDocumentId = '84000000-0000-4000-8000-000000000009';
+const callerRecordId = '84000000-0000-4000-8000-000000000010';
+const colleagueUserId = '84000000-0000-4000-8000-000000000011';
+const colleagueRecordId = '84000000-0000-4000-8000-000000000012';
+const ownProposalId = '84000000-0000-4000-8000-000000000013';
+const colleagueRequestId = '84000000-0000-4000-8000-000000000014';
+const decidableRequestId = '84000000-0000-4000-8000-000000000015';
+const colleagueFindingId = '84000000-0000-4000-8000-000000000016';
+const decidableFindingId = '84000000-0000-4000-8000-000000000017';
 
 const world = installActionWorld({
   employee_records: [
     { id: ownRecordId, organization_id: ORGANIZATION_A, user_id: null },
     { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null },
+    { id: callerRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID, exit_date: null },
+    { id: colleagueRecordId, organization_id: ORGANIZATION_A, user_id: colleagueUserId, exit_date: null },
+  ],
+  // No time-approval configuration: Admin and Büro hold the responsibility by role.
+  organization_members: [
+    { organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' },
+    { organization_id: ORGANIZATION_A, user_id: colleagueUserId, role: 'buero' },
   ],
   time_accounts: [
     { id: foreignAccountId, organization_id: ORGANIZATION_B, employee_record_id: foreignRecordId },
   ],
   time_account_adjustment_requests: [
     { id: foreignRequestId, organization_id: ORGANIZATION_B, status: 'pending' },
+    // The record without a login counts as an employee; the colleague is Büro.
+    {
+      id: ownProposalId,
+      organization_id: ORGANIZATION_A,
+      employee_record_id: ownRecordId,
+      requested_by: CALLER_ID,
+    },
+    {
+      id: colleagueRequestId,
+      organization_id: ORGANIZATION_A,
+      employee_record_id: colleagueRecordId,
+      requested_by: '84000000-0000-4000-8000-000000000018',
+    },
+    {
+      id: decidableRequestId,
+      organization_id: ORGANIZATION_A,
+      employee_record_id: ownRecordId,
+      requested_by: colleagueUserId,
+    },
   ],
   time_period_findings: [
     { id: foreignFindingId, organization_id: ORGANIZATION_B, period_id: foreignPeriodId },
+    { id: colleagueFindingId, organization_id: ORGANIZATION_A, employee_record_id: colleagueRecordId },
+    { id: decidableFindingId, organization_id: ORGANIZATION_A, employee_record_id: ownRecordId },
   ],
   time_periods: [
     {
@@ -101,8 +141,6 @@ const {
   closeTimePeriod,
   createDefaultPayrollMapping,
   createStarterTimePolicy,
-  decidePeriodFinding,
-  decideTimeAccountAdjustment,
   downloadPayrollExport,
   generatePayrollExport,
   getTimeAccountAccess,
@@ -111,6 +149,9 @@ const {
   reopenTimePeriod,
   submitTimeAccountAdjustment,
 } = await import('@/lib/time-accounts/actions');
+const { decidePeriodFinding, decideTimeAccountAdjustment } = await import(
+  '@/lib/time-accounts/decision-actions'
+);
 
 const form = (fields: Readonly<Record<string, string>>): FormData => {
   const data = new FormData();
@@ -140,8 +181,14 @@ const forms = {
   reopen: (periodId: string) => form({ periodId, reason: 'Korrektur erforderlich' }),
   download: (exportId: string) => form({ exportId }),
 };
-const initialDatabase = databaseSnapshot(world);
 const forbidden = { success: false, error: 'forbidden' };
+// The responsibility state reads the caller's role from the organization's members.
+const callerMembership = tableRows(world, 'organization_members').find((row) => row.user_id === CALLER_ID);
+const signInWithRole = (role: 'admin' | 'buero' | 'employee'): void => {
+  signInAs(world, role);
+  if (callerMembership) callerMembership.role = role;
+};
+const initialDatabase = databaseSnapshot(world);
 
 // A signed-out caller is sent to the login before any database access.
 world.callerId = null;
@@ -150,7 +197,7 @@ await assert.rejects(closeTimePeriod(forms.period(foreignPeriodId)), /redirect:\
 assert.equal(world.adminClientRequests, 0);
 
 // An employee without a time-approval responsibility manages nothing.
-signInAs(world, 'employee');
+signInWithRole('employee');
 assert.deepEqual(await getTimeAccountAccess(), {
   success: true,
   canManage: false,
@@ -167,7 +214,7 @@ assert.deepEqual(await generatePayrollExport(forms.period(foreignPeriodId)), for
 assert.deepEqual(await downloadPayrollExport(forms.download(foreignExportId)), forbidden);
 
 // Büro changes no rule, opens no account, reopens no period and maps no payroll codes.
-signInAs(world, 'buero');
+signInWithRole('buero');
 assert.deepEqual(await createStarterTimePolicy(forms.policy()), forbidden);
 assert.deepEqual(await assignEmployeeTimePolicy(forms.assign(ownRecordId)), forbidden);
 assert.deepEqual(await openMissingTimeAccounts(forms.open(ownRecordId)), forbidden);
@@ -175,14 +222,29 @@ assert.deepEqual(await reopenTimePeriod(forms.reopen(foreignPeriodId)), forbidde
 assert.deepEqual(await createDefaultPayrollMapping(), forbidden);
 assert.equal(world.rpcCalls.length, 0);
 
+// Büro decides neither its own proposal nor a matter of another Büro member.
+assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(ownProposalId)), {
+  success: false,
+  error: 'own_proposal',
+});
+assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(colleagueRequestId)), {
+  success: false,
+  error: 'not_responsible_or_self_approval',
+});
+assert.deepEqual(await decidePeriodFinding(forms.finding(colleagueFindingId)), forbidden);
+assert.equal(world.rpcCalls.length, 0, 'a decision outside the approval scope reached the database');
+// A colleague's proposal for a person without a login is Büro's to decide.
+assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(decidableRequestId)), { success: true });
+assert.deepEqual(await decidePeriodFinding(forms.finding(decidableFindingId)), { success: true });
+assert.equal(world.rpcCalls.length, 2);
+assertCallerScopedCalls(world);
+
 // An Admin of organization A reaches no row of organization B: each write is refused by its one call.
-signInAs(world, 'admin');
+signInWithRole('admin');
 for (const [write, expected] of [
   [() => assignEmployeeTimePolicy(forms.assign(foreignRecordId)), 'assignment_failed'],
   [() => openMissingTimeAccounts(forms.open(foreignRecordId)), 'employee_not_found'],
   [() => submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), 'account_not_found'],
-  [() => decideTimeAccountAdjustment(forms.decide(foreignRequestId)), 'request_not_found'],
-  [() => decidePeriodFinding(forms.finding(foreignFindingId)), 'finding_not_found'],
   [() => closeTimePeriod(forms.period(foreignPeriodId)), 'period_not_found'],
   [() => reopenTimePeriod(forms.reopen(foreignPeriodId)), 'period_not_found'],
 ] as const) {
@@ -192,8 +254,19 @@ for (const [write, expected] of [
   assertCallerScopedCalls(world);
 }
 
-// A foreign period is not a closed period of the caller's organization, and a foreign export is not ready.
+// A decision loads its request or finding in the caller's organization first, so a foreign id never reaches the database.
 world.rpcCalls.length = 0;
+assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId)), {
+  success: false,
+  error: 'request_not_found',
+});
+assert.deepEqual(await decidePeriodFinding(forms.finding(foreignFindingId)), {
+  success: false,
+  error: 'finding_not_found',
+});
+
+// A foreign period is not a closed period of the caller's organization, and a foreign export is not ready.
+
 assert.deepEqual(await generatePayrollExport(forms.period(foreignPeriodId)), {
   success: false,
   error: 'period_not_closed',
@@ -204,4 +277,5 @@ assert.deepEqual(await downloadPayrollExport(forms.download(foreignExportId)), {
 });
 assert.equal(world.rpcCalls.length, 0);
 assert.deepEqual(signedPaths, [], 'no foreign export may be signed');
+if (callerMembership) callerMembership.role = 'employee';
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');

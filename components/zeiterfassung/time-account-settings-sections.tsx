@@ -12,11 +12,8 @@ import {
 } from '@/components/zeiterfassung/time-account-person-table';
 import { TimeAccountSubmitButton } from '@/components/zeiterfassung/time-account-submit-button';
 import { useTimeAccountForm } from '@/components/zeiterfassung/use-time-account-form';
-import {
-  assignEmployeeTimePolicy,
-  decideTimeAccountAdjustment,
-  openMissingTimeAccounts,
-} from '@/lib/time-accounts/actions';
+import { assignEmployeeTimePolicy, openMissingTimeAccounts } from '@/lib/time-accounts/actions';
+import { decideTimeAccountAdjustment } from '@/lib/time-accounts/decision-actions';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import { formatGermanDate } from '@/lib/utils';
@@ -323,8 +320,11 @@ export function MissingTimeAccountsCard({
 
 function PendingTimeAccountAdjustment({
   request,
+  canApprove,
 }: {
   request: TimeAccountSettingsData['pendingAdjustments'][number];
+  /** The reader asked the approval scope and whether the caller proposed it. */
+  canApprove: boolean;
 }) {
   const { handleSubmit, handleKeyDown, isPending, pendingValue, error } = useTimeAccountForm({
     action: 'decideAdjustment',
@@ -343,43 +343,47 @@ function PendingTimeAccountAdjustment({
           {formatGermanDate(request.effectiveDate)} · {request.reason}
         </p>
       </div>
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-2"
-        aria-label={`Entscheidung für ${request.employeeName}`}
-      >
-        <div className="flex flex-wrap items-end gap-2">
-          <input type="hidden" name="requestId" value={request.id} />
-          <input type="hidden" name="expectedVersion" value={request.version} />
-          <Input
-            name="reason"
-            aria-label={`Entscheidungsgrund für ${request.employeeName}`}
-            placeholder="Entscheidungsgrund"
-            onKeyDown={handleKeyDown}
-            required
-          />
-          <TimeAccountSubmitButton
-            name="decision"
-            value="rejected"
-            variant="outline"
-            isPending={isPending}
-            pendingValue={pendingValue}
-            pendingLabel="Antrag wird abgelehnt"
-          >
-            Ablehnen
-          </TimeAccountSubmitButton>
-          <TimeAccountSubmitButton
-            name="decision"
-            value="approved"
-            isPending={isPending}
-            pendingValue={pendingValue}
-            pendingLabel="Antrag wird freigegeben"
-          >
-            Freigeben
-          </TimeAccountSubmitButton>
-        </div>
-        <ErrorText>{error}</ErrorText>
-      </form>
+      {canApprove ? (
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-2"
+          aria-label={`Entscheidung für ${request.employeeName}`}
+        >
+          <div className="flex flex-wrap items-end gap-2">
+            <input type="hidden" name="requestId" value={request.id} />
+            <input type="hidden" name="expectedVersion" value={request.version} />
+            <Input
+              name="reason"
+              aria-label={`Entscheidungsgrund für ${request.employeeName}`}
+              placeholder="Entscheidungsgrund"
+              onKeyDown={handleKeyDown}
+              required
+            />
+            <TimeAccountSubmitButton
+              name="decision"
+              value="rejected"
+              variant="outline"
+              isPending={isPending}
+              pendingValue={pendingValue}
+              pendingLabel="Antrag wird abgelehnt"
+            >
+              Ablehnen
+            </TimeAccountSubmitButton>
+            <TimeAccountSubmitButton
+              name="decision"
+              value="approved"
+              isPending={isPending}
+              pendingValue={pendingValue}
+              pendingLabel="Antrag wird freigegeben"
+            >
+              Freigeben
+            </TimeAccountSubmitButton>
+          </div>
+          <ErrorText>{error}</ErrorText>
+        </form>
+      ) : (
+        <p className="text-sm text-muted-foreground">Wartet auf die Freigabe durch eine andere Person.</p>
+      )}
     </div>
   );
 }
@@ -393,7 +397,7 @@ export function PendingTimeAccountAdjustments({
     <div className="space-y-3 border-t pt-4">
       <h3 className="text-sm font-semibold">Offene Freigaben</h3>
       {pendingAdjustments.map((request) => (
-        <PendingTimeAccountAdjustment key={request.id} request={request} />
+        <PendingTimeAccountAdjustment key={request.id} request={request} canApprove={request.canApprove} />
       ))}
     </div>
   ) : null;
