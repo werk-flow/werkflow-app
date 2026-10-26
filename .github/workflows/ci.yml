@@ -9,6 +9,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # labeled and unlabeled: the owner's `approved: list growth` label changes what the unit job allows.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_call:
@@ -101,6 +103,9 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - run: bun scripts/verify.ts run --group unit:all
+        env:
+          # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a shrink-only list").
+          SHRINK_ONLY_GROWTH_APPROVED: "${{ contains(github.event.pull_request.labels.*.name, 'approved: list growth') }}"
       - uses: ./.github/actions/upload-evidence
         if: failure()
         with:

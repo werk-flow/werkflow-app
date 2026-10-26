@@ -10,7 +10,9 @@ import ts from 'typescript';
 // a raised ceiling is refused, a removed entry or a lowered ceiling passes.
 // lib/testing/publication/shrink-only-lists.test.ts runs it in every unit run
 // against the merge base with the trunk, so CI's unit job judges each pull
-// request against the branch it merges into.
+// request against the branch it merges into. Only the owner lets a list grow:
+// CI passes the owner's label on the pull request as `growthApproved`, and
+// the diff shows what grew (testing.md, "Grow a shrink-only list").
 // Lab references ratchet through scripts/lab-counts.ts instead.
 
 /** A list's entries: a key, with its ceiling where the entry carries one. */
@@ -240,24 +242,31 @@ export function listEntries(list: ShrinkOnlyList, text: string | null): ListEntr
   return variableEntries(list.file, text, list.extract.name);
 }
 
+/** The key of a spread, in a record or an array: entries the extractor cannot list. */
+const SPREAD_KEY = /(^|[.#])\.\.\./;
+
 /**
  * Entries that joined the list or raised their ceiling since the base. A list
- * absent at the base is new and starts its own baseline.
+ * absent at the base is new and starts its own baseline. The owner's approval
+ * waives a new entry and a raised ceiling, never a spread or a ceiling it
+ * cannot compare: those hide what the list holds from every later check.
  */
 export function growthProblems(
   list: ShrinkOnlyList,
   base: ListEntries | null,
   current: ListEntries,
+  { growthApproved = false }: { growthApproved?: boolean } = {},
 ): string[] {
   if (base === null) return [];
   return [...current].flatMap(([key, value]) => {
-    if (!base.has(key)) return [`${list.id} (${list.file}) gained "${key}"`];
+    if (!base.has(key))
+      return growthApproved && !SPREAD_KEY.test(key) ? [] : [`${list.id} (${list.file}) gained "${key}"`];
     const ceiling = base.get(key);
     if (typeof ceiling === 'number' && typeof value !== 'number')
       return [
         `${list.id} (${list.file}) replaced the ceiling ${ceiling} of "${key}" with a value it cannot compare`,
       ];
-    return typeof value === 'number' && typeof ceiling === 'number' && value > ceiling
+    return !growthApproved && typeof value === 'number' && typeof ceiling === 'number' && value > ceiling
       ? [`${list.id} (${list.file}) raised "${key}" from ${ceiling} to ${value}`]
       : [];
   });
@@ -280,11 +289,15 @@ export function committedFileText(repositoryRoot: string, commit: string, file: 
   throw new Error(`git show ${commit}:${file} failed: ${shown.error?.message ?? shown.stderr.trim()}`);
 }
 
-/** Every growth of a shrink-only list between two versions of the tree. */
+/**
+ * Every growth of a shrink-only list between two versions of the tree. The
+ * owner's approval waives growth as `growthProblems` allows, never a list that is gone.
+ */
 export function shrinkOnlyProblems(
   readBase: (file: string) => string | null,
   readCurrent: (file: string) => string | null,
   lists: readonly ShrinkOnlyList[] = SHRINK_ONLY_LISTS,
+  { growthApproved = false }: { growthApproved?: boolean } = {},
 ): string[] {
   return lists.flatMap((list) => {
     const base = listEntries(list, readBase(list.file));
@@ -294,6 +307,6 @@ export function shrinkOnlyProblems(
     const current = listEntries(list, currentText);
     if (current === null)
       return [`${list.id}: ${list.file} no longer holds the list; update SHRINK_ONLY_LISTS`];
-    return growthProblems(list, base, current);
+    return growthProblems(list, base, current, { growthApproved });
   });
 }
