@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-26
 
 Employee management covers the operational relationship between an organization and its people: membership, access, personnel data, employment conditions, availability, qualifications, assignments, leave, personnel documents, and handoffs to time tracking and payroll.
 
@@ -36,7 +36,7 @@ Every person in an organization has one personnel record. It carries employment 
 - **Dispatch acknowledgement.** Employees confirm or challenge the current revision of a dispatched work instruction. An acknowledgement never stands in for attendance or recorded time.
 - **Time facts.** Managers inspect time but never record live time on someone's behalf. A correction of one's own time always needs a second time approver. [Time tracking](time-tracking.md) owns the time rules.
 - **Time accounts.** Every in-scope personnel record, with or without a login, has an explicitly opened time account. A missing opening balance, schedule, or policy blocks the period close for that person and never counts as zero. Employees see their own account and monthly statements.
-- **Access and employment lifecycle.** Admin plans activation, suspends, reactivates, or ends organization access, and runs employment transitions. None of these deletes the record, its history, or the person's login. A record without a lifecycle is labeled as not controlled. The owner and the last effective Admin are protected. The last holder of a responsibility blocks an employment transition until someone else takes it over.
+- **Access and employment lifecycle.** Admin plans activation, suspends, reactivates, or ends organization access, and runs employment transitions. None of these deletes the record, its history, or the person's login. A record without a lifecycle is labeled as not controlled. The owner and the last effective Admin are protected. Suspension and access end stop every read at once, in the app and through the database. Before the start date a future starter reads only their own onboarding, not their `Zeitkonto`. The last holder of a responsibility blocks an employment transition until someone else takes it over.
 - **Onboarding.** Organization templates have published versions that never change. A plan created from a template holds editable requirements that reference existing documents, qualifications, conditions, schedules, teams, or acknowledgements. Only a requirement marked as blocking access delays activation. Missing configuration never shows as complete.
 - **Protected personnel documents.** Personnel files have three classes: standard, Admin-only, and health evidence. They sit outside the ordinary library. No responsibility, job assignment, or ordinary document permission grants access to them. Admin sees every class, and Büro manages standard files. The person sees only expressly released versions and can upload requested health evidence. An acknowledgement proves that the person saw one exact version. It is not a signature.
 
