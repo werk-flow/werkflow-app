@@ -10,12 +10,12 @@ The root `.coderabbit.yaml` configures the review. Its path instructions point a
 
 ### Babysit a pull request
 
-1. After `gh pr create`, and after each later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
+1. After `gh pr create`, and after each later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. While the app answers with a rate limit, do not request again, because each early request restarts its wait: run `bun run review -- --committed --base-commit <merge base>` instead, and its findings are the review. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
 2. On each wake, read what is new: the failed CI job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or the new review comments (`gh pr view <number> --comments`, the inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`).
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
 4. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)).
 5. Dismiss a false finding with a written reason in its thread: the evidence that the code is right. Resolve the thread.
-6. Stay quiet when nothing is new. Stop when `Check` and the CodeRabbit review are green on the latest commit, then call `unwatch_pull_request` and hand back: the owner merges.
+6. Stay quiet when nothing is new. Stop when `Check` and the CodeRabbit review, or the local review while the app is rate-limited, are green on the latest commit, then call `unwatch_pull_request` and hand back: the owner merges.
 
 Wrong turn: accepting a suggested diff verbatim. CodeRabbit sees the diff, not the product; a fix that weakens a role check or a German label to satisfy it is a regression.
 

@@ -111,7 +111,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Account and email-change transitions stay atomic and server-only. [test `lib/security/account-boundaries.test.ts`]
 - Responses keep the hardening headers and the enforced Content-Security-Policy. [test `lib/security/headers.test.ts`, test `lib/security/csp-report.test.ts`]
 - Product code imports Zod through `lib/zod.ts`, which turns off its `eval` probe. [code `lib/zod.ts`, test `lib/conventions/zod-entry.test.ts`]
-- An advisory exception names its exact path, reason, digest and expiry, and leaves the file once its finding is gone. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
+- Every plan carries an advisory pass under 24 hours old; an exception names its exact path, reason, digest and expiry. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
 - Live DEV grants and Realtime delivery to foreign and removed receivers pass before a release. [group `canary:security`]
 - Every residual exposure the owner accepted is listed below until it closes. [judgment]
 
