@@ -11,7 +11,7 @@ WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-
 | Supabase project | `jbgaqpdjauzoocplgdsn` | `mbkkzuqjbdvzelqvuzcn` ("WerkFlow App Dev") |
 | Supabase organization | "WerkFlow" (`svxdwqapsmvfkchswonc`), Pro plan | The same organization |
 | Region | AWS eu-central-1 | The same region, on purpose |
-| R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS allows localhost and the partner-preview URL) |
+| R2 bucket (EU jurisdiction) | `werkflow-documents-prod` | `werkflow-documents-dev` (CORS allows localhost and the staging URL) |
 | Serves | The deployed app on Vercel and real customers | Local development, the cloud canary, the partner preview, and explicitly scoped provider checks |
 | Auth site URL | `https://app.werk-flow.app` | `http://localhost:3000` |
 
@@ -21,7 +21,7 @@ Both projects run Micro compute. Query latency on that tier rises steeply with c
 
 ### Vercel
 
-Every variable exists twice: one row for Production and one for all pre-production environments. Production rows carry the PROD project, the production bucket and the production domain. Pre-production rows carry the DEV project, the dev bucket and the partner-preview branch URL as `NEXT_PUBLIC_SITE_URL`. The names are the ones `lib/env/public.ts`, `lib/env/server.ts` and `lib/storage/r2.ts` read, each with one value per backend. `SUPABASE_ACCESS_TOKEN` is never on Vercel. DEV's auth redirect list must allow the partner-preview URL so that invite and password links work on the preview. Recheck the scopes when deployment configuration changes.
+Every variable exists twice: one row for Production and one for all pre-production environments. Production rows carry the PROD project, the production bucket and the production domain. Pre-production rows carry the DEV project, the dev bucket and the staging URL as `NEXT_PUBLIC_SITE_URL`. The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. The production branch is `production`; `vercel.json` turns off Git deployments of `main`, so `.github/workflows/staging.yml` deploys staging after DEV's migrations, and pull-request previews stay automatic. The names are the ones `lib/env/public.ts`, `lib/env/server.ts` and `lib/storage/r2.ts` read, each with one value per backend. `SUPABASE_ACCESS_TOKEN` is never on Vercel. DEV's auth redirect list must allow the staging URL so that invite and password links work on staging. Recheck the scopes when deployment configuration changes.
 
 ### Provider configuration
 
@@ -82,16 +82,16 @@ Vercel holds its own variables, so a local file never affects the deployed app. 
 
 This section is the one home of the rule. Skills and decision records link here.
 
-1. Every schema change is a committed file in `supabase/migrations/` first. No DDL exists only in a database.
+1. Every schema change is a committed file in `supabase/migrations/` first. No DDL exists only in a database. A pull request carries at most one migration, with its regenerated types: apply it to the local stack (`supabase migration up`) and run `bun run types:generate -- --local`. CI applies every migration to its own stack and fails while the committed types differ (`bun run types:check -- --local` in the SQL job).
 2. A migration that creates a table follows [add a table](security.md#add-a-table): RLS, policies and explicit grants in the same file.
-3. Apply to DEV with `bunx supabase db push`. The push records the committed file's exact version in the remote history. If a migration reached DEV through MCP `apply_migration` instead, align its history key to the committed file name afterwards, because MCP stamps its own version. `bun run migrations:check` and the canary fail on a divergence.
-4. Run `bun run types:generate` after the push and commit the result. `bun run types:check` fails when the committed types differ from a fresh DEV generation. `bun run advisors:check` runs the DEV security and performance advisors and fails on a warning, an error or a security finding without a reviewed exception in `lib/security/supabase-project-checks.ts`, and on an exception the advisor no longer reports.
-5. Apply to PROD only as part of a production release that the owner requested ([decision 0008](../decisions/0008-development-workflow.md)): MCP `apply_migration` against the production ref with the identical SQL, inside the maintenance window, before `origin/main` advances. Compare name and statement, then align the history key to the committed file name. Never `supabase link` or `db push` against production.
-6. The `*baseline*` repair migrations reconcile drift from before the split. Never edit them.
-7. Coordinate a schema change that the running app cannot tolerate with the app release that consumes it. For a change of a Realtime transport: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes. A rollback keeps app and database compatible.
-8. A migration never drops or changes the signature of a function, column or table that the deployed build still uses. Add the replacement first. A later migration drops the old object after that build is replaced. Every top-level drop, truncate, delete, rename or column type change carries `-- @destructive: <reason>` directly above it; `lib/security/destructive-migrations.test.ts` checks every migration newer than its frozen baseline, because applied files cannot change. `lib/security/retired-functions.test.ts` fails on a public function that no code calls, unless it names the SQL caller or the release that may drop it.
+3. DEV receives a migration only when its pull request merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, and only then deploys staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail on a divergence of DEV's history from the committed files. `bun run advisors:check` runs the DEV security and performance advisors and fails on a warning, an error or a security finding without a reviewed exception in `lib/security/supabase-project-checks.ts`, and on an exception the advisor no longer reports.
+4. PROD receives migrations only through the `release` workflow, before production deploys ([Release and rollback](#release-and-rollback)). Never link, push or apply a migration to PROD by hand.
+5. Migrations are expand-only within a release, so the previous release's code keeps working against the new schema and a Vercel Instant Rollback of the code is always safe. Add the replacement first. Dropping or renaming a table, column, function or enum value is a later release's contract step, after the build that used the object is replaced. `lib/security/destructive-migrations.test.ts` fails a statement the previous code may not survive unless the comment directly above it reads `-- @destructive: after release <production commit>: <reason>`: a drop, truncate, delete or rename; a column type change; a new NOT NULL column without a default; a new NOT NULL, CHECK, UNIQUE or foreign-key rule on an existing table; a changed policy or a revoked table grant. A changed signature or return shape of a function that existing code calls is a review point. `lib/security/retired-functions.test.ts` fails on a public function that no code calls, unless it names the SQL caller or the release that may drop it.
+6. Product code tolerates values it does not know yet, such as an enum value a newer release writes, so a rolled-back build reads newer data safely. The [backlog](enforcement-ladder-backlog.md) lists the reads that do not yet.
+7. The `*baseline*` repair migrations reconcile drift from before the split. Never edit them.
+8. For a change of a Realtime transport, which no expand step makes compatible: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes.
 
-Between releases, migrations wait on DEV. Read the two migration ledgers before you claim parity. `bun run migrations:check`, `bun run types:check` and `bun run realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When production parity matters, compare the live object definitions with the procedure in the `supabase-live-workflow` skill.
+Between releases, merged migrations wait on DEV. Read the two migration ledgers before you claim parity. `bun run migrations:check`, `bun run types:check` and `bun run realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When production parity matters, compare the live object definitions with the procedure in the `supabase-live-workflow` skill.
 
 ## Work in a worktree
 
@@ -116,7 +116,15 @@ T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree
 ## Work on production
 
 - Reads: the connector, the MCP server or the Management API, read-only.
-- Preview: when the owner asks for a push, run `git push origin main:partner-preview`. Vercel builds a preview on DEV data. `origin/main` does not move.
-- Release: `origin/main` advances only on the owner's explicit release request, after the pending migrations and edge functions reached PROD in the order of the migration rule. [Decision 0008](../decisions/0008-development-workflow.md) owns the flow.
+- Staging: a pull request merged to `main` reaches DEV's schema, then the staging deployment ([the migration rule](#the-migration-rule)).
+- Release: only through the `release` workflow, which the owner starts or asks an agent to start ([Release and rollback](#release-and-rollback)).
 - A production-local session: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable. For a manual look at `bun run dev`, which runs against DEV through `.env.local`, sign in with a demo member's address and the fixture password from that script.
+
+## Release and rollback
+
+[Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging; the `production` branch is what Vercel serves on `app.werk-flow.app`.
+
+1. Release: `gh workflow run release`, then `gh run watch` until it ends. `.github/workflows/release.yml` requires a successful `Check` on the head of `main` and a fast-forward from `production`, applies the pending migrations to PROD and deploys the edge functions, advances `production` to that commit with its deploy key, waits for Vercel's production build of it and promotes that build explicitly.
+2. Rollback: Vercel Instant Rollback in the dashboard switches the domain back to the previous production build within seconds. It changes code only; the database stays as it is, which expand-only migrations make safe. After a rollback Vercel stops assigning new production builds to the domain, so the next release must promote explicitly, which the workflow does.
+3. The database is never rolled back. Fix forward with a new migration. Point-in-time restore is a last resort that loses every customer write since the restore point ([recovery](recovery-and-incidents.md)).

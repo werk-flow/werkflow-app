@@ -1,0 +1,49 @@
+name: Staging
+
+# A merge to main reaches staging in this order: DEV's schema first, then the
+# app (docs/technical/environments.md, "Release and rollback"). vercel.json
+# turns off Git deployments of main, so staging never runs code ahead of its
+# schema; pull-request previews stay automatic.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Migrate DEV
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+        run: supabase db push --db-url "$DATABASE_URL"
+      - name: Deploy the edge functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy --project-ref mbkkzuqjbdvzelqvuzcn
+
+  deploy:
+    name: Deploy staging
+    needs: migrate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      # The hook builds the head of main as a preview with the pre-production (DEV)
+      # variables and moves the branch alias of main, the stable staging URL.
+      - name: Trigger the deploy hook
+        env:
+          HOOK: ${{ secrets.VERCEL_STAGING_DEPLOY_HOOK }}
+        run: curl --fail --silent --show-error --request POST "$HOOK" > /dev/null
