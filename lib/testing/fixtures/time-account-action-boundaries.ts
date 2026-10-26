@@ -38,12 +38,26 @@ const decidableRequestId = '84000000-0000-4000-8000-000000000015';
 const colleagueFindingId = '84000000-0000-4000-8000-000000000016';
 const decidableFindingId = '84000000-0000-4000-8000-000000000017';
 
+const noAccessRows = { personnel_access_lifecycles: [], personnel_onboarding_requirements: [] };
 const world = installActionWorld({
+  // The responsibility read embeds each record's access lifecycle and open access blockers.
   employee_records: [
-    { id: ownRecordId, organization_id: ORGANIZATION_A, user_id: null },
-    { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null },
-    { id: callerRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID, exit_date: null },
-    { id: colleagueRecordId, organization_id: ORGANIZATION_A, user_id: colleagueUserId, exit_date: null },
+    { id: ownRecordId, organization_id: ORGANIZATION_A, user_id: null, ...noAccessRows },
+    { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null, ...noAccessRows },
+    {
+      id: callerRecordId,
+      organization_id: ORGANIZATION_A,
+      user_id: CALLER_ID,
+      exit_date: null,
+      ...noAccessRows,
+    },
+    {
+      id: colleagueRecordId,
+      organization_id: ORGANIZATION_A,
+      user_id: colleagueUserId,
+      exit_date: null,
+      ...noAccessRows,
+    },
   ],
   // No time-approval configuration: Admin and Büro hold the responsibility by role.
   organization_members: [
