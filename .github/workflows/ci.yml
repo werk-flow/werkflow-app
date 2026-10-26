@@ -168,7 +168,8 @@ jobs:
           done
           tail -n 5 "$RUNNER_TEMP/test-server.log"
       - name: Run browser groups
-        run: bun scripts/verify.ts run --group "${{ matrix.groups }}" --jobs 2
+        # One worker: the stack, the server and a second browser outran a shared runner's four cores.
+        run: bun scripts/verify.ts run --group "${{ matrix.groups }}" --jobs 1
       - name: Copy the server output
         if: failure()
         run: |

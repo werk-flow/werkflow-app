@@ -27,8 +27,17 @@ export type CiPlan = {
 const TOOLING_INPUTS =
   /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|vercel\.json|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/.+|scripts\/(verify|run-playwright|playwright-preflight|test-server|build|ci-plan)\.ts|lib\/testing\/(runner|selection|local-stack)\/.+)$/;
 
-/** Product files whose rendering the visual reference and acceptance groups judge. */
+/** Product files whose rendering the visual reference group judges. */
 const RENDERED_UI = /^(app\/.+\.(tsx|css)|components\/.+\.tsx?|hooks\/.+\.tsx?|public\/.+)$/;
+
+/**
+ * The visual groups drive a browser in the pinned Playwright image and run for many minutes, so
+ * each takes a shard of its own. The acceptance captures run in full runs only: a pull request's
+ * before-and-after pair needs the base build, which the author captures locally
+ * (docs/technical/standards-audit.md).
+ */
+const VISUAL_GROUP = /^audit:visual(:|$)/;
+const ACCEPTANCE_GROUP = 'audit:visual:acceptance';
 
 /** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
 const GROUPS_PER_SHARD = 4;
@@ -92,16 +101,24 @@ function changeSelection(
     const selection = selections.get(group.id);
     if (selection)
       return [{ id: group.id, reason: `${selection.reason} (${selection.changedFiles[0] ?? 'no file'})` }];
-    if (renderedUi && group.files.some(isReleaseOnlySpec))
+    if (renderedUi && group.files.some(isReleaseOnlySpec) && group.id !== ACCEPTANCE_GROUP)
       return [{ id: group.id, reason: `Rendered UI changed (${renderedUi})` }];
     return [];
   });
 }
 
-/** Deals the groups round-robin into as few shards as hold about GROUPS_PER_SHARD each. */
+/**
+ * A shard of its own for each visual group, then the other groups dealt round-robin into as few
+ * shards as hold about GROUPS_PER_SHARD each, within the job budget.
+ */
 function shardsOf(groupIds: readonly string[]): CiShard[] {
-  const count = Math.min(MAX_SHARDS, Math.ceil(groupIds.length / GROUPS_PER_SHARD));
-  const shards = Array.from({ length: count }, (): string[] => []);
-  groupIds.forEach((id, index) => shards[index % count]?.push(id));
+  const visual = groupIds.filter((id) => VISUAL_GROUP.test(id));
+  const rest = groupIds.filter((id) => !VISUAL_GROUP.test(id));
+  // At least one shard for the other groups, so a large visual selection can never drop them.
+  const count = rest.length
+    ? Math.max(1, Math.min(MAX_SHARDS - visual.length, Math.ceil(rest.length / GROUPS_PER_SHARD)))
+    : 0;
+  const shards = [...visual.map((id) => [id]), ...Array.from({ length: count }, (): string[] => [])];
+  rest.forEach((id, index) => shards[visual.length + (index % count)]?.push(id));
   return shards.map((groups, index) => ({ shard: index + 1, groups: groups.join(',') }));
 }
