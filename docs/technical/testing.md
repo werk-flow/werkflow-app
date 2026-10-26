@@ -41,7 +41,7 @@ Write each test at its boundary while you build the behavior, and run the narrow
 ### Open and babysit the pull request
 
 1. Push the branch and open the PR with `gh pr create`; fill in `.github/pull_request_template.md`.
-2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until `Check` and the review are green on the latest commit. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
+2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until it is ready: `Check` green on the latest commit and, for a code PR, a clean review. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
 
 ## What browser tests are for
 
@@ -210,7 +210,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 1. Run `bun run test:plan` and read the reason for each selected group.
 2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
 3. On a failure, follow [Failures](#failures).
-4. Push, open the PR and babysit it until `Check` and the review are green on the latest commit ([CodeRabbit](coderabbit.md#babysit-a-pull-request)).
+4. Push, open the PR and babysit it until it is ready ([CodeRabbit](coderabbit.md#babysit-a-pull-request)).
 5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
 
 ## Examples

@@ -65,3 +65,7 @@ The edit guard stays where it protects a running local verification: it refuses 
 - [testing.md](../technical/testing.md) — the CI gate and the local commands.
 - [environments.md](../technical/environments.md) — the migration rule, release and rollback.
 - [coderabbit.md](../technical/coderabbit.md) — reviews on pull requests.
+
+## Amendment 2026-10-26: one CodeRabbit review per code pull request
+
+The owner narrowed rule 4. A pull request that changes product code, tests, migrations or security-relevant code gets one CodeRabbit app review, requested once at the end when `Check` is green, not after every fix. A pull request that changes only docs, agent instructions or CI workflow files merges on a green `Check` with the agent's own review. Requests after every fix spent the app's rate limit, and an early request restarts its window. [coderabbit.md](../technical/coderabbit.md#babysit-a-pull-request) owns the procedure, the rate-limit rule and the order when several pull requests wait.

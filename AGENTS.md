@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read this file at the start of every task. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
+Reach every other doc through [the docs index](docs/README.md). Do not glob the docs tree.
 
 ## Workspace
 
@@ -112,7 +112,7 @@ A rule below without a named mechanism is a Tier 3 default.
 - Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
 - Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
-- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)) until `Check` is green and one CodeRabbit review is clean on the latest commit; the owner merges. Mechanism: the ruleset on `main`.
+- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it until it is ready ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)): `Check` green on the latest commit, plus one final CodeRabbit review unless the PR changes only docs, agent instructions or CI workflows, which get your own review; the owner merges. Mechanism: the ruleset on `main`.
 
 ## Language
 
@@ -124,7 +124,7 @@ Domain terms: `Auftrag` (work order), `Projekt` (contains several jobs), `Kunde`
 ## Tools, branches and releases
 
 - Use Bun: `bun install`, `bun run <script>`, `bunx <tool>`. Keep `bun.lock`. Keep `package-lock.json` as is; add no other lockfile. Mechanism: `vercel.json` installs from the frozen `bun.lock`.
-- Work in Linux or macOS (WSL on Windows). In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
+- In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
 - The infrastructure stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
 - `main` is staging on DEV, `production` is PROD; never push to either. Release only when the owner asks in your thread ("release main"): run `gh workflow run release`, follow it to its end with `gh run watch`, and report. Mechanism: the rulesets.
 - Schema changes follow [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only. Mechanism: `bun run migrations:check`, `bun run types:check`, `sql:security`.
