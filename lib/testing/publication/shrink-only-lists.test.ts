@@ -119,6 +119,12 @@ test('array lists key by their identifying strings, and a setter added to an ent
     'planted array (eslint.config.mjs) gained "a.ts.setters#setB"',
   ]);
   expect(growth(list, array(`'setA', 'setB'`), array(`'setA'`))).toEqual([]);
+  // A spread into an array value hides its entries, so the owner's approval never waives it.
+  const current = listEntries(list, array(`'setA', ...MORE`));
+  if (current === null) throw new Error('the planted list is missing');
+  expect(growthProblems(list, listEntries(list, array(`'setA'`)), current, { growthApproved: true })).toEqual(
+    ['planted array (eslint.config.mjs) gained "a.ts.setters#...MORE"'],
+  );
 });
 
 test('a list absent at the base starts its own baseline, a list gone from the tree is a problem, and approval waives only growth', () => {

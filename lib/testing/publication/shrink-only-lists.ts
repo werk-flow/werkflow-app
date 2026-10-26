@@ -242,8 +242,8 @@ export function listEntries(list: ShrinkOnlyList, text: string | null): ListEntr
   return variableEntries(list.file, text, list.extract.name);
 }
 
-/** The key of a spread: entries the extractor cannot list. */
-const SPREAD_KEY = /(^|\.)\.\.\./;
+/** The key of a spread, in a record or an array: entries the extractor cannot list. */
+const SPREAD_KEY = /(^|[.#])\.\.\./;
 
 /**
  * Entries that joined the list or raised their ceiling since the base. A list
