@@ -230,6 +230,89 @@ end;
 $$;
 drop table public.werkflow_inert_policy_probe;
 
+-- RLS consults effective personnel access, not only the membership, the
+-- assignment or the employee record link: suspension and access end keep all
+-- three (docs/technical/security.md, "Revocation boundaries"). Every public
+-- policy, every app_private helper that authenticated executes or a policy
+-- calls, and every helper those call in turn, that reads organization_members,
+-- job_assignments or employee_records also calls an effective-access helper.
+-- The check reads function bodies as text: a body that calls the helper in one
+-- branch and reads membership in another passes, so review still owns each
+-- branch, and client_read_boundaries.sql drives suspended members per table
+-- family. The two exemptions compute access themselves.
+create function pg_temp.reads_without_effective_access() returns text language sql as $$
+  with recursive policy as (
+    select c.relname || ' policy "' || p.polname || '"' as name,
+      coalesce(pg_get_expr(p.polqual, p.polrelid), '') || ' '
+        || coalesce(pg_get_expr(p.polwithcheck, p.polrelid), '') as body
+    from pg_policy p join pg_class c on c.oid = p.polrelid
+    where c.relnamespace = 'public'::regnamespace
+  ), helper as (
+    select p.oid, p.proname, p.prosrc from pg_proc p
+    where p.pronamespace = 'app_private'::regnamespace
+  ), reached (oid) as (
+    select helper.oid from helper
+    where has_function_privilege('authenticated', helper.oid, 'EXECUTE')
+      or exists (
+        select 1 from policy where policy.body ~ ('\mapp_private\.' || helper.proname || '\(')
+      )
+    union
+    select callee.oid from reached
+    join helper caller on caller.oid = reached.oid
+    join helper callee on caller.prosrc ~ ('\mapp_private\.' || callee.proname || '\(')
+  ), checked as (
+    select 'app_private.' || helper.proname as name, helper.prosrc as body
+    from helper join reached on reached.oid = helper.oid
+    union all
+    select policy.name, policy.body from policy
+  )
+  select string_agg(distinct checked.name, ', ' order by checked.name) from checked
+  where checked.body ~ '\m(organization_members|job_assignments|employee_records)\M'
+    and checked.body !~ ('\mapp_private\.(p1_24_has_effective_access|p1_24_is_manager|p1_24_is_admin'
+      || '|p1_24_is_self|get_user_org_ids|get_user_admin_or_manager_org_ids'
+      || '|get_user_employee_record_ids|get_user_assigned_job_ids|get_user_assigned_project_ids)\(')
+    and checked.name not in (
+      -- the effective-access state itself
+      'app_private.p1_24_effective_access_state',
+      -- the prestart state, which a policy grants only through p1_24_is_self
+      'app_private.p1_24_has_prestart_access'
+    );
+$$;
+
+do $$
+declare offender text := pg_temp.reads_without_effective_access();
+begin
+  if offender is not null then
+    raise exception 'RLS reads membership, assignment or employee link without effective access: %', offender;
+  end if;
+end;
+$$;
+
+-- Probe: a policy and a helper that read membership directly must be reported.
+create table public.werkflow_access_probe (id bigint primary key, organization_id uuid);
+alter table public.werkflow_access_probe enable row level security;
+create function app_private.werkflow_access_probe(p_organization_id uuid) returns boolean
+language sql stable as $$
+  select exists (
+    select 1 from public.organization_members member
+    where member.organization_id = p_organization_id and member.user_id = (select auth.uid())
+  );
+$$;
+create policy "probe reads" on public.werkflow_access_probe for select to authenticated
+  using (app_private.werkflow_access_probe(organization_id) or exists (
+    select 1 from public.job_assignments assignment where assignment.user_id = (select auth.uid())
+  ));
+do $$
+begin
+  if coalesce(pg_temp.reads_without_effective_access(), '')
+     <> 'app_private.werkflow_access_probe, werkflow_access_probe policy "probe reads"' then
+    raise exception 'Effective-access check missed the probe: %', pg_temp.reads_without_effective_access();
+  end if;
+end;
+$$;
+drop table public.werkflow_access_probe;
+drop function app_private.werkflow_access_probe(uuid);
+
 -- Client roles write no public table directly (migration 20261015100100).
 -- Every client write privilege is in this reviewed inventory with its caller;
 -- a new one fails until it is listed, and a listed one that disappears fails
