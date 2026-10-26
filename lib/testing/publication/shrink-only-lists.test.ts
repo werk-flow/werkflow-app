@@ -197,7 +197,27 @@ test('a spread into a record list and a computed or opaque ceiling are growth', 
   ).toEqual(['waits (tests/timeouts.ts) raised "UPLOAD_MS" from 60000 to 120000']);
   expect(growth(list, 'export const UPLOAD_MS = 60_000;\n', 'export const UPLOAD_MS = slowest();\n')).toEqual(
     ['waits (tests/timeouts.ts) replaced the ceiling 60000 of "UPLOAD_MS" with a value it cannot compare'],
+  ); // The owner's approval waives a raised ceiling, never a spread or a ceiling it cannot compare.
+  const approved = (target: ShrinkOnlyList, base: string, current: string): string[] => {
+    const currentEntries = listEntries(target, current);
+    if (currentEntries === null) throw new Error('the planted list is missing');
+    return growthProblems(target, listEntries(target, base), currentEntries, { growthApproved: true });
+  };
+  expect(approved(list, 'export const UPLOAD_MS = 60_000;\n', 'export const UPLOAD_MS = 90_000;\n')).toEqual(
+    [],
   );
+  expect(
+    approved(list, 'export const UPLOAD_MS = 60_000;\n', 'export const UPLOAD_MS = slowest();\n'),
+  ).toEqual([
+    'waits (tests/timeouts.ts) replaced the ceiling 60000 of "UPLOAD_MS" with a value it cannot compare',
+  ]);
+  expect(
+    approved(
+      plantedRecord,
+      record(`  'a.ts::load': 'one job',`),
+      record(`  'a.ts::load': 'one job',\n  ...MORE,`),
+    ),
+  ).toEqual(['planted record (lib/planted.test.ts) gained "...MORE"']);
 });
 
 test('a JSON array keys by its items, so replacing one is growth', () => {
