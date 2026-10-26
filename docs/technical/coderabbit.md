@@ -2,7 +2,7 @@
 
 Status: living — last reviewed 2026-10-26
 
-The CodeRabbit GitHub app reviews every pull request to `main` ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Treat it as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
+The CodeRabbit GitHub app reviews the pull requests to `main` that [Babysit a pull request](#babysit-a-pull-request) names ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). Treat it as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 
 The root `.coderabbit.yaml` configures the review. Its path instructions point at the owner doc of each virtue and leave generated files out; the rules themselves live in those docs, and `AGENTS.md` is read as a guideline file. Change the file only when an owner doc moves or a new top-level folder needs its pointer. Validate it against the schema its first line declares.
 
@@ -10,12 +10,14 @@ The root `.coderabbit.yaml` configures the review. Its path instructions point a
 
 ### Babysit a pull request
 
-1. After `gh pr create`, and after each later push, comment `@coderabbitai review` on the PR: the app does not review a repository with fewer than ten stars by itself. While the app answers with a rate limit, do not request again, because each early request restarts its wait: run `bun run review -- --committed --base-commit <merge base>` instead, and its findings are the review. Then call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
-2. On each wake, read what is new: the failed CI job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or the new review comments (`gh pr view <number> --comments`, the inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`).
-3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
-4. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)).
-5. Dismiss a false finding with a written reason in its thread: the evidence that the code is right. Resolve the thread.
-6. Stay quiet when nothing is new. Stop when `Check` and the CodeRabbit review, or the local review while the app is rate-limited, are green on the latest commit, then call `unwatch_pull_request` and hand back: the owner merges.
+1. After `gh pr create`, call `watch_pull_request` with the PR URL and end your turn. T3 Code wakes you when a check fails or passes, someone comments or reviews, or the branch conflicts. Do not poll or sleep.
+2. Choose the review by what the PR changes. A PR that changes product code, tests, migrations or security-relevant code gets one CodeRabbit app review: comment `@coderabbitai review` once, when `Check` is green on the latest commit, not after every fix. The app does not review a repository with fewer than ten stars by itself. A PR that changes only docs, agent instructions or CI workflow files gets your own review of its diff, recorded in a PR comment, and merges on a green `Check` without CodeRabbit.
+3. Never request a review while CodeRabbit reports a rate limit: an early request restarts its window. Request once after the wait it names. When several PRs wait for the review, a security fix goes first.
+4. On each wake, read what is new: the failed CI job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or the new review comments (`gh pr view <number> --comments`, the inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`).
+5. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
+6. Fix a real finding in a new commit on the branch and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). A fix does not request another review.
+7. Dismiss a false finding with a written reason in its thread: the evidence that the code is right. Resolve the thread.
+8. Stay quiet when nothing is new. Stop when `Check` is green on the latest commit and the PR's review is done with every finding answered, then call `unwatch_pull_request` and hand back, naming the PR's kind and the review it got: the owner merges.
 
 Wrong turn: accepting a suggested diff verbatim. CodeRabbit sees the diff, not the product; a fix that weakens a role check or a German label to satisfy it is a regression.
 
@@ -25,7 +27,7 @@ Wrong turn: accepting a suggested diff verbatim. CodeRabbit sees the diff, not t
 
 ### Run a local pre-check
 
-`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional: the app review on the PR is the review of record.
+`bun run review` runs the CodeRabbit CLI on local changes before you push. It is optional: for a PR that needs one, the app review is the review of record.
 
 ```bash
 bun run review:doctor                                   # the binary and its authentication
