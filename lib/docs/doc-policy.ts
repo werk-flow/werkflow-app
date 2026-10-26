@@ -40,6 +40,8 @@ export const DATED_LINES: Readonly<Record<string, RegExp>> = {
   'docs/plans/phase-1/roadmap.md': /^\| `P1-\d{2}a?` \| `complete` \|/,
   // A flow's text is pinned by its hash in the coverage map and changes only with its evidence.
   'docs/product/user-flow-catalog.md': /^- `P1-\d{2}a?-F\d{2,3}` /,
+  // A credential row names the day its token expires, which no provider shows where the secret is stored.
+  'docs/technical/environments.md': /^\| `[A-Z0-9_]+`/,
 };
 
 /** Append-only logs: their historical entries keep the references they were written with. */

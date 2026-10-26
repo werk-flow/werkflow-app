@@ -1,6 +1,6 @@
 # Security control map
 
-Status: living — last reviewed 2026-10-25
+Status: living — last reviewed 2026-10-26
 
 ## How to work
 
@@ -67,7 +67,7 @@ Wrong turn: `console.error(error)`; a provider message can quote row values.
 | Database | RLS restricts every client read, by role and assignment where the server readers restrict them. Client roles write no table directly, except a user's own name and avatar. Nothing is granted to `anon`. A write policy exists only where a client write grant needs it. A function in `public` is executable by `service_role` only, and `authenticated` executes only the RLS helpers that its policies need. Ledger tables refuse direct UPDATE and DELETE, also for privileged roles. | `sql:security` runs `supabase/tests/security_boundaries.sql` and `supabase/tests/client_read_boundaries.sql`. Its inventories of anonymous grants, client writes and definer functions carry a reason per entry. `canary:security` checks the live DEV grants. |
 | Service-role queries | The admin client bypasses RLS. A query on a table with an `organization_id` column filters by the organization or carries a reviewed `tenant-scope` reason. | `lib/conventions/tenant-scope.test.ts`. It treats a client it cannot prove to be the caller's RLS client as privileged, and fails on an annotation that excuses no query. |
 | Closed time periods | A closed period freezes the recorded time of its month for every writer, including service-role code. Close refuses with `period_open_sessions` while a session that began before the period end is still open. | Database triggers raise SQLSTATE `WFP01`. `isPeriodClosedError` in `lib/time-tracking/closed-periods.ts` maps it to `period_closed`. `sql:closed-period-writes` runs `supabase/tests/closed_period_writes.sql`. |
-| Abuse limits | Invite mail, invite redemption, email-change codes and the simulated payment pass a limit per subject. A limiter that cannot decide refuses the operation. A subject reaches the database only as a keyed hash. | `lib/security/rate-limit.ts`, `lib/security/rate-limit.test.ts`, `lib/security/rate-limit-inventory.test.ts`, `sql:rate-limits`. |
+| Abuse limits | Invite mail, invite redemption, email-change codes, the simulated payment and the health check pass a limit per subject. A limiter that cannot decide refuses the operation; the health check reports the outage. A subject reaches the database only as a keyed hash. | `lib/security/rate-limit.ts`, `lib/security/rate-limit.test.ts`, `lib/security/rate-limit-inventory.test.ts`, `sql:rate-limits`. |
 | Cross-organization writes | A write that names another record (a job, a person, an entry) checks that the record belongs to the caller's organization and, where it applies, to the same person. | The owning action plus a boundary test that drives the real action with a foreign id, for example `lib/testing/fixtures/join-request-boundaries.ts`. |
 | Realtime | One channel per organization. RLS governs INSERT and UPDATE delivery, so a person waiting on a join request receives only their own request. Raw DELETE and TRUNCATE publication is off. Database triggers write minimal deletion notices that only current members receive. Consumers treat an event as a signal and read again through an authorized reader. | `bun run realtime:check`, the Realtime assertions in `sql:security`, and `canary:security` for foreign and removed receivers. [Realtime and caching](realtime-and-caching.md) owns the transport. |
 | Files | Bytes live in private buckets. Server code authorizes the target, builds the storage key and signs a short-lived URL. Finalization checks size and existence again. Every storage key starts with the owning organization id. The storage adapter and the admin client never reach the browser, and a Server Action never receives file bytes. | `assertOrganizationStorageKey` in `lib/storage/r2.ts` with `lib/storage/r2.test.ts`, `lib/documents/upload-targets.test.ts`, `lib/security/storage-import-boundary.test.ts`. [Document storage and access](document-storage-and-access.md) owns the access classes. |
@@ -85,7 +85,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Role, lifecycle and object permission are the right ones for the operation. [judgment]
 - Every exported Server Action has a boundary fixture that asserts its refusal of a foreign id or a lower role, unless it is self-scoped and the test proves it takes no id; the `missing` list only shrinks. [test `lib/security/boundary-coverage.test.ts`]
 - A service-role query or function call on organization data passes an organization derived from the resolved context, or carries a reviewed `tenant-scope` reason. [test `lib/conventions/tenant-scope.test.ts`]
-- A route handler calls the authorization its reviewed entry names, and no response body or redirect URL carries an error's message or details. [test `lib/security/route-inventory.test.ts`]
+- A route handler calls the authorization its reviewed entry names, and no response body or redirect URL carries an error's message or details. [test `lib/security/route-inventory.test.ts`, test `lib/security/health-http.test.ts`]
 - A handler that sets cookies or redeems a capability from a request body calls `verifySameOriginJsonRequest`. [test `lib/security/same-origin.test.ts`, test `lib/security/redeem-invite-http.test.ts`]
 - A new authenticated route area is routed by `proxy.ts`. [test `lib/security/proxy-prefixes.test.ts`]
 - An identity check that cannot complete is a failure, never a signed-out caller and never access. A page shows the error page, a route handler answers with a private 500 or 503, the auth callback sends the person to the `/auth/unavailable` screen, and the proxy lets the request through. [test `lib/security/proxy-session.test.ts`, test `lib/data/background-read-http.test.ts`, test `lib/security/auth-callback-http.test.ts`, test `lib/security/redeem-invite-http.test.ts`]
@@ -104,14 +104,14 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - A person's email address never travels in a URL. [test `lib/security/email-in-url.test.ts`]
 - The active-organization cookie counts only for a current member. [test `lib/org/active-cookie.test.ts`, test `lib/data/membership-freshness.test.ts`]
 - A GET handler that shares identity reads follows [read-request authorization reuse](#read-request-authorization-reuse). [test `lib/data/read-request-cache.test.ts`]
-- A provider failure returns a stable error code, and its log holds no recipient, code, link or provider body. [test `lib/security/mail-handlers.test.ts`, judgment]
+- A provider failure returns a stable error code, and its log holds no recipient, code, link or provider body. [test `lib/security/mail-handlers.test.ts`, test `lib/security/health-function.test.ts`, judgment]
 - Server code logs a failure through `logError`, never through `console`. [lint `no-restricted-properties`, code `lib/logging.ts`]
 - A reader cached across requests throws `CachedReadError` on a failed read, so the cache never keeps a failure. [code `lib/data/cached-read-failure.ts`, test `lib/data/cached-read-failures.test.ts`]
 - An edge-function mail send, an invite redemption or a billing write follows a checked `consumeRateLimit` verdict. [test `lib/security/rate-limit-inventory.test.ts`, test `lib/security/rate-limit.test.ts`, group `sql:rate-limits`]
 - Account and email-change transitions stay atomic and server-only. [test `lib/security/account-boundaries.test.ts`]
 - Responses keep the hardening headers and the enforced Content-Security-Policy. [test `lib/security/headers.test.ts`, test `lib/security/csp-report.test.ts`]
 - Product code imports Zod through `lib/zod.ts`, which turns off its `eval` probe. [code `lib/zod.ts`, test `lib/conventions/zod-entry.test.ts`]
-- Every plan carries an advisory pass under 24 hours old. An exception names its exact path, reason, digest and expiry, and leaves the file once its finding is gone. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
+- An advisory exception names its exact path, reason, digest and expiry, and leaves the file once its finding is gone. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
 - Live DEV grants and Realtime delivery to foreign and removed receivers pass before a release. [group `canary:security`]
 - Every residual exposure the owner accepted is listed below until it closes. [judgment]
 

@@ -15,6 +15,7 @@ import {
   CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -222,6 +223,16 @@ export async function headStorageObject({
     }
     throw error;
   }
+}
+
+/**
+ * Reads the bucket's metadata with the runtime credentials: the health check's
+ * harmless authenticated call (app/api/health/route.ts). It names no object key.
+ */
+export async function headStorageBucket(timeoutMs: number): Promise<void> {
+  await getR2Client().send(new HeadBucketCommand({ Bucket: getR2BucketName() }), {
+    abortSignal: AbortSignal.timeout(timeoutMs),
+  });
 }
 
 function isNotFoundError(error: unknown): boolean {
