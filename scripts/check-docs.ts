@@ -10,7 +10,7 @@
 // The numbers and exemptions come from lib/docs/doc-policy.ts, which decision 0004 pins.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
+import { join, isAbsolute, resolve, relative, sep } from 'node:path';
 import { ESLint } from 'eslint';
 import { getBusinessTodayIso } from '../lib/date-time/berlin';
 import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
@@ -28,10 +28,13 @@ import {
   findMarkdownFileLinks,
   findSkillCopyDifferences,
   readSharedSkills,
+  resolveWorkspaceLink,
   SIBLING_REPOSITORIES,
   siblingOfWorkspacePath,
   skillCopyFolders,
   type SiblingRepository,
+  workspaceRootOf,
+  type WorkspaceLayout,
 } from '../lib/docs/workspace-links';
 import { findDocCitations, isCitationCheckedFile } from '../lib/docs/code-citations';
 import {
@@ -137,9 +140,11 @@ function collectFiles(dir: string): string[] {
   });
 }
 
-// The sibling clones sit beside the app. A link into a missing clone is counted once under
-// "workspace" instead of failing link by link.
-const workspaceRoot = dirname(repoRoot);
+// The sibling clones sit beside the main checkout, which a worktree may not. A link into a missing
+// clone is counted once under "workspace" instead of failing link by link.
+const commonDir = git(['rev-parse', '--path-format=absolute', '--git-common-dir']);
+const workspaceRoot = workspaceRootOf(repoRoot, commonDir.ok ? commonDir.out.trim() : null);
+const workspace: WorkspaceLayout = { appRoot: repoRoot, workspaceRoot };
 const missingSiblings = new Set(
   SIBLING_REPOSITORIES.filter((sibling) => !existsSync(join(workspaceRoot, sibling))),
 );
@@ -189,7 +194,7 @@ report('index', findIndexStatusProblems(indexContent, statuses));
 for (const path of docPaths) {
   const file = join(docsRoot, path);
   const broken = findBrokenLinks(docMarkdown(path), {
-    resolve: (target) => (target === '' ? file : resolve(dirname(file), target)),
+    resolve: (target) => (target === '' ? file : resolveWorkspaceLink(workspace, file, target)),
     exists: existsSync,
     inMissingSibling: pointsIntoMissingSibling,
     anchors: headingAnchors,
@@ -371,7 +376,7 @@ for (const path of guidanceFiles) {
   for (const reference of findDocumentReferences(read(path))) {
     const target =
       reference.kind === 'link'
-        ? resolve(dirname(join(repoRoot, path)), reference.target)
+        ? resolveWorkspaceLink(workspace, join(repoRoot, path), reference.target)
         : join(repoRoot, reference.target);
     if (!existsSync(target) && !pointsIntoMissingSibling(target))
       problems.push(`guidance: ${path} references ${reference.target}, which does not exist`);
@@ -473,7 +478,7 @@ function mechanismResolver(fromDoc: string): MechanismResolver {
         : groupIds.some((groupId) => groupId.startsWith(id.slice(0, wildcard)));
     },
     scriptExists: (name) => packageScripts.has(name),
-    linkExists: (target) => existsSync(resolve(dirname(join(repoRoot, fromDoc)), target)),
+    linkExists: (target) => existsSync(resolveWorkspaceLink(workspace, join(repoRoot, fromDoc), target)),
   };
 }
 const agentsContent = read('AGENTS.md');
@@ -682,7 +687,7 @@ for (const sibling of SIBLING_REPOSITORIES) {
     const path = join(siblingRoot, file);
     if (file === '' || !existsSync(path)) continue;
     for (const link of findMarkdownFileLinks(readFileSync(path, 'utf8'))) {
-      const target = resolve(dirname(path), link.path);
+      const target = resolveWorkspaceLink(workspace, path, link.path);
       if (!isInsideApp(target)) continue;
       if (file === 'AGENTS.md' && target === appAgentsPath) linksBack = true;
       const place = `../${sibling}/${file}:${link.line}`;
