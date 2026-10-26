@@ -1,9 +1,10 @@
 name: Staging
 
 # A merge to main reaches staging in this order: DEV's schema first, then the
-# app (docs/technical/environments.md, "Release and rollback"). vercel.json
-# turns off Git deployments of main, so staging never runs code ahead of its
-# schema; pull-request previews stay automatic.
+# app (docs/technical/environments.md, "The migration rule"). vercel.json turns
+# off Git deployments of main, and this workflow deploys the exact commit whose
+# migrations it applied, so staging never runs code ahead of its schema;
+# pull-request previews stay automatic.
 on:
   push:
     branches: [main]
@@ -43,38 +44,28 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
-      # The hook builds the head of main. While a newer commit's run is queued behind this one,
-      # its migrations have not run yet, so only the run whose commit is still the head deploys.
-      - name: Check that this commit is still the head of main
-        id: head
-        run: |
-          head="$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}" refs/heads/main | cut -f1)"
-          if test "$head" = "$GITHUB_SHA"; then echo "current=true" >> "$GITHUB_OUTPUT"
-          else echo "::notice::main moved to ${head}; its own run deploys it after its migrations."; fi
-
-      # The hook builds main as a preview with the pre-production (DEV) variables and moves the
-      # branch alias of main, the stable staging URL.
-      - name: Trigger the deploy hook
-        if: steps.head.outputs.current == 'true'
-        env:
-          HOOK: ${{ secrets.VERCEL_STAGING_DEPLOY_HOOK }}
-        run: curl --fail --silent --show-error --request POST "$HOOK" > /dev/null
-
-      - name: Wait for the staging build
-        if: steps.head.outputs.current == 'true'
+      # A Git-source deployment of this commit, not of the branch head: a newer commit on main
+      # waits for its own run's migrations. Vercel builds it as a preview with the pre-production
+      # (DEV) variables and moves the branch alias of main, the stable staging URL, when it is ready.
+      - name: Deploy this commit to staging
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
-          query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN&limit=20"
+          api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          team="teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN"
+          body="$(jq -n --arg sha "$GITHUB_SHA" --argjson repo "$GITHUB_REPOSITORY_ID" '{name: "werkflow-app",
+            project: "prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R",
+            gitSource: {type: "github", repoId: $repo, ref: "main", sha: $sha}}')"
+          id="$(api -X POST -H "Content-Type: application/json" --data "$body" \
+            "https://api.vercel.com/v13/deployments?${team}" | jq -r .id)"
+          echo "Staging deployment ${id} of ${GITHUB_SHA}."
           deadline=$((SECONDS + 1200))
           while :; do
-            state="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?${query}" \
-              | jq -r --arg sha "$GITHUB_SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha and .meta.githubCommitRef == "main")][0].state // empty')"
+            state="$(api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
             case "$state" in
               READY) echo "Staging serves ${GITHUB_SHA}."; exit 0 ;;
-              ERROR | CANCELED) echo "::error::The staging build of ${GITHUB_SHA} ended ${state}."; exit 1 ;;
+              ERROR | CANCELED) echo "::error::The staging build ${id} ended ${state}."; exit 1 ;;
             esac
-            test $SECONDS -lt $deadline || { echo "::error::No ready staging build of ${GITHUB_SHA} after 20 minutes."; exit 1; }
+            test $SECONDS -lt $deadline || { echo "::error::Staging build ${id} not ready after 20 minutes."; exit 1; }
             sleep 15
           done

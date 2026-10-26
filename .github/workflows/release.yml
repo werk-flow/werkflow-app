@@ -71,31 +71,37 @@ jobs:
 
       # Vercel builds production from the production branch. After an Instant Rollback it
       # stops assigning the domain to new production builds, so the release promotes explicitly.
-      # A failed build gets one redeploy: a rerun of this workflow pushes the same commit, which
-      # starts no new build, and lands here too.
+      # A failed build gets one redeploy, whose own id the step then waits for: a rerun of this
+      # workflow pushes the same commit, which starts no build, and lands here too.
       - name: Promote the production build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SHA: ${{ steps.candidate.outputs.sha }}
         run: |
-          query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN&target=production&limit=20"
+          api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
           vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
+          team="teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN"
+          query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&${team}&target=production&limit=20"
           deadline=$((SECONDS + 1800))
+          id=""
           redeployed=false
           while :; do
-            deployment="$(curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?${query}" \
-              | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0] // empty | "\(.uid) \(.state)"')"
-            case "${deployment#* }" in
+            if test -z "$id"; then
+              id="$(api "https://api.vercel.com/v6/deployments?${query}" \
+                | jq -r --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)][0].uid // empty')"
+            fi
+            state="$(test -n "$id" && api "https://api.vercel.com/v13/deployments/${id}?${team}" | jq -r .readyState)"
+            case "$state" in
               READY) break ;;
               ERROR | CANCELED)
-                if $redeployed; then echo "::error::The production build of ${SHA} failed twice: ${deployment}"; exit 1; fi
-                echo "::warning::Production build ${deployment}; redeploying it once."
-                vercel redeploy "${deployment%% *}" --target production --no-wait
+                if $redeployed; then echo "::error::The production build of ${SHA} failed twice (${id})."; exit 1; fi
+                echo "::warning::Production build ${id} ended ${state}; redeploying it once."
+                url="$(vercel redeploy "$id" --target production --no-wait | tail -n 1)"
+                id="$(api "https://api.vercel.com/v13/deployments/${url#https://}?${team}" | jq -r .id)"
                 redeployed=true ;;
             esac
             test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 30 minutes."; exit 1; }
             sleep 15
           done
-          vercel promote "${deployment%% *}" --yes
-          echo "Production serves ${SHA} (${deployment%% *})."
+          vercel promote "$id" --yes
+          echo "Production serves ${SHA} (${id})."
