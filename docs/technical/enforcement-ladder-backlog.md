@@ -43,6 +43,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
+| Review levels | A PR states its [review level](coderabbit.md#choose-the-review-level) and its `sol-loop` line, and a level 2 PR waits for its CodeRabbit review, but only the agent's reading checks either. `Check` cannot carry the CodeRabbit half: the app is requested only after `Check` is green, so a gate inside `Check` could never pass. A PR body edit also does not start `.github/workflows/ci.yml`. | Tier 2: a separate small workflow on `pull_request` (`opened`, `edited`, `synchronize`) and `pull_request_review`, added by the owner as a second required check on the `main` ruleset. It fails a PR whose diff leaves docs and agent instructions but whose body lacks the `Reviewed with sol-loop:` line, and a PR that touches a level 2 path without a finished CodeRabbit review of its head. |
 
 ## Documentation
 

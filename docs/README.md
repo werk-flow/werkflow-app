@@ -25,7 +25,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 - **Remove** a sentence when it is derivable from code, when its rule no longer holds, or when another doc owns it. Remove a whole doc when nothing in it passes the table above. Deleting is a normal edit, and Git keeps the old text.
 - **Close** a plan or record when its work has ended. Before it closes, move every fact a later agent needs into its living home and list the homes under `## Durable homes`. Nobody opens a closed record unprompted.
 - **Delete** a closed record once nothing requires it: no living doc or check needs its acceptance evidence, and no fact in it still constrains future work. Slice records and decision records stay. Git keeps everything else.
-- **Budget.** Routine reading stays small because a task reads the procedures and items it touches, not whole owner docs. `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs, product docs and plans have no budget: a task reads a spec's Current Product Baseline and only the planned sections it reaches. A living doc states rules as they are now: no dates outside its status line, no commit hashes, no counters, no build or report ids. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
+- **Budget.** `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs, product docs and plans have no budget. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
 
 ## Index
 
@@ -43,7 +43,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | [code-quality.md](technical/code-quality.md) | You write or review code: the code-quality checklist, the deletion pass and the independent review. |
 | [testing.md](technical/testing.md) | You implement or verify a change, investigate a failed test, or prepare a release. |
 | [integrated-test-state.md](technical/integrated-test-state.md) | You seed a test's state, choose fixture dates, or keep a page stable during a browser step. |
-| [coderabbit.md](technical/coderabbit.md) | You babysit a pull request, handle a review finding or run a local review. |
+| [coderabbit.md](technical/coderabbit.md) | You choose a PR's review level, babysit or merge a PR, handle a review finding or run a local review. |
 | [recovery-and-incidents.md](technical/recovery-and-incidents.md) | Something is lost, leaked or down: backups, restore procedures, incident steps. |
 | [standards-audit.md](technical/standards-audit.md) | You accept a rendered design or audit a wave. |
 | [enforcement-ladder-backlog.md](technical/enforcement-ladder-backlog.md) | You plan a Tier 1 or Tier 2 conversion, or a finding needs a backlog row. Not part of routine reading. |
@@ -123,6 +123,10 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 | `grilling` | You resolve open product or design decisions with the owner. |
 | `supabase-live-workflow` | Any Supabase work: schema, SQL, RLS, storage, edge functions, migrations, generated types. |
 | `coderabbit-review` | The owner asks for a CodeRabbit review or a fix-and-review cycle. |
+| `sol-loop` | The owner says "sol loop", or a level 1 or 2 PR needs review. |
+| `full-send`, `full-stop` | The owner says "full send" or "full stop". |
+| `file-pr` | You open a PR. |
+| `leaving-pr-comments` | You comment on GitHub. |
 
 ## Maintenance rules
 

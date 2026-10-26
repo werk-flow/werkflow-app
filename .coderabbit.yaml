@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# Reviews a code pull request to main once, on request (docs/technical/coderabbit.md). Each rule lives in its owner doc;
+# Reviews a level 2 pull request to main once, on request (docs/technical/coderabbit.md). Each rule lives in its owner doc;
 # the path instructions only point there. AGENTS.md is read as a guideline file.
 
 language: "en-US"
