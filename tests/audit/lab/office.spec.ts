@@ -7,6 +7,7 @@ import { closeOccurrenceOverviewButton } from '../../golden/support/steps/calend
 import { customerSearchField } from '../../golden/support/steps/customers';
 import { openTimeApprovals } from '../../golden/support/steps/time-tracking';
 import {
+  fillJobNumber,
   jobFormField,
   visibleJobSearch,
   workCreateButton,
@@ -106,7 +107,7 @@ test.describe('Lab counts of the office @AUDIT-LAB-OFFICE', () => {
       await workCreateButton(lab.page).click();
       const dialog = workCreateDialog(lab.page);
       await workCreateTab(dialog, 'job').click();
-      await jobFormField(dialog, 'number').fill(jobNumber);
+      await fillJobNumber(jobFormField(dialog, 'number'), jobNumber);
       await jobFormField(dialog, 'title').fill(title);
       await recordLabStep(lab, 'lab.office.job-create', {
         trigger: () => workCreateSubmit(dialog, 'job').click(),
