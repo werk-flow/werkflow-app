@@ -9,6 +9,11 @@ import { CALLER_ID, ORGANIZATION_A, installActionWorld, tableRows } from './acti
 const employeeRecordId = '40000000-0000-4000-8000-000000000001';
 const callerProfile = { id: CALLER_ID, first_name: 'Former', last_name: 'Employee' };
 const membership = { organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' };
+const colleagueMembership = {
+  organization_id: ORGANIZATION_A,
+  user_id: '30000000-0000-4000-8000-000000000002',
+  role: 'employee',
+};
 
 const world = installActionWorld({ profiles: [callerProfile] });
 const { deleteAccount } = await import('@/lib/auth/actions');
@@ -44,9 +49,10 @@ assert.deepEqual(await deleteAccount(), { success: false, error: 'delete_failed'
 assert.deepEqual(world.deletedUserIds, []);
 world.failingTables.delete('organization_members');
 
-// Without a membership the Auth user goes; a refused Auth deletion (the
-// database guard, a restricting reference) keeps the profile.
-world.tables.organization_members = [];
+// Without a membership of their own the Auth user goes, whoever else is a
+// member; a refused Auth deletion (the database guard, a restricting
+// reference) keeps the profile.
+world.tables.organization_members = [colleagueMembership];
 world.deleteUser = () => ({ error: { message: 'account_deletion_member_has_time_history' } });
 assert.deepEqual(await deleteAccount(), { success: false, error: 'delete_failed' });
 assert.deepEqual(world.deletedUserIds, [CALLER_ID]);
