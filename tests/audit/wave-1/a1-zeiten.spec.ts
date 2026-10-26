@@ -50,6 +50,7 @@ import {
 import { createJob } from '../../golden/support/steps/work';
 import { berlinDateAtOffset } from '../../golden/support/date-ownership';
 import { clockOutTimeGroup, moveCalendarBlockToMember, visibleCalendarTimeBlock } from '../support/a1-steps';
+import { nextFrames } from '../support/layout-measure';
 
 function dateDigits(date: string): string {
   return date.split('-').reverse().join('');
@@ -161,26 +162,17 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     const saveEntry = editDialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true });
     await expect(entryHeading).toBeInViewport({ ratio: 1 });
     await expect(saveEntry).toBeInViewport({ ratio: 1 });
-    // The dialog re-centres after the viewport change; compare against a settled box.
-    let settledSaveBox = await saveEntry.boundingBox();
-    await expect
-      .poll(
-        async () => {
-          const next = await saveEntry.boundingBox();
-          const settled = JSON.stringify(next) === JSON.stringify(settledSaveBox);
-          settledSaveBox = next;
-          return settled;
-        },
-        { timeout: 5_000 },
-      )
-      .toBe(true);
-    const initialSaveBox = expectDefined(settledSaveBox, 'the settled save button box');
+    // The dialog re-centres after the viewport change; compare against its box once every frame
+    // and finite animation has ended (two equal reads inside one frame passed a still-moving dialog).
+    await nextFrames(adminPage);
+    const initialSaveBox = expectDefined(await saveEntry.boundingBox(), 'the settled save button box');
     expect(await entryBody.evaluate((body) => body.scrollHeight > body.clientHeight)).toBe(true);
     await entryBody.evaluate((body) => {
       body.scrollTop = body.scrollHeight;
     });
     await expect(entryHeading).toBeInViewport({ ratio: 1 });
     await expect(saveEntry).toBeInViewport({ ratio: 1 });
+    await nextFrames(adminPage);
     const scrolledSaveBox = expectDefined(await saveEntry.boundingBox(), 'the scrolled save button box');
     expect(Math.abs(scrolledSaveBox.y - initialSaveBox.y)).toBeLessThanOrEqual(1);
     await adminPage.setViewportSize(originalViewport);
