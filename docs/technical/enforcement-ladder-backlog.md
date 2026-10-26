@@ -9,7 +9,6 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
-| Day view on DST days | `lib/calendar/day-layout.ts` places a block by elapsed minutes since the day's first instant, and the drag and drop rules in `components/kalender/day-view/` convert back the same way, so on the 23- or 25-hour day of a DST change every block after the switch sits an hour off. `audit:wave-1:a1-zeiten` (A1-30) fails on the day after each change, because it reads yesterday's entries. | Tier 2: position by Berlin wall-clock minutes through `lib/date-time/berlin.ts`, with unit tests on both DST days for the layout and its inverse. |
 
 ## Performance and immediate feedback
 

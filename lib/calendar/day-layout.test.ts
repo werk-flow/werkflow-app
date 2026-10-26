@@ -1,12 +1,14 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
   fittedHourWidth,
+  instantAtMinutes,
   jobStartMinutes,
   minutesIntoDay,
   packTimeLanes,
   resizedBlockUpdates,
   shiftedBlockUpdates,
   travelGaps,
+  wallMinutesFrom,
 } from './day-layout';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
@@ -129,5 +131,41 @@ describe('day layout', () => {
       { entryId: 'out', newUserId: 'u1', newTimestamp: '2026-09-08T15:00:00.000Z' },
       { entryId: 'bs2', newUserId: 'u1', newTimestamp: '2026-09-08T15:00:00.000Z' },
     ]);
+  });
+});
+
+describe('a DST day keeps the wall-clock grid', () => {
+  // The day view runs in the browser's zone; the business zone is the one that has the DST days.
+  const zone = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = 'Europe/Berlin';
+  });
+  afterAll(() => {
+    process.env.TZ = zone;
+  });
+
+  test('on the fall-back day 10:00 sits at minute 600, not 660, and maps back to its instant', () => {
+    const dayStart = new Date(2026, 9, 25);
+    const tenAm = Date.parse('2026-10-25T09:00:00Z');
+    expect(minutesIntoDay(new Date(tenAm), dayStart)).toBe(600);
+    expect(instantAtMinutes(dayStart, 600)).toBe(tenAm);
+    // The repeated hour shares its minutes: 02:30 summer time and 02:30 winter time.
+    expect(wallMinutesFrom(dayStart, Date.parse('2026-10-25T00:30:00Z'))).toBe(150);
+    expect(wallMinutesFrom(dayStart, Date.parse('2026-10-25T01:30:00Z'))).toBe(150);
+    expect(minutesIntoDay(new Date(2026, 9, 26, 0, 30), dayStart)).toBe(1440);
+  });
+
+  test('on the spring-forward day 10:00 sits at minute 600 and the skipped hour moves forward', () => {
+    const dayStart = new Date(2027, 2, 28);
+    const tenAm = Date.parse('2027-03-28T08:00:00Z');
+    expect(minutesIntoDay(new Date(tenAm), dayStart)).toBe(600);
+    expect(instantAtMinutes(dayStart, 600)).toBe(tenAm);
+    expect(instantAtMinutes(dayStart, 150)).toBe(Date.parse('2027-03-28T01:30:00Z'));
+  });
+
+  test('outside the day the minutes continue, as the labels of a block past midnight need', () => {
+    const dayStart = new Date(2026, 9, 25);
+    expect(wallMinutesFrom(dayStart, Date.parse('2026-10-25T23:30:00Z'))).toBe(24 * 60 + 30);
+    expect(wallMinutesFrom(dayStart, Date.parse('2026-10-24T21:30:00Z'))).toBe(-30);
   });
 });

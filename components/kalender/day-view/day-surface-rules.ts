@@ -1,6 +1,12 @@
 import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
 import { edgeResizedSpan } from '@/lib/calendar/day-drag-geometry';
-import { DEFAULT_VISIT_MINUTES, MIN_ITEM_MINUTES, jobStartMinutes } from '@/lib/calendar/day-layout';
+import {
+  DEFAULT_VISIT_MINUTES,
+  MIN_ITEM_MINUTES,
+  instantAtMinutes,
+  jobStartMinutes,
+  wallMinutesFrom,
+} from '@/lib/calendar/day-layout';
 import {
   checkParkedContext,
   checkNotAlreadyAssigned,
@@ -113,14 +119,14 @@ export function dayTargetVerdict(
       let startMs: number;
       let endMs: number;
       if (payload.kind === 'timeBlock') {
-        startMs = dayStart.getTime() + minutes * 60_000;
+        startMs = instantAtMinutes(dayStart, minutes);
         endMs = startMs + (clockOutMs - clockInMs);
       } else {
         const next = edgeResizedSpan({
           start: clockInMs,
           end: clockOutMs,
           edge: payload.edge,
-          edgeAt: dayStart.getTime() + minutes * 60_000,
+          edgeAt: instantAtMinutes(dayStart, minutes),
           minimumLength: MIN_ITEM_MINUTES * 60_000,
         });
         startMs = next.start;
@@ -139,7 +145,7 @@ export function dayTargetVerdict(
       if (!check.ok) return { ok: false, message: check.message };
       return {
         ok: true,
-        label: timeLabel((startMs - dayStart.getTime()) / 60_000, (endMs - dayStart.getTime()) / 60_000),
+        label: timeLabel(wallMinutesFrom(dayStart, startMs), wallMinutesFrom(dayStart, endMs)),
       };
     }
     case 'barEdge':

@@ -3,7 +3,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { indexAtOffset } from '@/lib/calendar/drag-math';
 import { dayMinutesAtPoint, edgeResizedSpan } from '@/lib/calendar/day-drag-geometry';
-import { DAY_NAME_COLUMN_PX, MIN_ITEM_MINUTES } from '@/lib/calendar/day-layout';
+import { DAY_NAME_COLUMN_PX, MIN_ITEM_MINUTES, wallMinutesFrom } from '@/lib/calendar/day-layout';
 import type { CalendarBoardDay } from '@/lib/calendar/board';
 import { dayRowFor, dayRowKey, type DayRowModel } from '@/lib/calendar/day-rows';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -157,13 +157,13 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
       } else if (payload.kind === 'resizeBlock') {
         const { dayStart, nowMs } = inputRef.current;
         const blockStart = payload.session.clockIn
-          ? (new Date(payload.session.clockIn.timestamp).getTime() - dayStart.getTime()) / 60_000
+          ? wallMinutesFrom(dayStart, new Date(payload.session.clockIn.timestamp).getTime())
           : 0;
         // A running session ends now, as in the drop and its verdict.
-        const blockEnd =
-          ((payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs()) -
-            dayStart.getTime()) /
-          60_000;
+        const blockEnd = wallMinutesFrom(
+          dayStart,
+          payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs(),
+        );
         ({ start, end } = edgeResizedSpan({
           start: blockStart,
           end: blockEnd,

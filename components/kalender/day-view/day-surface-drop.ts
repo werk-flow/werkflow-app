@@ -3,6 +3,7 @@ import { edgeResizedSpan } from '@/lib/calendar/day-drag-geometry';
 import {
   DEFAULT_VISIT_MINUTES,
   MIN_ITEM_MINUTES,
+  instantAtMinutes,
   resizedBlockUpdates,
   shiftedBlockUpdates,
 } from '@/lib/calendar/day-layout';
@@ -112,7 +113,7 @@ export function applyDayDrop(
         session.clockIn,
         ...(session.clockOut ? [session.clockOut] : []),
       ];
-      const deltaMs = dayStart.getTime() + minutes * 60_000 - new Date(session.clockIn.timestamp).getTime();
+      const deltaMs = instantAtMinutes(dayStart, minutes) - new Date(session.clockIn.timestamp).getTime();
       if (deltaMs === 0 && target.userId === payload.sourceUserId) return;
       void mutations.moveTimeBlock({
         sourceEntries,
@@ -133,7 +134,7 @@ export function applyDayDrop(
         start: clockInMs,
         end: clockOutMs,
         edge,
-        edgeAt: dayStart.getTime() + minutes * 60_000,
+        edgeAt: instantAtMinutes(dayStart, minutes),
         minimumLength: MIN_ITEM_MINUTES * 60_000,
       });
       const newTimestamp = new Date(next[edge]).toISOString();

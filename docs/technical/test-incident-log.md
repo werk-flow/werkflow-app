@@ -24,12 +24,22 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 ## 2026-10-26: audit:wave-1:a1-zeiten product failure
 
+<!-- incident-run: 2026-10-26T081244178Z-1825b5 -->
+
+- Run: run `2026-10-26T081244178Z-1825b5`, group `audit:wave-1:a1-zeiten`, target local, fingerprint `52f81bfed830`, world `5943e594dd2a47b1bb00a880dc2b96ee`.
+- Failure point:  >  > wave-1/a1-zeiten.spec.ts > A1 Zeiterfassung @AUDIT-W1-A1 > A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke: Error: expect(locator).toBeVisible() failed
+- Root cause: The day view places a block by elapsed minutes since the day's first instant (lib/calendar/day-layout.ts), so on the DST day the test reads as yesterday the 10:00-11:00 entry showed at 11:00-12:00.
+- Prevention: Tier 2: lib/calendar/day-layout.test.ts places and maps back 10:00 on both DST days of the Berlin zone.
+
+## 2026-10-26: audit:wave-1:a1-zeiten product failure
+
 <!-- incident-run: 2026-10-26T075756883Z-4e98d7 -->
 
 - Run: run `2026-10-26T075756883Z-4e98d7`, group `audit:wave-1:a1-zeiten`, target local, fingerprint `52f81bfed830`, world `e85b6f70969a4eef88b54b3616af9b77`.
 - Failure point:  >  > wave-1/a1-zeiten.spec.ts > A1 Zeiterfassung @AUDIT-W1-A1 > A1-30: Manager korrigiert, hängt um und löscht bestehende Arbeitsblöcke: Error: expect(locator).toBeVisible() failed
 - Root cause: The day view positions a block by elapsed minutes since the day's first instant (lib/calendar/day-layout.ts), so on a DST day every block after the switch is drawn an hour off: the 10:00-11:00 entry of 2026-10-25, the fall-back day the test reads as yesterday, showed at 11:00-12:00. It fails on any day whose previous day is a DST change, in every time zone of the server.
-- Prevention: no prevention claim: the day view's DST positioning is open product work, recorded in docs/technical/enforcement-ladder-backlog.md.
+- Correction: `wallMinutesFrom` and `instantAtMinutes` in `lib/calendar/day-layout.ts` map instants to the day's wall-clock minutes and back; the day view's layout, drop rules and resize use them.
+- Prevention: Tier 2: `lib/calendar/day-layout.test.ts` places and maps back 10:00 on both DST days of the Berlin zone.
 
 ## 2026-10-26: audit:wave-1:a1-zeiten product failure
 

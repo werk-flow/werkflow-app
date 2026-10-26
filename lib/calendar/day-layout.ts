@@ -57,9 +57,46 @@ export function packTimeLanes<Item extends TimedItem>(
   return { lanes, laneCount: laneEnds.length };
 }
 
+/** The first instant of the local day after `dayStart`'s day: 23 or 25 hours later on a DST day. */
+function nextDayStart(dayStart: Date): number {
+  return new Date(dayStart.getFullYear(), dayStart.getMonth(), dayStart.getDate() + 1).getTime();
+}
+
+/**
+ * The wall-clock minute of the local day for an instant (`dayStart` is the day's local midnight).
+ * The day grid has 24 hours on every day, so a DST day maps its wall times, not its elapsed
+ * time: on the fall-back day the repeated hour shares its minutes, and an instant after the day
+ * continues past 1440. On any other day this is the elapsed time since midnight.
+ */
+export function wallMinutesFrom(dayStart: Date, instantMs: number): number {
+  const end = nextDayStart(dayStart);
+  if (instantMs < dayStart.getTime()) return (instantMs - dayStart.getTime()) / 60_000;
+  if (instantMs >= end) return 24 * 60 + (instantMs - end) / 60_000;
+  const instant = new Date(instantMs);
+  return (
+    instant.getHours() * 60 +
+    instant.getMinutes() +
+    instant.getSeconds() / 60 +
+    instant.getMilliseconds() / 60_000
+  );
+}
+
+/** The instant of a wall-clock minute of the day: the inverse of `wallMinutesFrom` inside the day. */
+export function instantAtMinutes(dayStart: Date, minutes: number): number {
+  return new Date(
+    dayStart.getFullYear(),
+    dayStart.getMonth(),
+    dayStart.getDate(),
+    0,
+    0,
+    0,
+    Math.round(minutes * 60_000),
+  ).getTime();
+}
+
 /** Minutes of the local day for an instant; an instant before the day clamps to 0, after it to 1440. */
 export function minutesIntoDay(instant: Date, dayStart: Date): number {
-  return Math.max(0, Math.min(24 * 60, (instant.getTime() - dayStart.getTime()) / 60_000));
+  return Math.max(0, Math.min(24 * 60, wallMinutesFrom(dayStart, instant.getTime())));
 }
 
 /** Gaps between consecutive visits of one person, in minutes, when short enough to matter for travel. */
