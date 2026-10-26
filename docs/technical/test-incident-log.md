@@ -29,7 +29,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-26T094527601Z-794ea2`, group `audit:layout:field`, target local, fingerprint `d1a276fc98c3`.
 - Failure point: Test runner: The test session was cancelled.
 - Root cause: The agent's tool stopped the local plan at its 40-minute background limit; SIGTERM cancelled the test session mid-group.
-- Prevention: no prevention claim: an operator time limit, not a test fault; long plans now run with the tool's longest limit.
+- Prevention: no prevention claim: the agent tool's time limit stopped the operator session, not a test.
 
 ## 2026-10-26: audit:layout:service environment failure
 
@@ -38,7 +38,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Run: run `2026-10-26T094527601Z-909408`, group `audit:layout:service`, target local, fingerprint `169f6a56bd12`, world `21db1bc7a2a046c88f43bcf369cc8ffa`.
 - Failure point: Test runner: The test session was cancelled.
 - Root cause: The agent's tool stopped the local plan at its 40-minute background limit; SIGTERM cancelled the test session mid-group.
-- Prevention: no prevention claim: an operator time limit, not a test fault; long plans now run with the tool's longest limit.
+- Prevention: no prevention claim: the agent tool's time limit stopped the operator session, not a test.
 
 ## 2026-10-26: audit:wave-1:a1-zeiten product failure
 
@@ -382,7 +382,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Root cause: the hook script called `cat`, `tr`, `mkdir` and `date`, which a shell whose PATH lacks Git's `usr/bin` does not have (a Codex PowerShell session); with such a PATH the hook refuses the override and the test fails the same way, exit 1 without output. Found on 2026-10-23 after Codex hit it and took it for its environment; the failed run's PATH was not recorded. 30 sequential runs and 15 runs beside a full unit run, all with Git's `usr/bin` on the PATH, passed. Classified harness: the hook depended on its caller's PATH, and the test's assertion hid the failure.
 - Correction: every exit-code assertion of the test carries the child's output.
 - Correction (2026-10-23): `.githooks/pre-push` only execs `scripts/pre-push.ts`, which reads the refs, runs the gate and logs an override with Bun and git alone.
-- Prevention: Tier 1: `scripts/pre-push.ts` needs no shell utility. Tier 2: `lib/conventions/unit-test-timeouts.test.ts` refuses an exit-code assertion without the child's output, and `lib/testing/publication/pre-push-hook.test.ts` runs the hook with a PATH of only Bun's and git's directories.
+- Prevention: Tier 2: `lib/conventions/unit-test-timeouts.test.ts` refuses an exit-code assertion without the child's output. The hook's own Tier 1 and Tier 2 mechanisms retired with the local publication gate ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 - Focused proof: `bun test lib/testing/publication/pre-push-hook.test.ts` passed 45 of 45 runs on the corrected test; the PATH probe fails on the old hook and passes on the new one.
 
 ## 2026-10-22: audit:lab:office product failure

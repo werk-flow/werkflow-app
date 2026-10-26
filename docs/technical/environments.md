@@ -111,8 +111,7 @@ T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree
 5. Local stack: from the repository root run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from the values that `supabase status` prints, then run `bun run env:local`.
 6. Run `bunx playwright install --with-deps chromium` once. The first visual run pulls the pinned Playwright image (`lib/testing/runner/visual-browser.ts`).
 7. CodeRabbit: install the CLI into your own account with `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (it lands in `~/.local/bin`). The owner signs in once with `coderabbit auth login`; `bun run review:doctor` confirms both. This step is the only time an agent installs CodeRabbit.
-8. Run `git config core.hooksPath .githooks` to enable the [publication gate](testing.md#publication-gate).
-9. Verify: `bunx supabase projects list` shows both cloud projects, and `bun scripts/check-r2.ts` passes against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` in another terminal.
+8. Verify: `bunx supabase projects list` shows both cloud projects, and `bun scripts/check-r2.ts` passes against the dev bucket. Start `bun run test:server local`, then run `bun run test:verify --group golden:gg-00` in another terminal.
 
 ## Work on production
 

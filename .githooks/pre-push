@@ -1,5 +1,0 @@
-#!/bin/sh
-# The one gate before publication (docs/technical/testing.md, "Publication gate").
-# scripts/pre-push.ts holds its logic and the owner override; this line needs no shell utility.
-# Enable once per clone: git config core.hooksPath .githooks
-exec bun scripts/pre-push.ts "$@"

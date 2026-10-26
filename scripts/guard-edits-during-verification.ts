@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   editedFiles,
-  evidenceWriteRefusal,
   guardedInputs,
   refusalMessage,
   resetsLocalStack,
@@ -55,17 +54,6 @@ try {
   call = JSON.parse(await Bun.stdin.text()) as GuardedToolCall & { cwd?: unknown };
 } catch {
   process.exit(0);
-}
-
-// Publication evidence is never written by an agent tool, with or without a running operation.
-const evidenceRefusal = evidenceWriteRefusal(
-  call,
-  repositoryRoot,
-  typeof call.cwd === 'string' ? call.cwd : repositoryRoot,
-);
-if (evidenceRefusal) {
-  console.error(evidenceRefusal);
-  process.exit(2);
 }
 
 // A stack reset or stop reaches every worktree, so any worktree's hold on the local stack refuses it.

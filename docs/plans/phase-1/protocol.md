@@ -1,6 +1,6 @@
 # Phase 1 Execution Protocol
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-26
 
 This file holds the durable process rules for Phase 1. It changes only when the process itself changes, and any such change needs an explicit progress-log entry naming the decision. The hot status and slice index live in [roadmap.md](roadmap.md); gate definitions in [gates.md](gates.md); routing matrices in [coverage.md](coverage.md); history in [log.md](log.md); per-slice acceptance evidence in `slices/`.
 
@@ -115,9 +115,9 @@ Rule: a slice that would introduce an external account, API, or per-use cost not
 
 ### Standing Authorizations And The Stop Rule
 
-The agent that takes a slice has the owner's go for the whole slice end to end: the research, the plan and report in the record, the implementation, every `bun run review` pass, the DEV migrations, the commit on local `main` and the publication to `partner-preview`. The pre-implementation report is written into the record and read by the owner there; it is not a gate the agent waits at.
+The agent that takes a slice has the owner's go for the whole slice end to end: the research, the plan and report in the record, the implementation, its worktree branches and pull requests with every review round on them. DEV receives the slice's migrations when a pull request merges; the owner merges. The pre-implementation report is written into the record and read by the owner there; it is not a gate the agent waits at.
 
-The agent stops and asks, with the `grilling` skill's numbered questions and a recommendation each, only for a decision the owner must weigh: a change of ownership, permissions, data migration or money, time or stock semantics; a durable user-facing behaviour that the docs and the code do not settle and that a customer would notice; a new dependency or an external resource (the cost gates above); a raise of a performance budget or a slower measured reference; a catalog clause that would lose its behaviour; or a fork where the evidence does not pick a direction. Everything else is the agent's judgment call, decided, recorded in the slice record with its reasoning, and carried on. A failed gate or verification the agent cannot explain is also a stop. Production is never touched by a slice; releases follow [decision 0008](../../decisions/0008-development-workflow.md).
+The agent stops and asks, with the `grilling` skill's numbered questions and a recommendation each, only for a decision the owner must weigh: a change of ownership, permissions, data migration or money, time or stock semantics; a durable user-facing behaviour that the docs and the code do not settle and that a customer would notice; a new dependency or an external resource (the cost gates above); a raise of a performance budget or a slower measured reference; a catalog clause that would lose its behaviour; or a fork where the evidence does not pick a direction. Everything else is the agent's judgment call, decided, recorded in the slice record with its reasoning, and carried on. A failed gate or verification the agent cannot explain is also a stop. Production is never touched by a slice; releases follow [decision 0009](../../decisions/0009-pull-requests-and-ci.md).
 
 ### Before Starting A Slice
 
@@ -166,7 +166,7 @@ The slice is not complete until all applicable items are satisfied:
 - the automatic local change plan passes, including the selected browser groups on a recorded production build; provider changes also receive the applicable cloud canary evidence; the slice record and [gate log](audits/golden-gate-log.md) identify the verification report, selected scope, reused results, and fresh runs;
 - every failure is diagnosed, classified and recorded as [testing.md](../../technical/testing.md#failures) requires; an unresolved selected group blocks acceptance, and retained worlds are cleaned before closure;
 - the deletion pass and the independent review below are recorded in the slice record, and the review leaves no unresolved correctness, security, data-loss, or documentation issue;
-- the commit on local `main` reaches `partner-preview` through the [publication gate](../../technical/testing.md#publication-gate), without an override the owner did not give.
+- the slice's pull request passes [CI](../../technical/testing.md#ci) (`Check`) on its latest commit and the owner merges it into `main`.
 
 ### Campaign Line
 
@@ -296,7 +296,7 @@ This owner decision replaced the standard new-task prompt and the Wave 2 meta pr
 > The prompt has these parts, in this order, and nothing else:
 >
 > 1. Target. The slice ID, the bounded outcome quoted from the index row, where the record is and what it already holds, and why this slice is next.
-> 2. Starting position. The checks the agent runs before touching anything (clean tree, local HEAD equal to `origin/partner-preview`, the checkpoint row, `bun run docs:check` green, and a current test plan interpreted under `docs/technical/testing.md` after selecting the appropriate proof environment), written as checks, not as values to compare. The reading list, routed through `docs/README.md`, limited to what this slice needs. The parallel-work rule: every other ready slice and what it owns.
+> 2. Starting position. The checks the agent runs before touching anything (a worktree on a new branch from `origin/main`, the checkpoint row, `bun run docs:check` green, and a current test plan interpreted under `docs/technical/testing.md` after selecting the appropriate proof environment), written as checks, not as values to compare. The reading list, routed through `docs/README.md`, limited to what this slice needs. The parallel-work rule: every other ready slice and what it owns.
 > 3. Standing authorizations and the stop rule. Quote the protocol's "Standing Authorizations And The Stop Rule" in the slice's terms: what the agent may do without asking (everything, including reviews, DEV migrations if the slice has a schema, commits and the push to `partner-preview`), the kinds of decision that stop it, and any slice-specific stop you know of.
 > 4. Independent research first. The plan is a floor, not a ceiling: the agent verifies the record's baseline against the code at its HEAD, looks at the product in the browser itself, researches the domain and the market where the record's research is thin, and writes what the plan missed or got wrong into the record before it starts. A sound plan is confirmed as sound in one sentence with the evidence; nothing is added to prove the agent looked. Then the pre-implementation report goes into the record per "Before Starting A Slice" step 5, the owner questions, if any, are posted, and the agent proceeds.
 > 5. The all six acceptance criteria, including documentation and verification tools as the definition of done. Point at `docs/technical/standards-audit.md`. Name only the slice-specific risks and intended evidence; do not copy its component and command lists. For a major UI change, include the representative user task, rendered design reference or unresolved design choice, and the comparison required before closure. Keep immediate feedback, saved-state proof and visual quality distinct. Code quantity is secondary to the complete, correct user outcome.

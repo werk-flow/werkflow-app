@@ -1,6 +1,6 @@
 # Code quality and maintainability
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-26
 
 This doc owns virtue 4 in `AGENTS.md`. `AGENTS.md` states what good code is; this doc says how to reach it and what checks it. The `typescript-best-practices` skill owns the type patterns. This page owns the checklist, the prohibitions, the deletion pass and the independent review.
 
@@ -50,7 +50,7 @@ Wrong turn: consecutive writes with a compensating delete on failure. The delete
 
 1. Run `bun run unused:check` and delete what it lists. Its second pass runs knip with `--production`, so it also lists an export that only a test imports.
 2. Do the [deletion pass](#deletion-pass-and-independent-review), then hand the diff to a different session for the independent review.
-3. Write a `Deletion pass:` line in the body of every commit: what the pass removed, or `nothing to remove` with the reason. A slice commit may point at its slice record. Record the review in the slice record, or outside a slice in the commit message body.
+3. Fill in the **Deletion pass** section of the pull request: what the pass removed, or "nothing to remove" with the reason. A slice PR may point at its slice record.
 
 Wrong turn: code kept for possible future scope. Every later agent reads it, maintains it and copies it.
 
@@ -89,7 +89,7 @@ A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.
 - Nothing is left unused: no file, export, dependency, local or parameter, and no export that only a unit test imports. A deliberate test seam carries `@internal` with its reason. [group `static:unused`, test `lib/conventions/test-only-exports.test.ts`, group `static:typecheck`]
 - The formatting matches Prettier. [group `static:format`]
 - Names are descriptive full words, and control flow uses guard clauses. The reviewer reads each new name without its context and flags nested `if` chains that an early return would flatten. [judgment]
-- Every commit carries a `Deletion pass:` line in its body, and the independent review below is recorded. The pre-push gate refuses a push while a commit that no remote has yet lacks the line. [code `.githooks/pre-push`, test `lib/testing/publication/deletion-pass.test.ts`, script `docs:check`, judgment]
+- Every pull request records its deletion pass, and the independent review below is recorded; a closed slice record carries both. [script `docs:check`, judgment]
 
 ## Never
 
@@ -125,7 +125,7 @@ A `[judgment]` item is a Tier 3 default: [how to read the virtues](../../AGENTS.
 
 ## Deletion pass and independent review
 
-Both happen after the selected test groups pass and before the slice record closes. Every commit records the deletion pass in a `Deletion pass:` line of its body, and a slice commit may point at its slice record. Outside a slice, record the review in the commit message body too.
+Both happen after the selected test groups pass and before the slice record closes. The pull request records the deletion pass in its template's section, and its CodeRabbit review and the finding dispositions live in the PR threads.
 
 1. **Deletion pass, by the session that wrote the code.** Walk the diff file by file (`git diff --stat HEAD` plus untracked files). For every added file, export, function, branch, state variable, effect, wrapper and dependency, ask whether the outcome survives without it. Delete what does not earn its place. Fold a helper with one caller into that caller. Replace a copy with an import of its home. Then run `bun run test:verify`. Record the pass in the slice record under `## Deletion Pass And Review`: the `git diff --shortstat` line before and after, and what the pass removed. Write what it removed in the commit's `Deletion pass:` line as well.
 2. **Independent review, by a different session.** A fresh context that did not write the code reads the diff against the bounded outcome and the six virtues. It then runs `bun run review` on the diff (`--uncommitted` while the work is unpublished, `--base-commit <sha>` after an intermediate commit). When the diff exceeds CodeRabbit's file limit, review it in directory passes (`--dir app`, `--dir components`, `--dir lib`) and name the directories the review did not cover. Each finding gets one row: the finding, the disposition (repaired, declined with the reason, or deferred with its owner) and, for a kept finding, the tier where its prevention landed.

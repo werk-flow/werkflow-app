@@ -138,39 +138,6 @@ export function repositoryPath(
   return path;
 }
 
-/**
- * The evidence the publication gate reads: verification reports, review records and the evidence
- * ledger (lib/testing/publication/evidence-ledger.ts). Only the runner and the review wrapper write
- * them, so an agent tool call that writes there is refused at any time, not only under the lock
- * (audit finding B7, 2026-10-16).
- */
-// Case-insensitive: macOS's default file system resolves `.Agent-Logs/Review` to the same folder.
-const EVIDENCE_PATH = /^\.agent-logs\/(?:(?:verification|review)\/|evidence-ledger\.jsonl)/i;
-const EVIDENCE_IN_COMMAND = /\.agent-logs[\\/]+(?:verification|review)\b|evidence-ledger/i;
-const REDIRECT_INTO_EVIDENCE =
-  /(?:^|[^<>])>{1,2}\s*["']?[^\s|;&"']*(?:\.agent-logs[\\/]+(?:verification|review)\b|evidence-ledger)/i;
-const WRITING_COMMAND =
-  /\b(?:rm|rmdir|mv|cp|tee|touch|truncate|ln|dd|writeFileSync|writeFile|appendFileSync|appendFile|rmSync|unlinkSync|renameSync|copyFileSync)\b|\bBun\.write\b|\b(?:sed|perl)\b[^|;&]*\s-i/;
-
-/** The evidence files a call would write, or the shell command that would, as a refusal; undefined otherwise. */
-export function evidenceWriteRefusal(
-  call: GuardedToolCall,
-  repositoryRoot: string,
-  cwd = repositoryRoot,
-): string | undefined {
-  const files = editedFiles(call).flatMap((file) => {
-    const path = repositoryPath(file, repositoryRoot, cwd);
-    return path && EVIDENCE_PATH.test(path) ? [path] : [];
-  });
-  const command = shellCommand(call);
-  const writesByShell =
-    command !== undefined &&
-    (REDIRECT_INTO_EVIDENCE.test(command) ||
-      (EVIDENCE_IN_COMMAND.test(command) && WRITING_COMMAND.test(command)));
-  if (!files.length && !writesByShell) return undefined;
-  return `Refused: ${files.length ? files.slice(0, 3).join(', ') : 'this shell command'} is publication evidence (verification reports, review records, the evidence ledger). Only bun run test:verify and bun run review write it, and the pre-push gate trusts it only through the ledger. Read it, never write, move or delete it.`;
-}
-
 /** Files of the call that a running verification fingerprints. */
 export function guardedInputs(input: {
   files: readonly string[];

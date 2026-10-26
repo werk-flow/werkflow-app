@@ -9,8 +9,8 @@ import ts from 'typescript';
 // each list with its version at the publication base instead: a new entry or
 // a raised ceiling is refused, a removed entry or a lowered ceiling passes.
 // lib/testing/publication/shrink-only-lists.test.ts runs it in every unit run
-// against the merge base with origin/partner-preview, and
-// scripts/check-publication-gate.ts against the commit a push replaces.
+// against the merge base with the trunk, so CI's unit job judges each pull
+// request against the branch it merges into.
 // Lab references ratchet through scripts/lab-counts.ts instead.
 
 /** A list's entries: a key, with its ceiling where the entry carries one. */

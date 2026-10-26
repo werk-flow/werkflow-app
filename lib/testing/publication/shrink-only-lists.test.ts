@@ -14,8 +14,8 @@ import {
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 /**
- * The published preview, then production: the merge base of HEAD with the
- * first ref this clone has is what the next push compares against.
+ * The trunk a change merges into: partner-preview until the branch switch of decision 0009
+ * retires it, then main. The merge base with the first ref this clone has is what the change adds to.
  */
 const PUBLICATION_REFS = ['origin/partner-preview', 'origin/main'];
 

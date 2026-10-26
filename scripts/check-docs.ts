@@ -4,7 +4,7 @@
 // This script reads the repository and hands the text to the rules in lib/docs/, which hold the
 // logic and its tests. Each problem line starts with the rule's area:
 //   index, link, skills, coderabbit, status, link-syntax, roadmap, spec-review, slices, catalog,
-//   incident-tier, publication-gate, deletion-pass, durable-homes, closed-banner, guidance,
+//   incident-tier, deletion-pass, durable-homes, closed-banner, guidance,
 //   dated, budget, review-stamp, decision, virtue, citation, route-handler, numbered-rule,
 //   german-quote, path, one-home, workspace, capture.
 // The numbers and exemptions come from lib/docs/doc-policy.ts, which decision 0004 pins.
@@ -14,7 +14,6 @@ import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
 import { ESLint } from 'eslint';
 import { getBusinessTodayIso } from '../lib/date-time/berlin';
 import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
-import { readRepositoryLedger, recordedEvidence } from '../lib/testing/publication/evidence-ledger';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
 import { findSliceRecordProblems } from '../lib/docs/slice-records';
 import {
@@ -79,7 +78,6 @@ import {
   readTestTitles,
 } from '../lib/docs/slice-browser-proof';
 import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
-import { configuredHooksPath, hooksPathProblem } from '../lib/testing/publication/push-refs';
 import {
   APPEND_ONLY_LOGS,
   DATED_DOCS,
@@ -229,7 +227,8 @@ report(
   ),
 );
 
-// CodeRabbit: agent-facing instructions route reviews through the repository wrapper.
+// CodeRabbit: agent-facing instructions route local reviews through the repository wrapper. The
+// review of record is the app on the pull request (decision 0009), so AGENTS.md need not name it.
 for (const path of [
   'AGENTS.md',
   '.claude/skills/coderabbit-review/SKILL.md',
@@ -240,7 +239,7 @@ for (const path of [
     continue;
   }
   const content = read(path);
-  if (!content.includes('bun run review'))
+  if (path !== 'AGENTS.md' && !content.includes('bun run review'))
     problems.push(`coderabbit: ${path} must route agents through bun run review`);
   for (const violation of findCodeRabbitInstructionViolations(content))
     problems.push(`coderabbit: ${path} contains forbidden ${violation} instructions; use bun run review`);
@@ -323,7 +322,7 @@ report(
   ),
 );
 
-// Incident tiers, and the wiring of the publication gate.
+// Incident tiers.
 const incidentMechanisms = repositoryMechanismIndex(repoRoot);
 report(
   'incident-tier',
@@ -331,31 +330,18 @@ report(
     tierClaimProblem(line, incidentMechanisms),
   ),
 );
-const hooksProblem = hooksPathProblem(configuredHooksPath(repoRoot), repoRoot);
-if (hooksProblem) problems.push(`publication-gate: ${hooksProblem}`);
 
 // Closed records: the deletion pass of a slice record, the durable homes of a plan record and the banner.
 const changedNow = uncommittedPaths(
   gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
 );
-// Review records are machine-local evidence: a record is checked against the ledger while it is
-// uncommitted, on the machine that closes it. A committed record, or a fresh clone, checks the citation alone.
-const evidenceLedger = readRepositoryLedger(repoRoot);
-const ledgerHolds = (path: string): boolean => {
-  const file = join(repoRoot, path);
-  return existsSync(file) && recordedEvidence(evidenceLedger, path, readFileSync(file));
-};
 for (const [path, status] of statuses) {
   if (status?.kind !== 'closed') continue;
   const markdown = docMarkdown(path);
   if (path.startsWith('plans/phase-1/slices/') && status.date >= DELETION_PASS_SINCE)
     report(
       'deletion-pass',
-      deletionPassProblems({
-        markdown,
-        closedOn: status.date,
-        recordedReview: changedNow.has(`docs/${path}`) ? ledgerHolds : null,
-      }).map((problem) => `docs/${path} ${problem}`),
+      deletionPassProblems({ markdown, closedOn: status.date }).map((problem) => `docs/${path} ${problem}`),
     );
   if (
     path.startsWith('plans/') &&

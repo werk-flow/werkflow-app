@@ -240,7 +240,7 @@ describe('independent group registry', () => {
     expect(unused.script).toBe('unused:check');
     expect(packageScripts['unused:check']).toContain('bun run unused:production');
     expect(packageScripts['unused:production']).toMatch(/^knip --production\b/);
-    // A static gate is selected without changed files, so the passing report the pre-push gate requires includes it.
+    // A static gate is selected without changed files, so every change plan and every CI run includes it.
     const plan = groupSelections({ mode: 'change', groups, changedFiles: [], unresolvedGroupIds: [] });
     expect(plan.get('static:format')).toEqual({ reason: 'Current policy check', changedFiles: [] });
   });

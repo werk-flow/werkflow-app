@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-25
+Status: living — last reviewed 2026-10-26
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -29,7 +29,7 @@ Write each test at its boundary while you build the behavior, and run the narrow
 ### Run checks while you work
 
 1. After each edit, run the narrowest check: `bun run test:unit <path>` for a module, `bun run test:ui <spec>` for a contract, `bun run test:verify --group <id>` for one SQL or browser group.
-2. Before you push, run `bun run check:changed`: in under a minute it checks every file changed since the merge base with `origin/partner-preview`, committed or not.
+2. Before you push, run `bun run check:changed`: in under a minute it checks every file changed since the merge base with the trunk, committed or not.
 3. Before you finish, run `bun run test:plan` and read why each group is selected.
 4. At the end, run `bun run test:verify` for the whole plan.
 
@@ -38,11 +38,10 @@ Write each test at its boundary while you build the behavior, and run the narrow
 1. Read the evidence before you run anything again, then follow [Failures](#failures).
 2. Repair the cause. When the test seems wrong, compare it with the catalog clause and the feature spec before you touch the assertion.
 
-### Review the change
+### Open and babysit the pull request
 
-1. Run `bun run review`. Its default scope is the uncommitted diff, and [CodeRabbit](coderabbit.md) owns the other scopes.
-2. Give each finding one disposition: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
-3. Record the dispositions in the slice record, or outside a slice in the commit message body.
+1. Push the branch and open the PR with `gh pr create`; fill in `.github/pull_request_template.md`.
+2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until `Check` and the review are green on the latest commit. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
 
 ## What browser tests are for
 
@@ -82,18 +81,14 @@ A failed browser group may run again as soon as any source file changed (`direct
 
 After a failed release run, pass every failed group with `--group` before the next release plan. After two consecutive failed release runs, write the diagnosis into the incident log first (`lib/testing/publication/release-breaker.ts`).
 
-## Publication gate
+## CI
 
-`.githooks/pre-push` is the one gate before publication. Git runs it only while `core.hooksPath` names `.githooks` (`git config core.hooksPath .githooks` once per clone), so `test:verify` and `docs:check` refuse while it does not (`hooksPathProblem`). The hook execs `scripts/pre-push.ts`, which needs only `bun` and `git` on the PATH, runs `scripts/check-publication-gate.ts` and refuses the push unless all six conditions hold:
+`.github/workflows/ci.yml` runs on every pull request to `main` and every push to `main`. Its aggregate job `Check` is the one required status check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): it fails unless every job passed, or the browser shards were skipped because the plan selected no browser group. Every job runs its groups through `scripts/verify.ts --group`; the SQL and browser jobs start a fresh Supabase CLI stack with every committed migration applied (`.github/actions/local-stack`).
 
-1. The push publishes the checked-out commit. The newest local verification report is an automatic plan that passed, its snapshot matches the current tree, no input file is uncommitted, and it holds an advisory check that passed within 24 hours (`lib/testing/evidence/advisory-freshness.ts`).
-2. A CodeRabbit review completed on the tree being pushed. `bun run review` records the digest of each file in its scope as CodeRabbit saw it ([CodeRabbit](coderabbit.md#run-a-review)). A file counts as reviewed while its content equals what a completed review saw, so a review of uncommitted work still counts after the commit, and an edit needs a new review of that file only.
-3. Every commit that no remote has yet carries a `Deletion pass:` line in its body.
-4. A pushed product file that an `audit:performance:*` group's scopes own has a passing run of that group on its current content.
-5. A push to `main` (production) has a passing release plan as the newest local report and a passing cloud canary, both on the pushed tree.
-6. No shrink-only list gained an entry or raised a ceiling since the commit the push replaces (`lib/testing/publication/shrink-only-lists.ts`); unit runs compare with the merge base of `origin/partner-preview`.
-
-The gate trusts a report or a review record only while the hash chain of `lib/testing/publication/evidence-ledger.ts` holds its content, and the edit guard refuses agent writes to that evidence at any time. The chain carries no HMAC: a key on the machine the agents use would protect nothing. The digests leave out documentation (`isDocumentationInput` in `lib/testing/evidence/group-evidence.ts`), so a documentation edit keeps the report and the reviews valid; the files that wire verification and review (`.claude/settings.json`, `.codex/hooks.json`, `.coderabbit.yaml`) are inputs. The owner can override with `WERKFLOW_PUSH_OVERRIDE="<reason>" git push ...`, which the hook logs.
+- **Selection.** `ciPlan` in `lib/testing/selection/ci-plan.ts` picks the browser groups for the diff against the PR's merge base with the change-mode rules of [How selection works](#how-selection-works), and adds the visual references when rendered UI changed. It takes every browser group on a push to `main`, in the nightly run (`.github/workflows/nightly.yml`), when the diff cannot be read, and when a tooling input changed. The static, unit, SQL and component groups run on every change.
+- **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary. They stay local release checks ([performance.md](performance.md)).
+- **Shards.** Each visual group takes a shard of its own, and the plan deals the other browser groups into shards of about four. Each shard builds and serves the app, then runs its groups with one worker, because a second browser beside the stack outruns a shared runner. The acceptance captures run in full runs only; a pull request's before-and-after pair needs the base build.
+- **Evidence.** A failed job uploads `.agent-logs/` as the artifact `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures); a rerun (`gh run rerun --failed`) follows the same retry rules as a local repeat.
 
 ## Commands
 
@@ -193,9 +188,9 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
 - Unit tests assert no duration and set no timeout of their own; a slow test is made cheaper. The runner's watchdog stops a run in which no test starts for twice Bun's per-test bound, which fires only while a test yields, or that passes its deadline. An assertion on a child's exit code carries the child's output. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, code `lib/testing/runner/unit-run-watchdog.ts`, test `lib/testing/runner/unit-run-watchdog.test.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
-- Every change gets `bun run review` and a disposition per finding. [script `review`, judgment]
-- A push meets every condition of the [publication gate](#publication-gate), which runs only while `core.hooksPath` names it. [code `.githooks/pre-push`, code `scripts/pre-push.ts`, test `lib/testing/evidence/advisory-freshness.test.ts`, test `lib/testing/publication/publication-gate.test.ts`, test `lib/testing/publication/push-refs.test.ts`, test `lib/testing/publication/deletion-pass.test.ts`, test `lib/testing/publication/pre-push-hook.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
-- An agent shell command that pushes with `--no-verify` or overrides `core.hooksPath` is refused. [code `.claude/hooks/refuse-publication-bypass.ts`, test `lib/testing/publication/push-bypass.test.ts`, test `lib/testing/runner/guard-wiring.test.ts`]
+- Every pull request passes `Check` on its latest commit, up to date with `main`: the required check runs every static gate, the unit suite (with the shrink-only ratchet against the merge base), the component contracts, every SQL group and the selected browser groups. [code `.github/workflows/ci.yml`, code `lib/testing/selection/ci-plan.ts`, test `lib/testing/selection/ci-plan.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
+- Every CodeRabbit finding on the pull request gets a disposition in its thread, and the PR records its deletion pass. [judgment]
+- A local change plan reuses a dependency advisory pass for 24 hours; CI runs the advisory check in every run. [test `lib/testing/evidence/advisory-freshness.test.ts`, code `.github/workflows/ci.yml`]
 
 ## Never
 
@@ -203,12 +198,10 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Add a fixed sleep, or mint a golden cleanup marker outside the seed module. [lint `specSelectors`]
 - Locate a control in a spec by its copy, a parent hop, a CSS class, an id or an attribute. [lint `playwright-spec/no-copy-in-spec-locator`, lint `playwright-spec/no-structural-locator`]
 - Compare `count()` reads taken once; poll them together with `expect.poll`. [lint `playwright-spec/no-one-shot-count-comparison`, test `lib/testing/spec-support/playwright-spec-rules.test.mjs`]
-- Weaken an assertion, or retry until green. [lint `playwright-spec/no-retried-action`, judgment]
+- Weaken an assertion, or retry until green, a failed CI job included. [lint `playwright-spec/no-retried-action`, judgment]
 - Derive a reference from a failed run. [test `lib/testing/performance-calibration.test.ts`]
 - Raise a timeout or a budget, or rewrite a visual reference, to make a run pass. [lint `playwright-spec/bounded-timeout`, judgment]
 - Treat a review score or an old report as acceptance. [judgment]
-- Call the CodeRabbit CLI directly: only the wrapper writes the review record the gate accepts. [code `scripts/run-coderabbit-review.ts`, code `lib/testing/publication/evidence-ledger.ts`, test `lib/testing/publication/coderabbit-review-command.test.ts`]
-- Push past the gate without the owner's logged override, or write publication evidence by hand. [code `.githooks/pre-push`, test `lib/testing/publication/pre-push-hook.test.ts`, test `lib/testing/publication/evidence-ledger.test.ts`, test `lib/testing/runner/edit-guard.test.ts`]
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock. [code `scripts/guard-edits-during-verification.ts`, test `lib/testing/runner/edit-guard.test.ts`]
 - Add a package script that builds, tests or changes the local stack outside the workspace lock. [test `lib/testing/runner/workspace-lock-coverage.test.ts`, test `lib/testing/runner/app-port.test.ts`]
 
@@ -217,7 +210,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 1. Run `bun run test:plan` and read the reason for each selected group.
 2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
 3. On a failure, follow [Failures](#failures).
-4. Run `bun run review` and record a disposition for each finding.
+4. Push, open the PR and babysit it until `Check` and the review are green on the latest commit ([CodeRabbit](coderabbit.md#babysit-a-pull-request)).
 5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
 
 ## Examples

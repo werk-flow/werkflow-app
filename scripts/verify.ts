@@ -53,8 +53,6 @@ import {
 import { checkLatencyEvidence, latencyEvidenceSchema } from '../lib/testing/latency-evidence';
 import { checkLabEvidence, labEvidenceSchema, type LabEvidenceCheck } from '../lib/testing/lab-evidence';
 import { recoveredEnvironmentRuns } from '../lib/testing/runner/group-recovery';
-import { recordEvidence } from '../lib/testing/publication/evidence-ledger';
-import { configuredHooksPath, hooksPathProblem } from '../lib/testing/publication/push-refs';
 import {
   DIAGNOSED_ATTEMPT_KINDS,
   readGroupDiagnoses,
@@ -429,7 +427,7 @@ async function main(): Promise<void> {
       changed,
     ))
       console.log(
-        `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). The publication gate requires its pass on the current content; on a quiet machine run: bun run test:verify --group ${measured.id}`,
+        `[verify] Wall-clock group for this change, not selected: ${measured.id} (first file ${measured.changedFiles[0]}). CI never runs it (docs/technical/performance.md); before a release, on a quiet machine run: bun run test:verify --group ${measured.id}`,
       );
   // The breaker and the archive guard refuse in run mode and only warn in plan mode, so the plan still lists what a focused run must prove.
   const refusals = [
@@ -447,8 +445,6 @@ async function main(): Promise<void> {
         })
       : undefined,
     freshBrowserEntries.length ? browserStorageProblem(repository) : undefined,
-    // Evidence is worth nothing while git skips the gate that reads it (push-refs.ts).
-    hooksPathProblem(configuredHooksPath(repository), repository),
     unclassifiedFailureProblem({
       groupIds: freshBrowserEntries.map((entry) => entry.group.id),
       target: options.target,
@@ -533,9 +529,6 @@ async function main(): Promise<void> {
       // Parsing drops the snapshot that reading the history attaches to a reused result: until
       // 2026-10-23 every copy carried its report's whole snapshot, and one plan's report grew to 39 MB.
       writeJsonAtomically(resolve(directory, 'report.json'), reportSchema.parse(report));
-      // The publication gate trusts a finished report only through its ledger entry (evidence-ledger.ts).
-      if (report.status !== 'running')
-        recordEvidence(repository, `.agent-logs/verification/${id}/report.json`, 'verification report');
     };
     await withVerificationReport({
       report,

@@ -63,7 +63,7 @@ test('runtime Markdown remains qualified while agent guidance uses current stati
   // The files that wire verification and review are inputs (audit finding B10, 2026-10-16).
   for (const file of [
     '.claude/settings.json',
-    '.claude/hooks/refuse-publication-bypass.ts',
+    '.claude/hooks/any-hook.ts',
     '.codex/hooks.json',
     '.coderabbit.yaml',
   ])

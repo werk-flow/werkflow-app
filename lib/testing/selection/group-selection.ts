@@ -207,9 +207,8 @@ const MEASURED_GROUP_PREFIX = 'audit:performance:';
  * changed product file. A change plan never selects them: their medians follow
  * the machine's load (docs/technical/test-incident-log.md, 2026-10-09), so they
  * run on a quiet machine with an explicit `--group`, which enforces their
- * deadlines. The plan names them, and the publication gate refuses a push of
- * such a file until a passing run saw its current content
- * (lib/testing/publication/publication-gate.ts). The lab groups count work,
+ * deadlines. The plan names them for a run before the next release; CI never
+ * runs them (docs/technical/performance.md). The lab groups count work,
  * which repeats exactly, so a change plan selects them by scope instead.
  */
 export function measuredGroupsForChange(
