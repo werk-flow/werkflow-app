@@ -3,8 +3,46 @@
 // only its own tree, so a renamed app heading, a missing clone or a drifted skill copy would pass
 // unseen. These rules let docs:check read the siblings without ever editing them.
 
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+
 export const SIBLING_REPOSITORIES = ['werkflow-business', 'werkflow-website'] as const;
 export type SiblingRepository = (typeof SIBLING_REPOSITORIES)[number];
+
+/** The folder name the siblings link the app by. */
+const APP_REPOSITORY = 'werkflow-app';
+
+/** Where the app checkout sits and the `Code` folder that holds the clones. */
+export type WorkspaceLayout = { appRoot: string; workspaceRoot: string };
+
+/**
+ * The `Code` folder: the parent of the main checkout, read from Git's shared directory. A worktree
+ * may sit anywhere under any folder name, so its own parent need not hold the siblings.
+ */
+export function workspaceRootOf(appRoot: string, gitCommonDir: string | null): string {
+  if (gitCommonDir === null || basename(gitCommonDir) !== '.git') return dirname(appRoot);
+  return dirname(dirname(resolve(appRoot, gitCommonDir)));
+}
+
+function isWithin(root: string, path: string): boolean {
+  const fromRoot = relative(root, path);
+  return fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot);
+}
+
+/**
+ * The file a relative link points at when the checkout is read as if it sat at `Code/werkflow-app`:
+ * a link that leaves the app lands among the siblings, and a link into the app lands in this checkout.
+ */
+export function resolveWorkspaceLink(layout: WorkspaceLayout, fromFile: string, target: string): string {
+  const appInWorkspace = join(layout.workspaceRoot, APP_REPOSITORY);
+  const resolved = resolve(dirname(fromFile), target);
+  if (isWithin(layout.appRoot, resolved)) return resolved;
+  const inWorkspace = isWithin(layout.appRoot, fromFile)
+    ? resolve(appInWorkspace, relative(layout.appRoot, resolved))
+    : resolved;
+  return isWithin(appInWorkspace, inWorkspace)
+    ? join(layout.appRoot, relative(appInWorkspace, inWorkspace))
+    : inWorkspace;
+}
 
 /** The sibling whose tree holds a path, given relative to the parent `Code` folder. */
 export function siblingOfWorkspacePath(workspacePath: string): SiblingRepository | null {
