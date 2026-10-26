@@ -3,6 +3,7 @@ import { Glob } from 'bun';
 import { mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { SESSION_CANCELLED_MESSAGE } from '../local-stack/test-session';
 import { createGroupQualification, directGroupRetryProblem } from './group-qualification';
 import {
   hashValue,
@@ -415,6 +416,23 @@ test('a recovered interruption without a failed test is no attempt on its tree',
   expect(directGroupRetryProblem({ ...retry, runs: [{ ...interrupted, failed: 1 }] })).toContain(
     'exact source tree',
   );
+});
+
+test('a cancelled session without a failed test is no attempt on its tree', () => {
+  const cancelled = {
+    ...failed,
+    failed: 0,
+    failures: [{ title: 'Session', file: null, message: SESSION_CANCELLED_MESSAGE }],
+  };
+  expect(directGroupRetryProblem({ ...retry, runs: [cancelled] })).toBeUndefined();
+  expect(directGroupRetryProblem({ ...retry, runs: [{ ...cancelled, failed: 1 }] })).toContain(
+    'exact source tree',
+  );
+  const alsoBroken = {
+    ...cancelled,
+    failures: [...cancelled.failures, { title: 'Evidence', file: null, message: 'missing latency' }],
+  };
+  expect(directGroupRetryProblem({ ...retry, runs: [alsoBroken] })).toContain('exact source tree');
 });
 
 test('a run voided by an input change is no attempt on its tree', () => {

@@ -1,8 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { errorCode } from '../runner/error-code';
 
+/** Why a cancelled session stops its operation: Ctrl+C, a closed terminal or a terminating host, never a test. */
+export const SESSION_CANCELLED_MESSAGE = 'The test session was cancelled.';
+
 function abortReason(signal: AbortSignal): Error {
-  return signal.reason instanceof Error ? signal.reason : new Error('The test session was cancelled.');
+  return signal.reason instanceof Error ? signal.reason : new Error(SESSION_CANCELLED_MESSAGE);
 }
 
 /** Whether any process of the group still exists; a killed one counts until it has been reaped. */
@@ -101,7 +104,7 @@ export async function withTestSession<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const abort = (): void => {
-    controller.abort(new Error('The test session was cancelled.'));
+    controller.abort(new Error(SESSION_CANCELLED_MESSAGE));
   };
   const forwardAbort = (): void => {
     controller.abort(options.signal?.reason);

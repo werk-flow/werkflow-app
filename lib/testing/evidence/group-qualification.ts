@@ -1,4 +1,5 @@
 import type { RunManifest } from '../../../tests/golden/support/run-state';
+import { SESSION_CANCELLED_MESSAGE } from '../local-stack/test-session';
 import {
   groupFingerprint,
   groupInputFiles,
@@ -139,9 +140,17 @@ function voidedByDrift(run: DirectGroupAttempt): boolean {
   return run.failures?.some((failure) => failure.message === BROWSER_INPUT_DRIFT_MESSAGE) ?? false;
 }
 
-/** A recovered interruption without a failed business test is no attempt either: nothing about the group was observed. */
+/**
+ * A recovered interruption without a failed business test is no attempt either: nothing about
+ * the group was observed. A cancelled session (Ctrl+C, a killed operator shell) can finish its
+ * manifest as failed rather than interrupted; with no failed test and the cancellation as its
+ * only failure, it is the same interruption.
+ */
 function interruptedWithoutFailure(run: DirectGroupAttempt): boolean {
-  return run.status === 'interrupted' && (run.failed ?? 0) === 0;
+  const cancelled =
+    Boolean(run.failures?.length) &&
+    (run.failures ?? []).every((failure) => failure.message === SESSION_CANCELLED_MESSAGE);
+  return (run.status === 'interrupted' || cancelled) && (run.failed ?? 0) === 0;
 }
 
 /**
