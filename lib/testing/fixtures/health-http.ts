@@ -10,7 +10,7 @@ const privateDetail = 'private provider detail sb_secret_synthetic';
 process.env.HEALTH_CHECK_TOKEN = token;
 process.env.EMAIL_OTP_HASH_SECRET = 'synthetic-otp-secret';
 
-let limiterVerdict: 'allowed' | 'limited' | 'unavailable' = 'allowed';
+let limiterVerdict: 'allowed' | 'limited' | 'unavailable' | 'stalled' = 'allowed';
 let failing: string | null = null;
 const reached: string[] = [];
 const logged: string[] = [];
@@ -41,9 +41,9 @@ mock.module('@supabase/ssr', () => ({
   }),
 }));
 mock.module('@/lib/security/rate-limit', () => ({
-  consumeRateLimit: async () => {
+  consumeRateLimit: () => {
     reached.push('limiter');
-    return limiterVerdict;
+    return limiterVerdict === 'stalled' ? new Promise(() => {}) : Promise.resolve(limiterVerdict);
   },
 }));
 mock.module('@/lib/supabase/admin', () => ({
@@ -174,3 +174,13 @@ failing = 'supabase_secret_key';
 const unavailable = await report();
 assert.equal(unavailable.status, 503);
 assert.deepEqual(unavailable.body, { ok: false, checks: { ...allOk, supabase_secret_key: 'failed' } });
+
+// A limiter that never answers holds the checks back only until its deadline,
+// so the report names the failed check before the weekly run's request gives up.
+limiterVerdict = 'stalled';
+const started = Date.now();
+const stalled = await report();
+const elapsed = Date.now() - started;
+assert.ok(elapsed < 10_000, `the stalled limiter held the report for ${elapsed} ms`);
+assert.equal(stalled.status, 503);
+assert.deepEqual(stalled.body, { ok: false, checks: { ...allOk, supabase_secret_key: 'failed' } });

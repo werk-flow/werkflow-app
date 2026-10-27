@@ -78,8 +78,9 @@ describe('documentation policy', () => {
       '| `VERCEL_TOKEN` | GitHub repository secret | Staging deploys | 2027-10-26 | `vercel-token` | Rotate it. |',
       '| `VERCEL_TOKEN` | GitHub repository secret | Rotated on 2026-10-26 | Never | `vercel-token` | Rotate it. |',
       '| `FOO` | 2027-01-01 |',
+      '| `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Rotated on 2026-10-26 | 2027-10-26 | `x` | Rotate it. |',
       'The token expires on 2027-10-26.',
     ].join('\n');
-    expect(findDatedLines(markdown, DATED_LINES['docs/technical/environments.md'])).toEqual([5, 6, 7]);
+    expect(findDatedLines(markdown, DATED_LINES['docs/technical/environments.md'])).toEqual([5, 6, 7, 8]);
   });
 });
