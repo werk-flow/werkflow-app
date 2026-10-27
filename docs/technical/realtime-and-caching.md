@@ -1,6 +1,6 @@
 # Realtime and caching
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-27
 
 This doc owns virtue 2 in `AGENTS.md`: immediate feedback, complete reads, caching and freshness. [Performance](performance.md) owns the measurement: journeys, lab counts, payload budgets and layout stability.
 
@@ -210,7 +210,7 @@ The contract is the behavior of the two live-view hooks. A surface does not re-i
 4. **Mutations refresh route-first, then refetch.** Start `router.refresh()` and finish with `view.refresh()`. In the reverse order a stale server payload overwrites the fresh read.
 5. **Refetches use generation guards and keep the last known data.** An older success never commits over a newer one. A failed read keeps the data and sets `isStale`. Render dependent actions non-interactive while the view is stale.
 6. **Dialogs suspend, then catch up once.** Open dialogs, sheets and dropdown menus suspend reads and route refreshes through `components/ui/open-dialog-context.tsx`, and one catch-up fires after close. Render `RegisterOpenDialog` inside the presence-gated content, never in a wrapper body, or every closed dialog counts as open and suspends every refresh. A held catch-up sets `<html data-live-read-held>`.
-7. **The own save's echo renders nothing**, because its response rendered the route. A save records its result with `ownWrites.recorded` (`useServerAction` does it), and the route refresh skips an event of a row the save named whose `updated_at` is a stamp it returned. `TRANSACTION_STAMPED_TABLES` lists the stamping tables (`realtime:check`).
+7. **The own save's echo renders nothing**, because its response rendered the route. A save runs through `ownWrites.track`. The route refresh skips an event of a row the save named whose `updated_at` it returned, and holds a stamped event for a running save, at most `OWN_SAVE_HOLD_MS`. `TRANSACTION_STAMPED_TABLES` lists the stamping tables (`realtime:check`).
 
 An `eventFilter` that inspects payload columns treats a missing column as relevant, because a deletion notification carries only `id` and `organization_id`. Synthetic catch-up events bypass every filter.
 

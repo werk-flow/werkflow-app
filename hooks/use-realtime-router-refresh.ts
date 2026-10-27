@@ -65,6 +65,8 @@ export function useRealtimeRouterRefresh({
         return;
       }
       // The echo of this tab's own save: the save's response already rendered the route.
+      // An echo that beats the response waits for the save and is judged again then.
+      if (event && ownWrites.heldForSave(event, () => scheduleRefresh(event))) return;
       if (event && ownWrites.covers(event)) return;
 
       if (suspendedRef.current) {
@@ -108,6 +110,8 @@ export function useRealtimeRouterRefresh({
 
   useEffect(() => {
     return () => {
+      // An event held for a running save is released after unmount; it must schedule nothing.
+      enabledRef.current = false;
       schedulerRef.current?.cancel();
       markRouteRefresh(queuedHolder, false);
     };

@@ -86,7 +86,7 @@ export function useServerAction<Args extends readonly unknown[], Result>(
     setPendingCount((count) => count + 1);
     let result: Result;
     try {
-      result = ownWrites.recorded(await actionRef.current(...args));
+      result = await ownWrites.track(actionRef.current(...args));
     } finally {
       if (mountedRef.current) {
         setPendingCount((count) => count - 1);

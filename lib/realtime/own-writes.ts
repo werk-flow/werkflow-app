@@ -15,8 +15,23 @@ import { TRANSACTION_STAMPED_TABLES } from './tables';
  * unstamped table refresh as before. A stamp read during the save names a
  * transaction that committed even earlier, so recording every stamp of the
  * result is safe too.
+ *
+ * The echo can arrive before the save's response: the write commits first and
+ * the response still renders the route. While a save of this tab runs, an
+ * event of a stamped table waits and is judged once every running save
+ * settled and recorded its result. The wait is bounded: a save holds events
+ * only for `OWN_SAVE_HOLD_MS` after it started, a held event is released
+ * after that time at the latest and is never held a second time, so a slow save, a task that never
+ * settles (`untilPageLeaves`) or a read run through the same hook delays
+ * another writer's change by at most that time and never drops it.
  */
 
+/**
+ * How long a running save holds the events that may be its echo. No Realtime debounce: it waits for
+ * the save's response, and the refresh it releases still goes through the shared scheduler. One
+ * second keeps another writer's change inside the two-second live target (`LIVE_TARGET_MS`).
+ */
+const OWN_SAVE_HOLD_MS = 1_000;
 /** How long a recorded stamp covers its echo; the echo lands within about a second. */
 const OWN_WRITE_STAMP_LIFETIME_MS = 60_000;
 /** Bounds the walk over a save's result. */
@@ -75,19 +90,64 @@ function collectSave(value: unknown, depth: number, save: SaveRecord, budget: { 
 type OwnWriteRegistry = {
   /** Records the transaction stamps and row ids a save returned, and returns the result. */
   recorded: <Result>(result: Result, now?: number) => Result;
+  /** Awaits a save, records its result and releases the events held while it ran. */
+  track: <Result>(save: Promise<Result>) => Promise<Result>;
+  /**
+   * True when the event is held for a recent running save: `then` runs once the
+   * running saves settled, after `OWN_SAVE_HOLD_MS` at the latest. False
+   * when no save started within that time or the event cannot be an echo.
+   */
+  heldForSave: (event: RealtimeChangeEvent, then: () => void) => boolean;
   /** True for a real event of a stamped table, of a row one save named, with a stamp that save returned. */
   covers: (event: RealtimeChangeEvent, now?: number) => boolean;
 };
 
 function createOwnWriteRegistry(): OwnWriteRegistry {
   let saves: SaveRecord[] = [];
+  const runningSaves = new Set<{ startedAt: number }>();
+  let held: Array<{ event: RealtimeChangeEvent; then: () => void }> = [];
+  // An event waits once. Every listener's copy of one event waits together; once released, the
+  // event is judged and never held again for a newer save.
+  const released = new WeakSet<RealtimeChangeEvent>();
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  const release = (): void => {
+    if (releaseTimer !== null) clearTimeout(releaseTimer);
+    releaseTimer = null;
+    const waiting = held;
+    held = [];
+    for (const { event } of waiting) released.add(event);
+    for (const { then } of waiting) then();
+  };
+  // A save older than the bound holds nothing; dropping it keeps a task that never settles from piling up.
+  const holding = (now: number): boolean => {
+    for (const save of runningSaves) if (now - save.startedAt >= OWN_SAVE_HOLD_MS) runningSaves.delete(save);
+    return runningSaves.size > 0;
+  };
+  const recorded = <Result>(result: Result, now = Date.now()): Result => {
+    const save: SaveRecord = { stamps: new Set(), rowIds: new Set(), at: now };
+    collectSave(result, 0, save, { left: RESULT_WALK_VALUES });
+    saves = saves.filter((earlier) => now - earlier.at <= OWN_WRITE_STAMP_LIFETIME_MS);
+    if (save.stamps.size && save.rowIds.size) saves.push(save);
+    return result;
+  };
   return {
-    recorded: (result, now = Date.now()) => {
-      const save: SaveRecord = { stamps: new Set(), rowIds: new Set(), at: now };
-      collectSave(result, 0, save, { left: RESULT_WALK_VALUES });
-      saves = saves.filter((earlier) => now - earlier.at <= OWN_WRITE_STAMP_LIFETIME_MS);
-      if (save.stamps.size && save.rowIds.size) saves.push(save);
-      return result;
+    recorded,
+    track: async (save) => {
+      const running = { startedAt: Date.now() };
+      runningSaves.add(running);
+      try {
+        return recorded(await save);
+      } finally {
+        runningSaves.delete(running);
+        if (!holding(Date.now())) release();
+      }
+    },
+    heldForSave: (event, then) => {
+      if (!event.new || !STAMPED_TABLES.has(event.table) || released.has(event) || !holding(Date.now()))
+        return false;
+      held.push({ event, then });
+      releaseTimer ??= setTimeout(release, OWN_SAVE_HOLD_MS);
+      return true;
     },
     covers: (event, now = Date.now()) => {
       if (!event.new || !STAMPED_TABLES.has(event.table)) return false;

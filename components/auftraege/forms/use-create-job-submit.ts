@@ -69,7 +69,7 @@ export function useCreateJobSubmit({
 
     await runSubmit(async () => {
       try {
-        const result = ownWrites.recorded(await createJob(input));
+        const result = await ownWrites.track(createJob(input));
 
         if (!result.success) {
           if (
