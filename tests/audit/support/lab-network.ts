@@ -16,6 +16,8 @@ type Tracked = {
   method: string;
   requestHeaders: Record<string, string>;
   finished: boolean;
+  /** The request ended without a body: the app aborted a read it superseded, or the network failed. */
+  failed: boolean;
   routeRender: boolean;
   encodedBytes: number;
   decodedBytes: number;
@@ -99,6 +101,7 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
       method: event.request.method,
       requestHeaders,
       finished: false,
+      failed: false,
       // A route GET or a document renders the route on the server as soon as it starts.
       routeRender: shape.startsWith('route:') || shape.startsWith('document:'),
       encodedBytes: 0,
@@ -157,6 +160,7 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
     const entry = tracked.get(event.requestId);
     if (!entry) return;
     touch();
+    entry.failed = true;
     entry.finished = true;
   });
   await cdp.send('Network.enable');
@@ -181,7 +185,7 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
             requests: 1,
             encodedBytes: entry.encodedBytes,
             decodedBytes: decoded,
-            rows: entry.rows,
+            rows: null,
           });
           continue;
         }
@@ -189,8 +193,17 @@ export async function trackLabNetwork(cdp: CDPSession, appOrigin: string): Promi
         current.encodedBytes += entry.encodedBytes;
         current.decodedBytes =
           current.decodedBytes === null || decoded === null ? null : current.decodedBytes + decoded;
-        current.rows =
-          current.rows === null || entry.rows === null ? null : Math.max(current.rows, entry.rows);
+      }
+      // A shape's rows are the largest body that arrived. An aborted request has no body, so it
+      // neither sets nor clears them; a body that arrived without a row count still clears them.
+      for (const [shape, payload] of payloads) {
+        const arrivedRows = entries
+          .filter((entry) => entry.shape === shape && !entry.failed)
+          .map((entry) => entry.rows);
+        payload.rows =
+          arrivedRows.length > 0 && arrivedRows.every((rows): rows is number => rows !== null)
+            ? Math.max(...arrivedRows)
+            : null;
       }
       return {
         // A prefetch follows timing (a link entering view, a cache invalidation), so the
