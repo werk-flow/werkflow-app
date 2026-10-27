@@ -65,3 +65,25 @@ The edit guard stays where it protects a running local verification: it refuses 
 - [testing.md](../technical/testing.md) — the CI gate and the local commands.
 - [environments.md](../technical/environments.md) — the migration rule, release and rollback.
 - [coderabbit.md](../technical/coderabbit.md) — reviews on pull requests.
+
+## Amendment 2026-10-26: the owner can approve list growth
+
+The table's ratchet row had no path for a list growth the owner approved, and the ruleset on `main` has no bypass. The owner adds the label `approved: list growth` to such a PR. CI's unit job then waives the growth, and the PR diff shows it. The owner owns the label: agents use the owner's GitHub account, so the label rule binds them only through review (Tier 3). [testing.md](../technical/testing.md#grow-a-shrink-only-list) holds the procedure.
+
+## Amendment 2026-10-26: one CodeRabbit review per code pull request
+
+The owner narrowed rule 4. A pull request that changes product code, tests, migrations or security-relevant code gets one CodeRabbit app review, requested once at the end when `Check` is green, not after every fix. A pull request that changes only docs, agent instructions or CI workflow files merges on a green `Check` with the agent's own review. Requests after every fix spent the app's rate limit, and an early request restarts its window. [coderabbit.md](../technical/coderabbit.md#babysit-a-pull-request) owns the procedure, the rate-limit rule and the order when several pull requests wait.
+
+## Amendment 2026-10-26: merges without an up-to-date branch
+
+The owner turned off "require branches to be up to date before merging" on the `main` ruleset. A green `Check` on the PR's latest commit is enough to merge; the branch need not contain the newest `main`. This supersedes three statements above: the "kept up to date with `main` before merge" part of the plan row in "Where the local gate's guarantees went", the reason given for rejecting a merge queue, and "up-to-date branches" in the GitHub ruleset settings. Two checks catch a merge that breaks `main`: `Check` runs again on every push to `main` (`.github/workflows/ci.yml`), and the `release` workflow refuses a `main` commit without a successful `Check` (`.github/workflows/release.yml`). A merge queue stays rejected while one owner merges.
+
+## Amendment 2026-10-26: review levels, sol-loop, and merges under "full send"
+
+The owner replaced the code-or-docs split of the CodeRabbit amendment above with three review levels, and narrowed rule 8. CodeRabbit reviews were the slowest wait in the owner's day, and every ready PR waited for the owner's merge even when nothing in it needed the owner's eyes.
+
+1. The agent chooses a PR's level from its diff and states it in the description; the owner may raise it, and the agent never goes below the rule. Level 0 is a change with no behavior effect (docs, comments, copy typos, agent instructions, formatting) and needs the agent's own read. Level 1, the default for every behavior change, needs a `sol-loop` review: GPT Sol, started through T3 Code's `delegate_task`, reviews the change in rounds before the PR opens. Level 2 (security, authentication, permissions and RLS, migrations, personal data, data deletion, the Zeitkonto, time and payroll logic) needs `sol-loop` and then one CodeRabbit app review, requested once after Sol approved and `Check` is green, never while the app reports a rate limit. Level 0 and 1 never request or wait for CodeRabbit.
+2. Rule 8 now reads: the owner merges, unless the owner said "full send" in the task's thread. Then the agent merges with a squash merge once the merge gate passes, and never with an admin bypass. Without it, an agent stops when the PR is ready ("full stop" behavior). No skill releases, runs the `release` workflow or writes to PROD.
+3. Each `sol-loop` records the usage T3 Code reports, or "not exposed", in the PR description, so the owner can judge whether the ChatGPT Plus plan suffices. On a Sol rate limit the agent asks the owner and substitutes no other model.
+
+The skills `sol-loop`, `full-send`, `full-stop`, `file-pr` and `leaving-pr-comments`, adapted from t3dotgg/tstack under its MIT license, carry the procedures. [coderabbit.md](../technical/coderabbit.md#choose-the-review-level) owns the levels, the babysit procedure and the merge gate. The levels are Tier 3 until the check that the [enforcement-ladder backlog](../technical/enforcement-ladder-backlog.md#testing-and-review) describes lands.

@@ -36,6 +36,7 @@ import {
   createProject,
   expandProjectButton,
   expectWorkTransitionSaved,
+  fillJobNumber,
   jobFormField,
   lifecycleAction,
   lifecycleState,
@@ -135,7 +136,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await expect(adminPage.getByRole('combobox').filter({ hasText: inlineCustomer })).toBeVisible();
     const inlineJobNumber = `A1-INLINE-${world.runId}`;
     const createJobDialog = workCreateDialog(adminPage);
-    await workCreateJobNumberField(createJobDialog).fill(inlineJobNumber);
+    await fillJobNumber(workCreateJobNumberField(createJobDialog), inlineJobNumber);
     await createJobDialog.getByLabel(SHARED_COPY.field.title).fill(`A1 Inlineauftrag ${world.runId}`);
     await workCreateSubmit(adminPage, 'job').click();
     await expect(workCreateHeading(adminPage)).toBeHidden();
@@ -185,7 +186,7 @@ test.describe('A1 Kunden und Auftragsdaten @AUDIT-W1-A1', () => {
     await workCreateButton(adminPage).click();
     const createDialog = workCreateDialog(adminPage);
     await workCreateTab(createDialog, 'job').click();
-    await jobFormField(createDialog, 'number').fill(jobNumber);
+    await fillJobNumber(jobFormField(createDialog, 'number'), jobNumber);
     await jobFormField(createDialog, 'title').fill(jobTitle);
     await jobFormField(createDialog, 'description').fill(jobDescription);
     await customerPicker(createDialog).click();

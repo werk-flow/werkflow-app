@@ -87,6 +87,7 @@ function PeriodFindingRow({
           periodId={periodId}
           findingId={finding.id}
           findingLabel={FINDING_LABELS[finding.kind]}
+          canApprove={finding.canApprove}
         />
       ) : null}
     </div>

@@ -1,6 +1,6 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-26
+Status: living — last reviewed 2026-10-27
 
 This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
 
@@ -8,6 +8,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
+| Long unbroken names on phones | Every audit-world surname ends in the 32-character run id (`planTestWorld` in `lib/testing/seed-world-plan.ts`). A name without `break-words` or `min-w-0` overflows at 375 px only when that run's id renders wide, so `audit:layout` and the audit overflow checks catch it on some runs and pass on others. | Tier 2: give every world name a fixed worst-case unbroken part, so each run probes the widest name and a missing wrap fails every time. |
 | States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
 
 ## Performance and immediate feedback
@@ -43,6 +44,7 @@ This list holds the open candidates for moving a prose rule or a known gap up th
 | Candidate | Gap today | Target tier and mechanism |
 | --- | --- | --- |
 | Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
+| Review levels | A PR states its [review level](coderabbit.md#choose-the-review-level) and its `sol-loop` line, and a level 2 PR waits for its CodeRabbit review, but only the agent's reading checks either. `Check` cannot carry the CodeRabbit half: the app is requested only after `Check` is green, so a gate inside `Check` could never pass. A PR body edit also does not start `.github/workflows/ci.yml`. | Tier 2: a separate small workflow on `pull_request` (`opened`, `edited`, `synchronize`) and `pull_request_review`, added by the owner as a second required check on the `main` ruleset. It fails a PR whose diff leaves docs and agent instructions but whose body lacks the `Reviewed with sol-loop:` line, and a PR that touches a level 2 path without a finished CodeRabbit review on the PR. Fixes pushed after that review need no second one. |
 
 ## Documentation
 

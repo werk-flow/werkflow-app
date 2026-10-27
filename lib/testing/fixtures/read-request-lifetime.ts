@@ -29,13 +29,23 @@ mock.module('@/lib/supabase/admin', () => ({
                         first_name: 'Test',
                         last_name: 'Person',
                         exit_date: null,
+                        personnel_access_lifecycles: [],
+                        personnel_onboarding_requirements: [],
                       },
                     ]
                   : [];
             return { data, error: null };
           };
-          // The delegation read also narrows to delegations that have not ended (gte).
-          const page = { order: () => page, gte: () => page, range: read };
+          // The delegation read also narrows to delegations that have not ended (gte); the
+          // employee read narrows its embedded access blockers (eq, not, limit).
+          const page = {
+            eq: () => page,
+            not: () => page,
+            limit: () => page,
+            order: () => page,
+            gte: () => page,
+            range: read,
+          };
           return page;
         },
         in: async () => {

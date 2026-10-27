@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+  approvalTargetRole,
   canHolderApproveTarget,
   getResponsibilitiesStrandedByEmployeeRemoval,
   resolveEffectiveResponsibility,
@@ -15,18 +16,21 @@ const members: ResponsibilityMember[] = [
     userId: 'admin-user',
     role: 'admin',
     active: true,
+    hasEffectiveAccess: true,
   },
   {
     employeeRecordId: 'buero-record',
     userId: 'buero-user',
     role: 'buero',
     active: true,
+    hasEffectiveAccess: true,
   },
   {
     employeeRecordId: 'employee-record',
     userId: 'employee-user',
     role: 'employee',
     active: true,
+    hasEffectiveAccess: true,
   },
 ];
 
@@ -178,6 +182,33 @@ describe('resolveEffectiveResponsibility', () => {
     expect(delegate ? canHolderApproveTarget(delegate, 'someone', 'employee') : false).toBe(true);
   });
 
+  test('a suspended, ended or prestart delegator hands no scope to their substitute', () => {
+    const delegation: ResponsibilityDelegation = {
+      id: 'delegation',
+      responsibility: 'time_approval',
+      delegatorEmployeeRecordId: 'buero-record',
+      substituteEmployeeRecordId: 'employee-record',
+      validFrom: '2026-08-10',
+      validUntil: '2026-08-12',
+      revokedFrom: null,
+    };
+    const result = resolveEffectiveResponsibility({
+      responsibility: 'time_approval',
+      actionTime: '2026-08-10T10:00:00.000Z',
+      businessDate: '2026-08-10',
+      members: members.map((member) =>
+        member.employeeRecordId === 'buero-record' ? { ...member, hasEffectiveAccess: false } : member,
+      ),
+      configurations: [directConfiguration],
+      delegations: [delegation],
+    });
+
+    expect(result.holders.map((holder) => holder.employeeRecordId)).toEqual(['buero-record']);
+    expect(
+      resolveWithDelegation('2026-08-10', delegation).holders.map((holder) => holder.employeeRecordId),
+    ).toEqual(['buero-record', 'employee-record']);
+  });
+
   test('resolves overlapping anomalous delegations independently of input order', () => {
     const delegations: ResponsibilityDelegation[] = [
       {
@@ -263,5 +294,39 @@ describe('resolveEffectiveResponsibility', () => {
         'buero-record',
       ),
     ).toEqual(['time_approval']);
+  });
+});
+
+describe('approval scope over a personnel record', () => {
+  const holders = resolveEffectiveResponsibility({
+    responsibility: 'time_approval',
+    actionTime: '2026-08-05T10:00:00.000Z',
+    businessDate: '2026-08-05',
+    members,
+    configurations: [],
+    delegations: [],
+  }).holders;
+  const holderOf = (userId: string) => {
+    const holder = holders.find((candidate) => candidate.userId === userId);
+    if (!holder) throw new Error(`${userId} holds no time approval`);
+    return holder;
+  };
+
+  test('a person without a login counts as an employee, a login without a membership has no role', () => {
+    expect(approvalTargetRole(null, null)).toBe('employee');
+    expect(approvalTargetRole('former-user', null)).toBeNull();
+    expect(approvalTargetRole('buero-user', 'buero')).toBe('buero');
+  });
+
+  test('a Büro default decides a person without a login, never a person without a known role', () => {
+    const buero = holderOf('buero-user');
+    expect(canHolderApproveTarget(buero, null, approvalTargetRole(null, null))).toBe(true);
+    expect(canHolderApproveTarget(buero, 'former-user', approvalTargetRole('former-user', null))).toBe(false);
+  });
+
+  test('an Admin default decides a person without a known role, never themselves', () => {
+    const admin = holderOf('admin-user');
+    expect(canHolderApproveTarget(admin, 'former-user', null)).toBe(true);
+    expect(canHolderApproveTarget(admin, 'admin-user', 'admin')).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 # Browser-test incident log
 
-Status: living — last reviewed 2026-10-26; entries from 2026-09-25 on
+Status: living — last reviewed 2026-10-27; entries from 2026-09-25 on
 
 Record here each failed acceptance group and each focused failure that changes shared testing behavior. [Testing](testing.md#failures) owns the procedure. Entries before 2026-09-25 were deleted; Git history keeps them. Read an entry only to investigate that failure. Rules live in their owner docs, not here.
 
@@ -21,6 +21,67 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-27: golden:p1-22 harness failure
+
+<!-- incident-run: 2026-10-27T035641092Z-79010d -->
+
+- Run: run `2026-10-27T035641092Z-79010d`, group `golden:p1-22`, target local, fingerprint `3ddab484ef6d`, world `6197cd57dc494d8b88d5d1700ec3e661`.
+- Failure point:  >  > p1-22.spec.ts > P1-22 consistent time corrections @P1-22 > calendar resize submits one audited correction and survives reload @P1-22-calendar-correction: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: The calendar correction test booked time two days back for an employee whose entry date is the business date; when the loaded calendar window ends before that date (the fixture day is a Sunday, so on Tuesdays) the board has no row for the person and the correction dialog refuses to submit.
+- Prevention: Tier 3: the test backdates the employee's entry date with ensureEmployedSince before it books time; review of fixtures that book time before the business date. Tier 1 would move every world's entry date back, which changes the employment state that other groups assert; Tier 2 cannot see a fixture's runtime date offset in the spec source.
+- Evidence: the failure's page snapshot shows the dialog for a block on 25.10.26 with "Person ist im geladenen Kalender nicht mehr verfügbar."; the trace's /api/calendar-board response for 2026-10-18 to 2026-10-26 holds no rows, and the world's employee records enter on 2026-10-27. The same failure on main's commit 1e32faaa and in main's CI run of 2026-10-26 (golden:p1-22 started 00:17 Berlin on a Tuesday) rules out the branch. Correction: the calendar correction test backdates the employee's entry date to the fixture day. Focused proof: report `2026-10-27T040212749Z-531e9eb2` passed golden:p1-22 on a Tuesday, with the fixture on the 25-hour day of 2026-10-25.
+- Cleanup: `bun run test:runs cleanup` removed the failed run's world `6197cd57dc494d8b88d5d1700ec3e661`; the harness class allowed no retry on unchanged inputs, and the group ran again only after the repair.
+
+## 2026-10-26: unit:all harness failure
+
+<!-- incident-run: unit:all@2026-10-26T195921969Z-e2d35826 -->
+
+- Run: run `unit:all@2026-10-26T195921969Z-e2d35826`, group `unit:all`, target local, fingerprint `e0f495ff8c10`.
+- Failure point: unit:all in report 2026-10-26T195921969Z-e2d35826: Command exited 1; inspect .agent-logs/verification/2026-10-26T195921969Z-e2d35826/unit-all.log
+- Root cause: Three tests did not follow the responsibility read's new shape. module-caps.test.ts requires a listed function to sit at its ceiling, and both split functions shrank. The read-request-lifetime fake chained only eq/order/range, and in-memory-admin applied the embedded-resource filter personnel_onboarding_requirements.blocks_access to the parent employee rows, which dropped every member, so the work-handover boundary saw no holder.
+- Prevention: Tier 2: lib/conventions/module-caps.test.ts keeps the ceilings at the new sizes; lib/testing/fixtures/in-memory-admin.ts skips a dotted filter for a row that carries that embedded array, as PostgREST does
+- Evidence: unit-all.log of the report names the three tests; running the work-handover fixture alone returned work_handover_not_authorized where the boundary expects work_handover_target_not_found. Correction: ceilings lowered in eslint-rules/size-cap-exceptions.json, the lifetime fake chains eq/not/limit, the work-handover fixture seeds the embedded arrays. A first fake repair that ignored every dotted filter broke three other boundary fixtures (report `2026-10-26T200139939Z-015500b2`, classified authoring) and was narrowed. Focused proof: report `2026-10-26T200415014Z-429d5168` passed unit:all.
+
+## 2026-10-26: unit:all harness failure
+
+<!-- incident-run: unit:all@2026-10-26T195751085Z-4ead4049 -->
+
+- Run: run `unit:all@2026-10-26T195751085Z-4ead4049`, group `unit:all`, target local, fingerprint `0cd2164f2153`.
+- Failure point: unit:all in report 2026-10-26T195751085Z-4ead4049: Command exited 1; inspect .agent-logs/verification/2026-10-26T195751085Z-4ead4049/unit-all.log
+- Root cause: lib/attention/count-volume.test.ts has the same stale fake as count-reads.test.ts: its employee_records rows lacked the embedded personnel_access_lifecycles and personnel_onboarding_requirements arrays that the responsibility read now selects, so the loader threw and the counts failed with unexpected_error.
+- Prevention: no prevention claim: the fixture now returns the embedded arrays; nothing ties a fake row's shape to the select string it answers
+- Evidence: unit-all.log of the report: "Unexpected error in getAttentionCounts" in every count-volume case. Correction: the fixture's employee rows carry both embedded arrays. Focused proof: report `2026-10-26T200415014Z-429d5168` passed unit:all.
+
+## 2026-10-26: sql:p1-23 environment failure
+
+<!-- incident-run: sql:p1-23@2026-10-26T194916050Z-ee3e770d -->
+
+- Run: run `sql:p1-23@2026-10-26T194916050Z-ee3e770d`, group `sql:p1-23`, target local, fingerprint `119243b5b1cc`.
+- Failure point: sql:p1-23 in report 2026-10-26T194916050Z-ee3e770d: Command exited 1; inspect .agent-logs/verification/2026-10-26T194916050Z-ee3e770d/sql-p1-23.log
+- Root cause: The shared local stack carries migration 20261026120000 from another worktree (PR #15, not on main), which makes decide_time_account_adjustment refuse its own proposer with own_proposal; p1_23_time_accounts.sql on this branch still expects the pre-#15 behavior. This branch does not touch that function.
+- Prevention: Tier 3: one local stack serves every worktree; CI's SQL job applies only this branch's migrations to a fresh stack
+- Evidence: sql-p1-23.log raises own_proposal from decide_time_account_adjustment; the local migration history lists 20261026120000, which is not in this branch. No correction on this branch and no local retry, because the stack keeps that migration. Focused proof: after #15 merged and main was merged into the branch, report `2026-10-26T215309713Z-d9061392` passed sql:p1-23.
+
+## 2026-10-26: unit:all harness failure
+
+<!-- incident-run: unit:all@2026-10-26T194916050Z-ee3e770d -->
+
+- Run: run `unit:all@2026-10-26T194916050Z-ee3e770d`, group `unit:all`, target local, fingerprint `f688ab81c5ae`.
+- Failure point: unit:all in report 2026-10-26T194916050Z-ee3e770d: Command exited 1; inspect .agent-logs/verification/2026-10-26T194916050Z-ee3e770d/unit-all.log
+- Root cause: lib/attention/count-reads.test.ts fakes the employee_records read with rows in the old select shape. The responsibility loader now embeds personnel_access_lifecycles and personnel_onboarding_requirements, which PostgREST always returns as arrays; the fixture rows lacked them, so reading the lifecycle threw and the counts reported unexpected_error instead of the asserted result.
+- Prevention: no prevention claim: the fixture now returns the embedded arrays; nothing ties a fake row's shape to the select string it answers
+- Evidence: unit-all.log of the report: the two count-reads cases received unexpected_error. Correction: the fixture's employee row carries both embedded arrays. Focused proof: report `2026-10-26T200415014Z-429d5168` passed unit:all.
+
+## 2026-10-26: ui:contracts harness failure
+
+<!-- incident-run: ui:contracts@2026-10-26T181459938Z-ff25d8db -->
+
+- Run: run `ui:contracts@2026-10-26T181459938Z-ff25d8db`, group `ui:contracts`, target local, fingerprint `f1730c66e529`.
+- Failure point: ui:contracts in report 2026-10-26T181459938Z-ff25d8db: Command exited 1; inspect .agent-logs/verification/2026-10-26T181459938Z-ff25d8db/ui-contracts.log
+- Root cause: controls.spec.ts rendered the row actions menu without the app stylesheet. The menu portals to the end of body, so unstyled it sat at the page bottom, partly below the 900 px fold instead of fixed beside its trigger; the first-item focus scrolled the page, the trigger moved and the scroll handler closed the menu before the click on Bearbeiten landed (screenshot: unstyled page; Playwright: element detached after scrolling into view).
+- Prevention: Tier 2: tests/ui-contracts/controls.spec.ts loads the app stylesheet in the row-action selection case, so ui:contracts observes the fixed menu the product renders
+- Evidence: test-failed-1.png shows the page without styles and the trigger near the bottom of the 900 px viewport; the Playwright log reads "element was detached from the DOM" after scrolling into view. CI's component job passed on the same commit. Focused proof: report `2026-10-26T194916050Z-ee3e770d` passed ui:contracts with the stylesheet loaded.
 
 ## 2026-10-26: audit:layout:field environment failure
 

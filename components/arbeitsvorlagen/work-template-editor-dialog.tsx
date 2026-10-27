@@ -336,13 +336,13 @@ function WorkTemplateHistorySection({ history }: { history: WorkTemplateDetail['
       </div>
       {history.map((event) => (
         <div key={event.id} className="flex justify-between gap-3 border-b pb-2 text-sm">
-          <span>
+          <span className="min-w-0 break-words">
             {HISTORY_EVENT_LABELS[event.eventType] ?? 'Geändert'}{' '}
             {event.versionNumber ? `· Version ${event.versionNumber}` : ''}
             {event.targetLabel && <span className="block">{event.targetLabel}</span>}
             <span className="block text-muted-foreground">{event.actorName}</span>
           </span>
-          <time className="text-muted-foreground">{formatBerlinDateTime(event.createdAt)}</time>
+          <time className="shrink-0 text-muted-foreground">{formatBerlinDateTime(event.createdAt)}</time>
         </div>
       ))}
     </section>

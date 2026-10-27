@@ -480,6 +480,11 @@ test('real custom controls keep the owning field names and error descriptions', 
 test('row action selection restores its trigger without stealing a newly opened dialog focus', async ({
   page,
 }) => {
+  // Unstyled, the portaled menu falls below the fold, and focusing its first item scrolls the
+  // page and closes it. The app stylesheet keeps it fixed beside its trigger, as in the product.
+  const css = process.env.WERKFLOW_UI_CONTRACT_CSS;
+  if (!css) throw new Error('Run the styled contracts through test:ui.');
+  await page.addStyleTag({ path: css });
   const section = page.getByRole('region', { name: 'Zeilenaktionen' });
   const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });
   await trigger.click();

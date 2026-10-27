@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Read this file at the start of every task. Everything else is reached through [the docs index](docs/README.md). Do not glob the docs tree.
+Reach every other doc through [the docs index](docs/README.md). Do not glob the docs tree.
 
 ## Workspace
 
@@ -82,12 +82,12 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 ### 5. Testing and review
 
-- **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. Each CodeRabbit finding on a PR gets a disposition.
+- **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. A PR gets the reviews of its [review level](docs/technical/coderabbit.md#choose-the-review-level), and each finding gets a disposition.
 - **Never.** Retry until green. Weaken an assertion, skip a test, add a fixed sleep or raise a timeout to pass. Treat a review score or an old report as acceptance. Merge without a green `Check`.
 - **Enforced by.** Tier 1: `scripts/guard-edits-during-verification.ts` guards a running local verification, `scripts/run-unit-tests.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: `.github/workflows/ci.yml` with its required check `Check`, the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis), the tests under `lib/testing/`, `lib/conventions/` and `lib/docs/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `bun run test:runs`.
-- **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, and the disposition of each review finding.
-- **Verify.** `bun run check:changed`, `bun run test:plan`, `bun run test:verify`, then `Check` on the PR. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
-- **Owner doc.** [Testing](docs/technical/testing.md), with [CodeRabbit](docs/technical/coderabbit.md) for reviews. Start from its [How to work](docs/technical/testing.md#how-to-work).
+- **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, a PR's review level, and the disposition of each review finding.
+- **Verify.** `bun run check:changed`, `bun run test:plan`, `bun run test:verify`, the level's reviews, then `Check` on the PR. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
+- **Owner doc.** [Testing](docs/technical/testing.md), with [reviews](docs/technical/coderabbit.md) for pull requests. Start from its [How to work](docs/technical/testing.md#how-to-work).
 
 ### 6. Documentation
 
@@ -100,44 +100,35 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 ### Keep the blocks and the owner docs in step
 
-An "Enforced by" line names only mechanisms its owner docs tag, and names every mechanism they tag or covers it by folder, group family or `static:lint`. Change both in the same change; `docs:check` fails while they disagree.
+Change an "Enforced by" line and its owner docs' mechanism tags in the same change; `docs:check` fails while they disagree.
 
 ## How to work
 
 A rule below without a named mechanism is a Tier 3 default.
 
 - Route every task through the matching skill: [the docs index](docs/README.md#skills) pairs each kind of task with its skill.
-- Ask a short clarifying question before you code when scope, acceptance or an edge case is ambiguous. When business context is uncertain, ask the owner or leave a clear TODO; never invent strategy.
-- The owner decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question yourself with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
+- Do yourself whatever your tools can do, including generating, setting and rotating a secret whose value you create. The owner supplies only what the owner alone holds (passwords, tokens and settings of the owner's own accounts) and decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
+- Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask the owner through your harness's ask-user tool and end your turn, so T3 Code marks the thread as needing input and notifies the owner. Never bury an owner action in a status message while you keep working or watching a PR.
 - Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
-- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`). Keep field-worker flows simple and mobile-friendly; favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
-- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed`, push, open the PR with `gh pr create`, call `watch_pull_request` and end your turn. Babysit it ([CodeRabbit](docs/technical/coderabbit.md#babysit-a-pull-request)) until `Check` and the bots are green on the latest commit; the owner merges. Mechanism: the ruleset on `main`.
+- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
+- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed` and, for level 1 and 2, `sol-loop`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it until it meets [the merge gate](docs/technical/coderabbit.md#the-merge-gate). The owner merges unless they said "full send". "full send" and "full stop" are the owner's request to commit, push and open the task's PR. Mechanism: the ruleset on `main`.
 
 ## Language
 
 - Everything a user sees is natural German with real umlauts and `ß`: labels, messages, tooltips, aria labels. Mechanism: `lib/conventions/german-copy.test.ts` for spelling, address, ellipsis and quotes.
 - Code, identifiers, comments, commits and developer documents are English. Route names and database values keep the German domain terms of the codebase.
-- Keep user-facing strings out of deep logic where practical.
 
 Domain terms: `Auftrag` (work order), `Projekt` (contains several jobs), `Kunde`, `Mitarbeiter`, `Handwerker/in` (field-worker role label), `Organisation` (the company boundary), `Anfrage` (customer request, converted once into work), `Ansprechpartner` and `Einsatzort` (a customer's contact and work site), `Kalender`, `Einsatz` (dispatched work; `Mein Einsatz` is the worker's view), `Arbeitsvorlage`, `Arbeitsnachweis` (site evidence), `Übergabe` (office-reviewed handover), `Aufgaben` (the one task and approval list), `Qualifikationen`, `Anlage`, `Servicefall`, `Wartungsplan`, `Dokumente`, `Zeiterfassung`, `Zeitkonto`, `Perioden`, `Urlaub`, `Krankmeldung`, `Lager`, `geparkt` (intentionally unscheduled work), `buero` (office role between employee and admin). The owning feature spec defines each term.
 
 ## Tools, branches and releases
 
 - Use Bun: `bun install`, `bun run <script>`, `bunx <tool>`. Keep `bun.lock`. Keep `package-lock.json` as is; add no other lockfile. Mechanism: `vercel.json` installs from the frozen `bun.lock`.
-- Work in Linux or macOS (WSL on Windows). In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
+- In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
 - The infrastructure stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
 - `main` is staging on DEV, `production` is PROD; never push to either. Release only when the owner asks in your thread ("release main"): run `gh workflow run release`, follow it to its end with `gh run watch`, and report. Mechanism: the rulesets.
 - Schema changes follow [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only. Mechanism: `bun run migrations:check`, `bun run types:check`, `sql:security`.
 
-## Brand
-
-The `werkflow-design` skill owns the design language: tokens, color rules, logos and components.
-
 ## Business context
 
-Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Resolve scope changes with Tamay. Do not encode sales positioning into feature logic.
-
-## Maintain this file
-
-Change this file when the product direction or a virtue changes. `CLAUDE.md` imports it; Codex reads it directly.
+Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Do not encode sales positioning into feature logic.
