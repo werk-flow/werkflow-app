@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoAxeViolations } from '../audit/support/axe';
 import { expectKeyboardPath } from '../audit/support/keyboard-path';
 import { expectDialogFits, expectNoSidewaysOverflow } from '../audit/support/layout-measure';
+import { trackLabNetwork } from '../audit/support/lab-network';
 
 // Planted-defect proofs of the rendered audit's measures (werkflow-design,
 // "Checklist"): each measure fails on a page that breaks its rule and passes
@@ -81,4 +82,38 @@ test('the keyboard path fails when focus stays outside the dialog or Tab leaves 
   await expect(expectKeyboardPath(page, dialog, 'untrapped', { soft: false })).rejects.toThrow(
     /moved focus out of the dialog/,
   );
+});
+
+test('the lab network read keeps the rows of a read that replaced an aborted one', async ({ page }) => {
+  const origin = 'http://lab.test';
+  const board = JSON.stringify({ rows: Array.from({ length: 90 }, (_, index) => ({ index })) });
+  let supersededArrived: () => void = () => undefined;
+  const supersededStarted = new Promise<void>((resolve) => (supersededArrived = resolve));
+  await page.route(`${origin}/**`, async (route) => {
+    const url = new URL(route.request().url());
+    if (!url.pathname.startsWith('/api/'))
+      return route.fulfill({ contentType: 'text/html', body: SHELL('') });
+    // The superseded read never answers; the page aborts it.
+    if (url.searchParams.has('superseded')) return supersededArrived();
+    return route.fulfill({ contentType: 'application/json', body: board });
+  });
+  await page.goto(`${origin}/`);
+  const network = await trackLabNetwork(await page.context().newCDPSession(page), origin);
+  network.reset();
+
+  const superseded = await page.evaluateHandle(() => {
+    const controller = new AbortController();
+    void fetch('/api/calendar-board?superseded', { signal: controller.signal }).catch(() => undefined);
+    return controller;
+  });
+  await supersededStarted;
+  await superseded.evaluate((controller) => controller.abort());
+  await page.evaluate(async () => {
+    await (await fetch('/api/calendar-board?current')).json();
+  });
+  await expect.poll(() => network.inFlight()).toEqual([]);
+  await expect.poll(() => network.quietForMs()).toBeGreaterThan(100);
+
+  const payload = network.read().payloads.find((entry) => entry.shape === 'api:/api/calendar-board');
+  expect(payload).toMatchObject({ requests: 2, rows: 90 });
 });

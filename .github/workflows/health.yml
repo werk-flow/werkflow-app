@@ -1,0 +1,186 @@
+name: Health
+
+# Every credential, checked weekly where it lives, so an expired or rotated one
+# is noticed long before a release or a user meets it
+# (docs/technical/environments.md#credentials). Each check is its own step
+# named after its credential and runs even when an earlier one failed. A
+# failed run opens or updates one issue that lists the failed check ids; the
+# next green run closes it. Scheduled-run failure mail goes to the account
+# that last changed the cron line below; environments.md names it.
+on:
+  schedule:
+    # Monday 05:00 UTC: 06:00 in Berlin in winter, 07:00 in summer.
+    - cron: '0 5 * * 1'
+  workflow_dispatch:
+    inputs:
+      break_check:
+        description: "Proof run only: swap this check's credential for an invalid value"
+        type: choice
+        default: none
+        options:
+          - none
+          - supabase-access-token-dev
+          - supabase-access-token-prod
+          - dev-database-url
+          - vercel-token
+          - sibling-repositories-token
+          - app-staging
+          - app-production
+          - supabase-function-dev
+          - supabase-function-prod
+          - prod-database-url
+          - production-deploy-key
+
+permissions:
+  contents: read
+
+concurrency:
+  group: health
+  cancel-in-progress: false
+
+env:
+  BREAK_CHECK: ${{ inputs.break_check || 'none' }}
+  CHECK: bash .github/scripts/health-check.sh
+
+jobs:
+  repository:
+    name: Repository credentials
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      failed: ${{ steps.summary.outputs.failed }}
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      DEV_DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SIBLING_REPOSITORIES_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
+      HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      # Only the check script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: SUPABASE_ACCESS_TOKEN lists the DEV edge functions
+        id: supabase-access-token-dev
+        if: ${{ !cancelled() }}
+        run: $CHECK supabase-access-token-dev bearer SUPABASE_ACCESS_TOKEN https://api.supabase.com/v1/projects/mbkkzuqjbdvzelqvuzcn/functions
+      - name: SUPABASE_ACCESS_TOKEN lists the PROD edge functions
+        id: supabase-access-token-prod
+        if: ${{ !cancelled() }}
+        run: $CHECK supabase-access-token-prod bearer SUPABASE_ACCESS_TOKEN https://api.supabase.com/v1/projects/jbgaqpdjauzoocplgdsn/functions
+      - name: DEV_DATABASE_URL runs select 1
+        id: dev-database-url
+        if: ${{ !cancelled() }}
+        run: $CHECK dev-database-url database DEV_DATABASE_URL
+      - name: VERCEL_TOKEN reads the project
+        id: vercel-token
+        if: ${{ !cancelled() }}
+        run: $CHECK vercel-token bearer VERCEL_TOKEN 'https://api.vercel.com/v9/projects/prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R?teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN'
+      - name: SIBLING_REPOSITORIES_TOKEN reads werkflow-business
+        id: sibling-repositories-token
+        if: ${{ !cancelled() }}
+        run: $CHECK sibling-repositories-token bearer SIBLING_REPOSITORIES_TOKEN https://api.github.com/repos/werk-flow/werkflow-business
+      # The app checks its own runtime credentials in Vercel (app/api/health/route.ts).
+      - name: Staging app runtime credentials (Vercel preview, DEV)
+        id: app-staging
+        if: ${{ !cancelled() }}
+        run: $CHECK app-staging protected-endpoint HEALTH_CHECK_TOKEN https://werkflow-app-git-main-werkflows-projects.vercel.app/api/health
+      - name: Production app runtime credentials (Vercel production, PROD)
+        id: app-production
+        if: ${{ !cancelled() }}
+        run: $CHECK app-production endpoint HEALTH_CHECK_TOKEN https://app.werk-flow.app/api/health
+      # The edge functions check their own secrets in Supabase (supabase/functions/health).
+      - name: DEV edge function secrets
+        id: supabase-function-dev
+        if: ${{ !cancelled() }}
+        run: $CHECK supabase-function-dev endpoint HEALTH_CHECK_TOKEN https://mbkkzuqjbdvzelqvuzcn.supabase.co/functions/v1/health
+      - name: PROD edge function secrets
+        id: supabase-function-prod
+        if: ${{ !cancelled() }}
+        run: $CHECK supabase-function-prod endpoint HEALTH_CHECK_TOKEN https://jbgaqpdjauzoocplgdsn.supabase.co/functions/v1/health
+      - name: Collect the failed checks
+        id: summary
+        if: always()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: echo "failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(" ")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
+
+  production:
+    name: Production credentials
+    # The PROD secrets live in this environment only, and only main may use it.
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      failed: ${{ steps.summary.outputs.failed }}
+    env:
+      PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+      PRODUCTION_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
+    steps:
+      # Only the check script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: PROD_DATABASE_URL runs select 1
+        id: prod-database-url
+        if: ${{ !cancelled() }}
+        run: $CHECK prod-database-url database PROD_DATABASE_URL
+      - name: PRODUCTION_DEPLOY_KEY reads the production branch (never a push)
+        id: production-deploy-key
+        if: ${{ !cancelled() }}
+        run: $CHECK production-deploy-key deploy-key PRODUCTION_DEPLOY_KEY git@github.com:werk-flow/werkflow-app.git
+      - name: Collect the failed checks
+        id: summary
+        if: always()
+        env:
+          STEPS: ${{ toJSON(steps) }}
+        run: echo "failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(" ")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
+
+  report:
+    name: Report
+    needs: [repository, production]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write # open, update and close the weekly health issue
+    steps:
+      - name: Open, update or close the health issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          REPOSITORY: ${{ needs.repository.result }}
+          REPOSITORY_FAILED: ${{ needs.repository.outputs.failed }}
+          PRODUCTION: ${{ needs.production.result }}
+          PRODUCTION_FAILED: ${{ needs.production.outputs.failed }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # The owner's account, assigned so a failure reaches them beside the run's own mail.
+          ASSIGNEE: tamaycbn
+        run: |
+          title='Weekly health check failed'
+          issue="$(gh issue list --state open --search "\"${title}\" in:title" --json number,title \
+            | jq -r --arg title "$title" '[.[] | select(.title == $title)][0].number // empty')"
+          failed="$(printf '%s %s' "$REPOSITORY_FAILED" "$PRODUCTION_FAILED" | xargs -n 1 | sort -u)"
+          # A job that failed before its checks ran still names itself.
+          test "$REPOSITORY" = success || test -n "$REPOSITORY_FAILED" || failed="$(printf '%s\nrepository-credentials-job' "$failed")"
+          test "$PRODUCTION" = success || test -n "$PRODUCTION_FAILED" || failed="$(printf '%s\nproduction-credentials-job' "$failed")"
+          failed="$(sed '/^$/d' <<< "$failed")"
+          if test -z "$failed"; then
+            if test -n "$issue"; then
+              gh issue close "$issue" --comment "All checks passed again: ${RUN_URL}"
+            fi
+            exit 0
+          fi
+          mapfile -t names <<< "$failed"
+          list="$(printf -- '- %s\n' "${names[@]}")"
+          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nRun: %s\n\nThe step of each check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it.' \
+            "$list" "$RUN_URL" "$GH_REPO")"
+          if test -n "$issue"; then
+            gh issue edit "$issue" --body "$body"
+            gh issue comment "$issue" --body "Still failing: ${RUN_URL}"
+          else
+            gh issue create --title "$title" --body "$body" --assignee "$ASSIGNEE"
+          fi
+          echo "::error::Failed checks: $(paste -sd ' ' <<< "$failed")"
+          exit 1

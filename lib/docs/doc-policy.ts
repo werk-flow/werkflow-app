@@ -34,12 +34,26 @@ export const DATED_DOCS: readonly string[] = [
   'docs/features/commercial-and-finance.md',
 ];
 
+/**
+ * A row of the credential table whose only date is the expiry in its fourth of six cells:
+ * a backticked variable name first, and no date in any other cell.
+ */
+function credentialRowWithExpiry(): RegExp {
+  const undatedCell = String.raw`(?:(?!\d{4}-\d{2}-\d{2})[^|])*`;
+  return new RegExp(
+    String.raw`^\| \`[A-Z0-9_]+\`${undatedCell}\|${undatedCell}\|${undatedCell}\| \d{4}-\d{2}-\d{2} \|${undatedCell}\|${undatedCell}\|$`,
+  );
+}
+
 /** Living docs that may carry dates only on the lines a pattern matches. */
 export const DATED_LINES: Readonly<Record<string, RegExp>> = {
   // A complete slice row names its acceptance date, which the roadmap check matches with the record.
   'docs/plans/phase-1/roadmap.md': /^\| `P1-\d{2}a?` \| `complete` \|/,
   // A flow's text is pinned by its hash in the coverage map and changes only with its evidence.
   'docs/product/user-flow-catalog.md': /^- `P1-\d{2}a?-F\d{2,3}` /,
+  // A credential row names the day its token expires in its fourth column, which no provider shows
+  // where the secret is stored.
+  'docs/technical/environments.md': credentialRowWithExpiry(),
 };
 
 /** Append-only logs: their historical entries keep the references they were written with. */

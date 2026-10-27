@@ -158,3 +158,39 @@ Correction to rule 6 of the 2026-10-01 amendment: the incident entries before 20
 | Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
 | Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
 | Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |
+
+## Amendment 2026-10-26: credential expiry dates
+
+The owner asked for one home of every credential, with the day each token expires, so that a rotation is a short task and happens before the weekly health check fails. The date rule kept a living doc from naming that day.
+
+Decided: a row of the credential table in [environments](../technical/environments.md#credentials) may carry a date. Every other setting is unchanged.
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| Word budget: living technical doc | 4000 | The 2026-10-03 amendment, unchanged. |
+| Word budget: AGENTS.md | 2800 | The 2026-10-01 amendment, unchanged. |
+| Word budget: docs index | 3600 | Routine reading includes the index in full; it holds the index, the doc rules and virtue 6's owner sections. |
+| Word budget: skill file | 4000 | A skill is read in full when it loads; the same size as an owner doc. |
+| Unbudgeted doc | docs/technical/test-incident-log.md | A log by purpose that no routine task reads. |
+| Dated doc | docs/technical/test-incident-log.md | A dated log by purpose. |
+| Dated doc | docs/plans/phase-1/log.md | The append-only progress log. |
+| Dated doc | docs/plans/phase-1/audits/golden-gate-log.md | The append-only gate-run log. |
+| Dated doc | docs/product/competitive-landscape.md | Market figures mean something only with their snapshot date. |
+| Dated doc | docs/features/commercial-and-finance.md | Statutory e-invoice dates and the research date of provider facts. |
+| Dated lines | docs/plans/phase-1/roadmap.md | A complete slice row names its acceptance date, which the roadmap check matches with the slice record. |
+| Dated lines | docs/product/user-flow-catalog.md | A flow's text is pinned by its hash in the coverage map and changes only with its evidence. |
+| Dated lines | docs/technical/environments.md | A row of the credential table names the day its token expires. GitHub, Vercel and Supabase store the secret without that date, and the weekly health check needs a human to rotate before it. |
+| Append-only log | docs/plans/phase-1/log.md | Historical entries keep the references they were written with. |
+| Append-only log | docs/plans/phase-1/audits/golden-gate-log.md | As above. |
+| Append-only log | docs/technical/test-incident-log.md | As above. |
+| Unmirrored skill | `coderabbit-review` | Codex ships its own CodeRabbit skill. |
+| Living plan | docs/plans/phase-1/roadmap.md | The living roadmap family never closes, so it needs no durable-homes section. |
+| Living plan | docs/plans/phase-1/protocol.md | As above. |
+| Living plan | docs/plans/phase-1/gates.md | As above. |
+| Living plan | docs/plans/phase-1/coverage.md | As above. |
+| Living plan | docs/plans/phase-1/log.md | As above. |
+| Dead citation | lib/testing/evidence/build-identity.test.ts -> docs/note.md | A fixture file name inside a test, not a citation. |
+| Dead citation | lib/testing/evidence/candidate-identity.test.ts -> docs/testing.md | As above. |
+| Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
+| Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
+| Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |

@@ -5,6 +5,7 @@ import { isRejectedIdentity } from '@/lib/auth/identity-errors';
 import { VERIFY_ADDRESS_COOKIE } from '@/lib/auth/address-cookies';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { logError } from '@/lib/logging';
+import { HEALTH_PATH, hasHealthCheckToken } from '@/lib/security/health-token';
 
 // Every folder under app/(app) plus the two authenticated areas outside it.
 // lib/security/proxy-prefixes.test.ts fails when a shipped route area is
@@ -29,6 +30,9 @@ export const PROTECTED_PREFIXES = [
   '/upgrade',
 ];
 
+// No route lives here, so a rewrite to it renders the app's own not-found answer.
+const UNKNOWN_ROUTE_PATH = '/api/health/unknown';
+
 function isStaticAsset(pathname: string) {
   return pathname.startsWith('/_next') || pathname.startsWith('/public') || pathname === '/favicon.ico';
 }
@@ -38,6 +42,14 @@ export async function proxy(req: NextRequest) {
 
   if (isStaticAsset(pathname)) {
     return NextResponse.next();
+  }
+
+  // Without its token the health endpoint answers exactly like a route that
+  // does not exist, for every method, so a probe learns nothing about it.
+  if (pathname === HEALTH_PATH) {
+    return hasHealthCheckToken(req.headers)
+      ? NextResponse.next()
+      : NextResponse.rewrite(new URL(UNKNOWN_ROUTE_PATH, req.url));
   }
 
   let response = NextResponse.next({
@@ -147,5 +159,6 @@ export const config = {
     '/verify',
     '/forgot-password',
     '/reset-password',
+    '/api/health',
   ],
 };

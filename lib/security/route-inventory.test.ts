@@ -66,6 +66,11 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
       'closed reader registry with per-kind validated input; verified cookie identity and, for inputs that name an organization, active-organization equality before delegating to readers that keep their own membership and subject checks; private no-store responses at background priority',
     mustCall: ['authenticateAndAuthorize', 'withReadRequest', 'isBackgroundReadKind'],
   },
+  'app/api/health/route.ts': {
+    authorization:
+      'a shared token in a header, compared in constant time (proxy.ts answers a request without it like an unknown route, the handler checks again); a per-backend limit before any dependency is asked; read-only checks that answer only a check name and ok or failed, no-store',
+    mustCall: ['hasHealthCheckToken', 'consumeRateLimit', 'runAppHealthChecks'],
+  },
   'app/auth/callback/route.ts': {
     authorization:
       'GET: provider code/token exchange with a same-origin return path; an invite redeems only after a PKCE code exchange, a bare invite link redirects to the login page; an Auth failure that is not a refusal answers a private 503. POST: same-origin JSON guard before setSession',

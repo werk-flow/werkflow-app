@@ -60,10 +60,14 @@ jobs:
         run: supabase db push --db-url "$DATABASE_URL"
 
       # --use-api bundles on Supabase's side, so the runner pulls no Docker image and meets no registry rate limit.
+      # The functions are named: each checks its own caller (the mail functions a secret key,
+      # health its token), so none needs a JWT. A new function deploys only once it is named here,
+      # and lib/security/edge-functions.test.ts fails until it is. A flag, not supabase/config.toml:
+      # CI's stack-image cache is keyed on that file.
       - name: Deploy the edge functions to PROD
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: supabase functions deploy --project-ref jbgaqpdjauzoocplgdsn --use-api
+        run: supabase functions deploy send-invite-email send-email-change-current-otp health --project-ref jbgaqpdjauzoocplgdsn --use-api --no-verify-jwt
 
       - name: Advance production
         env:

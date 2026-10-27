@@ -1,8 +1,8 @@
 # Environments
 
-Status: living — last reviewed 2026-10-26
+Status: living — last reviewed 2026-10-27
 
-WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, how tools reach each project, the migration rule, how worktrees share the local stack, and how to set up a new machine.
+WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, every credential and its rotation, how tools reach each project, the migration rule, how worktrees share the local stack, and how to set up a new machine.
 
 ## The two cloud backends
 
@@ -30,6 +30,31 @@ Project configuration (auth settings, mail templates, SMTP, rate limits) is not 
 Decided and in force: leaked-password protection, custom SMTP through Resend, SSL enforcement for direct database connections, the organization spend cap, daily backups from the plan, anonymous sign-in off, Vercel Authentication on every deployment except the custom domain.
 
 Not adopted, each a future owner decision: point-in-time recovery, database network restrictions, Supabase branching, the GitHub deploy integration. Signup CAPTCHA stays off while the rate limits cover sign-up; it turns on when public sign-up opens. Owner duties that no API covers: MFA on the Supabase account and a second organization owner.
+
+## Credentials
+
+This table is the one home of every credential the deployments and workflows use. Each value lives where the table says, and no check copies a secret elsewhere to test it. `.github/workflows/health.yml` checks every row each Monday morning, Berlin time, with a read-only call where the value lives. A failed run fails the step named after the credential, then opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`, which lists only the failed check ids; the next green run closes it. GitHub mails a scheduled run's failure to the account that last pushed a change to its cron line, which is the account that merges on `main`: `tamaycbn`. That account needs failed-workflow mail turned on in its GitHub notification settings.
+
+The app checks its own runtime credentials at `GET /api/health`, and each Supabase project at its `health` function; the weekly run reads the staging deployment, production and both projects. Both accept only a request that carries the header `x-health-check-token`; without it they answer like a route or function that does not exist. The answer names each check as `ok` or `failed`, never a value or a provider message. Each Vercel variable exists twice ([Vercel](#vercel)), and each Supabase secret once per project.
+
+| Credential | Lives in | Used by | Expires | Check | Rotate |
+| --- | --- | --- | --- | --- | --- |
+| `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging and release: deploy the edge functions | 2027-10-26 | `supabase-access-token-dev`, `-prod` | Supabase account settings, Access Tokens: create one, `gh secret set SUPABASE_ACCESS_TOKEN`, revoke the old one. |
+| `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | `vercel-token` | Vercel account settings, Tokens, scoped to the team; then `gh secret set`. |
+| `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-10-26 | `sibling-repositories-token` | A fine-grained GitHub token with read access to werkflow-business contents; then `gh secret set`. |
+| `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | `dev-database-url` | DEV dashboard, Database settings: reset the password, then `gh secret set` with the new connection string. |
+| `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | `prod-database-url` | As for DEV, on PROD, with `gh secret set --env production`. |
+| `PRODUCTION_DEPLOY_KEY` | GitHub environment `production`; its public half is a write deploy key of this repository | Release: advances `production` | Never | `production-deploy-key` (`git ls-remote`, never a push) | `ssh-keygen -t ed25519`, add the public key as a deploy key with write access, `gh secret set PRODUCTION_DEPLOY_KEY --env production`, delete the old deploy key. |
+| `HEALTH_CHECK_TOKEN` | GitHub repository secret, Vercel (both rows), Supabase secrets of DEV and PROD | The health endpoints and the weekly run | Never | Every endpoint check; a 404 names a mismatch | One new value (`openssl rand -hex 32`) in one sitting: `gh secret set`, `vercel env add` for Production and Preview, `supabase secrets set` on both projects, then redeploy staging and production. |
+| `VERCEL_AUTOMATION_BYPASS_SECRET` | GitHub repository secret; Vercel project, Deployment Protection | The weekly run past staging's protection | Never | `app-staging`; a 401 names it | Vercel project settings, Deployment Protection, Protection Bypass for Automation: regenerate, then `gh secret set`. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Vercel | Browser and server Supabase clients | Never | `supabase_publishable_key` | Supabase API keys: create a publishable key, set it in Vercel, redeploy, delete the old key. |
+| `SUPABASE_SECRET_KEY` | Vercel | The admin client and the edge-function calls | Never | `supabase_secret_key` | Supabase API keys: create a secret key, set it in Vercel, redeploy, delete the old key. The functions accept every secret key of their project. |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | Vercel | Document storage | As set on the Cloudflare token | `r2_storage` (head of the bucket) | Cloudflare R2, Manage API tokens: a token scoped to the one bucket; set both in Vercel, redeploy, delete the old token. |
+| `EMAIL_OTP_HASH_SECRET` | Vercel | Email-change code hashes and rate-limit subjects | Never | `email_otp_hash_secret` (presence only; no provider can confirm it) | Only after a leak: a new value voids pending email-change codes and restarts every rate-limit window. |
+| `RESEND_API_KEY` | Supabase secrets, one key per project | The mail functions | Never | `resend_api_key` | Resend, API keys: a sending key for the project, `supabase secrets set --project-ref <ref> RESEND_API_KEY`, delete the old key. |
+| `FROM_EMAIL` | Supabase secrets | The mail functions' sender | Never | `from_email` (presence) | `supabase secrets set`. |
+
+The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secret_keys` checks that the mail functions can read it. Not checked: the owner's local Supabase token and R2 admin token in the env backups, which no workflow holds.
 
 ## The local test stack
 

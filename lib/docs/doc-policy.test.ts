@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { findPolicyDifferences, policyRows, readDecisionPolicy, wordBudgetOf } from './doc-policy';
+import {
+  DATED_LINES,
+  findPolicyDifferences,
+  policyRows,
+  readDecisionPolicy,
+  wordBudgetOf,
+} from './doc-policy';
+import { findDatedLines } from './living-doc-rules';
 
 const decisionPath = resolve(import.meta.dir, '../../docs/decisions/0004-documentation-structure.md');
 
@@ -61,5 +68,19 @@ describe('documentation policy', () => {
     expect(wordBudgetOf('docs/technical/test-incident-log.md', true)).toBeNull();
     expect(wordBudgetOf('docs/features/inventory.md', true)).toBeNull();
     expect(wordBudgetOf('docs/technical/security.md', false)).toBeNull();
+  });
+
+  test('lets only the expiry column of a credential row carry a date in environments.md', () => {
+    const markdown = [
+      '# Environments',
+      '',
+      'Status: living — last reviewed 2026-10-26',
+      '| `VERCEL_TOKEN` | GitHub repository secret | Staging deploys | 2027-10-26 | `vercel-token` | Rotate it. |',
+      '| `VERCEL_TOKEN` | GitHub repository secret | Rotated on 2026-10-26 | Never | `vercel-token` | Rotate it. |',
+      '| `FOO` | 2027-01-01 |',
+      '| `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Rotated on 2026-10-26 | 2027-10-26 | `x` | Rotate it. |',
+      'The token expires on 2027-10-26.',
+    ].join('\n');
+    expect(findDatedLines(markdown, DATED_LINES['docs/technical/environments.md'])).toEqual([5, 6, 7, 8]);
   });
 });
