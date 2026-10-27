@@ -1,6 +1,9 @@
 import { expect, jest, test } from 'bun:test';
-import { REALTIME_MAX_DEFER_MS, type RealtimeChangeEvent } from './events';
+import type { RealtimeChangeEvent } from './events';
 import { ownWrites } from './own-writes';
+
+/** The hold bound lib/realtime/own-writes.ts documents: one second, inside the two-second live target. */
+const OWN_SAVE_HOLD_MS = 1_000;
 
 const saved = '2026-10-22T09:15:00.123456+00:00';
 const jobEvent = (
@@ -96,7 +99,7 @@ test('a save that never settles holds events for the bound only, then releases a
     const released: string[] = [];
     expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('colleague'))).toBe(true);
 
-    jest.advanceTimersByTime(REALTIME_MAX_DEFER_MS - 1);
+    jest.advanceTimersByTime(OWN_SAVE_HOLD_MS - 1);
     expect(released).toEqual([]);
     jest.advanceTimersByTime(1);
     expect(released).toEqual(['colleague']);
@@ -118,7 +121,7 @@ test('an event waits once: overlapping saves cannot hold it again after its rele
     };
     pages.push(saveUntilPageLeaves());
     judge();
-    jest.advanceTimersByTime(REALTIME_MAX_DEFER_MS - 100);
+    jest.advanceTimersByTime(OWN_SAVE_HOLD_MS - 100);
     pages.push(saveUntilPageLeaves());
     jest.advanceTimersByTime(100);
 

@@ -1,4 +1,4 @@
-import { REALTIME_MAX_DEFER_MS, type RealtimeChangeEvent } from './events';
+import type { RealtimeChangeEvent } from './events';
 import { TRANSACTION_STAMPED_TABLES } from './tables';
 
 /**
@@ -20,12 +20,18 @@ import { TRANSACTION_STAMPED_TABLES } from './tables';
  * the response still renders the route. While a save of this tab runs, an
  * event of a stamped table waits and is judged once every running save
  * settled and recorded its result. The wait is bounded: a save holds events
- * only for `REALTIME_MAX_DEFER_MS` after it started, a held event is released
+ * only for `OWN_SAVE_HOLD_MS` after it started, a held event is released
  * after that time at the latest and is never held a second time, so a slow save, a task that never
  * settles (`untilPageLeaves`) or a read run through the same hook delays
  * another writer's change by at most that time and never drops it.
  */
 
+/**
+ * How long a running save holds the events that may be its echo. No Realtime debounce: it waits for
+ * the save's response, and the refresh it releases still goes through the shared scheduler. One
+ * second keeps another writer's change inside the two-second live target (`LIVE_TARGET_MS`).
+ */
+const OWN_SAVE_HOLD_MS = 1_000;
 /** How long a recorded stamp covers its echo; the echo lands within about a second. */
 const OWN_WRITE_STAMP_LIFETIME_MS = 60_000;
 /** Bounds the walk over a save's result. */
@@ -88,7 +94,7 @@ type OwnWriteRegistry = {
   track: <Result>(save: Promise<Result>) => Promise<Result>;
   /**
    * True when the event is held for a recent running save: `then` runs once the
-   * running saves settled, after `REALTIME_MAX_DEFER_MS` at the latest. False
+   * running saves settled, after `OWN_SAVE_HOLD_MS` at the latest. False
    * when no save started within that time or the event cannot be an echo.
    */
   heldForSave: (event: RealtimeChangeEvent, then: () => void) => boolean;
@@ -114,8 +120,7 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
   };
   // A save older than the bound holds nothing; dropping it keeps a task that never settles from piling up.
   const holding = (now: number): boolean => {
-    for (const save of runningSaves)
-      if (now - save.startedAt >= REALTIME_MAX_DEFER_MS) runningSaves.delete(save);
+    for (const save of runningSaves) if (now - save.startedAt >= OWN_SAVE_HOLD_MS) runningSaves.delete(save);
     return runningSaves.size > 0;
   };
   const recorded = <Result>(result: Result, now = Date.now()): Result => {
@@ -141,7 +146,7 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
       if (!event.new || !STAMPED_TABLES.has(event.table) || released.has(event) || !holding(Date.now()))
         return false;
       held.push({ event, then });
-      releaseTimer ??= setTimeout(release, REALTIME_MAX_DEFER_MS);
+      releaseTimer ??= setTimeout(release, OWN_SAVE_HOLD_MS);
       return true;
     },
     covers: (event, now = Date.now()) => {
