@@ -87,23 +87,28 @@ test('the keyboard path fails when focus stays outside the dialog or Tab leaves 
 test('the lab network read keeps the rows of a read that replaced an aborted one', async ({ page }) => {
   const origin = 'http://lab.test';
   const board = JSON.stringify({ rows: Array.from({ length: 90 }, (_, index) => ({ index })) });
+  let supersededArrived: () => void = () => undefined;
+  const supersededStarted = new Promise<void>((resolve) => (supersededArrived = resolve));
   await page.route(`${origin}/**`, async (route) => {
     const url = new URL(route.request().url());
     if (!url.pathname.startsWith('/api/'))
       return route.fulfill({ contentType: 'text/html', body: SHELL('') });
     // The superseded read never answers; the page aborts it.
-    if (url.searchParams.has('superseded')) return;
+    if (url.searchParams.has('superseded')) return supersededArrived();
     return route.fulfill({ contentType: 'application/json', body: board });
   });
   await page.goto(`${origin}/`);
   const network = await trackLabNetwork(await page.context().newCDPSession(page), origin);
   network.reset();
 
+  const superseded = await page.evaluateHandle(() => {
+    const controller = new AbortController();
+    void fetch('/api/calendar-board?superseded', { signal: controller.signal }).catch(() => undefined);
+    return controller;
+  });
+  await supersededStarted;
+  await superseded.evaluate((controller) => controller.abort());
   await page.evaluate(async () => {
-    const superseded = new AbortController();
-    void fetch('/api/calendar-board?superseded', { signal: superseded.signal }).catch(() => undefined);
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    superseded.abort();
     await (await fetch('/api/calendar-board?current')).json();
   });
   await expect.poll(() => network.inFlight()).toEqual([]);
