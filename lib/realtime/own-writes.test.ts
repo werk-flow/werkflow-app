@@ -1,5 +1,5 @@
-import { expect, test } from 'bun:test';
-import type { RealtimeChangeEvent } from './events';
+import { expect, jest, test } from 'bun:test';
+import { REALTIME_MAX_DEFER_MS, type RealtimeChangeEvent } from './events';
 import { ownWrites } from './own-writes';
 
 const saved = '2026-10-22T09:15:00.123456+00:00';
@@ -75,4 +75,21 @@ test('a failed save releases the events it held, and only a stamped event waits'
   await expect(save).rejects.toThrow('offline');
 
   expect(released).toEqual(['jobs']);
+});
+
+test('a save that never settles holds events for the bound only, then releases and holds nothing', () => {
+  jest.useFakeTimers();
+  try {
+    void ownWrites.track(new Promise(() => undefined));
+    const released: string[] = [];
+    expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('colleague'))).toBe(true);
+
+    jest.advanceTimersByTime(REALTIME_MAX_DEFER_MS - 1);
+    expect(released).toEqual([]);
+    jest.advanceTimersByTime(1);
+    expect(released).toEqual(['colleague']);
+    expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('later'))).toBe(false);
+  } finally {
+    jest.useRealTimers();
+  }
 });

@@ -101,4 +101,17 @@ test('the echo of a save that arrives before its response refreshes nothing', as
   );
   await page.clock.runFor(151);
   expect(await navigation()).toEqual(['refresh', 'refresh']);
+  await page.evaluate(() => window.routeRefreshContract.complete(1, 'zweiter Stand'));
+  await expect(page.getByLabel('Serverstand')).toHaveText('zweiter Stand');
+
+  // A task that never settles, such as one that leaves the page, holds another writer's change for the bound only.
+  await page.evaluate(() => {
+    window.routeRefreshContract.startSave();
+    window.calendarContract.emit('clients', {
+      id: 'client-3',
+      updated_at: '2026-09-08T10:00:03.000001+00:00',
+    });
+  });
+  await page.clock.runFor(1_000 + 151);
+  expect(await navigation()).toEqual(['refresh', 'refresh', 'refresh']);
 });

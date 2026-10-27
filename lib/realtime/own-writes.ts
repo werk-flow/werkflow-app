@@ -1,4 +1,4 @@
-import type { RealtimeChangeEvent } from './events';
+import { REALTIME_MAX_DEFER_MS, type RealtimeChangeEvent } from './events';
 import { TRANSACTION_STAMPED_TABLES } from './tables';
 
 /**
@@ -18,8 +18,12 @@ import { TRANSACTION_STAMPED_TABLES } from './tables';
  *
  * The echo can arrive before the save's response: the write commits first and
  * the response still renders the route. While a save of this tab runs, an
- * event of a stamped table waits for it and is judged once every running save
- * settled and recorded its result.
+ * event of a stamped table waits and is judged once every running save
+ * settled and recorded its result. The wait is bounded: a save holds events
+ * only for `REALTIME_MAX_DEFER_MS` after it started, and a held event is
+ * released after that time at the latest, so a slow save, a task that never
+ * settles (`untilPageLeaves`) or a read run through the same hook delays
+ * another writer's change by at most that time and never drops it.
  */
 
 /** How long a recorded stamp covers its echo; the echo lands within about a second. */
@@ -83,8 +87,9 @@ type OwnWriteRegistry = {
   /** Awaits a save, records its result and releases the events held while it ran. */
   track: <Result>(save: Promise<Result>) => Promise<Result>;
   /**
-   * True when the event is held for a running save: `then` runs once every
-   * running save settled. False when nothing runs or the event cannot be an echo.
+   * True when the event is held for a recent running save: `then` runs once the
+   * running saves settled, after `REALTIME_MAX_DEFER_MS` at the latest. False
+   * when no save started within that time or the event cannot be an echo.
    */
   heldForSave: (event: RealtimeChangeEvent, then: () => void) => boolean;
   /** True for a real event of a stamped table, of a row one save named, with a stamp that save returned. */
@@ -93,8 +98,22 @@ type OwnWriteRegistry = {
 
 function createOwnWriteRegistry(): OwnWriteRegistry {
   let saves: SaveRecord[] = [];
-  let runningSaves = 0;
+  const runningSaves = new Set<{ startedAt: number }>();
   let held: Array<() => void> = [];
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null;
+  const release = (): void => {
+    if (releaseTimer !== null) clearTimeout(releaseTimer);
+    releaseTimer = null;
+    const waiting = held;
+    held = [];
+    for (const then of waiting) then();
+  };
+  // A save older than the bound holds nothing; dropping it keeps a task that never settles from piling up.
+  const holding = (now: number): boolean => {
+    for (const save of runningSaves)
+      if (now - save.startedAt >= REALTIME_MAX_DEFER_MS) runningSaves.delete(save);
+    return runningSaves.size > 0;
+  };
   const recorded = <Result>(result: Result, now = Date.now()): Result => {
     const save: SaveRecord = { stamps: new Set(), rowIds: new Set(), at: now };
     collectSave(result, 0, save, { left: RESULT_WALK_VALUES });
@@ -105,21 +124,19 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
   return {
     recorded,
     track: async (save) => {
-      runningSaves += 1;
+      const running = { startedAt: Date.now() };
+      runningSaves.add(running);
       try {
         return recorded(await save);
       } finally {
-        runningSaves -= 1;
-        if (runningSaves === 0) {
-          const release = held;
-          held = [];
-          for (const then of release) then();
-        }
+        runningSaves.delete(running);
+        if (!holding(Date.now())) release();
       }
     },
     heldForSave: (event, then) => {
-      if (runningSaves === 0 || !event.new || !STAMPED_TABLES.has(event.table)) return false;
+      if (!event.new || !STAMPED_TABLES.has(event.table) || !holding(Date.now())) return false;
       held.push(then);
+      releaseTimer ??= setTimeout(release, REALTIME_MAX_DEFER_MS);
       return true;
     },
     covers: (event, now = Date.now()) => {
