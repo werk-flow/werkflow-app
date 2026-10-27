@@ -3,7 +3,7 @@
 import { updateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { getAuthenticatedUser, getCachedMemberships, CACHE_TAGS } from '@/lib/data/cached';
+import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
 import { logError } from '@/lib/logging';
 import type { ActionResult } from '@/lib/action-result';
 import { RESET_ADDRESS_COOKIE, RESET_ADDRESS_COOKIE_OPTIONS } from '@/lib/auth/address-cookies';
@@ -39,10 +39,11 @@ export async function rememberPasswordResetAddress(): Promise<
 export type DeleteAccountResult = ActionResult;
 
 /**
- * Deletes the current user's account.
- * This action should only be available to users who:
- * - Are authenticated
- * - Have no organization memberships (orphan users)
+ * Deletes the current user's account, only while no membership row of any
+ * lifecycle state exists: a suspended or ended member keeps the history their
+ * membership anchors. The profile goes with the Auth user through its cascade,
+ * in the same transaction, so a refused Auth deletion leaves it in place. The
+ * database refuses the deletion of a member with recorded time as well.
  */
 export async function deleteAccount(): Promise<DeleteAccountResult> {
   const user = await getAuthenticatedUser();
@@ -50,18 +51,19 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
     return { success: false, error: 'not_authenticated' };
   }
 
-  const memberships = await getCachedMemberships(user.id);
-  if (memberships.length > 0) {
-    return { success: false, error: 'has_memberships' };
-  }
-
   const admin = createSupabaseAdminClient();
 
-  const { error: profileDeleteError } = await admin.from('profiles').delete().eq('id', user.id);
-
-  if (profileDeleteError) {
-    logError('Error deleting profile:', profileDeleteError);
-    // The profile may not exist; the auth user is deleted regardless.
+  const { count: membershipCount, error: membershipError } = await admin
+    // tenant-scope: own-user-row — the signed-in user's own memberships in every organization, whatever their lifecycle state
+    .from('organization_members')
+    .select('user_id', { count: 'exact', head: true })
+    .eq('user_id', user.id);
+  if (membershipError || membershipCount === null) {
+    logError('deleteAccount: membership read failed', membershipError);
+    return { success: false, error: 'delete_failed' };
+  }
+  if (membershipCount > 0) {
+    return { success: false, error: 'has_memberships' };
   }
 
   // Pending invitations for this email stay: admins keep the full invitation
@@ -69,7 +71,7 @@ export async function deleteAccount(): Promise<DeleteAccountResult> {
   const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
 
   if (deleteError) {
-    logError('Error deleting user:', deleteError);
+    logError('deleteAccount: Auth user deletion failed', deleteError);
     return { success: false, error: 'delete_failed' };
   }
 

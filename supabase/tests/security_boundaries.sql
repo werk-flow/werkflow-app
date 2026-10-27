@@ -725,4 +725,107 @@ begin
 end;
 $$;
 
+-- Account deletion: deleting the Auth user of a member with recorded time is
+-- refused before its cascade removes the membership and the time history,
+-- whatever the member's access state. Suspended (legacy entry) and ended
+-- (canonical session) members are refused; a member without time and a
+-- former member of a deleted organization pass.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('52000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'account-deletion-admin@example.test', '', now(), '{}',
+ '{"first_name":"Admin","last_name":"Deletion"}', now(), now()),
+('52000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'account-deletion-suspended@example.test', '', now(), '{}',
+ '{"first_name":"Suspended","last_name":"Deletion"}', now(), now()),
+('52000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'account-deletion-ended@example.test', '', now(), '{}',
+ '{"first_name":"Ended","last_name":"Deletion"}', now(), now()),
+('52000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'account-deletion-no-time@example.test', '', now(), '{}',
+ '{"first_name":"NoTime","last_name":"Deletion"}', now(), now());
+insert into public.organizations (id, name, admin_id, unique_code) values
+('52000000-0000-0000-0000-000000000010', 'Account deletion SQL',
+ '52000000-0000-0000-0000-000000000001', 'ACCDELSQL');
+insert into public.organization_members (organization_id, user_id, role) values
+('52000000-0000-0000-0000-000000000010', '52000000-0000-0000-0000-000000000002', 'employee'),
+('52000000-0000-0000-0000-000000000010', '52000000-0000-0000-0000-000000000003', 'employee'),
+('52000000-0000-0000-0000-000000000010', '52000000-0000-0000-0000-000000000004', 'employee');
+insert into public.time_entries (organization_id, user_id, entry_type, timestamp) values
+('52000000-0000-0000-0000-000000000010', '52000000-0000-0000-0000-000000000002', 'clock_in', now());
+
+do $$
+declare
+  v_org constant uuid := '52000000-0000-0000-0000-000000000010';
+  v_admin constant uuid := '52000000-0000-0000-0000-000000000001';
+  v_suspended constant uuid := '52000000-0000-0000-0000-000000000002';
+  v_ended constant uuid := '52000000-0000-0000-0000-000000000003';
+  v_record uuid;
+begin
+  select id into v_record from public.employee_records where organization_id = v_org and user_id = v_suspended;
+  perform public.set_personnel_access_transition(
+    v_admin, v_org, v_record, 0, 'suspend_now', clock_timestamp(), 'Gesperrt',
+    gen_random_uuid(), repeat('a', 64)
+  );
+
+  select id into v_record from public.employee_records where organization_id = v_org and user_id = v_ended;
+  perform set_config('app.time_capture_write', 'true', true);
+  insert into public.time_sessions (
+    organization_id, employee_record_id, user_id, status, started_at, ended_at, created_by, ended_by
+  ) values (
+    v_org, v_record, v_ended, 'closed', now() - interval '4 hours', now() - interval '1 hour', v_ended, v_ended
+  );
+  perform set_config('app.time_capture_write', '', true);
+  perform public.set_personnel_access_transition(
+    v_admin, v_org, v_record, 0, 'end_access', clock_timestamp(), 'Zugang beendet',
+    gen_random_uuid(), repeat('b', 64)
+  );
+
+  if (select lifecycle.state from public.personnel_access_lifecycles lifecycle
+      join public.employee_records record on record.id = lifecycle.employee_record_id
+      where record.organization_id = v_org and record.user_id = v_suspended) <> 'suspended'
+     or (select lifecycle.state from public.personnel_access_lifecycles lifecycle
+      where lifecycle.employee_record_id = v_record) <> 'ended'
+  then raise exception 'account deletion fixture did not reach its access states'; end if;
+end;
+$$;
+
+do $$
+declare
+  v_user uuid;
+begin
+  foreach v_user in array array[
+    '52000000-0000-0000-0000-000000000002', '52000000-0000-0000-0000-000000000003'
+  ]::uuid[] loop
+    begin
+      delete from auth.users where id = v_user;
+      raise exception 'account of a member with recorded time was deleted';
+    exception when raise_exception then
+      if sqlerrm <> 'account_deletion_member_has_time_history' then raise; end if;
+    end;
+    if not exists (select 1 from public.organization_members where user_id = v_user)
+      or not exists (select 1 from public.profiles where id = v_user)
+    then raise exception 'refused account deletion removed the membership or the profile'; end if;
+  end loop;
+  if not exists (select 1 from public.time_entries where user_id = '52000000-0000-0000-0000-000000000002')
+    or not exists (select 1 from public.time_sessions where user_id = '52000000-0000-0000-0000-000000000003')
+  then raise exception 'refused account deletion removed recorded time'; end if;
+
+  delete from auth.users where id = '52000000-0000-0000-0000-000000000004';
+  if exists (select 1 from public.profiles where id = '52000000-0000-0000-0000-000000000004')
+  then raise exception 'account of a member without time kept its profile'; end if;
+end;
+$$;
+
+delete from public.organizations where id = '52000000-0000-0000-0000-000000000010';
+delete from auth.users where id = '52000000-0000-0000-0000-000000000002';
+do $$
+begin
+  if exists (select 1 from auth.users where id = '52000000-0000-0000-0000-000000000002')
+  then raise exception 'former member of a deleted organization could not be deleted'; end if;
+end;
+$$;
+
 rollback;

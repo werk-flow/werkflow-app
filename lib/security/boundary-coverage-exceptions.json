@@ -3,7 +3,7 @@
     "lib/attention/actions.ts#getAttentionCounts": "Counts the caller's own attention items in the active organization; no row of another member is addressed.",
     "lib/attention/actions.ts#getAttentionOverview": "Reads the caller's own attention items in the active organization; what a role sees is decided per item, nothing is refused.",
     "lib/attention/actions.ts#markAllAttentionNotificationsRead": "Marks the caller's own notifications read; the write filters by the caller's user id.",
-    "lib/auth/actions.ts#deleteAccount": "Deletes the session user's own account; a sole admin is refused by the account deletion rules.",
+    "lib/auth/actions.ts#deleteAccount": "Deletes the session user's own account; any membership row, suspended or ended included, refuses it.",
     "lib/auth/actions.ts#invalidateProfileCache": "Invalidates the session user's own profile cache entry; no organization or row is addressed.",
     "lib/auth/actions.ts#rememberPasswordResetAddress": "Stores the session user's own address in an httpOnly cookie for the reset form.",
     "lib/jobs/auftraege-column-preferences-actions.ts#saveAuftraegeColumnPreferences": "Writes the caller's own column preference in the active organization.",

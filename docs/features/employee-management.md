@@ -1,6 +1,6 @@
 # Employee Management
 
-Status: living — last reviewed 2026-10-26
+Status: living — last reviewed 2026-10-27
 
 Employee management covers the operational relationship between an organization and its people: membership, access, personnel data, employment conditions, availability, qualifications, assignments, leave, personnel documents, and handoffs to time tracking and payroll.
 
@@ -51,6 +51,7 @@ Every person in an organization has one personnel record. It carries employment 
 - Ownership transfer and emergency owner recovery do not exist.
 - A member who asks to join a further organization of the same owner sees it after the next reload or tab return, not live. A join request records who decided and when, but no reason.
 - A member can be removed only before any time was recorded, so membership and time history survive. The office ends employment and access through the personnel record instead. A removal marks the personnel record as exited today in the same step, so a refused removal changes nothing. A member whose entry date lies in the future is removed only after that date is corrected. Complete offboarding with retained historical identity belongs to `P1-33`.
+- A person can delete their own account only while they hold no membership, suspended or ended included. The database refuses deleting the account of a member with recorded time, and a refused deletion keeps the profile.
 - No compensation, payroll profile, payslip, payroll-provider integration, electronic signature, legal retention, or complete organization export exists. The only payroll output is a generic payroll-ready export with employee and code mapping.
 
 ## Phase 1 — Complete Operational Core
