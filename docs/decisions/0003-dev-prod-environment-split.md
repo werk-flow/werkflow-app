@@ -62,3 +62,14 @@ Consequences and fixes:
 - Focused `@GG-00` 13/13 (2.0m) — signup, invite email through the dev edge function, direct R2 uploads to the dev bucket, Realtime.
 - Full Golden suite **93/93 (27.4m)** and focused `@AUDIT-W1-A7` **9/9 (6.2m)** — first attempts, no reruns needed; durations ~2× the prod-class baseline (NANO compute, documented in [testing.md](../technical/testing.md)). Teardown destroyed every world; the independent leftover sweep returned `LEFTOVER_SWEEP=0` against dev.
 - Untouched-prod proof: migration count (120) and max version identical to the session-start baseline; zero organizations matching test markers.
+
+## Amendment 2026-10-27: PROD's migration ledger matches the committed files
+
+Before [decision 0009](0009-pull-requests-and-ci.md), PROD received its migrations through MCP `apply_migration`. That tool records each migration under a version of its own, the time it ran, while the committed file keeps the version it was written with. The `release` workflow applies PROD's migrations with `supabase db push`, which matches the ledger to the files by version, not by name. Against the old ledger it would have treated committed files as pending and PROD's own versions as unknown. It would also have run the baseline repair migrations, which this record left out of PROD's ledger.
+
+Decided by the owner, and done once by hand before the first release through the workflow:
+
+1. Every PROD ledger row whose name matches a committed file under another version now carries the file's version. No migration body ran, and the schema did not change.
+2. The baseline repair migrations that PROD's ledger lacked are recorded as applied, marked `ledger alignment 2026-10-27`: `20251129053500_baseline_unrecorded_core_schema`, `20260426211500_baseline_recreate_org_role_enum` and `20260519150000_baseline_unrecorded_secondary_objects`. Each is idempotent, and the fidelity proof above shows their objects already existed on PROD. `20260817175800_baseline_reconcile_unrecorded_drift` was already recorded there.
+
+The release that followed applied PROD's pending migrations through `supabase db push`. [The migration rule](../technical/environments.md#the-migration-rule) is unchanged.
