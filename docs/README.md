@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-26; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-27; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
