@@ -31,6 +31,9 @@ export type ActionWorld = {
   rpcCalls: RpcCall[];
   invokeFunction: (call: FunctionCall) => { error: FixtureError | null };
   functionCalls: FunctionCall[];
+  /** The Auth admin deletion of a user; it runs the database's cascades and guards. */
+  deleteUser: (userId: string) => { error: FixtureError | null };
+  deletedUserIds: string[];
   /** How often an action asked for the service-role client. */
   adminClientRequests: number;
   /** Tables whose every read answers with a connection error instead of rows. */
@@ -53,6 +56,32 @@ export function tableRows(world: ActionWorld, table: string): FixtureRow[] {
   return world.tables[table] ?? [];
 }
 
+/** The service-role client: the world's tables, its database functions, edge functions and Auth admin. */
+function createAdminStandIn(world: ActionWorld, database: () => { from: (table: string) => InMemoryQuery }) {
+  world.adminClientRequests += 1;
+  return {
+    from: (table: string) => database().from(table),
+    rpc: async (name: string, args: FixtureRow = {}) => {
+      world.rpcCalls.push({ name, args });
+      return world.rpc({ name, args });
+    },
+    functions: {
+      invoke: async (name: string, options: { body: FixtureRow }) => {
+        world.functionCalls.push({ name, body: options.body });
+        return world.invokeFunction({ name, body: options.body });
+      },
+    },
+    auth: {
+      admin: {
+        deleteUser: async (userId: string) => {
+          world.deletedUserIds.push(userId);
+          return world.deleteUser(userId);
+        },
+      },
+    },
+  };
+}
+
 export function installActionWorld(
   tables: InMemoryTables,
   columnDefaults: Record<string, () => FixtureRow> = {},
@@ -67,6 +96,8 @@ export function installActionWorld(
     rpcCalls: [],
     invokeFunction: () => ({ error: null }),
     functionCalls: [],
+    deleteUser: () => ({ error: null }),
+    deletedUserIds: [],
     adminClientRequests: 0,
     failingTables: new Set(),
     beforeNextWrite: null,
@@ -118,22 +149,7 @@ export function installActionWorld(
     },
   }));
   mock.module('@/lib/supabase/admin', () => ({
-    createSupabaseAdminClient: () => {
-      world.adminClientRequests += 1;
-      return {
-        from: (table: string) => database().from(table),
-        rpc: async (name: string, args: FixtureRow = {}) => {
-          world.rpcCalls.push({ name, args });
-          return world.rpc({ name, args });
-        },
-        functions: {
-          invoke: async (name: string, options: { body: FixtureRow }) => {
-            world.functionCalls.push({ name, body: options.body });
-            return world.invokeFunction({ name, body: options.body });
-          },
-        },
-      };
-    },
+    createSupabaseAdminClient: () => createAdminStandIn(world, database),
   }));
   // The caller-scoped client reads the same rows; row-level security is SQL-tested.
   mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => database() }));
