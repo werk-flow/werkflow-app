@@ -1,6 +1,6 @@
 # Browser-test incident log
 
-Status: living — last reviewed 2026-10-26; entries from 2026-09-25 on
+Status: living — last reviewed 2026-10-27; entries from 2026-09-25 on
 
 Record here each failed acceptance group and each focused failure that changes shared testing behavior. [Testing](testing.md#failures) owns the procedure. Entries before 2026-09-25 were deleted; Git history keeps them. Read an entry only to investigate that failure. Rules live in their owner docs, not here.
 
@@ -21,6 +21,17 @@ Record each failed acceptance group and any focused failure that changes shared 
 | Cleanup        | Owned-world cleanup result, unresolved ownership, and whether the affected group qualifies for another attempt under current stopping rules                                                                                                                                                                             |
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
+
+## 2026-10-27: golden:p1-22 harness failure
+
+<!-- incident-run: 2026-10-27T035641092Z-79010d -->
+
+- Run: run `2026-10-27T035641092Z-79010d`, group `golden:p1-22`, target local, fingerprint `3ddab484ef6d`, world `6197cd57dc494d8b88d5d1700ec3e661`.
+- Failure point:  >  > p1-22.spec.ts > P1-22 consistent time corrections @P1-22 > calendar resize submits one audited correction and survives reload @P1-22-calendar-correction: TimeoutError: locator.click: Timeout 30000ms exceeded.
+- Root cause: The calendar correction test booked time two days back for an employee whose entry date is the business date; when the loaded calendar window ends before that date (the fixture day is a Sunday, so on Tuesdays) the board has no row for the person and the correction dialog refuses to submit.
+- Prevention: Tier 3: the test backdates the employee's entry date with ensureEmployedSince before it books time; review of fixtures that book time before the business date. Tier 1 would move every world's entry date back, which changes the employment state that other groups assert; Tier 2 cannot see a fixture's runtime date offset in the spec source.
+- Evidence: the failure's page snapshot shows the dialog for a block on 25.10.26 with "Person ist im geladenen Kalender nicht mehr verfügbar."; the trace's /api/calendar-board response for 2026-10-18 to 2026-10-26 holds no rows, and the world's employee records enter on 2026-10-27. The same failure on main's commit 1e32faaa and in main's CI run of 2026-10-26 (golden:p1-22 started 00:17 Berlin on a Tuesday) rules out the branch. Correction: the calendar correction test backdates the employee's entry date to the fixture day. Focused proof: report `2026-10-27T040212749Z-531e9eb2` passed golden:p1-22 on a Tuesday, with the fixture on the 25-hour day of 2026-10-25.
+- Cleanup: `bun run test:runs cleanup` removed the failed run's world `6197cd57dc494d8b88d5d1700ec3e661`; the harness class allowed no retry on unchanged inputs, and the group ran again only after the repair.
 
 ## 2026-10-26: unit:all harness failure
 
