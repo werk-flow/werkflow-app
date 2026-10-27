@@ -99,16 +99,18 @@ type OwnWriteRegistry = {
 function createOwnWriteRegistry(): OwnWriteRegistry {
   let saves: SaveRecord[] = [];
   const runningSaves = new Set<{ startedAt: number }>();
-  let held: Array<() => void> = [];
-  // An event waits once: on release it is judged, never held again for a newer save.
-  const heldOnce = new WeakSet<RealtimeChangeEvent>();
+  let held: Array<{ event: RealtimeChangeEvent; then: () => void }> = [];
+  // An event waits once. Every listener's copy of one event waits together; once released, the
+  // event is judged and never held again for a newer save.
+  const released = new WeakSet<RealtimeChangeEvent>();
   let releaseTimer: ReturnType<typeof setTimeout> | null = null;
   const release = (): void => {
     if (releaseTimer !== null) clearTimeout(releaseTimer);
     releaseTimer = null;
     const waiting = held;
     held = [];
-    for (const then of waiting) then();
+    for (const { event } of waiting) released.add(event);
+    for (const { then } of waiting) then();
   };
   // A save older than the bound holds nothing; dropping it keeps a task that never settles from piling up.
   const holding = (now: number): boolean => {
@@ -136,10 +138,9 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
       }
     },
     heldForSave: (event, then) => {
-      if (!event.new || !STAMPED_TABLES.has(event.table) || heldOnce.has(event) || !holding(Date.now()))
+      if (!event.new || !STAMPED_TABLES.has(event.table) || released.has(event) || !holding(Date.now()))
         return false;
-      heldOnce.add(event);
-      held.push(then);
+      held.push({ event, then });
       releaseTimer ??= setTimeout(release, REALTIME_MAX_DEFER_MS);
       return true;
     },

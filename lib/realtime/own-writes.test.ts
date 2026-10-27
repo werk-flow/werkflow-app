@@ -14,6 +14,18 @@ const jobEvent = (
   old: { id, organization_id: 'org-1' },
 });
 
+/** A save that runs until the test leaves the page; leaving settles it, so no later test sees it running. */
+function saveUntilPageLeaves(): { leave: () => Promise<void> } {
+  let settle: () => void = () => undefined;
+  const saving = ownWrites.track(new Promise<void>((resolve) => (settle = resolve)));
+  return {
+    leave: async () => {
+      settle();
+      await saving;
+    },
+  };
+}
+
 test('the Realtime spelling of the saved instant is covered, a millisecond cut or another value is not', () => {
   ownWrites.recorded({ success: true, job: { id: 'job-1', updatedAt: saved, client: null } }, 1_000);
 
@@ -77,10 +89,10 @@ test('a failed save releases the events it held, and only a stamped event waits'
   expect(released).toEqual(['jobs']);
 });
 
-test('a save that never settles holds events for the bound only, then releases and holds nothing', () => {
+test('a save that never settles holds events for the bound only, then releases and holds nothing', async () => {
   jest.useFakeTimers();
+  const page = saveUntilPageLeaves();
   try {
-    void ownWrites.track(new Promise(() => undefined));
     const released: string[] = [];
     expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('colleague'))).toBe(true);
 
@@ -90,26 +102,47 @@ test('a save that never settles holds events for the bound only, then releases a
     expect(released).toEqual(['colleague']);
     expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('later'))).toBe(false);
   } finally {
+    await page.leave();
     jest.useRealTimers();
   }
 });
 
-test('an event waits once: overlapping saves cannot hold it again after its release', () => {
+test('an event waits once: overlapping saves cannot hold it again after its release', async () => {
   jest.useFakeTimers();
+  const pages: Array<{ leave: () => Promise<void> }> = [];
   try {
     const colleague = jobEvent(saved, 'jobs', 'job-colleague');
     const released: string[] = [];
     const judge = (): void => {
       if (!ownWrites.heldForSave(colleague, judge)) released.push('judged');
     };
-    void ownWrites.track(new Promise(() => undefined));
+    pages.push(saveUntilPageLeaves());
     judge();
     jest.advanceTimersByTime(REALTIME_MAX_DEFER_MS - 100);
-    void ownWrites.track(new Promise(() => undefined));
+    pages.push(saveUntilPageLeaves());
     jest.advanceTimersByTime(100);
 
     expect(released).toEqual(['judged']);
   } finally {
+    for (const page of pages) await page.leave();
     jest.useRealTimers();
   }
+});
+
+test('every listener of one echo waits for the save, and each judges it once on release', async () => {
+  let respond: (result: unknown) => void = () => undefined;
+  const save = ownWrites.track(new Promise((resolve) => (respond = resolve)));
+  const echo = jobEvent(saved, 'documents', 'document-1');
+  const judged: string[] = [];
+  const listener = (name: string) => (): void => {
+    if (!ownWrites.heldForSave(echo, listener(name))) judged.push(`${name}: ${ownWrites.covers(echo)}`);
+  };
+
+  listener('overview')();
+  listener('documents')();
+  expect(judged).toEqual([]);
+  respond({ success: true, document: { id: 'document-1', updatedAt: saved } });
+  await save;
+
+  expect(judged).toEqual(['overview: true', 'documents: true']);
 });
