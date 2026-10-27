@@ -1,6 +1,6 @@
 # Pull-request reviews
 
-Status: living — last reviewed 2026-10-26
+Status: living — last reviewed 2026-10-27
 
 Every pull request to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): the agent's own read, a `sol-loop` review by GPT Sol, and for the riskiest changes one CodeRabbit app review. Treat every reviewer as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 
