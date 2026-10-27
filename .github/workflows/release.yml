@@ -112,5 +112,12 @@ jobs:
             test $SECONDS -lt $deadline || { echo "::error::No ready production build of ${SHA} after 30 minutes."; exit 1; }
             sleep 15
           done
-          vercel promote "$id" --yes
-          echo "Production serves ${SHA} (${id})."
+          # Vercel may already have assigned the domain to this build, and promoting the current
+          # production deployment fails with 409. A lookup that fails promotes as before.
+          served="$(api "https://api.vercel.com/v4/aliases/app.werk-flow.app?${team}" | jq -r .deploymentId)" || true
+          if test "$served" = "$id"; then
+            echo "Production already serves ${SHA} (${id})."
+          else
+            vercel promote "$id" --yes
+            echo "Production serves ${SHA} (${id})."
+          fi
