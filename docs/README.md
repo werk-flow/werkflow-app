@@ -35,7 +35,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 | --- | --- |
 | [architecture.md](technical/architecture.md) | You need the runtime shape: app structure, Supabase access model, auth and organization context, deployment. |
 | [data-model.md](technical/data-model.md) | You need the conceptual domain model: tenant boundary, roles, concept ownership, history rules. |
-| [environments.md](technical/environments.md) | Anything touches Supabase, env files, R2, a migration, a worktree or a new machine: project identities, tool access, the migration rule. |
+| [environments.md](technical/environments.md) | Anything touches Supabase, env files, R2, a credential, a migration, a worktree or a new machine: project identities, credentials, tool access, the migration rule. |
 | [security.md](technical/security.md) | You add a route handler, Server Action, table, privileged function, storage path or provider setting: invariants, mechanisms and checks. |
 | [realtime-and-caching.md](technical/realtime-and-caching.md) | You change a cache tag, a Realtime subscription, a list reader or freshness behavior. |
 | [performance.md](technical/performance.md) | You add a step people repeat daily, read a lab table, change a skeleton, or make a flow faster: journeys, lab counts, payload budgets, layout stability. |

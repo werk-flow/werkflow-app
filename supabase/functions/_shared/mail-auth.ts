@@ -1,18 +1,5 @@
 import type { MailDependencies } from './mail-delivery.ts';
-
-function timingSafeEquals(a: string, b: string): boolean {
-  const encoder = new TextEncoder();
-  const aBytes = encoder.encode(a);
-  const bBytes = encoder.encode(b);
-  const maxLength = Math.max(aBytes.length, bBytes.length);
-  let mismatch = aBytes.length === bBytes.length ? 0 : 1;
-
-  for (let i = 0; i < maxLength; i++) {
-    mismatch |= (aBytes[i] ?? 0) ^ (bBytes[i] ?? 0);
-  }
-
-  return mismatch === 0;
-}
+import { sha256Hex, timingSafeEquals } from './secret-compare.ts';
 
 function collectSecretKeys(value: unknown): string[] {
   if (typeof value === 'string') {
@@ -52,12 +39,6 @@ function getPresentedApiKey(req: Request): string | null {
   }
 
   return null;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export function createMailAuthorizer(dependencies: MailDependencies): {
