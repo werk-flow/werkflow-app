@@ -51,3 +51,54 @@ for (const pauseBeforeSettle of [false, true]) {
     expect(await page.evaluate(() => window.uiContractServices.navigation)).toEqual(['refresh', 'refresh']);
   });
 }
+
+test('the echo of a save that arrives before its response refreshes nothing', async ({ page }) => {
+  assertWorkspaceTestLock();
+  const bundle = process.env.WERKFLOW_UI_CONTRACT_BUNDLE;
+  if (!bundle) throw new Error('Run through the UI contract runner');
+  await page.clock.install({ time: new Date('2026-09-08T10:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-09-08T10:00:01Z'));
+  const url = 'http://localhost/ui-contracts';
+  await page.route(url, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<html lang="de"><body><div id="root"></div></body></html>',
+    }),
+  );
+  await page.goto(url);
+  await page.evaluate(() => {
+    window.uiContractFixture = 'route-refresh';
+  });
+  await page.addScriptTag({ path: bundle });
+  await page.evaluate(() => window.calendarContract.system({ extension: 'postgres_changes', status: 'ok' }));
+  await page.clock.runFor(151);
+  await page.evaluate(() => window.routeRefreshContract.complete(0, 'erster Stand'));
+  await expect(page.getByLabel('Serverstand')).toHaveText('erster Stand');
+  const navigation = () => page.evaluate(() => window.uiContractServices.navigation);
+  expect(await navigation()).toEqual(['refresh']);
+
+  const stamp = '2026-09-08T10:00:01.123456+00:00';
+  await page.evaluate((updatedAt) => {
+    window.routeRefreshContract.startSave();
+    window.calendarContract.emit('clients', { id: 'client-1', updated_at: updatedAt });
+  }, stamp);
+  await page.clock.runFor(500);
+  expect(await navigation()).toEqual(['refresh']);
+  await page.evaluate(
+    (updatedAt) =>
+      window.routeRefreshContract.finishSave({ success: true, client: { id: 'client-1', updatedAt } }),
+    stamp,
+  );
+  await page.clock.runFor(1_100);
+  expect(await navigation()).toEqual(['refresh']);
+
+  // Another writer's change still refreshes the route.
+  await page.evaluate(() =>
+    window.calendarContract.emit('clients', {
+      id: 'client-2',
+      updated_at: '2026-09-08T10:00:02.000001+00:00',
+    }),
+  );
+  await page.clock.runFor(151);
+  expect(await navigation()).toEqual(['refresh', 'refresh']);
+});

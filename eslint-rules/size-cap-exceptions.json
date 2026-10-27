@@ -113,7 +113,7 @@
     "components/auftraege/instructions/job-instruction-item-row.tsx": { "JobInstructionItemRow": 141 },
     "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 120 },
     "components/auftraege/instructions/job-instruction-row-actions.ts": {
-      "createJobInstructionRowActions": 93
+      "createJobInstructionRowActions": 91
     },
     "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },

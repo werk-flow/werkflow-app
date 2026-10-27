@@ -53,11 +53,9 @@ export function createJobInstructionRowActions({
     // when the server rejects or the call throws.
     let errorMessage: string | null = null;
     try {
+      const toggle = { itemId: item.id, isCompleted: !item.isCompleted };
       const result = await runOnRow(item.id, () =>
-        toggleJobInstructionItemCompletion({
-          itemId: item.id,
-          isCompleted: !item.isCompleted,
-        }).then((toggled) => ownWrites.recorded(toggled)),
+        ownWrites.track(toggleJobInstructionItemCompletion(toggle)),
       );
       if (result.success) {
         replaceItem(result.item);

@@ -49,7 +49,7 @@ declare global {
       status: (status: string) => void;
       system: (payload: unknown) => void;
       captureLateDelivery: () => () => void;
-      emit: (table?: RealtimeTable) => void;
+      emit: (table?: RealtimeTable, row?: Record<string, unknown>) => void;
     };
   }
 }
@@ -109,13 +109,13 @@ window.calendarContract = {
         });
     };
   },
-  emit(table = 'jobs') {
+  emit(table = 'jobs', row = { id: 'changed' }) {
     for (const channel of channels)
       for (const listener of channel.listeners) {
         if (listener.table === table)
           listener.callback({
             eventType: 'UPDATE',
-            new: { id: 'changed' },
+            new: row,
             old: {},
             commit_timestamp: new Date().toISOString(),
           });

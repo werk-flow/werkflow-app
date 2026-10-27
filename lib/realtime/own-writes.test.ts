@@ -46,3 +46,33 @@ test('a recorded stamp stops covering after its lifetime', () => {
   expect(ownWrites.covers(jobEvent(saved), 1_060_000)).toBe(true);
   expect(ownWrites.covers(jobEvent(saved), 1_060_001)).toBe(false);
 });
+
+test('an echo that beats the save response waits for the save and is then covered', async () => {
+  let respond: (result: unknown) => void = () => undefined;
+  const save = ownWrites.track(new Promise((resolve) => (respond = resolve)));
+  const judged: boolean[] = [];
+  const echo = jobEvent(saved, 'jobs', 'job-echo');
+
+  expect(ownWrites.heldForSave(echo, () => judged.push(ownWrites.covers(echo)))).toBe(true);
+  expect(judged).toEqual([]);
+  respond({ success: true, job: { id: 'job-echo', updatedAt: saved } });
+  await save;
+
+  expect(judged).toEqual([true]);
+  expect(ownWrites.heldForSave(echo, () => undefined)).toBe(false);
+});
+
+test('a failed save releases the events it held, and only a stamped event waits', async () => {
+  let fail: (error: Error) => void = () => undefined;
+  const save = ownWrites.track(new Promise((_, reject) => (fail = reject)));
+  const released: string[] = [];
+
+  expect(ownWrites.heldForSave(jobEvent(saved, 'job_assignments'), () => released.push('unstamped'))).toBe(
+    false,
+  );
+  expect(ownWrites.heldForSave(jobEvent(saved), () => released.push('jobs'))).toBe(true);
+  fail(new Error('offline'));
+  await expect(save).rejects.toThrow('offline');
+
+  expect(released).toEqual(['jobs']);
+});

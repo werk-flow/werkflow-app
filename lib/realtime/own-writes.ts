@@ -15,6 +15,11 @@ import { TRANSACTION_STAMPED_TABLES } from './tables';
  * unstamped table refresh as before. A stamp read during the save names a
  * transaction that committed even earlier, so recording every stamp of the
  * result is safe too.
+ *
+ * The echo can arrive before the save's response: the write commits first and
+ * the response still renders the route. While a save of this tab runs, an
+ * event of a stamped table waits for it and is judged once every running save
+ * settled and recorded its result.
  */
 
 /** How long a recorded stamp covers its echo; the echo lands within about a second. */
@@ -75,19 +80,47 @@ function collectSave(value: unknown, depth: number, save: SaveRecord, budget: { 
 type OwnWriteRegistry = {
   /** Records the transaction stamps and row ids a save returned, and returns the result. */
   recorded: <Result>(result: Result, now?: number) => Result;
+  /** Awaits a save, records its result and releases the events held while it ran. */
+  track: <Result>(save: Promise<Result>) => Promise<Result>;
+  /**
+   * True when the event is held for a running save: `then` runs once every
+   * running save settled. False when nothing runs or the event cannot be an echo.
+   */
+  heldForSave: (event: RealtimeChangeEvent, then: () => void) => boolean;
   /** True for a real event of a stamped table, of a row one save named, with a stamp that save returned. */
   covers: (event: RealtimeChangeEvent, now?: number) => boolean;
 };
 
 function createOwnWriteRegistry(): OwnWriteRegistry {
   let saves: SaveRecord[] = [];
+  let runningSaves = 0;
+  let held: Array<() => void> = [];
+  const recorded = <Result>(result: Result, now = Date.now()): Result => {
+    const save: SaveRecord = { stamps: new Set(), rowIds: new Set(), at: now };
+    collectSave(result, 0, save, { left: RESULT_WALK_VALUES });
+    saves = saves.filter((earlier) => now - earlier.at <= OWN_WRITE_STAMP_LIFETIME_MS);
+    if (save.stamps.size && save.rowIds.size) saves.push(save);
+    return result;
+  };
   return {
-    recorded: (result, now = Date.now()) => {
-      const save: SaveRecord = { stamps: new Set(), rowIds: new Set(), at: now };
-      collectSave(result, 0, save, { left: RESULT_WALK_VALUES });
-      saves = saves.filter((earlier) => now - earlier.at <= OWN_WRITE_STAMP_LIFETIME_MS);
-      if (save.stamps.size && save.rowIds.size) saves.push(save);
-      return result;
+    recorded,
+    track: async (save) => {
+      runningSaves += 1;
+      try {
+        return recorded(await save);
+      } finally {
+        runningSaves -= 1;
+        if (runningSaves === 0) {
+          const release = held;
+          held = [];
+          for (const then of release) then();
+        }
+      }
+    },
+    heldForSave: (event, then) => {
+      if (runningSaves === 0 || !event.new || !STAMPED_TABLES.has(event.table)) return false;
+      held.push(then);
+      return true;
     },
     covers: (event, now = Date.now()) => {
       if (!event.new || !STAMPED_TABLES.has(event.table)) return false;
