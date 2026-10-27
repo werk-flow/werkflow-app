@@ -93,3 +93,23 @@ test('a save that never settles holds events for the bound only, then releases a
     jest.useRealTimers();
   }
 });
+
+test('an event waits once: overlapping saves cannot hold it again after its release', () => {
+  jest.useFakeTimers();
+  try {
+    const colleague = jobEvent(saved, 'jobs', 'job-colleague');
+    const released: string[] = [];
+    const judge = (): void => {
+      if (!ownWrites.heldForSave(colleague, judge)) released.push('judged');
+    };
+    void ownWrites.track(new Promise(() => undefined));
+    judge();
+    jest.advanceTimersByTime(REALTIME_MAX_DEFER_MS - 100);
+    void ownWrites.track(new Promise(() => undefined));
+    jest.advanceTimersByTime(100);
+
+    expect(released).toEqual(['judged']);
+  } finally {
+    jest.useRealTimers();
+  }
+});

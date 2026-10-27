@@ -20,8 +20,8 @@ import { TRANSACTION_STAMPED_TABLES } from './tables';
  * the response still renders the route. While a save of this tab runs, an
  * event of a stamped table waits and is judged once every running save
  * settled and recorded its result. The wait is bounded: a save holds events
- * only for `REALTIME_MAX_DEFER_MS` after it started, and a held event is
- * released after that time at the latest, so a slow save, a task that never
+ * only for `REALTIME_MAX_DEFER_MS` after it started, a held event is released
+ * after that time at the latest and is never held a second time, so a slow save, a task that never
  * settles (`untilPageLeaves`) or a read run through the same hook delays
  * another writer's change by at most that time and never drops it.
  */
@@ -100,6 +100,8 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
   let saves: SaveRecord[] = [];
   const runningSaves = new Set<{ startedAt: number }>();
   let held: Array<() => void> = [];
+  // An event waits once: on release it is judged, never held again for a newer save.
+  const heldOnce = new WeakSet<RealtimeChangeEvent>();
   let releaseTimer: ReturnType<typeof setTimeout> | null = null;
   const release = (): void => {
     if (releaseTimer !== null) clearTimeout(releaseTimer);
@@ -134,7 +136,9 @@ function createOwnWriteRegistry(): OwnWriteRegistry {
       }
     },
     heldForSave: (event, then) => {
-      if (!event.new || !STAMPED_TABLES.has(event.table) || !holding(Date.now())) return false;
+      if (!event.new || !STAMPED_TABLES.has(event.table) || heldOnce.has(event) || !holding(Date.now()))
+        return false;
+      heldOnce.add(event);
       held.push(then);
       releaseTimer ??= setTimeout(release, REALTIME_MAX_DEFER_MS);
       return true;
