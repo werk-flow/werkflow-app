@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   AdjustmentRequestForms,
@@ -16,6 +18,30 @@ import { getTimeAccountAccess } from '@/lib/time-accounts/actions';
 import { getTimeAccountSettings, type TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 
+/** Proposals and the open requests: the proposer withdraws, another person in scope decides. */
+function TimeAccountAdjustmentCard({
+  settings,
+  today,
+  children,
+}: {
+  settings: TimeAccountSettingsData;
+  today: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Zeitkonto korrigieren</CardTitle>
+        <CardDescription>{children}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <AdjustmentRequestForms accounts={settings.accounts} today={today} />
+        <PendingTimeAccountAdjustments pendingAdjustments={settings.pendingAdjustments} />
+      </CardContent>
+    </Card>
+  );
+}
+
 function TimeAccountSettingsContent({
   settings,
   access,
@@ -26,18 +52,10 @@ function TimeAccountSettingsContent({
   const today = getBusinessTodayIso();
   return !access.isAdmin ? (
     access.canProposeAdjustments ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Zeitkonto korrigieren</CardTitle>
-          <CardDescription>
-            Büro-Nutzer können Korrekturen, Verfall und Auszahlung beantragen. Eine getrennte Freigabe ist
-            erforderlich.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <AdjustmentRequestForms accounts={settings.accounts} today={today} />
-        </CardContent>
-      </Card>
+      <TimeAccountAdjustmentCard settings={settings} today={today}>
+        Büro-Nutzer können Korrekturen, Verfall und Auszahlung beantragen. Eine getrennte Freigabe ist
+        erforderlich.
+      </TimeAccountAdjustmentCard>
     ) : (
       <p className="text-sm text-muted-foreground">Nur Administratoren können diese Einstellungen ändern.</p>
     )
@@ -69,19 +87,10 @@ function TimeAccountSettingsContent({
       </Card>
       <EmployeeTimePolicyAssignmentCard settings={settings} today={today} />
       <MissingTimeAccountsCard settings={settings} today={today} />
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Zeitkonto korrigieren</CardTitle>
-          <CardDescription>
-            Korrekturen, Verfall und Auszahlung werden beantragt und erst nach einer getrennten Freigabe in
-            den Saldo übernommen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <AdjustmentRequestForms accounts={settings.accounts} today={today} />
-          <PendingTimeAccountAdjustments pendingAdjustments={settings.pendingAdjustments} />
-        </CardContent>
-      </Card>
+      <TimeAccountAdjustmentCard settings={settings} today={today}>
+        Korrekturen, Verfall und Auszahlung werden beantragt und erst nach einer getrennten Freigabe in den
+        Saldo übernommen.
+      </TimeAccountAdjustmentCard>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Lohnarten-Zuordnung</CardTitle>

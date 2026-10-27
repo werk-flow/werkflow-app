@@ -41,7 +41,11 @@ Write each test at its boundary while you build the behavior, and run the narrow
 ### Open and babysit the pull request
 
 1. Push the branch and open the PR with `gh pr create`; fill in `.github/pull_request_template.md`.
-2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until `Check` and the review are green on the latest commit. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
+2. Babysit it as [CodeRabbit](coderabbit.md#babysit-a-pull-request) describes until it is ready: `Check` green on the latest commit and, for a code PR, a clean review. Each finding gets one disposition in its thread: repaired, declined with the reason, or deferred with its owner. A kept finding names the tier where its prevention landed.
+
+### Grow a shrink-only list
+
+CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Once approved, open a PR that names the added entries and ask the owner to add the label `approved: list growth`; CI then waives the growth. Never add the label yourself; it covers the whole PR.
 
 ## What browser tests are for
 
@@ -188,7 +192,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - After two failed release runs, the diagnosis goes into the incident log first. [test `lib/testing/publication/release-breaker.test.ts`]
 - Runner changes carry focused unit tests. [group `unit:all`, judgment]
 - Unit tests assert no duration and set no timeout of their own; a slow test is made cheaper. The runner's watchdog stops a run in which no test starts for twice Bun's per-test bound, which fires only while a test yields, or that passes its deadline. An assertion on a child's exit code carries the child's output. A test file sits where a runner reads it (`lib/**/*.test.*`, `tests/**/*.spec.ts`). [code `scripts/unit-test-preload.ts`, code `scripts/run-unit-tests.ts`, code `lib/testing/runner/unit-run-watchdog.ts`, test `lib/testing/runner/unit-run-watchdog.test.ts`, test `lib/conventions/unit-test-timeouts.test.ts`, test `lib/testing/selection/test-file-locations.test.ts`]
-- Every pull request passes `Check` on its latest commit, up to date with `main`: the required check runs every static gate, the unit suite (with the shrink-only ratchet against the merge base), the component contracts, every SQL group and the selected browser groups. [code `.github/workflows/ci.yml`, code `lib/testing/selection/ci-plan.ts`, test `lib/testing/selection/ci-plan.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
+- Every pull request passes `Check` on its latest commit: the required check runs every static gate, the unit suite (with the shrink-only ratchet against the merge base), the component contracts, every SQL group and the selected browser groups. A branch need not be up to date with `main`; `Check` runs again on every push to `main`, and the `release` workflow refuses a `main` commit without a green `Check`. [code `.github/workflows/ci.yml`, code `lib/testing/selection/ci-plan.ts`, test `lib/testing/selection/ci-plan.test.ts`, test `lib/testing/publication/shrink-only-lists.test.ts`]
 - Every CodeRabbit finding on the pull request gets a disposition in its thread, and the PR records its deletion pass. [judgment]
 - A local change plan reuses a dependency advisory pass for 24 hours; CI runs the advisory check in every run. [test `lib/testing/evidence/advisory-freshness.test.ts`, code `.github/workflows/ci.yml`]
 
@@ -210,7 +214,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 1. Run `bun run test:plan` and read the reason for each selected group.
 2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
 3. On a failure, follow [Failures](#failures).
-4. Push, open the PR and babysit it until `Check` and the review are green on the latest commit ([CodeRabbit](coderabbit.md#babysit-a-pull-request)).
+4. Push, open the PR and babysit it until it is ready ([CodeRabbit](coderabbit.md#babysit-a-pull-request)).
 5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
 
 ## Examples

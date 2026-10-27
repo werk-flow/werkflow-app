@@ -11,6 +11,8 @@ export type ResponsibilityMember = {
   userId: string;
   role: OrgRole;
   active: boolean;
+  /** Operational personnel access now; a suspended, ended or prestart holder delegates nothing. */
+  hasEffectiveAccess: boolean;
 };
 
 export type ResponsibilityAssignment = {
@@ -118,6 +120,18 @@ function isDelegationEffective(delegation: ResponsibilityDelegation, businessDat
   );
 }
 
+/** The newest delegation wins; then the one that ends first; then the id, so input order never matters. */
+function compareDelegationPrecedence(
+  left: ResponsibilityDelegation,
+  right: ResponsibilityDelegation,
+): number {
+  const startComparison = right.validFrom.localeCompare(left.validFrom);
+  if (startComparison !== 0) return startComparison;
+  const endComparison = left.validUntil.localeCompare(right.validUntil);
+  if (endComparison !== 0) return endComparison;
+  return left.id.localeCompare(right.id);
+}
+
 export function resolveEffectiveResponsibility({
   responsibility,
   actionTime,
@@ -192,15 +206,11 @@ export function resolveEffectiveResponsibility({
   const effectiveDelegations = delegations
     .filter(
       (delegation) =>
-        delegation.responsibility === responsibility && isDelegationEffective(delegation, businessDate),
+        delegation.responsibility === responsibility &&
+        isDelegationEffective(delegation, businessDate) &&
+        activeMemberByRecordId.get(delegation.delegatorEmployeeRecordId)?.hasEffectiveAccess === true,
     )
-    .toSorted((left, right) => {
-      const startComparison = right.validFrom.localeCompare(left.validFrom);
-      if (startComparison !== 0) return startComparison;
-      const endComparison = left.validUntil.localeCompare(right.validUntil);
-      if (endComparison !== 0) return endComparison;
-      return left.id.localeCompare(right.id);
-    });
+    .toSorted(compareDelegationPrecedence);
 
   for (const delegation of effectiveDelegations) {
     if (holders.has(delegation.substituteEmployeeRecordId)) {
@@ -236,10 +246,22 @@ export function resolveEffectiveResponsibility({
   };
 }
 
+/**
+ * The role an approval scope sees for a personnel record: the membership role;
+ * a person without a login holds no membership and counts as an employee; a
+ * login without a current membership has no known role, so only an Admin
+ * source or a direct assignment reaches it. The database applies the same rule
+ * in `app_private.can_p1_23_approve_employee`.
+ */
+export function approvalTargetRole(userId: string | null, membershipRole: OrgRole | null): OrgRole | null {
+  return userId === null ? 'employee' : membershipRole;
+}
+
+/** A target without a login has no user id; a target without a known role is out of a Büro holder's reach. */
 export function canHolderApproveTarget(
   holder: EffectiveResponsibilityHolder,
-  targetUserId: string,
-  targetRole: OrgRole,
+  targetUserId: string | null,
+  targetRole: OrgRole | null,
 ): boolean {
   if (holder.userId === targetUserId) return false;
 

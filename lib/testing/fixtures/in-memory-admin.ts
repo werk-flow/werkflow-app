@@ -75,7 +75,9 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   eq(column: string, value: unknown): this {
-    return this.where((row) => row[column] === value);
+    // A dotted column on a seeded embedded array filters that embed, never its parent row (PostgREST).
+    const embedded = column.includes('.') ? column.slice(0, column.indexOf('.')) : null;
+    return this.where((row) => (embedded !== null && Array.isArray(row[embedded])) || row[column] === value);
   }
   neq(column: string, value: unknown): this {
     return this.where((row) => row[column] !== value);

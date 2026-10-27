@@ -34,7 +34,17 @@ function rowsOf(table: string): Record<string, unknown>[] {
     ];
   }
   if (table === 'employee_records') {
-    return [{ id: OWN_RECORD, user_id: USER, first_name: 'Erika', last_name: 'Muster', exit_date: null }];
+    return [
+      {
+        id: OWN_RECORD,
+        user_id: USER,
+        first_name: 'Erika',
+        last_name: 'Muster',
+        exit_date: null,
+        personnel_access_lifecycles: [],
+        personnel_onboarding_requirements: [],
+      },
+    ];
   }
   return [];
 }

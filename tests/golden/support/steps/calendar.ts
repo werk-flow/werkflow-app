@@ -20,7 +20,7 @@ import {
   visibleText,
 } from './shared';
 import { TIME_ENTRY_COPY, fillManualEntryTimes, manualEntryMemberPicker } from './time-tracking';
-import { jobFormField, workCreateSubmit, workCreateTab } from './work';
+import { fillJobNumber, jobFormField, workCreateSubmit, workCreateTab } from './work';
 
 /**
  * Copy of the planning form, the occurrence edit dialog and the calendar's
@@ -704,7 +704,7 @@ export async function submitJobFromCalendar(
   },
 ): Promise<Locator> {
   const dialog = await openCalendarEntryDialog(page, 'job');
-  await jobFormField(dialog, 'number').fill(options.jobNumber);
+  await fillJobNumber(jobFormField(dialog, 'number'), options.jobNumber);
   await jobFormField(dialog, 'title').fill(options.title);
   await typeIntoDatePickerById(dialog, 'job-date', options.date);
   await typeIntoTimeInput(dialog, 'job-time', options.time.replace(':', ''));

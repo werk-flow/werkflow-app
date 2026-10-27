@@ -9,23 +9,26 @@ import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { useServerAction } from '@/hooks/use-server-action';
-import { decidePeriodFinding } from '@/lib/time-accounts/actions';
+import { decidePeriodFinding } from '@/lib/time-accounts/decision-actions';
 import { getTimeAccountFailureMessage } from '@/lib/time-accounts/messages';
 
 type FindingDecision = 'approved' | 'rejected';
 
 /**
  * Approves or rejects one finding that needs a decision. Enter approves; the
- * refusal stays at the row.
+ * refusal stays at the row. Outside the caller's approval scope it names who decides instead.
  */
 export function TimePeriodFindingDecisionForm({
   periodId,
   findingId,
   findingLabel,
+  canApprove,
 }: {
   periodId: string;
   findingId: string;
   findingLabel: string;
+  /** The reader asked the caller's approval scope for the finding's person. */
+  canApprove: boolean;
 }) {
   const { showBanner } = useBanner();
   const reasonRef = useRef<HTMLInputElement>(null);
@@ -65,6 +68,9 @@ export function TimePeriodFindingDecisionForm({
     event.preventDefault();
     await decide('approved');
   };
+
+  if (!canApprove)
+    return <p className="text-sm text-muted-foreground">Wartet auf die Freigabe durch eine andere Person.</p>;
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-2">

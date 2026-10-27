@@ -38,11 +38,22 @@ const FAILURE_CODES = {
     'forbidden',
     'responsibility_load_failed',
     'not_responsible_or_self_approval',
+    'own_proposal',
     'request_not_found',
     'request_not_pending',
     'stale_version',
     'reason_required',
     'decision_failed',
+  ],
+  withdrawAdjustment: [
+    'invalid_input',
+    'forbidden',
+    'not_authorized',
+    'not_proposer',
+    'request_not_found',
+    'request_not_pending',
+    'stale_version',
+    'withdraw_failed',
   ],
   createMapping: ['forbidden', 'employee_number_required', 'mapping_failed'],
   prepare: [
@@ -173,12 +184,23 @@ const MESSAGES: ActionMessages = {
       forbidden: 'Du darfst diesen Antrag nicht entscheiden.',
       not_responsible_or_self_approval:
         'Du darfst diesen Antrag nicht entscheiden. Eigene Anträge gibt eine andere Person frei.',
+      own_proposal: 'Du hast diesen Antrag gestellt. Eine andere Person entscheidet ihn.',
       request_not_found: 'Diesen Antrag gibt es nicht mehr. Lade die Seite neu.',
       request_not_pending: 'Dieser Antrag ist bereits entschieden. Lade die Seite neu.',
       stale_version: 'Der Antrag wurde inzwischen geändert. Lade die Seite neu.',
       reason_required: 'Gib einen Entscheidungsgrund an.',
     },
     fallback: 'Die Entscheidung konnte nicht gespeichert werden. Versuche es erneut.',
+  },
+  withdrawAdjustment: {
+    messages: {
+      forbidden: 'Nur Admin und Büro können Anträge zurückziehen.',
+      not_proposer: 'Nur wer den Antrag gestellt hat, kann ihn zurückziehen.',
+      request_not_found: 'Diesen Antrag gibt es nicht mehr. Lade die Seite neu.',
+      request_not_pending: 'Dieser Antrag ist bereits entschieden. Lade die Seite neu.',
+      stale_version: 'Der Antrag wurde inzwischen geändert. Lade die Seite neu.',
+    },
+    fallback: 'Der Antrag konnte nicht zurückgezogen werden. Versuche es erneut.',
   },
   createMapping: {
     messages: {
