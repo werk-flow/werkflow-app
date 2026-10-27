@@ -37,8 +37,9 @@ fi
 
 # Prints the HTTP status of a GET; the body goes to the file in $body.
 body="$RUNNER_TEMP/${check}.json"
+# On a timeout or refused connection curl prints 000 itself and exits non-zero.
 get() {
-  curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' "$@" || echo 000
+  curl --silent --max-time 30 --output "$body" --write-out '%{http_code}' "$@" || true
 }
 
 case "$kind" in

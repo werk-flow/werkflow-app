@@ -1,6 +1,6 @@
 # Environments
 
-Status: living — last reviewed 2026-10-26
+Status: living — last reviewed 2026-10-27
 
 WerkFlow runs on two separate cloud backends ([decision 0003](../decisions/0003-dev-prod-environment-split.md)) and a local Supabase stack for the application tests ([decision 0006](../decisions/0006-testing-architecture.md)). This page owns which backend is which, who owns which env file, every credential and its rotation, how tools reach each project, the migration rule, how worktrees share the local stack, and how to set up a new machine.
 
@@ -33,9 +33,9 @@ Not adopted, each a future owner decision: point-in-time recovery, database netw
 
 ## Credentials
 
-This table is the one home of every credential the deployments and workflows use. Each value lives only where the table says; nothing copies a secret elsewhere to test it. `.github/workflows/health.yml` checks every row each Monday morning, Berlin time, with a read-only call where the value lives. A failed run fails the step named after the credential, then opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`, which lists only the failed check ids; the next green run closes it. GitHub mails a scheduled run's failure to the account that last pushed a change to its cron line, which is the account that merges on `main`: `tamaycbn`. That account needs failed-workflow mail turned on in its GitHub notification settings.
+This table is the one home of every credential the deployments and workflows use. Each value lives where the table says, and no check copies a secret elsewhere to test it. `.github/workflows/health.yml` checks every row each Monday morning, Berlin time, with a read-only call where the value lives. A failed run fails the step named after the credential, then opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`, which lists only the failed check ids; the next green run closes it. GitHub mails a scheduled run's failure to the account that last pushed a change to its cron line, which is the account that merges on `main`: `tamaycbn`. That account needs failed-workflow mail turned on in its GitHub notification settings.
 
-The app checks its own runtime credentials at `GET /api/health`, and each Supabase project at its `health` function; the weekly run reads the staging deployment, production and both projects. Both answer only with the header `x-health-check-token`. Without it they answer like a route or function that does not exist. The answer names each check as `ok` or `failed`, never a value or a provider message. Each Vercel variable exists twice ([Vercel](#vercel)), and each Supabase secret once per project.
+The app checks its own runtime credentials at `GET /api/health`, and each Supabase project at its `health` function; the weekly run reads the staging deployment, production and both projects. Both accept only a request that carries the header `x-health-check-token`; without it they answer like a route or function that does not exist. The answer names each check as `ok` or `failed`, never a value or a provider message. Each Vercel variable exists twice ([Vercel](#vercel)), and each Supabase secret once per project.
 
 | Credential | Lives in | Used by | Expires | Check | Rotate |
 | --- | --- | --- | --- | --- | --- |

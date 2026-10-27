@@ -57,7 +57,10 @@ jobs:
       HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
+      # Only the check script is read; no step needs the job token in .git/config.
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: SUPABASE_ACCESS_TOKEN lists the DEV edge functions
         id: supabase-access-token-dev
         if: ${{ !cancelled() }}
@@ -115,7 +118,10 @@ jobs:
       PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
       PRODUCTION_DEPLOY_KEY: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
     steps:
+      # Only the check script is read; no step needs the job token in .git/config.
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - name: PROD_DATABASE_URL runs select 1
         id: prod-database-url
         if: ${{ !cancelled() }}
@@ -138,7 +144,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      issues: write
+      issues: write # open, update and close the weekly health issue
     steps:
       - name: Open, update or close the health issue
         env:

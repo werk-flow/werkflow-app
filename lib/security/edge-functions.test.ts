@@ -1,13 +1,48 @@
 import { expect, test } from 'bun:test';
+import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createHealthHandler,
   HEALTH_CHECK_TOKEN_HEADER,
   type HealthDependencies,
 } from '../../supabase/functions/health/handler';
 
-// The Supabase health function (docs/technical/environments.md#credentials):
-// without its token it answers like a missing function, and
-// its report names checks, never a value or a provider body.
+// The edge functions (docs/technical/environments.md#credentials). The deploy
+// steps turn JWT verification off by name, so every named function must check
+// its own caller, and a new function deploys only once someone names it. The
+// health function answers like a missing one without its token, and its
+// report names checks, never a value or a provider body.
+
+const repositoryRoot = resolve(import.meta.dir, '../..');
+const DEPLOY_WORKFLOWS = ['.github/workflows/staging.yml', '.github/workflows/release.yml'];
+// The guard each function's handler calls before it acts: the secret-key check or the health token.
+const CALLER_GUARDS = ['createMailAuthorizer', 'hasToken('];
+
+function functionFolders(): string[] {
+  return readdirSync(resolve(repositoryRoot, 'supabase/functions'), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function deployedFunctions(workflow: string): string[] {
+  const text = readFileSync(resolve(repositoryRoot, workflow), 'utf8');
+  const names = /supabase functions deploy ((?:[a-z0-9][a-z0-9-]* )+)--/.exec(text)?.[1];
+  return (names ?? '').trim().split(/\s+/).filter(Boolean).sort();
+}
+
+test('each deploy step names every function, and every function checks its own caller', () => {
+  for (const workflow of DEPLOY_WORKFLOWS) {
+    expect(deployedFunctions(workflow), workflow).toEqual(functionFolders());
+  }
+  for (const name of functionFolders()) {
+    const handler = readFileSync(resolve(repositoryRoot, `supabase/functions/${name}/handler.ts`), 'utf8');
+    expect(
+      CALLER_GUARDS.some((guard) => handler.includes(guard)),
+      `${name} deploys without JWT verification, so its handler must check its caller`,
+    ).toBe(true);
+  }
+});
 
 const token = 'synthetic-health-token-0123456789abcdef';
 const resendKey = 're_synthetic_private_key';
