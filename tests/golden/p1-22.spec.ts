@@ -12,6 +12,7 @@ import { TIME_CORRECTION_STATUS_LABELS } from '../../lib/time-corrections/types'
 import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
 import { expect, test } from './support/fixtures';
 import { getTimeCorrectionState } from './support/db/time-tracking';
+import { ensureEmployedSince } from './support/db/personnel';
 import { berlinDateAtOffset } from './support/date-ownership';
 import { dismissDialog } from './support/steps/interaction';
 import { confirmResponsibilityPreview, previewResponsibilityChange } from './support/steps/personnel';
@@ -115,6 +116,10 @@ test.describe('P1-22 consistent time corrections @P1-22', () => {
     world,
   }) => {
     const date = berlinDateAtOffset(-2);
+    // The world's employees enter on the business date; the board leaves a
+    // person out of a window that ends before their entry, as it does on a
+    // Tuesday, when the week of the fixture day ends the day before.
+    await ensureEmployedSince({ organizationId: world.orgId, userIds: [world.users.employee.id], date });
     const start = expectDefined(resolveBerlinWallTime(`${date}T08:00`), 'the Berlin start of the fixture');
     const end = expectDefined(resolveBerlinWallTime(`${date}T09:00`), 'the Berlin end of the fixture');
     const { error } = await createAdminClient()
