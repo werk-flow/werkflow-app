@@ -145,6 +145,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - The deletion transport lets current members of an organization receive the identity of a deleted row. It carries no record content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with the payment slice.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify` in the browser that signed up or signed in.
+- The `health` edge function has no rate limit; its constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
 - Two provider facts are unverified: the R2 buckets' CORS rules (runtime tokens get `AccessDenied` on `GetBucketCors`; a check needs an R2 token with Admin Read) and the Vercel environment scopes (a check needs a Vercel token that reads the project's environment).
 
@@ -190,4 +191,3 @@ A calendar gesture sends source references and proposed boundaries to the one co
 
 - `supabase/migrations/20261001104036_limit_organization_join_attempts.sql`: a new table with RLS, no client policy, a full revoke and the one grant the code uses.
 - `lib/testing/fixtures/join-request-boundaries.ts`: the boundary fixture a new action module copies.
-- `lib/security/route-inventory.test.ts`: a reviewed inventory that fails on a new handler until someone names its authorization.
