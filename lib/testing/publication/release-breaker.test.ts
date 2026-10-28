@@ -60,19 +60,26 @@ const failedRelease = report('release-1', 'failed', '2026-09-13T08:00:00.000Z', 
 ]);
 
 test('a passing or absent release history allows a release plan', () => {
-  expect(releaseAttemptProblem({ history: [], current, snapshot, incidentLog: '' })).toBeUndefined();
+  expect(
+    releaseAttemptProblem({ history: [], current, snapshot, hasDiagnosis: () => false }),
+  ).toBeUndefined();
   expect(
     releaseAttemptProblem({
       history: [report('release-0', 'passed', '2026-09-12T08:00:00.000Z', [])],
       current,
       snapshot,
-      incidentLog: '',
+      hasDiagnosis: () => false,
     }),
   ).toBeUndefined();
 });
 
 test('a failed group needs a later focused pass on the current inputs; blocked groups do not', () => {
-  const problem = releaseAttemptProblem({ history: [failedRelease], current, snapshot, incidentLog: '' });
+  const problem = releaseAttemptProblem({
+    history: [failedRelease],
+    current,
+    snapshot,
+    hasDiagnosis: () => false,
+  });
   expect(problem).toContain('audit:a');
   expect(problem).toContain('bun run test:verify --group audit:a');
   expect(problem).not.toContain('static:lint');
@@ -84,7 +91,12 @@ test('a failed group needs a later focused pass on the current inputs; blocked g
     { mode: 'change', scope: 'selected-groups' },
   );
   expect(
-    releaseAttemptProblem({ history: [earlierPass, failedRelease], current, snapshot, incidentLog: '' }),
+    releaseAttemptProblem({
+      history: [earlierPass, failedRelease],
+      current,
+      snapshot,
+      hasDiagnosis: () => false,
+    }),
   ).toContain('audit:a');
   const staleInputs = report(
     'focused-1',
@@ -98,7 +110,12 @@ test('a failed group needs a later focused pass on the current inputs; blocked g
     },
   );
   expect(
-    releaseAttemptProblem({ history: [failedRelease, staleInputs], current, snapshot, incidentLog: '' }),
+    releaseAttemptProblem({
+      history: [failedRelease, staleInputs],
+      current,
+      snapshot,
+      hasDiagnosis: () => false,
+    }),
   ).toContain('audit:a');
   const proof = report(
     'focused-2',
@@ -108,7 +125,7 @@ test('a failed group needs a later focused pass on the current inputs; blocked g
     { mode: 'change', scope: 'selected-groups' },
   );
   expect(
-    releaseAttemptProblem({ history: [failedRelease, proof], current, snapshot, incidentLog: '' }),
+    releaseAttemptProblem({ history: [failedRelease, proof], current, snapshot, hasDiagnosis: () => false }),
   ).toBeUndefined();
   const laterFailure = report(
     'focused-3',
@@ -122,7 +139,7 @@ test('a failed group needs a later focused pass on the current inputs; blocked g
       history: [failedRelease, proof, laterFailure],
       current,
       snapshot,
-      incidentLog: '',
+      hasDiagnosis: () => false,
     }),
   ).toContain('audit:a');
 });
@@ -136,15 +153,22 @@ test('a content-unchanged pass under another fingerprint counts, and a removed g
     { mode: 'change', scope: 'selected-groups' },
   );
   expect(
-    releaseAttemptProblem({ history: [failedRelease, recorded], current, snapshot, incidentLog: '' }),
+    releaseAttemptProblem({
+      history: [failedRelease, recorded],
+      current,
+      snapshot,
+      hasDiagnosis: () => false,
+    }),
   ).toBeUndefined();
   const retired = report('release-2', 'failed', '2026-09-13T12:00:00.000Z', [
     result('audit:retired', 'failed', '2026-09-13T12:00:00.000Z', hashValue('gone')),
   ]);
-  expect(releaseAttemptProblem({ history: [retired], current, snapshot, incidentLog: '' })).toBeUndefined();
+  expect(
+    releaseAttemptProblem({ history: [retired], current, snapshot, hasDiagnosis: () => false }),
+  ).toBeUndefined();
 });
 
-test('two consecutive failed releases require the incident log to name the latest report', () => {
+test('two consecutive failed releases require a diagnosis beside the latest report', () => {
   const second = report('release-2', 'failed', '2026-09-13T12:00:00.000Z', [
     result('golden:integrated', 'failed', '2026-09-13T12:30:00.000Z', hashValue('old-golden')),
   ]);
@@ -159,7 +183,7 @@ test('two consecutive failed releases require the incident log to name the lates
     history: [failedRelease, second, proof],
     current,
     snapshot,
-    incidentLog: '## 2026-09-13: something about release-1 only',
+    hasDiagnosis: (reportId) => reportId === 'release-1',
   });
   expect(problem).toContain('Two consecutive release reports failed');
   expect(problem).toContain('release-2');
@@ -168,14 +192,14 @@ test('two consecutive failed releases require the incident log to name the lates
       history: [failedRelease, second, proof],
       current,
       snapshot,
-      incidentLog: '## 2026-09-13: Release campaign, second run (report `release-2`)',
+      hasDiagnosis: (reportId) => reportId === 'release-2',
     }),
   ).toBeUndefined();
   const withoutProof = releaseAttemptProblem({
     history: [failedRelease, second],
     current,
     snapshot,
-    incidentLog: '',
+    hasDiagnosis: () => false,
   });
   expect(withoutProof).toContain('golden:integrated');
   expect(withoutProof).toContain('Two consecutive');

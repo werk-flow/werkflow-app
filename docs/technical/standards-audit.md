@@ -1,47 +1,46 @@
 # Audit a wave and accept a rendered design
 
-Status: living — last reviewed 2026-10-28
-
-The six virtues in `AGENTS.md` define quality for every change. Each virtue's owner doc holds its checklist, its prohibitions, its verification steps and its examples. This page holds the two procedures that the virtues refer to: how to accept a rendered design, and how to audit a wave.
-
-A gate proves only its registered assertions on the inputs it ran on. Reusing a shared component gives its behavior. It does not prove that the caller composes it well. An earlier audit is evidence for its date, not a guarantee.
+Two procedures the virtues refer to. A gate proves only its registered assertions on the inputs it ran on. Reusing a shared component does not prove the caller composes it well. An earlier audit is evidence for its date only.
 
 ## Rendered design acceptance
 
-Tests establish specific behaviors. They do not establish that a screen is clear, well composed, or fit for daily SHK work. That judgment is Tier 3 and it is required evidence, not an optional extra after the gates pass.
+Tests do not establish that a screen is clear, well composed, or fit for daily SHK work. That judgment is Tier 3 and required evidence. For a new major screen or a substantial redesign:
 
-For a new major screen or a substantial redesign:
+1. In the slice record, name the role, the main task, representative data and the viewports. State the action hierarchy and what the user must see without opening another panel. Use realistic names, long labels, crowded schedules and exceptions, not only empty states.
+2. Inspect reference screens and record the pattern you adopt and why. Existing WerkFlow pages are not automatically the target.
+3. Render one representative composition before you extend it. Compare hierarchy, toolbar height, density, typography, alignment, reading order and space for content. A new visual direction gets a concrete rendered proposal; a routine change inside an accepted design needs no approval.
+4. Review the result in the browser with the named roles, themes, viewports and states. Exercise the main task, the keyboard path and error recovery. A screenshot does not prove an interaction; a passing click test does not prove visual quality.
+5. Have an independent reviewer compare the result with the intended composition and the task. Record revision, route, role, data state, theme, viewport, artifact location and findings. A loading screen, failed capture, login page or connection error is missing evidence, never a pass. Check the affected captures again after a visual repair.
+6. Put accepted shared choices into tokens, primitives and the `werkflow-design` skill. Add a geometry, interaction or screenshot check only where it protects an accepted invariant. Never keep a baseline of an appearance the owner rejected.
 
-1. In the slice record, name the role, the main task, representative data and the viewports. State the intended action hierarchy and what the user must see without opening another panel. Use realistic names, long labels, crowded schedules and exceptions, not only empty states.
-2. Inspect relevant reference screens. Record the pattern you adopt and why it helps that task. A competitor's feature list is not a visual specification. Existing WerkFlow pages show current behavior. They are not automatically the visual target.
-3. Render one representative composition before you extend it across the feature. Compare hierarchy, toolbar height, control density, typography, alignment, reading order and the space left for content. When the owner asked for a new visual direction and the references leave it open, resolve it with a concrete rendered proposal under the protocol's stop rule. A routine change inside an accepted design needs no extra approval.
-4. Review the implemented result in the browser with the named roles, themes, viewports and states. Exercise the main task, the keyboard path and the relevant error recovery. A screenshot does not prove an interaction. A successful click test does not prove visual quality.
-5. Have an independent reviewer compare the result with the intended composition and the product task. Record the candidate revision, route, role, data state, theme, viewport, artifact location and findings. Inspect each cited artifact. A loading screen, a failed capture, a login page or a connection error is missing evidence, never a pass. Check the affected captures again after a visual repair.
+Each visual and interaction finding needs an explicit disposition. Visual polish cannot waive security, keyboard access, data integrity or response time. A browser review that could not run leaves the design unverified.
 
-Captures come from the focused run `bun run test:audit:focused --grep "@ACCEPT <set>"` over a set in `tests/audit/support/acceptance-sets.ts`. Its fixture (`tests/audit/support/acceptance-captures.ts`) logs in through the session fixtures, opens a dialog the way the layout audit does, and writes an image only of a ready screen: the requested page, never the login, its title rendered, every busy signal settled, the fonts loaded and no failed region. A capture whose id ends in `-loading` or `-error` asks for that state instead: the fixture holds the route's navigation (its `loading.tsx`) or holds or fails the client reads through route interception, and writes the image only while exactly that state shows (`tests/audit/support/acceptance-state-plan.ts`). A region the server renders cannot fail from the browser; `lib/conventions/detail-loader-failures.test.ts` and `lib/conventions/read-error-visibility.test.ts` prove its failure reaches the screen. A screen outside the app shell opens with the session its standalone inventory entry names and is refused when it redirects. Each image lands under `.agent-logs/playwright-runs/<run>/acceptance/<set>/` with an entry in `.agent-logs/playwright-runs/<run>/acceptance/index.json`. Capture a changed screen before the change and after it, so the reviewer judges a pair. Cite an image as `` `capture:<run-key>/<set>/<capture>-<width>-<scheme>` ``. Only a capture whose index entry says `passed` is evidence: the fixture marks it so only when its test passed.
-6. Put accepted shared choices into tokens, primitives and the `werkflow-design` skill. Add a geometry, interaction or screenshot check only where it protects an accepted invariant. A screenshot baseline must not freeze an appearance the owner rejected. Keep a small reviewed set of reference images in the skill's `references/` folder.
+### Captures
 
-Completion needs an explicit disposition for each visual and interaction finding beside the automated results. Visual polish cannot waive security, keyboard access, data integrity or response time. A browser review that could not run leaves the design unverified.
+- Run `bun run test:audit:focused --grep "@ACCEPT <set>"` over a set in `tests/audit/support/acceptance-sets.ts`. The fixture writes an image only of a ready screen.
+- A capture id ending in `-loading` or `-error` captures that state.
+- Capture a changed screen before and after the change, so the reviewer judges a pair.
+- Images land under `.agent-logs/playwright-runs/<run>/acceptance/<set>/`. Only a capture whose entry in `acceptance/index.json` says `passed` is evidence. Cite it as `` `capture:<run-key>/<set>/<capture>-<width>-<scheme>` ``.
 
 ### Keep accepted screens as visual references
 
-`audit:visual` (`tests/audit/visual/references.spec.ts`) compares one viewport screenshot per page family with its reference image in `references.spec.ts-snapshots/`. Its browser runs in Playwright's official image on every machine ([how a run executes](testing.md#how-a-run-executes)), so a reference carries the suffix `-linux` wherever it was recorded. `tests/audit/support/visual-families.ts` names the families and the inventory routes each one stands for, the screens outside the app shell included. Each family has a desktop and a phone reference, each in light and dark mode; `lib/testing/selection/visual-families.test.ts` fails when an inventoried page has no family, a family lacks a reference, or a reference belongs to no family. The spec seeds a world with constant names and numbers. Before each capture it replaces the text the app derives from the clock (dates, times, weekdays, relative times) and the run-specific strings (e-mail addresses, the join code) with constant stand-ins. Beside each image, a text reference (`.txt`) holds the visible text of the viewport after the same replacement, one line per text node. The calendar families show a seeded week owned relative to the run day (`ownedBerlinWeekAtOffset`), replace its range, week number and day numbers too, and run after every other family because the week plans the visual jobs. The text comparison is exact, so a changed word fails even when it moves fewer pixels than the image tolerance allows. The group runs in release mode and on an explicit `--group audit:visual`. A verification run never writes a reference, so a missing reference fails.
+`audit:visual` (`tests/audit/visual/references.spec.ts`) compares one screenshot per page family with its reference, desktop and phone, light and dark. `tests/audit/support/visual-families.ts` names the families. The browser runs in Playwright's pinned image, so every reference carries the suffix `-linux`. The spec replaces clock-derived and run-specific text with constant stand-ins, and a text reference (`.txt`) beside each image must match exactly, so a changed word fails even under the pixel tolerance. A verification run never writes a reference.
 
-A reference records an appearance that the owner accepted. A failed comparison is either a design change that waits for acceptance or a regression to repair. Never update a reference to make a failing run pass.
+A failed comparison is a design change that waits for acceptance, or a regression to repair. Never update a reference to make a run pass.
 
-To update the references after an intended design change:
+To update references after an intended design change:
 
 1. Get the owner's acceptance of the rendered change through steps 4 and 5 above.
-2. Run `WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"`; the bare tag also matches the acceptance spec's `@AUDIT-VISUAL-ACCEPT`, and the runner refuses two spec files. The run rewrites each image whose difference exceeds the tolerance and each text reference that differs, and writes the missing ones. An image whose change stays under the tolerance is rewritten only when you delete it before the run. `visualReferenceUpdateMode` in `lib/testing/runner/visual-reference-updates.ts` allows the rewrite in this focused lane only. The update run certifies nothing and is no attempt of the repeat rule, so you can repeat it.
-3. Show the owner every changed image in the diff. Keep only the images the owner accepts, and restore the others with `git checkout`.
-4. Run `bun run test:verify --group audit:visual` and confirm that it passes. It is a first attempt on the accepted references, and a failure there follows [Failures](testing.md#failures).
+2. Run `WERKFLOW_UPDATE_VISUAL_REFERENCES=1 bun run test:audit:focused --grep "@AUDIT-VISUAL rendered references"`. The full title matters: the bare tag also matches `@AUDIT-VISUAL-ACCEPT`, and the runner refuses two spec files. The run rewrites differing images and text references and writes missing ones. An image under the tolerance is rewritten only when you delete it first. The update run certifies nothing and may repeat.
+3. Show the owner every changed image. Keep the accepted ones and restore the others with `git checkout`.
+4. Run `bun run test:verify --group audit:visual`. A failure there follows [Failures](testing.md#failures).
 
 ## Audit a wave
 
-1. Run the release plan on the wave's final tree (`bun run test:verify --mode release`) and the cloud canary. Do not audit a wave on a partial plan.
-2. For each of the six virtues, read its block in `AGENTS.md` and the checklist of its owner doc. Walk the wave's slice records against the items tagged `judgment` and against the recorded divergences. Write one finding list per virtue with file and line. A divergence that recurs is a sign that its default should change.
-3. Check registration. Every flow the wave added is a journey in `lib/testing/journeys.ts` or a measured scenario, a component contract, a control-map row, or a catalog clause with coverage. A declined registration states its reason in the slice record.
-4. Push every finding up the ladder ([decision 0005](../decisions/0005-enforcement-ladder.md)). Build the mechanism or the check where one is reachable. Otherwise add a row to the backlog. Change the virtue's rule in the same change when the finding shows that the rule was missing or wrong.
-5. Record the audit in the pull request that closes the wave. Move every lasting fact to its living home.
+1. Run the release plan and the cloud canary on the wave's final tree.
+2. For each virtue, read its block in `AGENTS.md` and its owner doc. Walk the wave's slice records against the Tier 3 defaults and the recorded divergences. Write one finding list per virtue with file and line. A divergence that recurs means its default should change.
+3. Check registration. Every flow the wave added is a journey in `lib/testing/journeys.ts` or a measured scenario, a component contract, or a catalog clause with coverage. A declined registration states its reason in the slice record.
+4. Push every finding up the ladder ([decision 0005](../decisions/0005-enforcement-ladder.md)). Build the mechanism where one is reachable; otherwise add a [backlog](enforcement-ladder-backlog.md) row. Change the rule in the same change when the finding shows it was missing or wrong.
+5. Record the audit in the PR that closes the wave. Move every lasting fact to its living home.
 
 A finding changes its owner doc and its check. It does not trigger another audit of the whole app.

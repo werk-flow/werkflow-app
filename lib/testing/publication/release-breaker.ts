@@ -1,18 +1,13 @@
 import { reusableGroupResult, type GroupResult, type InputSnapshot } from '../evidence/group-evidence';
 
 /**
- * The release-plan circuit breaker (pre-Wave-3 step 1, 2026-09-14). The Step 3
- * campaign needed eleven full release runs because every repair was proven by
- * the next full run instead of by the failed group alone; the certification
- * lane's budget never saw them because release runs use the group lane. Two
- * rules, both mechanical:
+ * The release-plan circuit breaker. A full release run proves no repair: the failed group does.
  *
- * 1. After a failed release report, every group that failed in it needs a
- *    later passing result on the current inputs before the next release plan.
- *    With content-based reuse the release run then reruns only what changed.
- * 2. After two consecutive failed release reports, the incident log must name
- *    the latest failed report before anything runs again: a written diagnosis
- *    and harness hypothesis, not another attempt.
+ * 1. After a failed release report, every group that failed in it needs a later passing result on
+ *    the current inputs before the next release plan. Content-based reuse then reruns only what
+ *    changed.
+ * 2. After two consecutive failed release reports, the latest one needs a written diagnosis and
+ *    harness hypothesis in its folder (`RELEASE_DIAGNOSIS_FILE`) before anything runs again.
  */
 export type ReleaseHistoryReport = {
   id: string;
@@ -26,14 +21,16 @@ export type ReleaseHistoryReport = {
 
 export type CurrentGroupInputs = ReadonlyMap<string, { fingerprint: string; inputs: readonly string[] }>;
 
-export const INCIDENT_LOG_PATH = 'docs/technical/test-incident-log.md';
+/** The diagnosis of a failed release report, in the report's folder under `.agent-logs/verification`. */
+export const RELEASE_DIAGNOSIS_FILE = 'diagnosis.md';
 
 export function releaseAttemptProblem(input: {
   /** Reports of the same target, in start order. */
   history: readonly ReleaseHistoryReport[];
   current: CurrentGroupInputs;
   snapshot: InputSnapshot;
-  incidentLog: string;
+  /** Whether the report's folder holds its `RELEASE_DIAGNOSIS_FILE`. */
+  hasDiagnosis: (reportId: string) => boolean;
 }): string | undefined {
   const releases = input.history.filter(
     (report) =>
@@ -65,9 +62,9 @@ export function releaseAttemptProblem(input: {
     );
   }
   const previousRelease = releases.at(-2);
-  if (previousRelease?.status === 'failed' && !input.incidentLog.includes(latest.id)) {
+  if (previousRelease?.status === 'failed' && !input.hasDiagnosis(latest.id)) {
     problems.push(
-      `Two consecutive release reports failed (${previousRelease.id}, ${latest.id}). Write the diagnosis and a harness hypothesis into ${INCIDENT_LOG_PATH} naming report ${latest.id} before the next attempt.`,
+      `Two consecutive release reports failed (${previousRelease.id}, ${latest.id}). Write the diagnosis and a harness hypothesis into .agent-logs/verification/${latest.id}/${RELEASE_DIAGNOSIS_FILE} before the next attempt.`,
     );
   }
   return problems.length ? `${problems.join(' ')} (docs/technical/testing.md, "Release mode")` : undefined;
