@@ -1,7 +1,7 @@
 import { withVerificationReport } from '../lib/testing/runner/verification-lifecycle';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
 import { readBuildReceipt } from '../lib/testing/evidence/build-identity';
@@ -72,7 +72,7 @@ import {
   unclassifiedFailureProblem,
   unresolvedBrowserGroupIds,
 } from '../lib/testing/evidence/browser-group-evidence';
-import { INCIDENT_LOG_PATH, releaseAttemptProblem } from '../lib/testing/publication/release-breaker';
+import { RELEASE_DIAGNOSIS_FILE, releaseAttemptProblem } from '../lib/testing/publication/release-breaker';
 import { browserStorageProblem, pruneRunArchive } from '../lib/testing/runs/run-retention';
 import {
   discoverPlaywrightSelection,
@@ -441,7 +441,7 @@ async function main(): Promise<void> {
             ]),
           ),
           snapshot,
-          incidentLog: readFileSync(resolve(repository, INCIDENT_LOG_PATH), 'utf8'),
+          hasDiagnosis: (reportId) => existsSync(resolve(archive, reportId, RELEASE_DIAGNOSIS_FILE)),
         })
       : undefined,
     freshBrowserEntries.length ? browserStorageProblem(repository) : undefined,

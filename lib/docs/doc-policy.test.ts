@@ -7,7 +7,6 @@ describe('documentation policy', () => {
     expect(wordBudgetOf('docs/README.md')).toBe(3600);
     expect(wordBudgetOf('.claude/skills/x/SKILL.md')).toBe(4000);
     expect(wordBudgetOf('docs/technical/security.md')).toBe(4000);
-    expect(wordBudgetOf('docs/technical/test-incident-log.md')).toBeNull();
     expect(wordBudgetOf('docs/features/inventory.md')).toBeNull();
   });
 });
