@@ -77,6 +77,8 @@ function simpleCommands(command: string): ShellWord[][] {
       commands.push(words);
       words = [];
     } else {
+      // A redirection splits from an operand it touches (`/tmp/x/*>log`), not from its descriptor (`2>`).
+      if ((character === '<' || character === '>') && word && !/^\d*[<>]*$/.test(word.text)) endWord();
       if (GLOB_CHARACTERS.has(character)) current().globs = true;
       current().text += character;
     }

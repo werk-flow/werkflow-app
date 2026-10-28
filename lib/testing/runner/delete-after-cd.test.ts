@@ -30,6 +30,7 @@ test('explicit absolute deletes, deletes without a cd and non-recursive deletes 
     // A redirection target is no operand.
     'cd /tmp/ev35 && rm -rf /tmp/ev35/* > "$log" 2>&1',
     'cd /tmp/ev35 && rm -rf /tmp/ev35/* 2>"$log"',
+    'cd /tmp/ev35 && rm -rf /tmp/ev35/*>"$log" 2>&1',
     'cd /tmp/ev35 && rm -rf build',
     'cd /tmp/ev35 && rm -f *.log',
     'cd /tmp/ev35 && rm -rf "*"',
