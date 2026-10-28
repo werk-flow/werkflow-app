@@ -7,59 +7,53 @@ Adapted for WerkFlow from t3dotgg/tstack (MIT, [license](../LICENSE-tstack)).
 
 # Full Send
 
-The owner said "full send" because they are not watching this thread. They want the work done end to end without them: your updates and your final message go unread until long after you stop. You own the work from its current state to a merged PR on `main`.
+The owner is not watching. Take the work from its current state to a merged PR on `main`. Without a clear "full send" in this thread, stop at ready, as `full-stop` does.
 
-If the owner did not clearly say "full send" in this thread, do not assume this autonomy. Without it, agents stop at ready, as `full-stop` does.
+## The grant
 
-## What "full send" grants
+- Commit, push and open the PR for this task's branch.
+- Merge with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes.
+- Run the app, drive a browser and take screenshots without asking.
 
-- Commit, push and open the PR for this task's own branch. "full send" is the owner's request to commit and push.
-- Merge the PR into `main` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes, with `gh pr merge --squash`.
-- Use the test methods that proof needs without asking first: run the app and a dev server, drive a browser, take screenshots, use computer use.
-
-Rules about how to test still apply: the commands, fixtures and groups the owner docs name. The grant removes only the ask-first step. It never covers PROD, the `release` workflow, a release, real personal data, payments, deleting data outside the local stack, another branch, or a harness approval prompt.
-
-The owner's rule of thumb: full send for docs, tests, CI and small fixes; full stop for level 2 work. It is not a block. When "full send" meets level 2 work, merge only after its CodeRabbit review, as the gate says, and name the level in the report.
+It never covers PROD, a release, real personal data, payments, deleting data outside the local stack, another branch, or a harness approval prompt.
 
 ## Steps
 
-1. **Finish the change.** In the task's worktree (wait for `.t3/setup-done`) and on its own branch, never `main`. Complete the owner's goal with the smallest change that works. Fix the case that happened, not every case that could.
-2. **Prove it.** Get proof for every change in the diff (see Proof).
-3. **Choose the review level** from the diff by [the rule](../../../docs/technical/coderabbit.md#choose-the-review-level). For level 1 and 2, run the `sol-loop` skill.
-4. **File the PR** with the `file-pr` skill. Merge `origin/main` into the branch first if it moved. The description says in one line how you proved the change.
-5. **Babysit the PR** as [Babysit a pull request](../../../docs/technical/coderabbit.md#babysit-a-pull-request) describes. Fix real findings and CI failures, and prove each fix before you push it. A fix that changes behavior after Sol approved goes through another `sol-loop` round while its budget lasts.
-6. **Merge** when the merge gate passes on the latest commit.
-7. **Report** in plain language (see Report).
+1. Finish the change in the task's worktree and branch, never `main`. Fix the case that happened, not every case that could.
+2. Prove it (below).
+3. Choose the [review level](../../../docs/technical/coderabbit.md#choose-the-review-level). For level 1 and 2, run `sol-loop`.
+4. File the PR with `file-pr`. Merge `origin/main` first if it moved.
+5. Call `watch_pull_request` and babysit the PR ([pull-request reviews](../../../docs/technical/coderabbit.md)). Prove each fix before you push it. A behavior fix after Sol approved gets another `sol-loop` round while budget lasts.
+6. Merge when the gate passes on the latest commit.
+7. Report (below).
 
-Stay active from step 1 to step 7. If you end your turn without a watcher while checks or bots are pending, the work stops, because nobody prompts you again. Wait with `watch_pull_request`. Before you stop short of the merge, or ask a question, call `unwatch_pull_request`.
+Never end your turn while checks or bots are pending without a watcher: nobody prompts you again. Call `unwatch_pull_request` before you stop short of the merge or ask a question.
 
 ## Proof
 
-Proof is evidence you observed yourself in this session: command output, a reproduction, a screenshot. Use the most direct proof the change allows:
+Proof is evidence you observed in this session.
 
-- Reproduce the original failure, apply the fix, then watch the same reproduction pass.
-- Run `bun run check:changed`, then `bun run test:plan` and `bun run test:verify`, or the `bun run test:verify --group <id>` groups the plan selects for the diff.
-- Add one focused test that fails without the fix when the behavior has none, at the cheapest boundary ([testing](../../../docs/technical/testing.md#how-to-work)).
-- A permission, role or organization change: a SQL test or a unit test that drives the real action with a foreign id, and `bun run test:verify --group sql:security`.
-- UI: run the app and look at it. Take the `@ACCEPT` captures of each changed screen before and after, in both themes, at 375 px and desktop, with the empty, loading and error states ([werkflow-design](../werkflow-design/SKILL.md)). Embed them in the PR. Green mocked tests do not prove the experience.
+- Reproduce the failure, apply the fix, watch the same reproduction pass.
+- Run `bun run check:changed`, `bun run test:plan` and `bun run test:verify`.
+- Add one focused test that fails without the fix, at the cheapest boundary.
+- A permission change: a test that drives the real action with a foreign id, and `bun run test:verify --group sql:security`.
+- UI: run the app and capture each changed screen as [werkflow-design](../werkflow-design/SKILL.md) "Verify your work" says. Embed the captures in the PR.
 
-When you cannot prove a change, you do not have full confidence. Ask the owner.
+If you cannot prove the change, ask.
 
-## Asking the owner
+## Ask the owner
 
-A question in a normal message goes unseen, and the thread looks done. Call `unwatch_pull_request`, then ask through your harness's question tool (`AskUserQuestion` in Claude Code, the user-input tool in Codex) and end your turn. Put all the context in the question: the PR link, what blocks you, and the options with your recommendation first. Write for a non-developer: lead with the outcome, plain words, no jargon, no em dashes.
+Call `unwatch_pull_request`, ask through the question tool, and end your turn. Include the PR link, what blocks you and the options, your recommendation first, in plain words for a non-developer. Ask only when:
 
-Ask only when you cannot continue alone:
+- you cannot prove the change
+- the gate cannot pass and you cannot fix it
+- Sol hit a rate limit or stays disputed
+- the next step is outside the grant
+- the goal is ambiguous in a way that changes the result
+- another PR makes this one obsolete
 
-- You cannot prove the change.
-- The merge gate cannot pass and you cannot fix that yourself.
-- Sol hit a rate limit or stays in dispute after its budget.
-- The next step is outside the grant: PROD, a release, deleting data, real personal data, money, closing a PR, another branch.
-- The goal is ambiguous in a way that changes the result.
-- Another PR makes this one obsolete.
-
-Decide everything else with the option you would recommend, and list those decisions in the report. If the question tool returns no answer, take the safe path: leave the PR open and unmerged, and open your final message with the question.
+Decide everything else yourself and list the decisions in the report. If the question gets no answer, leave the PR open and unmerged.
 
 ## Report
 
-Plain language for the owner, outcome first. The PR link and the merge commit, what changed for the user, the proof in one or two lines, the review level and the sol-loop line, each decision you made for the owner, and anything you could not verify.
+Outcome first, in plain language: the PR link and merge commit, what changed for the user, the proof, the review level and the sol-loop line, your decisions, and anything unverified.

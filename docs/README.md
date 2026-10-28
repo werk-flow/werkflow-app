@@ -108,6 +108,7 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 | `coderabbit-review` | The owner asks for a CodeRabbit review or a fix-and-review cycle. |
 | `sol-loop` | The owner says "sol loop", or a level 1 or 2 PR needs review. |
 | `full-send`, `full-stop` | The owner says "full send" or "full stop". |
+| `run-epic` | You lead an epic: plan child issues, start child threads, merge them in order. |
 | `file-pr` | You open a PR. |
 | `leaving-pr-comments` | You comment on GitHub. |
 
