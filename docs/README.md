@@ -116,7 +116,7 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 Run `bun run docs:check` after every docs change. It checks the index, the links, the decision records, the budgets and the sibling repositories.
 
 1. **Index.** Every Markdown file under `docs/` has a row above, except this index.
-2. **Links.** A reference between docs is a relative markdown link, so the check resolves it and its heading anchor. Backticked paths are for code and config files. Links in `AGENTS.md` and the skills resolve. A `docs/` path that code cites resolves to a doc and heading.
+2. **Links.** A reference between docs is a relative markdown link, so the check resolves it and its heading anchor. Backticked paths are for code and config files. Links in `AGENTS.md` and the skills name files that exist. A `docs/` path that code cites resolves to a doc and heading.
 3. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `decisions/` holds numbered decision records.
 4. **Decision records.** An accepted record keeps its metadata block and changes only by a section appended at its end under `## Amendment YYYY-MM-DD: <title>`. The check fails while the committed or the published text is not a prefix of the current text.
 5. **Backlog audit.** No check sees a gap in the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. A release, and a change that lands a mechanism, checks every row against its code and deletes or corrects a stale one.
@@ -160,7 +160,8 @@ This page owns virtue 6 in `AGENTS.md`. A `[judgment]` item is a Tier 3 default:
 - Each fact has one home; other docs and skills link to it. [judgment]
 - The owning doc changes in the same change as the behavior it describes. [judgment]
 - Every doc under `docs/` has an index row. [script `docs:check`, test `lib/docs/doc-index.test.ts`]
-- Links between docs, and from `AGENTS.md` and the skills, resolve with their heading anchors. [script `docs:check`, test `lib/docs/doc-links.test.ts`, test `lib/docs/heading-anchors.test.ts`, test `lib/docs/living-doc-rules.test.ts`]
+- Links between docs resolve with their heading anchors. [script `docs:check`, test `lib/docs/doc-links.test.ts`, test `lib/docs/heading-anchors.test.ts`]
+- Links from `AGENTS.md` and the skills name files that exist. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
 - A `docs/` path that a code comment, a lint message or a thrown string cites resolves. [script `docs:check`, test `lib/docs/code-citations.test.ts`]
 - A decision record grows only by dated amendments. [script `docs:check`, test `lib/docs/decision-records.test.ts`]
 - The `.claude` and `.agents` skill trees are byte-identical, except `coderabbit-review`. [script `docs:check`, test `lib/docs/skill-mirror.test.ts`]
