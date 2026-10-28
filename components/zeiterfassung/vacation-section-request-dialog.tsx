@@ -32,6 +32,7 @@ const PREVIEW_ERROR_MESSAGES = {
   no_employee_record: REQUEST_ERROR_MESSAGES.no_employee_record,
   not_authenticated: REQUEST_ERROR_MESSAGES.not_authenticated,
   not_a_member: REQUEST_ERROR_MESSAGES.not_a_member,
+  outside_request_window: REQUEST_ERROR_MESSAGES.outside_request_window,
   load_failed: 'Die Urlaubstage konnten nicht berechnet werden.',
   unexpected_error: 'Die Urlaubstage konnten nicht berechnet werden.',
 } satisfies Record<string, string>;

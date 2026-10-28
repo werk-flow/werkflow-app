@@ -4,6 +4,8 @@ export const REQUEST_ERROR_MESSAGES = {
   invalid_dates: 'Bitte gib gültige Daten an.',
   invalid_range: 'Das Enddatum darf nicht vor dem Startdatum liegen.',
   range_too_long: 'Ein Antrag kann höchstens ein Jahr umfassen. Bitte teile längere Zeiträume auf.',
+  outside_request_window:
+    'Urlaub kannst du vom 1. Januar des Vorjahres bis zum 31. Dezember des nächsten Jahres beantragen.',
   invalid_portion: 'Bitte wähle Ganztägig oder Halbtägig aus.',
   half_day_needs_single_day: 'Ein halber Urlaubstag gilt nur für einen einzelnen Tag.',
   overlap_conflict: 'Für diesen Zeitraum existiert bereits ein offener oder genehmigter Urlaubsantrag.',
