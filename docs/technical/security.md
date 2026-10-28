@@ -98,7 +98,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - A service-only list or search function revokes browser execution, and its server caller resolves organization and role before it uses the admin client. [group `sql:list-pagination`, group `sql:planning-options`]
 - A schema change follows [the migration rule](environments.md#the-migration-rule). [script `migrations:check`, script `types:check`, test `lib/security/destructive-migrations.test.ts`, test `lib/security/retired-functions.test.ts`]
 - Every public table carries `organization_id` or sits in the reviewed global-table list. [group `sql:security`]
-- DEV's Auth configuration matches the reviewed posture, and its advisors report nothing outside the reviewed exceptions. [test `lib/security/supabase-project-checks.test.ts`, script `auth:check`, script `advisors:check`]
+- DEV's Auth configuration and advisors match the reviewed posture and exceptions; seeded accounts get generated passwords. [test `lib/security/supabase-project-checks.test.ts`, script `auth:check`, script `advisors:check`, test `lib/security/demo-member-password.test.ts`]
 - Every storage key starts with the owning organization id and goes through the storage adapter. [code `lib/storage/r2.ts`, test `lib/storage/r2.test.ts`]
 - The storage adapter and the admin client never reach a browser bundle. A Server Action never takes file bytes, and only the reviewed writers store a server-generated file. [test `lib/security/storage-import-boundary.test.ts`]
 - A redirect destination from a query string goes through `resolveSafeReturnPath`. [test `lib/auth/return-path.test.ts`]
@@ -137,7 +137,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 2. For a migration, a policy or a privileged function, run `bun run test:verify --group sql:security` on the local stack, plus the SQL group that owns the touched table or function, such as `sql:closed-period-writes` or `sql:list-pagination`. Then run `bun run migrations:check` and `bun run types:check`.
 3. For a dependency change, run `bun run security:dependencies`. A network failure leaves it unverified, not passed.
 4. Before a release, the cloud canary runs `canary:security` against DEV (`bun run test:verify --target cloud`).
-5. Record the Tier 3 answers in the slice record, or in the commit message outside a slice: which permission check guards each new operation and why it is the right one, and every residual exposure with the owner's acceptance.
+5. Record the Tier 3 answers in the slice record, or in the commit message outside a slice: which permission check guards each new operation and why it fits, and every residual exposure with the owner's acceptance.
 
 ## Known residual exposure
 
