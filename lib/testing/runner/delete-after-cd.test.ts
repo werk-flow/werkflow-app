@@ -17,6 +17,8 @@ test('rm -r on a wildcard or a variable after a cd in the same command is refuse
     '(cd /tmp/ev35 && sudo rm -rf *)',
     'cd /tmp/ev35 && LC_ALL=C /bin/rm -rf *',
     'cd /tmp/ev35 && cat <<EOF > notes.txt\ndata\nEOF\nrm -rf *',
+    'cd /tmp/ev35 && \\\nrm -rf *',
+    'cd /tmp/ev35 && rm -rf * 2>&1 > "$log"',
   ])
     expect(deleteAfterCdRefusal(command), command).toContain('explicit absolute path');
 });
@@ -25,6 +27,9 @@ test('explicit absolute deletes, deletes without a cd and non-recursive deletes 
   for (const command of [
     'mkdir -p /tmp/ev35 && cd /tmp/ev35 && rm -rf /tmp/ev35/* && gh run download 123',
     'cd /tmp/ev35 && rm -rf /tmp/ev35',
+    // A redirection target is no operand.
+    'cd /tmp/ev35 && rm -rf /tmp/ev35/* > "$log" 2>&1',
+    'cd /tmp/ev35 && rm -rf /tmp/ev35/* 2>"$log"',
     'cd /tmp/ev35 && rm -rf build',
     'cd /tmp/ev35 && rm -f *.log',
     'cd /tmp/ev35 && rm -rf "*"',

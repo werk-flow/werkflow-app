@@ -12,6 +12,8 @@ type ShellWord = { text: string; globs: boolean; expands: boolean };
 const OPERATORS = new Set([';', '&', '|', '(', ')', '\n']);
 const GLOB_CHARACTERS = new Set(['*', '?', '[']);
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+const REDIRECTION = /^\d*[<>]/;
+const BARE_REDIRECTION = /^\d*[<>]+&?$/;
 const HEREDOC = /(?<!<)<<-?\s*(["']?)([^\s"';&|<>()]+)\1/g;
 
 /** The command without its heredoc bodies, which are data, not commands. */
@@ -52,7 +54,9 @@ function simpleCommands(command: string): ShellWord[][] {
       continue;
     }
     if (character === '\\') {
-      current().text += command.charAt(++index);
+      // A backslash-newline continues the line and adds nothing.
+      const escaped = command.charAt(++index);
+      if (escaped !== '\n') current().text += escaped;
       continue;
     }
     if (character === '$' || character === '`') current().expands = true;
@@ -68,7 +72,7 @@ function simpleCommands(command: string): ShellWord[][] {
       while (index + 1 < command.length && command.charAt(index + 1) !== '\n') index++;
     } else if (character === ' ' || character === '\t') {
       endWord();
-    } else if (OPERATORS.has(character)) {
+    } else if (OPERATORS.has(character) && !(character === '&' && /[<>]$/.test(word?.text ?? ''))) {
       endWord();
       commands.push(words);
       words = [];
@@ -87,7 +91,17 @@ function program(words: ShellWord[]): { name: string; args: ShellWord[] } | unde
   const start = words.findIndex((word) => !ASSIGNMENT.test(word.text) && word.text !== 'sudo');
   const head = words[start];
   if (!head) return undefined;
-  return { name: head.text.slice(head.text.lastIndexOf('/') + 1), args: words.slice(start + 1) };
+  return {
+    name: head.text.slice(head.text.lastIndexOf('/') + 1),
+    args: withoutRedirections(words.slice(start + 1)),
+  };
+}
+
+/** The arguments without redirections (`> "$log"`, `2>&1`) and their targets, which are no operands. */
+function withoutRedirections(args: readonly ShellWord[]): ShellWord[] {
+  return args.filter(
+    (arg, index) => !REDIRECTION.test(arg.text) && !BARE_REDIRECTION.test(args[index - 1]?.text ?? ''),
+  );
 }
 
 function isRecursive(args: readonly ShellWord[]): boolean {
