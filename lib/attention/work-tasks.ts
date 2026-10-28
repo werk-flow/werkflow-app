@@ -226,9 +226,11 @@ export async function deriveWorkArtifactTasks(context: ActionContext): Promise<D
           .range(from, to),
       LIST_ROW_CAP,
     ),
+    // The service role reads the defects; an employee's tasks keep only the
+    // defects of artifacts that artifactReader returns for them.
     readCompleteRows(
       (from, to) =>
-        artifactReader
+        admin
           .from('work_artifact_defect_details')
           .select('revision_id, due_date, severity, state, responsible_employee_record_id')
           .eq('organization_id', context.orgId)
