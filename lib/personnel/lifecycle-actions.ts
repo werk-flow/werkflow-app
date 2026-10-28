@@ -17,12 +17,8 @@ import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admi
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { getSupabaseSecretKey } from '@/lib/env/server';
 import type { Database, Json } from '@/lib/supabase/database.types';
-import {
-  createSignedDownloadUrl,
-  createSignedUploadUrl,
-  discardStorageObjects,
-  headStorageObject,
-} from '@/lib/storage/r2';
+import { createSignedDownloadUrl, createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { acceptPersonnelUpload, discardPersonnelUpload, readPersonnelUploadOwner } from './upload-storage';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES, DOCUMENT_STORAGE_BUCKET } from '@/lib/documents/types';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
 import {
@@ -1093,19 +1089,14 @@ export async function cleanupPersonnelDocumentUpload(input: unknown): Promise<Li
     })
   )
     return { success: false, error: 'not_authorized' };
-  const { data: owner, error: ownerError } = await loggedRead(
+  const upload = { admin: context.admin, organizationId: context.organizationId, storagePath };
+  const owner = await readPersonnelUploadOwner(
+    upload,
     'cleanupPersonnelDocumentUpload: documents read failed',
-    context.admin
-      .from('documents')
-      .select('id')
-      .eq('organization_id', context.organizationId)
-      .eq('storage_path', storagePath)
-      .maybeSingle(),
   );
-  // Only a completed read proves that no document owns the object.
-  if (ownerError) return { success: false, error: 'load_failed' };
+  if (owner === undefined) return { success: false, error: 'load_failed' };
   if (owner) return { success: true };
-  await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
+  await discardPersonnelUpload(upload);
   const { error: auditError } = await context.admin.from('document_audit_events').insert({
     organization_id: context.organizationId,
     actor_id: context.actorId,
@@ -1146,11 +1137,9 @@ export async function finalizePersonnelDocumentUpload(
     })
   )
     return { success: false, error: 'not_authorized' };
-  const head = await headStorageObject({ organizationId: context.organizationId, path: storagePath }).catch(
-    () => null,
-  );
-  if (!head?.exists || !head.sizeBytes || head.sizeBytes <= 0)
-    return { success: false, error: 'file_missing' };
+  const upload = { admin: context.admin, organizationId: context.organizationId, storagePath };
+  const head = await acceptPersonnelUpload(upload);
+  if (!head.success) return head;
   if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
     await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
     return { success: false, error: 'file_too_large' };
@@ -1176,18 +1165,13 @@ export async function finalizePersonnelDocumentUpload(
   });
   if (error || !data) {
     const normalized = lifecycleFailureCode(error);
-    const { data: owner, error: ownerError } = await loggedRead(
+    const owner = await readPersonnelUploadOwner(
+      upload,
       'finalizePersonnelDocumentUpload: documents read failed',
-      context.admin
-        .from('documents')
-        .select('id')
-        .eq('organization_id', context.organizationId)
-        .eq('storage_path', storagePath)
-        .maybeSingle(),
     );
-    // Only a completed read proves that no document owns the object; a failed read keeps it.
-    if (ownerError) return { success: false, error: normalized };
-    if (!owner) await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
+    // A failed read keeps the object.
+    if (owner === null)
+      await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
     return { success: false, error: normalized };
   }
   revalidatePersonnel();

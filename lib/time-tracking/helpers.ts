@@ -415,28 +415,24 @@ export function determineApprovalStatus(
 }
 
 /**
- * Check if a user can manage another user's time entries
+ * Whether the caller may edit or delete an entry directly.
  *
  * Rules:
- * - Admin can manage all entries in their org
- * - Manager can manage entries for roles below them (accountant, secretary, employee)
- * - Others cannot manage anyone's entries
+ * - Admin manages every entry of the organization, their own included; the
+ *   database records each change of an own entry as an audit event
+ * - Büro manages the entries of employees; their own change goes through a
+ *   Zeitkorrektur with a second approver
+ * - Others manage no entry directly
  */
 export function canManageEntries(callerRole: OrgRole, targetRole: OrgRole, isOwnEntry: boolean): boolean {
-  // Admin can manage all entries
   if (callerRole === 'admin') {
     return true;
   }
 
-  // Manager can manage entries for managed roles and their own
   if (callerRole === 'buero') {
-    if (isOwnEntry) {
-      return true;
-    }
-    return MANAGED_ROLES.includes(targetRole);
+    return !isOwnEntry && MANAGED_ROLES.includes(targetRole);
   }
 
-  // Others cannot manage entries (not even their own for updates/deletes)
   return false;
 }
 

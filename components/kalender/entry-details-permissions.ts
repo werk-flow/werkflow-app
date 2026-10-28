@@ -39,7 +39,8 @@ export function getEntryDetailsPermissions({
     if (hasCanonicalSegment || inClosedPeriod) return false;
     if (currentUserRole === 'admin') return true;
     if (currentUserRole === 'buero') {
-      if (isOwnEntry) return true;
+      // Büro changes their own time through a Zeitkorrektur, as the server requires.
+      if (isOwnEntry) return false;
       if (effectiveEntryUserRole && effectiveEntryUserRole !== 'employee') {
         return false;
       }
