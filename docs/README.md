@@ -20,10 +20,10 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 
 ## Add, change and remove docs
 
-- **Add** a doc only when a rule, decision or procedure has no home in the index below. Prefer a section in the owning doc. A new doc gets a status line and an index row in the same change.
-- **Change** the owning doc in the same change as the behavior or rule it describes. A fact has one home. Other docs and skills link to it and do not repeat it.
-- **Remove** a sentence when it is derivable from code, when its rule no longer holds, or when another doc owns it. Remove a whole doc when nothing in it passes the table above. Deleting is a normal edit, and Git keeps the old text.
-- **Budget.** `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs and product docs have no budget. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
+- **Add** a doc only when a rule, decision or procedure has no home in the index below. Prefer a section in the owning doc. Give a new doc an index row in the same change, and no status line: Git dates every change.
+- **Change** the owning doc in the same change as the behavior or rule it describes. A fact has one home. Other docs and skills link to it.
+- **Remove** a sentence when the code says it, its rule no longer holds, or another doc owns it. Remove a doc when nothing in it passes the table above. Git keeps the old text.
+- **Budget.** `docs:check` measures the word budget of each technical doc, `AGENTS.md`, this index and each skill file. `lib/docs/doc-policy.ts` is the one home of every budget and exemption. Change one only by the owner's decision. To fit new text, cut text that restates code.
 
 ## Index
 
@@ -77,7 +77,7 @@ Read the spec of the feature you change, plus only the connected specs your chan
 
 ### Decision records (`docs/decisions/`)
 
-A decision record states why a durable choice was made. It is immutable once accepted and grows only by dated amendments ([maintenance rule 8](#maintenance-rules)).
+A decision record states why a durable choice was made. It is immutable once accepted and grows only by dated amendments ([maintenance rules](#maintenance-rules)).
 
 | Doc | Decision |
 | --- | --- |
@@ -113,19 +113,19 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 
 ## Maintenance rules
 
-`bun run docs:check` enforces the mechanical part of these rules. Run it after every docs change.
+Run `bun run docs:check` after every docs change. It checks the index, the links, the decision records, the budgets and the sibling repositories.
 
-1. **Status line.** Line 3 of every doc, under the H1 and one blank line, is its status. A living doc uses `Status: living — last reviewed YYYY-MM-DD`, optionally followed by `; <clause>`. Every change to a living doc reviews it, so the date moves to the day of the change: `docs:check` fails while the doc's last commit, or today for an uncommitted change, is newer than the date. A closed doc uses `Status: closed (YYYY-MM-DD) — <what it remains useful for>`. A decision record uses its metadata block that starts with `- **Status:** accepted (YYYY-MM-DD)`.
-2. **One home per fact.** See "Add, change and remove docs" above.
-3. **Link syntax.** A reference from one doc to another inside `docs/` is a relative markdown link, so that the check can resolve it. Backtick paths are for code and config files and for references from outside `docs/`. A bare id ("decision 0002") carries a link on its first mention in a doc.
-4. **The index is exhaustive.** Every Markdown file under `docs/` has a row above, except this index.
-5. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `decisions/` holds numbered decision records.
-6. **History lives in Git.** A pointer to old text is not a home: the living doc states the substance.
-7. **Sibling repositories.** `docs:check` needs the sibling clones of the [workspace setup](../../werkflow-business/docs/workflow.md#prepare-a-new-machine). It reads them and never edits them. It looks for them beside the main checkout, so a worktree can sit in any folder under any name. A missing clone fails the check once, with the number of links it left unchecked.
-8. **Decision record growth.** An accepted decision record changes only by a section appended at its end under the heading `## Amendment YYYY-MM-DD: <title>`. `docs:check` fails while the committed or the published text of a record is not a prefix of its current text.
-9. **Backlog audit.** A row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) describes code that keeps changing, and no check sees a gap close. A release, and a change that lands a mechanism, checks every row against the code it names and deletes or corrects a stale one.
+1. **Index.** Every Markdown file under `docs/` has a row above, except this index.
+2. **Links.** A reference between docs is a relative markdown link, so the check resolves it and its heading anchor. Backticked paths are for code and config files. Links in `AGENTS.md` and the skills resolve. A `docs/` path that code cites resolves to a doc and heading.
+3. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `decisions/` holds numbered decision records.
+4. **Decision records.** An accepted record keeps its metadata block and changes only by a section appended at its end under `## Amendment YYYY-MM-DD: <title>`. The check fails while the committed or the published text is not a prefix of the current text.
+5. **Backlog audit.** No check sees a gap in the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) close. A release, and a change that lands a mechanism, checks every row against its code and deletes or corrects a stale one.
 
-`docs:check` cannot judge meaning. Whether a sentence is derivable from code, whether a paraphrase gives a fact a second home, and whether a living doc carries history are review judgments under virtue 6 in `AGENTS.md`.
+### Sibling repositories
+
+`docs:check` reads the sibling clones of the [workspace setup](../../werkflow-business/docs/workflow.md#prepare-a-new-machine) and never edits them. It looks for them beside the main checkout, so a worktree may sit in any folder. It checks links in both directions, a link back from each sibling's `AGENTS.md`, and that every copy of a shared skill equals its canonical copy in werkflow-business. A missing clone fails once, with the number of links it left unchecked.
+
+`docs:check` cannot judge meaning. Whether a sentence restates code, has a second home or carries history is review under virtue 6.
 
 ## How to work
 
@@ -140,7 +140,7 @@ Wrong turn: describing what you built, file by file. The code already says it, a
 
 1. Route the subject through the index above to its owning doc, and `git grep` a key phrase to find an existing statement.
 2. If a statement exists, change it there and link to it from elsewhere.
-3. Put product behavior into the spec's **Current Product Baseline**, a system rule into its technical doc, a durable choice into a decision record, and history into the commit message or the incident log.
+3. Put product behavior into the spec's **Current Product Baseline**, a system rule into its technical doc and a durable choice into a decision record. Leave history to Git.
 
 Wrong turn: a new section or a new doc for one change. The fact gets a second home, and the two drift.
 
@@ -154,46 +154,34 @@ Wrong turn: a new paragraph under the old one. The doc grows a layer per change 
 
 ## Checklist
 
-This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechanism. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../AGENTS.md#how-to-read-the-virtues) says how to diverge.
+This page owns virtue 6 in `AGENTS.md`. A `[judgment]` item is a Tier 3 default: [how to read the virtues](../AGENTS.md#how-to-read-the-virtues) says how to diverge.
 
-- Every sentence holds something the code and the database cannot say: intent, a decision, a rule with its mechanism, a procedure, or an accepted limit. [judgment]
-- Each fact has one home, and other docs and skills link to it: no sentence of twelve or more words stands in two living docs, `AGENTS.md` or skills unless decision 0004 lists it. A paraphrase is review. [script `docs:check`, test `lib/docs/one-home.test.ts`, judgment]
-- The owning doc changes in the same change as the behavior or rule it describes, and its status date moves with the change (maintenance rule 1). [script `docs:check`, test `lib/docs/review-stamps.test.ts`, judgment]
-- Every doc under `docs/` has its status line on line 3 in its genre's shape (maintenance rule 1). [script `docs:check`, test `lib/docs/status-lines.test.ts`]
-- Every doc has an index row on this page (maintenance rule 4), and a row's status prefix agrees with its doc. [script `docs:check`, test `lib/docs/doc-index.test.ts`]
-- A reference between docs is a relative markdown link that resolves, including its heading anchor (maintenance rule 3). [script `docs:check`, test `lib/docs/doc-links.test.ts`, test `lib/docs/heading-anchors.test.ts`]
-- A decision record grows only by dated amendment sections (maintenance rule 8). [script `docs:check`, test `lib/docs/decision-records.test.ts`]
-- `AGENTS.md` and the skills link only to files that exist. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
-- A `docs/` path that a code comment, a lint message or a thrown string cites names a document and heading that exist. Applied migrations are exempt. [script `docs:check`, test `lib/docs/code-citations.test.ts`]
-- A living doc carries no date outside its status line and no commit hash, except where the settings table of decision 0004 exempts it with a reason. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
-- Living technical docs, `AGENTS.md`, this index and every skill file stay within their word budgets, and the checker's budgets and exemptions equal the latest settings table of decision 0004. [script `docs:check`, test `lib/docs/doc-policy.test.ts`]
-- Each virtue's owner doc carries "How to work", "Checklist", "Never", "Verify your work" and "Examples", each with at least one list item. Every checklist and "Never" item ends with a mechanism tag that names something real, and a lint tag names a rule the configuration enables or a set it declares and uses. Every custom lint rule, every selector set in `eslint.config.mjs` and every test under `lib/conventions/`, `lib/ui/` and `lib/security/`, and every rule test under `lib/testing/`, is named by `AGENTS.md` or an owner doc. [test `lib/docs/virtue-standards.test.ts`, test `lib/docs/lint-config.test.ts`]
-- The "Enforced by" lines of `AGENTS.md` name mechanisms that exist, each one tagged by the virtue's owner docs, and they name or cover by folder, group family or `static:lint` every mechanism those docs tag. [test `lib/docs/virtue-standards.test.ts`]
-- An owner doc's `[judgment]` tags never outnumber its entry in `lib/docs/judgment-ratchet.json`, which falls with them and rises only with the owner's reason. [script `docs:check`, test `lib/docs/judgment-ratchet.test.ts`]
-- The flow catalog's ids are unique and sequential. [script `docs:check`, test `lib/docs/flow-catalog.test.ts`]
-- In living docs, `AGENTS.md` and the skills, a backticked route handler names a folder under `app/api/`, and a backticked repository path resolves. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
-- Every incident-log entry names the tier where its prevention landed. [script `docs:check`, test `lib/docs/incident-tiers.test.ts`]
-- In living docs, `AGENTS.md` and the skills, a German quotation that opens with „ closes with “. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
-- Links between the app and its sibling clones resolve in both directions, each sibling's `AGENTS.md` links back to the app's, and every copy of a shared skill equals its canonical copy in the business repository. [script `docs:check`, test `lib/docs/workspace-links.test.ts`]
+- Every sentence holds what the code and the database cannot say. [judgment]
+- Each fact has one home; other docs and skills link to it. [judgment]
+- The owning doc changes in the same change as the behavior it describes. [judgment]
+- Every doc under `docs/` has an index row. [script `docs:check`, test `lib/docs/doc-index.test.ts`]
+- Links between docs, and from `AGENTS.md` and the skills, resolve with their heading anchors. [script `docs:check`, test `lib/docs/doc-links.test.ts`, test `lib/docs/heading-anchors.test.ts`, test `lib/docs/living-doc-rules.test.ts`]
+- A `docs/` path that a code comment, a lint message or a thrown string cites resolves. [script `docs:check`, test `lib/docs/code-citations.test.ts`]
+- A decision record grows only by dated amendments. [script `docs:check`, test `lib/docs/decision-records.test.ts`]
 - The `.claude` and `.agents` skill trees are byte-identical, except `coderabbit-review`. [script `docs:check`, test `lib/docs/skill-mirror.test.ts`]
-- Agent-facing instructions route CodeRabbit through `bun run review`. [test `lib/testing/publication/coderabbit-review-command.test.ts`]
-- Prose follows the `unslop` skill, and the `technical-writing` or `writing-for-agents` skill for its genre. [judgment]
+- Links to and from the sibling repositories resolve, and each shared skill equals its canonical copy. [script `docs:check`, test `lib/docs/workspace-links.test.ts`]
+- Technical docs, `AGENTS.md`, this index and every skill file stay within their word budgets. [script `docs:check`, test `lib/docs/doc-policy.test.ts`]
+- Prose follows `unslop`, and `technical-writing` or `writing-for-agents` for its genre. [judgment]
 - A divergence from a Tier 3 default is recorded where `AGENTS.md` says. [judgment]
 
 ## Never
 
-- The prohibitions of virtue 6 in `AGENTS.md`, which owns their wording; dates, commit hashes and copied sentences fail the check, the rest is review. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`, test `lib/docs/one-home.test.ts`, judgment]
-- Reference a doc inside `docs/` by a backticked path instead of a link. [script `docs:check`]
-- Cite a rule by a number ("testing rule" with a number) in a living doc, a skill or code. Only this index numbers its rules; link the heading that states the rule. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
-- Change a word budget or an exemption without the owner's decision recorded as an amendment to [decision 0004](decisions/0004-documentation-structure.md). To fit new text, cut text that restates code. [test `lib/docs/doc-policy.test.ts`]
+- The prohibitions of virtue 6 in `AGENTS.md`, which owns their wording. [judgment]
+- Add a status line or a review date to a doc. [judgment]
+- Change a word budget or an exemption without the owner's decision. [judgment]
 - Rewrite an accepted decision record in place. [script `docs:check`, test `lib/docs/decision-records.test.ts`]
 
 ## Verify your work
 
-1. Run `bun run docs:check`. A pass prints `docs:check passed` with the number of docs.
-2. If you changed the checker, run `bun run test:unit lib/docs` and lint `scripts/check-docs.ts` and `lib/docs` with ESLint.
-3. Read each changed sentence against "What a doc may contain" above. Delete a sentence that restates code, carries history or has another home.
-4. Record a judgment call (a kept sentence you were unsure about, a divergence from a default) in the commit message.
+1. Run `bun run docs:check`. A pass prints `docs:check passed`.
+2. If you changed the checker, run `bun run test:unit lib/docs` and `bun run lint`.
+3. Read each changed sentence against [what a doc may contain](#what-a-doc-may-contain). Delete a sentence that restates code, carries history or has another home.
+4. Record a judgment call where `AGENTS.md` says.
 
 ## Examples
 

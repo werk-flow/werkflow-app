@@ -70,12 +70,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      # docs:check reads the review dates and the decision records' history.
+      # docs:check reads the decision records' history.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      # docs:check reads the sibling clones beside the app (docs/README.md, maintenance rule 7).
+      # docs:check reads the sibling clones beside the app (docs/README.md, "Sibling repositories").
       - name: Clone the sibling repositories
         env:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
