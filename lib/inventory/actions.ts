@@ -376,9 +376,8 @@ async function recordMovement(
   );
 
   if (error) {
-    logError('Error recording inventory movement.', {
-      code: error.code ?? 'unknown',
-    });
+    if (error.message === 'return_exceeds_taken') return { success: false, error: 'return_exceeds_taken' };
+    logError('Error recording inventory movement.', { code: error.code ?? 'unknown' });
     if (error.message?.includes('inventory stock cannot go below zero')) {
       return { success: false, error: 'stock_would_go_negative' };
     }
