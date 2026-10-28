@@ -50,6 +50,9 @@ const SYNCHRONOUS_TABLES = [
   // Per-person forms of the time rules page, rendered from its page payload;
   // the route's loading.tsx owns the skeleton of the whole page.
   'components/zeiterfassung/time-account-person-table.tsx',
+  // The Admins' own direct changes, rendered from the Verlauf's read in
+  // entry-history.tsx, whose skeleton and failure cover the section.
+  'components/zeiterfassung/own-entry-changes.tsx',
 ];
 
 type Opening = ts.JsxOpeningElement | ts.JsxSelfClosingElement;

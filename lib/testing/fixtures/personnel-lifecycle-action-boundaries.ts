@@ -122,6 +122,12 @@ mock.module('@/lib/storage/r2', () => ({
     storageCalls.push(`head:${path}`);
     return { exists: true, sizeBytes: 100, contentType: 'application/pdf' };
   },
+  promoteUploadedObject: async ({ path }: { path: string }) => {
+    storageCalls.push(`promote:${path}`);
+    return { exists: true, sizeBytes: 100, contentType: 'application/pdf' };
+  },
+  uploadStagingPath: (organizationId: string, path: string) =>
+    `${organizationId}/staging/${path.slice(organizationId.length + 1)}`,
 }));
 const {
   acknowledgePersonnelDocument,
@@ -320,3 +326,56 @@ assert.equal(world.rpcCalls.length, 3);
 assertCallerScopedCalls(world);
 assert.deepEqual(storageCalls, []);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');
+
+// An Admin's upload: the first finalize copies the staged upload to the document key,
+// and a replay of the finalized upload reads the registered object without copying
+// over it. A cleanup of an unregistered upload removes its staging key too.
+signInAs(world, 'admin');
+storageCalls.length = 0;
+world.tables.documents = [];
+const issueTicket = async () => {
+  const issued = await ticket(colleagueRecordId, 'admin_restricted');
+  assert.ok(issued.success, JSON.stringify(issued));
+  const request = {
+    ...upload,
+    employeeRecordId: colleagueRecordId,
+    accessClass: 'admin_restricted' as const,
+    documentId: issued.data.documentId,
+    cleanupToken: issued.data.cleanupToken,
+  };
+  return { request, path: `${ORGANIZATION_A}/${issued.data.documentId}/nachweis.pdf` };
+};
+const registered = await issueTicket();
+const rpcBeforeUploads = world.rpc;
+world.rpc = (call) =>
+  call.name === 'finalize_personnel_document_metadata'
+    ? { data: registered.request.documentId, error: null }
+    : rpcBeforeUploads(call);
+const finalizeRegistered = () =>
+  finalizePersonnelDocumentUpload({
+    ...registered.request,
+    documentType: 'Vertrag',
+    evidenceState: 'valid',
+    validUntil: null,
+  });
+const finalized = { success: true, data: { documentId: registered.request.documentId } };
+// A finalize whose registration read fails reports it and touches no storage.
+world.failingTables.add('documents');
+assert.deepEqual(await finalizeRegistered(), { success: false, error: 'load_failed' });
+world.failingTables.delete('documents');
+assert.deepEqual(await finalizeRegistered(), finalized);
+world.tables.documents.push({
+  id: registered.request.documentId,
+  organization_id: ORGANIZATION_A,
+  storage_path: registered.path,
+});
+assert.deepEqual(await finalizeRegistered(), finalized);
+const abandoned = await issueTicket();
+assert.deepEqual(await cleanupPersonnelDocumentUpload(abandoned.request), { success: true });
+assert.deepEqual(storageCalls, [
+  `upload:${registered.path}`,
+  `promote:${registered.path}`,
+  `head:${registered.path}`,
+  `upload:${abandoned.path}`,
+  `discard:${ORGANIZATION_A}/staging/${abandoned.path.slice(ORGANIZATION_A.length + 1)},${abandoned.path}`,
+]);

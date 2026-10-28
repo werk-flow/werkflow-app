@@ -352,10 +352,7 @@ function validateEntryEdit(
   return null;
 }
 
-/**
- * Update a time entry (admin/manager only)
- * For managers editing their own entries, creates a change request for admin approval
- */
+/** Edits a time entry directly: Admin any entry, Büro an employee's entry. */
 export async function updateEntry(
   rawEntryId: string,
   rawFields: { timestamp?: string; entryType?: TimeEntryType; jobId?: string | null },
@@ -448,28 +445,21 @@ export async function updateEntry(
       }
     }
 
-    // Direct update (admin or manager editing managed role's entry)
-    const updateData: Record<string, unknown> = {};
-    if (fields.timestamp) updateData.timestamp = fields.timestamp;
-    if (fields.entryType !== undefined) updateData.entry_type = fields.entryType;
-    if (fields.jobId !== undefined) {
-      updateData.job_id = fields.jobId;
-    }
+    // Only the named fields change. The function refuses an own entry for
+    // every caller but an Admin, and records an Admin's own change.
+    const changes: { timestamp?: string; entry_type?: TimeEntryType; job_id?: string | null } = {};
+    if (fields.timestamp) changes.timestamp = fields.timestamp;
+    if (fields.entryType !== undefined) changes.entry_type = fields.entryType;
+    if (fields.jobId !== undefined) changes.job_id = fields.jobId;
 
-    const { data: updatedEntry, error: updateError } = await admin
-      .from('time_entries')
-      .update(updateData)
-      .eq('id', entryId)
-      .eq('organization_id', entry.organization_id)
-      .select()
-      .single();
-
-    if (updateError || !updatedEntry) {
-      return {
-        success: false,
-        error: timeWriteFailure('Error updating entry:', updateError, 'update_failed'),
-      };
-    }
+    const { data: updatedEntry, error: updateError } = await admin.rpc('update_time_entry', {
+      p_actor_id: user.id,
+      p_organization_id: entry.organization_id,
+      p_entry_id: entryId,
+      p_changes: changes,
+    });
+    if (updateError) return timeEntryBatchFailure('Error updating entry:', updateError, 'update_failed');
+    if (!updatedEntry) return { success: false, error: 'update_failed' };
 
     return { success: true, entry: toTimeEntry(updatedEntry) };
   } catch (error) {
@@ -479,8 +469,7 @@ export async function updateEntry(
 }
 
 /**
- * Delete a time entry (admin/manager only)
- * For managers deleting their own entries, creates a change request for admin approval
+ * Deletes a time entry directly: Admin any entry, Büro an employee's entry.
  * @param entryId - The ID of the entry to delete (typically clock_in for pairs)
  * @param pairedEntryId - Optional ID of paired entry (clock_out) for paired delete requests
  */
@@ -558,21 +547,20 @@ export async function deleteEntry(
       }
     }
 
-    // One statement deletes the entry and its verified pair together, so a
+    // One function call deletes the entry and its verified pair together, so a
     // refused delete (an entry a work artifact or correction still references)
-    // never leaves half of the pair behind.
-    const { error: deleteError } = await admin
-      .from('time_entries')
-      .delete()
-      .in('id', [entryId, pairedEntryId ?? entryId])
-      .eq('organization_id', entry.organization_id);
-
-    if (deleteError) {
-      return {
-        success: false,
-        error: timeWriteFailure('Error deleting entry:', deleteError, 'delete_failed'),
-      };
-    }
+    // never leaves half of the pair behind. It refuses an own entry for every
+    // caller but an Admin, and records an Admin's own deletion.
+    const { error: deleteError } = await admin.rpc(
+      'delete_time_entries',
+      rpcArgs('delete_time_entries', {
+        p_actor_id: user.id,
+        p_organization_id: entry.organization_id,
+        p_entry_ids: [...new Set([entryId, pairedEntryId ?? entryId])],
+        p_authorized_user_ids: [entry.user_id],
+      }),
+    );
+    if (deleteError) return timeEntryBatchFailure('Error deleting entry:', deleteError, 'delete_failed');
 
     return { success: true };
   } catch (error) {

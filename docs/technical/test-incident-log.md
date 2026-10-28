@@ -32,6 +32,34 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Prevention: Tier 2: lib/calendar/messages.test.ts caught it before push
 - Correction: `lib/calendar/messages.ts` carries a sentence for `job_not_assigned`.
 - Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T075903437Z-2fe989ec`.
+<!-- incident-run: unit:all@2026-10-28T063311071Z-86b16519 -->
+
+- Run: run `unit:all@2026-10-28T063311071Z-86b16519`, group `unit:all`, target local, fingerprint `e9bc6cc776a3`.
+- Failure point: unit:all in report 2026-10-28T063311071Z-86b16519: Command exited 1; inspect .agent-logs/verification/2026-10-28T063311071Z-86b16519/unit-all.log
+- Root cause: the migration rule flagged the new audit table's default-grant revoke, and the new Verlauf table had no row contract entry
+- Prevention: Tier 2: lib/security/destructive-migrations.test.ts now exempts a revoke on a table the migration creates, with planted cases; lib/ui/row-contracts.test.ts lists the section
+- Correction: the migration rule exempts a table revoke on a table the same migration creates, as it already did for tightening statements; the Verlauf section renders from the entry history's read and is listed as a synchronous table.
+- Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T063924718Z-455355ae`.
+
+## 2026-10-28: sql:security environment failure
+
+<!-- incident-run: sql:security@2026-10-28T063035424Z-2f6b8b68 -->
+
+- Run: run `sql:security@2026-10-28T063035424Z-2f6b8b68`, group `sql:security`, target local, fingerprint `70a0e5667ba2`.
+- Failure point: sql:security in report 2026-10-28T063035424Z-2f6b8b68: Command exited 1; inspect .agent-logs/verification/2026-10-28T063035424Z-2f6b8b68/sql-security.log
+- Root cause: shared local stack carries another worktree's unmerged migration 20261028090000 whose definer function this branch does not inventory
+- Prevention: no prevention claim
+
+## 2026-10-28: unit:all product failure
+
+<!-- incident-run: unit:all@2026-10-28T063035424Z-2f6b8b68 -->
+
+- Run: run `unit:all@2026-10-28T063035424Z-2f6b8b68`, group `unit:all`, target local, fingerprint `df4ab1f91342`.
+- Failure point: unit:all in report 2026-10-28T063035424Z-2f6b8b68: Command exited 1; inspect .agent-logs/verification/2026-10-28T063035424Z-2f6b8b68/unit-all.log
+- Root cause: own-entry change left three registries stale and the new audit reader without a boundary fixture
+- Prevention: Tier 2: lib/conventions/id-list-batches.test.ts, lib/conventions/module-caps.test.ts and lib/security/boundary-coverage.test.ts caught it before push
+- Correction: removed the stale bounded-list entry, lowered the two size ceilings, and drove `getTimeEntryAuditEvents` with a foreign organization and an employee in `lib/testing/fixtures/time-entry-write-boundaries-uuids.ts`.
+- Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T063924718Z-455355ae`.
 
 ## 2026-10-28: sql:security environment failure
 

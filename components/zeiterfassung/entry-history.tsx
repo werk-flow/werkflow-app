@@ -11,11 +11,10 @@ import { SectionError } from '@/components/ui/section-error';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
-import { cn, formatBerlinDateTime, parseIsoLocalDate } from '@/lib/utils';
-import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { cn, formatBerlinDateTime } from '@/lib/utils';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
-import type { TimeEntry, TimeEntryStatus } from '@/lib/time-tracking/types';
+import type { TimeEntry, TimeEntryAuditEvent, TimeEntryStatus } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
@@ -23,6 +22,8 @@ import { TimeCorrectionDialog } from './time-correction-dialog';
 import { useClosedTimePeriods } from './use-closed-time-periods';
 import type { MemberListEntry } from '@/lib/members/profile-name';
 import { EntryHistoryFilters } from './entry-history-filters';
+import { ENTRY_TYPE_LABELS, OwnEntryChanges } from './own-entry-changes';
+import { historyRange, useHistoryDates } from './entry-history-range';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
 const NEW_ENTRY_ID = 'new';
@@ -30,6 +31,8 @@ const NEW_ENTRY_ID = 'new';
 interface EntryHistoryProps {
   organizationId: string;
   members?: MemberListEntry[];
+  /** Admin and Büro also see the Admins' own direct changes in the window. */
+  showOwnEntryChanges?: boolean;
 }
 
 interface EntryWithProfile extends TimeEntry {
@@ -95,9 +98,7 @@ function getEntryTypeLabel(entry: TimeEntry): string {
   } as const;
   const direction = entry.entryType === 'clock_in' || entry.entryType === 'break_start' ? 'Start' : 'Ende';
   if (entry.activityKind) return `${activityLabels[entry.activityKind]} · ${direction}`;
-  if (entry.entryType === 'break_start') return 'Pause starten';
-  if (entry.entryType === 'break_end') return 'Pause beenden';
-  return entry.entryType === 'clock_in' ? 'Einstempeln' : 'Ausstempeln';
+  return ENTRY_TYPE_LABELS[entry.entryType];
 }
 
 function getEntryHistoryDisplayName(entry: EntryWithProfile): string {
@@ -113,7 +114,11 @@ type EntryHistoryQuery = {
   dateTo: Date | undefined;
   statusFilter: string;
   memberFilter: string;
+  /** Also read the Admins' own direct changes of the window (Admin and Büro). */
+  withOwnChanges: boolean;
 };
+
+type EntryHistoryData = { entries: EntryWithProfile[]; ownChanges: TimeEntryAuditEvent[] };
 
 type ProfileNames = Map<string, { firstName: string | null; lastName: string | null }>;
 
@@ -123,31 +128,32 @@ type ProfileNames = Map<string, { firstName: string | null; lastName: string | n
  * only for people the view has not shown yet.
  */
 async function readEntryHistory(
-  { organizationId, dateFrom, dateTo, statusFilter, memberFilter }: EntryHistoryQuery,
+  { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges }: EntryHistoryQuery,
   knownNames: ProfileNames,
   signal: AbortSignal,
-): Promise<LiveViewResult<EntryWithProfile[]>> {
+): Promise<LiveViewResult<EntryHistoryData>> {
   // The view reads only with a complete date range (`enabled` below).
   if (!dateFrom || !dateTo) return { ok: false };
   try {
-    const fromDate = new Date(dateFrom);
-    fromDate.setHours(0, 0, 0, 0);
-    const toDate = new Date(dateTo);
-    toDate.setHours(23, 59, 59, 999);
+    const range = historyRange(dateFrom, dateTo);
+    const member = memberFilter !== 'all' ? { userId: memberFilter } : {};
+    const [result, ownChanges] = await Promise.all([
+      readInBackground(
+        'time-entries',
+        {
+          organizationId,
+          ...range,
+          ...(statusFilter !== 'all' ? { status: statusFilter as TimeEntryStatus } : {}),
+          ...member,
+        },
+        signal,
+      ),
+      withOwnChanges
+        ? readInBackground('time-entry-audit-events', { organizationId, ...range, ...member }, signal)
+        : { success: true as const, events: [] },
+    ]);
 
-    const result = await readInBackground(
-      'time-entries',
-      {
-        organizationId,
-        from: fromDate.toISOString(),
-        to: toDate.toISOString(),
-        ...(statusFilter !== 'all' ? { status: statusFilter as TimeEntryStatus } : {}),
-        ...(memberFilter !== 'all' ? { userId: memberFilter } : {}),
-      },
-      signal,
-    );
-
-    if (!result.success) return { ok: false };
+    if (!result.success || !ownChanges.success) return { ok: false };
 
     const unknownUserIds = [...new Set(result.entries.map((e) => e.userId))].filter(
       (userId) => !knownNames.has(userId),
@@ -172,11 +178,14 @@ async function readEntryHistory(
     // Sort by reviewedAt descending (most recent first), fallback to createdAt
     return {
       ok: true,
-      data: entriesWithProfiles.sort((a, b) => {
-        const dateA = a.reviewedAt ? new Date(a.reviewedAt).getTime() : new Date(a.createdAt).getTime();
-        const dateB = b.reviewedAt ? new Date(b.reviewedAt).getTime() : new Date(b.createdAt).getTime();
-        return dateB - dateA;
-      }),
+      data: {
+        entries: entriesWithProfiles.sort((a, b) => {
+          const dateA = a.reviewedAt ? new Date(a.reviewedAt).getTime() : new Date(a.createdAt).getTime();
+          const dateB = b.reviewedAt ? new Date(b.reviewedAt).getTime() : new Date(b.createdAt).getTime();
+          return dateB - dateA;
+        }),
+        ownChanges: ownChanges.events,
+      },
     };
   } catch {
     // A transport failure; the server logs its own failures.
@@ -342,20 +351,35 @@ function EntryHistoryTable({
   );
 }
 
-export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps) {
+/** The found entries: their count, the closed-month note, and the cards or the table. */
+function EntryHistoryResults(props: EntryHistoryRowsProps) {
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">
+        {props.entries.length} {props.entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
+      </p>
+      {props.entries.some((entry) => isEntryInClosedPeriod(entry, props.closedPeriods)) && (
+        <p className="text-sm text-muted-foreground">
+          Einträge in abgeschlossenen Monaten lassen sich nicht korrigieren. Ein Admin muss die Periode zuerst
+          wieder öffnen.
+        </p>
+      )}
+      <EntryHistoryCards {...props} />
+      <EntryHistoryTable {...props} />
+    </>
+  );
+}
+
+export function EntryHistory({
+  organizationId,
+  members = [],
+  showOwnEntryChanges = false,
+}: EntryHistoryProps) {
   const hydrated = useHydrated();
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [memberFilter, setMemberFilter] = useState<string>('all');
-  // The default range starts from the Berlin business date, which the server
-  // render and the browser agree on; the runtime's local date would differ
-  // around midnight and the date fields would not hydrate.
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(() =>
-    parseIsoLocalDate(addLocalDays(getBusinessTodayIso(), -30)),
-  );
-  const [dateTo, setDateTo] = useState<Date | undefined>(() =>
-    parseIsoLocalDate(addLocalDays(getBusinessTodayIso(), 14)),
-  );
+  const { dateFrom, setDateFrom, dateTo, setDateTo } = useHistoryDates();
   const hasRange = dateFrom !== undefined && dateTo !== undefined;
   const [correctionEntry, setCorrectionEntry] = useState<TimeEntry | null | undefined>(undefined);
   // The corrected row (or the toolbar for an added time) shows the settle
@@ -364,11 +388,11 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
   const closedPeriods = useClosedTimePeriods(organizationId);
 
   const knownNames = useRef<ProfileNames>(new Map());
-  const view = useLiveView<EntryWithProfile[]>({
+  const view = useLiveView<EntryHistoryData>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'time_correction_requests'],
     read: ({ signal }) =>
       readEntryHistory(
-        { organizationId, dateFrom, dateTo, statusFilter, memberFilter },
+        { organizationId, dateFrom, dateTo, statusFilter, memberFilter, withOwnChanges: showOwnEntryChanges },
         knownNames.current,
         signal,
       ),
@@ -383,7 +407,7 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
     ].join('|'),
   });
 
-  const entries = view.data ?? [];
+  const entries = view.data?.entries ?? [];
   const loadError = (
     <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
       Die Einträge konnten nicht geladen werden.
@@ -432,34 +456,15 @@ export function EntryHistory({ organizationId, members = [] }: EntryHistoryProps
               description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
             />
           ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {entries.length} {entries.length === 1 ? 'Eintrag' : 'Einträge'} gefunden
-              </p>
-              {entries.some((entry) => isEntryInClosedPeriod(entry, closedPeriods)) && (
-                <p className="text-sm text-muted-foreground">
-                  Einträge in abgeschlossenen Monaten lassen sich nicht korrigieren. Ein Admin muss die
-                  Periode zuerst wieder öffnen.
-                </p>
-              )}
-
-              <EntryHistoryCards
-                entries={entries}
-                settling={settling}
-                hydrated={hydrated}
-                setCorrectionEntry={setCorrectionEntry}
-                closedPeriods={closedPeriods}
-              />
-
-              <EntryHistoryTable
-                entries={entries}
-                settling={settling}
-                hydrated={hydrated}
-                setCorrectionEntry={setCorrectionEntry}
-                closedPeriods={closedPeriods}
-              />
-            </>
+            <EntryHistoryResults
+              entries={entries}
+              settling={settling}
+              hydrated={hydrated}
+              setCorrectionEntry={setCorrectionEntry}
+              closedPeriods={closedPeriods}
+            />
           )}
+          <OwnEntryChanges events={view.data.ownChanges} members={members} />
         </StaleRegion>
       )}
       {correctionEntry !== undefined ? (

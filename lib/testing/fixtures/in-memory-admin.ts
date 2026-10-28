@@ -198,6 +198,24 @@ async function runTimeEntryBatch(tables: InMemoryTables, name: string, args: Row
   return { data: count, error: null, count: null };
 }
 
+// update_time_entry applies the named fields of one entry of the
+// organization. Its own-entry refusal and its audit event run in SQL:
+// supabase/tests/own_time_entry_changes.sql.
+async function updateTimeEntry(tables: InMemoryTables, args: Row): Promise<QueryResult> {
+  const changes = typeof args.p_changes === 'object' && args.p_changes !== null ? args.p_changes : {};
+  const fields = Object.fromEntries(
+    Object.entries(changes).filter(([key]) => ['timestamp', 'entry_type', 'job_id'].includes(key)),
+  );
+  const { data } = await new InMemoryQuery(tables, 'time_entries', () => ({}))
+    .update(fields)
+    .eq('organization_id', args.p_organization_id)
+    .eq('id', args.p_entry_id)
+    .select()
+    .maybeSingle();
+  if (!data) return { data: null, error: { code: 'P0001', message: 'entry_not_found' }, count: null };
+  return { data, error: null, count: null };
+}
+
 // decide_entry_change_request records the decision of a pending request of
 // the organization and applies it to the entries. Its refusals and its
 // all-or-nothing rule run in SQL: supabase/tests/entry_change_request_decisions.sql.
@@ -243,6 +261,7 @@ export function createInMemoryAdmin(
       if (name === 'review_time_entries' || name === 'delete_time_entries')
         return runTimeEntryBatch(tables, name, args);
       if (name === 'decide_entry_change_request') return decideEntryChangeRequest(tables, args);
+      if (name === 'update_time_entry') return updateTimeEntry(tables, args);
       return { data: [], error: null, count: null };
     },
   };

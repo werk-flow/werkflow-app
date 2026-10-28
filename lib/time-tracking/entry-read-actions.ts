@@ -6,12 +6,18 @@ import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
-import { getTimeEntriesInputSchema } from './action-schemas';
+import {
+  getTimeEntriesInputSchema,
+  timeEntryAuditInputSchema,
+  timeEntryAuditRowSchema,
+} from './action-schemas';
 import {
   type TimeEntry,
   type JobTimeParticipant,
   type GetTimeEntriesParams,
   type GetTimeEntriesResult,
+  type AuditedEntryState,
+  type GetTimeEntryAuditEventsResult,
   toTimeEntries,
 } from './types';
 import { calculateWorkSessions, canViewEntries } from './helpers';
@@ -22,6 +28,7 @@ import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/a
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
 import { verifyCurrentMembership } from './action-access';
+import { isManagerRole } from '@/lib/roles';
 
 // The Server Actions that read time entries: a window of the organization,
 // one job and the jobs of one project.
@@ -505,6 +512,88 @@ export async function getTimeEntriesForProjectJobs(
     };
   } catch (error) {
     logError('Unexpected error in getTimeEntriesForProjectJobs:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
+function toAuditedEntryState(state: {
+  entry_type: AuditedEntryState['entryType'];
+  timestamp: string;
+  job_id: string | null;
+  status: AuditedEntryState['status'];
+}): AuditedEntryState {
+  return {
+    entryType: state.entry_type,
+    timestamp: state.timestamp,
+    jobId: state.job_id,
+    status: state.status,
+  };
+}
+
+/**
+ * The audit events of Admins' own direct edits and deletions whose entry was
+ * recorded inside the window, newest first; optionally of one Admin. Admin
+ * and Büro read them, as they read every entry of the organization.
+ */
+export async function getTimeEntryAuditEvents(rawParams: {
+  organizationId: string;
+  from: string;
+  to: string;
+  userId?: string;
+}): Promise<GetTimeEntryAuditEventsResult> {
+  try {
+    const parsed = timeEntryAuditInputSchema.safeParse(rawParams);
+    if (!parsed.success) return { success: false, error: 'invalid_input' };
+    const user = await getAuthenticatedUser();
+    if (!user) return { success: false, error: 'not_authenticated' };
+    const { organizationId, from, to, userId } = parsed.data;
+    const fromTimestamp = Date.parse(from);
+    const toTimestamp = Date.parse(to);
+    if (!Number.isFinite(fromTimestamp) || !Number.isFinite(toTimestamp) || fromTimestamp > toTimestamp) {
+      return { success: false, error: 'invalid_input' };
+    }
+
+    const callerRole = await verifyCurrentMembership(organizationId);
+    if (!callerRole) return { success: false, error: 'not_a_member' };
+    if (!isManagerRole(callerRole)) return { success: false, error: 'not_authorized' };
+
+    const admin = createSupabaseAdminClient();
+    let query = admin
+      .from('time_entry_audit_events')
+      .select('id, entry_id, actor_id, action, created_at, before_entry, after_entry')
+      .eq('organization_id', organizationId)
+      .gte('entry_timestamp', new Date(fromTimestamp).toISOString())
+      .lte('entry_timestamp', new Date(toTimestamp).toISOString())
+      .order('created_at', { ascending: false })
+      .order('id');
+    if (userId) query = query.eq('actor_id', userId);
+    const { data, error } = await readCompleteRows(
+      (rangeFrom, rangeTo) => query.range(rangeFrom, rangeTo),
+      LIST_ROW_CAP,
+    );
+    if (error) {
+      logReadFailure('getTimeEntryAuditEvents: audit events read failed', error);
+      return { success: false, error: 'fetch_failed' };
+    }
+    const rows = timeEntryAuditRowSchema.array().safeParse(data);
+    if (!rows.success) {
+      logReadFailure('getTimeEntryAuditEvents: malformed audit event', { code: 'malformed_row' });
+      return { success: false, error: 'fetch_failed' };
+    }
+    return {
+      success: true,
+      events: rows.data.map((row) => ({
+        id: row.id,
+        entryId: row.entry_id,
+        actorId: row.actor_id,
+        action: row.action,
+        createdAt: row.created_at,
+        before: toAuditedEntryState(row.before_entry),
+        after: row.after_entry ? toAuditedEntryState(row.after_entry) : null,
+      })),
+    };
+  } catch (error) {
+    logError('Unexpected error in getTimeEntryAuditEvents:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
