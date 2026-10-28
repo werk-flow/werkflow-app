@@ -3,10 +3,9 @@
 //
 // This script reads the repository and hands the text to the rules in lib/docs/, which hold the
 // logic and its tests. Each problem line starts with the rule's area:
-//   index, link, skills, coderabbit, status, link-syntax, roadmap, spec-review, slices, catalog,
-//   incident-tier, deletion-pass, durable-homes, closed-banner, guidance,
+//   index, link, skills, coderabbit, status, link-syntax, catalog, incident-tier, guidance,
 //   dated, budget, review-stamp, decision, virtue, citation, route-handler, numbered-rule,
-//   german-quote, path, one-home, workspace, capture.
+//   german-quote, path, one-home, workspace.
 // The numbers and exemptions come from lib/docs/doc-policy.ts, which decision 0004 pins.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
@@ -15,7 +14,6 @@ import { ESLint } from 'eslint';
 import { getBusinessTodayIso } from '../lib/date-time/berlin';
 import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
-import { findSliceRecordProblems } from '../lib/docs/slice-records';
 import {
   countWords,
   findBacktickedDocPaths,
@@ -37,19 +35,6 @@ import {
   type WorkspaceLayout,
 } from '../lib/docs/workspace-links';
 import { findDocCitations, isCitationCheckedFile } from '../lib/docs/code-citations';
-import {
-  checkRoadmapRows,
-  findRoadmapCounterProblems,
-  findStaleSpecReviews,
-  readLogEntries,
-  readRoadmapRows,
-} from '../lib/docs/roadmap-rules';
-import {
-  CLOSED_RECORD_BANNER,
-  CLOSED_RECORD_BANNER_LINE,
-  hasClosedRecordBanner,
-} from '../lib/docs/closed-records';
-import { findCaptureCitationProblems } from '../lib/docs/acceptance-captures';
 import {
   findIdentifierReferences,
   findNumberedRuleReferences,
@@ -75,18 +60,12 @@ import {
   type MechanismResolver,
 } from '../lib/docs/virtue-standards';
 import { getTestGroups, listTestFiles } from '../lib/testing/selection/test-groups';
-import {
-  findSlicesWithoutBrowserProof,
-  readGoldenGates,
-  readTestTitles,
-} from '../lib/docs/slice-browser-proof';
 import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
 import {
   APPEND_ONLY_LOGS,
   DATED_DOCS,
   DATED_LINES,
   DEAD_CITATIONS,
-  LIVING_PLAN_FAMILY,
   NUMBERED_RULE_FIXTURES,
   SHARED_SENTENCES,
   UNMIRRORED_SKILLS,
@@ -95,12 +74,6 @@ import {
 import { findIndexCoverageProblems, findIndexStatusProblems } from '../lib/docs/doc-index';
 import { readDocStatus, type DocStatus } from '../lib/docs/status-lines';
 import { findSkillMirrorProblems, type SkillTree } from '../lib/docs/skill-mirror';
-import {
-  DELETION_PASS_SINCE,
-  DURABLE_HOMES_SINCE,
-  deletionPassProblems,
-  hasDurableHomes,
-} from '../lib/docs/record-sections';
 import { findCatalogProblems } from '../lib/docs/flow-catalog';
 import { findIncidentTierProblems } from '../lib/docs/incident-tiers';
 import { findBrokenLinks } from '../lib/docs/doc-links';
@@ -190,11 +163,18 @@ const indexContent = docMarkdown('README.md');
 report('index', findIndexCoverageProblems(indexContent, docPaths));
 report('index', findIndexStatusProblems(indexContent, statuses));
 
-// Relative links and their heading anchors.
+// Relative links and their heading anchors. A decision record keeps its accepted text, so its
+// links into the deleted plans tree stay as written; Git holds those plans.
+const deletedPlansRoot = join(docsRoot, 'plans') + sep;
 for (const path of docPaths) {
   const file = join(docsRoot, path);
+  const isDecision = path.startsWith('decisions/');
   const broken = findBrokenLinks(docMarkdown(path), {
-    resolve: (target) => (target === '' ? file : resolveWorkspaceLink(workspace, file, target)),
+    resolve: (target) => {
+      if (target === '') return file;
+      const resolved = resolveWorkspaceLink(workspace, file, target);
+      return isDecision && resolved.startsWith(deletedPlansRoot) ? null : resolved;
+    },
     exists: existsSync,
     inMissingSibling: pointsIntoMissingSibling,
     anchors: headingAnchors,
@@ -278,48 +258,7 @@ for (const path of docPaths) {
     );
 }
 
-// The roadmap: rows, counter, ready set, record links, browser proof and spec review.
-const roadmapContent = docMarkdown('plans/phase-1/roadmap.md');
-const roadmap = readRoadmapRows(roadmapContent);
-report(
-  'roadmap',
-  roadmap.problems.map((problem) => `docs/plans/phase-1/roadmap.md ${problem}`),
-);
-report('roadmap', findRoadmapCounterProblems(roadmapContent, roadmap.rows));
-const featureSpecs = docPaths.filter((path) => path.startsWith('features/'));
-const roadmapRows = checkRoadmapRows(roadmap.rows, {
-  statuses,
-  logEntries: readLogEntries(docMarkdown('plans/phase-1/log.md')),
-  featureSpecs,
-});
-report('roadmap', roadmapRows.problems);
-const completeSlices = roadmap.rows.filter((row) => row.status === 'complete').map((row) => row.id);
-report(
-  'roadmap',
-  findSlicesWithoutBrowserProof({
-    completeSlices,
-    gates: readGoldenGates(docMarkdown('plans/phase-1/gates.md')),
-    specTitles: new Map(
-      ['tests/golden', 'tests/audit', 'tests/canary']
-        .flatMap((directory) => listTestFiles(repoRoot, directory, /\.spec\.ts$/))
-        .map((file) => [file, readTestTitles(file, read(file))]),
-    ),
-  }),
-);
-report(
-  'spec-review',
-  findStaleSpecReviews(
-    roadmapRows.accepted,
-    new Map(featureSpecs.map((spec) => [spec, statuses.get(spec)?.date ?? null])),
-  ),
-);
-report(
-  'slices',
-  findSliceRecordProblems({
-    paths: docPaths,
-    sliceIds: new Set(roadmap.rows.map((row) => row.id.toUpperCase())),
-  }),
-);
+// The flow catalog.
 report(
   'catalog',
   findCatalogProblems(docMarkdown('product/user-flow-catalog.md')).map(
@@ -335,33 +274,6 @@ report(
     tierClaimProblem(line, incidentMechanisms),
   ),
 );
-
-// Closed records: the deletion pass of a slice record, the durable homes of a plan record and the banner.
-const changedNow = uncommittedPaths(
-  gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
-);
-for (const [path, status] of statuses) {
-  if (status?.kind !== 'closed') continue;
-  const markdown = docMarkdown(path);
-  if (path.startsWith('plans/phase-1/slices/') && status.date >= DELETION_PASS_SINCE)
-    report(
-      'deletion-pass',
-      deletionPassProblems({ markdown, closedOn: status.date }).map((problem) => `docs/${path} ${problem}`),
-    );
-  if (
-    path.startsWith('plans/') &&
-    !LIVING_PLAN_FAMILY.includes(`docs/${path}`) &&
-    status.date >= DURABLE_HOMES_SINCE &&
-    !hasDurableHomes(markdown)
-  )
-    problems.push(
-      `durable-homes: docs/${path} closes without a "## Durable homes" section naming where its lasting facts now live (docs/README.md maintenance rule 6)`,
-    );
-  if (!hasClosedRecordBanner(markdown))
-    problems.push(
-      `closed-banner: docs/${path} is closed but line ${CLOSED_RECORD_BANNER_LINE} is not the banner "${CLOSED_RECORD_BANNER}" followed by a blank line`,
-    );
-}
 
 // Guidance outside docs/ (AGENTS.md and the skills) points only at files that exist.
 const guidanceFiles = [
@@ -410,6 +322,9 @@ for (const path of [
 
 // Review stamps: a living doc's "last reviewed" date is not older than its last change.
 const today = getBusinessTodayIso();
+const changedNow = uncommittedPaths(
+  gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
+);
 const commitFormat = '--format=%x00%H %as';
 const lastChanged = lastCommits(gitOut(['log', '--name-only', commitFormat, '--', 'docs']));
 // The commits whose diff of a doc adds or removes its stamp line: they recorded a review.
@@ -738,17 +653,6 @@ if (!missingSiblings.has('werkflow-business')) {
     report('workspace', findSkillCopyDifferences(copies));
   }
 }
-
-// Rendered acceptance evidence (docs/technical/standards-audit.md): a capture an open plan record
-// cites must be the image of a passed test, unchanged since the capture. A closed record is history.
-problems.push(
-  ...findCaptureCitationProblems(
-    repoRoot,
-    docPaths
-      .filter((path) => path.startsWith('plans/'))
-      .map((path) => ({ file: `docs/${path}`, markdown: docMarkdown(path) })),
-  ),
-);
 
 if (problems.length > 0) {
   console.error(`docs:check failed with ${problems.length} problem(s):\n`);

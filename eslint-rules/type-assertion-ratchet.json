@@ -104,7 +104,6 @@
   "lib/data/background-read-client.ts": 1,
   "lib/dispatch/actions.ts": 2,
   "lib/dispatch/complete-reads.test.ts": 2,
-  "lib/docs/roadmap-rules.ts": 1,
   "lib/documents/action-input-boundaries.test.ts": 4,
   "lib/documents/types.ts": 2,
   "lib/installed-equipment/list-scale.test.ts": 2,
