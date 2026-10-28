@@ -104,6 +104,18 @@ const tables: InMemoryTables = {
       updated_at: today,
     },
   ],
+  // One audit event of an Admin's own edit in each organization.
+  time_entry_audit_events: [ownOrganization, foreignOrganization].map((organizationId, index) => ({
+    id: `60000000-0000-4000-8000-00000000000${index + 1}`,
+    organization_id: organizationId,
+    entry_id: index === 0 ? callerIn : foreignIn,
+    actor_id: index === 0 ? callerUser : strangerUser,
+    action: 'edit',
+    entry_timestamp: yesterday(8),
+    created_at: today,
+    before_entry: { entry_type: 'clock_in', timestamp: yesterday(8), job_id: null, status: 'approved' },
+    after_entry: { entry_type: 'clock_in', timestamp: yesterday(7), job_id: null, status: 'approved' },
+  })),
   jobs: [
     {
       id: ownJob,
@@ -160,6 +172,7 @@ const createAdmin = () => {
 };
 
 let settingsReadFails = false;
+let callerRole: 'admin' | 'buero' | 'employee' = 'admin';
 
 mock.module('server-only', () => ({}));
 mock.module('next/headers', () => ({ cookies: async () => ({ get: () => ({ value: ownOrganization }) }) }));
@@ -168,7 +181,7 @@ mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: createAd
 mock.module('@/lib/data/cached', () => ({
   CACHE_TAGS: {},
   getAuthenticatedUser: async () => ({ id: callerUser }),
-  getCachedMemberships: async () => [{ orgId: ownOrganization, role: 'admin' }],
+  getCachedMemberships: async () => [{ orgId: ownOrganization, role: callerRole }],
   getCachedOrganizationSettings: async () => {
     if (settingsReadFails) throw new Error('organization_settings_read_failed');
     return { breakMode: 'manual', autoBreakThresholdMinutes: 360, autoBreakDurationMinutes: 30 };
@@ -186,7 +199,9 @@ const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry } = await i
 );
 const { reviewEntries, reviewChangeRequest } = await import('@/lib/time-tracking/review-actions');
 const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
-const { getTimeEntries, getTimeEntriesForJob } = await import('@/lib/time-tracking/entry-read-actions');
+const { getTimeEntries, getTimeEntriesForJob, getTimeEntryAuditEvents } = await import(
+  '@/lib/time-tracking/entry-read-actions'
+);
 
 // A read names the organization or the job: another organization's entries
 // and another organization's job are refused before any entry is read.
@@ -196,6 +211,18 @@ assert.deepEqual(await getTimeEntries({ organizationId: foreignOrganization, ...
   error: 'not_a_member',
 });
 assert.deepEqual(await getTimeEntriesForJob(foreignJob), { success: false, error: 'not_a_member' });
+// The audit of Admins' own changes reads only the named organization, and
+// only when the caller belongs to it.
+assert.deepEqual(await getTimeEntryAuditEvents({ organizationId: foreignOrganization, ...range }), {
+  success: false,
+  error: 'not_a_member',
+});
+const audit = await getTimeEntryAuditEvents({ organizationId: ownOrganization, ...range });
+assert.ok(audit.success);
+assert.deepEqual(
+  audit.events.map((event) => [event.entryId, event.actorId, event.before.timestamp, event.after?.timestamp]),
+  [[callerIn, callerUser, yesterday(8), yesterday(7)]],
+);
 
 // A paired id from another organization or another person deletes nothing,
 // not even the authorized entry.
@@ -215,8 +242,21 @@ assert.deepEqual(await updateEntry(colleagueIn, { jobId: foreignJob }), {
   error: 'job_not_found',
 });
 assert.equal(jobOf(colleagueIn), null);
+rpcCalls.length = 0;
 assert.equal((await updateEntry(colleagueIn, { jobId: ownJob })).success, true);
 assert.equal(jobOf(colleagueIn), ownJob);
+// The edit names only the changed field, with server-resolved values.
+assert.deepEqual(rpcCalls, [
+  {
+    name: 'update_time_entry',
+    args: {
+      p_actor_id: callerUser,
+      p_organization_id: ownOrganization,
+      p_entry_id: colleagueIn,
+      p_changes: { job_id: ownJob },
+    },
+  },
+]);
 
 // The clock state never names a job of another organization, even when a
 // stored entry points at one.
@@ -227,12 +267,25 @@ if (clock.success) {
   assert.equal(clock.state.activeJobInfo, null);
 }
 
-// The pair of one person in one organization still deletes together.
+// The pair of one person in one organization still deletes together, in one
+// function call that names only that person.
+rpcCalls.length = 0;
 assert.deepEqual(await deleteEntry(ownIn, ownOut), { success: true });
 assert.deepEqual(
   entryIds(),
   before.filter((id) => id !== ownIn && id !== ownOut),
 );
+assert.deepEqual(rpcCalls, [
+  {
+    name: 'delete_time_entries',
+    args: {
+      p_actor_id: callerUser,
+      p_organization_id: ownOrganization,
+      p_entry_ids: [ownIn, ownOut],
+      p_authorized_user_ids: [employeeUser],
+    },
+  },
+]);
 
 // A review that names an entry of another organization refuses the whole
 // selection before the database function runs.
@@ -367,3 +420,24 @@ assert.deepEqual(entryIds(), unchanged);
 // A person without a membership row stays "not found" once the read succeeds.
 assert.deepEqual(await deleteEntry(formerIn), { success: false, error: 'target_not_found' });
 assert.ok(entryIds().includes(formerIn));
+
+// A Büro member changes their own time only through a Zeitkorrektur: a direct
+// edit or deletion of an own entry is refused before any write.
+callerRole = 'buero';
+const callerMembership = (tables.organization_members ?? []).find((row) => row.user_id === callerUser);
+if (callerMembership) callerMembership.role = 'buero';
+rpcCalls.length = 0;
+const ownEntriesBefore = structuredClone(tables.time_entries);
+const notAuthorized = { success: false, error: 'not_authorized' };
+assert.deepEqual(await updateEntry(callerIn, { timestamp: yesterday(7) }), notAuthorized);
+assert.deepEqual(await deleteEntry(callerIn), notAuthorized);
+assert.deepEqual(await deleteEntriesBatch([callerIn]), notAuthorized);
+assert.deepEqual(rpcCalls, []);
+assert.deepEqual(tables.time_entries, ownEntriesBefore);
+// An employee's entry stays theirs to change directly.
+assert.equal((await updateEntry(colleagueIn, { jobId: null })).success, true);
+assert.equal(jobOf(colleagueIn), null);
+
+// An employee reads no audit of Admins' own changes.
+callerRole = 'employee';
+assert.deepEqual(await getTimeEntryAuditEvents({ organizationId: ownOrganization, ...range }), notAuthorized);

@@ -17,7 +17,7 @@ const VacationApprovals = dynamic(() => import('./vacation-approvals').then((mod
 });
 import { useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import type { MemberListEntry } from '@/lib/members/profile-name';
-import type { OrgRole } from '@/lib/roles';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import type { ZeiterfassungOverview } from '@/lib/time-tracking/types';
 
 const PendingApprovals = dynamic(() => import('./pending-approvals').then((mod) => mod.PendingApprovals), {
@@ -128,7 +128,11 @@ export function ZeiterfassungContent({
 
       <TabsContent value="history" className="mt-4 space-y-8">
         <TimeCorrectionRequests organizationId={organizationId} mode="history" />
-        <EntryHistory organizationId={organizationId} members={members} />
+        <EntryHistory
+          organizationId={organizationId}
+          members={members}
+          showOwnEntryChanges={isManagerRole(currentUserRole)}
+        />
       </TabsContent>
     </Tabs>
   );

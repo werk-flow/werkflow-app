@@ -8,22 +8,8 @@ export function codeRabbitBinary(home: string): string {
 const SCOPE_ARGUMENTS = new Set(['--uncommitted', '--committed', '--base', '--base-commit']);
 const CONFIG_ARGUMENTS = new Set(['-c', '--config']);
 
-const RAW_CODERABBIT_COMMAND_PATTERN =
-  /^\s*(?:\$\s*)?(?:(?:sudo|command)\s+|env(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S+)*\s+)*(?:(?:bunx|npx|pnpx)\s+|yarn\s+dlx\s+)?(?:(?:~|\$HOME|\$\{HOME\}|\.{1,2})?\/(?:[^\s/]*\/)*)?(?:coderabbit|cr)(?:\s|$)/m;
-
 function hasArgument(argumentsToCheck: readonly string[], acceptedArguments: ReadonlySet<string>): boolean {
   return argumentsToCheck.some((argument) => acceptedArguments.has(argument.split('=')[0] ?? argument));
-}
-
-export function findCodeRabbitInstructionViolations(content: string): string[] {
-  const violations: string[] = [];
-  if (content.includes('cli.coderabbit.ai/install.sh')) {
-    violations.push('installer');
-  }
-  if (RAW_CODERABBIT_COMMAND_PATTERN.test(content)) {
-    violations.push('raw-command');
-  }
-  return violations;
 }
 
 /** Reads a stored review or the help text: no new review runs, so no review record follows. */

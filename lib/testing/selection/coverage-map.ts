@@ -32,16 +32,9 @@ export const coverageMapSchema = z
             flowIds: z.array(flowId).min(1),
             evidence: z.array(referenceSchema).min(1),
             clauses: z.string().min(1),
-            review: z.discriminatedUnion('kind', [
-              z
-                .object({
-                  kind: z.literal('imported-ledger'),
-                  source: z.string().min(1),
-                  row: z.string().min(1),
-                })
-                .strict(),
-              z.object({ kind: z.literal('assertions-reviewed'), rationale: z.string().min(1) }).strict(),
-            ]),
+            review: z
+              .object({ kind: z.literal('assertions-reviewed'), rationale: z.string().min(1) })
+              .strict(),
           })
           .strict(),
       )
@@ -154,12 +147,6 @@ function mappingProblems(mapping: CoverageMapping, context: ReferenceContext): s
     problems.push(
       `No executable evidence in ${mapping.id}; a mapping needs at least one test title that proves it, and inspection alone cannot cover a user flow.`,
     );
-  if (
-    mapping.review.kind === 'imported-ledger' &&
-    (!safeRepositoryFile(context.repositoryRoot, mapping.review.source) ||
-      !context.fileExists(mapping.review.source))
-  )
-    problems.push(`Missing imported evidence source: ${mapping.review.source}`);
   return problems;
 }
 

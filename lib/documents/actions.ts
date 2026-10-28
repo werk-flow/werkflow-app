@@ -128,7 +128,8 @@ import {
   documentWriteFailure,
   getAvailableDisplayName,
   revalidateDocuments,
-  verifyUploadedObject,
+  acceptUploadedObject,
+  discardStagedUpload,
 } from './write-support';
 
 function parseDocumentCategory(value: FormDataEntryValue | null): DocumentCategory | null {
@@ -805,18 +806,19 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
     fileName: originalFileName,
   });
 
-  if (await readDocumentStoragePath(auth.context, input.documentId)) {
-    return { success: false, error: 'already_finalized' };
-  }
+  // Only a completed read proves the upload unregistered; the copy must never replace a registered file.
+  const registeredPath = await readDocumentStoragePath(auth.context, input.documentId);
+  if (registeredPath === undefined) return { success: false, error: 'load_failed' };
+  if (registeredPath) return { success: false, error: 'already_finalized' };
 
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);
   if (!access.success) {
-    await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
+    await discardStagedUpload(auth.context.orgId, storagePath);
     return access;
   }
 
-  const head = await verifyUploadedObject({
+  const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
     storagePath,
     failureLabel: 'Failed to verify uploaded document object',
@@ -1507,19 +1509,16 @@ export async function finalizeDocumentVersionUpload(
 
   const nextVersionNumber = existing.document.current_version_number + 1;
   if (input.versionNumber !== nextVersionNumber) {
-    // Another version landed between ticket and finalize; the uploaded object
-    // sits at a now-stale version path and must not become the current file.
-    // Only clean up paths above the current version number — lower numbers
-    // could collide with legitimately archived version objects.
-    if (input.versionNumber > existing.document.current_version_number) {
-      const staleStoragePath = buildDocumentVersionStoragePath({
-        organizationId: auth.context.orgId,
-        documentId: existing.document.id,
-        versionNumber: input.versionNumber,
-        fileName: input.fileName.trim() || 'Dokument',
-      });
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [staleStoragePath] });
-    }
+    // Another version landed between ticket and finalize; the upload must not
+    // become the current file. It still sits at its staging key, which no
+    // archived version shares.
+    const staleStoragePath = buildDocumentVersionStoragePath({
+      organizationId: auth.context.orgId,
+      documentId: existing.document.id,
+      versionNumber: input.versionNumber,
+      fileName: input.fileName.trim() || 'Dokument',
+    });
+    await discardStagedUpload(auth.context.orgId, staleStoragePath);
     return { success: false, error: 'version_conflict' };
   }
 
@@ -1531,7 +1530,7 @@ export async function finalizeDocumentVersionUpload(
     fileName: originalFileName,
   });
 
-  const head = await verifyUploadedObject({
+  const head = await acceptUploadedObject({
     organizationId: auth.context.orgId,
     storagePath,
     failureLabel: 'Failed to verify uploaded version object',

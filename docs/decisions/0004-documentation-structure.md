@@ -194,3 +194,73 @@ Decided: a row of the credential table in [environments](../technical/environmen
 | Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
 | Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
 | Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |
+
+## Amendment 2026-10-28: plans leave the repository
+
+The `plans` folder under `docs/` is deleted (werk-flow/werkflow-planning#3). Git keeps it.
+
+Decided:
+
+1. `docs:check` drops the rules that served only plans: roadmap rows and counter, slice records, the deletion pass and durable homes of closed records, the closed-record banner, slice browser proof, the spec review date against slice acceptance, and capture citations in plan records.
+2. A decision record keeps its accepted text. `docs:check` does not resolve its links into the deleted plans tree.
+3. The coverage map drops its `imported-ledger` review kind. Each Wave 2 ledger row becomes an `assertions-reviewed` rationale.
+4. The settings table loses its plan rows. Every other setting is unchanged.
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| Word budget: living technical doc | 4000 | The 2026-10-03 amendment, unchanged. |
+| Word budget: AGENTS.md | 2800 | The 2026-10-01 amendment, unchanged. |
+| Word budget: docs index | 3600 | Routine reading includes the index in full; it holds the index, the doc rules and virtue 6's owner sections. |
+| Word budget: skill file | 4000 | A skill is read in full when it loads; the same size as an owner doc. |
+| Unbudgeted doc | docs/technical/test-incident-log.md | A log by purpose that no routine task reads. |
+| Dated doc | docs/technical/test-incident-log.md | A dated log by purpose. |
+| Dated doc | docs/product/competitive-landscape.md | Market figures mean something only with their snapshot date. |
+| Dated doc | docs/features/commercial-and-finance.md | Statutory e-invoice dates and the research date of provider facts. |
+| Dated lines | docs/product/user-flow-catalog.md | A flow's text is pinned by its hash in the coverage map and changes only with its evidence. |
+| Dated lines | docs/technical/environments.md | A row of the credential table names the day its token expires. GitHub, Vercel and Supabase store the secret without that date, and the weekly health check needs a human to rotate before it. |
+| Append-only log | docs/technical/test-incident-log.md | Historical entries keep the references they were written with. |
+| Unmirrored skill | `coderabbit-review` | Codex ships its own CodeRabbit skill. |
+| Dead citation | lib/testing/evidence/build-identity.test.ts -> docs/note.md | A fixture file name inside a test, not a citation. |
+| Dead citation | lib/testing/evidence/candidate-identity.test.ts -> docs/testing.md | As above. |
+| Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
+| Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
+| Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |
+
+## Amendment 2026-10-28: docs:check keeps links, budgets and few rules
+
+The owner decided this in werk-flow/werkflow-planning#4. Lint, tests and CI are the mechanism inventory. The docs stop mirroring them, and `docs:check` stops checking the mirror.
+
+`docs:check` keeps:
+
+| Rule | Reason |
+| --- | --- |
+| Links and heading anchors resolve: inside `docs/`, from `AGENTS.md` and the skills, and to the sibling repositories | A dead link sends an agent nowhere. |
+| A `docs/` path that code cites resolves | Code comments outlive the docs they cite. |
+| Every doc under `docs/` has an index row | The index is the only route into the docs. |
+| A decision record grows only by dated amendments | The record of why stays trustworthy. |
+| The `.claude` and `.agents` skill trees are identical, and shared skills equal their canonical copy | Two agents read two copies. |
+| Word budgets of `AGENTS.md`, the docs index, each technical doc and each skill file | Size grows unless something fails. |
+
+`docs:check` drops:
+
+| Rule | Reason |
+| --- | --- |
+| Virtue standards: required owner-doc sections, mechanism tags, "Enforced by" agreement, every lint rule and test named by a doc | It forced the docs to restate the mechanism inventory. |
+| The `[judgment]` ratchet | It counted tags, not judgment. |
+| Status lines and review-date stamps | Git dates every change. Decision records keep their metadata block. |
+| Twelve-word duplicate sentences | A paraphrase escaped it; review catches both. |
+| Dates and commit hashes in living docs | It needed exemptions for legitimate dates. |
+| Rule-number citations, route-handler names, repository paths and identifiers in prose | Wrong names in prose are review's to catch. |
+| German quote pairing in docs | Product copy keeps its own test. |
+| Incident tiers in the incident log | `bun run test:runs classify` refuses a prevention without its tier. |
+| CodeRabbit routing in agent instructions, backticked doc paths, flow-catalog order | Narrow form rules with no catch outside the commits that added them. |
+
+No record shows a dropped rule catching a defect in the past month. CI never failed on `docs:check`, and Git shows each rule's fixes only in the commit that added it.
+
+Decided:
+
+1. `lib/docs/doc-policy.ts` is the one home of every budget and exemption. The settings tables above no longer bind it, and no later amendment restates them. A budget or an exemption still changes only by the owner's decision.
+2. The budgets keep their numbers.
+3. A doc carries no status line or review date. Existing status lines go as their docs are next edited.
+
+This amendment supersedes rule 4 of the original decision, rules 1, 2, 3, 5 and 7 of the 2026-10-17 amendment, and the settings tables of the 2026-10-17, 2026-10-26 and "plans leave the repository" amendments.

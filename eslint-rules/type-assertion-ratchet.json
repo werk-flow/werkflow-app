@@ -1,7 +1,6 @@
 {
   "app/(app)/arbeitsvorlagen/page.tsx": 1,
   "app/api/background-read/route.ts": 1,
-  "app/auth/callback/route.ts": 1,
   "components/anfragen/anfragen-content.tsx": 1,
   "components/anfragen/close-request-dialog.tsx": 1,
   "components/anfragen/convert-request-dialog.tsx": 1,
@@ -104,7 +103,6 @@
   "lib/data/background-read-client.ts": 1,
   "lib/dispatch/actions.ts": 2,
   "lib/dispatch/complete-reads.test.ts": 2,
-  "lib/docs/roadmap-rules.ts": 1,
   "lib/documents/action-input-boundaries.test.ts": 4,
   "lib/documents/types.ts": 2,
   "lib/installed-equipment/list-scale.test.ts": 2,
