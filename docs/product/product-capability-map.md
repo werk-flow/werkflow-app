@@ -1,7 +1,5 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-10-17
-
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
 It answers four questions:
@@ -39,10 +37,9 @@ The product is documented at four levels:
 | --- | --- | --- |
 | Product context | Why WerkFlow exists, who it serves, and broad principles | `AGENTS.md` |
 | Product capability map | How all feature areas form one product, their phases, dependencies, and decision gates | This document |
-| Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | [`docs/features/*.md`](../features/) |
-| Phase 1 build roadmap | Ordered vertical slices, direct prerequisites, current progress, exit evidence, and golden-scenario gates | [`phase-1/roadmap.md`](../plans/phase-1/roadmap.md) |
+| Feature specification | A short goal and the current baseline: what exists, for which role, and its rules | [`docs/features/*.md`](../features/) |
 
-Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in [`docs/plans/`](../plans/), technical docs, or decision records after the product behavior is decided.
+Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in technical docs or decision records after the product behavior is decided.
 
 ## Phase Model
 
@@ -235,7 +232,7 @@ This is a dependency sequence, not a release commitment.
 
 ### Done
 
-The accepted Wave 0 to Wave 2 slices establish this foundation. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, dispatch and the `Plantafel`; document storage with versions and trash; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
+The accepted Wave 0 to Wave 2 slices establish this foundation. The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, dispatch and the `Plantafel`; document storage with versions and trash; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
 
 ### Remaining
 
@@ -277,7 +274,7 @@ Phase 2 should advance through controlled levels:
 
 Skipping directly to a generic agent builder would increase complexity and risk before the product has stable actions or understandable failure handling.
 
-The owner decided that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; the [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it and the roadmap carries it as the one exception to its Phase 2 rule.
+The owner decided that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; `werk-flow/werkflow-planning` carries it as the one exception to its Phase 2 rule.
 
 ## What WerkFlow Should Learn, Not Copy
 
@@ -325,25 +322,13 @@ Installed-equipment history and maintenance do not automatically commit WerkFlow
 
 ## Documentation Rules For Future Work
 
-Every feature spec should keep these sections current:
-
-1. **Product Goal**
-2. **Current Product Baseline**
-3. **Phase 1 — Complete Operational Core**
-4. **Connected Workflow Contracts**
-5. **Role And UX Principles**
-6. **Phase 2 — Intelligence And Automation**
-7. **Boundaries And Decision Gates**
-8. **Open Product Decisions**
-
-One spec carries extra sections by design. [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations". It adds The Phase 2 Plan, In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements. A spec's implementation reference lives in its technical doc, for example [document-storage-and-access.md](../technical/document-storage-and-access.md) for documents.
+Every feature spec holds two parts: a goal of two or three sentences, and its **Current Product Baseline**, which states what exists, for which role, its rules and its current limits. Planned scope lives in `werk-flow/werkflow-planning`, not in a spec. A spec's implementation reference lives in its technical doc, for example [document-storage-and-access.md](../technical/document-storage-and-access.md) for documents.
 
 When behavior is implemented:
 
-- describe it in the current baseline; keep the Phase 1 outcome as the durable requirement and distinguish any remaining depth;
-- preserve product rationale in the accepting slice record and link it; remove resolved questions from Open Product Decisions;
+- describe it in the current baseline, and delete the limit it resolves;
 - link a concrete implementation plan only when one exists;
-- update dependent feature handoffs;
+- update the baselines of connected specs;
 - update the conceptual data model if the domain boundary changed;
 - check this capability map if the change affects product phase, ownership, or a decision gate.
 
@@ -351,7 +336,6 @@ Do not copy exact competitor behavior into a feature spec without asking whether
 
 ## Related Docs
 
-- [Phase 1 build roadmap](../plans/phase-1/roadmap.md)
 - [Competitive landscape](./competitive-landscape.md)
 - [Product offer](./offer.md)
 - [Customer avatar](./avatar.md)

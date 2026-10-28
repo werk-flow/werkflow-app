@@ -41,7 +41,7 @@ export type CampaignSummary = {
  * Failures of proven tests that the tests, not the application, caused:
  * harness plus unclassified. `authoring` (test code that never passed) and
  * `accepted-change` (a stale visual reference after an accepted design) are
- * counted apart (docs/plans/phase-1/protocol.md, campaign line).
+ * counted apart.
  */
 const FALSE_FAILURE_CLASSES = ['harness', 'unclassified'] as const;
 

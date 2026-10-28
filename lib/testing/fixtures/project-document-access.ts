@@ -184,7 +184,10 @@ world.rpc = ({ name, args }) => {
 
 const signedPaths: string[] = [];
 const uploadUrlPaths: string[] = [];
+const promotedPaths: string[] = [];
 const discardedPaths: string[] = [];
+const stagingPathOf = (organizationId: string, path: string) =>
+  `${organizationId}/staging/${path.slice(organizationId.length + 1)}`;
 const outsideFixture = (name: string) => (): never => {
   throw new Error(`${name} is outside this fixture`);
 };
@@ -202,7 +205,11 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async ({ paths }: { paths: string[] }) => {
     discardedPaths.push(...paths);
   },
-  headStorageObject: async () => ({ exists: true, sizeBytes: 1024, contentType: 'application/pdf' }),
+  promoteUploadedObject: async ({ path }: { path: string }) => {
+    promotedPaths.push(path);
+    return { exists: true, sizeBytes: 1024, contentType: 'application/pdf' };
+  },
+  uploadStagingPath: stagingPathOf,
 }));
 const actions = await import('@/lib/documents/actions');
 
@@ -304,7 +311,9 @@ assert.deepEqual(
   }),
   notAuthorized,
 );
-assert.deepEqual(discardedPaths, [`${ORGANIZATION_A}/${refusedProjectUploadId}/aufmass.pdf`]);
+// The refused upload never left its staging key, so only that key is discarded.
+assert.deepEqual(discardedPaths, [`${ORGANIZATION_A}/staging/${refusedProjectUploadId}/aufmass.pdf`]);
+assert.deepEqual(promotedPaths, []);
 assert.equal(
   tableRows(world, 'documents').some((document) => document.id === refusedProjectUploadId),
   false,
@@ -317,6 +326,20 @@ assert.deepEqual(await actions.moveDocument({ documentId: projectDocumentId, fol
 assert.deepEqual(await actions.deleteDocument(projectDocumentId), notAuthorized);
 assert.deepEqual(projectDocumentRow(), projectDocumentBefore);
 
+// A finalize whose registration check cannot read copies and discards nothing.
+const finalizeJobUpload = () =>
+  actions.finalizeDocumentUpload({
+    kind: 'job',
+    jobId: assignedJobId,
+    documentId: jobUploadId,
+    fileName: 'aufmass.pdf',
+  });
+world.failingTables.add('documents');
+assert.deepEqual(await finalizeJobUpload(), { success: false, error: 'load_failed' });
+world.failingTables.delete('documents');
+assert.deepEqual(promotedPaths, []);
+assert.equal(discardedPaths.length, 1);
+
 // The same field worker still uploads on the assigned job, from ticket to finalized link.
 const jobTicket = await actions.createDocumentUploadTicket({
   kind: 'job',
@@ -324,14 +347,16 @@ const jobTicket = await actions.createDocumentUploadTicket({
   ...uploadFile,
 });
 assert.ok(jobTicket.success, JSON.stringify(jobTicket));
-const jobUpload = await actions.finalizeDocumentUpload({
-  kind: 'job',
-  jobId: assignedJobId,
-  documentId: jobUploadId,
-  fileName: 'aufmass.pdf',
-});
+const jobUpload = await finalizeJobUpload();
 assert.ok(jobUpload.success, JSON.stringify(jobUpload));
 assert.deepEqual(linksTo(jobUploadId), [{ job_id: assignedJobId, project_id: null }]);
+// The registered document references the promoted key, never the key its upload URL wrote.
+const jobUploadPath = `${ORGANIZATION_A}/${jobUploadId}/aufmass.pdf`;
+assert.equal(
+  tableRows(world, 'documents').find((document) => document.id === jobUploadId)?.storage_path,
+  jobUploadPath,
+);
+assert.deepEqual(promotedPaths, [jobUploadPath]);
 assert.deepEqual(
   await actions.createDocumentUploadTicket({ kind: 'job', jobId: unassignedJobId, ...uploadFile }),
   notAuthorized,

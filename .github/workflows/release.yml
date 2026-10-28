@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 45
     steps:
       # The deploy key is the only actor the production ruleset lets update the branch.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: main
           fetch-depth: 0
@@ -48,7 +48,7 @@ jobs:
           echo "Releasing ${sha}:"
           git log --oneline origin/production.."$sha"
 
-      - uses: supabase/setup-cli@v1
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
           version: 2.116.0
 
