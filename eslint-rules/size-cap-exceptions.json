@@ -10,7 +10,7 @@
     "lib/dispatch/actions.ts": 895,
     "lib/dispatch/server.ts": 853,
     "lib/documents/actions.ts": 1584,
-    "lib/inventory/actions.ts": 1568,
+    "lib/inventory/actions.ts": 1567,
     "lib/jobs/actions.ts": 1021,
     "lib/jobs/types.ts": 890,
     "lib/personnel/actions.ts": 891,

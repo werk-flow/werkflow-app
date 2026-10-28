@@ -7012,6 +7012,7 @@ export type Database = {
           created_by: string | null;
           id: string;
           occurrence_id: string;
+          operation_assessment_id: string | null;
           organization_id: string;
           override_reason: string | null;
           qualification_fingerprint: string;
@@ -7026,6 +7027,7 @@ export type Database = {
           created_by?: string | null;
           id?: string;
           occurrence_id: string;
+          operation_assessment_id?: string | null;
           organization_id: string;
           override_reason?: string | null;
           qualification_fingerprint: string;
@@ -7040,6 +7042,7 @@ export type Database = {
           created_by?: string | null;
           id?: string;
           occurrence_id?: string;
+          operation_assessment_id?: string | null;
           organization_id?: string;
           override_reason?: string | null;
           qualification_fingerprint?: string;
@@ -7053,6 +7056,13 @@ export type Database = {
             columns: ["occurrence_id"];
             isOneToOne: false;
             referencedRelation: "planning_occurrences";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "planning_occurrence_assessments_operation_assessment_id_fkey";
+            columns: ["operation_assessment_id"];
+            isOneToOne: false;
+            referencedRelation: "planning_operation_assessments";
             referencedColumns: ["id"];
           },
           {
@@ -7244,6 +7254,41 @@ export type Database = {
             columns: ["series_id"];
             isOneToOne: false;
             referencedRelation: "planning_series";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      planning_operation_assessments: {
+        Row: {
+          capacity_snapshot: Json;
+          created_at: string;
+          created_by: string | null;
+          id: string;
+          organization_id: string;
+          qualification_snapshot: Json;
+        };
+        Insert: {
+          capacity_snapshot: Json;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organization_id: string;
+          qualification_snapshot: Json;
+        };
+        Update: {
+          capacity_snapshot?: Json;
+          created_at?: string;
+          created_by?: string | null;
+          id?: string;
+          organization_id?: string;
+          qualification_snapshot?: Json;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "planning_operation_assessments_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
             referencedColumns: ["id"];
           },
         ];

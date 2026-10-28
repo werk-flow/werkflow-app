@@ -120,7 +120,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     outsiderPage,
     world,
   }) => {
-    // P1-15-F01…F16 and F18…F27: placement, exact target, site/task context,
+    // Placement, exact target, site/task context,
     // visibility, empty/list/detail states, role bounds, and all five schemas.
     const customerName = `P115 Kunde ${world.runId}`;
     const siteName = `P115 Einsatzort ${world.runId}`;
@@ -292,7 +292,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     bueroPage,
     world,
   }) => {
-    // P1-15-F28…F40: explicit save/submit, atomic validation, immutable history,
+    // Explicit save/submit, atomic validation, immutable history,
     // correction reasons, no evidence inheritance, stale conflicts, idempotency,
     // and a resting list versus an open edited dialog.
     const jobNumber = `AUF-${world.runId}-P115-STALE`;
@@ -353,7 +353,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     employeePage,
     world,
   }) => {
-    // P1-15-F41…F49 plus F36: shared responsibility, no self-approval,
+    // Shared responsibility, no self-approval,
     // approve/reject/correct/withdraw, stable attention links, and reasoned void.
     const jobNumber = `AUF-${world.runId}-P115-REVIEW`;
     const approvedTitle = `Freigabebericht ${world.runId}`;
@@ -441,7 +441,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
     employeePage,
     world,
   }) => {
-    // P1-15-F17, F50…F70: independent customer/internal outcomes, named
+    // Independent customer/internal outcomes, named
     // offline signer context, on-device signature, explicit document/source
     // and checklist evidence links, reasoned removal, and idempotent HTML export.
     const templateName = `P115 Nachweisvorlage ${world.runId}`;
@@ -668,7 +668,7 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       removed_at: null,
     });
 
-    // P1-15-F71…F78: measurements, defects, formal decisions, customer gates,
+    // Measurements, defects, formal decisions, customer gates,
     // approval dependency, shared cache/realtime projections, explicit non-effects,
     // and absence of later-slice modules from this surface.
     await adminPage.goto(`/auftraege/${jobNumber}`);
