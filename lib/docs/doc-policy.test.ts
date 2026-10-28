@@ -22,13 +22,13 @@ describe('documentation policy', () => {
   test('probe: a raised budget or an added exemption differs from the table', () => {
     const decided = [
       { setting: 'Word budget: AGENTS.md', value: '2800' },
-      { setting: 'Dated doc', value: 'docs/plans/phase-1/log.md' },
+      { setting: 'Dated doc', value: 'docs/technical/test-incident-log.md' },
     ];
     expect(
       findPolicyDifferences(
         [
           { setting: 'Word budget: AGENTS.md', value: '3000' },
-          { setting: 'Dated doc', value: 'docs/plans/phase-1/log.md' },
+          { setting: 'Dated doc', value: 'docs/technical/test-incident-log.md' },
           { setting: 'Dated doc', value: 'docs/technical/security.md' },
         ],
         decided,

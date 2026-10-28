@@ -1,6 +1,6 @@
 # Wave-Audit Battery
 
-Exhaustive user-flow audit specs, separate from the golden-gate suite. The harness rules, run lanes and failure handling live in [docs/technical/testing.md](../../docs/technical/testing.md). The Wave 2 coverage ledger lives in [wave-2-audit.md](../../docs/plans/phase-1/audits/wave-2-audit.md), and `lib/testing/selection/coverage-map.json` maps every catalog flow to its evidence. Read those before touching anything here.
+Exhaustive user-flow audit specs, separate from the golden-gate suite. The harness rules, run lanes and failure handling live in [docs/technical/testing.md](../../docs/technical/testing.md). `lib/testing/selection/coverage-map.json` maps every catalog flow to its evidence. Read those before touching anything here.
 
 Audit-specific facts:
 

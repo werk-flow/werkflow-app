@@ -1,6 +1,6 @@
 # Verify application changes
 
-Status: living — last reviewed 2026-10-27
+Status: living — last reviewed 2026-10-28
 
 Start here when you implement a slice, investigate a failed test, or prepare a release. [Decision 0007](../decisions/0007-independent-test-groups.md) owns the model, and [its amendment on browser tests](../decisions/0007-independent-test-groups.md#amendment-2026-10-01-browser-tests-are-a-sanity-check) owns the rules on this page. [Decision 0006](../decisions/0006-testing-architecture.md) keeps the local backend and the cloud providers apart.
 
@@ -184,7 +184,6 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Expectations name semantic tokens, never palette classes. [test `lib/conventions/palette-classes-in-tests.test.ts`]
 - Every catalog flow maps to evidence that names its proving test titles; a renamed, deleted or ambiguous title fails, a reference without a proving test states its reason, and a changed catalog clause reopens its mapping. Whether a mapped assertion proves its clause is the reviewer's reading. [group `static:coverage`, test `lib/testing/selection/coverage-map.test.ts`, test `lib/testing/selection/test-titles.test.ts`, judgment]
 - A new spec file is a registered group with its scopes, and every scope prefix exists. A measured or freshness group runs alone. [code `scripts/verify.ts`, test `lib/testing/selection/test-groups.test.ts`, test `lib/testing/selection/test-scope-prefixes.test.ts`, test `lib/testing/selection/group-selection.test.ts`]
-- A complete roadmap slice has a browser title with its tag or its gate's tag. [code `lib/docs/slice-browser-proof.ts`, test `lib/docs/slice-browser-proof.test.ts`]
 - Every required measured scenario has a reviewed reference at the digest of its measured tests, and a baseline never exceeds its budget. [test `lib/testing/performance-references.test.ts`, test `lib/testing/performance-reference-carryover.test.ts`, test `lib/testing/performance-baselines.test.ts`]
 - An accepted screen keeps its look and visible text, and only a focused update run rewrites a reference. [group `audit:visual`, test `lib/testing/runner/visual-reference-updates.test.ts`]
 - A failure is diagnosed, classified and its world cleaned before the next run. Classifying a verification run writes its incident entry, whose Tier 1 or Tier 2 prevention names an existing mechanism. [script `test:runs`, test `lib/testing/runs/incident-record.test.ts`, test `lib/testing/runs/incident-mechanisms.test.ts`, test `lib/testing/evidence/group-diagnosis.test.ts`, judgment]
@@ -215,7 +214,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 2. Run `bun run test:verify`. A pass is a report whose selected groups all passed.
 3. On a failure, follow [Failures](#failures).
 4. Push, open the PR and babysit it until it is ready ([reviews](coderabbit.md#babysit-a-pull-request)).
-5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the slice record.
+5. Record the Tier 3 answers (clause proof, failure class, finding dispositions) in the pull request.
 
 ## Examples
 

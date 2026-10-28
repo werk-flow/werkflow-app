@@ -1,6 +1,6 @@
 # AI Automations
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 AI automations are WerkFlow's second product phase: assistants, recommendations, workflows and bounded agents that use the operational context of the business to reduce repetitive work inside and outside the app.
 
@@ -421,7 +421,7 @@ The [business offer](../../../werkflow-business/docs/offer.md#price-and-payment-
 
 ### How Phase 2 gets planned
 
-Phase 1 continues in the order of its [roadmap](../plans/phase-1/roadmap.md). Phase 2 is then planned the way Phase 1 was: a `docs/plans/phase-2/` roadmap with waves, bounded slices, gates and records. It is built from three inputs: this spec, the "Phase 2 — Intelligence And Automation" section of every feature spec, and the five levels of the [capability map](../product/product-capability-map.md). Beta feedback reorders slices inside a wave. It does not skip a wave's prerequisites. The pilot lane is the one Phase 2 delivery inside Phase 1, and its two slices are the first records under `docs/plans/phase-2/`.
+Phase 2 is planned after Phase 1, in waves of bounded slices. It is built from three inputs: this spec, the "Phase 2 — Intelligence And Automation" section of every feature spec, and the five levels of the [capability map](../product/product-capability-map.md). Beta feedback reorders slices inside a wave. It does not skip a wave's prerequisites. The pilot lane is the one Phase 2 delivery inside Phase 1.
 
 Phase 2 planning settles these prerequisites first. None of them is a feature.
 
