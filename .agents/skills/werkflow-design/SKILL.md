@@ -117,6 +117,7 @@ Trap: a reference rewritten because the comparison failed. A reference records w
 
 - Success closes the dialog and a `Banner` confirms. No inline success flash, no auto-close timer.
 - The root's `pending` blocks Escape, outside clicks and the close controls until the answer lands. A form inside reports its request with `useReportPending`.
+- An `AlertDialogAction` that awaits calls `event.preventDefault()` synchronously first. The primitive closes on activation before `pending` can guard it, so a failure would land in a closed dialog.
 - A create dialog closes optimistically only when no correctable server error can follow.
 - Escape returns focus to the control that opened the dialog.
 

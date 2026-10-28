@@ -33,6 +33,7 @@ Start each child of the current stage with `delegate_task` (`isolation: "worktre
 
 - Read the epic, the child issue and the brief before writing.
 - Do the work yourself. Start no subagents.
+- Update the **Current Product Baseline** of the feature spec in the same PR as the behavior.
 - Run `bun run check:changed` and the done-when commands. Run `sol-loop` for level 1 and 2.
 - Open the PR with `file-pr`. Do not watch or merge it.
 - End with: `PR <full URL>, head <SHA>, checks and reviews <state>.`
@@ -45,9 +46,9 @@ For each hand-back:
 
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Fix small gaps yourself. Send a large one back as a new `delegate_task`.
-3. Merge a "full send" child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child waits for the owner's merge. Ask through the question tool.
+3. Merge a "full send" child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child waits for the owner's merge: call `unwatch_pull_request`, ask through the question tool, and end your turn.
 4. Rebase the open siblings on the new `main`. Where two children edit the same lines, keep both sides.
-5. Rerun a known flaky step once and cite its issue. Diagnose a new failure.
+5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
 6. Close the child issue with "Merged in <PR>."
 
 Start the next stage only after every child of this stage merged.
@@ -55,7 +56,7 @@ Start the next stage only after every child of this stage merged.
 ## 5. Close
 
 1. On the merged `main`, run the feature's end-to-end journeys: `bun run test:verify --group <ids> --fresh` with its `golden:*` and `audit:*` groups from `lib/testing/selection/test-groups.ts`. A wave end adds `bun run test:verify --mode release`.
-2. Update the **Current Product Baseline** of each feature spec the epic changed, in one last PR.
+2. Check that each child updated the **Current Product Baseline** of every spec whose behavior it changed.
 3. Check every done-when of the epic against `main`.
 4. Comment the result on the epic: each child with its PR, targets before and after, decisions you made, anything unverified. Close the epic.
 5. Report the same to the owner, outcome first.
