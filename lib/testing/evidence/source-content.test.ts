@@ -12,7 +12,7 @@ test("comment, JSDoc and indentation edits keep a code file's content identity",
     '}',
   ].join('\n');
   const edited = [
-    '/** Reads one row after the 2026-09-14 pointer fix (docs/plans/phase-1/audits/golden-gate-log.md). */',
+    '/** Reads one row after the 2026-09-14 pointer fix (docs/technical/testing.md). */',
     'export function read(id: string) {',
     '      // a different comment',
     '      return load(id);',

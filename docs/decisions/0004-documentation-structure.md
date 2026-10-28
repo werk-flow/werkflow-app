@@ -194,3 +194,34 @@ Decided: a row of the credential table in [environments](../technical/environmen
 | Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
 | Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
 | Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |
+
+## Amendment 2026-10-28: plans leave the repository
+
+The `plans` folder under `docs/` is deleted (werk-flow/werkflow-planning#3). Git keeps it.
+
+Decided:
+
+1. `docs:check` drops the rules that served only plans: roadmap rows and counter, slice records, the deletion pass and durable homes of closed records, the closed-record banner, slice browser proof, the spec review date against slice acceptance, and capture citations in plan records.
+2. A decision record keeps its accepted text. `docs:check` does not resolve its links into the deleted plans tree.
+3. The coverage map drops its `imported-ledger` review kind. Each Wave 2 ledger row becomes an `assertions-reviewed` rationale.
+4. The settings table loses its plan rows. Every other setting is unchanged.
+
+| Setting | Value | Reason |
+| --- | --- | --- |
+| Word budget: living technical doc | 4000 | The 2026-10-03 amendment, unchanged. |
+| Word budget: AGENTS.md | 2800 | The 2026-10-01 amendment, unchanged. |
+| Word budget: docs index | 3600 | Routine reading includes the index in full; it holds the index, the doc rules and virtue 6's owner sections. |
+| Word budget: skill file | 4000 | A skill is read in full when it loads; the same size as an owner doc. |
+| Unbudgeted doc | docs/technical/test-incident-log.md | A log by purpose that no routine task reads. |
+| Dated doc | docs/technical/test-incident-log.md | A dated log by purpose. |
+| Dated doc | docs/product/competitive-landscape.md | Market figures mean something only with their snapshot date. |
+| Dated doc | docs/features/commercial-and-finance.md | Statutory e-invoice dates and the research date of provider facts. |
+| Dated lines | docs/product/user-flow-catalog.md | A flow's text is pinned by its hash in the coverage map and changes only with its evidence. |
+| Dated lines | docs/technical/environments.md | A row of the credential table names the day its token expires. GitHub, Vercel and Supabase store the secret without that date, and the weekly health check needs a human to rotate before it. |
+| Append-only log | docs/technical/test-incident-log.md | Historical entries keep the references they were written with. |
+| Unmirrored skill | `coderabbit-review` | Codex ships its own CodeRabbit skill. |
+| Dead citation | lib/testing/evidence/build-identity.test.ts -> docs/note.md | A fixture file name inside a test, not a citation. |
+| Dead citation | lib/testing/evidence/candidate-identity.test.ts -> docs/testing.md | As above. |
+| Dead citation | lib/testing/selection/coverage-map.test.ts -> docs/review.md | As above. |
+| Numbered-rule fixture | `lib/docs/reference-rules.ts` | The rule's own module spells the phrases it refuses. |
+| Numbered-rule fixture | `lib/docs/reference-rules.test.ts` | The rule's own test spells them as probes. |

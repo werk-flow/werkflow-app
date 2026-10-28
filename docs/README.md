@@ -1,6 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-27; update this index when you add, move, close or remove a doc
+Status: living — last reviewed 2026-10-28; update this index when you add, move, close or remove a doc
 
 This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
 
@@ -16,16 +16,14 @@ A doc holds what the code and the database cannot say. The code, `lib/supabase/d
 | A procedure with its exact commands | A report id, a build id, a commit hash |
 | A limit the owner accepted | Dated narrative: what happened when, who found what |
 
-Examples. "The migration that creates a table grants explicitly; `sql:security` fails on an automatic grant" is a rule with its mechanism: keep it. "The GET handlers that use the read-request cache are a, b, c" is an inventory: delete it, the code is the list. "On September 12 the membership cache caused a stale cookie" is narrative: the rule that came out of it stays in the owner doc, and the story lives in a closed record or the incident log.
+Examples. "The migration that creates a table grants explicitly; `sql:security` fails on an automatic grant" is a rule with its mechanism: keep it. "The GET handlers that use the read-request cache are a, b, c" is an inventory: delete it, the code is the list. "On September 12 the membership cache caused a stale cookie" is narrative: the rule that came out of it stays in the owner doc, and the story lives in Git or the incident log.
 
 ## Add, change and remove docs
 
 - **Add** a doc only when a rule, decision or procedure has no home in the index below. Prefer a section in the owning doc. A new doc gets a status line and an index row in the same change.
 - **Change** the owning doc in the same change as the behavior or rule it describes. A fact has one home. Other docs and skills link to it and do not repeat it.
 - **Remove** a sentence when it is derivable from code, when its rule no longer holds, or when another doc owns it. Remove a whole doc when nothing in it passes the table above. Deleting is a normal edit, and Git keeps the old text.
-- **Close** a plan or record when its work has ended. Before it closes, move every fact a later agent needs into its living home and list the homes under `## Durable homes`. Nobody opens a closed record unprompted.
-- **Delete** a closed record once nothing requires it: no living doc or check needs its acceptance evidence, and no fact in it still constrains future work. Slice records and decision records stay. Git keeps everything else.
-- **Budget.** `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs, product docs and plans have no budget. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
+- **Budget.** `docs:check` measures the word budget of each living technical doc, of `AGENTS.md`, of this index and of each skill file. Feature specs and product docs have no budget. The settings table of the latest amendment to [decision 0004](decisions/0004-documentation-structure.md) holds every budget and every exemption with its reason, and a test fails while the checker's settings differ from it, so a budget or an exemption changes only by the owner's decision recorded there.
 
 ## Index
 
@@ -51,7 +49,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 
 ### Feature specifications (`docs/features/`)
 
-Read the spec of the feature you change, plus only the connected specs its slice names. Each spec separates **Current Product Baseline** (implemented) from planned scope.
+Read the spec of the feature you change, plus only the connected specs your change touches. Each spec separates **Current Product Baseline** (implemented) from planned scope.
 
 | Doc | Read when working on |
 | --- | --- |
@@ -71,26 +69,11 @@ Read the spec of the feature you change, plus only the connected specs its slice
 | Doc | Read when |
 | --- | --- |
 | [product-capability-map.md](product/product-capability-map.md) | You need the product-wide ownership map, handoff rules, Phase 1 completion criteria or decision gates. |
-| [user-flow-catalog.md](product/user-flow-catalog.md) | You touch slice acceptance or coverage: the German flow list with stable `P1-XX-FNN` ids. |
+| [user-flow-catalog.md](product/user-flow-catalog.md) | You change user-visible behavior or its coverage: the German flow list with stable `P1-XX-FNN` ids. |
 | [competitive-landscape.md](product/competitive-landscape.md) | A decision needs competitor context. Refresh volatile figures first. |
 | [offer.md](product/offer.md) | Routing page to the business offer. |
 | [acquisition.md](product/acquisition.md) | Routing page to the business acquisition context. |
 | [avatar.md](product/avatar.md) | Routing page to commercial targeting and personas. |
-
-### Plans (`docs/plans/phase-1/`)
-
-| Doc | Read when |
-| --- | --- |
-| [roadmap.md](plans/phase-1/roadmap.md) | Any Phase 1 task: current checkpoint, slice rows, dependencies. |
-| [protocol.md](plans/phase-1/protocol.md) | You start, verify or accept a slice. |
-| [gates.md](plans/phase-1/gates.md) | You run or extend a golden gate. |
-| [coverage.md](plans/phase-1/coverage.md) | You need slice-to-feature routing. |
-| [log.md](plans/phase-1/log.md) | You append a progress entry. History. |
-| phase-1/slices/ | You work on one slice. One document per slice: its plan while in progress, its acceptance record afterwards. The roadmap links each record. |
-| [golden-gate-log.md](plans/phase-1/audits/golden-gate-log.md) | You record a gate run. History. |
-| [wave-2-audit.md](plans/phase-1/audits/wave-2-audit.md) | Living — the Wave 2 coverage ledger and its wave-end certification gate. |
-
-Closed record. Open it only to investigate a named decision or claim: [Wave 3, Wave 4 and Phase 2 planning](plans/phase-1/pre-wave-3/04-wave-3-4-and-phase-2-planning.md) holds the research and reasoning behind the Wave 3 and Wave 4 owner decisions and the expert-review agenda that blocks `P1-39` to `P1-43`.
 
 ### Decision records (`docs/decisions/`)
 
@@ -135,9 +118,9 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 1. **Status line.** Line 3 of every doc, under the H1 and one blank line, is its status. A living doc uses `Status: living — last reviewed YYYY-MM-DD`, optionally followed by `; <clause>`. Every change to a living doc reviews it, so the date moves to the day of the change: `docs:check` fails while the doc's last commit, or today for an uncommitted change, is newer than the date. A closed doc uses `Status: closed (YYYY-MM-DD) — <what it remains useful for>`. A decision record uses its metadata block that starts with `- **Status:** accepted (YYYY-MM-DD)`.
 2. **One home per fact.** See "Add, change and remove docs" above.
 3. **Link syntax.** A reference from one doc to another inside `docs/` is a relative markdown link, so that the check can resolve it. Backtick paths are for code and config files and for references from outside `docs/`. A bare id ("decision 0002") carries a link on its first mention in a doc.
-4. **The index is exhaustive.** Every Markdown file under `docs/` has a row above, except this index and the slice records, which the roadmap links.
-5. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `plans/phase-1/` holds sequencing, with one document per slice under `slices/` and cross-slice records in `audits/` and `pre-wave-3/`. `decisions/` holds numbered decision records.
-6. **A closed record is history.** A slice record or a cross-slice record is read again only when someone is sent there. A bare "see the record" pointer is not a home: the living doc states the substance. `docs:check` rejects a closed plan record without a `## Durable homes` section; records closed before the rule are exempt.
+4. **The index is exhaustive.** Every Markdown file under `docs/` has a row above, except this index.
+5. **Where a doc goes.** `technical/` holds system rules. `features/` holds product behavior. `product/` holds capability, flow and market context. `decisions/` holds numbered decision records.
+6. **History lives in Git.** A pointer to old text is not a home: the living doc states the substance.
 7. **Sibling repositories.** `docs:check` needs the sibling clones of the [workspace setup](../../werkflow-business/docs/workflow.md#prepare-a-new-machine). It reads them and never edits them. It looks for them beside the main checkout, so a worktree can sit in any folder under any name. A missing clone fails the check once, with the number of links it left unchecked.
 8. **Decision record growth.** An accepted decision record changes only by a section appended at its end under the heading `## Amendment YYYY-MM-DD: <title>`. `docs:check` fails while the committed or the published text of a record is not a prefix of its current text.
 9. **Backlog audit.** A row of the [enforcement-ladder backlog](technical/enforcement-ladder-backlog.md) describes code that keeps changing, and no check sees a gap close. A release, and a change that lands a mechanism, checks every row against the code it names and deletes or corrects a stale one.
@@ -157,7 +140,7 @@ Wrong turn: describing what you built, file by file. The code already says it, a
 
 1. Route the subject through the index above to its owning doc, and `git grep` a key phrase to find an existing statement.
 2. If a statement exists, change it there and link to it from elsewhere.
-3. Put product behavior into the spec's **Current Product Baseline**, a system rule into its technical doc, a durable choice into a decision record, and history into the slice record or the incident log.
+3. Put product behavior into the spec's **Current Product Baseline**, a system rule into its technical doc, a durable choice into a decision record, and history into the commit message or the incident log.
 
 Wrong turn: a new section or a new doc for one change. The fact gets a second home, and the two drift.
 
@@ -187,12 +170,7 @@ This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechan
 - Each virtue's owner doc carries "How to work", "Checklist", "Never", "Verify your work" and "Examples", each with at least one list item. Every checklist and "Never" item ends with a mechanism tag that names something real, and a lint tag names a rule the configuration enables or a set it declares and uses. Every custom lint rule, every selector set in `eslint.config.mjs` and every test under `lib/conventions/`, `lib/ui/` and `lib/security/`, and every rule test under `lib/testing/`, is named by `AGENTS.md` or an owner doc. [test `lib/docs/virtue-standards.test.ts`, test `lib/docs/lint-config.test.ts`]
 - The "Enforced by" lines of `AGENTS.md` name mechanisms that exist, each one tagged by the virtue's owner docs, and they name or cover by folder, group family or `static:lint` every mechanism those docs tag. [test `lib/docs/virtue-standards.test.ts`]
 - An owner doc's `[judgment]` tags never outnumber its entry in `lib/docs/judgment-ratchet.json`, which falls with them and rises only with the owner's reason. [script `docs:check`, test `lib/docs/judgment-ratchet.test.ts`]
-- A slice has one document, under `slices/`. [test `lib/docs/slice-records.test.ts`]
-- A closed slice record carries its deletion pass and review, and a closed plan record names its durable homes. [script `docs:check`, test `lib/docs/record-sections.test.ts`]
-- The roadmap counter, the ready set and the record links agree, and the flow catalog's ids are unique and sequential. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`, test `lib/docs/flow-catalog.test.ts`]
-- A roadmap row uses a status of the protocol's status model, and every accepted slice has its entry in the progress log. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`]
-- A feature spec's status line is dated on or after the acceptance of every slice that names it as primary spec. The date lives only in the status line. [script `docs:check`, test `lib/docs/roadmap-rules.test.ts`]
-- Every closed record opens with the fixed history banner under its status line, so an agent does not carry out an old instruction. [script `docs:check`, test `lib/docs/closed-records.test.ts`]
+- The flow catalog's ids are unique and sequential. [script `docs:check`, test `lib/docs/flow-catalog.test.ts`]
 - In living docs, `AGENTS.md` and the skills, a backticked route handler names a folder under `app/api/`, and a backticked repository path resolves. [script `docs:check`, test `lib/docs/reference-rules.test.ts`]
 - Every incident-log entry names the tier where its prevention landed. [script `docs:check`, test `lib/docs/incident-tiers.test.ts`]
 - In living docs, `AGENTS.md` and the skills, a German quotation that opens with „ closes with “. [script `docs:check`, test `lib/docs/living-doc-rules.test.ts`]
@@ -215,7 +193,7 @@ This page owns virtue 6 in `AGENTS.md`. The tag after each item names its mechan
 1. Run `bun run docs:check`. A pass prints `docs:check passed` with the number of docs.
 2. If you changed the checker, run `bun run test:unit lib/docs` and lint `scripts/check-docs.ts` and `lib/docs` with ESLint.
 3. Read each changed sentence against "What a doc may contain" above. Delete a sentence that restates code, carries history or has another home.
-4. Record a judgment call (a kept sentence you were unsure about, a divergence from a default) in the slice record, or in the commit message outside a slice.
+4. Record a judgment call (a kept sentence you were unsure about, a divergence from a default) in the commit message.
 
 ## Examples
 

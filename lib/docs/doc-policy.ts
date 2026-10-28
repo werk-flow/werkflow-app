@@ -28,8 +28,6 @@ export function wordBudgetOf(path: string, living: boolean): number | null {
 /** Living docs that may carry dates anywhere: dated logs and dated research snapshots. */
 export const DATED_DOCS: readonly string[] = [
   'docs/technical/test-incident-log.md',
-  'docs/plans/phase-1/log.md',
-  'docs/plans/phase-1/audits/golden-gate-log.md',
   'docs/product/competitive-landscape.md',
   'docs/features/commercial-and-finance.md',
 ];
@@ -47,8 +45,6 @@ function credentialRowWithExpiry(): RegExp {
 
 /** Living docs that may carry dates only on the lines a pattern matches. */
 export const DATED_LINES: Readonly<Record<string, RegExp>> = {
-  // A complete slice row names its acceptance date, which the roadmap check matches with the record.
-  'docs/plans/phase-1/roadmap.md': /^\| `P1-\d{2}a?` \| `complete` \|/,
   // A flow's text is pinned by its hash in the coverage map and changes only with its evidence.
   'docs/product/user-flow-catalog.md': /^- `P1-\d{2}a?-F\d{2,3}` /,
   // A credential row names the day its token expires in its fourth column, which no provider shows
@@ -57,23 +53,10 @@ export const DATED_LINES: Readonly<Record<string, RegExp>> = {
 };
 
 /** Append-only logs: their historical entries keep the references they were written with. */
-export const APPEND_ONLY_LOGS: readonly string[] = [
-  'docs/plans/phase-1/log.md',
-  'docs/plans/phase-1/audits/golden-gate-log.md',
-  'docs/technical/test-incident-log.md',
-];
+export const APPEND_ONLY_LOGS: readonly string[] = ['docs/technical/test-incident-log.md'];
 
 /** Skills that exist only under `.claude/skills`. */
 export const UNMIRRORED_SKILLS: readonly string[] = ['coderabbit-review'];
-
-/** The living roadmap family, which never closes and so needs no "Durable homes" section. */
-export const LIVING_PLAN_FAMILY: readonly string[] = [
-  'docs/plans/phase-1/roadmap.md',
-  'docs/plans/phase-1/protocol.md',
-  'docs/plans/phase-1/gates.md',
-  'docs/plans/phase-1/coverage.md',
-  'docs/plans/phase-1/log.md',
-];
 
 /** Code files that cite a missing docs path on purpose, as `<file> -> <path>`. */
 export const DEAD_CITATIONS: readonly string[] = [
@@ -108,7 +91,6 @@ export function policyRows(): PolicyRow[] {
     ['Dated lines', Object.keys(DATED_LINES)],
     ['Append-only log', APPEND_ONLY_LOGS],
     ['Unmirrored skill', UNMIRRORED_SKILLS],
-    ['Living plan', LIVING_PLAN_FAMILY],
     ['Dead citation', DEAD_CITATIONS],
     ['Numbered-rule fixture', NUMBERED_RULE_FIXTURES],
     ['Shared sentence', SHARED_SENTENCES],
