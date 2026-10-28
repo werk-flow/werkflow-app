@@ -715,8 +715,7 @@ export const noScopedHasLocatorRule = {
 // ---------------------------------------------------------------------------
 // One-shot count comparisons. Two lists, or a list and a badge, settle from
 // separate reads, so an assertion that compares count() reads taken once races
-// the slower one (test-incident-log.md: audit:wave-1:a5, the Aufgaben badge
-// equality). Every read belongs inside one expect.poll.
+// the slower one. Every read belongs inside one expect.poll.
 
 const FUNCTION_NODES = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'FunctionDeclaration']);
 
