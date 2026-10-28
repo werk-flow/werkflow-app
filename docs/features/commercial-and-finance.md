@@ -1,6 +1,6 @@
 # Commercial And Finance
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 Commercial and finance capabilities connect the operational record of customers, jobs, projects, time, documents, and material with calculation, offers, orders, billing, incoming costs, payments, and post-calculation. Native accounting, payroll, and tax filing are separate product decisions. This scope does not imply them.
 
@@ -233,7 +233,7 @@ Issued and received financial documents are the main consumers of the retention 
 
 An audit trail or a PDF alone never justifies a claim of GoBD conformity, compliant archiving, qualified signatures, or tax correctness. Claims need expert review, documented procedures, and acceptance evidence.
 
-> Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports require the qualified expert review defined in the [execution protocol's practical cautions](../plans/phase-1/protocol.md#practical-execution-cautions). Record `decision_blocked` while that review is missing.
+> Invoice semantics, number ranges, e-invoice profiles, retention, and accounting exports require a qualified expert review. Build none of them before that review exists.
 
 ### Onboarding, Packaging, Integrations, And Support
 
