@@ -184,7 +184,10 @@ world.rpc = ({ name, args }) => {
 
 const signedPaths: string[] = [];
 const uploadUrlPaths: string[] = [];
+const promotedPaths: string[] = [];
 const discardedPaths: string[] = [];
+const stagingPathOf = (organizationId: string, path: string) =>
+  `${organizationId}/staging/${path.slice(organizationId.length + 1)}`;
 const outsideFixture = (name: string) => (): never => {
   throw new Error(`${name} is outside this fixture`);
 };
@@ -202,7 +205,11 @@ mock.module('@/lib/storage/r2', () => ({
   discardStorageObjects: async ({ paths }: { paths: string[] }) => {
     discardedPaths.push(...paths);
   },
-  headStorageObject: async () => ({ exists: true, sizeBytes: 1024, contentType: 'application/pdf' }),
+  promoteUploadedObject: async ({ path }: { path: string }) => {
+    promotedPaths.push(path);
+    return { exists: true, sizeBytes: 1024, contentType: 'application/pdf' };
+  },
+  uploadStagingPath: stagingPathOf,
 }));
 const actions = await import('@/lib/documents/actions');
 
@@ -304,7 +311,9 @@ assert.deepEqual(
   }),
   notAuthorized,
 );
-assert.deepEqual(discardedPaths, [`${ORGANIZATION_A}/${refusedProjectUploadId}/aufmass.pdf`]);
+// The refused upload never left its staging key, so only that key is discarded.
+assert.deepEqual(discardedPaths, [`${ORGANIZATION_A}/staging/${refusedProjectUploadId}/aufmass.pdf`]);
+assert.deepEqual(promotedPaths, []);
 assert.equal(
   tableRows(world, 'documents').some((document) => document.id === refusedProjectUploadId),
   false,
@@ -332,6 +341,13 @@ const jobUpload = await actions.finalizeDocumentUpload({
 });
 assert.ok(jobUpload.success, JSON.stringify(jobUpload));
 assert.deepEqual(linksTo(jobUploadId), [{ job_id: assignedJobId, project_id: null }]);
+// The registered document references the promoted key, never the key its upload URL wrote.
+const jobUploadPath = `${ORGANIZATION_A}/${jobUploadId}/aufmass.pdf`;
+assert.equal(
+  tableRows(world, 'documents').find((document) => document.id === jobUploadId)?.storage_path,
+  jobUploadPath,
+);
+assert.deepEqual(promotedPaths, [jobUploadPath]);
 assert.deepEqual(
   await actions.createDocumentUploadTicket({ kind: 'job', jobId: unassignedJobId, ...uploadFile }),
   notAuthorized,

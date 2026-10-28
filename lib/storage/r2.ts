@@ -157,6 +157,20 @@ export function assertOrganizationStorageKey(organizationId: string, path: strin
 /** The organization scope every storage operation carries. */
 type OrganizationScope = { organizationId: string };
 
+/**
+ * The key a browser upload writes before finalize promotes it to `path`. No
+ * row ever references a staging key, so a signed PUT that is still valid after
+ * finalize can no longer change the bytes a row points at.
+ */
+export function uploadStagingPath(organizationId: string, path: string): string {
+  assertOrganizationStorageKey(organizationId, path);
+  return `${organizationId}/staging/${path.slice(organizationId.length + 1)}`;
+}
+
+/**
+ * Signs a PUT for the staging key of `path`, never for `path` itself;
+ * `promoteUploadedObject` moves the bytes to `path` at finalize.
+ */
 export async function createSignedUploadUrl({
   organizationId,
   path,
@@ -167,10 +181,10 @@ export async function createSignedUploadUrl({
   contentType: string;
   expiresInSeconds?: number;
 }): Promise<string> {
-  assertOrganizationStorageKey(organizationId, path);
+  const stagingPath = uploadStagingPath(organizationId, path);
   const command = new PutObjectCommand({
     Bucket: getR2BucketName(),
-    Key: path,
+    Key: stagingPath,
     ContentType: contentType,
   });
 
@@ -266,6 +280,27 @@ export async function copyStorageObject({
       ...(contentType ? { MetadataDirective: 'REPLACE' as const, ContentType: contentType } : {}),
     }),
   );
+}
+
+/**
+ * Copies a browser upload from its staging key to `path` on the server,
+ * removes the staging object and returns the head of the copy. The copy is
+ * what finalize verifies and registers: only the server writes `path`. A
+ * missing staging object reads as a missing upload.
+ */
+export async function promoteUploadedObject({
+  organizationId,
+  path,
+}: OrganizationScope & { path: string }): Promise<StorageObjectHead> {
+  const stagingPath = uploadStagingPath(organizationId, path);
+  try {
+    await copyStorageObject({ organizationId, sourcePath: stagingPath, targetPath: path });
+  } catch (error) {
+    if (isNotFoundError(error)) return { exists: false, sizeBytes: null, contentType: null };
+    throw error;
+  }
+  await discardStorageObjects({ organizationId, paths: [stagingPath] });
+  return headStorageObject({ organizationId, path });
 }
 
 export async function putStorageObject({
