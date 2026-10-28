@@ -9,8 +9,9 @@
 --
 -- record_inventory_movement now locks the line FOR NO KEY UPDATE before a
 -- return and refuses with 'return_exceeds_taken' while the returned quantity
--- plus the return would exceed the taken quantity, and with 'line_not_found'
--- for a line outside the organization. The lock serializes the returns of one
+-- plus the return would exceed the taken quantity. The movement's insert
+-- trigger already refuses a line outside the organization, so the line is
+-- always found here. The lock serializes the returns of one
 -- line, and it does not conflict with the KEY SHARE lock that a concurrent
 -- movement's foreign key takes on the line, so two returns of one line to
 -- different locations cannot deadlock (FOR UPDATE would). The stock row is
@@ -164,9 +165,6 @@ begin
         and line.organization_id = p_organization_id
       for no key update;
 
-      if not found then
-        raise exception 'line_not_found';
-      end if;
       if line_returned + absolute_delta > line_taken then
         raise exception 'return_exceeds_taken';
       end if;

@@ -252,12 +252,10 @@ expect(tableWrites).toBe(0);
 //    its code, even after the server's own check of the line passed.
 const LINE = '00000000-0000-4000-8000-0000000000b7';
 const returnInput = { lineId: LINE, locationId: LOCATION, quantity: 2 };
-for (const code of ['return_exceeds_taken', 'line_not_found'] as const) {
-  reset(refusal(code));
-  tables.job_material_lines = [
-    { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 4, returned_quantity: 1 },
-  ];
-  expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: code });
-  expect(rpcCalls).toHaveLength(1);
-  expect(logged).toEqual([]);
-}
+reset(refusal('return_exceeds_taken'));
+tables.job_material_lines = [
+  { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 4, returned_quantity: 1 },
+];
+expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: 'return_exceeds_taken' });
+expect(rpcCalls).toHaveLength(1);
+expect(logged).toEqual([]);

@@ -162,6 +162,24 @@ begin
   if v_refusal is null then
     raise exception 'the line must refuse a returned quantity above its taken quantity';
   end if;
+
+  select count(*) into v_count from public.inventory_movements where organization_id = v_org;
+  begin
+    perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 1, null, v_project,
+      '98000000-0000-4000-8000-0000000000ff');
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'inventory movement material line must belong to same organization' then
+    raise exception 'a return against a line outside the organization must be refused, got %', v_refusal;
+  end if;
+  select quantity_on_hand into v_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_item and location_id = v_location;
+  if v_stock <> 10 or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_count then
+    raise exception 'a return refused for a foreign line must leave the stock level and the movement ledger unchanged';
+  end if;
 end $$;
 
 rollback;
