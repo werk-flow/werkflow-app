@@ -75,7 +75,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 - A ledger table refuses direct UPDATE and DELETE, also for privileged roles, with a real denial and a permitted-cleanup assertion. Cascade or reference-nulling follows the domain's retention rule.
 - **Service-role queries.** A query on organization data passes an organization from the resolved context, or carries a reviewed `tenant-scope` reason.
 - **Closed periods.** A closed period freezes the recorded time of its month for every writer, service-role code included. Triggers raise SQLSTATE `WFP01`; `isPeriodClosedError` maps it to `period_closed`. Close refuses with `period_open_sessions` while a session that began before the period end is open.
-- **Email change.** One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
+- **Account and email change.** Account and email-change transitions stay atomic and server-only. One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
 - DEV's Auth configuration matches the reviewed posture (`auth:check`), and its advisors report nothing outside the reviewed exceptions (`advisors:check`).
 
 ### Realtime
@@ -151,7 +151,7 @@ List every residual exposure the owner accepted here until it closes.
 
 | Data | Purpose and access | Retention |
 | --- | --- | --- |
-| Customer contacts, sites, work records, signatures | Organization operations, restricted by role and assignment. | The owner sets contractual retention before client data is imported. Add no guessed automatic deletion period. |
+| Customer contacts, sites, work records, signatures | Organization operations, restricted by role and assignment. | Keep business history and the explicit trash and version behavior. The owner sets contractual retention and deletion rules before client data is imported. Add no guessed automatic deletion period. |
 | Personnel, sickness, time, payroll exports | Employment operations, through personnel access classes and releases. An export is a copy outside the app's access control. | The owner decides lawful purpose, recipients and retention. Ending access does not authorize deleting employment or time history. |
 | Mail | Invitations and code delivery. No business documents. | The provider's mail metadata has its own lifecycle. |
 | Logs, traces, test artifacts | Diagnosis and test evidence. Fixtures are synthetic. | Limit access and remove secrets from exported evidence. Ignored files are neither encrypted nor purged automatically. |
