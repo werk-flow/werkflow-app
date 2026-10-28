@@ -2,7 +2,8 @@
 // the in-memory database: a field worker is refused before any read or write,
 // and a folder, document, customer, request, equipment, service case,
 // maintenance coverage or employee of another organization is not found
-// before any write; storage is never reached on a refusal.
+// before any write; storage is never reached on a refusal. A trashed personnel
+// document of an Admin-only access class comes back only through an Admin.
 import assert from 'node:assert/strict';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 import { assertRefused } from './operations-boundary-refusals';
@@ -17,6 +18,8 @@ const foreignEquipmentId = '8f000000-0000-4000-8000-000000000007';
 const foreignServiceCaseId = '8f000000-0000-4000-8000-000000000008';
 const foreignCoverageId = '8f000000-0000-4000-8000-000000000009';
 const foreignMemberId = '8f000000-0000-4000-8000-00000000000a';
+const restrictedDeletedDocumentId = '8f000000-0000-4000-8000-00000000000b';
+const standardDeletedDocumentId = '8f000000-0000-4000-8000-00000000000c';
 
 const folder = (id: string, organizationId: string) => ({
   id,
@@ -25,11 +28,11 @@ const folder = (id: string, organizationId: string) => ({
   name: 'Verträge',
   deleted_at: null,
 });
-const document = (id: string, deletedAt: string | null) => ({
+const document = (id: string, deletedAt: string | null, organizationId = ORGANIZATION_B) => ({
   id,
-  organization_id: ORGANIZATION_B,
+  organization_id: organizationId,
   folder_id: null,
-  storage_path: `${ORGANIZATION_B}/${id}/vertrag.pdf`,
+  storage_path: `${organizationId}/${id}/vertrag.pdf`,
   display_name: 'vertrag.pdf',
   category: 'contract',
   current_version_number: 1,
@@ -38,8 +41,24 @@ const document = (id: string, deletedAt: string | null) => ({
 
 const world = installActionWorld({
   document_folders: [folder(ownFolderId, ORGANIZATION_A), folder(foreignFolderId, ORGANIZATION_B)],
-  documents: [document(foreignDocumentId, null), document(foreignDeletedDocumentId, '2026-10-01T08:00:00Z')],
-  personnel_documents: [],
+  documents: [
+    document(foreignDocumentId, null),
+    document(foreignDeletedDocumentId, '2026-10-01T08:00:00Z'),
+    document(restrictedDeletedDocumentId, '2026-10-01T08:00:00Z', ORGANIZATION_A),
+    document(standardDeletedDocumentId, '2026-10-01T08:00:00Z', ORGANIZATION_A),
+  ],
+  personnel_documents: [
+    {
+      organization_id: ORGANIZATION_A,
+      document_id: restrictedDeletedDocumentId,
+      access_class: 'health_evidence',
+    },
+    {
+      organization_id: ORGANIZATION_A,
+      document_id: standardDeletedDocumentId,
+      access_class: 'personnel_standard',
+    },
+  ],
   clients: [{ id: foreignClientId, organization_id: ORGANIZATION_B }],
   client_requests: [{ id: foreignRequestId, organization_id: ORGANIZATION_B }],
   installed_equipment: [{ id: foreignEquipmentId, organization_id: ORGANIZATION_B }],
@@ -152,3 +171,27 @@ assert.deepEqual(
   options.folders.map((option) => option.id),
   [ownFolderId],
 );
+
+// Büro neither restores nor deletes a trashed Admin-only personnel document,
+// and restores a standard one; an Admin restores the Admin-only one.
+await assertRefused(
+  world,
+  [
+    ['restoreDocument', () => restoreDocument(restrictedDeletedDocumentId)],
+    ['permanentlyDeleteDocument', () => permanentlyDeleteDocument(restrictedDeletedDocumentId)],
+  ],
+  { success: false, error: 'not_authorized' },
+  'reads',
+);
+for (const [role, documentId] of [
+  ['buero', standardDeletedDocumentId],
+  ['admin', restrictedDeletedDocumentId],
+] as const) {
+  signInAs(world, role);
+  world.rpcCalls.length = 0;
+  assert.deepEqual(await restoreDocument(documentId), { success: true }, `${role} restore failed`);
+  assert.deepEqual(
+    world.rpcCalls.map((call) => call.name),
+    ['restore_document'],
+  );
+}

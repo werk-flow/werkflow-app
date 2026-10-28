@@ -1,6 +1,6 @@
 # Document storage and access
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do, the planned scope and the open decisions. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
 
@@ -81,7 +81,7 @@ A field employee reads an ordinary document only through assigned work: the docu
 Protected personnel documents use a separate path:
 
 - The affected employee reads a current version only through an unrevoked release of that exact version. The employee can also upload requested own health evidence through the onboarding page.
-- Admin reads all protected classes. Büro manages only `personnel_standard` and cannot read `admin_restricted` or `health_evidence` bytes.
+- Admin reads all protected classes. Büro manages only `personnel_standard` and cannot read `admin_restricted` or `health_evidence` bytes. Büro cannot restore or permanently delete a trashed document of those classes either: `getDeletedDocumentForManager` refuses it, and `restore_document` refuses the restore in the database.
 - Job assignment, planning authority, ordinary document access and scoped approval responsibility never widen this access.
 - Operational consumers receive a status, never bytes.
 
