@@ -144,7 +144,7 @@ T3 Code gives every thread its own git worktree and runs `scripts/setup-worktree
 - Staging: a pull request merged to `main` reaches DEV's schema, then the staging deployment ([the migration rule](#the-migration-rule)).
 - Release: only through the `release` workflow, which the owner starts or asks an agent to start ([Release and rollback](#release-and-rollback)).
 - A production-local session: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
-- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable. Each run gives the demo members a generated password that nobody learns. For a manual look at `bun run dev`, which runs against DEV through `.env.local`, seed DEV with `DEMO_MEMBER_PASSWORD` set to a password you choose, and sign in with a demo member's address and that password. PROD refuses a chosen password.
+- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) deletes and recreates the owner's demo organizations. It refuses the beta partner's organization. The data is disposable. Each run gives the demo members a generated password that nobody learns. For a manual look, seed DEV with `DEMO_MEMBER_PASSWORD` set to a password you choose, run `bun run env:dev` and `bun run dev`, and sign in with a demo member's address and that password. PROD refuses a chosen password.
 
 ## Release and rollback
 
