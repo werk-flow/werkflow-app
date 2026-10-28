@@ -1,7 +1,28 @@
 import { describe, expect, test } from 'bun:test';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 
-import { canApproveEntries, formatDuration, formatSignedDuration, liveMinutes } from './helpers';
+import {
+  canApproveEntries,
+  canManageEntries,
+  formatDuration,
+  formatSignedDuration,
+  liveMinutes,
+} from './helpers';
+
+describe('canManageEntries: who edits or deletes an entry directly', () => {
+  test('Büro manages employees but never their own entries, which go through a Zeitkorrektur', () => {
+    expect(canManageEntries('buero', 'employee', false)).toBe(true);
+    expect(canManageEntries('buero', 'buero', true)).toBe(false);
+    expect(canManageEntries('buero', 'buero', false)).toBe(false);
+    expect(canManageEntries('buero', 'admin', false)).toBe(false);
+  });
+
+  test('Admin manages every entry, their own included; an employee manages none', () => {
+    expect(canManageEntries('admin', 'admin', true)).toBe(true);
+    expect(canManageEntries('admin', 'buero', false)).toBe(true);
+    expect(canManageEntries('employee', 'employee', true)).toBe(false);
+  });
+});
 
 describe('liveMinutes', () => {
   const nowMs = Date.parse('2026-09-03T10:30:00.000Z');

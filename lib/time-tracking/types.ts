@@ -426,6 +426,27 @@ type TimeValidationActionFailure = ActionFailure<TimeValidationCode> & TimeValid
 /**
  * Roles that a manager can manage (roles below manager)
  */
+/** An entry's state in an audit event of an Admin's own change. */
+export type AuditedEntryState = {
+  entryType: TimeEntryType;
+  timestamp: string;
+  jobId: string | null;
+  status: TimeEntryStatus;
+};
+
+/** An Admin's own direct edit or deletion of a time entry; a deletion has no after state. */
+export type TimeEntryAuditEvent = {
+  id: string;
+  entryId: string;
+  actorId: string;
+  action: 'edit' | 'delete';
+  createdAt: string;
+  before: AuditedEntryState;
+  after: AuditedEntryState | null;
+};
+
+export type GetTimeEntryAuditEventsResult = { success: true; events: TimeEntryAuditEvent[] } | ActionFailure;
+
 export const MANAGED_ROLES: OrgRole[] = ['employee'];
 
 /**
