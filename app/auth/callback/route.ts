@@ -143,6 +143,11 @@ async function redeemRecoveryLink(req: NextRequest): Promise<NextResponse> {
   const kept = recoveryTokenHashSchema.safeParse(req.cookies.get(RECOVERY_LINK_COOKIE)?.value);
   if (!kept.success) return refused();
 
+  const unavailable = (): NextResponse =>
+    NextResponse.json(
+      { error: 'auth_unavailable' },
+      { status: 503, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   const res = NextResponse.json({ success: true });
   const supabase = createCookieBoundSupabaseClient(req, res);
   let verification: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>;
@@ -150,12 +155,12 @@ async function redeemRecoveryLink(req: NextRequest): Promise<NextResponse> {
     verification = await supabase.auth.verifyOtp({ token_hash: kept.data, type: 'recovery' });
   } catch (thrown) {
     logError('auth.callback: token hash verification threw', thrown);
-    return NextResponse.json({ error: 'auth_unavailable' }, { status: 503 });
+    return unavailable();
   }
   if (verification.error) {
     logError('auth.callback: token hash verification failed', verification.error);
     if (!isRejectedSignInLink(verification.error)) {
-      return NextResponse.json({ error: 'auth_unavailable' }, { status: 503 });
+      return unavailable();
     }
     return refused();
   }

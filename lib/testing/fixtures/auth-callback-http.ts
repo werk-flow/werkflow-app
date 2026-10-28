@@ -23,6 +23,7 @@ let authAnswer: AuthAnswer = { error: null };
 let redeemAnswer: RpcAnswer = { data: null, error: null };
 const rpcNames: string[] = [];
 const verifiedHashes: string[] = [];
+const verifiedTypes: string[] = [];
 
 mock.module('server-only', () => ({}));
 mock.module('next/cache', () => ({ revalidateTag: () => {} }));
@@ -42,8 +43,9 @@ mock.module('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: {
       exchangeCodeForSession: async () => answerAuth(),
-      verifyOtp: async ({ token_hash }: { token_hash: string }) => {
+      verifyOtp: async ({ token_hash, type }: { token_hash: string; type: string }) => {
         verifiedHashes.push(token_hash);
+        verifiedTypes.push(type);
         return answerAuth();
       },
       getUser: async () => ({ data: { user: { id: callerId } }, error: null }),
@@ -114,6 +116,7 @@ for (const answer of unavailableErrors) {
   const response = await redeemRecoveryLink({ ...sameOrigin, ...keptLink });
   const label = `token hash ${answer.error?.name ?? 'thrown'}`;
   assert.equal(response.status, 503, label);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store', label);
   assert.equal(clearsKeptLink(response), false, label);
 }
 
@@ -162,6 +165,7 @@ for (const headers of [
   assert.equal((await redeemRecoveryLink(headers)).status, 403);
 }
 // Without a kept link it asks Auth nothing.
+verifiedTypes.length = 0;
 const withoutLink = await redeemRecoveryLink(sameOrigin);
 assert.equal(withoutLink.status, 400);
 assert.deepEqual(verifiedHashes, []);
@@ -169,6 +173,7 @@ assert.deepEqual(verifiedHashes, []);
 const redeemed = await redeemRecoveryLink({ ...sameOrigin, ...keptLink });
 assert.equal(redeemed.status, 200);
 assert.deepEqual(verifiedHashes, ['fixture-hash']);
+assert.deepEqual(verifiedTypes, ['recovery']);
 assert.ok(clearsKeptLink(redeemed));
 
 // A bare invite link redeems nothing and writes no cookie, whichever site
