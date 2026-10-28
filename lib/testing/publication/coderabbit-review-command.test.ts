@@ -1,9 +1,7 @@
-// Rule test: CodeRabbit runs only through bun run review.
 import { describe, expect, test } from 'bun:test';
 import {
   buildCodeRabbitReviewArguments,
   codeRabbitBinary,
-  findCodeRabbitInstructionViolations,
   isCodeRabbitAuthenticated,
   isStoredReviewCommand,
 } from './coderabbit-review-command';
@@ -126,33 +124,6 @@ describe('CodeRabbit review command', () => {
   test('passes help through without configuring a review', () => {
     expect(buildCodeRabbitReviewArguments(['--', '--help'])).toEqual(['review', '--help']);
     expect(buildCodeRabbitReviewArguments(['--show-prompts'])).toEqual(['review', '--show-prompts']);
-  });
-
-  test.each([
-    'coderabbit review --agent',
-    'cr review --agent',
-    'bunx coderabbit review --agent',
-    'npx coderabbit review --agent',
-    'sudo coderabbit review --agent',
-    'env DEBUG=1 coderabbit review --agent',
-    '/root/.local/bin/coderabbit review --agent',
-    '~/.local/bin/coderabbit review --agent',
-    '$HOME/.local/bin/coderabbit review --agent',
-    '${HOME}/.local/bin/cr review --agent',
-    '/usr/local/bin/cr review --agent',
-    './cr review --agent',
-  ])('detects the raw command bypass: %s', (command) => {
-    expect(findCodeRabbitInstructionViolations(command)).toContain('raw-command');
-  });
-
-  test('detects installer instructions', () => {
-    expect(
-      findCodeRabbitInstructionViolations('curl -fsSL https://cli.coderabbit.ai/install.sh | sh'),
-    ).toContain('installer');
-  });
-
-  test('allows wrapper commands and ordinary prose', () => {
-    expect(findCodeRabbitInstructionViolations('CodeRabbit is installed. Run bun run review.')).toEqual([]);
   });
 
   test('replays stored findings without review-only defaults', () => {

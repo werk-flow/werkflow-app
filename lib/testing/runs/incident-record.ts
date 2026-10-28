@@ -18,11 +18,8 @@ export type IncidentRecord = {
   prevention: string;
 };
 
-/**
- * The tier rule of the incident log (decision 0005). `scripts/check-docs.ts` applies it to every
- * dated section, so an entry the command writes always passes the docs check.
- */
-export const INCIDENT_TIER_PATTERN =
+/** The tier rule of the incident log (decision 0005): a prevention names its tier. */
+const INCIDENT_TIER_PATTERN =
   /\bTier [12]\b|\bTier 3\b[^.\n]*(?::|\bbecause\b|\()|\bno (?:\w+ )*prevention claim\b/i;
 
 /** Authoring and accepted-change are not failures of proven behavior, so they leave no incident. */

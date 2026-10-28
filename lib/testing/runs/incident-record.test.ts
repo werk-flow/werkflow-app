@@ -97,7 +97,7 @@ describe('incident record', () => {
     expect(recordsIncident({ lane: 'diagnostic', groupId: 'golden:p1-06' }, 'harness')).toBe(false);
   });
 
-  test('refuses a prevention that names no tier, as the docs check would', () => {
+  test('refuses a prevention that names no tier', () => {
     expect(incidentPreventionProblem('Added a wait.')).toContain('must name its enforcement tier');
     expect(incidentPreventionProblem('Tier 1: the helper owns it.')).toBeNull();
     expect(incidentPreventionProblem('Tier 3: no mechanism sees a WSL restart.')).toBeNull();

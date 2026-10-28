@@ -55,7 +55,7 @@ A group is one executable check in `lib/testing/selection/test-groups.ts`. Every
 
 ## Quality of tests and the runner
 
-A useful test also survives an equivalent implementation. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`, and `docs:check` requires an owner doc to name it.
+A useful test also survives an equivalent implementation. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`.
 
 ## When a proof is valid
 

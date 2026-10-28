@@ -93,14 +93,14 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 - **Good.** A doc holds what the code and the database cannot say: intent, decisions, rules, reasons, procedures, and a pointer to the mechanism that enforces a rule. Every fact has one home, and other places link to it. Change the owning doc in the same change as the behavior.
 - **Never.** Restate a schema, a file list, a handler list, a function inventory, a count or a current value. Write dated narrative, report ids or build ids into a living doc. Copy a rule into a second doc. Create a report or summary file that nobody asked for. Store repository facts in agent memory.
-- **Enforced by.** Tier 2: `bun run docs:check` with its rules and tests in `lib/docs/` and `lib/testing/publication/coderabbit-review-command.test.ts`.
-- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether undated narrative or a counter sits in a living doc.
+- **Enforced by.** Tier 2: `bun run docs:check` with its rules and tests in `lib/docs/`.
+- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether narrative or a counter sits in a living doc.
 - **Verify.** `bun run docs:check`.
 - **Owner doc.** [The docs index](docs/README.md), with the `writing-for-agents`, `technical-writing` and `unslop` skills for the prose. Start from its [How to work](docs/README.md#how-to-work).
 
 ### Keep the blocks and the owner docs in step
 
-Change an "Enforced by" line and its owner docs' mechanism tags in the same change; `docs:check` fails while they disagree.
+Change an "Enforced by" line and its owner docs' mechanism tags in the same change.
 
 ## How to work
 
