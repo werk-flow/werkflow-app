@@ -5,33 +5,57 @@ description: TypeScript best practices. Use when designing types, validation bou
 
 # TypeScript best practices
 
-Adapted for WerkFlow from cursor/plugins pstack (MIT). Repo notes: `lib/supabase/database.types.ts` (generated from dev) is the authoritative schema source — derive from it instead of re-declaring database shapes. The boundaries where external data crosses in are Server Actions, Route Handlers, and Supabase/PostgREST responses; parse there, and trust domain types inside. The [security control map](../../../docs/technical/security.md#add-a-server-action-or-route-handler) owns what a Server Action parses.
+Adapted for WerkFlow from cursor/plugins pstack (MIT).
 
-| Rule | Summary |
-|------|---------|
-| Discriminated unions | Model variants with a `kind` literal discriminant so impossible states can't be represented. No optional-field bags. |
-| Branded types | Brand primitives with `& { readonly __brand: "X" }` so they can't be mixed up. Validate once at creation. |
-| Constructive modeling | Build the shape so the illegal value can't be constructed. `[T, ...T[]]` for non-empty, `[T, T][]` for even length, `start` plus `duration` for a range. Not a runtime guard, not a wish for refinement types. |
-| Simplest total type | Keep `T[]` while every operation on it stays total. Strengthen to `NonEmpty<T>` only where the loose type forces `!`, a cast, or a "should never happen" throw. |
-| `unknown` over `any` | External data is `unknown`. `any` disables type checking everywhere it touches. |
-| No `as` casts | Every `as` is a runtime crash waiting. Cast only after validation. |
-| Narrowing hierarchy | Discriminant switch > `in` operator > `typeof`/`instanceof` > user-defined type guard > `as`. |
-| Type guards | Must verify the claim. A lying guard is worse than `as` because the bug hides behind a name that says it's safe. Name them `isX` or `hasX`. |
-| Exhaustiveness | Inline `const _exhaustive: never = x;` in default arms so the compiler errors when a new variant is added. |
-| `satisfies` over `as` | Validates the value without widening literal types. |
-| Boundary validation | Parse where data crosses in, into a named domain type. `Record<string, unknown>` (however spelled) stops at that parse. Trust types inside; keep business logic in pure functions behind the boundary. |
-| Schema-derived types | Reach for `Pick`/`Omit`/`Parameters`/`ReturnType`/`Awaited`/`typeof` before declaring a new interface. In this repo, derive database shapes from the generated Supabase types. |
-| Object args | Pass objects, not positional, so argument order is self-documenting. Skip on hot paths (per-frame render, tokenizers, parsers). |
-| Real tests | Don't mock what you can run. Prefer the framework's real test primitives with leak/disposable checks, and verify UI in a running build. Mock only what you can't run locally. |
-| Structured telemetry | Prefer structured logger diagnostics with enough context to debug from an id, and never leak PII into logs. No stray `console.log` in shipped code. |
+## Boundaries
 
-## Strict optional and index rules
+- External data enters through Server Actions, Route Handlers and Supabase responses. It is `unknown` there. Parse it once into a named domain type, then trust the type inside. [Security](../../../docs/technical/security.md) owns what a Server Action parses.
+- Derive database shapes from `lib/supabase/database.types.ts`. Reach for `Pick`, `Omit`, `Parameters`, `ReturnType`, `Awaited` and `typeof` before you declare a new type.
+- `Record<string, unknown>` stops at the parse.
 
-`tsconfig.json` runs with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`. They bind every new and changed file:
+## Make illegal states unrepresentable
 
-- No non-null assertion, no cast, no `@ts-expect-error` or `@ts-ignore` to satisfy either flag.
-- An optional property that carries `undefined` on purpose is widened to `T | undefined` at its declaration. Every other site builds the object conditionally (`...(value !== undefined ? { key: value } : {})`, or a separate assignment) instead of passing `undefined` into an optional property.
-- An index or map read narrows with a guard that follows the module's own failure shape: return the module's error result, throw its named error, or skip the row, whichever that module already does for missing data.
-- In tests, a missing value fails the assertion (`expect(row).toBeDefined()` then use `row`), never `rows[0]!`.
+- Model variants as a discriminated union on `kind`, not a bag of optional fields:
 
-Examples: `references/patterns.md`.
+  ```ts
+  type DiffState =
+    | { kind: 'loading' }
+    | { kind: 'ready'; diff: GitDiff }
+    | { kind: 'error'; error: string };
+  ```
+
+- Build the shape so the bad value cannot exist: `[T, ...T[]]` for non-empty, `[T, T][]` for pairs, `{ start, durationMs }` for a range.
+- Keep `T[]` while every operation stays total. Strengthen to `NonEmpty<T>` only where the loose type forces `!`, a cast or a "never happens" throw.
+- Brand a primitive that could be mixed up (`string & { readonly __brand: 'AgentId' }`), and validate it once where it is created.
+- Pass an object, not positional arguments, when two arguments could swap. Skip it on hot paths.
+
+## Narrow, never cast
+
+- Narrow in this order: discriminant, `in`, `typeof` or `instanceof`, a type guard, and `as` only after full validation.
+- A type guard (`isX`, `hasX`) must check what it claims. A lying guard hides the bug behind a safe-sounding name.
+- Use `satisfies` instead of `as` to check a literal without widening it.
+- End every switch over a union with an exhaustiveness check:
+
+  ```ts
+  default: {
+    const _exhaustive: never = shape;
+    return _exhaustive;
+  }
+  ```
+
+- To remove an existing `as`, find why inference fails: a missing discriminant, a source type that is too wide, or an unparsed boundary.
+
+## Strict flags
+
+`tsconfig.json` sets `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`.
+
+- Never satisfy them with `!`, `as`, `@ts-expect-error` or `@ts-ignore`.
+- An optional property that carries `undefined` on purpose is declared `T | undefined`. Everywhere else, build the object conditionally: `...(value !== undefined ? { key: value } : {})`.
+- An index read narrows with a guard in the module's own failure shape: return its error result, throw its named error, or skip the row.
+- In a test, assert the value exists (`expect(row).toBeDefined()`), never `rows[0]!`.
+
+## Runtime
+
+- Keep business logic in pure functions behind the boundary.
+- Test with the real thing you can run. Mock only what cannot run locally.
+- Log through `lib/logging.ts` with an id to debug from. Never log personal data.
