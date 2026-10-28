@@ -1,6 +1,6 @@
 # Security control map
 
-Status: living — last reviewed 2026-10-27
+Status: living — last reviewed 2026-10-28
 
 ## How to work
 
@@ -24,7 +24,7 @@ Wrong turn: a policy that checks membership but not the role. Every member can t
 5. An operation that sends mail, redeems a capability or activates billing calls `consumeRateLimit` from `lib/security/rate-limit.ts` before it acts.
 6. Write. Rows that change together change in one database function call ([write related rows](code-quality.md#write-related-rows)). Return `ActionResult` with a stable code, and log a failure through `logError`.
 7. A route handler gets its entry in `lib/security/route-inventory.test.ts`. A handler that sets cookies or redeems a capability from a request body calls `verifySameOriginJsonRequest` first. A GET handler redeems nothing from a query string.
-8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`, and expect a refusal for a foreign organization's id and for a lower role. Each new action needs one.
+8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`, and expect a refusal for a foreign organization's id and for a lower role.
 9. Run `bun run test:unit lib/security lib/conventions/server-action-input.test.ts` and the new boundary test.
 
 Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint, and anyone can send any id.
@@ -74,7 +74,7 @@ Wrong turn: `console.error(error)`; a provider message can quote row values.
 | Email change | One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles cannot read either state table. | `supabase/tests/email_change_boundaries.sql`, `lib/security/account-boundaries.test.ts`. |
 | Mail | The edge functions accept only the project's secret keys and escape every interpolated value. The email-change code is stored as a keyed hash over user id and code. Missing configuration and provider failure return a failure. Logs hold fixed error codes and status numbers, never recipients, codes, invitation links or provider bodies. | `supabase/functions/_shared/`, `lib/settings/otp-hash.ts`, `lib/security/mail-handlers.test.ts`. |
 | Browser | Responses carry the hardening headers and the enforced Content-Security-Policy from `buildSecurityHeaders` in `next.config.ts`. The script policy allows the app's own origin and inline scripts. Violations go to `POST /api/csp-report`, which is unauthenticated by design, stores nothing and logs a redacted summary. An `eval` report, or one that names another origin, is a finding. Product code has no HTML string sink and no `eval`. | `lib/security/headers.test.ts` calls the real builder. `lib/security/csp-report.test.ts` pins the directives. The `htmlSinkSelectors` lint set rejects the sinks. |
-| Dependencies | Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input, an expired exception and an exception that matches no current finding fail. A network failure leaves the check unverified. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
+| Dependencies | Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input, an expired exception and an exception that matches no current finding fail. | `bun run security:dependencies` (`static:dependencies`). Reviewed exceptions live in `lib/security/dependency-exceptions.json`. |
 
 ## Checklist
 
@@ -113,6 +113,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 - Responses keep the hardening headers and the enforced Content-Security-Policy. [test `lib/security/headers.test.ts`, test `lib/security/csp-report.test.ts`]
 - Product code imports Zod through `lib/zod.ts`, which turns off its `eval` probe. [code `lib/zod.ts`, test `lib/conventions/zod-entry.test.ts`]
 - Every plan carries an advisory pass under 24 hours old; an exception names its path, reason, digest and expiry. [group `static:dependencies`, test `lib/security/dependency-audit.test.ts`]
+- A workflow pins each outside action to a commit SHA and its release. [test `lib/security/workflow-actions.test.ts`]
 - Live DEV grants and Realtime delivery to foreign and removed receivers pass before a release. [group `canary:security`]
 - Every residual exposure the owner accepted is listed below until it closes. [judgment]
 
@@ -140,7 +141,7 @@ The tag names the mechanism that fails on a violation. A `[judgment]` item here 
 
 ## Known residual exposure
 
-- Injected inline scripts are not blocked. The enforced script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A nonce per request needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating such an injection point. Cached rendering stays; the owner accepted this.
+- Injected inline scripts are not blocked. The enforced script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A nonce per request needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating such an injection point. Cached rendering stays.
 - No edge rate limit covers every request. The application limits the operations that send mail, redeem a capability or activate billing, and Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members of an organization receive the identity of a deleted row. It carries no record content.
 - `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with the payment slice.
