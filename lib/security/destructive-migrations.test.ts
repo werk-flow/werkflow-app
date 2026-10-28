@@ -37,8 +37,9 @@ const DESTRUCTIVE_STATEMENTS: readonly RegExp[] = [
 const COMPATIBILITY_STATEMENTS: readonly RegExp[] = [
   /^alter\s+type\b.*\brename\s+value\b/,
   /^alter\s+policy\b/,
-  /^revoke\b(?!.*\bon\s+(?:all\s+)?functions?\b)/,
 ];
+/** A revoke of table access; on a table the migration creates, it is the new table's default-grant revoke. */
+const TABLE_REVOKE = /^revoke\b(?!.*\bon\s+(?:all\s+)?functions?\b).*?\bon\s+(?:table\s+)?([\w."]+)/;
 
 /** Statements that tighten a table the migration did not create, so older code's writes may fail. */
 const TIGHTENING_STATEMENTS: readonly RegExp[] = [
@@ -175,6 +176,7 @@ function unmarkedDestructiveStatements(sql: string, releaseRule = false): string
         DESTRUCTIVE_STATEMENTS.some((pattern) => pattern.test(statement.text)) ||
         (releaseRule &&
           (COMPATIBILITY_STATEMENTS.some((pattern) => pattern.test(statement.text)) ||
+            onExistingTable(TABLE_REVOKE, statement.text) ||
             TIGHTENING_STATEMENTS.some((pattern) => onExistingTable(pattern, statement.text)) ||
             addsRequiredColumn(statement.text))),
     )
@@ -246,6 +248,8 @@ describe('destructive migration statements', () => {
       'create unique index jobs_id_key on public.jobs (id);',
       'alter table public.jobs add column amount numeric(10,2) not null;',
       'alter table public.jobs add column note text, add column total numeric(10,2) not null default 0;',
+      'revoke all on table public.fresh from public, anon, authenticated, service_role;',
+      'revoke all on table public.jobs from anon;',
     ].join('\n');
     expect(unmarkedDestructiveStatements(planted, true)).toEqual([
       "4: alter table public.jobs add constraint jobs_title_check check (title <> 'text' )",
@@ -258,6 +262,7 @@ describe('destructive migration statements', () => {
       '17: alter table public.jobs enable row level security',
       '19: create unique index jobs_id_key on public.jobs (id)',
       '20: alter table public.jobs add column amount numeric(10,2) not null',
+      '23: revoke all on table public.jobs from anon',
     ]);
   });
 
