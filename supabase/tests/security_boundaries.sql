@@ -464,8 +464,10 @@ declare
     'app_private.can_access_document(uuid, uuid)',
     -- inventory_movements, job_material_lines
     'app_private.can_access_job_inventory(uuid, uuid)',
-    -- work_artifacts and their revision, detail and source tables
+    -- work_artifacts
     'app_private.can_access_work_artifact(uuid, uuid)',
+    -- work_artifact_defect_details
+    'app_private.can_access_work_artifact_revision(uuid, uuid)',
     -- work_artifact_actions, job_instruction_item_evidence_fulfillments
     'app_private.can_access_work_artifact_target(uuid, uuid, uuid, uuid)',
     -- work_handover_packages

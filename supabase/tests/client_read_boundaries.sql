@@ -15,6 +15,10 @@
 -- prestart employee reads their onboarding state but not their Zeitkonto.
 -- Substitutes: a substitute reads through a delegation only while the holder
 -- who named them has effective access.
+-- Arbeitsnachweis: a client reads only the artifact rows and their defect
+-- details. Revisions, actions and the other detail tables carry content the
+-- server hides from coworkers (lib/work-artifacts/actions.ts), so only the
+-- service role reads them.
 begin;
 
 insert into auth.users (
@@ -244,10 +248,9 @@ insert into public.work_artifact_revisions (
 ('cb000000-0000-4000-8000-000000000123', 'cb000000-0000-4000-8000-000000000010',
  'cb000000-0000-4000-8000-000000000122', 1, 'site_diary', 'customer_facing', now(), 'Bautagebuch',
  'cb000000-0000-4000-8000-000000000007');
-insert into public.work_artifact_actions (id, organization_id, artifact_id, revision_id, action_type, created_by) values
-('cb000000-0000-4000-8000-000000000124', 'cb000000-0000-4000-8000-000000000010',
- 'cb000000-0000-4000-8000-000000000122', 'cb000000-0000-4000-8000-000000000123', 'review_requested',
- 'cb000000-0000-4000-8000-000000000007');
+insert into public.work_artifact_defect_details (revision_id, organization_id, description, severity, location) values
+('cb000000-0000-4000-8000-000000000123', 'cb000000-0000-4000-8000-000000000010', 'Undichte Leitung', 'high',
+ 'Keller');
 insert into public.work_handover_packages (id, organization_id, job_id, created_by, updated_by) values
 ('cb000000-0000-4000-8000-000000000125', 'cb000000-0000-4000-8000-000000000010',
  'cb000000-0000-4000-8000-000000000034', 'cb000000-0000-4000-8000-000000000001',
@@ -341,8 +344,8 @@ create function pg_temp.visible_families() returns text language sql as $$
     'instructions=' || (select count(*) from public.job_instruction_items where id = 'cb000000-0000-4000-8000-000000000120')
       || (select count(*) from public.work_blockers where id = 'cb000000-0000-4000-8000-000000000121'),
     'artifacts=' || (select count(*) from public.work_artifacts where id = 'cb000000-0000-4000-8000-000000000122')
-      || (select count(*) from public.work_artifact_revisions where id = 'cb000000-0000-4000-8000-000000000123')
-      || (select count(*) from public.work_artifact_actions where id = 'cb000000-0000-4000-8000-000000000124'),
+      || (select count(*) from public.work_artifact_defect_details
+        where revision_id = 'cb000000-0000-4000-8000-000000000123'),
     'handover=' || (select count(*) from public.work_handover_packages where id = 'cb000000-0000-4000-8000-000000000125'),
     'inventory=' || (select count(*) from public.inventory_items where id = 'cb000000-0000-4000-8000-000000000126')
       || (select count(*) from public.job_material_lines where id = 'cb000000-0000-4000-8000-000000000127'),
@@ -400,10 +403,10 @@ $$;
 -- Before the suspension: Büro reads every family; the employee reads the
 -- assigned work and their own records, no manager-only family.
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000006',
-  'work=111 instructions=11 artifacts=111 handover=1 inventory=11 service=11 maintenance=11 planning=1 '
+  'work=111 instructions=11 artifacts=11 handover=1 inventory=11 service=11 maintenance=11 planning=1 '
   || 'zeitkonto=111 organization=11111 people=11 onboarding=0');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
-  'work=111 instructions=11 artifacts=111 handover=1 inventory=01 service=00 maintenance=01 planning=1 '
+  'work=111 instructions=11 artifacts=11 handover=1 inventory=01 service=00 maintenance=01 planning=1 '
   || 'zeitkonto=110 organization=11101 people=11 onboarding=0');
 
 -- Suspended: nothing, although membership, employee record and assignments stay.
@@ -412,10 +415,10 @@ select pg_temp.set_access('cb000000-0000-4000-8000-000000000006', 0, 'suspend_no
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000007', 0, 'suspend_now', clock_timestamp(),
   'cb000000-0000-4000-8000-000000000151');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000006',
-  'work=000 instructions=00 artifacts=000 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
+  'work=000 instructions=00 artifacts=00 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
   || 'zeitkonto=000 organization=00000 people=00 onboarding=0');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
-  'work=000 instructions=00 artifacts=000 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
+  'work=000 instructions=00 artifacts=00 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
   || 'zeitkonto=000 organization=00000 people=00 onboarding=0');
 
 -- Prestart (a scheduled reactivation): the employee reads their own onboarding
@@ -423,7 +426,7 @@ select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000007', 1, 'schedule_activation',
   clock_timestamp() + interval '1 day', 'cb000000-0000-4000-8000-000000000152');
 select pg_temp.expect_families('cb000000-0000-4000-8000-000000000007',
-  'work=000 instructions=00 artifacts=000 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
+  'work=000 instructions=00 artifacts=00 handover=0 inventory=00 service=00 maintenance=00 planning=0 '
   || 'zeitkonto=000 organization=00000 people=00 onboarding=1');
 
 -- Substitutes. The Büro member names the colleague as substitute for time
@@ -480,5 +483,22 @@ select pg_temp.expect_delegated('periods=1 handover=1 configuration=1');
 select pg_temp.set_access('cb000000-0000-4000-8000-000000000002', 0, 'suspend_now', clock_timestamp(),
   'cb000000-0000-4000-8000-000000000153');
 select pg_temp.expect_delegated('periods=0 handover=0 configuration=0');
+
+-- Arbeitsnachweis: the client grants are exactly the artifacts and their defect details.
+reset role;
+do $$
+declare
+  v_granted text[];
+begin
+  select array_agg(relation.relname::text order by relation.relname collate "C") into v_granted
+  from pg_class relation
+  where relation.relnamespace = 'public'::regnamespace and relation.relkind = 'r'
+    and relation.relname like 'work\_artifact%'
+    and has_table_privilege('authenticated', relation.oid, 'SELECT');
+  if v_granted is distinct from array['work_artifact_defect_details', 'work_artifacts'] then
+    raise exception 'authenticated reads the Arbeitsnachweis tables %, expected only the artifacts and their defect details', v_granted;
+  end if;
+end;
+$$;
 
 rollback;
