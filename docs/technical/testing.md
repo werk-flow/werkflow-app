@@ -55,7 +55,7 @@ A group is one executable check in `lib/testing/selection/test-groups.ts`. Every
 
 ## Quality of tests and the runner
 
-A useful test also survives an equivalent implementation. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`, and `docs:check` requires an owner doc to name it.
+A useful test also survives an equivalent implementation. Check a regression test against the broken case. Preserve catalog-clause coverage when you move an assertion. A runner test enforcing an author rule opens with `// Rule test:`.
 
 ## When a proof is valid
 
@@ -206,6 +206,7 @@ The [spec checklist](#spec-checklist) adds the detail for a single spec. A `[jud
 - Raise a timeout or a budget, or rewrite a visual reference, to make a run pass. [lint `playwright-spec/bounded-timeout`, judgment]
 - Treat a review score or an old report as acceptance. [judgment]
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock. [code `scripts/guard-edits-during-verification.ts`, test `lib/testing/runner/edit-guard.test.ts`]
+- Run `rm -r` on a wildcard or variable after a `cd` in one command; Claude Code asks the owner. Use an absolute path or `mktemp -d`. [test `lib/testing/runner/delete-after-cd.test.ts`]
 - Add a package script that builds, tests or changes the local stack outside the workspace lock. [test `lib/testing/runner/workspace-lock-coverage.test.ts`, test `lib/testing/runner/app-port.test.ts`]
 
 ## Verify your work

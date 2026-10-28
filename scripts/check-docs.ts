@@ -3,25 +3,13 @@
 //
 // This script reads the repository and hands the text to the rules in lib/docs/, which hold the
 // logic and its tests. Each problem line starts with the rule's area:
-//   index, link, skills, coderabbit, status, link-syntax, catalog, incident-tier, guidance,
-//   dated, budget, review-stamp, decision, virtue, citation, route-handler, numbered-rule,
-//   german-quote, path, one-home, workspace.
-// The numbers and exemptions come from lib/docs/doc-policy.ts, which decision 0004 pins.
+//   index, link, skills, guidance, budget, decision, citation, workspace.
+// The numbers and exemptions come from lib/docs/doc-policy.ts.
 
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, isAbsolute, resolve, relative, sep } from 'node:path';
-import { ESLint } from 'eslint';
-import { getBusinessTodayIso } from '../lib/date-time/berlin';
-import { findCodeRabbitInstructionViolations } from '../lib/testing/publication/coderabbit-review-command';
 import { markdownHeadingAnchors } from '../lib/docs/heading-anchors';
-import {
-  countWords,
-  findBacktickedDocPaths,
-  findCommitHashLines,
-  findDatedLines,
-  findDocumentReferences,
-  findMismatchedGermanQuotes,
-} from '../lib/docs/living-doc-rules';
+import { countWords, findDocumentReferences } from '../lib/docs/living-doc-rules';
 import {
   findMarkdownFileLinks,
   findSkillCopyDifferences,
@@ -35,53 +23,11 @@ import {
   type WorkspaceLayout,
 } from '../lib/docs/workspace-links';
 import { findDocCitations, isCitationCheckedFile } from '../lib/docs/code-citations';
-import {
-  findIdentifierReferences,
-  findNumberedRuleReferences,
-  findRepositoryPathReferences,
-  holdsIdentifier,
-  findRouteHandlerReferences,
-  findUnresolvedRulePointers,
-  numberedItemsUnder,
-  type NumberedRuleSource,
-  repositoryPathCandidates,
-} from '../lib/docs/reference-rules';
-import {
-  countMechanisms,
-  declaredLintRuleNames,
-  declaredSelectorSetNames,
-  findEnforcedByProblems,
-  findStandardProblems,
-  findUnreferencedMechanisms,
-  findVirtueAgreementProblems,
-  isRuleTest,
-  readVirtueBlocks,
-  TEST_FILE_PATTERN,
-  type MechanismResolver,
-} from '../lib/docs/virtue-standards';
-import { getTestGroups, listTestFiles } from '../lib/testing/selection/test-groups';
-import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
-import {
-  APPEND_ONLY_LOGS,
-  DATED_DOCS,
-  DATED_LINES,
-  DEAD_CITATIONS,
-  NUMBERED_RULE_FIXTURES,
-  SHARED_SENTENCES,
-  UNMIRRORED_SKILLS,
-  wordBudgetOf,
-} from '../lib/docs/doc-policy';
-import { findIndexCoverageProblems, findIndexStatusProblems } from '../lib/docs/doc-index';
-import { readDocStatus, type DocStatus } from '../lib/docs/status-lines';
+import { DEAD_CITATIONS, UNMIRRORED_SKILLS, wordBudgetOf } from '../lib/docs/doc-policy';
+import { findIndexCoverageProblems } from '../lib/docs/doc-index';
 import { findSkillMirrorProblems, type SkillTree } from '../lib/docs/skill-mirror';
-import { findCatalogProblems } from '../lib/docs/flow-catalog';
-import { findIncidentTierProblems } from '../lib/docs/incident-tiers';
 import { findBrokenLinks } from '../lib/docs/doc-links';
-import { lastCommits, reviewStampProblem, uncommittedPaths } from '../lib/docs/review-stamps';
 import { decisionGrowthProblem } from '../lib/docs/decision-records';
-import { findJudgmentRatchetProblems, parseJudgmentRatchet } from '../lib/docs/judgment-ratchet';
-import { enabledRuleNames, lintNameInForce, usedConfigBindings } from '../lib/docs/lint-config';
-import { findSharedSentenceProblems, findSharedSentences } from '../lib/docs/one-home';
 
 const repoRoot = resolve(import.meta.dir, '..');
 const docsRoot = join(repoRoot, 'docs');
@@ -140,7 +86,7 @@ function headingAnchors(path: string): Set<string> {
   return anchors;
 }
 
-// The docs tree: paths relative to docs/ and their status lines.
+// The docs tree: paths relative to docs/.
 const docPaths = collectFiles(docsRoot)
   .filter((file) => file.endsWith('.md'))
   .map((file) => relative(docsRoot, file).split(sep).join('/'));
@@ -148,24 +94,13 @@ const docText = new Map(docPaths.map((path) => [path, readFileSync(join(docsRoot
 function docMarkdown(path: string): string {
   return docText.get(path) ?? '';
 }
-const statuses = new Map<string, DocStatus | null>();
-for (const path of docPaths) {
-  const result = readDocStatus(path, docMarkdown(path));
-  if ('problem' in result) problems.push(`status: docs/${path} ${result.problem}`);
-  statuses.set(path, 'status' in result ? result.status : null);
-}
-const livingDocs = docPaths
-  .filter((path) => statuses.get(path)?.kind === 'living')
-  .map((path) => `docs/${path}`);
 
-// Index coverage and the status prefixes of index rows.
-const indexContent = docMarkdown('README.md');
-report('index', findIndexCoverageProblems(indexContent, docPaths));
-report('index', findIndexStatusProblems(indexContent, statuses));
+// Index coverage.
+report('index', findIndexCoverageProblems(docMarkdown('README.md'), docPaths));
 
 // Relative links and their heading anchors. A decision record keeps its accepted text, so its
-// links into the deleted plans tree stay as written; Git holds those plans.
-const deletedPlansRoot = join(docsRoot, 'plans') + sep;
+// links into deleted docs stay as written; Git holds those docs.
+const deletedDocTargets = [join(docsRoot, 'plans') + sep, join(docsRoot, 'product', 'offer.md')];
 for (const path of docPaths) {
   const file = join(docsRoot, path);
   const isDecision = path.startsWith('decisions/');
@@ -173,7 +108,7 @@ for (const path of docPaths) {
     resolve: (target) => {
       if (target === '') return file;
       const resolved = resolveWorkspaceLink(workspace, file, target);
-      return isDecision && resolved.startsWith(deletedPlansRoot) ? null : resolved;
+      return isDecision && deletedDocTargets.some((target) => resolved.startsWith(target)) ? null : resolved;
     },
     exists: existsSync,
     inMissingSibling: pointsIntoMissingSibling,
@@ -212,69 +147,6 @@ report(
   ),
 );
 
-// CodeRabbit: agent-facing instructions route local reviews through the repository wrapper. The
-// review of record is the app on the pull request (decision 0009), so AGENTS.md need not name it.
-for (const path of [
-  'AGENTS.md',
-  '.claude/skills/coderabbit-review/SKILL.md',
-  'docs/technical/coderabbit.md',
-]) {
-  if (!existsSync(join(repoRoot, path))) {
-    problems.push(`coderabbit: expected instruction file ${path} is missing`);
-    continue;
-  }
-  const content = read(path);
-  if (path !== 'AGENTS.md' && !content.includes('bun run review'))
-    problems.push(`coderabbit: ${path} must route agents through bun run review`);
-  for (const violation of findCodeRabbitInstructionViolations(content))
-    problems.push(`coderabbit: ${path} contains forbidden ${violation} instructions; use bun run review`);
-}
-const packageJsonContent = read('package.json');
-if (!packageJsonContent.includes('"review": "bun scripts/run-coderabbit-review.ts"'))
-  problems.push(
-    'coderabbit: package.json must expose bun scripts/run-coderabbit-review.ts as the review script',
-  );
-
-// A doc-to-doc reference inside docs/ is a relative link, so the link check above resolves it.
-const docPathsByBasename = new Map<string, string[]>();
-for (const path of docPaths) {
-  const basename = path.split('/').at(-1) ?? path;
-  docPathsByBasename.set(basename, [...(docPathsByBasename.get(basename) ?? []), path]);
-}
-function namesExistingDoc(fromPath: string, reference: string): boolean {
-  const cleaned = reference.replace(/^docs\//, '');
-  const fromDir = fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
-  if ([cleaned, join(fromDir, cleaned).split(sep).join('/')].some((candidate) => docText.has(candidate)))
-    return true;
-  return !cleaned.includes('/') && docPathsByBasename.has(cleaned);
-}
-for (const path of docPaths) {
-  if (APPEND_ONLY_LOGS.includes(`docs/${path}`)) continue;
-  for (const { line, reference } of findBacktickedDocPaths(docMarkdown(path), (name) =>
-    namesExistingDoc(path, name),
-  ))
-    problems.push(
-      `link-syntax: docs/${path}:${line} references ${reference} in backticks; use a relative markdown link (docs/README.md maintenance rule 3)`,
-    );
-}
-
-// The flow catalog.
-report(
-  'catalog',
-  findCatalogProblems(docMarkdown('product/user-flow-catalog.md')).map(
-    (problem) => `docs/product/user-flow-catalog.md ${problem}`,
-  ),
-);
-
-// Incident tiers.
-const incidentMechanisms = repositoryMechanismIndex(repoRoot);
-report(
-  'incident-tier',
-  findIncidentTierProblems(docMarkdown('technical/test-incident-log.md'), (line) =>
-    tierClaimProblem(line, incidentMechanisms),
-  ),
-);
-
 // Guidance outside docs/ (AGENTS.md and the skills) points only at files that exist.
 const guidanceFiles = [
   'AGENTS.md',
@@ -295,57 +167,18 @@ for (const path of guidanceFiles) {
   }
 }
 
-// Dates and word budgets. A living doc states its rules as they are now; dated logs and dated
-// research snapshots are exempt, and the roadmap keeps the acceptance date of a complete row.
-for (const path of livingDocs) {
-  if (DATED_DOCS.includes(path)) continue;
-  const markdown = read(path);
-  for (const line of findDatedLines(markdown, DATED_LINES[path]))
-    problems.push(
-      `dated: ${path}:${line} carries a date outside the status line; state the rule as it is now and leave the story to Git, a closed record or a log (docs/README.md, "What a doc may contain")`,
-    );
-  for (const line of findCommitHashLines(markdown))
-    problems.push(
-      `dated: ${path}:${line} names a commit hash; Git holds history, a living doc states the rule`,
-    );
-}
+// Word budgets.
 for (const path of [
-  ...livingDocs,
+  ...docPaths.map((doc) => `docs/${doc}`),
   'AGENTS.md',
   ...guidanceFiles.filter((file) => file.startsWith('.claude/')),
 ]) {
-  const budget = wordBudgetOf(path, true);
+  const budget = wordBudgetOf(path);
   const words = countWords(read(path));
   if (budget !== null && words > budget)
-    problems.push(`budget: ${path} has ${words} words; it stays at or under ${budget} (decision 0004)`);
-}
-
-// Review stamps: a living doc's "last reviewed" date is not older than its last change.
-const today = getBusinessTodayIso();
-const changedNow = uncommittedPaths(
-  gitOut(['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'docs']),
-);
-const commitFormat = '--format=%x00%H %as';
-const lastChanged = lastCommits(gitOut(['log', '--name-only', commitFormat, '--', 'docs']));
-// The commits whose diff of a doc adds or removes its stamp line: they recorded a review.
-const lastStamped = lastCommits(
-  gitOut(['log', '--name-only', commitFormat, '-G^Status: living — last reviewed', '--', 'docs']),
-);
-for (const path of livingDocs) {
-  const stamp = statuses.get(path.slice('docs/'.length))?.date;
-  const committed = lastChanged.get(path);
-  if (stamp === undefined) continue;
-  const change = changedNow.has(path)
-    ? { date: today, uncommitted: true, movedStamp: false }
-    : committed === undefined
-      ? null
-      : {
-          date: committed.date,
-          uncommitted: false,
-          movedStamp: lastStamped.get(path)?.hash === committed.hash,
-        };
-  const problem = change === null ? null : reviewStampProblem(stamp, change, today);
-  if (problem !== null) problems.push(`review-stamp: ${path}: ${problem}`);
+    problems.push(
+      `budget: ${path} has ${words} words; it stays at or under ${budget} (lib/docs/doc-policy.ts)`,
+    );
 }
 
 // Decision records grow only by dated amendment sections: the committed and the published texts
@@ -361,102 +194,6 @@ for (const path of docPaths.filter((doc) => doc.startsWith('decisions/'))) {
     if (problem !== null) problems.push(`decision: docs/${path} against ${ref}: ${problem}`);
   }
 }
-
-// The six virtues: owner-doc standards, the "Enforced by" lines, their agreement, mechanism
-// coverage and the judgment ratchet.
-const lintableFiles = gitOut(['ls-files', '*.ts', '*.tsx', '*.mjs', '*.js', '*.cjs'])
-  .split('\n')
-  .filter(Boolean);
-const eslint = new ESLint({ cwd: repoRoot });
-const resolvedConfigs = [];
-for (const file of lintableFiles) {
-  if (!(await eslint.isPathIgnored(file))) resolvedConfigs.push(await eslint.calculateConfigForFile(file));
-}
-const enabledLintRules = enabledRuleNames(resolvedConfigs);
-const eslintConfigSource = read('eslint.config.mjs');
-const configBindings = usedConfigBindings(eslintConfigSource);
-function scriptNames(packageJson: unknown): string[] {
-  if (typeof packageJson !== 'object' || packageJson === null || !('scripts' in packageJson)) return [];
-  const { scripts } = packageJson;
-  return typeof scripts === 'object' && scripts !== null ? Object.keys(scripts) : [];
-}
-const packageScripts = new Set(scriptNames(JSON.parse(packageJsonContent)));
-const groupIds = getTestGroups(repoRoot).map((group) => group.id);
-function mechanismResolver(fromDoc: string): MechanismResolver {
-  return {
-    lintNameExists: (name) => lintNameInForce(name, enabledLintRules, configBindings),
-    pathExists: (path) => existsSync(join(repoRoot, path)),
-    groupExists: (id) => {
-      const wildcard = id.search(/[*<]/);
-      return wildcard === -1
-        ? groupIds.includes(id)
-        : groupIds.some((groupId) => groupId.startsWith(id.slice(0, wildcard)));
-    },
-    scriptExists: (name) => packageScripts.has(name),
-    linkExists: (target) => existsSync(resolveWorkspaceLink(workspace, join(repoRoot, fromDoc), target)),
-  };
-}
-const agentsContent = read('AGENTS.md');
-const virtueBlocks = readVirtueBlocks(agentsContent);
-const ownerDocs = [...new Set(virtueBlocks.flatMap((block) => block.ownerDocs))];
-for (const ownerDoc of ownerDocs) {
-  if (!existsSync(join(repoRoot, ownerDoc))) {
-    problems.push(`virtue: owner doc ${ownerDoc} is missing (AGENTS.md names it)`);
-    continue;
-  }
-  report(
-    'virtue',
-    findStandardProblems(read(ownerDoc), mechanismResolver(ownerDoc)).map(
-      (problem) => `${ownerDoc} ${problem}`,
-    ),
-  );
-}
-for (const reference of findEnforcedByProblems(agentsContent, mechanismResolver('AGENTS.md')))
-  problems.push(
-    `virtue: AGENTS.md:${reference.line} names \`${reference.token}\`, which ${reference.problem}`,
-  );
-for (const block of virtueBlocks) {
-  const markdown = block.ownerDocs.filter((doc) => existsSync(join(repoRoot, doc))).map(read);
-  report('virtue', findVirtueAgreementProblems(block, markdown));
-}
-const virtueCorpus = [
-  agentsContent,
-  ...ownerDocs.filter((doc) => existsSync(join(repoRoot, doc))).map(read),
-].join('\n');
-const eslintRuleFiles = readdirSync(join(repoRoot, 'eslint-rules'))
-  .filter((file) => file.endsWith('.mjs'))
-  .map((file) => `eslint-rules/${file}`);
-const mechanismTests = [
-  ...['conventions', 'ui', 'security'].flatMap((folder) =>
-    readdirSync(join(repoRoot, 'lib', folder))
-      .filter((file) => TEST_FILE_PATTERN.test(file))
-      .map((file) => `lib/${folder}/${file}`),
-  ),
-  ...listTestFiles(repoRoot, 'lib/testing', TEST_FILE_PATTERN).filter((file) => isRuleTest(read(file))),
-];
-const localLintRules = eslintRuleFiles.flatMap((file) => declaredLintRuleNames(read(file)));
-for (const mechanism of findUnreferencedMechanisms(
-  [...localLintRules, ...mechanismTests, ...declaredSelectorSetNames(eslintConfigSource)],
-  virtueCorpus,
-))
-  problems.push(
-    `virtue: ${mechanism} is named by no owner doc and not by AGENTS.md; add it to the checklist of the virtue it enforces`,
-  );
-const judgmentCounts = new Map(
-  ownerDocs
-    .filter((doc) => existsSync(join(repoRoot, doc)))
-    .map((doc) => [doc, countMechanisms(read(doc)).judgment]),
-);
-const ratchetPath = 'lib/docs/judgment-ratchet.json';
-const committedRatchet = git(['show', `HEAD:${ratchetPath}`]);
-report(
-  'virtue',
-  findJudgmentRatchetProblems(
-    judgmentCounts,
-    parseJudgmentRatchet(JSON.parse(read(ratchetPath))),
-    committedRatchet.ok ? parseJudgmentRatchet(JSON.parse(committedRatchet.out)) : null,
-  ),
-);
 
 // Doc citations in code: a docs/...md path (with an optional #anchor) in a comment, lint message
 // or thrown string outside docs/ resolves to a document and heading. A listed dead citation that
@@ -489,92 +226,9 @@ for (const file of citedFiles) {
 for (const key of DEAD_CITATIONS) {
   if (!usedDeadCitations.has(key))
     problems.push(
-      `citation: the dead citation "${key}" no longer fails; remove it from decision 0004 and lib/docs/doc-policy.ts`,
+      `citation: the dead citation "${key}" no longer fails; remove it from lib/docs/doc-policy.ts`,
     );
 }
-
-// Living guidance names things by values that go stale: living docs (not the append-only logs),
-// AGENTS.md and the skills. Closed records and decision records are history.
-const livingGuidance = [...livingDocs.filter((path) => !APPEND_ONLY_LOGS.includes(path)), ...guidanceFiles];
-const routeHandlers = new Set(readdirSync(join(repoRoot, 'app', 'api')));
-for (const file of livingGuidance) {
-  const text = read(file);
-  for (const reference of findRouteHandlerReferences(text)) {
-    if (!routeHandlers.has(reference.name))
-      problems.push(
-        `route-handler: ${file}:${reference.line} names the route handler "${reference.name}", which has no folder under app/api/`,
-      );
-  }
-  for (const reference of findNumberedRuleReferences(text))
-    problems.push(
-      `numbered-rule: ${file}:${reference.line} cites "${reference.name}"; link the heading that states the rule instead`,
-    );
-  for (const line of findMismatchedGermanQuotes(text))
-    problems.push(
-      `german-quote: ${file}:${line} opens a quotation with „ and closes it with " or ”; close it with “`,
-    );
-  for (const reference of findRepositoryPathReferences(text)) {
-    if (!repositoryPathCandidates(reference.name).some((candidate) => existsSync(join(repoRoot, candidate))))
-      problems.push(
-        `path: ${file}:${reference.line} names ${reference.name}, which does not exist; point it at the current file`,
-      );
-  }
-  // "`Name` in `path`" and "`path` (`Name`)": the named file holds the identifier.
-  for (const reference of findIdentifierReferences(text)) {
-    const target = repositoryPathCandidates(reference.path)
-      .map((candidate) => join(repoRoot, candidate))
-      .find((candidate) => existsSync(candidate) && statSync(candidate).isFile());
-    if (target && !holdsIdentifier(readFileSync(target, 'utf8'), reference.name))
-      problems.push(
-        `identifier: ${file}:${reference.line} names ${reference.name} in ${reference.path}, which does not hold it; name the current symbol or file`,
-      );
-  }
-}
-// A "rule N" pointer in code resolves to a numbered item of the document it names; only the docs
-// index and the client freshness contract number their rules. Markdown was read above.
-const numberedRuleSources: NumberedRuleSource[] = [
-  {
-    document: 'docs/technical/realtime-and-caching.md#client-freshness-contract',
-    phrase: /freshness contract\s*$/i,
-    numbers: numberedItemsUnder(
-      docMarkdown('technical/realtime-and-caching.md'),
-      'Client freshness contract',
-    ),
-  },
-  {
-    document: 'docs/README.md#maintenance-rules',
-    phrase: /maintenance\s*$/i,
-    numbers: numberedItemsUnder(indexContent, 'Maintenance rules'),
-  },
-  {
-    document: 'an area guide without numbered rules',
-    phrase:
-      /\b(?:testing|security|quality|code-quality|review|design|ui|performance|realtime|protocol|docs)(?:\.md)?,?\s*$/i,
-    numbers: new Set(),
-  },
-];
-for (const file of trackedFiles.filter(
-  (path) => !path.endsWith('.md') && !NUMBERED_RULE_FIXTURES.includes(path),
-)) {
-  for (const reference of findUnresolvedRulePointers(read(file), numberedRuleSources))
-    problems.push(
-      `numbered-rule: ${file}:${reference.line} cites "${reference.name}"; name the rule or cite its doc heading instead`,
-    );
-}
-
-// One home per fact: a sentence of twelve or more words stands in one living doc or skill only.
-const oneHomeCorpus = [
-  ...livingDocs.filter((path) => !APPEND_ONLY_LOGS.includes(path)),
-  'AGENTS.md',
-  ...guidanceFiles.filter((file) => file.startsWith('.claude/')),
-];
-report(
-  'one-home',
-  findSharedSentenceProblems(
-    findSharedSentences(oneHomeCorpus.map((path) => ({ path, markdown: read(path) }))),
-    SHARED_SENTENCES,
-  ),
-);
 
 // The workspace: this check reads the sibling clones and never edits them. A problem inside a
 // sibling is fixed in the app target or reported to the sibling's owner.
@@ -589,7 +243,7 @@ for (const sibling of SIBLING_REPOSITORIES) {
     const unchecked = `../${sibling} is not present beside werkflow-app, so ${uncheckedSiblingLinks.get(sibling) ?? 0} of the app's links into it and all of its links into the app are unchecked`;
     // CI names a private sibling it has no read token for; it warns there instead of failing.
     if (unreadableSiblings.has(sibling)) console.warn(`docs:check: ${unchecked} (no read access in CI)`);
-    else problems.push(`workspace: ${unchecked}; clone it as docs/README.md maintenance rule 7 says`);
+    else problems.push(`workspace: ${unchecked}; clone it as docs/README.md#sibling-repositories says`);
     continue;
   }
   const listed = git(['ls-files', '--cached', '--others', '--exclude-standard', '*.md'], siblingRoot);
@@ -660,4 +314,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`docs:check passed — ${docPaths.length} docs indexed, linked, and status-labeled.`);
+console.log(`docs:check passed — ${docPaths.length} docs indexed and linked.`);

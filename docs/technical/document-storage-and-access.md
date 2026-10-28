@@ -1,8 +1,6 @@
 # Document storage and access
 
-Status: living — last reviewed 2026-10-28
-
-This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do, the planned scope and the open decisions. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
+This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
 
 ## Where bytes and metadata live
 
@@ -103,7 +101,7 @@ The app has no storage reconciliation feature, and no Server Action reports or d
 
 When reconciliation becomes a product need, build it as an admin maintenance page with a reviewed authorization boundary. Follow the orphan rules in the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, and preserve objects for review.
 
-Retention-relevant categories will also get copies in an independent immutable archive. The feature spec owns the product direction and decision 0001 owns the infrastructure decision.
+Retention-relevant categories will also get copies in an independent immutable archive. Decision 0001 owns the infrastructure decision.
 
 ## Freshness
 

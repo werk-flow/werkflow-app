@@ -66,7 +66,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     employeePage,
     world,
   }) => {
-    // P1-14-F01…F12: explicit facets and next action; canonical list badge/filter;
+    // Explicit facets and next action; canonical list badge/filter;
     // manager and employee transition bounds; reason; stale optimistic version;
     // open-dialog preservation and catch-up.
     const jobNumber = `AUF-${world.runId}-P114-STATE`;
@@ -121,7 +121,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     employeePage,
     world,
   }) => {
-    // P1-14-F13…F25: multiple blocker facts, required owner/review, employee-self
+    // Multiple blocker facts, required owner/review, employee-self
     // rule, due attention identity, resolution history, parking distinction,
     // legacy-gap honesty, atomic unpark, and no duplicate context system. The
     // employee's own resolution is the golden journey; here the manager resolves.
@@ -186,7 +186,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     adminPage,
     world,
   }) => {
-    // P1-14-F26…F36: work/task/declarative prerequisite kinds, effect vocabulary,
+    // Work/task/declarative prerequisite kinds, effect vocabulary,
     // same-org target selection, start/completion/warning semantics, cycle/self
     // rejection, derived satisfaction, predecessor reopening, versioned declared
     // resolution, removal, and retained event history.
@@ -289,7 +289,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     employeePage,
     world,
   }) => {
-    // P1-14-F37…F48: shared readiness dimensions and unknown/load-failure posture;
+    // Shared readiness dimensions and unknown/load-failure posture;
     // no-demand material and unassessed tools; instruction/predecessor/time gates;
     // current-fact evaluation, reasoned manager override snapshot/fingerprint;
     // execution-complete versus handover; later-slice facts remain not assessable.
@@ -394,7 +394,7 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     outsiderPage,
     world,
   }) => {
-    // P1-14-F49…F63: child-derived/empty/mixed projects, reasoned override and
+    // Child-derived/empty/mixed projects, reasoned override and
     // clear; no cascade; project parking reaches its children and unparks them;
     // outsider page denial. The automatic time start is the golden journey;
     // ledger side effects and RLS are in supabase/tests/work_execution_boundaries.sql.
