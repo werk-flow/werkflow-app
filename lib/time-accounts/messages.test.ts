@@ -38,6 +38,7 @@ describe('period close refusal', () => {
   test('only known database refusals pass through to the user', () => {
     expect(isTimeAccountFailureCode('close', 'period_open_sessions')).toBe(true);
     expect(isTimeAccountFailureCode('close', 'stale_calculation')).toBe(true);
+    expect(isTimeAccountFailureCode('close', 'period_pending_corrections')).toBe(true);
     expect(isTimeAccountFailureCode('close', 'duplicate key value violates unique constraint')).toBe(false);
   });
 });

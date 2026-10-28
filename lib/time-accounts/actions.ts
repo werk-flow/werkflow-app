@@ -353,20 +353,20 @@ export async function prepareTimePeriod(
   try {
     const startInstant = getBerlinInstant(`${bounds.start}T00:00`);
     const endInstant = getBerlinInstant(`${bounds.endExclusive}T00:00`);
+    // Fingerprint first: prepare_time_period refuses one that changed since,
+    // so every source the fingerprint covers is also in the findings below.
+    const fingerprint = await admin.rpc('get_time_period_source_fingerprint', {
+      p_actor_id: context.userId,
+      p_organization_id: context.orgId,
+      p_period_start_date: bounds.start,
+      p_period_end_date: bounds.end,
+    });
+    const sourceFingerprint = fingerprint.data;
+    if (fingerprint.error || !sourceFingerprint)
+      throw new Error(fingerprint.error?.message ?? 'fingerprint_failed');
     const { employeePayload, dailyPayload, sourcePayload, findingPayload } = await buildTimePeriodPreparation(
       { admin, context, bounds, startInstant, endInstant },
     );
-    const { data: sourceFingerprint, error: fingerprintError } = await admin.rpc(
-      'get_time_period_source_fingerprint',
-      {
-        p_actor_id: context.userId,
-        p_organization_id: context.orgId,
-        p_period_start_date: bounds.start,
-        p_period_end_date: bounds.end,
-      },
-    );
-    if (fingerprintError || !sourceFingerprint)
-      throw new Error(fingerprintError?.message ?? 'fingerprint_failed');
     const operationId = randomUUID();
     const payload = { organizationId: context.orgId, bounds, sourceFingerprint };
     const { data: calculationId, error } = await admin.rpc('prepare_time_period', {

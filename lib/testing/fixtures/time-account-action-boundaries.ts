@@ -7,7 +7,8 @@
 // proposal and outside the caller's approval scope (a Büro member deciding for
 // another Büro member). Every other write is one function call in the caller's
 // organization, so the function's org-scoped lookup refuses the foreign id and
-// nothing changes. Only the proposer withdraws an open request.
+// nothing changes. Only the proposer withdraws an open request. A period
+// preparation takes its source fingerprint before it reads a source.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -312,5 +313,33 @@ assert.deepEqual(await downloadPayrollExport(forms.download(foreignExportId)), {
 });
 assert.equal(world.rpcCalls.length, 0);
 assert.deepEqual(signedPaths, [], 'no foreign export may be signed');
+
+// The preparation takes its source fingerprint before it reads a source, so a
+// correction filed during the reads changes the fingerprint and
+// prepare_time_period refuses it instead of storing findings without it.
+const seededTables = world.tables;
+const readTables: string[] = [];
+world.tables = new Proxy(seededTables, {
+  get: (tables, table, receiver) => {
+    if (typeof table === 'string') readTables.push(table);
+    return Reflect.get(tables, table, receiver);
+  },
+});
+const boundaryRpc = world.rpc;
+const sourceReadsBeforeFingerprint: string[][] = [];
+world.rpc = (call) => {
+  if (call.name !== 'get_time_period_source_fingerprint') return boundaryRpc(call);
+  sourceReadsBeforeFingerprint.push(readTables.filter((table) => table.startsWith('time_')));
+  return { data: null, error: { code: 'P0001', message: 'fingerprint_probe' } };
+};
+assert.deepEqual(await prepareTimePeriod(forms.prepare()), { success: false, error: 'prepare_failed' });
+assert.deepEqual(
+  sourceReadsBeforeFingerprint,
+  [[]],
+  'the preparation read a period source before its source fingerprint, or took none',
+);
+assertCallerScopedCalls(world);
+world.tables = seededTables;
+world.rpc = boundaryRpc;
 if (callerMembership) callerMembership.role = 'employee';
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');

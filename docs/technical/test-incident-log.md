@@ -53,6 +53,15 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Correction: removed the stale bounded-list entry, lowered the two size ceilings, and drove `getTimeEntryAuditEvents` with a foreign organization and an employee in `lib/testing/fixtures/time-entry-write-boundaries-uuids.ts`.
 - Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T063924718Z-455355ae`.
 
+## 2026-10-28: sql:security environment failure
+
+<!-- incident-run: sql:security@2026-10-28T062529331Z-2874afaf -->
+
+- Run: run `sql:security@2026-10-28T062529331Z-2874afaf`, group `sql:security`, target local, fingerprint `2a2d869a064c`.
+- Failure point: sql:security in report 2026-10-28T062529331Z-2874afaf: Command exited 1; inspect .agent-logs/verification/2026-10-28T062529331Z-2874afaf/sql-security.log
+- Root cause: The shared local stack carries another worktree's unmerged migration that defines app_private.can_access_work_artifact_revision; this branch has no such function
+- Prevention: no prevention claim: CI applies only the branch's migrations to its own stack
+
 ## 2026-10-27: golden:p1-22 harness failure
 
 <!-- incident-run: 2026-10-27T035641092Z-79010d -->

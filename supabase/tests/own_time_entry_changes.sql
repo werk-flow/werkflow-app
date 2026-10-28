@@ -1,4 +1,4 @@
--- Own time entries (migration 20261028120000_audit_own_time_entry_changes.sql):
+-- Own time entries (migration 20261028140000_audit_own_time_entry_changes.sql):
 -- a Büro member's own entry is refused by the direct edit and deletion
 -- functions, whatever the action passed. An Admin's own edit or deletion
 -- writes an audit event with the actor, the time and the entry before and

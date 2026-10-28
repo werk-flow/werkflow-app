@@ -4,7 +4,10 @@
 -- The period workflow, writes outside the period, writes after a reopen and
 -- an organization deletion still pass.
 -- A close is refused while a session of the period is still open
--- (migration 20261002150600_refuse_period_close_with_open_sessions.sql).
+-- (migration 20261002150600_refuse_period_close_with_open_sessions.sql),
+-- and while a correction request proposes a time in the period; the guard of
+-- account events and correction applications locks the period rows of its
+-- day (migration 20261028130000_keep_period_close_consistent_with_concurrent_writes.sql).
 -- Batched review and deletion of entries apply completely or not at all
 -- (migration 20261003110000_apply_time_entry_batches_atomically.sql).
 begin;
@@ -130,6 +133,58 @@ begin
     set status = 'closed', recovery_reason = null, ended_at = '2026-07-01 06:00+02', ended_by = v_employee_user
     where id = '26100000-0000-0000-0000-000000000043';
   perform set_config('app.time_capture_write', v_previous_capture_write, true);
+
+  -- A correction request that proposes a June time blocks the close although
+  -- the preparation reported no finding. Requests are written only through
+  -- their RPCs; the seed bypasses their triggers.
+  set local session_replication_role = replica;
+  insert into public.time_correction_requests (
+    id, organization_id, subject_employee_record_id, subject_user_id, requested_by, kind, status,
+    source_scope_key
+  ) values (
+    '26100000-0000-0000-0000-000000000060', v_org, v_employee_record, v_employee_user, v_employee_user,
+    'add', 'submitted', repeat('1', 64)
+  );
+  insert into public.time_correction_request_revisions (
+    request_id, organization_id, revision, reason, source_fingerprint, before_snapshot,
+    proposed_snapshot, created_by
+  ) values (
+    '26100000-0000-0000-0000-000000000060', v_org, 1, 'Vergessen', repeat('2', 64),
+    '{"schemaVersion":1,"facts":[]}',
+    '{"schemaVersion":1,"facts":[{"kind":"legacy_transition","entryType":"clock_in","timestamp":"2026-06-30T21:30:00Z"}]}',
+    v_employee_user
+  );
+  set local session_replication_role = origin;
+  v_fingerprint := app_private.compute_p1_23_source_fingerprint(v_org, '2026-06-01', '2026-06-30');
+  v_calculation := public.prepare_time_period(
+    v_admin, v_org, '2026-06-01', '2026-06-30', v_fingerprint,
+    jsonb_build_array(
+      jsonb_build_object(
+        'id', '26100000-0000-0000-0000-000000000061', 'employee_record_id', v_admin_record,
+        'policy_version_id', null, 'previous_balance_minutes', 0, 'target_minutes', 0,
+        'source_seconds', 0, 'source_minutes', 0, 'credited_minutes', 0, 'vacation_minutes', 0,
+        'sickness_minutes', 0, 'account_event_minutes', 0, 'period_delta_minutes', 0,
+        'overtime_candidate_minutes', 0, 'closing_balance_minutes', 0, 'authoritative_targets', false),
+      jsonb_build_object(
+        'id', '26100000-0000-0000-0000-000000000062', 'employee_record_id', v_employee_record,
+        'policy_version_id', null, 'previous_balance_minutes', 0, 'target_minutes', 0,
+        'source_seconds', 0, 'source_minutes', 0, 'credited_minutes', 0, 'vacation_minutes', 0,
+        'sickness_minutes', 0, 'account_event_minutes', 0, 'period_delta_minutes', 0,
+        'overtime_candidate_minutes', 0, 'closing_balance_minutes', 0, 'authoritative_targets', false)
+    ), '[]', '[]', '[]', '26100000-0000-0000-0000-000000000063', repeat('9', 64));
+  begin
+    perform public.close_time_period(
+      v_admin, v_org, (select period_id from public.time_period_calculations where id = v_calculation),
+      '26100000-0000-0000-0000-000000000053', repeat('d', 64));
+    raise exception 'June closed with a pending correction';
+  exception when others then
+    if sqlerrm <> 'period_pending_corrections' then raise; end if;
+  end;
+  set local session_replication_role = replica;
+  update public.time_correction_requests set status = 'withdrawn'
+    where id = '26100000-0000-0000-0000-000000000060';
+  set local session_replication_role = origin;
+
   v_fingerprint := app_private.compute_p1_23_source_fingerprint(v_org, '2026-06-01', '2026-06-30');
   v_calculation := public.prepare_time_period(
     v_admin, v_org, '2026-06-01', '2026-06-30', v_fingerprint,
@@ -431,6 +486,27 @@ begin
     'clock_in', '2026-07-20 08:00+02', true, 'approved');
   if (select xmax from public.time_periods where id = v_period) <> pg_current_xact_id()::xid then
     raise exception 'the write did not lock the period row';
+  end if;
+end;
+$$;
+
+-- The guard of account events and correction applications locks the period
+-- row of its day too, whatever the period's state, so a concurrent close
+-- waits for the write.
+do $$
+declare
+  v_period uuid;
+begin
+  insert into public.time_periods (organization_id, period_start_date, period_end_date, prepared_by)
+  values ('26100000-0000-0000-0000-000000000011', '2026-08-01', '2026-08-31',
+    '26100000-0000-0000-0000-000000000001')
+  returning id into v_period;
+  if (select xmax from public.time_periods where id = v_period) <> '0'::xid then
+    raise exception 'the new period row is already locked';
+  end if;
+  perform app_private.assert_p1_23_period_open('26100000-0000-0000-0000-000000000011', '2026-08-10');
+  if (select xmax from public.time_periods where id = v_period) <> pg_current_xact_id()::xid then
+    raise exception 'the account-event guard did not lock the period row';
   end if;
 end;
 $$;
