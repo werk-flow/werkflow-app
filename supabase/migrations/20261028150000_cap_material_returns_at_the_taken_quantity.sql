@@ -7,12 +7,15 @@
 -- taken quantity, the stock rose by material that never left the shelf and
 -- the billable quantity fell.
 --
--- record_inventory_movement now locks the line FOR UPDATE before a return and
--- refuses with 'return_exceeds_taken' while the returned quantity plus the
--- return would exceed the taken quantity, and with 'line_not_found' for a
--- line outside the organization. The stock row is locked first, the
--- same order a take uses, so a take and a return of one line cannot deadlock.
--- The refusal rolls back the movement and the stock change.
+-- record_inventory_movement now locks the line FOR NO KEY UPDATE before a
+-- return and refuses with 'return_exceeds_taken' while the returned quantity
+-- plus the return would exceed the taken quantity, and with 'line_not_found'
+-- for a line outside the organization. The lock serializes the returns of one
+-- line, and it does not conflict with the KEY SHARE lock that a concurrent
+-- movement's foreign key takes on the line, so two returns of one line to
+-- different locations cannot deadlock (FOR UPDATE would). The stock row is
+-- locked first, the same order a take uses. The refusal rolls back the
+-- movement and the stock change.
 --
 -- A constraint caps the returned quantity at the taken quantity for every
 -- later write. It is NOT VALID: it checks each new or changed row and leaves
@@ -160,7 +163,7 @@ begin
       from public.job_material_lines line
       where line.id = p_job_material_line_id
         and line.organization_id = p_organization_id
-      for update;
+      for no key update;
 
       if not found then
         raise exception 'line_not_found';
