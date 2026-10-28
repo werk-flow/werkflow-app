@@ -8,7 +8,7 @@ begin
     'attention_events', 'client_communication_preference_events', 'client_follow_up_events',
     'client_request_events', 'document_audit_events', 'employee_record_events',
     'organization_responsibility_events', 'qualification_events', 'sickness_report_events',
-    'team_events', 'vacation_request_events'
+    'team_events', 'time_entry_audit_events', 'vacation_request_events'
   ] loop
     if not exists (
       select 1 from pg_trigger where tgrelid = ('public.' || ledger)::regclass

@@ -9260,6 +9260,50 @@ export type Database = {
           },
         ];
       };
+      time_entry_audit_events: {
+        Row: {
+          action: string;
+          actor_id: string;
+          after_entry: Json | null;
+          before_entry: Json;
+          created_at: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id: string;
+          organization_id: string;
+        };
+        Insert: {
+          action: string;
+          actor_id: string;
+          after_entry?: Json | null;
+          before_entry: Json;
+          created_at?: string;
+          entry_id: string;
+          entry_timestamp: string;
+          id?: string;
+          organization_id: string;
+        };
+        Update: {
+          action?: string;
+          actor_id?: string;
+          after_entry?: Json | null;
+          before_entry?: Json;
+          created_at?: string;
+          entry_id?: string;
+          entry_timestamp?: string;
+          id?: string;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_entry_audit_events_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       time_operations: {
         Row: {
           actor_id: string | null;
@@ -17282,6 +17326,39 @@ export type Database = {
           p_team_id: string;
         };
         Returns: undefined;
+      };
+      update_time_entry: {
+        Args: {
+          p_actor_id: string;
+          p_changes: Json;
+          p_entry_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          capture_source:
+            | Database["public"]["Enums"]["time_capture_source"]
+            | null;
+          created_at: string;
+          entry_type: string;
+          id: string;
+          is_manual: boolean;
+          job_id: string | null;
+          operation_id: string | null;
+          organization_id: string;
+          recovery_reason: string | null;
+          reviewed_at: string | null;
+          reviewed_by: string | null;
+          status: Database["public"]["Enums"]["time_entry_status"];
+          timestamp: string;
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "time_entries";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_time_tracking_settings: {
         Args: {
