@@ -27,6 +27,7 @@ import { getCanonicalTimeEntries } from './canonical-entries';
 import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
+import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import { verifyCurrentMembership } from './action-access';
 import { isManagerRole } from '@/lib/roles';
 
@@ -307,6 +308,78 @@ async function collectJobSessionEntries(
 }
 
 /**
+ * The corrected time entries of one job the caller may see; null when a read
+ * fails. The caller authorized the job and loaded the
+ * approved corrections once for its whole request.
+ */
+async function readJobTimeEntries(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  scope: {
+    organizationId: string;
+    jobId: string;
+    userId: string;
+    isManager: boolean;
+    projectionTime: string;
+    correctionApplications: readonly TimeCorrectionApplicationProjection[];
+  },
+): Promise<TimeEntry[] | null> {
+  const { organizationId, jobId, userId, isManager, projectionTime } = scope;
+  const canonicalResult = await getCanonicalTimeEntries({
+    organizationId,
+    from: '1970-01-01T00:00:00.000Z',
+    to: projectionTime,
+    userId: isManager ? undefined : userId,
+    jobId,
+    referenceTime: projectionTime,
+  });
+  if (!canonicalResult.success) return null;
+  const canonicalEntries = canonicalResult.entries;
+  const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
+    applyApprovedTimeCorrections(entries, scope.correctionApplications, organizationId).filter(
+      (entry) => entry.jobId === jobId && (isManager || entry.userId === userId),
+    );
+  let jobClockInsQuery = admin
+    .from('time_entries')
+    .select('*')
+    .eq('organization_id', organizationId)
+    .eq('entry_type', 'clock_in')
+    .eq('job_id', jobId)
+    .neq('status', 'rejected');
+
+  if (!isManager) {
+    jobClockInsQuery = jobClockInsQuery.eq('user_id', userId);
+  }
+
+  const orderedJobClockIns = jobClockInsQuery.order('timestamp', { ascending: true }).order('id');
+  const { data: jobClockIns, error: jobClockInsError } = await readCompleteRows(
+    (from, to) => orderedJobClockIns.range(from, to),
+    LIST_ROW_CAP,
+  );
+
+  if (jobClockInsError) {
+    logError('Error fetching clock-ins for job:', jobClockInsError);
+    return null;
+  }
+
+  const targetClockIns = toTimeEntries(jobClockIns || []);
+  if (targetClockIns.length === 0) return projectJobEntries(canonicalEntries);
+
+  const sessionEntries = await collectJobSessionEntries(
+    admin,
+    { organizationId, jobId },
+    targetClockIns,
+    canonicalEntries,
+  );
+  if (!sessionEntries) return null;
+
+  return projectJobEntries(sessionEntries).sort((a, b) => {
+    const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+    if (timestampDiff !== 0) return timestampDiff;
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+}
+
+/**
  * Get all time entries linked to a specific job.
  */
 export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEntriesResult> {
@@ -352,84 +425,68 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
 
     const isManager = callerRole === 'admin' || callerRole === 'buero';
     const projectionTime = new Date().toISOString();
-    const canonicalResult = await getCanonicalTimeEntries({
-      organizationId: job.organization_id,
-      from: '1970-01-01T00:00:00.000Z',
-      to: projectionTime,
-      userId: isManager ? undefined : user.id,
-      jobId,
-      referenceTime: projectionTime,
-    });
-    if (!canonicalResult.success) {
-      return { success: false, error: 'fetch_failed' };
-    }
-    const canonicalEntries = canonicalResult.entries;
     const correctionApplications = await loadApprovedCorrectionProjection(admin, {
       organizationId: job.organization_id,
       from: '1970-01-01T00:00:00.000Z',
       to: projectionTime,
       ...(!isManager ? { userIds: [user.id] } : {}),
     });
-    const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
-      applyApprovedTimeCorrections(entries, correctionApplications, job.organization_id).filter(
-        (entry) => entry.jobId === jobId && (isManager || entry.userId === user.id),
-      );
-    let jobClockInsQuery = admin
-      .from('time_entries')
-      .select('*')
-      .eq('organization_id', job.organization_id)
-      .eq('entry_type', 'clock_in')
-      .eq('job_id', jobId)
-      .neq('status', 'rejected');
-
-    if (!isManager) {
-      jobClockInsQuery = jobClockInsQuery.eq('user_id', user.id);
-    }
-
-    const orderedJobClockIns = jobClockInsQuery.order('timestamp', { ascending: true }).order('id');
-    const { data: jobClockIns, error: jobClockInsError } = await readCompleteRows(
-      (from, to) => orderedJobClockIns.range(from, to),
-      LIST_ROW_CAP,
-    );
-
-    if (jobClockInsError) {
-      logError('Error fetching clock-ins for job:', jobClockInsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const targetClockIns = toTimeEntries(jobClockIns || []);
-    if (targetClockIns.length === 0) {
-      const correctedCanonicalEntries = projectJobEntries(canonicalEntries);
-      const canonicalParticipants = await loadJobParticipants(admin, isManager, correctedCanonicalEntries);
-      if (!canonicalParticipants) return { success: false, error: 'fetch_failed' };
-      return { success: true, entries: correctedCanonicalEntries, participants: canonicalParticipants };
-    }
-
-    const sessionEntries = await collectJobSessionEntries(
-      admin,
-      { organizationId: job.organization_id, jobId },
-      targetClockIns,
-      canonicalEntries,
-    );
-    if (!sessionEntries) return { success: false, error: 'fetch_failed' };
-
-    const correctedEntries = projectJobEntries(sessionEntries);
-    const participants = await loadJobParticipants(admin, isManager, correctedEntries);
+    const entries = await readJobTimeEntries(admin, {
+      organizationId: job.organization_id,
+      jobId,
+      userId: user.id,
+      isManager,
+      projectionTime,
+      correctionApplications,
+    });
+    if (!entries) return { success: false, error: 'fetch_failed' };
+    const participants = await loadJobParticipants(admin, isManager, entries);
     if (!participants) return { success: false, error: 'fetch_failed' };
-
-    return {
-      success: true,
-      entries: correctedEntries.sort((a, b) => {
-        const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-        if (timestampDiff !== 0) return timestampDiff;
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-      }),
-      participants,
-    };
+    return { success: true, entries, participants };
   } catch (error) {
     logError('Unexpected error in getTimeEntriesForJob:', error);
     return { success: false, error: 'unexpected_error' };
   }
+}
+
+/**
+ * The corrected time entries of each authorized job of one project, with the
+ * approved corrections read once for all of them; null when a read fails.
+ */
+async function readProjectJobTimeEntries(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  scope: { organizationId: string; jobIds: readonly string[]; userId: string; isManager: boolean },
+): Promise<Array<{ jobId: string; entries: TimeEntry[] }> | null> {
+  if (scope.jobIds.length === 0) return [];
+  const projectionTime = new Date().toISOString();
+  const correctionApplications = await loadApprovedCorrectionProjection(admin, {
+    organizationId: scope.organizationId,
+    from: '1970-01-01T00:00:00.000Z',
+    to: projectionTime,
+    ...(!scope.isManager ? { userIds: [scope.userId] } : {}),
+  });
+  const jobs: Array<{ jobId: string; entries: TimeEntry[] | null }> = [];
+  const jobReadConcurrency = 4;
+  for (let offset = 0; offset < scope.jobIds.length; offset += jobReadConcurrency) {
+    const batch = scope.jobIds.slice(offset, offset + jobReadConcurrency);
+    jobs.push(
+      ...(await Promise.all(
+        batch.map(async (jobId) => ({
+          jobId,
+          entries: await readJobTimeEntries(admin, {
+            organizationId: scope.organizationId,
+            jobId,
+            userId: scope.userId,
+            isManager: scope.isManager,
+            projectionTime,
+            correctionApplications,
+          }),
+        })),
+      )),
+    );
+  }
+  const readJobs = jobs.flatMap(({ jobId, entries }) => (entries ? [{ jobId, entries }] : []));
+  return readJobs.length === jobs.length ? readJobs : null;
 }
 
 export async function getTimeEntriesForProjectJobs(
@@ -483,33 +540,14 @@ export async function getTimeEntriesForProjectJobs(
       visibleJobIds = assignments.map((assignment) => assignment.job_id);
     }
 
-    const results: Array<{
-      jobId: string;
-      result: Awaited<ReturnType<typeof getTimeEntriesForJob>>;
-    }> = [];
-    const jobReadConcurrency = 4;
-    for (let offset = 0; offset < visibleJobIds.length; offset += jobReadConcurrency) {
-      const batch = visibleJobIds.slice(offset, offset + jobReadConcurrency);
-      results.push(
-        ...(await Promise.all(
-          batch.map(async (jobId) => ({
-            jobId,
-            result: await getTimeEntriesForJob(jobId),
-          })),
-        )),
-      );
-    }
-    const failedResult = results.find(({ result }) => !result.success);
-    if (failedResult && !failedResult.result.success) {
-      return { success: false, error: failedResult.result.error };
-    }
-    return {
-      success: true,
-      jobs: results.map(({ jobId, result }) => ({
-        jobId,
-        entries: result.success ? result.entries : [],
-      })),
-    };
+    const jobs = await readProjectJobTimeEntries(admin, {
+      organizationId: project.organization_id,
+      jobIds: visibleJobIds,
+      userId: user.id,
+      isManager: callerRole === 'admin' || callerRole === 'buero',
+    });
+    if (!jobs) return { success: false, error: 'fetch_failed' };
+    return { success: true, jobs };
   } catch (error) {
     logError('Unexpected error in getTimeEntriesForProjectJobs:', error);
     return { success: false, error: 'unexpected_error' };

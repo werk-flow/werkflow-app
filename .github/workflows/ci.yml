@@ -38,7 +38,7 @@ jobs:
       static: ${{ steps.plan.outputs.static }}
       sql: ${{ steps.plan.outputs.sql }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - run: bun scripts/verify.ts run --group static:lint
       - uses: ./.github/actions/upload-evidence
@@ -70,12 +70,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      # docs:check reads the review dates and the decision records' history.
-      - uses: actions/checkout@v6
+      # docs:check reads the decision records' history.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      # docs:check reads the sibling clones beside the app (docs/README.md, maintenance rule 7).
+      # docs:check reads the sibling clones beside the app (docs/README.md, "Sibling repositories").
       - name: Clone the sibling repositories
         env:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOSITORIES_TOKEN }}
@@ -98,7 +98,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
@@ -116,7 +116,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/playwright
       - run: bun scripts/verify.ts run --group ui:contracts
@@ -131,7 +131,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
         with:
@@ -158,7 +158,7 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.shards) }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
       - uses: ./.github/actions/playwright

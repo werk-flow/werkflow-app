@@ -24,7 +24,7 @@ The buyer is the business owner. The users are the whole company: owners, office
 
 These businesses lose time to paperwork, scattered information, slow legacy software and physical folders, and the owner holds it all together. WerkFlow is the one place that answers: what work is due, for which customer or project, who is assigned, when, in which state, how much time was recorded, and which documents and materials belong to it.
 
-The product has two phases. Phase 1 builds a complete operational core with the depth of serious Handwerkersoftware. Phase 2 builds AI assistance and automation on that data. [The capability map](docs/product/product-capability-map.md) owns the dependency model. [The roadmap](docs/plans/phase-1/roadmap.md) owns the order of work and the current checkpoint. Each feature spec's **Current Product Baseline** owns implemented behavior. A planned capability is not an implemented feature.
+The product has two phases. Phase 1 builds a complete operational core with the depth of serious Handwerkersoftware. Phase 2 builds AI assistance and automation on that data. [The capability map](docs/product/product-capability-map.md) owns the dependency model. Each feature spec's **Current Product Baseline** owns implemented behavior. A planned capability is not an implemented feature.
 
 Before you add a feature, ask three questions. Does it reduce paperwork? Does it make the work more organized? Does it save time for employees or the owner? If all three answers are no, raise it with the owner as likely bloat.
 
@@ -75,7 +75,7 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 - **Good.** Write the smallest amount of clear code that delivers the confirmed outcome. A domain rule has one owner module with precise types and focused tests. Rows that change together change in one database function call. Use descriptive full-word names and guard clauses. Type every exported signature under `lib/`. End each task with a deletion pass.
 - **Never.** Use `any`, a `!` assertion, an `as` cast, or `undefined` in an optional property. Copy a helper or a type. Write related rows in separate statements. Leave dead code, an unused or test-only export, or an unused dependency. Suppress a rule without a reason. Add an abstraction for possible future scope. Remove authorization, validation, audit history or failure visibility to save lines. Rename existing short identifiers in passing (owner decision).
-- **Enforced by.** Tier 1: strict compiler flags in `tsconfig.json`. Tier 2: `static:typecheck`, `static:lint` (type, cast, size-cap, layering, escape, suppression and typed rules; `quality/function-size` with `eslint-rules/size-cap-exceptions.json`, `quality/no-silent-catch`, `timeOfDaySelectors`), `static:unused`, `static:format`, the tests under `lib/` (duplicates, caps, assertions, failure shapes, guarded writes), `sql:job-plan-bridge`, `sql:user-preference-writes`, `types:check`, `docs:check`.
+- **Enforced by.** Tier 1: strict compiler flags in `tsconfig.json`. Tier 2: `static:typecheck`, `static:lint` (type, cast, size-cap, layering, escape, suppression and typed rules; `quality/function-size` with `eslint-rules/size-cap-exceptions.json`, `quality/no-silent-catch`, `timeOfDaySelectors`), `static:unused`, `static:format`, the tests under `lib/` (duplicates, caps, assertions, failure shapes, guarded writes), `sql:job-plan-bridge`, `sql:user-preference-writes`, `types:check`.
 - **Defaults (Tier 3).** Whether an abstraction earns its place, naming, and the deletion pass with its independent review.
 - **Verify.** `bun run typecheck`, `bun run lint`, `bun run unused:check`, `bun run test:unit`.
 - **Owner doc.** [Code quality](docs/technical/code-quality.md), with the `typescript-best-practices` skill for types. Start from its [How to work](docs/technical/code-quality.md#how-to-work).
@@ -84,7 +84,7 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 - **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. A PR gets the reviews of its [review level](docs/technical/coderabbit.md#choose-the-review-level), and each finding gets a disposition.
 - **Never.** Retry until green. Weaken an assertion, skip a test, add a fixed sleep or raise a timeout to pass. Treat a review score or an old report as acceptance. Merge without a green `Check`.
-- **Enforced by.** Tier 1: `scripts/guard-edits-during-verification.ts` guards a running local verification, `scripts/run-unit-tests.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: `.github/workflows/ci.yml` with its required check `Check`, the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis), the tests under `lib/testing/`, `lib/conventions/` and `lib/docs/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `bun run test:runs`.
+- **Enforced by.** Tier 1: `scripts/guard-edits-during-verification.ts` guards a running local verification, `scripts/run-unit-tests.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: `.github/workflows/ci.yml` with its required check `Check`, the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis), the tests under `lib/testing/` and `lib/conventions/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `bun run test:runs`.
 - **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, a PR's review level, and the disposition of each review finding.
 - **Verify.** `bun run check:changed`, `bun run test:plan`, `bun run test:verify`, the level's reviews, then `Check` on the PR. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
 - **Owner doc.** [Testing](docs/technical/testing.md), with [reviews](docs/technical/coderabbit.md) for pull requests. Start from its [How to work](docs/technical/testing.md#how-to-work).
@@ -93,14 +93,14 @@ A change is done when its Verify commands pass and its Tier 3 points have a reco
 
 - **Good.** A doc holds what the code and the database cannot say: intent, decisions, rules, reasons, procedures, and a pointer to the mechanism that enforces a rule. Every fact has one home, and other places link to it. Change the owning doc in the same change as the behavior.
 - **Never.** Restate a schema, a file list, a handler list, a function inventory, a count or a current value. Write dated narrative, report ids or build ids into a living doc. Copy a rule into a second doc. Create a report or summary file that nobody asked for. Store repository facts in agent memory.
-- **Enforced by.** Tier 2: `bun run docs:check` with its rules and tests in `lib/docs/` and `lib/testing/publication/coderabbit-review-command.test.ts`.
-- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether undated narrative or a counter sits in a living doc.
+- **Enforced by.** Tier 2: `bun run docs:check` with its rules and tests in `lib/docs/`.
+- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether narrative or a counter sits in a living doc.
 - **Verify.** `bun run docs:check`.
 - **Owner doc.** [The docs index](docs/README.md), with the `writing-for-agents`, `technical-writing` and `unslop` skills for the prose. Start from its [How to work](docs/README.md#how-to-work).
 
 ### Keep the blocks and the owner docs in step
 
-Change an "Enforced by" line and its owner docs' mechanism tags in the same change; `docs:check` fails while they disagree.
+Change an "Enforced by" line and its owner docs' mechanism tags in the same change.
 
 ## How to work
 
@@ -109,7 +109,6 @@ A rule below without a named mechanism is a Tier 3 default.
 - Route every task through the matching skill: [the docs index](docs/README.md#skills) pairs each kind of task with its skill.
 - Do yourself whatever your tools can do, including generating, setting and rotating a secret whose value you create. The owner supplies only what the owner alone holds (passwords, tokens and settings of the owner's own accounts) and decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
 - Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask the owner through your harness's ask-user tool and end your turn, so T3 Code marks the thread as needing input and notifies the owner. Never bury an owner action in a status message while you keep working or watching a PR.
-- Phase 1 feature work follows [the protocol](docs/plans/phase-1/protocol.md) and updates the roadmap and the affected feature spec in the same change. Mechanism: `docs:check` validates the roadmap and the slice records.
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
 - Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
 - A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed` and, for level 1 and 2, `sol-loop`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it until it meets [the merge gate](docs/technical/coderabbit.md#the-merge-gate). The owner merges unless they said "full send". "full send" and "full stop" are the owner's request to commit, push and open the task's PR. Mechanism: the ruleset on `main`.

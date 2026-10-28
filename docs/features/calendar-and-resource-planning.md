@@ -1,6 +1,6 @@
 # Calendar And Resource Planning
 
-Status: living — last reviewed 2026-10-23
+Status: living — last reviewed 2026-10-28
 
 Calendar and resource planning (`Kalender` and `Einsatzplanung`) connects the work the business has promised with the people, time, tools, vehicles, locations and materials needed to deliver it.
 
@@ -31,7 +31,7 @@ The calendar reduces telephone coordination, paper schedules, duplicate entry, a
 - **Phone.** Every role sees the week and the day as a list in time order, with the person's name on a card when more than one person is visible. The phone lists have no toolbar and no drag. A tap opens the details and editing flow.
 - **Landing view and preferences.** The calendar stores view, horizon, density, weekends, filters and search per user and organization. The saved view is the landing view. Without one, managers land on the Plantafel and employees on the day. The „Arbeitszeiten“ toggle in the tab row is session state. A date can be bookmarked with `?date=YYYY-MM-DD`.
 - **Loading.** Dates that the loaded window already covers appear at once. While an uncovered window loads, the grid stays visible but inert. A failed refresh marks the view as stale, and a failed first load offers a retry. [Realtime and caching](../technical/realtime-and-caching.md) owns the freshness model.
-- **Design decisions.** The owner decided the calendar overhaul in the [P1-24a record](../plans/phase-1/slices/p1-24a-plantafel.md): the month view rebuilt without FullCalendar, a red-family now indicator, two densities, seven days without horizontal scroll at 1280 px, an in-house pointer-event drag engine, month drag, a weekend toggle, content-driven day rows, copy by `Alt`-drag.
+- **Design decisions.** The owner decided the calendar overhaul in `P1-24a`: the month view rebuilt without FullCalendar, a red-family now indicator, two densities, seven days without horizontal scroll at 1280 px, an in-house pointer-event drag engine, month drag, a weekend toggle, content-driven day rows, copy by `Alt`-drag.
 
 ### Planning gestures
 
