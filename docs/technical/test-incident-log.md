@@ -31,7 +31,13 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Root cause: the calendar message map lacked the new job_not_assigned refusal of addManualEntry, which the calendar can reach
 - Prevention: Tier 2: lib/calendar/messages.test.ts caught it before push
 - Correction: `lib/calendar/messages.ts` carries a sentence for `job_not_assigned`.
-- Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T075903437Z-2fe989ec`.
+- Classification: product.
+- Evidence: the failed assertion in `lib/calendar/messages.test.ts:62` in that report's `unit-all.log`, which listed `job_not_assigned` as a result code without a calendar sentence.
+- Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T075903437Z-2fe989ec`, target local, fingerprint `09074091efc1`, every unit test of the group.
+- Cleanup: no owned world (a unit group); the group ran again on its changed inputs.
+
+## 2026-10-28: unit:all product failure
+
 <!-- incident-run: unit:all@2026-10-28T063311071Z-86b16519 -->
 
 - Run: run `unit:all@2026-10-28T063311071Z-86b16519`, group `unit:all`, target local, fingerprint `e9bc6cc776a3`.
