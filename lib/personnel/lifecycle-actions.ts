@@ -1139,8 +1139,7 @@ export async function finalizePersonnelDocumentUpload(
     return { success: false, error: 'not_authorized' };
   const upload = { admin: context.admin, organizationId: context.organizationId, storagePath };
   const head = await acceptPersonnelUpload(upload);
-  if (!head?.exists || !head.sizeBytes || head.sizeBytes <= 0)
-    return { success: false, error: 'file_missing' };
+  if (!head.success) return head;
   if (head.sizeBytes > DOCUMENT_MAX_FILE_SIZE_BYTES) {
     await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
     return { success: false, error: 'file_too_large' };

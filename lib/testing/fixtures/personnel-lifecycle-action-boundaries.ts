@@ -359,6 +359,10 @@ const finalizeRegistered = () =>
     validUntil: null,
   });
 const finalized = { success: true, data: { documentId: registered.request.documentId } };
+// A finalize whose registration read fails reports it and touches no storage.
+world.failingTables.add('documents');
+assert.deepEqual(await finalizeRegistered(), { success: false, error: 'load_failed' });
+world.failingTables.delete('documents');
 assert.deepEqual(await finalizeRegistered(), finalized);
 world.tables.documents.push({
   id: registered.request.documentId,

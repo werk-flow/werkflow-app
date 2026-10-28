@@ -14,7 +14,7 @@
     "lib/jobs/actions.ts": 1021,
     "lib/jobs/types.ts": 890,
     "lib/personnel/actions.ts": 891,
-    "lib/personnel/lifecycle-actions.ts": 1245,
+    "lib/personnel/lifecycle-actions.ts": 1244,
     "lib/planning/actions.ts": 811,
     "lib/planning/server.ts": 1165,
     "lib/qualifications/actions.ts": 1228,

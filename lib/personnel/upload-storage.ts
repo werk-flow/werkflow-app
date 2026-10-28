@@ -1,5 +1,6 @@
 import 'server-only';
 
+import type { ActionResult } from '@/lib/action-result';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import {
@@ -40,18 +41,23 @@ export async function readPersonnelUploadOwner(
  * The object a finalize registers. A first finalize copies the staging key;
  * a replay of a registered upload reads the registered object and copies
  * nothing, so a signed URL that is still valid cannot replace its bytes.
- * `null` when the owner read or storage failed.
  */
-export async function acceptPersonnelUpload(upload: PersonnelUpload): Promise<StorageObjectHead | null> {
+export async function acceptPersonnelUpload(
+  upload: PersonnelUpload,
+): Promise<ActionResult<{ sizeBytes: number; contentType: string | null }>> {
   const owner = await readPersonnelUploadOwner(upload, 'acceptPersonnelUpload: documents read failed');
-  if (owner === undefined) return null;
+  if (owner === undefined) return { success: false, error: 'load_failed' };
   const scope = { organizationId: upload.organizationId, path: upload.storagePath };
+  let head: StorageObjectHead;
   try {
-    return await (owner ? headStorageObject(scope) : promoteUploadedObject(scope));
+    head = await (owner ? headStorageObject(scope) : promoteUploadedObject(scope));
   } catch (error) {
     logError('acceptPersonnelUpload: storage failed', error);
-    return null;
+    return { success: false, error: 'upload_failed' };
   }
+  if (!head.exists || !head.sizeBytes || head.sizeBytes <= 0)
+    return { success: false, error: 'file_missing' };
+  return { success: true, sizeBytes: head.sizeBytes, contentType: head.contentType };
 }
 
 /** Removes an unregistered upload: its staging object and a copy a failed finalize left. */

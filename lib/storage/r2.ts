@@ -299,8 +299,10 @@ export async function promoteUploadedObject({
     if (isNotFoundError(error)) return { exists: false, sizeBytes: null, contentType: null };
     throw error;
   }
+  // The staging object stays until the copy is read, so a failed read can be retried.
+  const head = await headStorageObject({ organizationId, path });
   await discardStorageObjects({ organizationId, paths: [stagingPath] });
-  return headStorageObject({ organizationId, path });
+  return head;
 }
 
 export async function putStorageObject({
