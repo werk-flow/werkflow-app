@@ -79,7 +79,7 @@ Planning is no second job, employee, absence or time system, and never changes r
 - A recurrence is a bounded series with a durable lineage. "This and future" closes the old segment and starts a successor. Past and started occurrences are never rewritten.
 - An occurrence is identified by organization, lineage and original Berlin local start, so extending the horizon is idempotent across DST.
 - A planning assignment controls planning visibility. The job assignment stays the authority for job responsibility and field access.
-- Capacity, qualification and team membership resolve at action time. A planning action stores its assessment once as a snapshot; each occurrence it writes references it with its own selection and any override reason. No capacity balance is stored.
+- Capacity, qualification and team membership resolve at action time. An action stores one assessment snapshot, which each written occurrence references with its own selection and override reason. No balance is stored.
 - A dispatch (`Einsatz`) targets one visit or one unscheduled job, at most one active per target. A revision records the instruction as issued; a schedule change supersedes it in the same transaction. Parking cancels the dispatches.
 - An acknowledgement belongs to one revision and one personnel record; the latest wins. A recipient without a login shows "nicht möglich".
 - A customer commitment is an explicit agreement for an occurrence. A schedule move never rewrites it; a mismatch is a derived, visible state.
