@@ -1,8 +1,6 @@
 # WerkFlow docs
 
-Status: living — last reviewed 2026-10-28; update this index when you add, move, close or remove a doc
-
-This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc, and a spec's planned-scope sections, only when your task reaches them.
+This index routes a task to the few docs it needs. Start with `AGENTS.md`. Then read only the rows whose "read when" condition applies. Routine reading is `AGENTS.md` and this index in full. Each task adds the **Current Product Baseline** of the feature spec it changes. For each virtue the task touches, it adds the "How to work" procedure and the "Checklist" and "Never" items of that virtue's owner doc. Read the rest of an owner doc only when your task reaches it.
 
 ## What a doc may contain
 
@@ -49,7 +47,7 @@ Examples. "The migration that creates a table grants explicitly; `sql:security` 
 
 ### Feature specifications (`docs/features/`)
 
-Read the spec of the feature you change, plus only the connected specs your change touches. Each spec separates **Current Product Baseline** (implemented) from planned scope.
+Read the spec of the feature you change, plus only the connected specs your change touches. Each spec holds a short goal and its **Current Product Baseline**: what exists, for which role, and its rules. Planned scope lives in `werk-flow/werkflow-planning`.
 
 | Doc | Read when working on |
 | --- | --- |
@@ -60,9 +58,9 @@ Read the spec of the feature you change, plus only the connected specs your chan
 | [time-tracking.md](features/time-tracking.md) | Zeiterfassung, clock events, breaks, targets, approvals, corrections, Perioden. |
 | [document-management.md](features/document-management.md) | Dokumente, folders, versions, trash, audit. |
 | [inventory.md](features/inventory.md) | Lager, catalog, locations, stock movements, job material. |
-| [service-and-maintenance.md](features/service-and-maintenance.md) | Anlagen, Servicefälle, Wartungspläne, and the planned contract and on-call scope. |
-| [commercial-and-finance.md](features/commercial-and-finance.md) | The planned commercial loop: offers, invoices, payments, accounting handoffs. |
-| [ai-automations.md](features/ai-automations.md) | Phase 2 AI direction and the Phase 1 foundations it needs. |
+| [service-and-maintenance.md](features/service-and-maintenance.md) | Anlagen, Servicefälle, Wartungspläne. |
+| [commercial-and-finance.md](features/commercial-and-finance.md) | Prices, billable quantities or handover readiness, and what the commercial loop does not do yet. |
+| [ai-automations.md](features/ai-automations.md) | The AI direction and the Phase 1 foundations it builds on. |
 
 ### Product (`docs/product/`)
 

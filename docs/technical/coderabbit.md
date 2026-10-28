@@ -1,7 +1,5 @@
 # Pull-request reviews
 
-Status: living — last reviewed 2026-10-27
-
 Every pull request to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): the agent's own read, a `sol-loop` review by GPT Sol, and for the riskiest changes one CodeRabbit app review. Treat every reviewer as a reviewer, not as an authority. Every finding needs engineering judgment: check that a suggested fix keeps the SHK product context, the role-specific workflows, the organization boundaries and field-worker usability.
 
 The root `.coderabbit.yaml` configures the CodeRabbit review. Its path instructions point at the owner doc of each virtue and leave generated files out; the rules themselves live in those docs, and `AGENTS.md` is read as a guideline file. Automatic review is off, so that a level 2 PR gets its one review on request ([step 4](#babysit-a-pull-request)). Change the file only when an owner doc moves, a new top-level folder needs its pointer or the review policy changes. Validate it against the schema its first line declares.
@@ -50,7 +48,7 @@ Merge only under "full send", with `gh pr merge --squash`, after a fresh `git fe
 
 ### Give a review its context
 
-`AGENTS.md` and the owner docs carry the durable rules. When the diff needs context that no owner doc holds, such as the feature spec of the slice, link it in the PR description. A feature spec separates implemented behavior from planned scope; otherwise CodeRabbit recommends building a planned workflow or removing deliberate infrastructure.
+`AGENTS.md` and the owner docs carry the durable rules. When the diff needs context that no owner doc holds, such as the feature spec of the slice, link it in the PR description. A feature spec states only implemented behavior. Name a deliberate limit in the PR description; otherwise CodeRabbit recommends building a planned workflow or removing deliberate infrastructure.
 
 ### Run a local pre-check
 
