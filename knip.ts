@@ -37,7 +37,8 @@ const config: KnipConfig = {
     'lib/testing/runner/file-lock-worker.ts!',
     'lib/testing/fixtures/*.{ts,tsx}',
     'scripts/*.ts!',
-    // Agent hooks run by path from the agent settings (the prepared ones from their test).
+    // Agent hooks run by path from the agent settings.
+    '.claude/hooks/*.ts!',
     'playwright.audit.config.ts!',
     'playwright.canary.config.ts!',
     'tests/golden/global-setup.ts!',

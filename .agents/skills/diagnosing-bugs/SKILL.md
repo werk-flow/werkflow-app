@@ -5,80 +5,54 @@ description: Diagnosis loop for hard bugs and performance regressions. Use when 
 
 # Diagnose a defect
 
-Adapted for WerkFlow from mattpocock/skills (MIT). For a test failure, first read `docs/technical/testing.md`. That guide owns group selection, repair mode, the run's execution model, deadlines, retained diagnosis and recovery under [decision 0007](../../../docs/decisions/0007-independent-test-groups.md). Apply this skill to the suspected product, test, or environment defect. Read the owning feature contract before deciding what behavior is wrong.
+Adapted for WerkFlow from mattpocock/skills (MIT).
 
-Application tests use local Supabase. The canary and named provider checks use cloud DEV. Production is read-only during diagnosis. Use the repository wrappers and workspace ownership rules. Do not start a competing server, database reset, or test command.
+For a failed test group, [testing](../../../docs/technical/testing.md) owns reruns, repair mode and cleanup. Read it first. Read the owning feature spec before you decide which behavior is wrong.
 
-When repairing an existing test, follow `docs/technical/testing.md#specs` and `#failures`: compare the failed assertion with the feature specification and the catalog clause first, decide whether the application violates its promise or the test misrepresents it, and repair the shared helper in its domain module when it owns the cause. Historical acceptance records do not override that procedure.
+Application tests run on local Supabase. The canary uses cloud DEV. PROD is read-only. Use the repository wrappers. Never start a competing server, reset or test run.
 
-## 1. Establish the symptom and evidence
+## 1. Pin the symptom
 
-State the exact expected and observed behavior. Identify which user, record, operation, and execution boundary are involved. Distinguish a contract violation from an incorrect test assumption.
+1. State the expected and the observed behavior: which user, record, operation and boundary.
+2. Read the evidence you already have: the error context, screenshot, trace, logs, persisted state. A captured failure is evidence. Read the code before you rerun it.
+3. Redact credentials and personal data in anything you show.
+4. Pick a tight loop that can tell the explanations apart:
+   - a unit or SQL assertion for a domain or database rule
+   - a real-component browser check for a control
+   - a retained run (`--reuse-run <key>`) or one affected group, or `KEEP_WORLD=1` to replay on a kept world
+   - a read-only query for a disputed saved result
+   - a timing measurement for a slowdown
+   - [hitl-loop.template.sh](scripts/hitl-loop.template.sh) when only the user can see the symptom
 
-Inspect existing evidence first: the failed group's error context, screenshot, trace, relevant logs, and exact persisted state. A captured failure is evidence. You do not need to recreate it repeatedly before reading the code or forming a hypothesis. Playwright's error snapshot shows the fixture page, not a page a test opened in its own context; for those, replay the step on the retained world.
+Done when the loop goes red on the symptom, or you can name exactly what blocks observation.
 
-Redact credentials and personal data before showing artifacts. Keep secrets in environment variables. Read selected trace fields rather than dumping requests, cookies, or storage state.
+## 2. Shrink and explain
 
-Choose a bounded feedback method that can distinguish the leading explanations:
+1. Use the smallest scenario that still crosses the suspect boundary. Keep the auth, the organization and the timing that matter.
+2. For a flaky failure, read the ordering in the trace before you add load. Test an ordering with a seeded or delayed experiment and a fixed limit. No 100-run loops, no sleeps.
+3. Rank the explanations the evidence supports. For each, name the observation that would rule it out.
 
-- A focused unit or SQL assertion for a domain or database rule.
-- A real-component browser check for control behavior.
-- A retained diagnostic (`--reuse-run <key>`) or fresh affected group for application behavior; for a measured scenario, a focused run with `KEEP_WORLD=1` and replays on that world.
-- A read-only request or state comparison for a disputed saved result.
-- A focused timing measurement for a performance defect.
-- A human-in-the-loop script when only the user can observe the symptom: copy [hitl-loop.template.sh](scripts/hitl-loop.template.sh), edit its steps and run it.
+## 3. Instrument
 
-Completion means the symptom and relevant evidence are identified, with either a suitable bounded experiment or a precise reason that observation is currently blocked. Do not claim a reproduction merely because a nearby assertion failed.
+1. Change one variable at a time.
+2. Prefix temporary logs with a unique marker. Remove them before you finish.
+3. For performance, measure from the user's action to the usable control. Register a repeatable measurement in `lib/testing/measured-scenarios.ts` through `expectUsableWithin` or `expectScenarioLiveWithin`.
+4. When a write's outcome is unclear, read its persisted row. A repeat write is not an observation.
+5. For a reconnect defect, hold a read across the gap and write during it. The [client freshness contract](../../../docs/technical/realtime-and-caching.md) owns the recovery order.
 
-## 2. Minimize the investigation
+## 4. Repair and prevent
 
-Choose the smallest scenario that still exercises the suspected boundary. Preserve authorization, tenant context, meaningful state, and the timing relationship that matters. Reuse known valid setup without pre-completing the operation under test.
+1. Fix the smallest confirmed cause. Keep the promised behavior.
+2. Make the regression check cross the real boundary and go red without the fix. Retained failure evidence counts as red.
+3. Land prevention at the highest tier ([decision 0005](../../../docs/decisions/0005-enforcement-ladder.md)): a type or shared API, then a check, then a written rule. State the tier.
+4. A harness failure class seen twice in one change gets a fixture, a convention test or a runner rule, not a second local fix.
 
-For intermittent failures, use the retained trace to identify the ordering before adding load or repetition. A seeded domain experiment or controlled delayed response can test that ordering. Set an explicit experiment limit and stop when it answers the hypothesis. Do not use arbitrary 100-run loops, parallel stress, or sleeps in business tests to force a failure.
+## 5. Close
 
-If the environment prevents valid observation, preserve the evidence and identify the missing capability or repair. Continue safe code and artifact inspection. Ask for user input only when a necessary fact or access is unavailable. No failed-command quota is required before reporting that limit.
+Run the affected checks through the current test plan. Before you report, confirm:
 
-## 3. Form falsifiable explanations
+- The repair addresses the original symptom at its boundary.
+- Temporary instrumentation is gone.
+- No failed, blocked or slow group is reported green.
 
-List the plausible explanations supported by the evidence and rank them. Do not invent extra hypotheses to meet a quota. For each explanation, state what observation would support it and what would rule it out.
-
-Share consequential findings and uncertainty in the progress update. Proceed with already authorized, bounded inspection. Do not introduce another permission checkpoint for routine diagnosis.
-
-Completion means the next experiment distinguishes explanations rather than merely repeating the failing operation.
-
-## 4. Instrument the disputed boundary
-
-Change one relevant variable at a time. Prefer existing logs, a debugger, or a focused read. Add temporary instrumentation only where it can distinguish the explanations. Prefix temporary logs with a unique marker and remove them before completion.
-
-For performance, record the start event, completion event, elapsed time, and required deadline. Do not start the clock after a loading delay or reload a receiving page to manufacture freshness. An emergency timeout does not define acceptable response time. Measure a repeatable interaction as a registered scenario (`lib/testing/measured-scenarios.ts`, recorded through `expectUsableWithin` or `expectScenarioLiveWithin` in `tests/golden/support/scenario-measurement.ts`) so the value gets a budget, a baseline comparison, and browser attribution instead of a one-off stopwatch. End a navigation or view-switch measurement on the actual usable renderer or control (`data-calendar-state`, `data-usable-content-name`). A server response, a dialog shell, or hydration of a parent does not prove child readiness.
-
-If a mutation response is unclear, inspect its exact persisted identity or version before any recovery. A repeat write is not an observation.
-
-## 5. Repair and prevent recurrence
-
-For a reconnect defect, hold a read across the disconnected gap and introduce a later change before rejoining. A read during the gap proves no coverage of later writes. The recovery ordering and the same-scope reuse rule live in the [client freshness contract](../../../docs/technical/realtime-and-caching.md#client-freshness-contract).
-
-Repair the smallest confirmed cause without weakening the promised behavior. Exercise the real failing boundary in the regression check. A test that simulates away the cause does not establish prevention.
-
-Where practical, demonstrate that the check rejects the defect and passes the repair. Existing retained failure evidence may establish the rejected behavior. Do not spend another full browser run solely to recreate it.
-
-Use the enforcement ladder from [decision 0005](../../../docs/decisions/0005-enforcement-ladder.md): first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
-
-A harness failure is a defect of the harness, not a detail of the run. The same class twice in one change (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair.
-
-## 6. Verify the affected scope and close the investigation
-
-Run the affected checks through the current test plan. `docs/technical/testing.md` ("Repair mode" and "Failures") owns when a failed group may run again and in which order to classify, replay and clean. Follow it; a later pass alone is not a diagnosis.
-
-Before closing the finding, confirm:
-
-- The repair addresses the original symptom and its real boundary.
-- Appropriate regression evidence exists, with any limitations stated.
-- Temporary instrumentation and throwaway prototypes are removed or clearly archived.
-- The incident record names the cause, correction, affected proof, cleanup, and prevention tier.
-- No required selected group is falsely reported green while failed, blocked, or too slow.
-- A harness failure class that appeared twice in the change is answered by a mechanism in the same change, not by a sentence.
-
-Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.
-
-The calendar's save ownership rules live in the `werkflow-design` skill, "Loading states".
+Never rerun passing groups, raise a timeout or reset attempt history for a clean report. Report what the evidence supports: a confirmed repair, a disproved hypothesis, or an open observation with its next step.

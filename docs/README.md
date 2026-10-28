@@ -66,12 +66,8 @@ Read the spec of the feature you change, plus only the connected specs your chan
 
 | Doc | Read when |
 | --- | --- |
-| [product-capability-map.md](product/product-capability-map.md) | You need the product-wide ownership map, handoff rules, Phase 1 completion criteria or decision gates. |
-| [user-flow-catalog.md](product/user-flow-catalog.md) | You change user-visible behavior or its coverage: the German flow list with stable `P1-XX-FNN` ids. |
-| [competitive-landscape.md](product/competitive-landscape.md) | A decision needs competitor context. Refresh volatile figures first. |
-| [offer.md](product/offer.md) | Routing page to the business offer. |
-| [acquisition.md](product/acquisition.md) | Routing page to the business acquisition context. |
-| [avatar.md](product/avatar.md) | Routing page to commercial targeting and personas. |
+| [product-capability-map.md](product/product-capability-map.md) | You need the dependency model: phases, the operating loop, shared foundations, handoff rules or decision gates. |
+| [user-flow-catalog.md](product/user-flow-catalog.md) | A test cites a flow id, or you add, change or retire a cited flow and its coverage mapping. |
 
 ### Decision records (`docs/decisions/`)
 
@@ -106,6 +102,7 @@ Skills live in `.claude/skills/` and are mirrored byte for byte in `.agents/skil
 | `coderabbit-review` | The owner asks for a CodeRabbit review or a fix-and-review cycle. |
 | `sol-loop` | The owner says "sol loop", or a level 1 or 2 PR needs review. |
 | `full-send`, `full-stop` | The owner says "full send" or "full stop". |
+| `run-epic` | You lead an epic: plan child issues, start child threads, merge them in order. |
 | `file-pr` | You open a PR. |
 | `leaving-pr-comments` | You comment on GitHub. |
 

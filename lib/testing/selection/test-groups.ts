@@ -329,7 +329,11 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['request-history-writes', ['request_history_writes.sql'], ['customers']],
   ['sickness-report-writes', ['sickness_report_writes.sql'], ['personnel']],
   ['vacation-history-writes', ['vacation_history_writes.sql'], ['personnel']],
-  ['planning', ['planning_occurrences.sql', 'planning_dispatch.sql'], ['planning', 'work']],
+  [
+    'planning',
+    ['planning_occurrences.sql', 'planning_dispatch.sql', 'planning_operation_assessments.sql'],
+    ['planning', 'work'],
+  ],
   ['service', ['service_boundaries.sql'], ['service', 'customers', 'work']],
   ['service-atomic-writes', ['service_atomic_writes.sql'], ['service', 'planning']],
   ['inventory-ledger', ['inventory_ledger.sql', 'inventory_atomic_writes.sql'], ['inventory']],

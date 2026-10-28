@@ -1,6 +1,6 @@
 # Conceptual data model
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 This page states which domain owns which concept, the invariants between domains, and the rules that keep the meaning of history. `lib/supabase/database.types.ts` and live Supabase inspection show the schema. Update this page only when the conceptual model changes.
 
@@ -124,7 +124,7 @@ Planning coordinates work. It is no second job, employee, absence or time system
 - A recurrence is a bounded series with a durable lineage. A split for "this and future" closes the old segment and creates a successor. Past occurrences and started occurrences are never rewritten.
 - A recurring occurrence is identified by organization, lineage and original Europe/Berlin local start. Extending the horizon is therefore idempotent, also across a DST change.
 - A planning assignment references the personnel record and controls planning visibility. The job assignment remains the authority for job responsibility and field access.
-- Capacity, qualification and team membership are resolved at action time for the occurrence date. Each assessment is stored as an attributable snapshot with any override reason. No capacity balance is stored.
+- Capacity, qualification and team membership are resolved at action time for the occurrence date. A planning action stores its assessment once as an attributable snapshot, and each occurrence it writes references that snapshot with its own selection and any override reason. No capacity balance is stored.
 - Planning never changes recorded time.
 
 Dispatch (`Einsatz`) turns a plan into an issued work instruction that the recipient confirms. It is no second schedule, inbox or messaging system.

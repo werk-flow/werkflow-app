@@ -97,4 +97,89 @@ begin
   end if;
 end $$;
 
+-- A return books against its material line under the line's lock: the
+-- returned quantity never exceeds the taken quantity, whichever call checked
+-- the line before, and a refused return writes no movement.
+insert into public.projects (id, organization_id, name, created_by)
+values (
+  '98000000-0000-4000-8000-000000000005', '98000000-0000-4000-8000-000000000002',
+  'Ledger project', '98000000-0000-4000-8000-000000000001'
+);
+
+insert into public.job_material_lines (id, organization_id, project_id, item_id, planned_quantity)
+values (
+  '98000000-0000-4000-8000-000000000006', '98000000-0000-4000-8000-000000000002',
+  '98000000-0000-4000-8000-000000000005', '98000000-0000-4000-8000-000000000003', 4
+);
+
+do $$
+declare
+  v_org constant uuid := '98000000-0000-4000-8000-000000000002';
+  v_actor constant uuid := '98000000-0000-4000-8000-000000000001';
+  v_item constant uuid := '98000000-0000-4000-8000-000000000003';
+  v_location constant uuid := '98000000-0000-4000-8000-000000000004';
+  v_project constant uuid := '98000000-0000-4000-8000-000000000005';
+  v_line constant uuid := '98000000-0000-4000-8000-000000000006';
+  v_refusal text;
+  v_returned numeric;
+  v_stock numeric;
+  v_count integer;
+begin
+  perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_take', -4, null, v_project, v_line);
+  perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 3, null, v_project, v_line);
+
+  begin
+    perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 2, null, v_project, v_line);
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'return_exceeds_taken' then
+    raise exception 'a return beyond the line''s taken quantity must be refused with return_exceeds_taken, got %', v_refusal;
+  end if;
+
+  select returned_quantity into v_returned from public.job_material_lines where id = v_line;
+  select quantity_on_hand into v_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_item and location_id = v_location;
+  select count(*) into v_count from public.inventory_movements where job_material_line_id = v_line;
+  if v_returned <> 3 or v_stock <> 9 or v_count <> 2 then
+    raise exception 'a refused return must leave the line, the stock level and the movement ledger unchanged';
+  end if;
+
+  perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 1, null, v_project, v_line);
+  select returned_quantity into v_returned from public.job_material_lines where id = v_line;
+  if v_returned <> 4 then
+    raise exception 'a return up to the taken quantity must be booked';
+  end if;
+
+  begin
+    update public.job_material_lines set returned_quantity = 5 where id = v_line;
+    v_refusal := null;
+  exception when check_violation then
+    v_refusal := 'check_violation';
+  end;
+  if v_refusal is null then
+    raise exception 'the line must refuse a returned quantity above its taken quantity';
+  end if;
+
+  select count(*) into v_count from public.inventory_movements where organization_id = v_org;
+  begin
+    perform public.record_inventory_movement(v_org, v_actor, v_item, v_location, 'job_return', 1, null, v_project,
+      '98000000-0000-4000-8000-0000000000ff');
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'inventory movement material line must belong to same organization' then
+    raise exception 'a return against a line outside the organization must be refused, got %', v_refusal;
+  end if;
+  select quantity_on_hand into v_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_item and location_id = v_location;
+  if v_stock <> 10 or (select count(*) from public.inventory_movements where organization_id = v_org) <> v_count then
+    raise exception 'a return refused for a foreign line must leave the stock level and the movement ledger unchanged';
+  end if;
+end $$;
+
 rollback;
