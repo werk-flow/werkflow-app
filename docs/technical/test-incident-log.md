@@ -22,6 +22,17 @@ Record each failed acceptance group and any focused failure that changes shared 
 
 `bun run test:runs classify` stores the classification, cause and prevention in the run manifest and, for a failed run of the verification lane, writes the dated entry below with the run, the failure point, the cause and the prevention (`lib/testing/runs/incident-record.ts`). It refuses a prevention without its tier, and a Tier 1 or Tier 2 prevention that names no existing mechanism file, lint rule, selector set or group (`lib/testing/runs/incident-mechanisms.ts`; `docs:check` applies the same rule to every Prevention line). Add the evidence, the correction and the focused proof under that entry when the repair lands. Write a focused failure that changes shared testing behavior by hand. Do not call an unexplained retry a transient.
 
+## 2026-10-28: unit:all product failure
+
+<!-- incident-run: unit:all@2026-10-28T075654068Z-f22e928d -->
+
+- Run: run `unit:all@2026-10-28T075654068Z-f22e928d`, group `unit:all`, target local, fingerprint `3291f9a820fd`.
+- Failure point: unit:all in report 2026-10-28T075654068Z-f22e928d: Command exited 1; inspect .agent-logs/verification/2026-10-28T075654068Z-f22e928d/unit-all.log
+- Root cause: the calendar message map lacked the new job_not_assigned refusal of addManualEntry, which the calendar can reach
+- Prevention: Tier 2: lib/calendar/messages.test.ts caught it before push
+- Correction: `lib/calendar/messages.ts` carries a sentence for `job_not_assigned`.
+- Focused proof: `bun run test:verify --group unit:all` passed in report `2026-10-28T075903437Z-2fe989ec`.
+
 ## 2026-10-28: sql:security environment failure
 
 <!-- incident-run: sql:security@2026-10-28T062529331Z-2874afaf -->

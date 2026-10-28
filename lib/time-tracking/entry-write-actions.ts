@@ -44,6 +44,7 @@ import {
 import type { TimeValidationFailure } from './validation-messages';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
 import { getDayBounds, getUserEntriesForDay, verifyCurrentMembership } from './action-access';
+import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 
 // The Server Actions that write time entries: manual entries, edits and deletes.
 
@@ -131,6 +132,40 @@ async function refuseOpenSessionElsewhere(
   };
 }
 
+/**
+ * The entries with the job on their clock-in only, or the refusal of that job:
+ * it lies in the organization, and an employee's entry names only a job the
+ * employee is assigned to, as the live clock requires.
+ */
+async function attachManualEntryJob(
+  params: {
+    organizationId: string;
+    targetUserId: string;
+    entries: ReadonlyArray<{ entryType: TimeEntryType; timestamp: string }>;
+    jobId?: string | null | undefined;
+  },
+  targetRole: OrgRole,
+): Promise<{ entries: ManualEntryDraft[] } | { refusal: AddManualEntryResult }> {
+  const { organizationId, targetUserId, entries, jobId } = params;
+  const drafts = entries.map((entry) => ({
+    entryType: entry.entryType,
+    timestamp: entry.timestamp,
+    jobId: getManualEntryJobId(entry.entryType, jobId),
+  }));
+  const ownership = validateManualEntryJobOwnership(drafts);
+  if (!ownership.valid) return { refusal: { success: false, ...ownership.failure } };
+  const namedJobId = drafts.find((draft) => draft.jobId)?.jobId;
+  if (!namedJobId) return { entries: drafts };
+  const [job, assignment] = await Promise.all([
+    readOrganizationJob(organizationId, namedJobId),
+    targetRole === 'employee' ? readJobAssignmentOfUser(organizationId, namedJobId, targetUserId) : null,
+  ]);
+  if (job.error || assignment?.error) return { refusal: { success: false, error: 'load_failed' } };
+  if (!job.data) return { refusal: { success: false, error: 'job_not_found' } };
+  if (assignment && !assignment.data) return { refusal: { success: false, error: 'job_not_assigned' } };
+  return { entries: drafts };
+}
+
 // ============================================
 // Manual Entry Actions
 // ============================================
@@ -213,12 +248,9 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     });
     if (!validationResult.valid) return { success: false, ...validationResult.failure };
 
-    const normalizedEntries = entries.map((entry) => ({
-      ...entry,
-      jobId: getManualEntryJobId(entry.entryType, params.jobId),
-    }));
-    const jobOwnershipResult = validateManualEntryJobOwnership(normalizedEntries);
-    if (!jobOwnershipResult.valid) return { success: false, ...jobOwnershipResult.failure };
+    const withJob = await attachManualEntryJob(params, targetRole);
+    if ('refusal' in withJob) return withJob.refusal;
+    const normalizedEntries = withJob.entries;
 
     // Determine approval status
     const status = determineApprovalStatus(callerRole, targetUserId, user.id);
