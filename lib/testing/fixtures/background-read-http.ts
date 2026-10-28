@@ -102,6 +102,7 @@ mock.module('@/lib/time-tracking/entry-read-actions', () => ({
   getTimeEntries: seam('time-entries'),
   getTimeEntriesForJob: seam('time-entries-for-job'),
   getTimeEntriesForProjectJobs: seam('project-job-time-entries'),
+  getTimeEntryAuditEvents: seam('time-entry-audit-events'),
 }));
 mock.module('@/lib/time-tracking/review-actions', () => ({
   getPendingSessions: seam('pending-sessions'),
@@ -377,6 +378,12 @@ const inputs: Record<string, unknown> = {
     to: '2026-09-20T23:59:59.999Z',
     userId: jobId,
     status: 'pending',
+  },
+  'time-entry-audit-events': {
+    organizationId,
+    from: '2026-09-14T00:00:00.000Z',
+    to: '2026-09-20T23:59:59.999Z',
+    userId: jobId,
   },
   'weekly-targets': { userId: jobId },
   'provisional-time-summary': { organizationId, userId: jobId },
