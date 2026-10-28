@@ -105,8 +105,8 @@ import {
 } from '../../golden/support/steps/shared';
 import { createJob } from '../../golden/support/steps/work';
 
-// P1-24a audit: the Plantafel, the day and the month view flow by flow
-// (docs/product/user-flow-catalog.md, P1-24a-F01 to F35). Golden P1-24a owns
+// P1-24a audit: the Plantafel, the day and the month view flow by flow.
+// Golden P1-24a owns
 // the reassignment with Undo, the live date move, the park dialog with
 // „Einplanen am …“, the horizon memory and the employee's own row. Every test
 // seeds its own visits; the weeks keep the tests apart: AUDIT-01, 03, 04 and 06
