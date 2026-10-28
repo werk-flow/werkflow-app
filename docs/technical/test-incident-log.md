@@ -30,7 +30,7 @@ Record each failed acceptance group and any focused failure that changes shared 
 - Failure point: sql:security in report 2026-10-28T074717407Z-d6a91dcb: Command exited 1; inspect .agent-logs/verification/2026-10-28T074717407Z-d6a91dcb/sql-security.log
 - Root cause: The new work_artifact_signature_uploads table had no service_role SELECT, which every public table needs
 - Prevention: Tier 2: supabase/tests/security_boundaries.sql
-- Correction: migration `20261028160000_reserve_work_artifact_signature_uploads.sql` grants `select` on the table to `service_role` and nothing else; `supabase/tests/document_writes.sql` asserts that no role writes it and no client role reads it.
+- Correction: migration `20261028190000_reserve_work_artifact_signature_uploads.sql` grants `select` on the table to `service_role` and nothing else; `supabase/tests/document_writes.sql` asserts that no role writes it and no client role reads it.
 - Proof: `sql:security` and `sql:document-writes` passed on the corrected migration.
 
 ## 2026-10-28: unit:all product failure
