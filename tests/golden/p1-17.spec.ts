@@ -118,7 +118,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     const visitDate = berlinDateAtOffset(90);
 
     await test.step('Plan, park, dispatch and confirm the assigned job', async () => {
-      // P1-17-F01…F22: target, role, contact, template, schedule, dispatch,
+      // Target, role, contact, template, schedule, dispatch,
       // assignment and side-effect-free initial handover state.
       await createCustomer(adminPage, customerName);
       await openCustomerDetail(adminPage, customerName);
@@ -199,7 +199,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     });
 
     await test.step('Execute the work and capture the GG-04 evidence set', async () => {
-      // P1-17-F23…F57: assigned execution, checklist, time/material, photo,
+      // Assigned execution, checklist, time/material, photo,
       // measurement, defect/change, customer refusal, approval and privacy.
       const pack = await openFieldWorkPack(employeePage, jobNumber);
       await transitionWork(employeePage, 'not_started', 'in_progress');
@@ -296,7 +296,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     });
 
     await test.step('Review, preview and atomically release the exact package', async () => {
-      // P1-17-F58…F88: completion versus handover, classified gates, exact
+      // Completion versus handover, classified gates, exact
       // sources, preview privacy, reasoned override, immutable release and field projection.
       await completeWithManagerOverride(adminPage, jobNumber);
       await adminPage.goto(`/auftraege/${jobNumber}`);
@@ -327,7 +327,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     });
 
     await test.step('Withdraw, correct and re-release without rewriting history', async () => {
-      // P1-17-F89…F101: reasoned withdrawal, correction reopening, successor
+      // Reasoned withdrawal, correction reopening, successor
       // draft/release, predecessor linkage and preserved lifecycle/package events.
       await adminPage.goto(`/auftraege/${jobNumber}/uebergabe`);
       const section = workHandoverSection(adminPage);
@@ -355,7 +355,7 @@ test.describe('P1-17 field execution and office handover @P1-17 @GG-04', () => {
     });
 
     await test.step('The office keeps the history while field and foreign sessions are refused', async () => {
-      // P1-17-F102…F109: office continuity, assigned-field minimalism and
+      // Office continuity, assigned-field minimalism and
       // non-reviewer route denial.
       await bueroPage.goto(`/auftraege/${jobNumber}/uebergabe`);
       await expect(workHandoverSection(bueroPage)).toContainText(handoverReleaseHistory(2));
