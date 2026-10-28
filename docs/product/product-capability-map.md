@@ -76,8 +76,6 @@ Phase 2 advances one level at a time:
 4. **Compose workflows.** Let authorized users combine safe triggers, conditions, approvals and actions.
 5. **Delegate to bounded agents.** Allow multi-step work within explicit data, tool, cost and approval limits.
 
-A pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes. The [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it.
-
 ## Decision gates
 
 A gate needs an owner decision before work starts. A competitor offering the capability is no reason to build it.
