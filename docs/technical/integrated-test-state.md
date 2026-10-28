@@ -1,38 +1,36 @@
 # Integrated test state
 
-Status: living — last reviewed 2026-10-22
+Read this page when you choose a fixture date, compute a date-dependent expectation, or keep a page stable during a browser step. [testing.md](testing.md) owns every other testing rule.
 
-Read this page when you choose a date for a test fixture, compute a date-dependent expectation, or keep a page stable during a browser step. [testing.md](testing.md) owns every other testing rule, including the rule that each test prepares its own state.
-
-Each golden and audit group runs one spec file in its own disposable organization. No test consumes the state of another test. `lib/testing/spec-support/spec-independence.ts`, run by `lib/testing/spec-support/spec-conventions.test.ts`, rejects a declared producer, a chained value, a checkpoint handoff, module state that one test writes and another reads, and a wall-clock date read at module load. A large fixture that several tests of one world read is seed-or-reuse: each test calls the helper, and the first call in the world seeds it. `ensureTypicalProfile` in `tests/audit/support/performance-profile.ts` is the example.
+No test consumes another test's state. A large fixture that several tests of one world read is seed-or-reuse: each test calls the helper, and the first call seeds it (`ensureTypicalProfile` in `tests/audit/support/performance-profile.ts`).
 
 ## Seed the state a test needs
 
-- Seed each precondition through the admin-client helpers in `tests/golden/support/db/` inside the test. Exercise only the claimed operation through its real boundary.
-- Derive every identity from the run id. Read a value that the app assigns, such as a job number or an invite code, back from the database inside the same test.
-- Derive count expectations from the database at run time, for example notifications or badge numbers. A hardcoded count holds in only one execution mode.
-- Address records by their run-scoped identity, and scope each locator to the exact row or section. One world can hold several records with matching names. A spec that uses fixed names instead of run-scoped names must not reuse a name for a different meaning.
+- Derive every identity from the run id. Read app-assigned values, such as a job number or an invite code, back from the database inside the same test.
+- Derive count expectations from the database at run time. A hardcoded count holds in one execution mode only.
+- Address records by their run-scoped identity, and scope each locator to the exact row or section. A spec with fixed names never reuses a name for a different meaning.
 
 ## Choose fixture dates
 
-A business fact under a uniqueness constraint collides when two tests of one world pick the same date. Examples are the versions of `employment_conditions` and `work_schedules`, and closure days.
+A fact under a uniqueness constraint collides when two tests of one world pick the same date, such as `employment_conditions` and `work_schedules` versions or closure days.
 
-- Claim an audit date through `ownedBerlinDateAtOffset()` in `tests/golden/support/date-ownership.ts`. The function throws when a spec uses an offset outside its own window. The registry `AUDIT_DATE_WINDOWS` in that module owns the windows and throws at import when two windows overlap.
-- Register the window of a new group in `AUDIT_DATE_WINDOWS` when the slice starts. Take the next free offsets.
-- For a visit that must appear in the manager dispatch panel, use `dispatchOverviewBerlinDateAtOffset()`. It rejects an offset outside the dispatch overview window.
-- For days that a week view must show whole, such as the lab's live week on the Plantafel, claim the week through `ownedBerlinWeekAtOffset()`. It returns the first Monday on or after the offset, so the week holds the same days on every run weekday, and it throws unless the spec owns all seven.
-- Inside one file, a later test must not reuse an effective-date key that an earlier test owns. When a test needs a new effective state, choose a date that does not collide and assess the dependent business action on that same date.
-- Use a past date for an ordinary manual time entry, with times clear of the other entries in the file. An entry later today is still in the future during an early run. Use a future date only when the scenario tests an allowed future-date path.
+- Claim an audit date through `ownedBerlinDateAtOffset()` in `tests/golden/support/date-ownership.ts`. It throws outside the spec's window. `AUDIT_DATE_WINDOWS` owns the windows and throws at import when two overlap.
+- Register a new group's window in `AUDIT_DATE_WINDOWS` when the slice starts. Take the next free offsets.
+- A visit that must appear in the manager dispatch panel uses `dispatchOverviewBerlinDateAtOffset()`.
+- Days a week view must show whole use `ownedBerlinWeekAtOffset()`. It returns the first Monday on or after the offset, so the week holds the same days on every run weekday, and it throws unless the spec owns all seven.
+- A later test in a file never reuses an effective-date key an earlier test owns. Assess the dependent business action on the new date.
+- An ordinary manual time entry uses a past date, with times clear of the file's other entries. An entry later today is still in the future during an early run.
+- Avoid a fixture date on a DST switch unless the test is about DST.
 
 ## Compute date-dependent expectations
 
-Do not write date logic by hand in a spec. Hand-written logic drifts in holiday weeks and on weekends.
+Never write date logic by hand in a spec; it drifts in holiday weeks and on weekends.
 
-- Read the person's schedules, conditions and holiday calendar through `getTargetContextForRecord` in `tests/golden/support/db/vacation.ts`. Compute consumed vacation days and the weekly target with the product's own functions in `lib/vacation/balance` and `lib/personnel/targets`.
-- Resolve every assertion about the target of a day through `resolveDailyTarget`. On a weekend day without a schedule, the dashboard shows that the day is no working day instead of a daily target.
+- Read schedules, conditions and holiday calendar through `getTargetContextForRecord` in `tests/golden/support/db/vacation.ts`. Compute vacation days and weekly targets with `lib/vacation/balance` and `lib/personnel/targets`.
+- Resolve every daily-target assertion through `resolveDailyTarget`. On a weekend day without a schedule, the dashboard shows no working day instead of a target.
 
 ## Keep the page stable during a step
 
-- Locate a row again after every mutation that renders it again. A Realtime refresh can detach the node that a saved locator holds.
+- Locate a row again after every mutation that renders it again. A Realtime refresh detaches the node a saved locator holds.
 - Do not open or select a control whose value is already correct. A router refresh can detach an option between the open and the click.
-- Freeze the page before you test an action on a stale view. The app repairs stale views through Realtime events and a refresh on `visibilitychange`, so an unfrozen test races that repair. Swallow the Realtime socket with `page.routeWebSocket` and suppress `visibilitychange` with an init script.
+- Before you test an action on a stale view, call `freezeLiveUpdates` (`tests/golden/support/live.ts`). Otherwise the test races the app's Realtime and `visibilitychange` repair.

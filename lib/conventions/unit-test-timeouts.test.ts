@@ -118,8 +118,7 @@ describe('unit tests share one hang guard', () => {
 });
 
 // A failed child process says why only through its output: an exit-code
-// assertion without it left a pre-push hook failure undiagnosable (test
-// incident log, 2026-10-22).
+// assertion without it left a pre-push hook failure undiagnosable.
 const EXIT_NAMES = new Set(['exitCode', 'exited']);
 
 /** The expression under `await`, parentheses, `!` and `as`: `expect(await child.exited)`. */
