@@ -79,6 +79,7 @@ const FAILURE_CODES = {
     'period_not_found',
     'period_order_conflict',
     'period_open_sessions',
+    'period_pending_corrections',
     'period_closed',
     'period_not_ended',
     'period_not_prepared',
@@ -234,6 +235,8 @@ const MESSAGES: ActionMessages = {
         'Monate werden der Reihe nach abgeschlossen. Schließe zuerst den Vormonat ab, oder öffne den Folgemonat wieder.',
       period_open_sessions:
         'Der Monat kann nicht abgeschlossen werden, solange eine Zeiterfassung läuft. Sie muss zuerst beendet werden.',
+      period_pending_corrections:
+        'Für diesen Monat ist noch eine Zeitkorrektur offen. Entscheide sie zuerst und bereite den Monat dann neu vor.',
       period_not_ended: 'Ein Monat kann erst nach seinem letzten Tag abgeschlossen werden.',
       period_not_prepared: 'Bereite die Periode zuerst vor.',
       stale_calculation:
