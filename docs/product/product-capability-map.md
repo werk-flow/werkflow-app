@@ -1,7 +1,5 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-10-28
-
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
 It answers four questions:
@@ -39,7 +37,7 @@ The product is documented at four levels:
 | --- | --- | --- |
 | Product context | Why WerkFlow exists, who it serves, and broad principles | `AGENTS.md` |
 | Product capability map | How all feature areas form one product, their phases, dependencies, and decision gates | This document |
-| Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | [`docs/features/*.md`](../features/) |
+| Feature specification | A short goal and the current baseline: what exists, for which role, and its rules | [`docs/features/*.md`](../features/) |
 
 Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in technical docs or decision records after the product behavior is decided.
 
@@ -276,7 +274,7 @@ Phase 2 should advance through controlled levels:
 
 Skipping directly to a generic agent builder would increase complexity and risk before the product has stable actions or understandable failure handling.
 
-The owner decided that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; the [AI spec](../features/ai-automations.md#the-pilot-lane-after-wave-4) defines it and the roadmap carries it as the one exception to its Phase 2 rule.
+The owner decided that a bounded pilot lane for two Level 1 assist slices opens after Wave 4, before Phase 1 closes; `werk-flow/werkflow-planning` carries it as the one exception to its Phase 2 rule.
 
 ## What WerkFlow Should Learn, Not Copy
 
@@ -324,25 +322,13 @@ Installed-equipment history and maintenance do not automatically commit WerkFlow
 
 ## Documentation Rules For Future Work
 
-Every feature spec should keep these sections current:
-
-1. **Product Goal**
-2. **Current Product Baseline**
-3. **Phase 1 — Complete Operational Core**
-4. **Connected Workflow Contracts**
-5. **Role And UX Principles**
-6. **Phase 2 — Intelligence And Automation**
-7. **Boundaries And Decision Gates**
-8. **Open Product Decisions**
-
-One spec carries extra sections by design. [ai-automations.md](../features/ai-automations.md) has foundations rather than features as its Phase 1 scope, so its Phase 1 section is titled "Phase 1 — Complete Operational Core Enabling Foundations". It adds The Phase 2 Plan, In-App And External Automation, Human-Control Levels, and Trust, Security, And Operational Requirements. A spec's implementation reference lives in its technical doc, for example [document-storage-and-access.md](../technical/document-storage-and-access.md) for documents.
+Every feature spec holds two parts: a goal of two or three sentences, and its **Current Product Baseline**, which states what exists, for which role, its rules and its current limits. Planned scope lives in `werk-flow/werkflow-planning`, not in a spec. A spec's implementation reference lives in its technical doc, for example [document-storage-and-access.md](../technical/document-storage-and-access.md) for documents.
 
 When behavior is implemented:
 
-- describe it in the current baseline; keep the Phase 1 outcome as the durable requirement and distinguish any remaining depth;
-- preserve product rationale in the accepting slice record and link it; remove resolved questions from Open Product Decisions;
+- describe it in the current baseline, and delete the limit it resolves;
 - link a concrete implementation plan only when one exists;
-- update dependent feature handoffs;
+- update the baselines of connected specs;
 - update the conceptual data model if the domain boundary changed;
 - check this capability map if the change affects product phase, ownership, or a decision gate.
 
