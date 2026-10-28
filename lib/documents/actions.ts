@@ -806,9 +806,10 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
     fileName: originalFileName,
   });
 
-  if (await readDocumentStoragePath(auth.context, input.documentId)) {
-    return { success: false, error: 'already_finalized' };
-  }
+  // Only a completed read proves the upload unregistered; the copy must never replace a registered file.
+  const registeredPath = await readDocumentStoragePath(auth.context, input.documentId);
+  if (registeredPath === undefined) return { success: false, error: 'load_failed' };
+  if (registeredPath) return { success: false, error: 'already_finalized' };
 
   const target = normalizeUploadTarget(input);
   const access = await authorizeDocumentUploadTarget(auth.context, target);

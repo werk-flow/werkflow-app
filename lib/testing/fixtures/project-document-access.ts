@@ -326,6 +326,20 @@ assert.deepEqual(await actions.moveDocument({ documentId: projectDocumentId, fol
 assert.deepEqual(await actions.deleteDocument(projectDocumentId), notAuthorized);
 assert.deepEqual(projectDocumentRow(), projectDocumentBefore);
 
+// A finalize whose registration check cannot read copies and discards nothing.
+const finalizeJobUpload = () =>
+  actions.finalizeDocumentUpload({
+    kind: 'job',
+    jobId: assignedJobId,
+    documentId: jobUploadId,
+    fileName: 'aufmass.pdf',
+  });
+world.failingTables.add('documents');
+assert.deepEqual(await finalizeJobUpload(), { success: false, error: 'load_failed' });
+world.failingTables.delete('documents');
+assert.deepEqual(promotedPaths, []);
+assert.equal(discardedPaths.length, 1);
+
 // The same field worker still uploads on the assigned job, from ticket to finalized link.
 const jobTicket = await actions.createDocumentUploadTicket({
   kind: 'job',
@@ -333,12 +347,7 @@ const jobTicket = await actions.createDocumentUploadTicket({
   ...uploadFile,
 });
 assert.ok(jobTicket.success, JSON.stringify(jobTicket));
-const jobUpload = await actions.finalizeDocumentUpload({
-  kind: 'job',
-  jobId: assignedJobId,
-  documentId: jobUploadId,
-  fileName: 'aufmass.pdf',
-});
+const jobUpload = await finalizeJobUpload();
 assert.ok(jobUpload.success, JSON.stringify(jobUpload));
 assert.deepEqual(linksTo(jobUploadId), [{ job_id: assignedJobId, project_id: null }]);
 // The registered document references the promoted key, never the key its upload URL wrote.
