@@ -15,10 +15,9 @@ export const RUNNABLE_LANES = [
 export const PLAYWRIGHT_SUITES = ['golden', 'audit', 'canary'] as const;
 export type PlaywrightSuite = (typeof PLAYWRIGHT_SUITES)[number];
 
-// Where a run's authoritative backend lives (decision D8, docs/plans/
-// platform-hardening.md): golden and audit batteries run against the local
-// Supabase stack by default; the canary suite exists to prove cloud behavior
-// and only ever runs against cloud DEV. `--target cloud` on golden/audit is
+// Where a run's authoritative backend lives (docs/decisions/0006-testing-architecture.md):
+// golden and audit batteries run against the local Supabase stack by default; the canary
+// suite exists to prove cloud behavior and only ever runs against cloud DEV. `--target cloud` on golden/audit is
 // the deliberate exception for wave-end and partner-milestone verification
 // (decision D11).
 export const PLAYWRIGHT_TARGETS = ['local', 'cloud'] as const;

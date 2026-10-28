@@ -6,8 +6,7 @@ import { getTestGroups } from '../selection/test-groups';
  * A Tier 1 or Tier 2 prevention is a mechanism, so the incident log must name one that exists
  * (decision 0005). Until 2026-10-16 the check read only the tier's wording, and two entries called
  * a one-hook code repair "Tier 1" without any mechanism behind it. `bun run test:runs classify`
- * refuses such a prevention, and `scripts/check-docs.ts` applies the same rule to every entry's
- * Prevention line.
+ * refuses such a prevention.
  */
 export type MechanismIndex = {
   fileExists: (path: string) => boolean;

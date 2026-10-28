@@ -98,8 +98,6 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
   variable('unlimited rate-limit sites', 'lib/security/rate-limit-inventory.test.ts', 'REVIEWED_UNLIMITED'),
   variable('closed-history count reads', 'lib/attention/count-volume.test.ts', 'HISTORY_READS'),
   variable('empty-state sentences', 'lib/ui/empty-state-copy.test.ts', 'REVIEWED_SENTENCES'),
-  variable('shared doc sentences', 'lib/docs/doc-policy.ts', 'SHARED_SENTENCES'),
-  variable('slices proven elsewhere', 'lib/docs/slice-browser-proof.ts', 'SLICES_PROVEN_ELSEWHERE'),
   variable(
     'pending-state locators',
     'lib/testing/spec-support/confirmed-locators.test.ts',
