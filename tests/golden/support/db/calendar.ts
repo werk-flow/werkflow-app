@@ -89,7 +89,7 @@ export async function getPlanningState(
     occurrenceIds.length
       ? admin
           .from('planning_occurrence_assessments')
-          .select('id, capacity_snapshot, qualification_snapshot, override_reason')
+          .select('id, capacity_snapshot, qualification_snapshot, override_reason, operation_assessment_id')
           .eq('organization_id', orgId)
           .in('occurrence_id', occurrenceIds)
           .limit(10_001)
@@ -127,6 +127,34 @@ export async function getPlanningState(
   ) {
     throw new Error('Planning related-record lookup exceeded its safety limit');
   }
+  // An occurrence assessment's snapshots are those of the operation it references, or its own before that reference existed.
+  const operationIds = [
+    ...new Set(
+      (assessmentResult.data ?? []).flatMap((row) =>
+        row.operation_assessment_id ? [row.operation_assessment_id] : [],
+      ),
+    ),
+  ];
+  const operationResult = operationIds.length
+    ? await admin
+        .from('planning_operation_assessments')
+        .select('id, capacity_snapshot, qualification_snapshot')
+        .eq('organization_id', orgId)
+        .in('id', operationIds)
+    : { data: [], error: null };
+  if (operationResult.error) {
+    throw new Error(`Planning operation assessment lookup failed: ${operationResult.error.message}`);
+  }
+  const operationById = new Map((operationResult.data ?? []).map((row) => [row.id, row]));
+  const assessmentSnapshots = (assessmentResult.data ?? []).map((row) => {
+    const operation = row.operation_assessment_id
+      ? operationById.get(row.operation_assessment_id)
+      : undefined;
+    return {
+      capacitySnapshot: operation ? operation.capacity_snapshot : row.capacity_snapshot,
+      qualificationSnapshot: operation ? operation.qualification_snapshot : row.qualification_snapshot,
+    };
+  });
 
   return {
     jobId,
@@ -136,16 +164,16 @@ export async function getPlanningState(
     assessmentCount: assessmentResult.data?.length ?? 0,
     capacityConflictKinds: [
       ...new Set(
-        (assessmentResult.data ?? []).flatMap((row) => {
-          const snapshot = row.capacity_snapshot as {
+        assessmentSnapshots.flatMap((row) => {
+          const snapshot = row.capacitySnapshot as {
             conflicts?: Array<{ kind?: string }>;
           } | null;
           return (snapshot?.conflicts ?? []).flatMap((conflict) => (conflict.kind ? [conflict.kind] : []));
         }),
       ),
     ].sort(),
-    qualificationEvaluationCount: (assessmentResult.data ?? []).reduce((count, row) => {
-      const snapshot = row.qualification_snapshot as {
+    qualificationEvaluationCount: assessmentSnapshots.reduce((count, row) => {
+      const snapshot = row.qualificationSnapshot as {
         evaluations?: unknown[];
       } | null;
       return count + (snapshot?.evaluations?.length ?? 0);

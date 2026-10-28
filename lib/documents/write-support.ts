@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { discardStorageObjects, headStorageObject } from '@/lib/storage/r2';
+import { discardStorageObjects, promoteUploadedObject, uploadStagingPath } from '@/lib/storage/r2';
 import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import type { AuthorizedDocumentContext } from './access';
 import { firstAvailableName } from './names';
@@ -99,11 +99,17 @@ export async function getAvailableFolderName({
   });
 }
 
+/** Removes an upload that finalize refused before the copy: only its staging object exists. */
+export async function discardStagedUpload(organizationId: string, storagePath: string): Promise<void> {
+  await discardStorageObjects({ organizationId, paths: [uploadStagingPath(organizationId, storagePath)] });
+}
+
 /**
- * Checks the object the browser uploaded to a signed URL: it exists, is not
- * empty and stays within the size limit. A rejected object is discarded.
+ * Promotes the object the browser uploaded to a signed URL to its permanent
+ * key and checks the copy: it exists, is not empty and stays within the size
+ * limit. A rejected copy is discarded.
  */
-export async function verifyUploadedObject({
+export async function acceptUploadedObject({
   organizationId,
   storagePath,
   failureLabel,
@@ -114,7 +120,7 @@ export async function verifyUploadedObject({
 }): Promise<ActionResult<{ sizeBytes: number; contentType: string }>> {
   let head;
   try {
-    head = await headStorageObject({ organizationId, path: storagePath });
+    head = await promoteUploadedObject({ organizationId, path: storagePath });
   } catch (error) {
     logError(failureLabel, error);
     return { success: false, error: 'upload_failed' };

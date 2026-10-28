@@ -57,6 +57,7 @@ import {
   getTimeEntries,
   getTimeEntriesForJob,
   getTimeEntriesForProjectJobs,
+  getTimeEntryAuditEvents,
 } from '@/lib/time-tracking/entry-read-actions';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
 import { getClosedTimePeriods } from '@/lib/time-tracking/closed-period-reads';
@@ -137,6 +138,22 @@ export const BACKGROUND_READS = {
         to: input.to,
         ...(input.userId !== undefined ? { userId: input.userId } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
+      }),
+  ),
+  // The Verlauf's record of Admins' own direct edits and deletions, for Admin and Büro.
+  'time-entry-audit-events': defineRead(
+    z.object({
+      organizationId: uuidSchema,
+      from: isoTimestamp,
+      to: isoTimestamp,
+      userId: uuidSchema.optional(),
+    }),
+    (input) =>
+      getTimeEntryAuditEvents({
+        organizationId: input.organizationId,
+        from: input.from,
+        to: input.to,
+        ...(input.userId !== undefined ? { userId: input.userId } : {}),
       }),
   ),
   'weekly-targets': defineRead(z.object({ userId: uuidSchema }), (input) => getWeeklyTargets(input)),

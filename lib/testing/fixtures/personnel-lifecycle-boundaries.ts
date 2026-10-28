@@ -118,6 +118,8 @@ mock.module('@/lib/storage/r2', () => ({
   createSignedUploadUrl: outsideFixture('createSignedUploadUrl'),
   discardStorageObjects: outsideFixture('discardStorageObjects'),
   headStorageObject: outsideFixture('headStorageObject'),
+  promoteUploadedObject: outsideFixture('promoteUploadedObject'),
+  uploadStagingPath: outsideFixture('uploadStagingPath'),
 }));
 const actions = await import('@/lib/personnel/lifecycle-actions');
 

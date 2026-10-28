@@ -73,7 +73,7 @@ const reviewedHandlers: Record<string, { authorization: string; mustCall: readon
   },
   'app/auth/callback/route.ts': {
     authorization:
-      'GET: provider code/token exchange with a same-origin return path; an invite redeems only after a PKCE code exchange, a bare invite link redirects to the login page; an Auth failure that is not a refusal answers a private 503. POST: same-origin JSON guard before setSession',
+      'GET: PKCE code exchange with a same-origin return path; an invite redeems only after that exchange, a bare invite link redirects to the login page; a reset link redeems nothing, its parsed token hash goes into an httpOnly cookie scoped to the callback and the person confirms on the reset page; an Auth failure that is not a refusal answers a private 503. POST: same-origin JSON guard before setSession or before redeeming the kept reset link',
     mustCall: [
       'resolveSafeReturnPath',
       'verifySameOriginJsonRequest',

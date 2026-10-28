@@ -16,14 +16,14 @@ runs:
       shell: bash
       run: sudo sysctl -w net.ipv4.ip_local_port_range="55000 65000"
 
-    - uses: supabase/setup-cli@v1
+    - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
       with:
         version: 2.116.0
 
     # The stack's images, saved after the first start. A key change pulls them again.
     - name: Restore the stack images
       id: images
-      uses: actions/cache/restore@v6
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/supabase-images.tar
         key: supabase-images-v3-ghcr-2.116.0-${{ hashFiles('supabase/config.toml') }}
@@ -66,7 +66,7 @@ runs:
 
     - name: Cache the stack images
       if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
-      uses: actions/cache/save@v6
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/supabase-images.tar
         key: ${{ steps.images.outputs.cache-primary-key }}

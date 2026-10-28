@@ -2,11 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, type Browser, type Locator, type Page, type TestInfo } from '@playwright/test';
-import {
-  ACCEPTANCE_INDEX_FILE,
-  acceptanceIndexSchema,
-  type AcceptanceEntry,
-} from '../../../lib/docs/acceptance-captures';
+import { z } from '../../../lib/zod';
 import { browserTestIdentity } from '../../../lib/testing/evidence/test-evidence';
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
 import { browserRunPaths } from '../../../lib/testing/runs/run-paths';
@@ -33,10 +29,34 @@ import { openSurface, surfaceDestination } from './surface-routes';
 // asks for its loading or error state instead, which the fixture produces and
 // proves (captureState below). Each image lands under
 // `<run>/acceptance/<set>/` with an entry in `<run>/acceptance/index.json`;
-// the entry turns `passed` only when its test passed, which is what
-// `docs:check` requires before a record may cite it.
+// the entry turns `passed` only when its test passed.
 
 const REPOSITORY_ROOT = resolve(__dirname, '../../..');
+const ACCEPTANCE_INDEX_FILE = 'index.json';
+
+const entrySchema = z
+  .object({
+    set: z.string().min(1),
+    capture: z.string().min(1),
+    /** `<set>/<capture>-<width>-<scheme>.png`, relative to the acceptance folder. */
+    file: z.string().min(1),
+    testId: z.string().min(1),
+    route: z.string().min(1),
+    /** The app role, or the session of a screen outside the app shell. */
+    role: z.enum(['admin', 'employee', 'anonymous', 'newcomer', 'subscriber', 'prestart']),
+    view: z.enum(['page', 'tab', 'dialog', 'standalone']),
+    width: z.number().int().positive(),
+    height: z.number().int().nonnegative(),
+    scheme: z.enum(['light', 'dark']),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    capturedAt: z.iso.datetime(),
+    status: z.enum(['captured', 'passed', 'failed']),
+  })
+  .strict();
+
+const acceptanceIndexSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema) }).strict();
+
+type AcceptanceEntry = z.infer<typeof entrySchema>;
 
 /** The identity the run manifest records for the test's outcome. */
 function testIdentityOf(testInfo: TestInfo): string {

@@ -1,4 +1,5 @@
-// Rule test: both agent tools run the edit guard before every tool call that can write a file.
+// Rule test: both agent tools run the edit guard before every tool call that can write a file,
+// and Claude runs the delete guard before every shell call.
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -6,6 +7,7 @@ import { z } from 'zod';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GUARD = 'scripts/guard-edits-during-verification.ts';
+const DELETE_GUARD = '.claude/hooks/refuse-delete-after-cd.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -19,13 +21,13 @@ const hookFileSchema = z.object({
 });
 
 /** The tools whose calls run the given hook script, read from a hook file's PreToolUse matchers. */
-function guardedTools(file: string, tools: readonly string[]): string[] {
+function guardedTools(file: string, tools: readonly string[], script = GUARD): string[] {
   const { hooks } = hookFileSchema.parse(JSON.parse(readFileSync(resolve(repositoryRoot, file), 'utf8')));
   return tools.filter((tool) =>
     hooks.PreToolUse.some(
       (entry) =>
         new RegExp(`^(?:${entry.matcher})$`).test(tool) &&
-        entry.hooks.some((hook) => hook.type === 'command' && hook.command.includes(GUARD)),
+        entry.hooks.some((hook) => hook.type === 'command' && hook.command.includes(script)),
     ),
   );
 }
@@ -45,4 +47,10 @@ test('Claude runs the edit guard before every file and shell tool', () => {
 test('Codex runs the edit guard before every file and shell tool', () => {
   const tools = ['apply_patch', 'Edit', 'Write', 'Bash'];
   expect(guardedTools('.codex/hooks.json', tools)).toEqual(tools);
+});
+
+// Only Claude Code's built-in safety check stops on a wildcard delete after a cd
+// (lib/testing/runner/delete-after-cd.ts); Codex in full access runs it without asking.
+test('Claude runs the delete guard before every shell call', () => {
+  expect(guardedTools('.claude/settings.json', ['Bash'], DELETE_GUARD)).toEqual(['Bash']);
 });

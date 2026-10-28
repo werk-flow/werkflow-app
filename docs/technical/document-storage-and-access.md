@@ -1,8 +1,6 @@
 # Document storage and access
 
-Status: living — last reviewed 2026-10-28
-
-This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do, the planned scope and the open decisions. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
+This page holds the rules for document bytes, storage paths, signed URLs, access, links, trash and versions. The feature spec [document-management.md](../features/document-management.md) owns what users can do. `lib/supabase/database.types.ts` and live Supabase inspection show the schema.
 
 ## Where bytes and metadata live
 
@@ -29,15 +27,15 @@ All access uses short-lived signed URLs. A view URL renders inline only for the 
 
 An upload has three steps:
 
-1. `createDocumentUploadTicket` authorizes the user, the organization, the target and the folder. It returns a document id and a signed PUT URL with the content type pinned into the signature.
+1. `createDocumentUploadTicket` authorizes the user, the organization, the target and the folder. It returns a document id and a signed PUT URL with the content type pinned into the signature. The URL writes the upload's staging key (`<organization>/staging/...`), never the key the document will reference.
 2. The browser PUTs the bytes directly to R2.
-3. `finalizeDocumentUpload` authorizes again and recomputes the storage path on the server, so a client can never register a foreign key. It verifies the existence and the size of the object with a HEAD request and takes the content type from the object. Then one database function inserts the metadata, the link and the audit events in one transaction.
+3. `finalizeDocumentUpload` authorizes again and recomputes the storage path on the server, so a client can never register a foreign key. `promoteUploadedObject` copies the staging object to that path on the server and deletes the staging object. Finalize verifies the existence and the size of the copy with a HEAD request and takes the content type from it. Then one database function inserts the metadata, the link and the audit events in one transaction.
 
-A finalize that fails after the object exists deletes the object, unless a concurrent finalize of the same upload committed it first. The size limit `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at ticket creation and again to the actual object size at finalize. A version upload follows the same flow and adds a version-number conflict check.
+Only the server writes a key that a row references. The signed URL stays valid for its full lifetime, but after finalize it reaches only the staging key, so it cannot change the registered bytes or push them past the size limit. A finalize that fails after the copy exists deletes the copy, unless a concurrent finalize of the same upload committed it first. A finalize refused before the copy deletes the staging object. The size limit `DOCUMENT_MAX_FILE_SIZE_BYTES` applies at ticket creation and again to the copy at finalize. A version upload follows the same flow and adds a version-number conflict check. `lib/storage/upload-staging.test.ts` proves the staging key and the copy.
 
 Variants of the flow:
 
-- A protected personnel upload uses `createPersonnelDocumentUploadTicket` and `finalizePersonnelDocumentUpload` with the same signed PUT, HEAD verification and path pattern. A signed cleanup capability binds the actor, organization, personnel owner, document, file name, class and operation. A failed finalize can therefore remove only its own orphan.
+- A protected personnel upload uses `createPersonnelDocumentUploadTicket` and `finalizePersonnelDocumentUpload` with the same staging key, server copy, HEAD verification and path pattern. A replay of a finalized upload reads the registered object and copies nothing. A signed cleanup capability binds the actor, organization, personnel owner, document, file name, class and operation. A failed finalize can therefore remove only its own orphan, staging object included.
 - A handover release renders a deterministic customer-safe HTML file on the server and writes it to the organization's path. A guarded database RPC then registers the document, the release facts and the lifecycle transition. The release references source documents by exact identity and copies no source bytes. A failed registration deletes the object only after it proves that no committed document or release references the object.
 
 ## Links and ownership
@@ -99,11 +97,11 @@ Protected personnel documents use a separate path:
 
 ## Storage cleanup
 
-The app has no storage reconciliation feature, and no Server Action reports or deletes orphaned objects. An orphaned upload is an object whose PUT succeeded and whose finalize never ran. Users cannot see it. An interrupted protected personnel upload whose browser never returns also leaves an orphan.
+The app has no storage reconciliation feature, and no Server Action reports or deletes orphaned objects. An orphaned upload is a staging object whose PUT succeeded and whose finalize never ran, or that a still-valid signed URL wrote again after finalize. Users cannot see it. An interrupted protected personnel upload whose browser never returns also leaves an orphan.
 
 When reconciliation becomes a product need, build it as an admin maintenance page with a reviewed authorization boundary. Follow the orphan rules in the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, and preserve objects for review.
 
-Retention-relevant categories will also get copies in an independent immutable archive. The feature spec owns the product direction and decision 0001 owns the infrastructure decision.
+Retention-relevant categories will also get copies in an independent immutable archive. Decision 0001 owns the infrastructure decision.
 
 ## Freshness
 

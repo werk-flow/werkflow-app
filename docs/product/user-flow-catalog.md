@@ -1,6 +1,6 @@
 # User Flow Catalog
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 ## Purpose And Rules (for agents)
 
@@ -24,7 +24,7 @@ The IDs below are authoritative, including the lowercase suffix in `P1-00a-F01` 
 - If a later slice changes an earlier flow, correct the earlier flow in place and note the changing slice in parentheses. The catalog describes the app as it is now, per the slice that introduced each capability.
 - A material wording change reopens the affected flow ID's audit mapping until the assertion bodies have been rechecked against the complete revised bullet.
 - This catalog intentionally repeats things that also live in feature docs. Feature docs describe the product model for agents; this file describes concrete user actions for humans. Do not "deduplicate" it away.
-- For audit traceability, the set of relevant IDs here must equal the union of IDs mapped in the owning coverage ledger (a Wave 1 session's, or since Wave 2 a slice's). Mapping is many-to-many: one ledger row/test may cover multiple flow IDs, and one flow ID may need multiple rows/tests. Test count never needs to equal flow count. See [wave-2-audit.md](../plans/phase-1/audits/wave-2-audit.md).
+- For audit traceability, `lib/testing/selection/coverage-map.json` maps every flow ID here to its evidence. `lib/testing/selection/coverage-map.ts` fails on an unmapped flow. Mapping is many-to-many: one test may cover multiple flow IDs, and one flow ID may need multiple tests. Test count never needs to equal flow count.
 - The next section to add is `P1-25`, when that slice starts.
 
 ---

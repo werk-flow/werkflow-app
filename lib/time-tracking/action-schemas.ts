@@ -53,6 +53,26 @@ export const getTimeEntriesInputSchema = z.object({
   status: z.enum(Constants.public.Enums.time_entry_status).optional(),
 });
 
+export const timeEntryAuditInputSchema = getTimeEntriesInputSchema.omit({ status: true });
+
+/** The entry state an audit event records before and after an Admin's own change. */
+const auditedEntryStateSchema = z.object({
+  entry_type: entryTypeSchema,
+  timestamp: z.string(),
+  job_id: uuidSchema.nullable(),
+  status: z.enum(Constants.public.Enums.time_entry_status),
+});
+
+export const timeEntryAuditRowSchema = z.object({
+  id: uuidSchema,
+  entry_id: uuidSchema,
+  actor_id: uuidSchema,
+  action: z.enum(['edit', 'delete']),
+  created_at: z.string(),
+  before_entry: auditedEntryStateSchema,
+  after_entry: auditedEntryStateSchema.nullable(),
+});
+
 /** Calendar ids include synthetic ones (canonical segments); only persisted uuids are kept. */
 export const calendarEntryIdListSchema = z.array(z.string().max(128)).max(ID_LIST_LIMIT);
 
