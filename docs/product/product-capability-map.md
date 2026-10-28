@@ -1,6 +1,6 @@
 # Product Capability Map
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 This document defines how WerkFlow should grow from its current operational foundation into a complete, coherent operating system for German SHK businesses and, later, an intelligent automation platform.
 
@@ -40,9 +40,8 @@ The product is documented at four levels:
 | Product context | Why WerkFlow exists, who it serves, and broad principles | `AGENTS.md` |
 | Product capability map | How all feature areas form one product, their phases, dependencies, and decision gates | This document |
 | Feature specification | Current baseline plus what the feature must become, its cross-feature contracts, roles, AI opportunities, boundaries, and open decisions | [`docs/features/*.md`](../features/) |
-| Phase 1 build roadmap | Ordered vertical slices, direct prerequisites, current progress, exit evidence, and golden-scenario gates | [`phase-1/roadmap.md`](../plans/phase-1/roadmap.md) |
 
-Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in [`docs/plans/`](../plans/), technical docs, or decision records after the product behavior is decided.
+Feature specs should describe **what outcome and product behavior are needed**. Concrete implementation plans, schema changes, endpoint designs, vendor selection, and rollout steps belong in technical docs or decision records after the product behavior is decided.
 
 ## Phase Model
 
@@ -235,7 +234,7 @@ This is a dependency sequence, not a release commitment.
 
 ### Done
 
-The accepted Wave 0 to Wave 2 slices establish this foundation. Slice counts and certification status live only in the [roadmap checkpoint](../plans/phase-1/roadmap.md#current-checkpoint). The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, dispatch and the `Plantafel`; document storage with versions and trash; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
+The accepted Wave 0 to Wave 2 slices establish this foundation. The foundation covers customer contacts, sites, requests and the relationship timeline; employee records, schedules, responsibilities, vacation, sickness, teams and qualifications; recurring planning, dispatch and the `Plantafel`; document storage with versions and trash; work templates, the execution lifecycle, structured evidence, the field work pack and office handover; installed equipment, reactive service and maintenance plans; explicit time segments, corrections, time accounts with period close and payroll export; and the controlled people lifecycle. The shared attention pattern on `/aufgaben` carries approvals and notifications for all of them. Cross-domain search remains Wave 5 scope; feature-local search already exists. Native mobile and offline workflows also remain Wave 5 scope.
 
 ### Remaining
 
@@ -351,7 +350,6 @@ Do not copy exact competitor behavior into a feature spec without asking whether
 
 ## Related Docs
 
-- [Phase 1 build roadmap](../plans/phase-1/roadmap.md)
 - [Competitive landscape](./competitive-landscape.md)
 - [Product offer](./offer.md)
 - [Customer avatar](./avatar.md)

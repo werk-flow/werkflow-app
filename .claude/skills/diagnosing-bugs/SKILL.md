@@ -64,7 +64,7 @@ Where practical, demonstrate that the check rejects the defect and passes the re
 
 Use the enforcement ladder from [decision 0005](../../../docs/decisions/0005-enforcement-ladder.md): first remove the invalid state through a type or shared API, then add an automated check, then document a remaining judgment. State the prevention tier. If no suitable automated boundary exists, record why and the focused follow-up needed.
 
-A harness failure is a defect of the harness, not a detail of the run. The same class twice in one slice (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair; the protocol's "Campaign Line" binds the slice's closure to that.
+A harness failure is a defect of the harness, not a detail of the run. The same class twice in one change (a leaked state, a locator that matched a hidden copy, a fixture that did not fit the viewport) ends with a fixture, a convention test or a runner rule, never with a second local repair.
 
 ## 6. Verify the affected scope and close the investigation
 
@@ -77,7 +77,7 @@ Before closing the finding, confirm:
 - Temporary instrumentation and throwaway prototypes are removed or clearly archived.
 - The incident record names the cause, correction, affected proof, cleanup, and prevention tier.
 - No required selected group is falsely reported green while failed, blocked, or too slow.
-- A harness failure class that appeared twice in the slice is answered by a mechanism in the same change, not by a sentence (`docs/plans/phase-1/protocol.md`, "Campaign Line").
+- A harness failure class that appeared twice in the change is answered by a mechanism in the same change, not by a sentence.
 
 Do not restart all passing groups, enlarge a timeout, or reset attempt history to obtain a clean-looking report. The result can be a confirmed repair, a disproved hypothesis, or an unresolved observation with a precise next step. Report which conclusion the evidence supports.
 

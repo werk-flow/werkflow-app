@@ -1,6 +1,6 @@
 # Customers And CRM
 
-Status: living — last reviewed 2026-10-17
+Status: living — last reviewed 2026-10-28
 
 Customer relationship management in WerkFlow is the operational customer context an SHK business needs to receive requests, plan visits, do the work, communicate reliably, and understand a relationship's history.
 
@@ -45,7 +45,7 @@ Admin and Büro maintain the customer record with contacts, work sites, requests
 - There is no customer-master audit trail beyond creator and timestamps on contacts and sites and the request history. A consolidated approach is expected with the shared audit foundations.
 - Promised-response reporting and converting a request into an update of existing work are deferred.
 - The chronology records no standalone calls, emails, messages, letters, or meetings and never claims a manual note was delivered. `P1-46` owns communication delivery, threading, provider state, templates, failures, and channel security.
-- A customer commitment recorded against a planned visit is a calendar fact ([P1-12](../plans/phase-1/slices/p1-12-dispatch.md)). It proves no delivery or consent, sends nothing, and shows as a mismatch for the office when the internal plan moves.
+- A customer commitment recorded against a planned visit is a calendar fact. It proves no delivery or consent, sends nothing, and shows as a mismatch for the office when the internal plan moves.
 - There is no duplicate detection, merge, alias history, or import-quality workflow.
 - Service contracts and a complete warranty history are later scope.
 - Preference guidance is deliberately conservative. Legal basis, evidence files, retention, and a reviewed consent regime are open.

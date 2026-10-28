@@ -13,7 +13,7 @@ const runPaths = browserRunPaths(__dirname, currentRunKey());
 const quietReporter = process.env.WERKFLOW_QUIET_REPORTER === '1';
 const listingTests = process.argv.includes('--list');
 
-// Golden-gate harness (docs/plans/phase-1/gates.md). Runs the GG-XX
+// Golden-gate harness (docs/technical/testing.md). Runs the GG-XX
 // business scenarios against a locally running app and the selected Supabase
 // target, local by default, using disposable organization-isolated fixture data.
 export default defineConfig({
