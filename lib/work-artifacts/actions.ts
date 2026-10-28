@@ -619,48 +619,26 @@ export async function removeInstructionEvidenceFulfillment(rawInput: {
   return { success: true };
 }
 
+/** Deletes the caller's reserved signature upload that no artifact uses, with its audit event. */
 export async function discardUnlinkedWorkArtifactSignature(
   documentId: string,
 ): Promise<{ success: true } | ActionFailure> {
-  if (!voidWorkArtifactSchema.shape.artifactId.safeParse(documentId).success) {
-    return { success: false, error: 'invalid_input' };
-  }
+  if (!uuidSchema.safeParse(documentId).success) return { success: false, error: 'invalid_input' };
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
-  const admin = createSupabaseAdminClient();
-  const { data: document, error: documentError } = await admin
-    .from('documents')
-    .select('id, storage_path, uploaded_by, category')
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', documentId)
-    .maybeSingle();
-  if (
-    documentError ||
-    !document ||
-    document.uploaded_by !== auth.context.userId ||
-    document.category !== 'photo'
-  )
-    return { success: false, error: 'not_authorized' };
-  const { data: relation, error: relationError } = await loggedRead(
-    'discardUnlinkedWorkArtifactSignature: work_artifact_revision_documents read failed',
-    admin
-      .from('work_artifact_revision_documents')
-      .select('id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('document_id', documentId)
-      .maybeSingle(),
+  const { data: storagePath, error } = await createSupabaseAdminClient().rpc(
+    'discard_work_artifact_signature_upload',
+    { p_actor_id: auth.context.userId, p_organization_id: auth.context.orgId, p_document_id: documentId },
   );
-  // An unread relation could be a signature in use: never delete on a failed read.
-  if (relationError) return { success: false, error: 'load_failed' };
-  if (relation) return { success: false, error: 'work_artifact_signature_in_use' };
-  const { error } = await admin
-    .from('documents')
-    .delete()
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', documentId)
-    .eq('uploaded_by', auth.context.userId);
-  if (error) return { success: false, error: 'work_artifact_signature_cleanup_failed' };
-  await discardStorageObjects({ organizationId: auth.context.orgId, paths: [document.storage_path] });
+  if (error) {
+    if (error.message === 'work_artifact_signature_in_use') return { success: false, error: error.message };
+    if (error.message === 'work_artifact_signature_not_discardable')
+      return { success: false, error: 'not_authorized' };
+    logError('discardUnlinkedWorkArtifactSignature: discard failed', error);
+    return { success: false, error: 'work_artifact_signature_cleanup_failed' };
+  }
+  // The row is gone, so a storage failure leaves only an orphaned object, which discardStorageObjects logs.
+  if (storagePath) await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
   revalidateWorkEvidenceViews();
   return { success: true };
 }

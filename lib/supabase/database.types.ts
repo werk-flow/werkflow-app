@@ -10962,6 +10962,45 @@ export type Database = {
           },
         ];
       };
+      work_artifact_signature_uploads: {
+        Row: {
+          artifact_id: string;
+          created_at: string;
+          created_by: string;
+          document_id: string;
+          organization_id: string;
+        };
+        Insert: {
+          artifact_id: string;
+          created_at?: string;
+          created_by: string;
+          document_id: string;
+          organization_id: string;
+        };
+        Update: {
+          artifact_id?: string;
+          created_at?: string;
+          created_by?: string;
+          document_id?: string;
+          organization_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "work_artifact_signature_uploads_artifact_id_fkey";
+            columns: ["artifact_id"];
+            isOneToOne: false;
+            referencedRelation: "work_artifacts";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "work_artifact_signature_uploads_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       work_artifacts: {
         Row: {
           created_at: string;
@@ -14204,6 +14243,14 @@ export type Database = {
         };
         Returns: boolean;
       };
+      discard_work_artifact_signature_upload: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: string;
+      };
       dissolve_team: {
         Args: {
           p_actor_id: string;
@@ -15670,6 +15717,15 @@ export type Database = {
           p_supersedes_export_id: string;
         };
         Returns: string;
+      };
+      reserve_work_artifact_signature_upload: {
+        Args: {
+          p_actor_id: string;
+          p_artifact_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
       };
       resolve_planning_dispatch_challenge: {
         Args: {
