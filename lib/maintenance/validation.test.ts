@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from 'bun:test';
 
 import {
   maintenanceCompletionSchema,
@@ -32,6 +32,10 @@ const VALID_PLAN = {
 } as const;
 
 describe('maintenance validation boundaries', () => {
+  // The first due date is bounded relative to today; a fixed day keeps the fixtures valid.
+  beforeAll(() => setSystemTime(new Date('2026-10-28T10:00:00Z')));
+  afterAll(() => setSystemTime());
+
   test('accepts one exact site, template version and equipment set', () => {
     expect(maintenancePlanSchema.safeParse(VALID_PLAN).success).toBe(true);
   });
@@ -44,6 +48,24 @@ describe('maintenance validation boundaries', () => {
 
     expect(result.success).toBe(false);
     if (!result.success) expect(result.error.issues[0]?.path).toEqual(['firstDueDate']);
+  });
+
+  test('rejects a first due date more than five years back, which would generate unbounded due work', () => {
+    const result = maintenancePlanSchema.safeParse({
+      ...VALID_PLAN,
+      effectiveFromDate: '2021-10-27',
+      firstDueDate: '2021-10-27',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0]?.path).toEqual(['firstDueDate']);
+    expect(
+      maintenancePlanSchema.safeParse({
+        ...VALID_PLAN,
+        effectiveFromDate: '2021-10-28',
+        firstDueDate: '2021-10-28',
+      }).success,
+    ).toBe(true);
   });
 
   test('rejects an empty equipment scope', () => {

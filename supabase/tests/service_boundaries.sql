@@ -355,6 +355,34 @@ begin
       raise exception 'an overlapping active plan was accepted without a reason: %', sqlerrm;
     end if;
   end;
+
+  -- A monthly plan from 1900 would walk more than 600 steps: the generation
+  -- is refused and creates no due work.
+  v_plan := public.create_maintenance_plan(
+    '18000000-0000-0000-0000-000000000010', '18000000-0000-0000-0000-000000000076',
+    '18000000-0000-0000-0000-000000000077',
+    v_plan_payload || jsonb_build_object(
+      'planId', '18000000-0000-0000-0000-000000000076',
+      'revisionId', '18000000-0000-0000-0000-000000000077',
+      'effectiveFromDate', '1900-01-01', 'firstDueDate', '1900-01-01', 'intervalMonths', 1,
+      'overlapReason', 'Altvertrag SQL',
+      'idempotencyKey', '18000000-0000-0000-0000-000000000078'),
+    '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000078'
+  );
+  begin
+    perform public.generate_maintenance_due_work(
+      '18000000-0000-0000-0000-000000000010', v_plan.id, v_plan.version, '2027-06-30',
+      '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000079'
+    );
+    raise exception 'unbounded_generation_accepted';
+  exception when others then
+    if sqlerrm <> 'maintenance_generation_horizon_invalid' then
+      raise exception 'a generation of more than 600 steps was not refused: %', sqlerrm;
+    end if;
+  end;
+  if exists (select 1 from public.maintenance_due_work where maintenance_plan_id = v_plan.id) then
+    raise exception 'a refused generation left due work behind';
+  end if;
 end;
 $$;
 

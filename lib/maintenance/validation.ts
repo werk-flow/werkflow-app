@@ -1,3 +1,4 @@
+import { addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { z } from '@/lib/zod';
 import { nullableTrimmedText } from '@/lib/validation/text';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -73,6 +74,14 @@ export const maintenancePlanSchema = z
         code: 'custom',
         path: ['firstDueDate'],
         message: 'Die erste Fälligkeit darf nicht vor dem Gültigkeitsbeginn liegen.',
+      });
+    }
+    // Five years back bounds the due work one save generates; generate_maintenance_due_work caps its walk too.
+    if (value.firstDueDate < addLocalMonthsClamped(getBusinessTodayIso(), -60)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['firstDueDate'],
+        message: 'Die erste Fälligkeit darf höchstens fünf Jahre zurückliegen.',
       });
     }
   });
