@@ -17,10 +17,9 @@
 -- locked first, the same order a take uses. The refusal rolls back the
 -- movement and the stock change.
 --
--- A constraint caps the returned quantity at the taken quantity for every
--- later write. It is NOT VALID: it checks each new or changed row and leaves
--- existing rows unread, so a release never fails on a row an earlier race
--- wrote. DEV holds no such row.
+-- A constraint caps the returned quantity at the taken quantity. It is
+-- validated against the existing rows: neither DEV nor PROD held a row above
+-- the cap when it was written (PROD checked read-only on 2026-10-28).
 --
 -- The signature, the result and the grants stay as before.
 
@@ -198,4 +197,4 @@ $$;
 -- @destructive: after release 81eb219c: that build books a return only through record_inventory_movement after it compares the return with the line's remaining quantity, so its writes keep the returned quantity within the taken quantity
 alter table public.job_material_lines
   add constraint job_material_lines_returned_within_taken
-  check (returned_quantity <= taken_quantity) not valid;
+  check (returned_quantity <= taken_quantity);
