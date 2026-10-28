@@ -2,7 +2,7 @@ import { expect, mock } from 'bun:test';
 import { resolve } from 'node:path';
 
 // Run in a child process so replaced framework modules cannot leak into other tests.
-// Drives the real upsertInventoryItem, takeJobMaterial and takeProjectMaterial
+// Drives the real upsertInventoryItem, takeJobMaterial, takeProjectMaterial and returnJobMaterial
 // against a fake service-role client: each save or unplanned take is one
 // database function call with the server-resolved organization and actor, no
 // direct table write follows it, and the function's refusal codes reach the
@@ -84,7 +84,9 @@ const logged: unknown[][] = [];
 // Capture the reviewed log sink: only the label and the classification may reach it.
 console.error = (...args: unknown[]) => logged.push(args);
 
-const { takeJobMaterial, takeProjectMaterial, upsertInventoryItem } = await import('../../inventory/actions');
+const { returnJobMaterial, takeJobMaterial, takeProjectMaterial, upsertInventoryItem } = await import(
+  '../../inventory/actions'
+);
 
 function reset(result: RpcResult, { isManager = true }: { isManager?: boolean } = {}) {
   tables = {
@@ -245,3 +247,17 @@ expect(rpcCalls[0]?.args).toMatchObject({
   p_reason: 'Für Projekt entnommen',
 });
 expect(tableWrites).toBe(0);
+
+// 8. A return the function refuses under the line's lock reaches the caller as
+//    its code, even after the server's own check of the line passed.
+const LINE = '00000000-0000-4000-8000-0000000000b7';
+const returnInput = { lineId: LINE, locationId: LOCATION, quantity: 2 };
+for (const code of ['return_exceeds_taken', 'line_not_found'] as const) {
+  reset(refusal(code));
+  tables.job_material_lines = [
+    { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 4, returned_quantity: 1 },
+  ];
+  expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: code });
+  expect(rpcCalls).toHaveLength(1);
+  expect(logged).toEqual([]);
+}
