@@ -3,7 +3,8 @@
 -- functions, whatever the action passed. An Admin's own edit or deletion
 -- writes an audit event with the actor, the time and the entry before and
 -- after; a change of another person's entry and an edit that changes nothing
--- write none. The audit table is append-only and closed to client roles.
+-- write none. The audit table is append-only, for the table owner too, and
+-- closed to client roles.
 begin;
 
 insert into auth.users (
@@ -144,6 +145,28 @@ end;
 $$;
 
 reset role;
+
+-- The event-history guard refuses a rewrite by the table owner too.
+do $$
+begin
+  begin
+    update public.time_entry_audit_events set actor_id = gen_random_uuid()
+    where organization_id = '28100000-0000-0000-0000-000000000010';
+    raise exception 'an owner rewrite of an audit event was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'event_ledger_history_immutable' then raise; end if;
+  end;
+  begin
+    delete from public.time_entry_audit_events where organization_id = '28100000-0000-0000-0000-000000000010';
+    raise exception 'an owner delete of an audit event was accepted';
+  exception when raise_exception then
+    if sqlerrm <> 'event_ledger_history_immutable' then raise; end if;
+  end;
+  if (select count(*) from public.time_entry_audit_events
+      where organization_id = '28100000-0000-0000-0000-000000000010') <> 2
+  then raise exception 'an audit event changed despite the guard'; end if;
+end;
+$$;
 
 do $$
 declare

@@ -9,8 +9,10 @@
 -- person. The functions below refuse an own entry for every actor but an
 -- Admin, and write the audit event in the same transaction as the change.
 
--- Append-only: service_role inserts and reads, nobody updates or deletes a
--- row; the organization's deletion removes its events by cascade.
+-- Append-only: service_role inserts and reads. The event-history guard
+-- (20260907010100) refuses an update or delete for every role, the table
+-- owner included; the organization's deletion still removes its events by
+-- cascade.
 create table public.time_entry_audit_events (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations (id) on delete cascade,
@@ -35,6 +37,9 @@ alter table public.time_entry_audit_events enable row level security;
 
 revoke all on table public.time_entry_audit_events from public, anon, authenticated, service_role;
 grant select, insert on table public.time_entry_audit_events to service_role;
+
+create trigger guard_event_ledger_history before update or delete on public.time_entry_audit_events
+  for each row execute function app_private.guard_event_ledger_history();
 
 -- Applies the changed fields of one entry: the keys timestamp, entry_type and
 -- job_id that p_changes carries; a missing key keeps the stored value. An own
