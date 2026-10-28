@@ -75,6 +75,7 @@ declare
   v_transition record;
   v_blocker record;
   v_result jsonb;
+  v_actor uuid;
 begin
   select id into v_employee_record from public.employee_records
   where organization_id = v_org and user_id = v_employee;
@@ -141,6 +142,39 @@ begin
       where id = '14170000-0000-0000-0000-000000000030' and status = 'submitted' and created_by = v_employee)
   then raise exception 'the submitted work report was not recorded'; end if;
 
+  -- A replayed revision or action id answers the assigned author and refuses
+  -- the unassigned colleague, who learns nothing about the artifact.
+  foreach v_actor in array array[v_employee, '14170000-0000-0000-0000-000000000005']::uuid[] loop
+    begin
+      v_result := public.create_work_artifact_revision(
+        p_organization_id => v_org, p_artifact_id => '14170000-0000-0000-0000-000000000030',
+        p_revision_id => '14170000-0000-0000-0000-000000000031', p_job_id => v_job, p_project_id => null,
+        p_kind => 'work_report', p_visibility => 'internal_only', p_title => 'Arbeitsbericht',
+        p_content => '{}'::jsonb, p_captured_at => now(), p_correction_reason => null,
+        p_corrects_revision_id => null, p_expected_version => null, p_submit => true,
+        p_submit_action_id => '14170000-0000-0000-0000-000000000032', p_actor_id => v_actor
+      );
+      if v_actor <> v_employee then raise exception 'an unassigned colleague replayed the revision'; end if;
+      if not (v_result ->> 'duplicate')::boolean then raise exception 'the author''s retry was no replay'; end if;
+    exception when others then
+      if v_actor = v_employee or sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+    end;
+    begin
+      v_result := public.record_work_artifact_action(
+        p_organization_id => v_org, p_actor_id => v_actor,
+        p_artifact_id => '14170000-0000-0000-0000-000000000030',
+        p_revision_id => '14170000-0000-0000-0000-000000000031',
+        p_action_id => '14170000-0000-0000-0000-000000000032', p_expected_version => 1,
+        p_action_type => 'review_requested', p_reason => null, p_comment => null,
+        p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+      );
+      if v_actor <> v_employee then raise exception 'an unassigned colleague replayed the action'; end if;
+      if not (v_result ->> 'duplicate')::boolean then raise exception 'the author''s retry was no replay'; end if;
+    exception when others then
+      if v_actor = v_employee or sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
+    end;
+  end loop;
+
   -- P1-17: completed work (with a reasoned manager exception for the open blocker)
   -- receives a handover draft.
   perform public.transition_work_execution(
@@ -169,8 +203,7 @@ declare
   v_count integer;
 begin
   foreach v_table in array array[
-    'work_blockers', 'work_blocker_events', 'work_execution_events',
-    'work_artifacts', 'work_artifact_revisions', 'work_artifact_actions',
+    'work_blockers', 'work_blocker_events', 'work_execution_events', 'work_artifacts',
     'work_handover_packages', 'work_handover_events'
   ] loop
     execute format('select count(*) from public.%I where organization_id = $1', v_table)
@@ -187,8 +220,7 @@ declare
   v_count integer;
 begin
   foreach v_table in array array[
-    'work_blockers', 'work_blocker_events', 'work_execution_events',
-    'work_artifacts', 'work_artifact_revisions', 'work_artifact_actions',
+    'work_blockers', 'work_blocker_events', 'work_execution_events', 'work_artifacts',
     'work_handover_packages', 'work_handover_events'
   ] loop
     execute format('select count(*) from public.%I where organization_id = $1', v_table)
