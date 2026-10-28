@@ -16,6 +16,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-delete-after-cd.ts\"",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }
