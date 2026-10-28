@@ -1,9 +1,10 @@
-// Actual GET /auth/callback with only Auth, the cache and the database RPCs
-// replaced: an Auth service that cannot answer leads to the page that the
-// proxy answers with a private 503 (proxy-session.ts), never the invalid-link
-// page; a bare invite link redeems nothing, whatever site sent
-// the browser; and no provider message, invited address or invite code
-// travels in a redirect URL.
+// Actual GET and POST /auth/callback with only Auth, the cache and the
+// database RPCs replaced: an Auth service that cannot answer leads to the page
+// that the proxy answers with a private 503 (proxy-session.ts), never the
+// invalid-link page; neither a bare invite link nor a reset link redeems
+// anything in a GET, whatever site sent the browser; the reset link redeems
+// only through the same-origin POST; and no provider message, invited address
+// or invite code travels in a redirect URL.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { AuthApiError, AuthRetryableFetchError, type AuthError } from '@supabase/supabase-js';
@@ -21,6 +22,7 @@ console.error = () => {};
 let authAnswer: AuthAnswer = { error: null };
 let redeemAnswer: RpcAnswer = { data: null, error: null };
 const rpcNames: string[] = [];
+const verifiedHashes: string[] = [];
 
 mock.module('server-only', () => ({}));
 mock.module('next/cache', () => ({ revalidateTag: () => {} }));
@@ -40,7 +42,10 @@ mock.module('@supabase/ssr', () => ({
   createServerClient: () => ({
     auth: {
       exchangeCodeForSession: async () => answerAuth(),
-      verifyOtp: async () => answerAuth(),
+      verifyOtp: async ({ token_hash }: { token_hash: string }) => {
+        verifiedHashes.push(token_hash);
+        return answerAuth();
+      },
       getUser: async () => ({ data: { user: { id: callerId } }, error: null }),
     },
   }),
@@ -53,10 +58,26 @@ mock.module('@/lib/supabase/admin', () => ({
     },
   }),
 }));
-const { GET } = await import('@/app/auth/callback/route');
+const { GET, POST } = await import('@/app/auth/callback/route');
 
 function callback(query: string, headers: Record<string, string> = {}): Promise<Response> {
   return GET(new NextRequest(`http://localhost/auth/callback?${query}`, { headers }));
+}
+const sameOrigin = { 'content-type': 'application/json', 'sec-fetch-site': 'same-origin' };
+const keptLink = { cookie: 'recovery_link=fixture-hash' };
+function redeemRecoveryLink(headers: Record<string, string>): Promise<Response> {
+  return POST(
+    new NextRequest('http://localhost/auth/callback', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ redeem: 'recovery_link' }),
+    }),
+  );
+}
+function clearsKeptLink(response: Response): boolean {
+  return response.headers
+    .getSetCookie()
+    .some((cookie) => /^recovery_link=; Path=\/auth\/callback; Expires=Thu, 01 Jan 1970/.test(cookie));
 }
 function redemptions(): number {
   return rpcNames.filter((name) => name === 'redeem_organization_invite_for_user').length;
@@ -86,13 +107,14 @@ for (const answer of unavailableErrors) {
   assert.equal(redemptions(), 0);
 }
 
-// The same for a token hash.
+// The same for the confirmed reset link, which the POST answers with a 503
+// and keeps for the next click.
 for (const answer of unavailableErrors) {
   authAnswer = answer;
-  assertUnavailable(
-    await callback('token_hash=fixture-hash&type=recovery'),
-    `token hash ${answer.error?.name ?? 'thrown'}`,
-  );
+  const response = await redeemRecoveryLink({ ...sameOrigin, ...keptLink });
+  const label = `token hash ${answer.error?.name ?? 'thrown'}`;
+  assert.equal(response.status, 503, label);
+  assert.equal(clearsKeptLink(response), false, label);
 }
 
 // Auth refusing the link itself shows the invalid-link page with a fixed code
@@ -101,20 +123,57 @@ for (const code of ['flow_state_not_found', 'bad_code_verifier', 'otp_expired'])
   authAnswer = { error: new AuthApiError(providerMessage, 400, code) };
   const exchange = await callback('code=fixture-code');
   assert.equal(exchange.headers.get('location'), 'http://localhost/forgot-password?error=invalid_code', code);
-  const recovery = await callback('token_hash=fixture-hash&type=recovery');
-  assert.equal(recovery.headers.get('location'), 'http://localhost/reset-password?error=invalid_token', code);
-  const confirmation = await callback('token_hash=fixture-hash&type=email');
-  assert.equal(
-    confirmation.headers.get('location'),
-    'http://localhost/forgot-password?error=invalid_token',
-    code,
-  );
+  const recovery = await redeemRecoveryLink({ ...sameOrigin, ...keptLink });
+  assert.equal(recovery.status, 400, code);
+  assert.deepEqual(await recovery.json(), { error: 'invalid_token' }, code);
+  assert.ok(clearsKeptLink(recovery), code);
 }
+
+// A reset link redeems nothing in a GET, whichever site sent the browser: it
+// keeps the hash in an httpOnly cookie that only the POST reads and leads to
+// the confirmation step.
+authAnswer = { error: null };
+for (const headers of [{ 'sec-fetch-site': 'cross-site' }, { 'sec-fetch-site': 'same-origin' }, {}]) {
+  verifiedHashes.length = 0;
+  const response = await callback('token_hash=fixture-hash&type=recovery', headers);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), 'http://localhost/reset-password?step=confirm');
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  const cookies = response.headers.getSetCookie();
+  assert.equal(cookies.length, 1, cookies.join('\n'));
+  assert.match(cookies[0] ?? '', /^recovery_link=fixture-hash; Path=\/auth\/callback; .*HttpOnly/);
+  assert.deepEqual(verifiedHashes, []);
+}
+// Only the reset email carries a token hash; any other type or a malformed
+// hash is an invalid link.
+for (const query of ['token_hash=fixture-hash&type=email', 'token_hash=bad%20hash&type=recovery']) {
+  const response = await callback(query);
+  assert.equal(response.headers.get('location'), 'http://localhost/forgot-password?error=invalid_token');
+  assert.equal(response.headers.get('set-cookie'), null);
+}
+assert.deepEqual(verifiedHashes, []);
+
+// The POST redeems the kept link only for a same-origin JSON request.
+for (const headers of [
+  { ...keptLink, 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
+  { ...keptLink, 'content-type': 'text/plain', 'sec-fetch-site': 'same-origin' },
+  { ...keptLink, 'content-type': 'application/json', origin: 'https://elsewhere.example' },
+]) {
+  assert.equal((await redeemRecoveryLink(headers)).status, 403);
+}
+// Without a kept link it asks Auth nothing.
+const withoutLink = await redeemRecoveryLink(sameOrigin);
+assert.equal(withoutLink.status, 400);
+assert.deepEqual(verifiedHashes, []);
+// A confirmed link redeems the kept hash and clears it.
+const redeemed = await redeemRecoveryLink({ ...sameOrigin, ...keptLink });
+assert.equal(redeemed.status, 200);
+assert.deepEqual(verifiedHashes, ['fixture-hash']);
+assert.ok(clearsKeptLink(redeemed));
 
 // A bare invite link redeems nothing and writes no cookie, whichever site
 // sent the browser: it leads to the login page, where a signed-in person
 // accepts with a click.
-authAnswer = { error: null };
 for (const headers of [{ 'sec-fetch-site': 'cross-site' }, { 'sec-fetch-site': 'same-origin' }, {}]) {
   rpcNames.length = 0;
   const response = await callback(`invite_code=${inviteCode}`, headers);

@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 
 import { createServerClient } from '@supabase/ssr';
-import { type EmailOtpType } from '@supabase/supabase-js';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
 import { isRejectedSignInLink } from '@/lib/auth/identity-errors';
+import {
+  RECOVERY_CONFIRMATION_PATH,
+  RECOVERY_LINK_COOKIE,
+  RECOVERY_LINK_COOKIE_OPTIONS,
+  RECOVERY_LINK_REDEMPTION,
+  recoveryTokenHashSchema,
+} from '@/lib/auth/recovery-link';
 import { resolveSafeReturnPath } from '@/lib/auth/return-path';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import {
@@ -125,41 +131,65 @@ async function redeemAfterCodeExchange(
   return redirect;
 }
 
+// Redeems the reset link the GET kept, after the person confirmed it on the
+// reset page. The cookie goes once Auth decided; when Auth does not answer it
+// stays, so the next click retries the link, which may still be valid.
+async function redeemRecoveryLink(req: NextRequest): Promise<NextResponse> {
+  const refused = (): NextResponse => {
+    const response = NextResponse.json({ error: 'invalid_token' }, { status: 400 });
+    response.cookies.delete({ name: RECOVERY_LINK_COOKIE, path: RECOVERY_LINK_COOKIE_OPTIONS.path });
+    return response;
+  };
+  const kept = recoveryTokenHashSchema.safeParse(req.cookies.get(RECOVERY_LINK_COOKIE)?.value);
+  if (!kept.success) return refused();
+
+  const res = NextResponse.json({ success: true });
+  const supabase = createCookieBoundSupabaseClient(req, res);
+  let verification: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>;
+  try {
+    verification = await supabase.auth.verifyOtp({ token_hash: kept.data, type: 'recovery' });
+  } catch (thrown) {
+    logError('auth.callback: token hash verification threw', thrown);
+    return NextResponse.json({ error: 'auth_unavailable' }, { status: 503 });
+  }
+  if (verification.error) {
+    logError('auth.callback: token hash verification failed', verification.error);
+    if (!isRejectedSignInLink(verification.error)) {
+      return NextResponse.json({ error: 'auth_unavailable' }, { status: 503 });
+    }
+    return refused();
+  }
+  res.cookies.delete({ name: RECOVERY_LINK_COOKIE, path: RECOVERY_LINK_COOKIE_OPTIONS.path });
+  return res;
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url);
   const code = searchParams.get('code');
   const tokenHash = searchParams.get('token_hash');
   // Only same-origin paths may follow authentication (SI-003).
   const next = resolveSafeReturnPath(searchParams.get('next'), origin);
-  const type = searchParams.get('type') as EmailOtpType | null;
+  const type = searchParams.get('type');
   // Invite codes are generated UUIDs; anything else is neither redeemed nor
   // echoed into a redirect (SI-026).
   const rawInviteCode = searchParams.get('invite_code');
   const inviteCode = rawInviteCode && isUuid(rawInviteCode) ? rawInviteCode : null;
   const redirectTo = type === 'recovery' ? '/reset-password' : next;
 
-  // A token hash verifies on the server, so it works across browsers
-  // (password reset and email confirmation).
-  if (tokenHash && type) {
-    const res = NextResponse.redirect(`${origin}${redirectTo}`);
-    const supabase = createCookieBoundSupabaseClient(req, res);
-    let verification: Awaited<ReturnType<typeof supabase.auth.verifyOtp>>;
-    try {
-      verification = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
-    } catch (thrown) {
-      logError('auth.callback: token hash verification threw', thrown);
-      return authUnavailableResponse(origin);
+  // The reset email links its token hash here. The GET only keeps it for the
+  // confirmation step, whose click redeems it through POST (recovery-link.ts).
+  // Only the reset email carries a token hash.
+  if (tokenHash) {
+    const parsedHash = recoveryTokenHashSchema.safeParse(tokenHash);
+    if (type !== 'recovery' || !parsedHash.success) {
+      return NextResponse.redirect(`${origin}/forgot-password?error=invalid_token`, 303);
     }
-    const { error } = verification;
-    if (!error) return res;
-    logError('auth.callback: token hash verification failed', error);
-    if (!isRejectedSignInLink(error)) return authUnavailableResponse(origin);
-    // A fixed code: the provider's message never travels in a URL.
-    return NextResponse.redirect(
-      type === 'recovery'
-        ? `${origin}/reset-password?error=invalid_token`
-        : `${origin}/forgot-password?error=invalid_token`,
-    );
+    const res = NextResponse.redirect(`${origin}${RECOVERY_CONFIRMATION_PATH}`, {
+      status: 303,
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
+    res.cookies.set(RECOVERY_LINK_COOKIE, parsedHash.data, RECOVERY_LINK_COOKIE_OPTIONS);
+    return res;
   }
 
   if (code) {
@@ -205,7 +235,8 @@ export async function POST(req: NextRequest) {
   if (typeof parsedBody !== 'object' || parsedBody === null) {
     return NextResponse.json({ error: 'invalid_body' }, { status: 400 });
   }
-  const body: { event?: unknown; session?: unknown } = parsedBody;
+  const body: { event?: unknown; session?: unknown; redeem?: unknown } = parsedBody;
+  if (body.redeem === RECOVERY_LINK_REDEMPTION) return redeemRecoveryLink(req);
   const event = typeof body.event === 'string' ? body.event : null;
   const session = body.session;
 

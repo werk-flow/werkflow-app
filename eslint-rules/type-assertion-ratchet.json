@@ -1,7 +1,6 @@
 {
   "app/(app)/arbeitsvorlagen/page.tsx": 1,
   "app/api/background-read/route.ts": 1,
-  "app/auth/callback/route.ts": 1,
   "components/anfragen/anfragen-content.tsx": 1,
   "components/anfragen/close-request-dialog.tsx": 1,
   "components/anfragen/convert-request-dialog.tsx": 1,
