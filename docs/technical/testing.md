@@ -57,7 +57,7 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
 
-- **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) all run when a product file, a migration, a dependency or shared test support changed.
+- **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it. A documentation-only change selects no browser group.
@@ -84,12 +84,12 @@ After a failed release run, pass every failed group with `--group` before the ne
 `.github/workflows/ci.yml` runs on every PR to `main` and every push to `main`. Its aggregate job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs when the diff is unreadable, when a tooling input changed, and in a full run.
-- **Tooling input.** A file that can change how every group installs, builds or runs: dependencies, build, Playwright and local-stack configuration, `ci.yml` and `.github/actions/`, the runner scripts, and the runner, selection and local-stack modules those scripts import (`runnerModules`). Other workflows, `.github/scripts/`, the PR template, and a module only a spec or a check imports plan by diff.
+- **Tooling input.** A file that can change how every group installs, builds or runs: dependencies, build, Playwright and local-stack configuration, `ci.yml` and `.github/actions/`, the runner scripts, and the runner, selection and local-stack modules those scripts import (`runnerModules`). Any other file plans by diff.
 - **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** The `Build` job builds the app once per run, beside `Plan`, from the stack's fixed CLI defaults without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build receipt.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`. A push to `main` runs `Check` on the merged diff; the nightly run and the release gate run every browser group.
+- **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the same retry rules as a local repeat.
 
 ## Commands
