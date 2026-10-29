@@ -23,7 +23,8 @@ const MANUAL_ENTRY_ERROR_MESSAGES: Readonly<Partial<Record<string, string | Fail
   target_not_a_member: 'Der ausgewählte Mitarbeiter ist kein Mitglied dieser Organisation.',
   validation_failed: 'Die Validierung ist fehlgeschlagen.',
   insert_failed: 'Der Eintrag konnte nicht gespeichert werden.',
-  job_not_found: 'Der Auftrag wurde nicht gefunden.',
+  job_not_found:
+    'Der Auftrag wurde in dieser Organisation nicht gefunden. Wähle einen anderen Auftrag oder trage die Zeit ohne Auftrag ein.',
   job_not_assigned:
     'Die ausgewählte Person ist diesem Auftrag nicht zugewiesen. Wähle einen ihrer Aufträge oder trage die Zeit ohne Auftrag ein.',
 };
