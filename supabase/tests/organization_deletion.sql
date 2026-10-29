@@ -1,5 +1,5 @@
 -- Deleting an organization through delete_organization (migration
--- 20261029130000_refuse_organization_delete_with_time_records.sql) refuses
+-- 20261029205025_refuse_organization_delete_with_time_records.sql) refuses
 -- while the organization holds a time entry, a time session or a closed
 -- period, refuses everyone but the owner and a wrong confirmation name, and
 -- removes the organization with its rows otherwise. Only the service role

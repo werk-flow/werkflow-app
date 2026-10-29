@@ -18,9 +18,7 @@ export type DeleteOrgResult = ActionResult<{ nextOrgId: string | null }>;
 
 const confirmationNameSchema = z.string();
 
-const deleteRefusal = writeRefusalFor(
-  new Set(['org_not_found', 'not_authorized', 'name_mismatch', 'has_time_records']),
-);
+const deleteRefusal = writeRefusalFor(new Set(['org_not_found', 'not_authorized', 'name_mismatch']));
 
 /**
  * Delete an organization and all its associated data.
@@ -93,6 +91,11 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       p_confirmation_name: parsedConfirmation.data.trim(),
     });
 
+    // The files are gone by now: a refusal says so, and a retry finishes the
+    // deletion once nothing retains the organization.
+    if (orgDeleteError?.message === 'has_time_records') {
+      return { success: false, error: 'time_recorded_during_deletion' };
+    }
     if (orgDeleteError) {
       return deleteRefusal(
         orgDeleteError,

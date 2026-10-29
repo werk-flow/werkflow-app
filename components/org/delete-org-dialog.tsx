@@ -38,8 +38,11 @@ const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   has_time_records:
     'Die Organisation enthält inzwischen erfasste Arbeitszeiten oder abgeschlossene Perioden und kann deshalb nicht gelöscht werden.',
   files_delete_failed:
-    'Die gespeicherten Dateien konnten nicht gelöscht werden. Die Organisation bleibt bestehen. Versuche es in einem Moment erneut.',
-  delete_org_failed: 'Fehler beim Löschen der Organisation.',
+    'Nicht alle gespeicherten Dateien konnten gelöscht werden. Die Organisation bleibt bestehen. Versuche es erneut, dann werden die übrigen Dateien gelöscht.',
+  time_recorded_during_deletion:
+    'Während des Löschens wurde Arbeitszeit erfasst. Die Organisation bleibt deshalb bestehen, ihre gespeicherten Dateien sind aber bereits gelöscht.',
+  delete_org_failed:
+    'Die Organisation konnte nicht gelöscht werden, ihre gespeicherten Dateien sind aber bereits gelöscht. Versuche es erneut.',
 };
 
 interface DeleteOrgDialogProps {
@@ -161,7 +164,7 @@ function DeletionConfirmation({
       setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
       // Time recorded since the page loaded: the re-read scope turns the
       // dialog into the refusal with its retention reason and the export.
-      if (result.error === 'has_time_records') refresh();
+      if (result.error === 'has_time_records' || result.error === 'time_recorded_during_deletion') refresh();
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
     }
@@ -176,11 +179,15 @@ function DeletionConfirmation({
           required
           error={nameError}
         >
-          <div className="rounded-md bg-muted px-3 py-2 text-sm font-medium">{orgName}</div>
+          <div className="rounded-md bg-muted px-3 py-2 text-sm font-medium wrap-anywhere">{orgName}</div>
           <Input
             id={CONFIRM_NAME_ID}
             value={confirmationName}
-            onChange={(e) => setConfirmationName(e.target.value)}
+            onChange={(e) => {
+              setConfirmationName(e.target.value);
+              setNameError(null);
+              setError(null);
+            }}
             placeholder="Organisationsname eingeben"
             disabled={isLoading}
           />

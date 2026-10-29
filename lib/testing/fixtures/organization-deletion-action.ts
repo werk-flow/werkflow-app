@@ -122,10 +122,13 @@ assert.deepEqual(steps, ['files'], 'the rows went although the files did not');
 assert.ok(organizationRemains(), 'a failed file deletion removed the organization');
 failFileDeletion = false;
 
-// The database's own refusal under its lock reaches the owner as its code.
+// The database's own refusal under its lock, after the files went, says so.
 reset();
 databaseRefusal = 'has_time_records';
-assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: false, error: 'has_time_records' });
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), {
+  success: false,
+  error: 'time_recorded_during_deletion',
+});
 assert.ok(organizationRemains(), 'a database refusal removed the organization');
 databaseRefusal = null;
 

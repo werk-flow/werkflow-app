@@ -2,7 +2,7 @@ import 'server-only';
 
 // The callers establish identity, the active organization and the owner or
 // Admin role before they read; delete_organization repeats the retention check
-// under its lock (supabase/migrations/20261029130000_refuse_organization_delete_with_time_records.sql).
+// under its lock (supabase/migrations/20261029205025_refuse_organization_delete_with_time_records.sql).
 
 import type { ActionFailure } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
