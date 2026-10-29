@@ -170,7 +170,7 @@ async function attachManualEntryJob(
  * The action failure of a refused manual entry insert. The database refuses
  * an employee's job whose assignment was removed after
  * attachManualEntryJob read it (migration
- * 20261029141443_recheck_manual_entry_job_assignment.sql).
+ * 20261029212937_recheck_manual_entry_job_assignment.sql).
  */
 function manualEntryInsertFailure(error: { message: string } | null): string {
   if (error?.message === 'manual_entry_job_not_assigned') return 'job_not_assigned';

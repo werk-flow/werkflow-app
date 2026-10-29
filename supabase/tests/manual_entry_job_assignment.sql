@@ -1,6 +1,6 @@
 -- A manual entry of an employee names only a job the employee is assigned to,
 -- checked at insert time (migration
--- 20261029141443_recheck_manual_entry_job_assignment.sql), so an assignment
+-- 20261029212937_recheck_manual_entry_job_assignment.sql), so an assignment
 -- or a membership removed after the action's own check refuses the entry. An
 -- Admin or Büro member's manual entry and an automatic entry keep their job
 -- without an assignment.
