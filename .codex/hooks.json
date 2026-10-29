@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun .claude/hooks/refuse-production-mcp.ts",
+            "command": "root=\"$(git rev-parse --show-toplevel)\" || { echo \"Refused: the MCP guard could not find the repository root.\" >&2; exit 2; }; exec bun \"$root/.claude/hooks/refuse-production-mcp.ts\"",
             "timeout": 20,
             "statusMessage": "Checking that the MCP tool does not reach production"
           }

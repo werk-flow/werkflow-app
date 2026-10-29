@@ -4,6 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { z } from '../zod';
+
 import { configuredMcpServers, productionMcpRefusal, supabaseProjectRefs } from './production-access';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
@@ -231,4 +233,30 @@ test('the hook refuses PROD MCP calls with the reason and lets DEV calls through
   }
   const dev = call(mcp('mcp__supabase__execute_sql', { query: 'select 1' }));
   expect(dev.exitCode, dev.output).toBe(0);
+});
+
+// Codex runs a command hook in the session's working directory, and a hook that fails to start
+// does not block the call. The registered command must find the script from a subfolder.
+test('the Codex hook command refuses a PROD call from a subfolder of the repository', () => {
+  const { hooks } = z
+    .object({
+      hooks: z.object({
+        PreToolUse: z.array(z.object({ hooks: z.array(z.object({ command: z.string() })) })),
+      }),
+    })
+    .parse(JSON.parse(readFileSync(resolve(repositoryRoot, '.codex/hooks.json'), 'utf8')));
+  const command = hooks.PreToolUse.flatMap((entry) => entry.hooks)
+    .map((hook) => hook.command)
+    .find((text) => text.includes('refuse-production-mcp.ts'));
+  const result = Bun.spawnSync({
+    cmd: ['sh', '-c', command ?? 'exit 0'],
+    cwd: resolve(repositoryRoot, 'lib/security'),
+    stdin: Buffer.from(
+      JSON.stringify({ tool_name: 'mcp__supabase-prod-readonly__list_tables', tool_input: {} }),
+    ),
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  expect(result.exitCode, result.stderr.toString()).toBe(2);
+  expect(result.stderr.toString()).toContain('production server by its name');
 });

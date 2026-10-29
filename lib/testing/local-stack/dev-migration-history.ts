@@ -1,13 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { z } from 'zod';
-
 import { compareMigrationVersions, migrationVersionFromFileName } from './migration-history';
+import { LEDGER_QUERY, ledgerRowsSchema } from '../../security/production-inspection';
 import { requireEnv } from '../../../tests/golden/support/env';
 
 const DEV_PROJECT_REF = 'mbkkzuqjbdvzelqvuzcn';
-const migrationRowsSchema = z.array(z.object({ version: z.string() }));
 
 export function validateSupabaseCliLink(linkedProjectRef: string | null): string[] {
   if (linkedProjectRef === null || linkedProjectRef === DEV_PROJECT_REF) {
@@ -44,15 +42,13 @@ async function remoteDevMigrationVersions(): Promise<string[]> {
       Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      query: 'select version from supabase_migrations.schema_migrations order by version',
-    }),
+    body: JSON.stringify({ query: LEDGER_QUERY }),
     signal: AbortSignal.timeout(30_000),
   });
   if (response.status !== 201) {
     throw new Error(`DEV migration-history query returned HTTP ${response.status}.`);
   }
-  return migrationRowsSchema.parse(await response.json()).map((row) => row.version);
+  return ledgerRowsSchema.parse(await response.json()).map((row) => row.version);
 }
 
 export async function getDevMigrationHistoryProblems(repositoryRoot = process.cwd()): Promise<string[]> {
