@@ -681,7 +681,7 @@
     "lib/time-tracking/clock-actions.ts": { "deriveClockActions": 128 },
     "lib/time-tracking/clock-state-actions.ts": { "clockOutBeforeSignOut": 118, "getCurrentClockState": 90 },
     "lib/time-tracking/entry-read-actions.ts": { "getTimeEntries": 106 },
-    "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 101, "updateEntry": 92 },
+    "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 98, "updateEntry": 92 },
     "lib/time-tracking/review-actions.ts": { "reviewEntries": 94 },
     "lib/time-tracking/segment-actions.ts": { "getCanonicalClockState": 124 },
     "lib/time-tracking/settings-actions.ts": { "updateTimeTrackingSettings": 88 },

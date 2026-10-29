@@ -95,6 +95,14 @@ The owner aligned the rules with current practice.
 1. Rule 8 now reads: the coordinator thread merges a PR that meets the merge gate, or the PR's own thread does when the owner said "full send" there. The owner may merge any PR. A "full stop" PR waits until the owner has read it. Nobody merges with an admin bypass.
 2. Rule 7 now reads: a release runs when the owner or the coordinator thread asks for it ("release main"). The releasing thread checks production afterwards and rolls the app back through Vercel if it breaks. The database is never rolled back.
 
+## Amendment 2026-10-29: main runs the diff selection, a full run gates the release
+
+Every push to `main` ran every browser group in 14 shards, the free plan's whole job budget, so each merge queued behind the last one. The owner decided on 2026-10-29:
+
+1. A push to `main` plans its browser groups by diff against the previous `main` commit, like a PR. A push whose previous commit git cannot read runs every browser group. This supersedes "A push to `main` and a nightly run take every browser group" in rule 2.
+2. A full run is `ci.yml` called with `full` from a job named `Full run`: nightly on `main`, by hand, and in the release.
+3. The `release` workflow ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at exactly that commit is green. It reuses a nightly or manual one; without one it runs the full suite first and ships only on green. This replaces "a green `Check` on the `main` commit" in the table row on the release plan and in the amendment on merges without an up-to-date branch. A merge that breaks a group its diff did not select now surfaces in the nightly run or at the release, not on the push.
+
 ## Amendment 2026-10-29: threads merge their own PRs, and a queue requests CodeRabbit reviews
 
 The owner removed the need for one coordinator thread to stay alive. A watcher in the coordinator's thread requested CodeRabbit reviews in a fixed order and woke the coordinator to merge, so reviews and merges stopped whenever that thread stopped.

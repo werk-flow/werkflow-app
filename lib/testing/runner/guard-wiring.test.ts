@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GUARD = 'scripts/guard-edits-during-verification.ts';
-const DELETE_GUARD = '.claude/hooks/refuse-delete-after-cd.ts';
+const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -49,8 +49,8 @@ test('Codex runs the edit guard before every file and shell tool', () => {
   expect(guardedTools('.codex/hooks.json', tools)).toEqual(tools);
 });
 
-// Only Claude Code's built-in safety check stops on a wildcard delete after a cd
-// (lib/testing/runner/delete-after-cd.ts); Codex in full access runs it without asking.
+// Only Claude Code's built-in safety check stops on a delete it cannot resolve
+// (lib/testing/runner/unresolvable-delete.ts); Codex in full access runs it without asking.
 test('Claude runs the delete guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], DELETE_GUARD)).toEqual(['Bash']);
 });

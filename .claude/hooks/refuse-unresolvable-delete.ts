@@ -1,12 +1,12 @@
-import { deleteAfterCdRefusal } from '../../lib/testing/runner/delete-after-cd';
+import { unresolvableDeleteRefusal } from '../../lib/testing/runner/unresolvable-delete';
 import { shellCommand } from '../../lib/testing/runner/edit-guard';
 
 /**
  * PreToolUse hook for Bash calls, wired in .claude/settings.json (pinned by
  * lib/testing/runner/guard-wiring.test.ts): exits 2 with the reason when the
- * command runs `rm -r` on a wildcard or a variable after a `cd` in the same
- * command (lib/testing/runner/delete-after-cd.ts). A call it cannot read passes,
- * as in the edit guard.
+ * command runs `rm` on a variable or on a wildcard with a relative path
+ * (lib/testing/runner/unresolvable-delete.ts). A call it cannot read passes, as
+ * in the edit guard.
  */
 let call: unknown;
 try {
@@ -19,7 +19,7 @@ const command =
   call && typeof call === 'object'
     ? shellCommand({ tool_name: Reflect.get(call, 'tool_name'), tool_input: Reflect.get(call, 'tool_input') })
     : undefined;
-const reason = command ? deleteAfterCdRefusal(command) : undefined;
+const reason = command ? unresolvableDeleteRefusal(command) : undefined;
 if (reason) {
   console.error(reason);
   process.exit(2);

@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-delete-after-cd.ts\"",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-unresolvable-delete.ts\"",
             "timeout": 20
           }
         ]
