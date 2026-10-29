@@ -9,6 +9,8 @@ import { getTestGroups } from '../lib/testing/selection/test-groups';
 // The `Plan` job of .github/workflows/ci.yml: which browser groups this run
 // executes and how they split into shards (lib/testing/selection/ci-plan.ts).
 // Usage: bun scripts/ci-plan.ts --base <commit> | --full "<reason>"
+// --base is a pull request's base or, for a push to main, the previous main
+// commit. A base git cannot read (a force push, a new branch) plans a full run.
 // It writes `browser`, `shards` and `full` to $GITHUB_OUTPUT when set.
 const repository = resolve(import.meta.dir, '..');
 const [flag, value] = process.argv.slice(2);

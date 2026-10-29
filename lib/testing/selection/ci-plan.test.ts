@@ -38,7 +38,7 @@ test('an unreadable diff and a tooling change run every browser group except the
   expect(ids(nightly)).toEqual(EVERY_BROWSER_GROUP);
 });
 
-test('a pull request runs the browser groups its changed files select', () => {
+test('a pull request or a push to main runs the browser groups its changed files select', () => {
   const plan = ciPlan({ groups, changedFiles: ['lib/inventory/stock.ts'], fullRun: undefined });
   expect(plan.fullReason).toBeUndefined();
   expect(ids(plan)).toEqual(['audit:wave-2:p1-13']);
