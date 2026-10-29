@@ -7,7 +7,7 @@ import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
-import { enterHeavySlot } from '../lib/testing/runner/heavy-slot';
+import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 const target = process.argv[2];
 const prebuiltArgument = process.argv[3];
@@ -18,8 +18,6 @@ if (
   throw new Error('Usage: bun run test:server <local|cloud> [--prebuilt]');
 // --prebuilt serves a build recorded elsewhere, such as the CI Build job's, after proving it is this checkout's.
 const prebuilt = prebuiltArgument === '--prebuilt';
-// A local server builds and serves the app for as long as it runs, so it holds a heavy slot that long.
-if (target === 'local') await enterHeavySlot('test:server local');
 const repositoryRoot = resolve(import.meta.dir, '..');
 
 /**
@@ -169,11 +167,16 @@ await withTestSession(async (signal) => {
     await run([process.execPath, 'run', target === 'local' ? 'env:local' : 'env:dev']);
     if (target === 'local') await run(['docker', 'start', 'supabase_edge_runtime_werkflow-app']);
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
-    await run(
-      prebuilt
-        ? [process.execPath, 'run', 'test:preflight', 'build', target]
-        : [process.execPath, 'run', 'build'],
-    );
+    if (prebuilt) await run([process.execPath, 'run', 'test:preflight', 'build', target]);
+    else {
+      // The build holds a heavy slot; serving does not, so three idle servers never block verification.
+      const slot = target === 'local' ? await acquireHeavySlot('test:server local build') : null;
+      try {
+        await run([process.execPath, 'run', 'build']);
+      } finally {
+        slot?.release();
+      }
+    }
   });
   const releaseRealtimeWarmUp = target === 'local' ? await keepRealtimeWarm() : null;
   const serverLog = openServerLog();

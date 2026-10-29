@@ -121,7 +121,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/`. The main checkout serves on port 3000. A linked worktree derives its test-server and dev ports from its path (`lib/testing/runner/app-port.ts`).
 - Every worktree uses the one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
-- `bun run check:changed`, `bun run test:verify` and a local test server each take one of three machine-wide slots and print that they wait while all are busy (`lib/testing/runner/heavy-slot.ts`). A local server holds its slot while it runs, so stop it when you are done. CI takes no slot.
+- `bun run check:changed`, `bun run test:verify` and a local test server's build each take one of three machine-wide slots and print that they wait while all are busy (`lib/testing/runner/heavy-slot.ts`). Serving holds no slot. CI takes no slot.
 - `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 

@@ -1,14 +1,16 @@
 import { afterEach, expect, test } from 'bun:test';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { HEAVY_SLOT_VARIABLE, heavySlotSkip, runInSlot, SLOT_TAKEN, slotPath } from './heavy-slot';
+import { join, resolve } from 'node:path';
+import { HEAVY_SLOT_VARIABLE, hasFlock, heavySlotSkip, tryHeavySlot, type HeavySlot } from './heavy-slot';
 
 const directories: string[] = [];
-const holders: ChildProcessWithoutNullStreams[] = [];
+const processes: ChildProcess[] = [];
+const slots: HeavySlot[] = [];
 afterEach(() => {
-  for (const holder of holders.splice(0)) holder.kill('SIGKILL');
+  for (const slot of slots.splice(0)) slot.release();
+  for (const child of processes.splice(0)) child.kill('SIGKILL');
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
 
@@ -18,44 +20,84 @@ function slotDirectory(): string {
   return directory;
 }
 
-/** Holds `slot` from another process until its stdin closes; resolves once the lock is held. */
-function holdSlot(directory: string, slot: number): Promise<ChildProcessWithoutNullStreams> {
-  const holder = spawn('flock', [slotPath(directory, slot), 'sh', '-c', 'echo held; cat']);
-  holders.push(holder);
-  return new Promise((resolveHeld, reject) => {
-    holder.on('error', reject);
-    holder.stdout.once('data', () => resolveHeld(holder));
-  });
+/** A process that runs until it is killed: a slot's owner in a test. */
+function owner(): { pid: number; child: ChildProcess } {
+  const child = spawn('cat', [], { stdio: ['pipe', 'ignore', 'ignore'] });
+  processes.push(child);
+  if (child.pid === undefined) throw new Error('cat did not start.');
+  return { pid: child.pid, child };
 }
 
-const exited = (holder: ChildProcessWithoutNullStreams): Promise<void> =>
-  new Promise((resolveExit) => holder.once('exit', () => resolveExit()));
+async function held(directory: string, slot: number, ownerPid: number): Promise<HeavySlot> {
+  const taken = await tryHeavySlot(directory, slot, ownerPid);
+  if (!taken) throw new Error(`Heavy slot ${slot} was taken.`);
+  slots.push(taken);
+  return taken;
+}
+
+const exited = (child: ChildProcess): Promise<number | null> =>
+  new Promise((resolveExit) => child.once('exit', resolveExit));
 
 test('CI and a command already inside a slot take no slot; a machine without flock warns instead', () => {
-  const hasFlock = () => true;
-  expect(heavySlotSkip({ CI: 'true' }, hasFlock)).toBe('ci');
-  expect(heavySlotSkip({ [HEAVY_SLOT_VARIABLE]: '2' }, hasFlock)).toBe('nested');
+  const available = () => true;
+  expect(heavySlotSkip({ CI: 'true' }, available)).toBe('ci');
+  expect(heavySlotSkip({ [HEAVY_SLOT_VARIABLE]: '2' }, available)).toBe('nested');
   expect(heavySlotSkip({}, () => false)).toBe('no-flock');
-  expect(heavySlotSkip({}, hasFlock)).toBeUndefined();
+  expect(heavySlotSkip({}, available)).toBeUndefined();
 });
 
-test('a held slot refuses a second command, and a free slot runs it with its exit code and slot number', async () => {
-  const directory = slotDirectory();
-  await holdSlot(directory, 0);
-  expect(await runInSlot(directory, 0, ['true'], process.env)).toBe(SLOT_TAKEN);
-  expect(await runInSlot(directory, 1, ['sh', '-c', 'exit 3'], process.env)).toBe(3);
-  expect(await runInSlot(directory, 1, ['sh', '-c', `test "$${HEAVY_SLOT_VARIABLE}" = 1`], process.env)).toBe(
-    0,
-  );
-});
+// The slots are util-linux flock locks; without flock (macOS) the limit is off, as the test above proves.
+if (hasFlock()) {
+  test('a held slot is refused to another owner and the other slots stay free', async () => {
+    const directory = slotDirectory();
+    await held(directory, 0, owner().pid);
+    expect(await tryHeavySlot(directory, 0, process.pid)).toBeNull();
+    expect((await held(directory, 1, process.pid)).slot).toBe(1);
+  });
 
-test('a slot frees when its holder ends, also when the holder is killed', async () => {
-  const directory = slotDirectory();
-  const finishing = await holdSlot(directory, 0);
-  const killed = await holdSlot(directory, 1);
-  finishing.stdin.end();
-  killed.kill('SIGKILL');
-  await Promise.all([exited(finishing), exited(killed)]);
-  expect(await runInSlot(directory, 0, ['true'], process.env)).toBe(0);
-  expect(await runInSlot(directory, 1, ['true'], process.env)).toBe(0);
-});
+  test('a slot frees on release and when its owner is killed', async () => {
+    const directory = slotDirectory();
+    const released = await held(directory, 0, process.pid);
+    const killedOwner = owner();
+    const orphaned = await held(directory, 1, killedOwner.pid);
+    released.release();
+    killedOwner.child.kill('SIGKILL');
+    await Promise.all([released.released, orphaned.released]);
+    expect((await held(directory, 0, process.pid)).slot).toBe(0);
+    expect((await held(directory, 1, process.pid)).slot).toBe(1);
+  });
+
+  // A heavy script keeps its own exit code and signal handlers: the slot never reruns or wraps it.
+  test('a script in a slot keeps its exit code, also 197, and runs its own SIGTERM cleanup', async () => {
+    const directory = slotDirectory();
+    const slotModule = JSON.stringify(resolve(import.meta.dir, 'heavy-slot.ts'));
+    const script = (body: string) => {
+      const child = spawn(
+        process.execPath,
+        ['-e', `const { acquireHeavySlot } = await import(${slotModule});\n${body}`],
+        {
+          env: { ...process.env, CI: '', [HEAVY_SLOT_VARIABLE]: '', WERKFLOW_HEAVY_SLOT_DIR: directory },
+          stdio: ['ignore', 'pipe', 'inherit'],
+        },
+      );
+      processes.push(child);
+      return child;
+    };
+
+    expect(await exited(script("await acquireHeavySlot('exit test'); process.exit(197);"))).toBe(197);
+
+    const cancelled = script(
+      "await acquireHeavySlot('signal test'); process.on('SIGTERM', () => { console.log('cleaned'); process.exit(0); }); console.log('ready'); setInterval(() => {}, 1000);",
+    );
+    let output = '';
+    await new Promise<void>((resolveReady) =>
+      cancelled.stdout?.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        if (output.includes('ready')) resolveReady();
+      }),
+    );
+    cancelled.kill('SIGTERM');
+    expect(await exited(cancelled)).toBe(0);
+    expect(output).toContain('cleaned');
+  });
+}
