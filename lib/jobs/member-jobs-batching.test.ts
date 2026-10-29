@@ -68,29 +68,24 @@ const admin = {
 // the mocked scenario runs in its own process.
 const ISOLATED = process.env.MEMBER_JOBS_BATCHING_ISOLATED === '1';
 
-// The child Bun test process takes several seconds under host load; the 5 s default cuts it off.
-test.skipIf(ISOLATED)(
-  'member jobs batching passes in an isolated process',
-  async () => {
-    const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
-      env: { ...process.env, MEMBER_JOBS_BATCHING_ISOLATED: '1' },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(
-      status,
-      `${stdout}
+test.skipIf(ISOLATED)('member jobs batching passes in an isolated process', async () => {
+  const child = Bun.spawn([process.execPath, 'test', import.meta.path], {
+    env: { ...process.env, MEMBER_JOBS_BATCHING_ISOLATED: '1' },
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const [status, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  expect(
+    status,
+    `${stdout}
 ${stderr}`,
-    ).toBe(0);
-    expect(stderr).toContain('2 pass');
-  },
-  30_000,
-);
+  ).toBe(0);
+  expect(stderr).toContain('2 pass');
+});
 
 async function loadMemberJobs(): Promise<(typeof import('./actions'))['getJobsForMember']> {
   mock.module('server-only', () => ({}));

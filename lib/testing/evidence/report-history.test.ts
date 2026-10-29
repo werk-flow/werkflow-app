@@ -77,7 +77,7 @@ test('probe: a rewritten, removed or added report and a damaged cache never serv
   // A finished report rewrites its file: the cache entry of the old content no longer counts.
   const file = join(archive, 'r1', 'report.json');
   writeFileSync(file, JSON.stringify(report('r1', 'passed')));
-  utimesSync(file, new Date(), new Date(Date.now() + 5_000));
+  utimesSync(file, new Date('2026-01-02T10:00:00.000Z'), new Date('2026-01-02T10:00:00.000Z'));
   expect(readReportHistory(archive, cache).map((entry) => entry.status)).toEqual(['passed', 'passed']);
   rmSync(join(archive, 'r2'), { recursive: true });
   expect(readReportHistory(archive, cache).map((entry) => entry.id)).toEqual(['r1']);

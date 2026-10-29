@@ -24,7 +24,8 @@ test('names the process, working directory and start of a real listener, and nul
     const listener = getAppListener(port);
     expect(listener?.processId).toBe(process.pid);
     expect(listener?.workingDirectory).toBe(process.cwd());
-    expect(listener?.startedAt).toBeLessThanOrEqual(Date.now());
+    // `ps` names the start to the second, so it never passes this process's own start.
+    expect(listener?.startedAt).toBeLessThanOrEqual(performance.timeOrigin);
     expect(listener?.command).toContain('bun');
   } finally {
     await new Promise<void>((resolveClose) => server.close(() => resolveClose()));

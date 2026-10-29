@@ -3,6 +3,7 @@ import { dirname, join, posix } from 'node:path';
 import ts from 'typescript';
 import { labStepsForFiles } from '../lab-steps';
 import { scenariosForFiles } from '../measured-scenarios';
+import { changeTrigger, type ChangeTrigger } from './change-triggers';
 
 export interface TestGroup {
   readonly id: string;
@@ -13,6 +14,8 @@ export interface TestGroup {
   readonly timing: GroupTimingRequirements;
   /** Package script a static group runs; declared here so the registry is its only home. */
   readonly script?: string;
+  /** Set for golden and audit groups. */
+  readonly changeTrigger?: ChangeTrigger;
 }
 
 export interface GroupTimingRequirements {
@@ -382,16 +385,6 @@ export function isPerformanceSpec(file: string): boolean {
   return file.startsWith('tests/audit/performance/');
 }
 
-/**
- * Speed measurements, captures and sweeps run in release mode, in CI's full
- * runs and on explicit request only: the wall-clock and lab groups, the visual
- * references and acceptance captures, and the layout and accessibility sweeps.
- * A change plan selects one only when its own spec or test support changed.
- */
-export function isReleaseOnlySpec(file: string): boolean {
-  return /^tests\/audit\/(performance|lab|visual|layout)\//.test(file);
-}
-
 export function listTestFiles(repositoryRoot: string, directory: string, pattern: RegExp): string[] {
   const result: string[] = [];
   function visit(relative: string): void {
@@ -406,6 +399,22 @@ export function listTestFiles(repositoryRoot: string, directory: string, pattern
   return result.sort();
 }
 
+/** The scopes of the golden slices that predate the audit definitions. */
+const earlyGoldenScopes: Readonly<Record<string, readonly string[]>> = {
+  'gg-01': ['customers', 'work', 'documents'],
+  'p1-01': ['customers', 'work'],
+  'p1-03': ['personnel'],
+  'p1-04': ['personnel', 'time'],
+  'p1-05': ['personnel', 'attention'],
+  'p1-06': ['personnel', 'time', 'planning'],
+  'p1-07': ['attention', 'personnel', 'time'],
+  'p1-08': ['personnel', 'documents', 'time'],
+  'p1-09': ['personnel', 'planning'],
+  'p1-10': ['customers', 'attention', 'documents'],
+  'p1-11': ['planning', 'work'],
+  'p1-12': ['planning', 'work', 'attention'],
+};
+
 export function getTestGroups(repositoryRoot: string): TestGroup[] {
   const groups: TestGroup[] = auditDefinitions.map(([id, file, scopes]) => ({
     id: `audit:${id}`,
@@ -414,6 +423,7 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     scopes,
     isolation: 'group-world',
     timing: declaredTiming([`tests/audit/${file}`]),
+    changeTrigger: changeTrigger(repositoryRoot, `audit:${id}`, [`tests/audit/${file}`]),
   }));
   groups.push(
     {
@@ -454,27 +464,14 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
     const basename = (file.split('/').at(-1) ?? file).replace('.spec.ts', '');
     // A golden slice shares the scopes of its audit definition, whichever wave registered it.
     const sliceScopes = auditDefinitions.find(([id]) => id.endsWith(`:${basename}`))?.[2];
-    const earlyScopes: Readonly<Record<string, readonly string[]>> = {
-      'gg-01': ['customers', 'work', 'documents'],
-      'p1-01': ['customers', 'work'],
-      'p1-03': ['personnel'],
-      'p1-04': ['personnel', 'time'],
-      'p1-05': ['personnel', 'attention'],
-      'p1-06': ['personnel', 'time', 'planning'],
-      'p1-07': ['attention', 'personnel', 'time'],
-      'p1-08': ['personnel', 'documents', 'time'],
-      'p1-09': ['personnel', 'planning'],
-      'p1-10': ['customers', 'attention', 'documents'],
-      'p1-11': ['planning', 'work'],
-      'p1-12': ['planning', 'work', 'attention'],
-    };
     groups.push({
       id: `golden:${basename}`,
       kind: 'golden',
       files: [file],
-      scopes: sliceScopes ?? earlyScopes[basename] ?? ['*'],
+      scopes: sliceScopes ?? earlyGoldenScopes[basename] ?? ['*'],
       isolation: 'group-world',
       timing: declaredTiming([file]),
+      changeTrigger: changeTrigger(repositoryRoot, `golden:${basename}`, [file]),
     });
   }
   for (const [id, files, scopes] of sqlDefinitions) {

@@ -1,6 +1,7 @@
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { groupSelections } from './group-selection';
-import { isPerformanceSpec, isReleaseOnlySpec } from './test-groups';
+import type { ChangeTrigger } from './change-triggers';
+import { isPerformanceSpec } from './test-groups';
 
 /** A group as the CI plan sees it: its id, kind, spec files and what its execution imports. */
 export type CiGroup = {
@@ -9,6 +10,8 @@ export type CiGroup = {
   files: readonly string[];
   scopes: readonly string[];
   executionInputs: readonly string[];
+  /** The group's `changeTrigger`. */
+  trigger?: ChangeTrigger | undefined;
 };
 
 type CiShard = { shard: number; groups: string };
@@ -79,8 +82,9 @@ const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.
  * groups, whose medians follow a shared runner's load
  * (docs/technical/performance.md). A pull request and a push to `main` take
  * the change-mode selection of `groupSelections` for their diff against the
- * base (a push's previous `main` commit); it leaves out the lab, visual and
- * layout groups unless their own test code changed.
+ * base (a push's previous `main` commit): the critical journeys, the
+ * permission groups by scope, and the other groups only when their own test
+ * code changed.
  */
 export function ciPlan(input: {
   groups: readonly CiGroup[];
@@ -106,7 +110,10 @@ export function ciPlan(input: {
   const browser =
     fullReason !== undefined || input.changedFiles === undefined
       ? browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' }))
-      : changeSelection(browserGroups, input.changedFiles);
+      : // Every browser group's support counts as shared; the plan then never runs a wall-clock group.
+        changeSelection(input.groups.filter(isBrowser), input.changedFiles).filter((entry) =>
+          browserGroups.some((group) => group.id === entry.id),
+        );
   return { fullReason, browser, shards: shardsOf(browser.map((entry) => entry.id)) };
 }
 
@@ -121,7 +128,7 @@ function changeSelection(
       kind: group.kind,
       scopes: group.scopes,
       executionInputs: group.executionInputs,
-      releaseOnly: group.files.some(isReleaseOnlySpec),
+      trigger: group.trigger,
     })),
     changedFiles,
     unresolvedGroupIds: [],

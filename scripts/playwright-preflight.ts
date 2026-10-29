@@ -171,7 +171,8 @@ async function assertLocalEdgeRuntimeReachable(): Promise<void> {
   });
 }
 
-async function assertRecordedAppServer(repositoryRoot: string): Promise<void> {
+// The disk, source and backend evidence of the recorded build, before anything serves it.
+function assertRecordedBuild(repositoryRoot: string) {
   const buildIdPath = resolve(repositoryRoot, '.next/BUILD_ID');
   if (!existsSync(buildIdPath))
     throw new Error(
@@ -181,7 +182,6 @@ async function assertRecordedAppServer(repositoryRoot: string): Promise<void> {
   if (!buildId) throw new Error('.next/BUILD_ID is empty.');
   const receipt = readBuildReceipt(repositoryRoot);
   const inputs = calculateBuildInputs(repositoryRoot);
-  // Validate cheap disk/source/backend evidence before starting network probes.
   assertBuildIdentity({
     receipt,
     inputs,
@@ -189,6 +189,12 @@ async function assertRecordedAppServer(repositoryRoot: string): Promise<void> {
     diskBuildId: buildId,
     servedBuildId: receipt.buildId,
   });
+  return { buildIdPath, buildId, receipt, inputs };
+}
+
+async function assertRecordedAppServer(repositoryRoot: string): Promise<void> {
+  // Validate cheap disk/source/backend evidence before starting network probes.
+  const { buildIdPath, buildId, receipt, inputs } = assertRecordedBuild(repositoryRoot);
 
   const port = workspacePorts(repositoryRoot).app;
   const listener = getAppListener(port);
@@ -284,9 +290,13 @@ export async function runBackendPreflight(input: {
 if (import.meta.main) {
   try {
     const laneArgument = process.argv[2] ?? 'iteration';
-    if (laneArgument !== 'backend' && !(RUNNABLE_LANES as readonly string[]).includes(laneArgument)) {
+    if (
+      laneArgument !== 'backend' &&
+      laneArgument !== 'build' &&
+      !(RUNNABLE_LANES as readonly string[]).includes(laneArgument)
+    ) {
       throw new Error(
-        `Unknown lane: ${laneArgument}. Expected backend or one of ${RUNNABLE_LANES.join(', ')}.`,
+        `Unknown lane: ${laneArgument}. Expected backend, build or one of ${RUNNABLE_LANES.join(', ')}.`,
       );
     }
     const targetArgument = process.argv[3] ?? 'local';
@@ -295,6 +305,8 @@ if (import.meta.main) {
     }
     const target = targetArgument as PlaywrightTarget;
     if (laneArgument === 'backend') await runBackendPreflight({ target });
+    // A build made elsewhere (the CI Build job) serves here only on this checkout's source and environment.
+    else if (laneArgument === 'build') assertRecordedBuild(resolve(import.meta.dir, '..'));
     else await runPlaywrightPreflight({ lane: laneArgument as PlaywrightLane, target });
     console.log(`[werkflow-test] ${laneArgument} preflight passed (target ${target})`);
   } catch (error) {

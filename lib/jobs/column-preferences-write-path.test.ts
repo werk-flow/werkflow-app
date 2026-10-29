@@ -23,7 +23,7 @@ let rpcError: { code: string; message: string } | null;
 
 // Every database step yields once, so two saves started together interleave
 // the way two requests on the server do.
-const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const tick = () => new Promise((resolve) => setImmediate(resolve));
 
 function setKey(document: Document, path: string[], value: unknown): Document {
   const [head, child] = path;

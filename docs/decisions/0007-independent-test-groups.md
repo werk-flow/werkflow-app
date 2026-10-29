@@ -172,3 +172,13 @@ The owner decided this on 2026-10-29 for the CI overhaul (werk-flow/werkflow-pla
 3. A tooling input, a change that runs every browser group, is a file that can change how every group installs, builds or runs. Of `.github/`, only `workflows/ci.yml` and `actions/` count. Of the runner, selection and local-stack folders, only the modules the runner scripts import count; a module only a spec, a check or a unit test imports selects its own groups. `vercel.json` no longer counts.
 
 Known limit, accepted by the owner: a layout, accessibility or lab-count regression surfaces in the nightly run or the release gate, not on its PR. The author of UI or data-path work runs the matching group with `--group`. Rules and commands: [testing.md](../technical/testing.md#how-selection-works).
+
+## Amendment 2026-10-29: a fixed set of critical journeys per change
+
+The owner decided this on 2026-10-29 for the CI overhaul (werk-flow/werkflow-planning#34). Scope selection pulled a third or more of all browser groups into a change in a broad area: scope `work` alone selected more than 30.
+
+1. A change plan no longer selects browser groups by declared scope. It selects the owner-approved critical journeys (`CRITICAL_JOURNEYS` in `lib/testing/selection/change-triggers.ts`, at least one per role) when a product file, a migration, a dependency or shared test support changed, and any group whose own spec or support changed. This supersedes, in the 2026-10-01 amendment, the core set's fallback to `golden:gg-00` and the selection of browser groups by scope.
+2. Permission tests keep their trigger: `audit:security:account` through the core set, and by declared scope every group that drives another organization's session (`outsiderPage`, derived from the spec) and every group of `ROLE_DENIAL_GROUPS`. A row names its role-denial tests and the stage-4 issue that proves them below the browser; that issue removes the row. The list is shrink-only.
+3. Repair mode, release mode and full CI runs are unchanged. Every other browser group runs nightly and in the release gate.
+
+Known limit, accepted by the owner: a regression that only a non-critical journey without a permission test exposes surfaces in the nightly run or the release gate, not on its PR. Rules and commands: [testing.md](../technical/testing.md#how-selection-works).

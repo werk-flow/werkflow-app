@@ -47,7 +47,7 @@ export function JobDetailAssigneesCard({
                 className="size-8"
                 fallbackClassName="bg-primary/10 text-xs font-medium text-primary-text"
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 break-words">
                 <Link href={`/mitarbeiter/${a.userId}`} className="text-sm font-medium hover:underline">
                   {getSessionPersonName(a)}
                 </Link>

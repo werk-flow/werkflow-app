@@ -1,5 +1,5 @@
 // Rule test: an attention count reads rows in proportion to the pending work, never to the organization's history.
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 
 // Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md),
 // beside count-reads.test.ts, which pins the queries of the steady state. The
@@ -30,8 +30,9 @@ let world: World = new Map();
 let reads: { table: string; rows: number }[] = [];
 let failures: unknown[] = [];
 
-const DAY = 86_400_000;
-const RECENT = new Date(Date.now() - DAY).toISOString();
+/** The pinned instant of the isolated process; the pending rows date from the day before. */
+const NOW = new Date('2026-10-14T10:00:00.000Z');
+const RECENT = '2026-10-13T10:00:00.000Z';
 const DUE = RECENT.slice(0, 10);
 const OLD = '2024-01-02T09:00:00.000Z';
 const OLD_DATE = OLD.slice(0, 10);
@@ -651,6 +652,7 @@ test.skipIf(ISOLATED)('the attention count volume cases pass in an isolated proc
 });
 
 if (ISOLATED) {
+  setSystemTime(NOW);
   mock.module('server-only', () => ({}));
   mock.module('@/lib/logging', () => ({ logError: (...args: unknown[]) => failures.push(args) }));
   mock.module('@/lib/supabase/admin', () => ({ createSupabaseAdminClient: () => client }));
