@@ -60,13 +60,12 @@ const {
   createPersonnelRecord,
   deleteEmploymentCondition,
   deleteWorkSchedule,
+  getPersonnelDetail,
   updateEmploymentCondition,
   updatePersonnelMasterData,
   updateWorkSchedule,
 } = await import('@/lib/personnel/actions');
-const { getPersonnelDetail, getPersonnelRecords, suggestPersonnelNumber } = await import(
-  '@/lib/personnel/record-read-actions'
-);
+const { getPersonnelRecords, suggestPersonnelNumber } = await import('@/lib/personnel/record-read-actions');
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };
