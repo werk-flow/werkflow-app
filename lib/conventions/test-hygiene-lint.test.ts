@@ -68,8 +68,9 @@ describe('test-hygiene/no-polling-loop', () => {
       'for (let attempt = 0; attempt < 2; attempt += 1) { await page.waitForTimeout(300); await open(); }',
       'do { await refresh(); } while (performance.now() < deadline);',
       'while (true) { await check(); const elapsed = Date.now() - start; if (elapsed > 1_000) break; }',
+      'while (true) { await check(); const now = Date.now(); const elapsed = now - start; if (elapsed > 1_000) break; }',
     ].join('\n');
-    expect(await reported('no-polling-loop', source, SUPPORT)).toEqual([1, 3, 7, 8, 9]);
+    expect(await reported('no-polling-loop', source, SUPPORT)).toEqual([1, 3, 7, 8, 9, 10]);
   });
 
   test('a loop over items, and the outer loop of a nested poll, pass', async () => {

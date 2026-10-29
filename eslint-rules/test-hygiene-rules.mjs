@@ -249,6 +249,7 @@ const noPollingLoopRule = {
         });
         return found;
       };
+      const assignments = [];
       visitEager(loop, (node) => {
         if (node.type === 'AwaitExpression' || (node.type === 'ForOfStatement' && node.await)) awaits = true;
         const [target, value] =
@@ -257,8 +258,17 @@ const noPollingLoopRule = {
             : node.type === 'AssignmentExpression'
               ? [node.left, node.right]
               : [];
-        if (target?.type === 'Identifier' && value && readsClock(value)) clockNames.add(target.name);
+        if (target?.type === 'Identifier' && value) assignments.push([target.name, value]);
       });
+      // To a fixed point: `const now = Date.now(); const elapsed = now - start` reads the clock twice removed.
+      for (let grown = true; grown; ) {
+        grown = false;
+        for (const [name, value] of assignments) {
+          if (clockNames.has(name) || !readsClock(value)) continue;
+          clockNames.add(name);
+          grown = true;
+        }
+      }
       // A nested loop answers for its own waits, so an outer loop over items is not a poll.
       visitEager(
         loop,
