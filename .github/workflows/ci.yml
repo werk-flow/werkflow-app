@@ -28,11 +28,12 @@ on:
 permissions:
   contents: read
 
-# A new commit's run cancels the PR's older run. A rerun waits instead: list-growth.yml may rerun a
-# commit the PR has just left, and it must not cancel the new head's run.
+# A new commit's run cancels the PR's older run. A rerun takes a group of its own commit:
+# list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
+# replace the new head's run.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.run_attempt == '1' }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   plan:
