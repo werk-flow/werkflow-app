@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -84,7 +85,7 @@ afterEach(() => {
 });
 
 function fixture(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-build-identity-'));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'werkflow-build-identity-')));
   directories.push(directory);
   for (const child of ['app', 'lib', 'docs', 'tests']) mkdirSync(join(directory, child));
   writeFileSync(join(directory, 'app/page.tsx'), 'export default function Page() { return null; }');

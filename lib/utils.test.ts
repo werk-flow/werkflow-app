@@ -193,7 +193,8 @@ describe('formatBerlin', () => {
     expect(formatBerlin(instant, 'date')).toBe('03.09.2026');
     expect(formatBerlin(instant, 'shortYearDate')).toBe('03.09.26');
     expect(formatBerlin(instant, 'longDate')).toBe('3. September 2026');
-    expect(formatBerlin(instant, 'weekdayDate')).toBe('Do., 03.09.2026');
+    // ICU versions differ on the comma after an abbreviated German weekday.
+    expect(formatBerlin(instant, 'weekdayDate')).toMatch(/^Do\.,? 03\.09\.2026$/);
     expect(formatBerlin(instant, 'longWeekdayDateTime')).toBe('Donnerstag, 03.09.2026, 10:15');
     expect(formatBerlin(instant, 'dayMonthTime')).toBe('03.09., 10:15');
   });
