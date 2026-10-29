@@ -60,6 +60,40 @@ test('rapid searches retain the latest request across an intermediate URL commit
   await expect.poll(() => page.evaluate(() => location.search)).toContain('q=neu');
 });
 
+test('a keystroke between a URL commit and its passive effects still navigates', async ({ page }) => {
+  await page.getByRole('textbox', { name: 'Liste durchsuchen' }).fill('alt');
+  await page.clock.runFor(251);
+  // The next keystroke lands right after the commit renders, before React
+  // flushes that commit's passive effects (audit:wave-1:a1-kunden, q=kein-a1-kund).
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const status = document.querySelector('output[aria-label="Listenstatus"]');
+        const input = document.querySelector('input[aria-label="Liste durchsuchen"]');
+        const [firstRequest] = window.listNavigationContract.requests;
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (!status || !(input instanceof HTMLInputElement) || !firstRequest || !setValue) {
+          reject(new Error('expected the search input, the status and a recorded request'));
+          return;
+        }
+        new MutationObserver((_, observer) => {
+          if (status.textContent !== 'Bereit') return;
+          observer.disconnect();
+          setValue.call(input, 'alte');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          resolve();
+        }).observe(status, { childList: true, characterData: true, subtree: true });
+        window.listNavigationContract.commit(firstRequest);
+      }),
+  );
+  await page.clock.runFor(251);
+  expect(await page.evaluate(() => window.listNavigationContract.requests)).toEqual([
+    '/ui-contracts?q=alt&page=1',
+    '/ui-contracts?q=alte&page=1',
+  ]);
+  await expect(page.getByLabel('Listenstatus')).toHaveText('Wird geladen');
+});
+
 test('history navigation cancels a queued search and new pagination uses that URL', async ({ page }) => {
   await page.getByRole('textbox', { name: 'Liste durchsuchen' }).fill('verwerfen');
   await page.evaluate(() => window.listNavigationContract.commit('/ui-contracts?view=folders', true));
