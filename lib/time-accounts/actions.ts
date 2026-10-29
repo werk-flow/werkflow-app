@@ -83,6 +83,7 @@ export async function getTimeAccountAccess(): Promise<
     managementReadFailed: boolean;
     isAdmin: boolean;
     canProposeAdjustments: boolean;
+    canExportPayroll: boolean;
   }
 > {
   const context = await requireAuth();
@@ -93,6 +94,7 @@ export async function getTimeAccountAccess(): Promise<
     managementReadFailed: !management.success,
     isAdmin: context.role === 'admin',
     canProposeAdjustments: context.role === 'admin' || context.role === 'buero',
+    canExportPayroll: context.isManagerOrAbove,
   };
 }
 
@@ -1088,8 +1090,7 @@ export async function generatePayrollExport(
   const formData = parseFormData(formInput, generatePayrollExportFormSchema);
   if (!formData) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
-  const refusal = await refuseNonManager(context);
-  if (refusal) return refusal;
+  if (!context.isManagerOrAbove) return { success: false, error: 'forbidden' };
   const periodId = String(formData.get('periodId') ?? '');
   if (!periodId) return { success: false, error: 'invalid_input' };
   try {
@@ -1284,8 +1285,7 @@ export async function downloadPayrollExport(
   const formData = parseFormData(formInput, downloadPayrollExportFormSchema);
   if (!formData) return { success: false, error: 'invalid_input' };
   const context = await requireAuth();
-  const refusal = await refuseNonManager(context);
-  if (refusal) return refusal;
+  if (!context.isManagerOrAbove) return { success: false, error: 'forbidden' };
   const exportId = String(formData.get('exportId') ?? '');
   if (!exportId) return { success: false, error: 'invalid_input' };
   try {
