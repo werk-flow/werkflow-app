@@ -19,6 +19,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { loadDocument } from '@/lib/navigation/document-load';
@@ -137,6 +138,7 @@ function DeletionConfirmation({
   const [confirmationName, setConfirmationName] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { refresh } = useRouterRefresh();
 
   const handleDelete = async () => {
     setError(null);
@@ -157,6 +159,9 @@ function DeletionConfirmation({
         return;
       }
       setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
+      // Time recorded since the page loaded: the re-read scope turns the
+      // dialog into the refusal with its retention reason and the export.
+      if (result.error === 'has_time_records') refresh();
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
     }
@@ -218,7 +223,7 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
           Organisation löschen
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="sm:max-w-md">
+      <AlertDialogContent className="max-h-[calc(100dvh-3rem)] overflow-y-auto sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className={cn('flex items-center gap-2', !retained && 'text-destructive')}>
             <AlertTriangle className="size-5" />
