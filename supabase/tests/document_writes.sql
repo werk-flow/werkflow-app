@@ -328,6 +328,56 @@ begin
   then raise exception 'a document change was not recorded with its audit event'; end if;
 end;
 $$;
+-- A trashed personnel document of an Admin-only access class comes back only
+-- through an Admin; the office restores a standard personnel document.
+reset role;
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('26140000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'document-writes-office@example.test', '', now(), '{}',
+ '{"first_name":"Office","last_name":"Documents"}', now(), now());
+insert into public.organization_members (organization_id, user_id, role) values
+('26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000004', 'buero');
+insert into public.employee_records (id, organization_id, first_name, last_name) values
+('26140000-0000-0000-0000-000000000090', '26140000-0000-0000-0000-000000000010', 'Paula', 'Personal');
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by,
+  deleted_at, deleted_by
+) values
+('26140000-0000-0000-0000-000000000091', '26140000-0000-0000-0000-000000000010',
+ '26140000-0000-0000-0000-000000000010/d91/attest.pdf', 'attest.pdf', 'attest.pdf', 'other', 10,
+ '26140000-0000-0000-0000-000000000001', now(), '26140000-0000-0000-0000-000000000001'),
+('26140000-0000-0000-0000-000000000092', '26140000-0000-0000-0000-000000000010',
+ '26140000-0000-0000-0000-000000000010/d92/vertrag.pdf', 'vertrag.pdf', 'vertrag.pdf', 'other', 10,
+ '26140000-0000-0000-0000-000000000001', now(), '26140000-0000-0000-0000-000000000001');
+insert into public.personnel_documents (organization_id, employee_record_id, document_id, document_type, access_class) values
+('26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000090',
+ '26140000-0000-0000-0000-000000000091', 'Attest', 'health_evidence'),
+('26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000090',
+ '26140000-0000-0000-0000-000000000092', 'Arbeitsvertrag', 'personnel_standard');
+set local role service_role;
+
+select pg_temp.expect_refusal('restore of an Admin-only personnel document by the office', $sql$
+  select public.restore_document('26140000-0000-0000-0000-000000000004',
+    '26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000091', 'attest.pdf')
+$sql$, 'not_authorized');
+do $$
+begin
+  if (select deleted_at from public.documents where id = '26140000-0000-0000-0000-000000000091') is null
+  then raise exception 'a refused restore brought the document back'; end if;
+  perform public.restore_document('26140000-0000-0000-0000-000000000004',
+    '26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000092', 'vertrag.pdf');
+  perform public.restore_document('26140000-0000-0000-0000-000000000001',
+    '26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000091', 'attest.pdf');
+  if exists (select 1 from public.documents
+             where id in ('26140000-0000-0000-0000-000000000091', '26140000-0000-0000-0000-000000000092')
+               and deleted_at is not null)
+  then raise exception 'the office restore of a standard or the Admin restore of a restricted personnel document failed'; end if;
+end;
+$$;
+
 select pg_temp.expect_refusal('rename of a foreign document', $sql$
   select public.rename_document('26140000-0000-0000-0000-000000000001',
     '26140000-0000-0000-0000-000000000010', '26140000-0000-0000-0000-000000000043', 'x.pdf')

@@ -475,6 +475,23 @@ export async function getDeletedDocumentForManager(
     return { success: false, error: 'document_not_found' };
   }
 
+  // An Admin-only personnel document comes back only through an Admin, as restore_document refuses.
+  if (context.role !== 'admin') {
+    const { data: protectedDocument, error: protectedError } = await loggedRead(
+      'getDeletedDocumentForManager: personnel_documents read failed',
+      context.admin
+        .from('personnel_documents')
+        .select('access_class')
+        .eq('organization_id', context.orgId)
+        .eq('document_id', document.id)
+        .maybeSingle(),
+    );
+    if (protectedError) return { success: false, error: 'load_failed' };
+    if (protectedDocument && protectedDocument.access_class !== 'personnel_standard') {
+      return { success: false, error: 'not_authorized' };
+    }
+  }
+
   return { success: true, document };
 }
 

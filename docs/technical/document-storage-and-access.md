@@ -52,7 +52,7 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 - Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - Every project-level write needs a manager, the upload ticket and finalize included. Exporting a project-level `Arbeitsnachweis` is such a write.
-- Protected personnel documents: the affected employee reads a version only through an unrevoked release of that version, and can upload requested own health evidence. Admin reads all classes. Büro manages only `personnel_standard` and reads no `admin_restricted` or `health_evidence` bytes. Assignment, planning, document access and approval responsibility never widen this. Operational consumers get a status, never bytes.
+- Protected personnel documents: the affected employee reads a version only through an unrevoked release of that version, and can upload requested own health evidence. Admin reads all classes. Büro manages only `personnel_standard` and reads no `admin_restricted` or `health_evidence` bytes, nor restores or permanently deletes such a trashed document (`getDeletedDocumentForManager`, `restore_document`). Assignment, planning, document access and approval responsibility never widen this. Operational consumers get a status, never bytes.
 
 ## Operations
 
