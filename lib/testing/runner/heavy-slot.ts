@@ -92,9 +92,9 @@ export function tryHeavySlot(directory: string, slot: number, owner: number): Pr
 /**
  * Waits for a free heavy slot and holds it for this process, or returns null
  * at once in CI, inside a slot already, or without `flock` (macOS), where it
- * warns.
+ * warns. An aborted `signal` ends the wait with its reason.
  */
-export async function acquireHeavySlot(label: string): Promise<HeavySlot | null> {
+export async function acquireHeavySlot(label: string, signal?: AbortSignal): Promise<HeavySlot | null> {
   const skip = heavySlotSkip(process.env);
   if (skip === 'no-flock')
     console.warn(`[heavy-slot] flock is missing, so ${label} runs without the machine-wide limit.`);
@@ -102,6 +102,7 @@ export async function acquireHeavySlot(label: string): Promise<HeavySlot | null>
   const directory = process.env.WERKFLOW_HEAVY_SLOT_DIR ?? join(homedir(), '.cache', 'werkflow-heavy');
   let announced = false;
   for (;;) {
+    signal?.throwIfAborted();
     for (let slot = 0; slot < HEAVY_SLOTS; slot += 1) {
       const held = await tryHeavySlot(directory, slot, process.pid);
       if (held) {
@@ -122,6 +123,16 @@ export async function acquireHeavySlot(label: string): Promise<HeavySlot | null>
         `[heavy-slot] ${label} waits: all ${HEAVY_SLOTS} heavy slots of this machine are busy (${directory}).`,
       );
     }
-    await new Promise((resume) => setTimeout(resume, WAIT_MILLISECONDS + Math.random() * 2_000));
+    await new Promise<void>((resume) => {
+      const timer = setTimeout(resume, WAIT_MILLISECONDS + Math.random() * 2_000);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resume();
+        },
+        { once: true },
+      );
+    });
   }
 }

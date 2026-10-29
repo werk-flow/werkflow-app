@@ -67,37 +67,62 @@ if (hasFlock()) {
     expect((await held(directory, 1, process.pid)).slot).toBe(1);
   });
 
+  /** Runs `body` in a fresh process with `acquireHeavySlot` in scope and the slots under `directory`. */
+  const slotScript = (directory: string, body: string): ChildProcess => {
+    const slotModule = JSON.stringify(resolve(import.meta.dir, 'heavy-slot.ts'));
+    const child = spawn(
+      process.execPath,
+      ['-e', `const { acquireHeavySlot } = await import(${slotModule});\n${body}`],
+      {
+        env: { ...process.env, CI: '', [HEAVY_SLOT_VARIABLE]: '', WERKFLOW_HEAVY_SLOT_DIR: directory },
+        stdio: ['ignore', 'pipe', 'inherit'],
+      },
+    );
+    processes.push(child);
+    return child;
+  };
+
+  /** Resolves with the output so far once `child` has printed `text`. */
+  const printed = (child: ChildProcess, text: string): Promise<string> => {
+    let output = '';
+    return new Promise((resolvePrinted) =>
+      child.stdout?.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        if (output.includes(text)) resolvePrinted(output);
+      }),
+    );
+  };
+
   // A heavy script keeps its own exit code and signal handlers: the slot never reruns or wraps it.
   test('a script in a slot keeps its exit code, also 197, and runs its own SIGTERM cleanup', async () => {
     const directory = slotDirectory();
-    const slotModule = JSON.stringify(resolve(import.meta.dir, 'heavy-slot.ts'));
-    const script = (body: string) => {
-      const child = spawn(
-        process.execPath,
-        ['-e', `const { acquireHeavySlot } = await import(${slotModule});\n${body}`],
-        {
-          env: { ...process.env, CI: '', [HEAVY_SLOT_VARIABLE]: '', WERKFLOW_HEAVY_SLOT_DIR: directory },
-          stdio: ['ignore', 'pipe', 'inherit'],
-        },
-      );
-      processes.push(child);
-      return child;
-    };
+    expect(
+      await exited(slotScript(directory, "await acquireHeavySlot('exit test'); process.exit(197);")),
+    ).toBe(197);
 
-    expect(await exited(script("await acquireHeavySlot('exit test'); process.exit(197);"))).toBe(197);
-
-    const cancelled = script(
+    const cancelled = slotScript(
+      directory,
       "await acquireHeavySlot('signal test'); process.on('SIGTERM', () => { console.log('cleaned'); process.exit(0); }); console.log('ready'); setInterval(() => {}, 1000);",
     );
-    let output = '';
-    await new Promise<void>((resolveReady) =>
-      cancelled.stdout?.on('data', (chunk: Buffer) => {
-        output += chunk.toString();
-        if (output.includes('ready')) resolveReady();
-      }),
-    );
+    const ready = printed(cancelled, 'ready');
+    await ready;
+    const cleaned = printed(cancelled, 'cleaned');
     cancelled.kill('SIGTERM');
     expect(await exited(cancelled)).toBe(0);
-    expect(output).toContain('cleaned');
+    expect(await cleaned).toContain('cleaned');
+  });
+
+  test('an aborted signal ends the wait for a slot while every slot is busy', async () => {
+    const directory = slotDirectory();
+    for (const slot of [0, 1, 2]) await held(directory, slot, owner().pid);
+    const waiting = slotScript(
+      directory,
+      "const stop = new AbortController(); process.on('SIGTERM', () => stop.abort(new Error('stopped'))); try { await acquireHeavySlot('abort test', stop.signal); } catch (error) { console.log(`aborted: ${error.message}`); process.exit(3); }",
+    );
+    await printed(waiting, 'abort test waits');
+    const aborted = printed(waiting, 'aborted: stopped');
+    waiting.kill('SIGTERM');
+    expect(await exited(waiting)).toBe(3);
+    expect(await aborted).toContain('aborted: stopped');
   });
 }

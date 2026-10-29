@@ -170,7 +170,7 @@ await withTestSession(async (signal) => {
     if (prebuilt) await run([process.execPath, 'run', 'test:preflight', 'build', target]);
     else {
       // The build holds a heavy slot; serving does not, so three idle servers never block verification.
-      const slot = target === 'local' ? await acquireHeavySlot('test:server local build') : null;
+      const slot = target === 'local' ? await acquireHeavySlot('test:server local build', signal) : null;
       try {
         await run([process.execPath, 'run', 'build']);
       } finally {
