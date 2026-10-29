@@ -72,6 +72,7 @@ import type { DialogOpener } from '../dialog-opener';
 import { auditCheckpoint } from '../checkpoints';
 import { prepareLayoutDetails } from '../layout-fixtures';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 /**
  * The jobs a dialog needs in a particular state, each seeded once per world
@@ -92,7 +93,7 @@ type AuditJob = keyof typeof AUDIT_JOB_TITLES;
 function auditJob(world: TestWorld, job: AuditJob): { jobNumber: string; title: string } {
   return {
     jobNumber: testData`AUF-${world.runId}-${job.toUpperCase()}`,
-    title: testData`${AUDIT_JOB_TITLES[job]} ${world.runId}`,
+    title: worldName(AUDIT_JOB_TITLES[job], world.runId),
   };
 }
 
@@ -328,7 +329,7 @@ export const WORK_OPENERS = {
         const capabilityId = await seedOrganizationCertification(
           world.orgId,
           actorId,
-          testData`Gasinstallation nach TRGI ${world.runId}`,
+          worldName('Gasinstallation nach TRGI', world.runId),
         );
         await seedJobCapabilityRequirement({ orgId: world.orgId, actorId, jobId, capabilityId });
         await seedJobAssignment({ orgId: world.orgId, actorId, jobId, userId: world.users.employee.id });
