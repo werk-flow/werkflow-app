@@ -7,6 +7,7 @@ import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
+import { enterHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 const target = process.argv[2];
 const prebuiltArgument = process.argv[3];
@@ -17,6 +18,8 @@ if (
   throw new Error('Usage: bun run test:server <local|cloud> [--prebuilt]');
 // --prebuilt serves a build recorded elsewhere, such as the CI Build job's, after proving it is this checkout's.
 const prebuilt = prebuiltArgument === '--prebuilt';
+// A local server builds and serves the app for as long as it runs, so it holds a heavy slot that long.
+if (target === 'local') await enterHeavySlot('test:server local');
 const repositoryRoot = resolve(import.meta.dir, '..');
 
 /**

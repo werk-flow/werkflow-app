@@ -95,6 +95,10 @@ import {
   checkBackendHealth,
   type BackendHealth,
 } from '../lib/testing/runner/backend-health';
+import { enterHeavySlot } from '../lib/testing/runner/heavy-slot';
+
+// A verification run takes one of the machine's heavy slots first (lib/testing/runner/heavy-slot.ts); a plan does not.
+if (process.argv[2] === 'run') await enterHeavySlot('test:verify');
 
 const repository = resolve(import.meta.dir, '..');
 const archive = resolve(repository, '.agent-logs/verification');
