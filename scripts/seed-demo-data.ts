@@ -8,6 +8,7 @@
  * is meant to grow as features land (add a section, re-run).
  *
  * Usage:
+ *   bun scripts/seed-demo-data.ts --target local
  *   bun scripts/seed-demo-data.ts --target dev
  *   bun scripts/seed-demo-data.ts --target prod --confirm-prod
  *   ... --phase reset   (only delete the owner's organizations)
@@ -17,8 +18,10 @@
  * For a manual look on DEV, set DEMO_MEMBER_PASSWORD to one you choose; PROD
  * refuses it (lib/security/demo-member-password.ts).
  *
- * Reads the gitignored `.env.dev-backup` / `.env.live-backup` directly, so
- * `.env.local` stays untouched. The reset deletes only organizations whose
+ * Reads the gitignored `.env.local-stack-backup` / `.env.dev-backup` /
+ * `.env.live-backup` directly, so `.env.local` stays untouched. A local stack
+ * without the owner, such as CI's, gets the owner created with the members'
+ * password. The reset deletes only organizations whose
  * `admin_id` is the owner's user, their R2 objects, and member users that are
  * left without any membership. Willert Haustechnik's organization is refused by
  * id as a second guard; the owner is not a member there.
@@ -42,7 +45,11 @@ const WILLERT_ORGANIZATION_ID = '351e9e05-b8c6-4d5c-b29f-b33b2f1f04de';
 const TODAY = '2026-09-18';
 const RANGE_START = '2026-08-03';
 const RANGE_END = '2026-11-27';
-const ENV_FILES = { dev: '.env.dev-backup', prod: '.env.live-backup' } as const;
+const ENV_FILES = {
+  local: '.env.local-stack-backup',
+  dev: '.env.dev-backup',
+  prod: '.env.live-backup',
+} as const;
 const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 // ---------------------------------------------------------------------------
@@ -2001,14 +2008,27 @@ function loadEnvironment(target: Target): { url: string; secretKey: string } {
   return { url, secretKey };
 }
 
-async function findOwner(admin: Admin): Promise<{ id: string; firstName: string; lastName: string }> {
+async function findOwner(
+  admin: Admin,
+  target: Target,
+  password: string,
+): Promise<{ id: string; firstName: string; lastName: string }> {
   const { data, error } = await admin
     .from('profiles')
     .select('id, first_name, last_name')
     .eq('email', OWNER_EMAIL)
-    .single();
-  if (error || !data) fail(`owner ${OWNER_EMAIL} lookup`, error);
-  return { id: data.id, firstName: data.first_name ?? 'Tamay', lastName: data.last_name ?? 'Can' };
+    .maybeSingle();
+  if (error) fail(`owner ${OWNER_EMAIL} lookup`, error);
+  if (data) return { id: data.id, firstName: data.first_name ?? 'Tamay', lastName: data.last_name ?? 'Can' };
+  if (target !== 'local') throw new Error(`owner ${OWNER_EMAIL} lookup: no profile`);
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email: OWNER_EMAIL,
+    password,
+    email_confirm: true,
+    user_metadata: { first_name: 'Tamay', last_name: 'Can' },
+  });
+  if (createError) fail(`create local owner ${OWNER_EMAIL}`, createError);
+  return { id: created.user.id, firstName: 'Tamay', lastName: 'Can' };
 }
 
 // ---------------------------------------------------------------------------
@@ -3509,9 +3529,9 @@ async function main(): Promise<void> {
     return index >= 0 ? (args[index + 1] ?? null) : null;
   };
   const target = readFlag('--target');
-  if (target !== 'dev' && target !== 'prod')
+  if (target !== 'local' && target !== 'dev' && target !== 'prod')
     throw new Error(
-      'Usage: bun scripts/seed-demo-data.ts --target dev|prod [--phase reset|seed] [--confirm-prod]',
+      'Usage: bun scripts/seed-demo-data.ts --target local|dev|prod [--phase reset|seed] [--confirm-prod]',
     );
   if (target === 'prod' && !args.includes('--confirm-prod')) throw new Error('PROD needs --confirm-prod');
   const phase = readFlag('--phase') ?? 'all';
@@ -3521,7 +3541,7 @@ async function main(): Promise<void> {
   const admin = createClient<Database>(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const owner = await findOwner(admin);
+  const owner = await findOwner(admin, target, password);
   log(`target ${target} (${url}), owner ${OWNER_EMAIL} = ${owner.id}`);
 
   if (phase === 'all' || phase === 'reset') await resetOwnerOrganizations(admin, owner.id);

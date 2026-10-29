@@ -146,6 +146,12 @@ jobs:
         env:
           SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
         run: bun run types:check -- --local
+      # The owner's demo seeder seeds both companies on the stack with every committed migration.
+      # The second run starts with the reset (docs/technical/environments.md, "Work on production").
+      - name: Seed the demo companies twice
+        run: |
+          bun scripts/seed-demo-data.ts --target local
+          bun scripts/seed-demo-data.ts --target local
       - uses: ./.github/actions/upload-evidence
         if: failure()
         with:
