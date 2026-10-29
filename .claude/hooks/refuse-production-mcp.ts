@@ -40,6 +40,7 @@ const reason =
           servers: attempt(() =>
             configuredMcpServers(mcpConfigPaths(process.env.CLAUDE_PROJECT_DIR ?? repositoryRoot)),
           ),
+          env: process.env,
         },
       )
     : 'Refused: the MCP guard could not read the tool call, so it cannot rule out PROD.';

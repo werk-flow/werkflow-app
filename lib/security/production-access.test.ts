@@ -13,8 +13,14 @@ const servers = new Map<string, unknown[]>([
   ['supabase', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=${DEV}` }]],
   ['database', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=${PROD}&read_only=true` }]],
   ['pg', [{ command: 'npx', args: ['@supabase/mcp-server-supabase', `--project-ref=${PROD}`] }]],
+  ['team__db', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=${PROD}` }]],
+  ['expanded', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${TARGET_REF}' }]],
+  ['defaulted', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=\${MISSING:-${PROD}}` }]],
+  ['unresolved', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${MISSING}' }]],
+  ['search', [{ type: 'http', url: 'https://search.example.test/mcp?key=${MISSING}' }]],
 ]);
-const context = { productionRef: PROD, servers };
+const env = { TARGET_REF: PROD };
+const context = { productionRef: PROD, servers, env };
 const refusal = (
   tool_name: string,
   tool_input: unknown = {},
@@ -64,16 +70,35 @@ test('a call whose input names the production ref is refused', () => {
 test('a server configured for the production ref is refused under any name', () => {
   expect(refusal('mcp__database__execute_sql')).toContain('configured for the production Supabase project');
   expect(refusal('mcp__pg__list_tables')).toContain('configured for the production Supabase project');
+  // A server name may contain `__`.
+  expect(refusal('mcp__team__db__execute_sql')).toContain('configured for the production Supabase project');
+  expect(refusal('mcp__db__prod__execute_sql')).toContain('production server by its name');
+});
+
+test('a server configuration is judged as the agent expands its variables', () => {
+  for (const tool of ['mcp__expanded__execute_sql', 'mcp__defaulted__execute_sql'])
+    expect(refusal(tool), tool).toContain('configured for the production Supabase project');
+  expect(refusal('mcp__expanded__execute_sql', {}, { ...context, env: { TARGET_REF: DEV } })).toBeUndefined();
+  expect(refusal('mcp__unresolved__execute_sql')).toContain('cannot tell whether');
+  expect(refusal('mcp__search__query')).toBeUndefined();
 });
 
 test('without the ref or the server configuration, every Supabase server is refused', () => {
   for (const given of [
-    { productionRef: undefined, servers },
-    { productionRef: PROD, servers: undefined },
+    { productionRef: undefined, servers, env },
+    { productionRef: PROD, servers: undefined, env },
   ]) {
     expect(refusal('mcp__supabase__execute_sql', {}, given)).toContain('cannot tell whether');
     expect(refusal('mcp__t3-code__task_status', {}, given)).toBeUndefined();
   }
+  // The input still names PROD when the configuration is unreadable.
+  expect(
+    refusal(
+      'mcp__fetch__get',
+      { url: `https://${PROD}.supabase.co/rest/v1/jobs` },
+      { productionRef: PROD, servers: undefined, env },
+    ),
+  ).toContain('names the production Supabase project');
 });
 
 test('the refusal names the structure-only path and the DEV server', () => {

@@ -24,9 +24,33 @@ export function supabaseProjectRefs(repositoryRoot: string): { production: strin
   return production && dev ? { production, dev } : undefined;
 }
 
-/** The server part of an MCP tool name, `mcp__<server>__<tool>`. */
+/**
+ * The widest server part of an MCP tool name, `mcp__<server>__<tool>`. A server
+ * name may itself contain `__`, so everything before the last `__` counts.
+ */
 function mcpServerOf(toolName: string): string | undefined {
-  return /^mcp__(.+?)__./.exec(toolName)?.[1];
+  return /^mcp__(.+)__[^_]/.exec(toolName)?.[1];
+}
+
+/**
+ * A server configuration as the agent resolves it: Claude Code expands
+ * `${VAR}` and `${VAR:-default}`. `unresolved` reports a variable the hook
+ * cannot resolve.
+ */
+function expandedConfig(
+  config: unknown,
+  env: Readonly<Record<string, string | undefined>>,
+): { text: string; unresolved: boolean } {
+  let unresolved = false;
+  const text = JSON.stringify(config ?? null).replace(
+    /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g,
+    (_, name: string, fallback: string | undefined) => {
+      const value = env[name] ?? fallback;
+      if (value === undefined) unresolved = true;
+      return value ?? '';
+    },
+  );
+  return { text, unresolved };
 }
 
 /** A configured server name as it appears in tool names. */
@@ -107,33 +131,38 @@ const INSTEAD = [
 /**
  * Why an MCP tool call may not run, or undefined when it may. It refuses a
  * server whose name contains "prod", a call whose input names the production
- * ref, and a server whose configuration names it. Without the ref or the
- * server configuration it refuses every Supabase server, since it cannot tell
- * DEV from PROD.
+ * ref, and a server whose expanded configuration names it. Without the ref or
+ * the server configuration, or with a Supabase configuration it cannot
+ * resolve, it refuses the Supabase server, since it cannot tell DEV from PROD.
  */
 export function productionMcpRefusal(
   call: { tool_name: unknown; tool_input: unknown },
   context: {
     productionRef: string | undefined;
     servers: ReadonlyMap<string, readonly unknown[]> | undefined;
+    env: Readonly<Record<string, string | undefined>>;
   },
 ): string | undefined {
   if (typeof call.tool_name !== 'string') return undefined;
-  const server = mcpServerOf(call.tool_name);
+  const toolName = call.tool_name;
+  const server = mcpServerOf(toolName);
   if (!server) return undefined;
   const refuse = (why: string) => `Refused: ${why} ${INSTEAD}`;
+  const unknown = (what: string) =>
+    refuse(`the hook could not read ${what}, so it cannot tell whether "${server}" reaches PROD.`);
   if (/prod/i.test(server)) return refuse(`MCP server "${server}" is a production server by its name.`);
-  const { productionRef, servers } = context;
-  if (!productionRef || !servers) {
-    return /supabase/i.test(server)
-      ? refuse(
-          `the hook could not read ${productionRef ? 'the MCP server configuration' : `the production ref from ${ENVIRONMENTS_DOC}`}, so it cannot tell whether "${server}" reaches PROD.`,
-        )
-      : undefined;
-  }
+  const { productionRef, servers, env } = context;
+  if (!productionRef)
+    return /supabase/i.test(server) ? unknown(`the production ref from ${ENVIRONMENTS_DOC}`) : undefined;
   if (JSON.stringify(call.tool_input ?? null).includes(productionRef))
     return refuse(`the call to "${server}" names the production Supabase project.`);
-  if ((servers.get(server) ?? []).some((config) => JSON.stringify(config).includes(productionRef)))
+  if (!servers) return /supabase/i.test(server) ? unknown('the MCP server configuration') : undefined;
+  const configs = [...servers]
+    .filter(([name]) => toolName.startsWith(`mcp__${name}__`))
+    .flatMap(([, entries]) => entries.map((entry) => expandedConfig(entry, env)));
+  if (configs.some((config) => config.text.includes(productionRef)))
     return refuse(`MCP server "${server}" is configured for the production Supabase project.`);
+  if (configs.some((config) => config.unresolved && /supabase/i.test(config.text)))
+    return unknown('every variable in its configuration');
   return undefined;
 }

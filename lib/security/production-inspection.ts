@@ -21,7 +21,8 @@ with ns as (
 )
 select kind, name, hash from (
   select 'relation' as kind, ns.nspname || '.' || c.relname as name,
-    md5(concat_ws('|', c.relkind, c.relrowsecurity, c.relforcerowsecurity, c.relacl::text)) as hash
+    md5(concat_ws('|', c.relkind, c.relrowsecurity, c.relforcerowsecurity, c.relacl::text, c.reloptions::text,
+      case when c.relkind in ('v', 'm') then pg_catalog.pg_get_viewdef(c.oid) end)) as hash
   from pg_catalog.pg_class c join ns on ns.oid = c.relnamespace
   where c.relkind in ('r', 'p', 'v', 'm', 'S', 'f', 'c')
     and not exists (select 1 from ext where ext.classid = 'pg_catalog.pg_class'::regclass and ext.objid = c.oid)
