@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { getEventListeners } from 'node:events';
 import { runSessionCommand, withTestSession } from './test-session';
 
@@ -37,6 +37,15 @@ test('cancellation between commands prevents the next process from starting', as
 
 test('cancellation terminates an owned descendant, not only its launcher', async () => {
   const controller = new AbortController();
+  const kill = process.kill.bind(process);
+  let deniedProbe = false;
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid < 0 && signal === 0 && !deniedProbe) {
+      deniedProbe = true;
+      throw Object.assign(new Error('Group is awaiting reaping'), { code: 'EPERM' });
+    }
+    return kill(pid, signal);
+  });
   // The descendant prints its pid through the launcher's stdout once it runs.
   const descendant = `console.log(process.pid); setInterval(() => {}, 1000);`;
   const launcher = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:['ignore','inherit','ignore']}); setInterval(() => {}, 1000);`;
@@ -54,10 +63,12 @@ test('cancellation terminates an owned descendant, not only its launcher', async
     expect(alive(pid)).toBe(true);
     controller.abort(new Error('Cancel tree'));
     expect(await settled).toMatchObject({ message: 'Cancel tree' });
+    expect(deniedProbe).toBe(true);
     expect(alive(pid)).toBe(false);
   } finally {
     if (!controller.signal.aborted) controller.abort(new Error('Cancel tree'));
     await settled;
+    killSpy.mockRestore();
   }
 });
 

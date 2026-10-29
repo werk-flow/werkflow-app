@@ -1,6 +1,6 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readStackLockHolders, stackLockConflicts, stackLockDirectory, withStackLock } from './stack-lock';
@@ -20,7 +20,7 @@ afterEach(() => {
 });
 
 function repository(): string {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-stack-lock-'));
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), 'werkflow-stack-lock-')));
   directories.push(directory);
   execFileSync('git', ['init', '--quiet'], { cwd: directory });
   return directory;
