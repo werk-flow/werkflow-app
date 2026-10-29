@@ -9,7 +9,14 @@ import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 
 const target = process.argv[2];
-if (target !== 'local' && target !== 'cloud') throw new Error('Usage: bun run test:server <local|cloud>');
+const prebuiltArgument = process.argv[3];
+if (
+  (target !== 'local' && target !== 'cloud') ||
+  (prebuiltArgument !== undefined && prebuiltArgument !== '--prebuilt')
+)
+  throw new Error('Usage: bun run test:server <local|cloud> [--prebuilt]');
+// --prebuilt serves a build recorded elsewhere, such as the CI Build job's, after proving it is this checkout's.
+const prebuilt = prebuiltArgument === '--prebuilt';
 const repositoryRoot = resolve(import.meta.dir, '..');
 
 /**
@@ -159,7 +166,11 @@ await withTestSession(async (signal) => {
     await run([process.execPath, 'run', target === 'local' ? 'env:local' : 'env:dev']);
     if (target === 'local') await run(['docker', 'start', 'supabase_edge_runtime_werkflow-app']);
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
-    await run([process.execPath, 'run', 'build']);
+    await run(
+      prebuilt
+        ? [process.execPath, 'run', 'test:preflight', 'build', target]
+        : [process.execPath, 'run', 'build'],
+    );
   });
   const releaseRealtimeWarmUp = target === 'local' ? await keepRealtimeWarm() : null;
   const serverLog = openServerLog();
