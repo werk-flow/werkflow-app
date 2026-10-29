@@ -3027,16 +3027,12 @@ async function seedVisitAssignments(
   jobs: SeededJob[],
   assignedAt: (job: SeededJob) => string,
 ): Promise<void> {
-  const {
-    data: visits,
-    error,
-    count,
-  } = await admin
+  const { data, error, count } = await admin
     .from('planning_occurrences')
     .select('id, job_id', { count: 'exact' })
     .eq('organization_id', organizationId);
   if (error) fail('load visits', error);
-  if (visits.length !== count) throw new Error(`load visits: read ${visits.length} of ${count}`);
+  const visits = requireComplete('load visits', data, count);
   const jobsById = new Map(jobs.map((job) => [job.id, job]));
   const rows = visits.flatMap((visit) => {
     const job = visit.job_id ? jobsById.get(visit.job_id) : undefined;
@@ -3489,6 +3485,63 @@ async function seedDispatches(
   log(`  dispatches issued: ${issued}`);
 }
 
+function requireComplete<T>(step: string, rows: T[] | null, count: number | null): T[] {
+  if (!rows || rows.length !== count) throw new Error(`${step}: read ${rows?.length ?? 0} of ${count}`);
+  return rows;
+}
+
+// Reads the seeded rows back: every visit of a job carries each person the job lists, past visits
+// and visits outside the dispatch window included. Read-only; the failure names counts only.
+async function verifyVisitTeams(admin: Admin, organizationId: string): Promise<void> {
+  const [jobAssignments, records, visits, visitAssignments] = await Promise.all([
+    admin
+      .from('job_assignments')
+      .select('job_id, user_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('employee_records')
+      .select('id, user_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('planning_occurrences')
+      .select('id, job_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('planning_occurrence_assignments')
+      .select('occurrence_id, employee_record_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+  ]);
+  for (const result of [jobAssignments, records, visits, visitAssignments])
+    if (result.error) fail('verify visit teams', result.error);
+  const recordByUser = new Map(
+    requireComplete('verify employee records', records.data, records.count).map((row) => [
+      row.user_id,
+      row.id,
+    ]),
+  );
+  const teamByJob = new Map<string, string[]>();
+  for (const row of requireComplete('verify job assignments', jobAssignments.data, jobAssignments.count)) {
+    const recordId = recordByUser.get(row.user_id);
+    if (!recordId) throw new Error('verify visit teams: a job assignee has no employee record');
+    teamByJob.set(row.job_id, [...(teamByJob.get(row.job_id) ?? []), recordId]);
+  }
+  const onVisit = new Set(
+    requireComplete('verify visit assignments', visitAssignments.data, visitAssignments.count).map(
+      (row) => `${row.occurrence_id}:${row.employee_record_id}`,
+    ),
+  );
+  let expected = 0;
+  let missing = 0;
+  for (const visit of requireComplete('verify visits', visits.data, visits.count)) {
+    for (const recordId of (visit.job_id ? teamByJob.get(visit.job_id) : undefined) ?? []) {
+      expected += 1;
+      if (!onVisit.has(`${visit.id}:${recordId}`)) missing += 1;
+    }
+  }
+  if (missing > 0) throw new Error(`verify visit teams: ${missing} of ${expected} visit assignments missing`);
+  log(`  visit teams verified: ${expected} visit assignments`);
+}
+
 // The join code is a secret, so it comes from the cryptographic source and never from the
 // seeded generator. A drawn code another organization holds is drawn again, as the app does.
 async function insertOrganization(
@@ -3563,6 +3616,7 @@ async function seedCompany(
   await seedRequests(admin, organizationId, owner.id, members, customers, jobs, equipmentBySite, random);
   await seedMaintenance(admin, organizationId, owner.id, customers, equipmentBySite, templateVersions);
   await seedDispatches(admin, organizationId, owner.id, jobs);
+  await verifyVisitTeams(admin, organizationId);
 }
 
 // ---------------------------------------------------------------------------
