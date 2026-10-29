@@ -67,9 +67,9 @@ function PeriodFindingRow({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-start gap-3">
         <FindingIcon severity={finding.severity} />
-        <div>
+        <div className="min-w-0 wrap-anywhere">
           <p className="font-medium">{FINDING_LABELS[finding.kind]}</p>
           <p className="text-sm text-muted-foreground">
             {finding.employeeName ?? 'Organisation'} ·{' '}
