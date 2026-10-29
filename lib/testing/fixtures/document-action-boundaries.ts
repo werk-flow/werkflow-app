@@ -183,6 +183,18 @@ await assertRefused(
   { success: false, error: 'not_authorized' },
   'reads',
 );
+// A failed protection read refuses too; it never counts as an unprotected document.
+world.failingTables.add('personnel_documents');
+await assertRefused(
+  world,
+  [
+    ['restoreDocument', () => restoreDocument(restrictedDeletedDocumentId)],
+    ['permanentlyDeleteDocument', () => permanentlyDeleteDocument(restrictedDeletedDocumentId)],
+  ],
+  { success: false, error: 'load_failed' },
+  'reads',
+);
+world.failingTables.delete('personnel_documents');
 for (const [role, documentId] of [
   ['buero', standardDeletedDocumentId],
   ['admin', restrictedDeletedDocumentId],
