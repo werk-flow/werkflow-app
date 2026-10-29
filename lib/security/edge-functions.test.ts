@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 import {
   createHealthHandler,
   HEALTH_CHECK_TOKEN_HEADER,
@@ -42,6 +43,22 @@ test('each deploy step names every function, and every function checks its own c
       `${name} deploys without JWT verification, so its handler must check its caller`,
     ).toBe(true);
   }
+});
+
+// A remote module (jsr:, npm:, https:) is fetched when the runtime first boots the function: an
+// unpinned supply-chain input, and on a fresh CI runner a registry stall hung the stack start
+// (werk-flow/werkflow-planning#12). The functions import only their own relative modules.
+test('every edge function module imports only relative modules', () => {
+  const functionsRoot = resolve(repositoryRoot, 'supabase/functions');
+  const remote = readdirSync(functionsRoot, { recursive: true, encoding: 'utf8' })
+    .filter((path) => path.endsWith('.ts'))
+    .flatMap((path) =>
+      ts
+        .preProcessFile(readFileSync(resolve(functionsRoot, path), 'utf8'), true, true)
+        .importedFiles.filter(({ fileName }) => !fileName.startsWith('./') && !fileName.startsWith('../'))
+        .map(({ fileName }) => `${path}: ${fileName}`),
+    );
+  expect(remote).toEqual([]);
 });
 
 const token = 'synthetic-health-token-0123456789abcdef';
