@@ -19,6 +19,11 @@ const servers = new Map<string, unknown[]>([
   ['unresolved', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${MISSING}' }]],
   ['supabase_alt', [{ type: 'http', url: '${ENDPOINT}' }]],
   ['neutral', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=${DEV}` }]],
+  ['supabase_local', [{ type: 'http', url: 'http://127.0.0.1:54321/mcp' }]],
+  ['supabase_stdio', [{ command: 'npx', args: ['@supabase/mcp-server-supabase', '--project-ref', DEV] }]],
+  ['supabase_org', [{ type: 'http', url: 'https://mcp.supabase.com/mcp' }]],
+  ['supabase_unscoped', [{ command: 'npx', args: ['@supabase/mcp-server-supabase'] }]],
+  ['supabase_empty', [{}]],
   ['search', [{ type: 'http', url: 'https://search.example.test/mcp?key=${MISSING}' }]],
 ]);
 const env = { TARGET_REF: PROD };
@@ -62,6 +67,17 @@ test('a Supabase server whose project the hook cannot establish is refused', () 
     'cannot tell whether',
   );
   expect(refusal('mcp__neutral__execute_sql')).toBeUndefined();
+});
+
+test('a Supabase server passes only when its configuration names a non-production project or a local stack', () => {
+  for (const tool of ['mcp__supabase_local__execute_sql', 'mcp__supabase_stdio__execute_sql'])
+    expect(refusal(tool), tool).toBeUndefined();
+  for (const tool of [
+    'mcp__supabase_org__list_projects',
+    'mcp__supabase_unscoped__list_projects',
+    'mcp__supabase_empty__list_projects',
+  ])
+    expect(refusal(tool), tool).toContain('names no project');
 });
 
 test('a call without a tool name is refused', () => {

@@ -89,7 +89,7 @@ A local file never affects the deployed app. Never run the test harness or a des
 
 ## Which tool reaches what
 
-Agents never read PROD data, because every tool result goes to the model provider. `.claude/hooks/refuse-production-mcp.ts` refuses, for Claude Code and Codex, an MCP tool whose server name contains `prod` or whose input or server configuration names the production ref. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape.
+Agents never read PROD data, because every tool result goes to the model provider. `.claude/hooks/refuse-production-mcp.ts` refuses, for Claude Code and Codex, an MCP tool whose server name contains `prod` or whose input or server configuration names the production ref, and a Supabase server whose configuration names no other project or local stack. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |

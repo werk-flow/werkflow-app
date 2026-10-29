@@ -136,8 +136,9 @@ const INSTEAD = [
  * Why an MCP tool call may not run, or undefined when it may. It refuses a
  * server whose name contains "prod", a call whose input names the production
  * ref, and a server whose expanded configuration names it. A Supabase server,
- * by name or configuration, is refused whenever the hook cannot establish its
- * project: no ref, no configuration, or a variable it cannot resolve.
+ * by name or configuration, passes only when every configuration names a
+ * non-production project or a local stack; no ref, no configuration, a
+ * variable it cannot resolve or an unscoped server refuses it.
  */
 export function productionMcpRefusal(
   call: { tool_name: unknown; tool_input: unknown },
@@ -171,5 +172,17 @@ export function productionMcpRefusal(
   if (!servers) return unknown('the MCP server configuration');
   if (configs.length === 0) return unknown('a configuration for it');
   if (configs.some((config) => config.unresolved)) return unknown('every variable in its configuration');
+  if (!configs.every((config) => scopedOutsideProduction(config.text, productionRef)))
+    return refuse(
+      `MCP server "${server}" names no project, so it reaches every project of the organization, PROD included. Scope it with project_ref.`,
+    );
   return undefined;
+}
+
+/** Whether an expanded Supabase server configuration names only non-production projects, or a local stack. */
+function scopedOutsideProduction(text: string, productionRef: string): boolean {
+  const local = /\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\b/.test(text);
+  if (local && !/supabase\.(?:com|co)\b/.test(text)) return true;
+  const refs = [...text.matchAll(/project[_-]?ref\W{1,3}([a-z]{20})\b/gi)].map((match) => match[1]);
+  return refs.length > 0 && refs.every((ref) => ref !== productionRef);
 }
