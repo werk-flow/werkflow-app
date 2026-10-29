@@ -47,19 +47,20 @@ export const MAX_SHARDS = 14;
 const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.kind === 'audit';
 
 /**
- * The browser groups a CI run executes, split into shards. A full run (a
- * push to `main`, the nightly run, an unreadable diff or a tooling change)
+ * The browser groups a CI run executes, split into shards. A full run (the
+ * nightly run, the release gate, an unreadable diff or a tooling change)
  * takes every browser group except the wall-clock `audit:performance:*`
  * groups, whose medians follow a shared runner's load
- * (docs/technical/performance.md). A pull request takes the change-mode
- * selection of `groupSelections` for its diff against the base, and the
- * visual groups when it changes rendered UI.
+ * (docs/technical/performance.md). A pull request and a push to `main` take
+ * the change-mode selection of `groupSelections` for their diff against the
+ * base (a push's previous `main` commit), and the visual groups when it
+ * changes rendered UI.
  */
 export function ciPlan(input: {
   groups: readonly CiGroup[];
   /** The files the change touches, or undefined when the diff could not be read. */
   changedFiles: readonly string[] | undefined;
-  /** Set for a push to `main`, the nightly run and a manual run. */
+  /** Set for a call with `full`: the nightly run and the release gate. */
   fullRun: string | undefined;
 }): CiPlan {
   const browserGroups = input.groups.filter(

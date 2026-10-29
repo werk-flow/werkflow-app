@@ -2,21 +2,87 @@ name: release
 
 # The owner's release (docs/technical/environments.md, "Release and rollback").
 # The owner starts it, or an agent does when the owner asks for a release in
-# its thread: gh workflow run release. It releases the head of main.
+# its thread: gh workflow run release. It releases the main commit it starts on,
+# and only after a green full run on exactly that commit: a nightly or manual
+# one it finds, or its own.
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  checks: read
+  actions: read
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  candidate:
+    name: Find a full run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.candidate.outputs.sha }}
+      verified: ${{ steps.candidate.outputs.verified }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+
+      # A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
+      # job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly or release run
+      # on main counts: their workflow files come from the commit itself, so no other branch
+      # can stand in for one. The newest completed full run decides; a later failure replaces a pass.
+      - name: Look for a green full run on the commit
+        id: candidate
+        # Explicit bash runs with pipefail, so a failed request inside the pipeline stops the step.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main \
+            || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git merge-base --is-ancestor origin/production "$sha" \
+            || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
+          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
+            --jq '.workflow_runs[] | select(.head_branch == "main"
+              and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml")
+              and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
+          # A failed request stops the gate: a missing run could be the newest, failed one.
+          latest="$(for run in $runs; do
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "Full run / Check" and .status == "completed") | "\(.completed_at) \(.conclusion) \(.html_url)"' \
+              || exit 1
+          done | sort | tail -n 1)"
+          echo "Newest full run on ${sha}: ${latest:-none}"
+          if test "$(echo "$latest" | cut -d ' ' -f 2)" = success; then
+            echo "verified=true" >> "$GITHUB_OUTPUT"
+            echo "${sha} has a green full run; the release reuses it."
+          else
+            echo "verified=false" >> "$GITHUB_OUTPUT"
+            echo "${sha} has no green full run; the release runs the full suite first."
+          fi
+          echo "Releasing ${sha}:"
+          git log --oneline origin/production.."$sha"
+
+  full:
+    name: Full run
+    needs: candidate
+    if: needs.candidate.outputs.verified != 'true'
+    uses: ./.github/workflows/ci.yml
+    with:
+      full: Release ${{ needs.candidate.outputs.sha }}
+    secrets: inherit
+
   release:
     name: Release main
+    needs: [candidate, full]
+    # Ships only when the candidate had a green full run or its own full run passed.
+    if: >-
+      !cancelled() && needs.candidate.result == 'success'
+      && (needs.full.result == 'success' || (needs.full.result == 'skipped' && needs.candidate.outputs.verified == 'true'))
     # The PROD secrets live in this environment only, and only main may use it. By the owner's
     # decision it has no approval step: a run is the release the owner asked for.
     environment: production
@@ -26,27 +92,9 @@ jobs:
       # The deploy key is the only actor the production ruleset lets update the branch.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          ref: main
+          ref: ${{ needs.candidate.outputs.sha }}
           fetch-depth: 0
           ssh-key: ${{ secrets.PRODUCTION_DEPLOY_KEY }}
-
-      - name: Require a green Check on the main commit
-        id: candidate
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          sha="$(git rev-parse HEAD)"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          passed="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=Check" \
-            --jq '[.check_runs[] | select(.conclusion == "success")] | length')"
-          if test "$passed" -lt 1; then
-            echo "::error::main is at ${sha}, which has no successful Check run. Wait for CI on main, or repair it."
-            exit 1
-          fi
-          git merge-base --is-ancestor origin/production "$sha" \
-            || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
-          echo "Releasing ${sha}:"
-          git log --oneline origin/production.."$sha"
 
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
         with:
@@ -71,7 +119,7 @@ jobs:
 
       - name: Advance production
         env:
-          SHA: ${{ steps.candidate.outputs.sha }}
+          SHA: ${{ needs.candidate.outputs.sha }}
         run: git push origin "${SHA}:refs/heads/production"
 
       # Vercel builds production from the production branch. After an Instant Rollback it
@@ -81,7 +129,7 @@ jobs:
       - name: Promote the production build
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          SHA: ${{ steps.candidate.outputs.sha }}
+          SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
           vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
