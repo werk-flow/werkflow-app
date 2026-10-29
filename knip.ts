@@ -23,6 +23,9 @@ const TOOLING = [
   'lib/conventions/**',
   'lib/ui/{action-prechecks,dialog-discovery}.ts',
   'lib/security/supabase-project-checks.ts',
+  // The demo seeder's own helper. CI's SQL job runs the seeder, so the GitHub
+  // Actions plugin turns it into an entry without the production mark.
+  'lib/security/demo-member-password.ts',
   'eslint-rules/**',
   'scripts/**',
   'tests/**',

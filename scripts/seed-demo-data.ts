@@ -33,6 +33,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../lib/supabase/database.types';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
+import { generateOrganizationCode } from '../lib/org/schemas';
 import { DEMO_MEMBER_PASSWORD_ENV, resolveDemoMemberPassword } from '../lib/security/demo-member-password';
 import { deleteStorageObjects, listStorageObjectPaths } from '../lib/storage/r2';
 
@@ -50,7 +51,6 @@ const ENV_FILES = {
   dev: '.env.dev-backup',
   prod: '.env.live-backup',
 } as const;
-const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 // ---------------------------------------------------------------------------
 // Company specifications
@@ -1927,13 +1927,6 @@ function listWorkdays(from: string, to: string, holidays: Set<string>): string[]
   return days;
 }
 
-function randomOrganizationCode(random: Random): string {
-  let code = '';
-  for (let index = 0; index < 6; index += 1)
-    code += ORGANIZATION_CODE_CHARSET.charAt(random.int(0, ORGANIZATION_CODE_CHARSET.length - 1));
-  return code;
-}
-
 function slug(value: string): string {
   return value
     .normalize('NFD')
@@ -3002,6 +2995,9 @@ async function seedWork(
   }
 
   await insertRows(admin, 'jobs', jobRows);
+  const assignedAt = (job: SeededJob): string =>
+    berlinInstant(shiftDate(job.plannedDate ?? '2026-08-03', -2), '16:00');
+  await seedVisitAssignments(admin, organizationId, ownerId, jobs, assignedAt);
   await insertRows(
     admin,
     'job_assignments',
@@ -3011,11 +3007,50 @@ async function seedWork(
         user_id: member.userId,
         assigned_by: ownerId,
         organization_id: organizationId,
-        assigned_at: berlinInstant(shiftDate(job.plannedDate ?? '2026-08-03', -2), '16:00'),
+        assigned_at: assignedAt(job),
       })),
     ),
   );
   return jobs;
+}
+
+// Each dated job got its visit from the jobs trigger. The job_assignments trigger puts a person
+// only on visits that start after the database's now(), but this timeline is fixed around TODAY,
+// so it would leave every visit before the real date without people: the Plantafel would list
+// them under "Ohne Zuweisung" and issue_planning_dispatch would find no recipients. Each person
+// was assigned two days before the visit, when the app would have put them on it, so the visit
+// teams are written here, before the job_assignments rows whose trigger then skips them.
+async function seedVisitAssignments(
+  admin: Admin,
+  organizationId: string,
+  ownerId: string,
+  jobs: SeededJob[],
+  assignedAt: (job: SeededJob) => string,
+): Promise<void> {
+  const {
+    data: visits,
+    error,
+    count,
+  } = await admin
+    .from('planning_occurrences')
+    .select('id, job_id', { count: 'exact' })
+    .eq('organization_id', organizationId);
+  if (error) fail('load visits', error);
+  if (visits.length !== count) throw new Error(`load visits: read ${visits.length} of ${count}`);
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+  const rows = visits.flatMap((visit) => {
+    const job = visit.job_id ? jobsById.get(visit.job_id) : undefined;
+    if (!job) throw new Error(`visit ${visit.id} has no seeded job`);
+    return job.assignees.map((member) => ({
+      organization_id: organizationId,
+      occurrence_id: visit.id,
+      employee_record_id: member.employeeRecordId,
+      assigned_by: ownerId,
+      assigned_at: assignedAt(job),
+    }));
+  });
+  await insertRows(admin, 'planning_occurrence_assignments', rows);
+  log(`  visits: ${visits.length}, visit assignments: ${rows.length}`);
 }
 
 async function seedTimeEntries(
@@ -3068,6 +3103,8 @@ async function seedTimeEntries(
       const hasBreak = worked > 300;
       const end = start + worked + (hasBreak ? 30 : 0);
       const dayJobs = jobsByMemberDay.get(`${member.employeeRecordId}:${date}`) ?? [];
+      // The job rides on the entries that start a work block, as the app writes them: clock_out
+      // and break_start carry none (validateManualEntryJobOwnership, the sign-out clock_out).
       const base = {
         organization_id: organizationId,
         user_id: member.userId,
@@ -3452,6 +3489,23 @@ async function seedDispatches(
   log(`  dispatches issued: ${issued}`);
 }
 
+// The join code is a secret, so it comes from the cryptographic source and never from the
+// seeded generator. A drawn code another organization holds is drawn again, as the app does.
+async function insertOrganization(
+  admin: Admin,
+  row: Omit<Insert<'organizations'>, 'unique_code'>,
+): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { error } = await admin
+      .from('organizations')
+      .insert({ ...row, unique_code: generateOrganizationCode() });
+    if (!error) return;
+    if (!error.message.includes('organizations_unique_code_key'))
+      fail(`insert organization ${row.name}`, error);
+  }
+  throw new Error(`insert organization ${row.name}: no free code after 10 draws`);
+}
+
 async function seedCompany(
   admin: Admin,
   owner: { id: string },
@@ -3464,14 +3518,7 @@ async function seedCompany(
   const organizationId = crypto.randomUUID();
   log(`seed: creating "${company.name}" (${organizationId})`);
 
-  await insertRows(admin, 'organizations', [
-    {
-      id: organizationId,
-      name: company.name,
-      admin_id: owner.id,
-      unique_code: randomOrganizationCode(random),
-    },
-  ]);
+  await insertOrganization(admin, { id: organizationId, name: company.name, admin_id: owner.id });
   await insertRows(admin, 'organization_settings', [
     {
       organization_id: organizationId,
