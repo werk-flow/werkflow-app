@@ -27,7 +27,7 @@ const FAILURE_CODE = /^[a-z][a-z0-9_]*$/;
  * test fails on an entry that no longer exists or now conforms.
  */
 const REVIEWED_RESULT_EXCEPTIONS: Readonly<Record<string, string>> = {
-  'lib/time-corrections/actions.ts#getProvisionalTimeCorrectionProjection':
+  'lib/time-corrections/read-actions.ts#getProvisionalTimeCorrectionProjection':
     'A server-side projection the time-tracking entry reads merge in; it answers an empty projection to a caller without access. Converting it changes those readers, which the time-tracking split moves in the same package.',
 };
 

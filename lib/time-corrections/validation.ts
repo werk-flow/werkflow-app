@@ -3,6 +3,9 @@ import { uuidSchema } from '@/lib/validation/uuid';
 
 import type { TimeCorrectionKind } from './types';
 
+/** The entry types a time entry's check constraint allows. */
+export const timeEntryTypeSchema = z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']);
+
 const timeCorrectionSourceInputSchema = z.object({
   kind: z.enum(['legacy_entry', 'canonical_session', 'canonical_segment', 'correction_application']),
   id: uuidSchema,
@@ -11,7 +14,7 @@ const timeCorrectionSourceInputSchema = z.object({
 const timeCorrectionFactInputSchema = z.object({
   factId: z.string().min(1).max(100),
   employeeRecordId: uuidSchema,
-  entryType: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
+  entryType: timeEntryTypeSchema,
   timestamp: z.iso.datetime({ offset: true }),
   jobId: uuidSchema.nullable().optional(),
   activityKind: z
@@ -22,7 +25,7 @@ const timeCorrectionFactInputSchema = z.object({
 
 const calendarBoundarySchema = z.object({
   source: timeCorrectionSourceInputSchema.extend({ version: z.string().min(1).max(200) }),
-  entryType: z.enum(['clock_in', 'clock_out', 'break_start', 'break_end']),
+  entryType: timeEntryTypeSchema,
   originalTimestamp: z.iso.datetime({ offset: true }),
   timestamp: z.iso.datetime({ offset: true }),
   employeeRecordId: uuidSchema,

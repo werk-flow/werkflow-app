@@ -124,7 +124,7 @@ mock.module('@/lib/time-corrections/approved-projection', () => ({
     return approvedApplications;
   },
 }));
-mock.module('@/lib/time-corrections/actions', () => ({
+mock.module('@/lib/time-corrections/read-actions', () => ({
   getProvisionalTimeCorrectionProjection: async () => {
     startedProjections.add('provisional');
     if (provisionalFailure) throw new Error('Controlled provisional failure');

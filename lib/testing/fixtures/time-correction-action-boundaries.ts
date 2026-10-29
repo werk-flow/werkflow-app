@@ -59,6 +59,8 @@ const {
   getTimeCorrectionFormOptions,
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
+} = await import('@/lib/time-corrections/read-actions');
+const {
   resubmitTimeCorrection,
   reviewTimeCorrectionsBatch,
   submitTimeCorrection,

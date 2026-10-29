@@ -24,7 +24,7 @@ import { calculateWorkSessions, canViewEntries } from './helpers';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getCanonicalTimeEntries } from './canonical-entries';
-import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
+import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/read-actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';

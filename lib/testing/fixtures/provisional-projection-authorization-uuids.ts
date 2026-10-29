@@ -46,7 +46,7 @@ mock.module('@/lib/responsibilities/server', () => ({
     return { members: [], people: [], configurations: [], delegations: [] };
   },
 }));
-const { getProvisionalTimeCorrectionProjection } = await import('@/lib/time-corrections/actions');
+const { getProvisionalTimeCorrectionProjection } = await import('@/lib/time-corrections/read-actions');
 const input = {
   organizationId: '00000000-0000-4000-8000-0000000000d1',
   from: '2026-06-01T00:00:00Z',
