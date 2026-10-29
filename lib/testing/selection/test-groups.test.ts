@@ -51,6 +51,12 @@ describe('independent group registry', () => {
       expect([performance.id, performance.files.every(isReleaseOnlySpec)]).toEqual([performance.id, true]);
     const releaseOnly = groups.filter((candidate) => candidate.files.some(isReleaseOnlySpec));
     expect(releaseOnly.every((candidate) => candidate.kind === 'audit')).toBe(true);
+    // Every speed measurement, capture and sweep, and no other group (decision 0007, amendment 2026-10-29).
+    expect(
+      groups
+        .filter((candidate) => /^audit:(performance|lab|visual|layout)(:|$)/.test(candidate.id))
+        .map((candidate) => candidate.id),
+    ).toEqual(releaseOnly.map((candidate) => candidate.id));
     // The runner passes the same flag; a change plan with every file changed still leaves them out.
     const plan = groupSelections({
       mode: 'change',
@@ -120,7 +126,7 @@ describe('independent group registry', () => {
     expect(groups.some((entry) => entry.id === 'golden:integrated')).toBe(false);
   });
 
-  test('a lab group runs alone, a change plan selects it by scope, and it must record each of its steps', () => {
+  test('a lab group runs alone, a change plan selects it only for its own spec, and it must record each of its steps', () => {
     const root = resolve(import.meta.dir, '../../..');
     const groups = getTestGroups(root);
     const plan = groupSelections({
@@ -131,13 +137,14 @@ describe('independent group registry', () => {
         executionInputs: candidate.files,
         releaseOnly: candidate.files.some(isReleaseOnlySpec),
       })),
-      changedFiles: ['lib/attention/actions.ts'],
+      changedFiles: ['lib/attention/actions.ts', 'tests/audit/lab/office.spec.ts'],
       unresolvedGroupIds: [],
     });
+    expect(plan.has('audit:lab:field')).toBe(false);
+    expect(plan.get('audit:lab:office')?.reason).toBe('Test execution dependency changed');
     for (const id of ['audit:lab:field', 'audit:lab:office']) {
       const group = expectDefined(groups.find((entry) => entry.id === id));
-      expect(group.files.some(isReleaseOnlySpec)).toBe(false);
-      expect(plan.get(id)?.reason).toStartWith('Lab counts; ');
+      expect(group.files.some(isReleaseOnlySpec)).toBe(true);
       const timing = getGroupTimingRequirements(group, root);
       expect(timing.exclusive).toBe(true);
       expect(timing.requiredLabSteps).toEqual(labStepsForFiles(group.files).map((step) => step.id));

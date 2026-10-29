@@ -228,10 +228,6 @@ export const LAB_STEPS: readonly LabStep[] = [
   }),
 ];
 
-export function isLabSpec(file: string): boolean {
-  return file.startsWith(LAB_SPEC_DIRECTORY);
-}
-
 export function labStepsForFiles(files: readonly string[]): LabStep[] {
   return LAB_STEPS.filter((step) => files.includes(step.file));
 }

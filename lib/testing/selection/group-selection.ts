@@ -1,7 +1,5 @@
 import { ADVISORY_GROUP_ID } from '../evidence/advisory-freshness';
-import { isLabSpec } from '../lab-steps';
 import { DEPENDENCY_GATE_INPUTS } from '../publication/dependency-audit';
-import { SURFACE_GROUPS } from './surface-groups';
 import { scopeEntryOwns, TEST_SCOPE_PREFIXES } from './test-groups';
 
 type SelectableGroup = {
@@ -10,13 +8,14 @@ type SelectableGroup = {
   /** A browser group's spec files and the test support they import. */
   executionInputs?: readonly string[];
   scopes?: readonly string[];
-  /** Wall-clock performance and visual reference groups run in release mode and on explicit request only. */
+  /** Speed measurements, captures and sweeps: a change plan selects one only when its own test code changed. */
   releaseOnly?: boolean;
 };
 
 /** Why a group is in the plan, and the changed files that put it there. */
 type GroupSelection = { reason: string; changedFiles: readonly string[] };
 
+const MEASURED_GROUP_PREFIX = 'audit:performance:';
 const RUNNER_PILOTS = new Set(['golden:p1-24a', 'audit:wave-3:p1-24a']);
 const ORCHESTRATION_INPUTS =
   /^lib\/testing\/(selection\/(group-selection|test-groups)|evidence\/(group-(qualification|evidence)|campaign-summary|browser-group-evidence)|runner\/(group-(schedule|recovery)|verification-lifecycle|prepared-plan|run-policy|playwright-discovery|backend-health)|publication\/release-breaker|runs\/run-retention|local-stack\/(owned-world-lifecycle|local-stack-startup))\.ts$/;
@@ -29,24 +28,6 @@ const ORCHESTRATION_INPUTS =
 const CORE_JOURNEY = 'golden:gg-00';
 export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: readonly string[] }[] = [
   {
-    name: 'Shared controls and tokens',
-    pattern: /^(components\/ui\/|app\/globals\.css$)/,
-    groups: [CORE_JOURNEY, 'audit:layout', 'audit:layout:viewports', 'audit:layout:standalone'],
-  },
-  {
-    // Every dialog, tab and wide table of the app renders through these, so the
-    // surface groups that open them all run (lib/testing/selection/surface-groups.ts).
-    name: 'Layer, tab, table and scroll-region primitives',
-    pattern:
-      /^(components\/ui\/(dialog|alert-dialog|sheet|tabs|table|scroll-region|return-focus)\.tsx?|components\/shared\/area-nav\.tsx)$/,
-    groups: [
-      CORE_JOURNEY,
-      'audit:layout',
-      'audit:layout:viewports',
-      ...SURFACE_GROUPS.map((group) => `audit:layout:${group}`),
-    ],
-  },
-  {
     name: 'Authentication and session boundary',
     pattern:
       /^(proxy\.ts$|lib\/auth\/|app\/auth\/|app\/\(auth\)\/|components\/auth\/|lib\/data\/cached\.ts$|hooks\/use-sign-out\.ts$)/,
@@ -55,13 +36,7 @@ export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: r
   {
     name: 'Dependencies or backend environment',
     pattern: /^(package\.json|bun\.lock|<environment>)$/,
-    groups: [
-      CORE_JOURNEY,
-      'audit:layout',
-      'audit:layout:viewports',
-      'audit:layout:standalone',
-      'audit:security:account',
-    ],
+    groups: [CORE_JOURNEY, 'audit:security:account'],
   },
 ];
 
@@ -123,10 +98,11 @@ function browserSelection(file: string, group: SelectableGroup): string | undefi
 
 /**
  * Chooses what a change must check. Release mode selects every group. Change
- * mode selects the cheap gates, and browser groups by declared scope or the
- * core table; when a browser group's latest result failed or was blocked, it
- * selects those browser groups and the groups whose own test code changed
- * instead (repair mode).
+ * mode selects the cheap gates, browser groups by declared scope or the core
+ * table, and a release-only group only when its own test code changed; when a
+ * browser group's latest result failed or was blocked, it selects those
+ * browser groups and the groups whose own test code changed instead (repair
+ * mode).
  */
 export function groupSelections(input: {
   mode: 'change' | 'release';
@@ -144,7 +120,10 @@ export function groupSelections(input: {
     if (input.mode === 'release') {
       selections.set(group.id, { reason: 'Release coverage', changedFiles: [] });
     } else if (group.releaseOnly) {
-      continue;
+      // The author of a sweep or a capture gets feedback on the change; a wall-clock group never runs in it.
+      const testChanges = ownTestChanges(group, input.changedFiles);
+      if (testChanges.length && !group.id.startsWith(MEASURED_GROUP_PREFIX))
+        selections.set(group.id, { reason: 'Test execution dependency changed', changedFiles: testChanges });
     } else if (group.id === ADVISORY_GROUP_ID) {
       // Every change plan carries an advisory result; the plan reuses a pass under 24 hours old
       // (lib/testing/evidence/advisory-freshness.ts), so a new advisory surfaces within a day.
@@ -168,9 +147,7 @@ export function groupSelections(input: {
     } else if (repairing) {
       // A repair absorbs shared product changes into its baseline, but never a group's own test code:
       // until 2026-10-16 a spec rewritten during a repair became baseline without ever running.
-      const testChanges = input.changedFiles.filter(
-        (file) => isTestInput(file) && group.executionInputs?.includes(file),
-      );
+      const testChanges = ownTestChanges(group, input.changedFiles);
       if (testChanges.length)
         selections.set(group.id, { reason: 'Test execution dependency changed', changedFiles: testChanges });
     } else if (RUNNER_PILOTS.has(group.id) && runnerChanges.length) {
@@ -180,12 +157,15 @@ export function groupSelections(input: {
         .map((file) => [file, browserSelection(file, group)] as const)
         .filter(([, reason]) => reason !== undefined);
       const first = reasons[0]?.[1];
-      // A lab group judges its ceilings, budgets and floors in every plan (lib/testing/lab-evidence.ts).
-      const judged = first && group.executionInputs?.some(isLabSpec) ? `Lab counts; ${first}` : first;
-      if (judged) selections.set(group.id, { reason: judged, changedFiles: reasons.map(([file]) => file) });
+      if (first) selections.set(group.id, { reason: first, changedFiles: reasons.map(([file]) => file) });
     }
   }
   return selections;
+}
+
+/** The changed spec and test support files a browser group executes. */
+function ownTestChanges(group: SelectableGroup, changedFiles: readonly string[]): string[] {
+  return changedFiles.filter((file) => isTestInput(file) && group.executionInputs?.includes(file));
 }
 
 /**
@@ -200,16 +180,13 @@ export function changedTestTier(
   return executionInputs?.some((file) => file.startsWith('tests/') && changedFiles.includes(file)) ? 0 : 1;
 }
 
-const MEASURED_GROUP_PREFIX = 'audit:performance:';
-
 /**
  * The wall-clock groups (`audit:performance:*`) whose declared scopes own a
  * changed product file. A change plan never selects them: their medians follow
  * the machine's load, so they
  * run on a quiet machine with an explicit `--group`, which enforces their
  * deadlines. The plan names them for a run before the next release; CI never
- * runs them (docs/technical/performance.md). The lab groups count work,
- * which repeats exactly, so a change plan selects them by scope instead.
+ * runs them (docs/technical/performance.md).
  */
 export function measuredGroupsForChange(
   groups: readonly SelectableGroup[],

@@ -55,8 +55,9 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 `bun run test:plan` prints each group with its reason and the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
 
-- A product file selects the browser groups that declare its scope; one without an owner selects `golden:gg-00`. Shared primitives, the auth path and dependency files add the shell, layout and account groups.
+- A product file selects the browser groups that declare its scope; one without an owner selects `golden:gg-00`. The auth path and dependency files add `audit:security:account`.
 - A spec or support file selects the groups that import it.
+- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, in CI's full runs, or with an explicit `--group`. A change to a group's own spec or support still selects it, except a wall-clock group.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Browser groups whose own spec or support changed run first. When one fails, later browser groups are blocked for that attempt.
 - `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
@@ -69,8 +70,7 @@ When a browser group's latest result is failed or blocked, a change plan selects
 
 `bun run test:verify --mode release` selects every group and rejects `--group`. A browser pass is reused only when every product file is unchanged since it ran.
 
-- `audit:performance:*` and `audit:visual` run in release mode only, or with an explicit `--group`.
-- `audit:lab:*` groups are selected by scope in change plans and fail on budgets, ceilings and floors, because counts repeat on a loaded machine.
+- `audit:lab:*` groups fail on budgets, ceilings and floors in every run, because counts repeat on a loaded machine.
 - Other latency deadlines fail in release mode only. Missing or malformed evidence fails in every mode.
 
 After a failed release run, pass every failed group with `--group` before the next release plan. After two consecutive failed release runs, write the diagnosis and a harness hypothesis into `.agent-logs/verification/<report-id>/diagnosis.md` of the latest one first (`lib/testing/publication/release-breaker.ts`).
@@ -80,6 +80,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 `.github/workflows/ci.yml` runs on every PR to `main` and every push to `main`. Its aggregate job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs when the diff is unreadable, when a tooling input changed, and in a full run.
+- **Tooling input.** A file that can change how every group installs, builds or runs: dependencies, build, Playwright and local-stack configuration, `ci.yml` and `.github/actions/`, the runner scripts, and the runner, selection and local-stack modules those scripts import (`runnerModules`). Other workflows, `.github/scripts/`, the PR template, and a module only a spec or a check imports plan by diff.
 - **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.

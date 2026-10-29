@@ -50,7 +50,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 ## What each instrument proves
 
 - **Wall-clock scenarios** (`audit:performance:*`) judge medians against a budget and a reference on this machine. They run alone and never in CI.
-- **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time.
+- **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. They run nightly, in the release gate and with `--group`; a change plan selects them only when their own spec or support changed.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 
 A metric earns its gate by two jobs: it repeats across five runs within tolerance, and moving it in a recorded experiment moved the time the user waits.
@@ -104,6 +104,6 @@ Tier 3 defaults. Diverge after the owner tried the alternative.
 
 ## Verify your work
 
-1. With `bun run test:server local` running, run each lab group `bun run test:plan` selects, and a wall-clock group it names with `--group audit:performance:<name>` on a quiet machine.
-2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout`.
+1. With `bun run test:server local` running, run the lab group of each journey the change touches with `--group audit:lab:<name>`, and a wall-clock group the plan names with `--group audit:performance:<name>` on a quiet machine.
+2. For a page, skeleton or shared control, run `bun run test:verify --group audit:layout` and `--group audit:layout:<area>` for each changed area.
 3. Commit the lowered or accepted references with the change. Record the journey decision, the numbers and the person's verdict in the slice record.

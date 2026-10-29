@@ -202,5 +202,5 @@ Every write shows feedback in its first frame, while the server works:
 ## Verify your work
 
 1. Run `bun run lint`, `bun run test:unit` and `bun run test:ui`.
-2. Run `bun run test:verify`. The plan selects `audit:layout` when a shared control or token changed, and `audit:layout:<area>` for each changed area. After an accepted redesign, add `--group audit:visual`.
+2. Run `bun run test:verify`, then the sweeps the plan leaves to the nightly run: `--group audit:layout` when a shared control or token changed, and `--group audit:layout:<area>` for each changed area. After an accepted redesign, add `--group audit:visual`.
 3. Capture each changed screen before and after: add it to `tests/audit/support/acceptance-sets.ts`, run `bun run test:audit:focused --grep "@ACCEPT <set>"`. Cover both themes, 375 px and desktop, empty, `-loading` and `-error`. Walk the keyboard path yourself. A screenshot does not prove an interaction.

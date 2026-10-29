@@ -285,9 +285,9 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['layout:field-time', 'layout/surfaces-field-time.spec.ts', ['time', 'personnel']],
   // The screens outside the app shell with their own sessions (standalone-route-inventory.ts).
   ['layout:standalone', 'layout/standalone-screens.spec.ts', ['standalone']],
-  // Reference screenshots of every page family; release mode and explicit request only.
+  // Reference screenshots of every page family.
   ['visual', 'visual/references.spec.ts', ['*']],
-  // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts); release mode and explicit request only.
+  // Rendered acceptance captures of the open sets (tests/audit/support/acceptance-sets.ts).
   ['visual:acceptance', 'visual/acceptance.spec.ts', ['*']],
   ['security:account', 'security/account.spec.ts', ['*']],
   ['list-pagination', 'pagination/list-pagination.spec.ts', ['inventory', 'documents', 'work']],
@@ -301,7 +301,7 @@ const auditDefinitions: readonly (readonly [string, string, readonly string[]])[
   ['performance:calendar-live', 'performance/calendar-live.spec.ts', ['planning', 'time', 'personnel']],
   ['performance:planning', 'performance/planning-benchmark.spec.ts', ['planning', 'work', 'personnel']],
   ['performance:field', 'performance/field.spec.ts', ['time', 'personnel', 'attention']],
-  // Lab counts and payloads of the daily journeys (lib/testing/journeys.ts); release mode and explicit request only.
+  // Lab counts and payloads of the daily journeys (lib/testing/journeys.ts).
   ['lab:field', 'lab/field.spec.ts', ['work', 'time', 'documents', 'personnel', 'attention']],
   ['lab:office', 'lab/office.spec.ts', ['work', 'customers', 'planning', 'time', 'personnel', 'attention']],
 ];
@@ -382,12 +382,13 @@ export function isPerformanceSpec(file: string): boolean {
 }
 
 /**
- * Wall-clock performance and visual reference specs run in release mode and on
- * explicit request only. Lab specs count work, which repeats exactly, so a
- * change plan selects them by scope like any browser group.
+ * Speed measurements, captures and sweeps run in release mode, in CI's full
+ * runs and on explicit request only: the wall-clock and lab groups, the visual
+ * references and acceptance captures, and the layout and accessibility sweeps.
+ * A change plan selects one only when its own spec or test support changed.
  */
 export function isReleaseOnlySpec(file: string): boolean {
-  return isPerformanceSpec(file) || file.startsWith('tests/audit/visual/');
+  return /^tests\/audit\/(performance|lab|visual|layout)\//.test(file);
 }
 
 export function listTestFiles(repositoryRoot: string, directory: string, pattern: RegExp): string[] {

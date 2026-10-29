@@ -3,7 +3,7 @@ import { appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { captureInputSnapshot } from '../lib/testing/evidence/group-evidence';
 import { createGroupQualification } from '../lib/testing/evidence/group-qualification';
-import { ciPlan } from '../lib/testing/selection/ci-plan';
+import { ciPlan, runnerModules } from '../lib/testing/selection/ci-plan';
 import { getTestGroups } from '../lib/testing/selection/test-groups';
 
 // The `Plan` job of .github/workflows/ci.yml: which browser groups this run
@@ -53,6 +53,7 @@ const plan = ciPlan({
   })),
   changedFiles: flag === '--base' ? changedSince(value) : [],
   fullRun: flag === '--full' ? value : undefined,
+  runnerModules: runnerModules(qualification.graph),
 });
 
 console.info(
