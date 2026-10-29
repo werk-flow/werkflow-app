@@ -43,7 +43,7 @@ Open the PR with `gh pr create` and the template, then babysit it as [reviews](c
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Once approved, open a PR that names the added entries and ask the owner to add the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. A change of the label reruns the head commit's Unit job and `Check` once its CI run finished (`list-growth.yml`).
+CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Once approved, open a PR that names the added entries and ask the owner to add the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. A label change reruns Unit and `Check` on the head commit (`list-growth.yml`). If that rerun fails, as past GitHub's 30-day limit, push a commit.
 
 A shrink counts too. When a function on `eslint-rules/size-cap-exceptions.json` gets shorter, lower its ceiling in the same change, or `module-caps.test.ts` fails.
 

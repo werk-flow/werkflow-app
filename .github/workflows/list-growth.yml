@@ -52,5 +52,9 @@ jobs:
           job="$(gh run view "$run" --json jobs --jq '.jobs[] | select(.name == "Unit") | .databaseId')"
           test -n "$job" || { echo "::error::CI run $run has no Unit job."; exit 1; }
           # A job's rerun also reruns the jobs that need it, so Check reports again on $SHA.
-          gh run rerun "$run" --job "$job"
+          # GitHub reruns a run only within 30 days of its start; a push starts a fresh one.
+          gh run rerun "$run" --job "$job" || {
+            echo "::error::CI run $run could not rerun. Push a commit, such as a merge of main, so a fresh CI run reads the label."
+            exit 1
+          }
           echo "Reran Unit and Check in CI run $run: https://github.com/$GH_REPO/actions/runs/$run"
