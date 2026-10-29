@@ -70,6 +70,15 @@ test('provider-only bootstrap cannot be selected as a business browser lane', ()
   expect(bootstrap).not.toContain("'test:preflight', 'iteration'");
 });
 
+test('a prebuilt test server proves the recorded build belongs to this checkout instead of building', () => {
+  // The CI shards serve the Build job's build; the identity check is what makes that build theirs.
+  const bootstrap = sourceAt('scripts/test-server.ts').text;
+  expect(bootstrap).toContain("'test:preflight', 'build', target");
+  expect(sourceAt('scripts/playwright-preflight.ts').text).toContain(
+    "else if (laneArgument === 'build') assertRecordedBuild(",
+  );
+});
+
 test('the Playwright configs keep one worker, no retries, no failure caps and the measured timeouts', () => {
   // File order on one worker is the execution model (decision 0007, amendment 2026-09-25); a cap or a
   // retry would hide failures or repeat them without diagnosis.
