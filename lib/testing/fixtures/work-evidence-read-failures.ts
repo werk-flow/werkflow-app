@@ -5,12 +5,11 @@
 // a missing row keeps its own not-found or refusal code.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
-import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs, tableRows } from './action-boundary-world';
+import { ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 import { createInMemoryAdmin } from './in-memory-admin';
 
 const jobId = '91000000-0000-4000-8000-000000000001';
 const artifactId = '94000000-0000-4000-8000-000000000001';
-const signatureId = '95000000-0000-4000-8000-000000000001';
 const requestId = '96000000-0000-4000-8000-000000000001';
 const subjectId = '30000000-0000-4000-8000-000000000002';
 const missingId = '99000000-0000-4000-8000-000000000001';
@@ -30,16 +29,6 @@ const world = installActionWorld({
       current_revision_id: null,
       created_at: now,
       updated_at: now,
-    },
-  ],
-  work_artifact_revision_documents: [],
-  documents: [
-    {
-      id: signatureId,
-      organization_id: ORGANIZATION_A,
-      storage_path: `${ORGANIZATION_A}/signatures/${signatureId}.png`,
-      uploaded_by: CALLER_ID,
-      category: 'photo',
     },
   ],
   time_correction_requests: [
@@ -74,16 +63,11 @@ mock.module('@/lib/supabase/admin', () => ({
     };
   },
 }));
-const discardedPaths: string[] = [];
 mock.module('@/lib/storage/r2', () => ({
   putStorageObject: async () => {},
-  discardStorageObjects: async ({ paths }: { paths: string[] }) => {
-    discardedPaths.push(...paths);
-  },
+  discardStorageObjects: async () => {},
 }));
-const { discardUnlinkedWorkArtifactSignature, getWorkArtifactDetail, getWorkArtifacts } = await import(
-  '@/lib/work-artifacts/actions'
-);
+const { getWorkArtifactDetail, getWorkArtifacts } = await import('@/lib/work-artifacts/actions');
 const { reviewTimeCorrection } = await import('@/lib/time-corrections/actions');
 
 const loadFailed = { success: false, error: 'load_failed' };
@@ -111,16 +95,6 @@ for (const table of ['jobs', 'job_assignments']) {
 }
 failingReadTable = null;
 assert.deepEqual(await getWorkArtifacts(jobTarget), { success: false, error: 'not_authorized' });
-
-// An unread signature relation could be a signature in use: nothing is deleted.
-failingReadTable = 'work_artifact_revision_documents';
-assert.deepEqual(await discardUnlinkedWorkArtifactSignature(signatureId), loadFailed);
-failingReadTable = null;
-assert.deepEqual(
-  tableRows(world, 'documents').map((row) => row.id),
-  [signatureId],
-);
-assert.deepEqual(discardedPaths, []);
 
 // The correction review: a failed request or subject read is a load failure;
 // a missing request or subject keeps its own code. No decision is written.

@@ -3,7 +3,8 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
-import { uploadDocumentDirect } from '@/lib/documents/upload-client';
+import type { DocumentUploadTarget } from '@/lib/documents/types';
+import { uploadWorkArtifactSignatureDirect } from '@/lib/documents/upload-client';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { discardUnlinkedWorkArtifactSignature, recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
 import { WORK_ARTIFACT_LEGAL_NOTICE } from '@/lib/work-artifacts/types';
@@ -18,6 +19,10 @@ type WorkArtifactCustomerActionsOptions = WorkArtifactTarget & {
   review: WorkArtifactReviewActions;
   onClose: () => void;
 };
+
+function signatureUploadTarget({ targetType, targetId }: WorkArtifactTarget): DocumentUploadTarget {
+  return targetType === 'job' ? { kind: 'job', jobId: targetId } : { kind: 'project', projectId: targetId };
+}
 
 /** Customer decision, signature capture, and the close flow that discards an unlinked signature upload. */
 export function useWorkArtifactCustomerActions({
@@ -86,13 +91,10 @@ export function useWorkArtifactCustomerActions({
     void runArtifactTask('signature', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
       if (!signatureDocumentId) {
-        const uploaded = await uploadDocumentDirect({
+        const uploaded = await uploadWorkArtifactSignatureDirect({
           file: signatureFile,
-          target:
-            targetType === 'job'
-              ? { kind: 'job', jobId: targetId }
-              : { kind: 'project', projectId: targetId },
-          category: 'photo',
+          artifactId: detail.id,
+          target: signatureUploadTarget({ targetType, targetId }),
         });
         if (!uploaded.success) {
           setError('Die Unterschrift konnte nicht hochgeladen werden.');

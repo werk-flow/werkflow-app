@@ -73,7 +73,7 @@
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
     "components/auftraege/artifacts/use-work-artifact-customer-actions.ts": {
-      "useWorkArtifactCustomerActions": 132
+      "useWorkArtifactCustomerActions": 129
     },
     "components/auftraege/artifacts/use-work-artifact-editor.ts": { "useWorkArtifactEditor": 132 },
     "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 151 },
