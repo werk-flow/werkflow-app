@@ -186,16 +186,18 @@ for (const path of [
 }
 
 // Decision records grow only by dated amendment sections: the committed and the published texts
-// stay prefixes of the current one.
-const publishedRef = git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main']).ok
-  ? 'origin/main'
-  : null;
+// stay prefixes of the current one. The published text is main's at the merge base: a CI run's
+// merge commit may predate an amendment that reached main since, and must not fail for it.
+const mergeBase = git(['merge-base', 'HEAD', 'refs/remotes/origin/main']);
+const publishedRef = mergeBase.ok ? mergeBase.out.trim() : null;
 for (const path of docPaths.filter((doc) => doc.startsWith('decisions/'))) {
-  for (const ref of ['HEAD', ...(publishedRef === null ? [] : [publishedRef])]) {
+  const refs = [{ ref: 'HEAD', name: 'HEAD' }];
+  if (publishedRef !== null) refs.push({ ref: publishedRef, name: 'origin/main at the merge base' });
+  for (const { ref, name } of refs) {
     const earlier = git(['show', `${ref}:docs/${path}`]);
     if (!earlier.ok) continue;
     const problem = decisionGrowthProblem(earlier.out, docMarkdown(path));
-    if (problem !== null) problems.push(`decision: docs/${path} against ${ref}: ${problem}`);
+    if (problem !== null) problems.push(`decision: docs/${path} against ${name}: ${problem}`);
   }
 }
 
