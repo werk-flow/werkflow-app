@@ -89,7 +89,7 @@ A local file never affects the deployed app. Never run the test harness or a des
 
 ## Which tool reaches what
 
-Agents never read PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. For MCP, `.claude/hooks/refuse-production-mcp.ts` refuses, in Claude Code and Codex, a tool whose server name contains `prod` or whose input or server configuration names the production ref, and a Supabase server whose configuration names no other project or local stack. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape. Codex skips a new or changed project hook until someone trusts it: after a change to `.codex/hooks.json`, the owner runs `/hooks` in Codex on each machine and trusts it.
+Agents never read PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. The hook below enforces this for MCP only; the [backlog](enforcement-ladder-backlog.md) records the shell and `env:prod` paths. For MCP, `.claude/hooks/refuse-production-mcp.ts` refuses, in Claude Code and Codex, a tool whose server name contains `prod` or whose input or server configuration names the production ref, and a Supabase server whose configuration names no other project or local stack. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape. Codex skips a new or changed project hook until someone trusts it: after a change to `.codex/hooks.json`, the owner runs `/hooks` in Codex on each machine and trusts it.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
@@ -140,7 +140,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 ## Work on production
 
-- Reads: metadata only, through `bun run prod:inspect`: migration versions, object names and advisor findings. No agent reads PROD data through any other tool. The hook enforces this for MCP only; the [backlog](enforcement-ladder-backlog.md) records the shell and `env:prod` paths.
+- Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
 - Staging: a PR merged to `main` reaches DEV's schema, then staging.
 - Release: only through the `release` workflow, which the owner starts or asks an agent to start.
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
