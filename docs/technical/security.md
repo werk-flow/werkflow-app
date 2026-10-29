@@ -77,6 +77,7 @@ Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it ke
 - **Closed periods.** A closed period freezes the recorded time of its month for every writer, service-role code included. Triggers raise SQLSTATE `WFP01`; `isPeriodClosedError` maps it to `period_closed`. Close refuses with `period_open_sessions` while a session that began before the period end is open.
 - **Account and email change.** Account and email-change transitions stay atomic and server-only. One service-only RPC serializes every challenge transition per account. Send windows per mailbox survive a reset of the wizard. A completion claim permits one Auth update. Client roles read neither state table.
 - DEV's Auth configuration matches the reviewed posture (`auth:check`), and its advisors report nothing outside the reviewed exceptions (`advisors:check`).
+- A seeded demo account gets a password generated per run, never one from the repository, and PROD refuses a chosen one (`lib/security/demo-member-password.test.ts`).
 
 ### Realtime
 

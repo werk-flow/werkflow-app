@@ -19,7 +19,7 @@ Choose the level from the diff before you open the PR, and state it with its rea
 - Every level also needs `Check` green on the latest commit.
 - Level 0 and 1 never request or wait for CodeRabbit.
 - When the owner says "sol loop", run the `sol-loop` skill alone. It owns the review loop, its budget and its PR line.
-- "full send" lets the agent merge; without it the owner merges.
+- The coordinator thread merges a PR that meets the merge gate. Under "full send" the PR's own thread merges it. The owner may merge any PR. A "full stop" PR waits until the owner has read it.
 
 Wrong turn: calling a change level 0 because it is small. A one-line change to a role check is level 2.
 
@@ -32,7 +32,7 @@ Wrong turn: calling a change level 0 because it is small. A one-line change to a
 5. Fix a real finding in a new commit and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
 7. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
-8. When the PR meets [the merge gate](#the-merge-gate), call `unwatch_pull_request` and hand back with the level and the reviews it got. Under "full send" you merge. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
+8. When the PR meets [the merge gate](#the-merge-gate), call `unwatch_pull_request` and hand back with the level and the reviews it got. Under "full send" you merge; otherwise the coordinator or the owner does. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
 
 Wrong turn: accepting a suggested diff verbatim. A reviewer sees the diff, not the product. A fix that weakens a role check or a German label to satisfy it is a regression.
 

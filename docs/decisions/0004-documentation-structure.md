@@ -264,3 +264,13 @@ Decided:
 3. A doc carries no status line or review date. Existing status lines go as their docs are next edited.
 
 This amendment supersedes rule 4 of the original decision, rules 1, 2, 3, 5 and 7 of the 2026-10-17 amendment, and the settings tables of the 2026-10-17, 2026-10-26 and "plans leave the repository" amendments.
+
+## Amendment 2026-10-28: budgets at the post-cut sizes
+
+The owner decided this in werk-flow/werkflow-planning#9, the last step of the docs cut (werk-flow/werkflow-planning#2). The old budgets sat far above the cut docs, so they no longer stopped growth.
+
+Decided:
+
+1. Each budget is set to the largest file it covers after the cut, plus a little headroom: a technical doc 3,000 words, `AGENTS.md` 1,800, the docs index 800, a skill file 2,700. The `AGENTS.md` and index budgets equal the epic's targets.
+2. To add text to a file at its budget, cut text from it. Raising a budget stays the owner's decision.
+3. `lib/docs/doc-policy.ts` stays the one home of the numbers. This amendment records the decision of its date; it supersedes rule 2 of the "docs:check keeps links, budgets and few rules" amendment.

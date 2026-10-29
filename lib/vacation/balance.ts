@@ -167,11 +167,15 @@ export type VacationBalance = {
  * The explainable balance for one vacation year. `takenDays` sums the
  * approval-time snapshots (`approvedDaysByYear`) so a later schedule change
  * never silently rewrites a decided balance; pending days are a live preview.
+ * A caller that shows several balances passes `daysByYearOf` to count each
+ * pending request once.
  */
 export function computeVacationBalance(
   year: number,
   requests: VacationRequest[],
   context: VacationCountingContext,
+  daysByYearOf: (request: VacationRequest) => Record<string, number> = (request) =>
+    countVacationDaysByYear(request, context),
 ): VacationBalance {
   const yearKey = String(year);
   let takenDays = 0;
@@ -181,7 +185,7 @@ export function computeVacationBalance(
     if (request.status === 'approved') {
       takenDays += request.approvedDaysByYear?.[yearKey] ?? 0;
     } else if (request.status === 'pending') {
-      pendingDays += countVacationDaysByYear(request, context)[yearKey] ?? 0;
+      pendingDays += daysByYearOf(request)[yearKey] ?? 0;
     }
   }
 

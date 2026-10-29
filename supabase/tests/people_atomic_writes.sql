@@ -3,7 +3,9 @@
 -- member removal with the exit date (20261004130000_remove_member_with_exit_atomically.sql),
 -- organization creation with its defaults (20261004130100_create_organization_atomically.sql),
 -- invite creation with the record connection and the withdrawal of an unsent
--- invite (20261004130200_create_invites_atomically.sql).
+-- invite (20261004130200_create_invites_atomically.sql), and invite
+-- redemption that accepts only a pending invite
+-- (20261029100000_lock_invite_on_redemption_read.sql).
 begin;
 
 insert into auth.users (
@@ -329,6 +331,47 @@ begin
       end if;
     end loop;
   end loop;
+end;
+$$;
+
+-- An invite cancelled while its redemption runs is not redeemed: the
+-- redemption accepts only a pending invite, and its refusal rolls back the
+-- membership. The trigger stands in for a cancel that commits between the
+-- redemption's status read and its final update.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('41004000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'atomic-late-cancel@example.test', '', now(), '{}',
+ '{"first_name":"Late","last_name":"Cancel"}', now(), now());
+insert into public.organization_invites (id, organization_id, email, invite_code, invited_role) values
+('41004000-0000-0000-0000-000000000032', '41004000-0000-0000-0000-000000000011',
+  'atomic-late-cancel@example.test', '41004000-0000-0000-0000-0000000000c2', 'buero');
+
+create function public.test_cancel_invite_during_redemption() returns trigger
+language plpgsql as $$
+begin
+  update public.organization_invites set status = 'cancelled'
+  where id = '41004000-0000-0000-0000-000000000032';
+  return new;
+end;
+$$;
+create trigger test_cancel_invite_during_redemption
+after insert on public.organization_members
+for each row execute function public.test_cancel_invite_during_redemption();
+
+select pg_temp.expect_refusal('redemption of an invite cancelled meanwhile', $sql$
+  select * from app_private.redeem_organization_invite_for_user(
+    '41004000-0000-0000-0000-0000000000c2', '41004000-0000-0000-0000-000000000005')
+$sql$, 'invite_already_used');
+drop trigger test_cancel_invite_during_redemption on public.organization_members;
+do $$
+begin
+  if exists (select 1 from public.organization_members
+             where user_id = '41004000-0000-0000-0000-000000000005')
+    or (select status from public.organization_invites where id = '41004000-0000-0000-0000-000000000032') <> 'pending'
+  then raise exception 'a refused redemption left a membership or changed the invite'; end if;
 end;
 $$;
 

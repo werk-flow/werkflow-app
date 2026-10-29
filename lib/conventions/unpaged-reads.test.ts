@@ -134,7 +134,6 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/time-tracking/segment-actions.ts::getCanonicalClockState::time_segments': ONE_USER_DAY,
   'lib/vacation/server.ts::loadVacationCountingContext::work_schedules': ONE_EMPLOYEE,
   'lib/vacation/server.ts::loadVacationCountingContext::employment_conditions': ONE_EMPLOYEE,
-  'lib/vacation/server.ts::loadVacationRequestsForRecord::vacation_requests': ONE_EMPLOYEE,
   'lib/work-artifacts/actions.ts::getWorkArtifactDetail::work_artifact_revisions': ONE_ARTIFACT,
   'lib/work-artifacts/actions.ts::getWorkArtifactDetail::work_artifact_actions': ONE_ARTIFACT,
   'lib/work-artifacts/actions.ts::getWorkArtifactDetail::work_artifact_measurement_lines': ONE_ARTIFACT,
