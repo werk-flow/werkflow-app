@@ -1,7 +1,7 @@
 <!--
 One problem per PR. Title: what changes for the user or the developer, in plain English.
-A PR is ready at the merge gate (docs/technical/coderabbit.md, "The merge gate"). Its own thread merges it,
-unless the owner said "full stop" or it changes AGENTS.md.
+A PR is ready at the merge gate (docs/technical/coderabbit.md, "The merge gate"). The owner merges,
+unless the owner said "full send" in the task's thread.
 -->
 
 ## Problem
