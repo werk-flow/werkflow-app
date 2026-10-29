@@ -94,3 +94,10 @@ The owner aligned the rules with current practice.
 
 1. Rule 8 now reads: the coordinator thread merges a PR that meets the merge gate, or the PR's own thread does when the owner said "full send" there. The owner may merge any PR. A "full stop" PR waits until the owner has read it. Nobody merges with an admin bypass.
 2. Rule 7 now reads: a release runs when the owner or the coordinator thread asks for it ("release main"). The releasing thread checks production afterwards and rolls the app back through Vercel if it breaks. The database is never rolled back.
+
+## Amendment 2026-10-29: threads merge their own PRs, and a queue requests CodeRabbit reviews
+
+The owner removed the need for one coordinator thread to stay alive. A watcher in the coordinator's thread requested CodeRabbit reviews in a fixed order and woke the coordinator to merge, so reviews and merges stopped whenever that thread stopped.
+
+1. Rule 8 now reads: a PR's own thread squash-merges it once the merge gate passes. A "full stop" PR, or one that changes `AGENTS.md`, waits until the owner has read and merged it. The owner may merge any PR. Nobody merges with an admin bypass.
+2. Rule 4 now reads: a level 2 PR whose `Check` is green and whose `sol-loop` approved gets the label `needs-coderabbit`. Its thread never requests the review itself. A scheduled queue outside any thread requests one review at a time, oldest label first, while the app's rate-limit window allows, and messages the PR's thread. [coderabbit.md](../technical/coderabbit.md#the-coderabbit-queue) owns the procedure.

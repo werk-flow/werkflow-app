@@ -19,7 +19,7 @@ Choose the level from the diff before you open the PR, and state it with its rea
 - Every level also needs `Check` green on the latest commit.
 - Level 0 and 1 never request or wait for CodeRabbit.
 - When the owner says "sol loop", run the `sol-loop` skill alone. It owns the review loop, its budget and its PR line.
-- The coordinator thread merges a PR that meets the merge gate. Under "full send" the PR's own thread merges it. The owner may merge any PR. A "full stop" PR waits until the owner has read it.
+- A PR's own thread merges it once it meets the merge gate. A "full stop" PR, or one that changes `AGENTS.md`, waits until the owner has read and merged it. The owner may merge any PR.
 
 Wrong turn: calling a change level 0 because it is small. A one-line change to a role check is level 2.
 
@@ -28,11 +28,11 @@ Wrong turn: calling a change level 0 because it is small. A one-line change to a
 1. After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher.
 2. On each wake, act only on news newer than your last push: the failed job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or new comments (`gh pr view <number> --comments`, inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`). When a wake needs no action, end your turn without a message.
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
-4. A level 2 PR gets one CodeRabbit app review, at the end: once Sol approved and `Check` is green, comment `@coderabbitai review` (the app skips repositories under ten stars by itself). Request it once per PR, never while its latest comment reports a rate limit: an early request restarts the window. When several PRs wait, request the security fixes first.
+4. A level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved and `Check` is green, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
 5. Fix a real finding in a new commit and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
 7. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
-8. When the PR meets [the merge gate](#the-merge-gate), call `unwatch_pull_request` and hand back with the level and the reviews it got. Under "full send" you merge; otherwise the coordinator or the owner does. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
+8. When the PR meets [the merge gate](#the-merge-gate), merge it, call `unwatch_pull_request`, and report the level and the reviews it got. A "full stop" PR, or one that changes `AGENTS.md`, you hand back unmerged for the owner. Call `unwatch_pull_request` before every question to the owner too, so the thread reaches the owner's inbox.
 
 Wrong turn: accepting a suggested diff verbatim. A reviewer sees the diff, not the product. A fix that weakens a role check or a German label to satisfy it is a regression.
 
@@ -46,7 +46,17 @@ A PR is ready when all of these hold on its latest commit:
 - GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`).
 - No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours.
 
-Merge only under "full send": `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
+Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
+
+### The CodeRabbit queue
+
+`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine, so no thread has to stay alive to hand out reviews. Each pass:
+
+1. Lists the open PRs labelled `needs-coderabbit`, and skips any that already got a CodeRabbit review or a request after their latest push.
+2. Does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
+3. Otherwise comments `@coderabbitai review` on the PR labelled longest ago, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
+
+The log is `~/.local/state/coderabbit-queue.log`, and `journalctl --user -u coderabbit-queue` shows each run. Automatic review is off, so a PR without the label gets no CodeRabbit review.
 
 ### Give a review its context
 
