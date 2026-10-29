@@ -97,7 +97,7 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
 3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
 4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
-5. **Deletes after `cd`.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `cd` somewhere and then `rm -rf` a wildcard: Claude Code cannot resolve the target and stops the thread for the owner, even in full access (`.claude/hooks/refuse-delete-after-cd.ts` refuses it).
+5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): Claude Code cannot resolve it and stops for the owner, even in full access (`.claude/hooks/refuse-unresolvable-delete.ts` refuses it).
 
 ## Hit every surface
 
