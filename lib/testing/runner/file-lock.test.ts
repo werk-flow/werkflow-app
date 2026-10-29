@@ -47,7 +47,7 @@ describe('cross-process file lock', () => {
     temporaryDirectories.push(directory);
     const lockPath = resolve(directory, 'manifest.json.lock');
     writeFileSync(lockPath, 'existing-owner');
-    const oldTimestamp = new Date(Date.now() - 60_000);
+    const oldTimestamp = new Date('2026-01-02T10:00:00.000Z');
     utimesSync(lockPath, oldTimestamp, oldTimestamp);
 
     expect(() => withFileLock(lockPath, () => undefined, { timeoutMilliseconds: 50 })).toThrow(

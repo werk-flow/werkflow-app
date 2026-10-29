@@ -58,7 +58,7 @@ test('batched reads keep at most BATCH_CONCURRENCY requests in flight', async ()
   const result = await readInBatches(ids, async (batch) => {
     inFlight += 1;
     peak = Math.max(peak, inFlight);
-    await new Promise((resolve) => setTimeout(resolve, 1));
+    await new Promise((resolve) => setImmediate(resolve));
     inFlight -= 1;
     return { data: batch.map((id) => ({ id })), error: null };
   });

@@ -479,10 +479,12 @@ export async function setRequestStatusFromDetail(
 
 export async function closeRequestViaDialog(page: Page, reasonLabel: string): Promise<void> {
   const detailUrl = page.url();
+  // eslint-disable-next-line test-hygiene/no-polling-loop -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (page.url() !== detailUrl) await page.goto(detailUrl);
     // The request-created event can reach the newly mounted detail page after
     // navigation. Drain the shared 150 ms router-refresh debounce (REALTIME_DEBOUNCE_MS) first.
+    // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;

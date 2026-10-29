@@ -121,7 +121,7 @@ A browser group is one spec file with one disposable organization, a rough check
 
 ### Spec checklist
 
-Lint and `spec-conventions.test.ts` enforce the locator, wait and independence rules. Review owns these:
+Lint and `spec-conventions.test.ts` enforce the locator, wait, timeout, retry, clock, skip and independence rules (`eslint-rules/test-hygiene-rules.mjs` owns the last five for unit tests too). Review owns these:
 
 - **Independent.** Each test seeds its own preconditions and passes alone and in any order. A count or "latest row" check covers only the test's own records. A measured test prepares the typical profile through `ensureTypicalProfile`.
 - **One proof per behavior.** The golden file holds the journey a user walks, including second-session and live checks. The audit file holds edge cases, denials and role variants. A second browser proof needs a distinct risk or role.
@@ -130,6 +130,7 @@ Lint and `spec-conventions.test.ts` enforce the locator, wait and independence r
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.
 - **Stale premise.** A session whose premise is outdated state calls `freezeLiveUpdates` before it opens the page, or holds that state in an open dialog.
 - **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why in a `// best-effort: <reason>` comment.
+- **Quarantine as a last resort.** A skip is for a diagnosed product or harness defect whose fix is an open planning issue, never for an undiagnosed failure. The issue brings the test back; the nightly summary lists every quarantine (`scripts/list-quarantines.ts`).
 
 ## Deadlines and measured scenarios
 
@@ -183,8 +184,11 @@ Causes that failed runs more than once. Check them before you classify.
 
 ## Never
 
-- Commit `test.only`, `test.skip`, `test.fixme`, `test.slow` or a per-test timeout.
-- Add a fixed sleep, or mint a golden cleanup marker outside the seed module.
+- Commit `.only`. Commit a skip (`skip`, `fixme`, `todo`) without `// quarantine: werk-flow/werkflow-planning#<n> <why>` on the line above, or quarantine a security, SQL or action-boundary test.
+- Wait on the clock: a sleep, `waitForTimeout`, or a loop that awaits and sleeps or checks a deadline. Wait on the fact with a web-first assertion, `expect.poll` or `settledBeforeTimeout`.
+- Set a per-test timeout (`test(…, ms)`, `{ timeout }`, `test.slow`, `test.setTimeout`, `setDefaultTimeout`) or a retry (`retries` other than 0, `{ retry }`, `{ repeats }`, `--rerun-each`).
+- Read the wall clock in a unit test (`Date.now()`, `new Date()`, `performance.now()`). Use a fixed instant, `setSystemTime` or the module's injected clock.
+- Mint a golden cleanup marker outside the seed module.
 - Locate a control in a spec by its copy, a parent hop, a CSS class, an id or an attribute.
 - Compare `count()` reads taken once. Poll them together with `expect.poll`.
 - Weaken an assertion, or retry until green, a failed CI job included.
@@ -194,7 +198,7 @@ Causes that failed runs more than once. Check them before you classify.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
 - Run `rm -r` on a wildcard or variable after a `cd` in one command; Claude Code asks the owner. Use an absolute path or `mktemp -d`.
 - Add a package script that builds, tests or changes the local stack outside the workspace lock.
-- Set a duration assertion or a timeout in a unit test. Make a slow test cheaper.
+- Set a duration assertion in a unit test. Make a slow test cheaper.
 
 ## Verify your work
 

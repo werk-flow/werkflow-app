@@ -233,7 +233,9 @@ export async function recordSicknessForMemberViaSection(
     expectVacationOverlapHint?: boolean;
   },
 ): Promise<void> {
+  // eslint-disable-next-line test-hygiene/no-polling-loop -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
     await page.waitForTimeout(300);
     await recordSicknessButton(page).click();
     await expect(page.getByRole('heading', { name: SICKNESS_COPY.recordSickness })).toBeVisible();
