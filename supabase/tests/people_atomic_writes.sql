@@ -5,7 +5,7 @@
 -- invite creation with the record connection and the withdrawal of an unsent
 -- invite (20261004130200_create_invites_atomically.sql), and invite
 -- redemption that accepts only a pending invite
--- (20261028150100_lock_invite_on_redemption_read.sql).
+-- (20261029100000_lock_invite_on_redemption_read.sql).
 begin;
 
 insert into auth.users (
