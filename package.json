@@ -39,6 +39,7 @@
     "test:runs": "bun scripts/manage-playwright-runs.ts",
     "test:campaign": "bun scripts/campaign-summary.ts",
     "migrations:check": "bun scripts/check-dev-migration-history.ts",
+    "migrations:order": "bun scripts/check-migration-order.ts",
     "types:generate": "bun scripts/generate-supabase-types.ts",
     "types:check": "bun scripts/generate-supabase-types.ts --check",
     "auth:check": "bun scripts/check-supabase-project.ts auth",
