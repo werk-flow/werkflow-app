@@ -17,6 +17,7 @@ const servers = new Map<string, unknown[]>([
   ['expanded', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${TARGET_REF}' }]],
   ['defaulted', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=\${MISSING:-${PROD}}` }]],
   ['unresolved', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${MISSING}' }]],
+  ['supabase_alt', [{ type: 'http', url: '${ENDPOINT}' }]],
   ['search', [{ type: 'http', url: 'https://search.example.test/mcp?key=${MISSING}' }]],
 ]);
 const env = { TARGET_REF: PROD };
@@ -46,6 +47,13 @@ test('DEV, local and unrelated MCP tools pass', () => {
   // "prod" in the tool part names no server.
   expect(refusal('mcp__shop__list_products')).toBeUndefined();
   expect(refusal('Bash', { command: `echo ${PROD}` })).toBeUndefined();
+});
+
+test('a call without a tool name is refused', () => {
+  for (const tool_name of [undefined, 7, null])
+    expect(productionMcpRefusal({ tool_name, tool_input: {} }, context)).toContain(
+      'could not read the tool name',
+    );
 });
 
 test('a server named for production is refused, whatever its tool', () => {
@@ -80,6 +88,8 @@ test('a server configuration is judged as the agent expands its variables', () =
     expect(refusal(tool), tool).toContain('configured for the production Supabase project');
   expect(refusal('mcp__expanded__execute_sql', {}, { ...context, env: { TARGET_REF: DEV } })).toBeUndefined();
   expect(refusal('mcp__unresolved__execute_sql')).toContain('cannot tell whether');
+  // The variable hides the whole target; the server name still marks it as Supabase.
+  expect(refusal('mcp__supabase_alt__execute_sql')).toContain('cannot tell whether');
   expect(refusal('mcp__search__query')).toBeUndefined();
 });
 
@@ -113,13 +123,18 @@ test('servers come from every Claude Code and Codex scope, keyed as in tool name
     join(dir, 'claude.json'),
     JSON.stringify({
       mcpServers: { supabase: { url: 'user' } },
-      projects: { '/repo': { mcpServers: { 'claude.ai Db': { url: 'local' } } } },
+      projects: {
+        '/repo': { mcpServers: { 'claude.ai Db': { url: 'local' } } },
+        // Another project's local server of the same name does not apply here.
+        '/other': { mcpServers: { supabase: { url: 'other project' } } },
+      },
     }),
   );
   writeFileSync(join(dir, 'mcp.json'), JSON.stringify({ mcpServers: { supabase: { url: 'project' } } }));
   writeFileSync(join(dir, 'config.toml'), '[mcp_servers.codex-db]\nurl = "codex"\n');
   const found = configuredMcpServers({
     claudeConfig: join(dir, 'claude.json'),
+    projectDir: '/repo',
     projectMcp: join(dir, 'mcp.json'),
     codexConfigs: [join(dir, 'config.toml'), join(dir, 'missing.toml')],
   });
@@ -132,6 +147,7 @@ test('servers come from every Claude Code and Codex scope, keyed as in tool name
   expect(() =>
     configuredMcpServers({
       claudeConfig: join(dir, 'claude.json'),
+      projectDir: '/repo',
       projectMcp: join(dir, 'mcp.json'),
       codexConfigs: [],
     }),
@@ -168,6 +184,8 @@ test('the hook refuses PROD MCP calls with the reason and lets DEV calls through
     mcp('mcp__db__list_tables'),
     mcp('mcp__claude_ai_Supabase__execute_sql', { project_id: production }),
     'not json',
+    '{}',
+    '[]',
   ]) {
     const refused = call(stdin);
     expect(refused.exitCode, refused.output).toBe(2);

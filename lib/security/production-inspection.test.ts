@@ -19,6 +19,12 @@ test('the catalog query reads only system catalogs', () => {
   for (const relation of relations) expect(relation).toMatch(/^pg_catalog\.pg_[a-z_]+$/);
 });
 
+test('the catalog compares the Realtime publication operations', () => {
+  // Raw DELETE and TRUNCATE publication bypass Realtime RLS (docs/technical/security.md, Realtime).
+  for (const flag of ['pubinsert', 'pubupdate', 'pubdelete', 'pubtruncate'])
+    expect(CATALOG_QUERY).toContain(`p.${flag}`);
+});
+
 test('the ledger query reads only the migration versions', () => {
   expect(relationsRead(LEDGER_QUERY)).toEqual(['supabase_migrations.schema_migrations']);
   expect(LEDGER_QUERY).toStartWith('select version from ');

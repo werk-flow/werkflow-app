@@ -65,6 +65,10 @@ select kind, name, hash from (
   select 'publication', p.pubname || ':' || p.schemaname || '.' || p.tablename,
     md5(concat_ws('|', p.attnames::text, p.rowfilter))
   from pg_catalog.pg_publication_tables p where p.pubname = 'supabase_realtime'
+  union all
+  select 'publication', p.pubname,
+    md5(concat_ws('|', p.puballtables, p.pubinsert, p.pubupdate, p.pubdelete, p.pubtruncate, p.pubviaroot))
+  from pg_catalog.pg_publication p where p.pubname = 'supabase_realtime'
 ) objects order by kind, name`;
 
 export const catalogRowsSchema = z.array(z.object({ kind: z.string(), name: z.string(), hash: z.string() }));

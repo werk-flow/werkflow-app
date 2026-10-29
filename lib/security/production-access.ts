@@ -40,9 +40,10 @@ function mcpServerOf(toolName: string): string | undefined {
 function expandedConfig(
   config: unknown,
   env: Readonly<Record<string, string | undefined>>,
-): { text: string; unresolved: boolean } {
+): { raw: string; text: string; unresolved: boolean } {
   let unresolved = false;
-  const text = JSON.stringify(config ?? null).replace(
+  const raw = JSON.stringify(config ?? null);
+  const text = raw.replace(
     /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g,
     (_, name: string, fallback: string | undefined) => {
       const value = env[name] ?? fallback;
@@ -50,7 +51,7 @@ function expandedConfig(
       return value ?? '';
     },
   );
-  return { text, unresolved };
+  return { raw, text, unresolved };
 }
 
 /** A configured server name as it appears in tool names. */
@@ -77,12 +78,14 @@ function readOptional(path: string): string | undefined {
 }
 
 /**
- * Every MCP server configured for Claude Code (user, local and project scope)
- * and Codex (user and project), keyed by its tool-name form. A file that
+ * Every MCP server configured for Claude Code (user scope, and local and
+ * project scope of this project) and Codex (user and project), keyed by its
+ * tool-name form. A file that
  * exists but cannot be read or parsed throws, so the caller fails closed.
  */
 export function configuredMcpServers(paths: {
   claudeConfig: string;
+  projectDir: string;
   projectMcp: string;
   codexConfigs: readonly string[];
 }): Map<string, unknown[]> {
@@ -97,7 +100,7 @@ export function configuredMcpServers(paths: {
   if (claude !== undefined) {
     const config = claudeConfigSchema.parse(JSON.parse(claude));
     add(config.mcpServers);
-    for (const project of Object.values(config.projects ?? {})) add(project.mcpServers);
+    add(config.projects?.[paths.projectDir]?.mcpServers);
   }
   const project = readOptional(paths.projectMcp);
   if (project !== undefined) add(projectConfigSchema.parse(JSON.parse(project)).mcpServers);
@@ -113,6 +116,7 @@ export function mcpConfigPaths(projectDir: string): Parameters<typeof configured
   const claudeDir = process.env.CLAUDE_CONFIG_DIR;
   return {
     claudeConfig: claudeDir ? join(claudeDir, '.claude.json') : join(homedir(), '.claude.json'),
+    projectDir,
     projectMcp: join(projectDir, '.mcp.json'),
     codexConfigs: [
       join(process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'config.toml'),
@@ -143,11 +147,12 @@ export function productionMcpRefusal(
     env: Readonly<Record<string, string | undefined>>;
   },
 ): string | undefined {
-  if (typeof call.tool_name !== 'string') return undefined;
+  const refuse = (why: string) => `Refused: ${why} ${INSTEAD}`;
+  if (typeof call.tool_name !== 'string')
+    return refuse('the MCP guard could not read the tool name, so it cannot rule out PROD.');
   const toolName = call.tool_name;
   const server = mcpServerOf(toolName);
   if (!server) return undefined;
-  const refuse = (why: string) => `Refused: ${why} ${INSTEAD}`;
   const unknown = (what: string) =>
     refuse(`the hook could not read ${what}, so it cannot tell whether "${server}" reaches PROD.`);
   if (/prod/i.test(server)) return refuse(`MCP server "${server}" is a production server by its name.`);
@@ -162,7 +167,9 @@ export function productionMcpRefusal(
     .flatMap(([, entries]) => entries.map((entry) => expandedConfig(entry, env)));
   if (configs.some((config) => config.text.includes(productionRef)))
     return refuse(`MCP server "${server}" is configured for the production Supabase project.`);
-  if (configs.some((config) => config.unresolved && /supabase/i.test(config.text)))
+  const supabase = (config: { raw: string; text: string }) =>
+    /supabase/i.test(server) || /supabase/i.test(config.raw) || /supabase/i.test(config.text);
+  if (configs.some((config) => config.unresolved && supabase(config)))
     return unknown('every variable in its configuration');
   return undefined;
 }
