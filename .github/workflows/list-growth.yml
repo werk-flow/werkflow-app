@@ -14,13 +14,13 @@ permissions: {}
 # The newest change of this label wins and still waits for a rerun an older one started. Other
 # labels take their own group, so a queue relabel never cancels a waiting rerun.
 concurrency:
-  group: "list-growth-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'approved: list growth' || github.event.label.name == 'documentation' }}"
+  group: "list-growth-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'approved: list growth' }}"
   cancel-in-progress: true
 
 jobs:
   rerun:
     name: Rerun Unit
-    if: "github.event.label.name == 'approved: list growth' || github.event.label.name == 'documentation'"
+    if: "github.event.label.name == 'approved: list growth'"
     runs-on: ubuntu-24.04
     # A CI run in progress can take its own 45 min browser timeout after a runner queue.
     timeout-minutes: 90
