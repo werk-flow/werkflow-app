@@ -42,6 +42,7 @@ type CalendarActionErrorCode =
   | 'invalid_input'
   | 'invalid_occurrence'
   | 'invalid_recurrence'
+  | 'job_not_assigned'
   | 'job_not_found'
   | 'job_not_parked'
   | 'job_number_required'
@@ -168,6 +169,8 @@ const CALENDAR_MESSAGES = {
   working_in_other_org:
     'Diese Person ist gerade in einer anderen Organisation eingestempelt. Die Zeit lässt sich erst danach ändern.',
   not_authorized: NOT_ALLOWED,
+  job_not_assigned:
+    'Die ausgewählte Person ist diesem Auftrag nicht zugewiesen. Wähle einen ihrer Aufträge oder trage die Zeit ohne Auftrag ein.',
   work_blocker_not_authorized: NOT_ALLOWED,
   work_dependency_not_authorized: NOT_ALLOWED,
   work_transition_not_authorized: NOT_ALLOWED,
