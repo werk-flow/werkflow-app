@@ -99,7 +99,7 @@ const STABLE_FRAMES = 3;
  * frames: it waits while the target is missing (a card renders anew) or
  * disabled (its request still ends), and finds the replacement by key when
  * the focused target is removed. It stops when the user moved focus to
- * another control outside a layer, or after ten seconds.
+ * another control outside the closing layer, or after ten seconds.
  */
 function restoreFocus(origin: Origin, closing: Element | null, deadline: number, stableFrames = 0): void {
   if (Date.now() > deadline) return;
@@ -113,11 +113,16 @@ function restoreFocus(origin: Origin, closing: Element | null, deadline: number,
     return;
   }
   if (active instanceof HTMLElement && active !== document.body) {
-    // Focus on a page control is the user's move; focus in a layer that does
-    // not hold the target belongs to a layer opened since (its own trap wins).
+    // Focus on a control outside the closing layer is the user's move, also in
+    // the dialog that holds the target: taking it back would close a picker
+    // opened there right after a quick-create. Only the closing layer, or the
+    // container of a layer that holds the target, where Radix's trap parks
+    // focus that lost its control, still waits for the target. A layer that
+    // does not hold the target opened since (its own trap wins).
     const activeLayer = active.closest('[role="dialog"], [role="alertdialog"]');
-    const openedSince = activeLayer !== closing && target !== null && !activeLayer?.contains(target);
-    if (!activeLayer || openedSince) return;
+    const inClosingLayer = activeLayer !== null && activeLayer === closing;
+    const parkedInHolder = active === activeLayer && (target === null || activeLayer.contains(target));
+    if (!inClosingLayer && !parkedInHolder) return;
   }
   if (target && !target.matches(':disabled')) target.focus();
   next(0);
