@@ -16,7 +16,7 @@ Every role clocks in and out, records work, travel, break, standby, call-out and
 - **Member removal.** Removing a member who has recorded time is refused, and membership, sessions and history stay unchanged. [Employee management](employee-management.md#current-product-baseline) owns the removal rule.
 - **Break rule.** Admin chooses manually stamped breaks or one automatic break threshold and duration. Büro sees the rule. Saving a new rule also ends the open break of every member on a break today and resumes the job that break interrupted, in the same save. A closed period or a concurrent rule change refuses the whole save. A rule change never rewrites closed days.
 - **Targets.** The dashboard shows presence, work, break and overtime per day against the daily and weekly target. [Employee management](employee-management.md#current-product-baseline) owns how schedules, holidays, closures, vacation and sickness set the target. Approved full-day vacation blocks clock-in. A sickness day only warns.
-- **Manual entries.** Everyone can add same-day work or break entries, with sequence and overlap checks. Employee entries and a Büro user's own entries wait for approval. An Admin's own additions apply directly, as the owner's recovery path.
+- **Manual entries.** Everyone can add same-day work or break entries, with sequence and overlap checks. Employee entries and a Büro user's own entries wait for approval. An Admin's own additions apply directly, as the owner's recovery path. A work entry may name a job of the organization; an employee's entry names only a job the employee is assigned to, as on the live clock.
 
 ### Approval and corrections
 
