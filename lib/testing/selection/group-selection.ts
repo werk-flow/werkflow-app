@@ -205,7 +205,7 @@ const MEASURED_GROUP_PREFIX = 'audit:performance:';
 /**
  * The wall-clock groups (`audit:performance:*`) whose declared scopes own a
  * changed product file. A change plan never selects them: their medians follow
- * the machine's load (docs/technical/test-incident-log.md, 2026-10-09), so they
+ * the machine's load, so they
  * run on a quiet machine with an explicit `--group`, which enforces their
  * deadlines. The plan names them for a run before the next release; CI never
  * runs them (docs/technical/performance.md). The lab groups count work,

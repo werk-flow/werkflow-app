@@ -596,6 +596,72 @@ begin
 end;
 $$;
 
+-- Signature uploads: only a document id the server reserved before the document
+-- existed can be discarded, only by its uploader and only while no artifact uses
+-- it. The discard deletes the document with its links and records the deletion.
+do $$
+declare
+  v_org constant uuid := '26140000-0000-0000-0000-000000000010';
+  v_admin constant uuid := '26140000-0000-0000-0000-000000000001';
+  v_employee constant uuid := '26140000-0000-0000-0000-000000000002';
+  v_artifact constant uuid := '26140000-0000-0000-0000-000000000072';
+  v_path text;
+begin
+  perform pg_temp.expect_refusal('reservation of another organization''s artifact', format($sql$
+    select public.reserve_work_artifact_signature_upload(%L, %L, %L, '26140000-0000-0000-0000-0000000000a0')
+  $sql$, '26140000-0000-0000-0000-000000000003', '26140000-0000-0000-0000-000000000011', v_artifact),
+    'work_artifact_not_found');
+  perform pg_temp.expect_refusal('reservation of an existing document', format($sql$
+    select public.reserve_work_artifact_signature_upload(%L, %L, %L, '26140000-0000-0000-0000-000000000051')
+  $sql$, v_employee, v_org, v_artifact), 'work_artifact_signature_upload_taken');
+  -- The field worker's own photo upload was never reserved, so it is not discarded.
+  perform pg_temp.expect_refusal('discard of an unreserved own photo', format($sql$
+    select public.discard_work_artifact_signature_upload(%L, %L, '26140000-0000-0000-0000-000000000051')
+  $sql$, v_employee, v_org), 'work_artifact_signature_not_discardable');
+
+  perform public.reserve_work_artifact_signature_upload(v_employee, v_org, v_artifact,
+    '26140000-0000-0000-0000-0000000000a1');
+  perform public.finalize_document_upload(v_employee, v_org, '26140000-0000-0000-0000-0000000000a1',
+    null, v_org || '/a1/unterschrift.png', 'unterschrift.png', 'unterschrift.png', 'photo', 'image/png', 20,
+    'job', '26140000-0000-0000-0000-000000000022');
+  perform pg_temp.expect_refusal('discard of another person''s reservation', format($sql$
+    select public.discard_work_artifact_signature_upload(%L, %L, '26140000-0000-0000-0000-0000000000a1')
+  $sql$, v_admin, v_org), 'work_artifact_signature_not_discardable');
+
+  -- A reserved upload that a revision uses as its signature stays.
+  perform public.reserve_work_artifact_signature_upload(v_employee, v_org, v_artifact,
+    '26140000-0000-0000-0000-0000000000a2');
+  perform public.finalize_document_upload(v_employee, v_org, '26140000-0000-0000-0000-0000000000a2',
+    null, v_org || '/a2/unterschrift.png', 'unterschrift.png', 'unterschrift (1).png', 'photo', 'image/png', 20,
+    'job', '26140000-0000-0000-0000-000000000022');
+  insert into public.work_artifact_revision_documents (
+    id, organization_id, revision_id, document_id, relation, description, created_by
+  ) values (
+    '26140000-0000-0000-0000-0000000000a3', v_org, '26140000-0000-0000-0000-000000000073',
+    '26140000-0000-0000-0000-0000000000a2', 'signature_mark', 'Erfasste Unterschrift', v_employee
+  );
+  perform pg_temp.expect_refusal('discard of a used signature', format($sql$
+    select public.discard_work_artifact_signature_upload(%L, %L, '26140000-0000-0000-0000-0000000000a2')
+  $sql$, v_employee, v_org), 'work_artifact_signature_in_use');
+  if not exists (select 1 from public.documents where id = '26140000-0000-0000-0000-0000000000a2')
+    or not exists (select 1 from public.documents where id = '26140000-0000-0000-0000-000000000051')
+  then raise exception 'a refused discard deleted its document'; end if;
+
+  v_path := public.discard_work_artifact_signature_upload(v_employee, v_org,
+    '26140000-0000-0000-0000-0000000000a1');
+  if v_path is distinct from v_org || '/a1/unterschrift.png'
+    or exists (select 1 from public.documents where id = '26140000-0000-0000-0000-0000000000a1')
+    or exists (select 1 from public.document_links where document_id = '26140000-0000-0000-0000-0000000000a1')
+    or exists (select 1 from public.work_artifact_signature_uploads
+      where document_id = '26140000-0000-0000-0000-0000000000a1')
+    or not exists (select 1 from public.document_audit_events
+      where event_type = 'permanently_deleted' and actor_id = v_employee
+        and event_payload->>'documentId' = '26140000-0000-0000-0000-0000000000a1'
+        and event_payload->>'reason' = 'discarded_signature_upload')
+  then raise exception 'the discard did not delete the reserved upload with its audit event'; end if;
+end;
+$$;
+
 -- Only the service role executes the write functions; their helpers nobody.
 do $$
 declare
@@ -606,6 +672,8 @@ begin
     'public.finalize_document_upload(uuid, uuid, uuid, uuid, text, text, text, text, text, bigint, text, uuid)',
     'public.finalize_document_version_upload(uuid, uuid, uuid, integer, text, text, text, bigint)',
     'public.delete_document_folder(uuid, uuid, uuid)',
+    'public.reserve_work_artifact_signature_upload(uuid, uuid, uuid, uuid)',
+    'public.discard_work_artifact_signature_upload(uuid, uuid, uuid)',
     'public.update_document_links(uuid, uuid, uuid, uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[], uuid[])',
     'public.copy_document_folder(uuid, uuid, uuid, uuid, jsonb, jsonb)',
     'public.rename_document(uuid, uuid, uuid, text)',
@@ -630,6 +698,12 @@ begin
         raise exception '% is executable by %', v_function, v_role;
       end if;
     end loop;
+  end loop;
+  foreach v_role in array array['anon', 'authenticated', 'service_role'] loop
+    if has_table_privilege(v_role, 'public.work_artifact_signature_uploads', 'insert, update, delete')
+      or (v_role <> 'service_role'
+        and has_table_privilege(v_role, 'public.work_artifact_signature_uploads', 'select'))
+    then raise exception 'the signature upload reservations are reachable by %', v_role; end if;
   end loop;
   foreach v_function in array array[
     'app_private.lock_active_document(uuid, uuid, uuid)',

@@ -51,7 +51,7 @@ export type DiagnosableAttempt = { reportId: string; target: string; result: Arc
 /**
  * The attempt a diagnosis of the group names: with a report id, the group's failed attempt in that
  * report, even when a later attempt passed (a failure repaired before its classification still gets
- * its class and incident entry); without one, its latest executed attempt. Attempts the runner
+ * its class); without one, its latest executed attempt. Attempts the runner
  * voided do not count. The attempt must have failed and must have no browser run.
  */
 export function diagnosableGroupAttempt(

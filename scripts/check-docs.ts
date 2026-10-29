@@ -99,8 +99,12 @@ function docMarkdown(path: string): string {
 report('index', findIndexCoverageProblems(docMarkdown('README.md'), docPaths));
 
 // Relative links and their heading anchors. A decision record keeps its accepted text, so its
-// links into the deleted plans tree stay as written; Git holds those plans.
-const deletedPlansRoot = join(docsRoot, 'plans') + sep;
+// links into deleted docs stay as written; Git holds those docs.
+const deletedDocTargets = [
+  join(docsRoot, 'plans') + sep,
+  join(docsRoot, 'product', 'offer.md'),
+  join(docsRoot, 'technical', 'test-incident-log.md'),
+];
 for (const path of docPaths) {
   const file = join(docsRoot, path);
   const isDecision = path.startsWith('decisions/');
@@ -108,7 +112,7 @@ for (const path of docPaths) {
     resolve: (target) => {
       if (target === '') return file;
       const resolved = resolveWorkspaceLink(workspace, file, target);
-      return isDecision && resolved.startsWith(deletedPlansRoot) ? null : resolved;
+      return isDecision && deletedDocTargets.some((target) => resolved.startsWith(target)) ? null : resolved;
     },
     exists: existsSync,
     inMissingSibling: pointsIntoMissingSibling,

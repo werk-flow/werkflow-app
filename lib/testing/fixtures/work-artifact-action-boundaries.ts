@@ -4,7 +4,9 @@
 // revision of the caller's organization, and every other write names the
 // caller's organization and the caller, so the function's org-scoped lookup
 // refuses an artifact, requirement or fulfillment of organization B with one
-// call. A refused call writes nothing.
+// call. A signature upload ticket names an artifact of the caller's
+// organization, and a signature discard names the caller. A refused call
+// writes nothing.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -45,6 +47,7 @@ const world = installActionWorld({
   ],
   job_instruction_item_evidence_requirements: [{ id: foreignRequirementId, organization_id: ORGANIZATION_B }],
   job_instruction_item_evidence_fulfillments: [{ id: foreignFulfillmentId, organization_id: ORGANIZATION_B }],
+  work_artifact_signature_uploads: [],
 });
 // The artifact functions load their target inside the organization they are
 // given (supabase/tests/p1_15_*.sql); here only that lookup and its code.
@@ -59,6 +62,11 @@ installScopedFunctions(world, {
     idArgument: 'p_evidence_requirement_id',
     refusal: 'instruction_evidence_requirement_not_found',
   },
+  discard_work_artifact_signature_upload: {
+    table: 'work_artifact_signature_uploads',
+    idArgument: 'p_document_id',
+    refusal: 'work_artifact_signature_not_discardable',
+  },
   remove_instruction_evidence_fulfillment: {
     table: 'job_instruction_item_evidence_fulfillments',
     idArgument: 'p_fulfillment_id',
@@ -66,6 +74,7 @@ installScopedFunctions(world, {
   },
 });
 const {
+  discardUnlinkedWorkArtifactSignature,
   fulfillInstructionEvidence,
   linkWorkArtifactDocument,
   linkWorkArtifactSource,
@@ -74,6 +83,9 @@ const {
   saveWorkArtifact,
   voidWorkArtifact,
 } = await import('@/lib/work-artifacts/actions');
+const { createWorkArtifactSignatureUploadTicket } = await import(
+  '@/lib/work-artifacts/signature-upload-actions'
+);
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };
@@ -158,4 +170,27 @@ for (const [index, write] of writes.entries()) {
   assertCallerScopedCalls(world);
 }
 assert.equal(world.rpcCalls[0]?.args.p_organization_id, ORGANIZATION_A);
+assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');
+
+// A signature upload ticket for another organization's artifact gets no ticket and no
+// reservation, and a failed artifact read is a load failure, never a refusal.
+const signatureTicket = () =>
+  createWorkArtifactSignatureUploadTicket({
+    artifactId: foreignArtifactId,
+    fileName: 'unterschrift.png',
+    fileSizeBytes: 100,
+    mimeType: 'image/png',
+  });
+world.rpcCalls.length = 0;
+assert.deepEqual(await signatureTicket(), { success: false, error: 'work_artifact_not_found' });
+world.failingTables.add('work_artifacts');
+assert.deepEqual(await signatureTicket(), { success: false, error: 'load_failed' });
+world.failingTables.delete('work_artifacts');
+assert.equal(world.rpcCalls.length, 0);
+
+// A discard names the caller and the caller's organization; without a reservation of the
+// caller the function refuses it, and nothing is deleted.
+assert.deepEqual(await discardUnlinkedWorkArtifactSignature(documentId), notAuthorized);
+assert.equal(world.rpcCalls.length, 1);
+assertCallerScopedCalls(world);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');

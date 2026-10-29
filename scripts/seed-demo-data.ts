@@ -13,6 +13,10 @@
  *   ... --phase reset   (only delete the owner's organizations)
  *   ... --phase seed    (only create; fails if the demo organizations exist)
  *
+ * Each run gives the demo members a generated password that nobody learns.
+ * For a manual look on DEV, set DEMO_MEMBER_PASSWORD to one you choose; PROD
+ * refuses it (lib/security/demo-member-password.ts).
+ *
  * Reads the gitignored `.env.dev-backup` / `.env.live-backup` directly, so
  * `.env.local` stays untouched. The reset deletes only organizations whose
  * `admin_id` is the owner's user, their R2 objects, and member users that are
@@ -26,6 +30,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../lib/supabase/database.types';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
+import { DEMO_MEMBER_PASSWORD_ENV, resolveDemoMemberPassword } from '../lib/security/demo-member-password';
 import { deleteStorageObjects, listStorageObjectPaths } from '../lib/storage/r2';
 
 type Tables = Database['public']['Tables'];
@@ -34,7 +39,6 @@ type Admin = SupabaseClient<Database>;
 
 const OWNER_EMAIL = 'tamay@coban.cc';
 const WILLERT_ORGANIZATION_ID = '351e9e05-b8c6-4d5c-b29f-b33b2f1f04de';
-const DEMO_PASSWORD = 'WerkFlow-Demo-2026!';
 const TODAY = '2026-09-18';
 const RANGE_START = '2026-08-03';
 const RANGE_END = '2026-11-27';
@@ -2105,13 +2109,14 @@ async function createMembers(
   company: CompanySpec,
   organizationId: string,
   random: Random,
+  password: string,
 ): Promise<Member[]> {
   const members: Member[] = [];
   for (const [index, person] of company.people.entries()) {
     const email = `${slug(person.first)}.${slug(person.last)}@${company.emailDomain}`;
     const { data, error } = await admin.auth.admin.createUser({
       email,
-      password: DEMO_PASSWORD,
+      password,
       email_confirm: true,
       user_metadata: { first_name: person.first, last_name: person.last },
     });
@@ -3427,7 +3432,12 @@ async function seedDispatches(
   log(`  dispatches issued: ${issued}`);
 }
 
-async function seedCompany(admin: Admin, owner: { id: string }, company: CompanySpec): Promise<void> {
+async function seedCompany(
+  admin: Admin,
+  owner: { id: string },
+  company: CompanySpec,
+  password: string,
+): Promise<void> {
   const random = createRandom(company.seed);
   const holidays = new Set(getPublicHolidaysForYear(company.region, 2026).map((holiday) => holiday.date));
   const workdays = listWorkdays(RANGE_START, RANGE_END, holidays);
@@ -3459,7 +3469,7 @@ async function seedCompany(admin: Admin, owner: { id: string }, company: Company
     .eq('user_id', owner.id);
   if (ownerRecordError) fail('owner employee record', ownerRecordError);
 
-  const members = await createMembers(admin, company, organizationId, random);
+  const members = await createMembers(admin, company, organizationId, random, password);
   await seedPersonnel(admin, organizationId, owner.id, members, random);
   log(`  members: ${members.length + 1}`);
   const customers = await seedCustomers(admin, company, organizationId, owner.id, random);
@@ -3505,6 +3515,7 @@ async function main(): Promise<void> {
     );
   if (target === 'prod' && !args.includes('--confirm-prod')) throw new Error('PROD needs --confirm-prod');
   const phase = readFlag('--phase') ?? 'all';
+  const password = resolveDemoMemberPassword(target, process.env[DEMO_MEMBER_PASSWORD_ENV]);
 
   const { url, secretKey } = loadEnvironment(target);
   const admin = createClient<Database>(url, secretKey, {
@@ -3520,7 +3531,7 @@ async function main(): Promise<void> {
       .select('id', { count: 'exact', head: true })
       .eq('admin_id', owner.id);
     if ((count ?? 0) > 0) throw new Error('owner still owns organizations; run the reset phase first');
-    for (const company of COMPANIES) await seedCompany(admin, owner, company);
+    for (const company of COMPANIES) await seedCompany(admin, owner, company, password);
   }
   log('done');
 }

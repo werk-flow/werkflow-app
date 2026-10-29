@@ -23,13 +23,8 @@ import { pruneRunArchive } from '../lib/testing/runs/run-retention';
 import { recordGroupDiagnosis } from '../lib/testing/evidence/group-diagnosis';
 import { classificationProblem } from '../lib/testing/evidence/browser-group-evidence';
 import { repositoryMechanismIndex, tierClaimProblem } from '../lib/testing/runs/incident-mechanisms';
-import { readFileSync, writeFileSync } from 'node:fs';
-import {
-  incidentPreventionProblem,
-  recordsIncident,
-  withIncidentEntry,
-  type IncidentRecord,
-} from '../lib/testing/runs/incident-record';
+import { readFileSync } from 'node:fs';
+import { incidentPreventionProblem, recordsIncident } from '../lib/testing/runs/incident-record';
 
 function printRuns(): void {
   for (const line of formatRunInventory(listRunManifests())) console.log(line);
@@ -82,23 +77,12 @@ function incidentPrevention(prevention: string): string | null {
   );
 }
 
-function writeIncident(record: IncidentRecord): void {
-  const incidentLog = resolve(import.meta.dir, '../docs/technical/test-incident-log.md');
-  writeFileSync(
-    incidentLog,
-    withIncidentEntry(readFileSync(incidentLog, 'utf8'), record, resolve(import.meta.dir, '..')),
-  );
-  console.log(
-    `[werkflow-test] wrote the incident entry of ${record.runKey} into docs/technical/test-incident-log.md; add the evidence, correction and focused proof under it when the repair lands.`,
-  );
-}
-
 const LOG_TAIL_LINES = 20;
 
 /**
  * Classifies a failed attempt of a group without a browser run: `<group-id>` names its latest
  * attempt, `<group-id>@<report-id>` the failed attempt in that report, also after a later pass.
- * It prints the end of the attempt's log and writes the incident entry, as a browser run's does.
+ * It prints the end of the attempt's log and keeps the diagnosis in the report's `diagnoses.json`.
  */
 function classifyGroupAttempt(
   target: string,
@@ -111,8 +95,9 @@ function classifyGroupAttempt(
   const [groupId = '', reportId, ...extra] = target.split('@');
   if (extra.length)
     throw new Error(`Give the attempt as <group-id> or <group-id>@<report-id>, not ${target}.`);
-  const writesIncident = recordsIncident({ lane: 'group', groupId }, classification);
-  const preventionProblem = writesIncident ? incidentPrevention(prevention) : null;
+  const preventionProblem = recordsIncident({ lane: 'group', groupId }, classification)
+    ? incidentPrevention(prevention)
+    : null;
   if (preventionProblem) throw new Error(preventionProblem);
   const { attempt, diagnosis } = recordGroupDiagnosis(
     resolve(import.meta.dir, '../.agent-logs/verification'),
@@ -144,22 +129,6 @@ function classifyGroupAttempt(
         : 'The group runs again once its inputs change.'
     }`,
   );
-  if (!writesIncident) return;
-  writeIncident({
-    runKey: `${groupId}@${attempt.reportId}`,
-    groupId,
-    target: attempt.target,
-    groupFingerprint: attempt.result.fingerprint,
-    worldId: null,
-    startedAt: diagnosis.startedAt,
-    classification,
-    firstFailure: {
-      title: `${groupId} in report ${attempt.reportId}`,
-      message: attempt.result.reason ?? logLines.at(-1) ?? 'no reason recorded; read the attempt log.',
-    },
-    rootCause,
-    prevention,
-  });
 }
 
 async function main(): Promise<void> {
@@ -234,9 +203,8 @@ async function main(): Promise<void> {
     const run = readRunManifest(runKey);
     const refusal = classificationProblem({ classification, run, runs: listRunManifests() });
     if (refusal) throw new Error(refusal);
-    // A failed acceptance run gets its incident-log entry from this command (testing.md, "Failures").
-    const writesIncident = recordsIncident(run, classification);
-    const preventionProblem = writesIncident ? incidentPrevention(prevention) : null;
+    // The run manifest keeps the diagnosis beside the run's report (testing.md, "Failures").
+    const preventionProblem = recordsIncident(run, classification) ? incidentPrevention(prevention) : null;
     if (preventionProblem) throw new Error(preventionProblem);
     updateRunManifest(runKey, {
       classification,
@@ -245,20 +213,6 @@ async function main(): Promise<void> {
       prevention,
     });
     console.log(`[werkflow-test] classified ${runKey} as ${classification}`);
-    if (!writesIncident || !run.groupId) return;
-    const firstFailure = run.failures[0];
-    writeIncident({
-      runKey,
-      groupId: run.groupId,
-      target: run.target ?? 'cloud',
-      groupFingerprint: run.groupFingerprint ?? null,
-      worldId: run.world?.runId ?? null,
-      startedAt: run.startedAt,
-      classification,
-      firstFailure: firstFailure ? { title: firstFailure.title, message: firstFailure.message } : null,
-      rootCause,
-      prevention,
-    });
     return;
   }
   throw new Error(`Unknown command: ${command}`);
