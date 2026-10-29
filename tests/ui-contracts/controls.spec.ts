@@ -610,6 +610,46 @@ test(
   },
 );
 
+test(
+  'a control focused in the parent dialog right after a nested dialog closes keeps focus',
+  { annotation: { type: 'fixture', description: 'dialog-pending' } },
+  async ({ page }) => {
+    const section = page.getByRole('region', { name: 'Laufende Anfrage' });
+    await section.getByRole('button', { name: 'Zuweisung öffnen' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Zuweisung', exact: true });
+    const save = dialog.getByRole('button', { name: 'Speichern' });
+    const note = dialog.getByRole('textbox', { name: 'Notiz' });
+    await save.focus();
+    // When focus returns to the save button, the next control takes it in the same task,
+    // as a fast click does while the return still waits for its stable frames.
+    await save.evaluate(
+      (button, field) => {
+        button.addEventListener('focus', () => queueMicrotask(() => field.focus()), { once: true });
+      },
+      await note.elementHandle(),
+    );
+    await page.keyboard.press('Enter');
+    const warning = page.getByRole('dialog', { name: 'Zuweisung prüfen' });
+    await expect(warning).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(warning).toBeHidden();
+    // The return holds its target for three frames before it ends; six frames outlast it.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          let frames = 0;
+          const tick = (): void => {
+            frames += 1;
+            if (frames >= 6) resolve();
+            else requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    await expect(note).toBeFocused();
+  },
+);
+
 test('a scroll that leaves the row menu trigger in place keeps the menu open', async ({ page }) => {
   const section = page.getByRole('region', { name: 'Zeilenaktionen' });
   const trigger = section.getByRole('button', { name: 'Aktionen öffnen' });
