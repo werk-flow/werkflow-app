@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from 'react';
 
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 import {
   createPersonnelOnboardingPlan,
   savePersonnelOnboardingRequirement,
-  type PersonnelLifecycleView,
-} from '@/lib/personnel/lifecycle-actions';
+} from '@/lib/personnel/onboarding-actions';
 import type { PersonnelRequirementState, PersonnelRequirementType } from '@/lib/personnel/lifecycle';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { toLocalDateString } from '@/lib/utils';

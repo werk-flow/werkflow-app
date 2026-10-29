@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { describeFailure } from '@/lib/action-messages';
-import { addEmploymentCondition, updateEmploymentCondition } from '@/lib/personnel/actions';
+import { addEmploymentCondition, updateEmploymentCondition } from '@/lib/personnel/employment-condition-actions';
 import type { EmploymentCondition, EmploymentType } from '@/lib/personnel/types';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatDecimalDe, parseBoundedDecimalInput } from '@/lib/ui/decimal';

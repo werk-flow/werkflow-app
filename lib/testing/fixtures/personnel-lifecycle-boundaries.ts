@@ -121,7 +121,11 @@ mock.module('@/lib/storage/r2', () => ({
   promoteUploadedObject: outsideFixture('promoteUploadedObject'),
   uploadStagingPath: outsideFixture('uploadStagingPath'),
 }));
-const actions = await import('@/lib/personnel/lifecycle-actions');
+const actions = {
+  ...(await import('@/lib/personnel/lifecycle-actions')),
+  ...(await import('@/lib/personnel/onboarding-actions')),
+  ...(await import('@/lib/personnel/document-actions')),
+};
 
 const databaseSnapshot = (): string => JSON.stringify(world.tables);
 const initialDatabase = databaseSnapshot();

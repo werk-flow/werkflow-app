@@ -35,6 +35,9 @@ const CONTEXT_WRAPPERS: Record<string, string> = {
   requireManagerAndClient: 'lib/clients/manager-access.ts',
   requireManagedInvite: 'lib/invites/managed-invite.ts',
   verifyCurrentMembership: 'lib/time-tracking/action-access.ts',
+  requirePersonnelManager: 'lib/personnel/record-writes.ts',
+  requireManagerRecord: 'lib/personnel/lifecycle-action-context.ts',
+  getSelfContext: 'lib/personnel/lifecycle-action-context.ts',
 };
 
 const SESSION_IDENTITY = 'getAuthenticatedUser';

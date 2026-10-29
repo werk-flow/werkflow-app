@@ -149,7 +149,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             );
             builder.onResolve(
               {
-                filter: /^@\/lib\/(personnel\/lifecycle-actions|documents\/upload-client)$/,
+                filter:
+                  /^@\/lib\/(personnel\/(?:lifecycle|onboarding|document)-actions|documents\/upload-client)$/,
               },
               () => ({
                 path: join(import.meta.dir, 'personnel-boundaries.ts'),

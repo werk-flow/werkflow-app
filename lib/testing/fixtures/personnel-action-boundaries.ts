@@ -55,18 +55,18 @@ installScopedFunctions(world, {
   delete_work_schedule: scheduleScope,
 });
 const {
-  addEmploymentCondition,
-  addWorkSchedule,
   createPersonnelRecord,
-  deleteEmploymentCondition,
-  deleteWorkSchedule,
   getPersonnelDetail,
   getPersonnelRecords,
   suggestPersonnelNumber,
-  updateEmploymentCondition,
   updatePersonnelMasterData,
-  updateWorkSchedule,
 } = await import('@/lib/personnel/actions');
+const { addEmploymentCondition, deleteEmploymentCondition, updateEmploymentCondition } = await import(
+  '@/lib/personnel/employment-condition-actions'
+);
+const { addWorkSchedule, deleteWorkSchedule, updateWorkSchedule } = await import(
+  '@/lib/personnel/work-schedule-actions'
+);
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };

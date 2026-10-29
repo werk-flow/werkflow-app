@@ -24,7 +24,7 @@ import {
   cleanupPersonnelDocumentUpload,
   createPersonnelDocumentUploadTicket,
   finalizePersonnelDocumentUpload,
-} from '@/lib/personnel/lifecycle-actions';
+} from '@/lib/personnel/document-actions';
 import type { PersonnelDocumentAccessClass, PersonnelDocumentEvidenceState } from '@/lib/personnel/lifecycle';
 import { createWorkArtifactSignatureUploadTicket } from '@/lib/work-artifacts/signature-upload-actions';
 

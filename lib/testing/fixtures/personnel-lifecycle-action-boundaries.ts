@@ -132,19 +132,23 @@ mock.module('@/lib/storage/r2', () => ({
 const {
   acknowledgePersonnelDocument,
   acknowledgePersonnelRequirement,
-  cleanupPersonnelDocumentUpload,
-  createPersonnelDocumentUploadTicket,
-  createPersonnelOnboardingPlan,
   exportPersonnelLifecycleManifest,
-  finalizePersonnelDocumentUpload,
-  getPersonnelDocumentSignedUrl,
+  setPersonnelAccessTransition,
+  setPersonnelEmploymentTransition,
+} = await import('@/lib/personnel/lifecycle-actions');
+const {
+  createPersonnelOnboardingPlan,
   getPersonnelOnboardingTemplates,
   publishPersonnelOnboardingTemplate,
   savePersonnelOnboardingRequirement,
-  setPersonnelAccessTransition,
+} = await import('@/lib/personnel/onboarding-actions');
+const {
+  cleanupPersonnelDocumentUpload,
+  createPersonnelDocumentUploadTicket,
+  finalizePersonnelDocumentUpload,
+  getPersonnelDocumentSignedUrl,
   setPersonnelDocumentRelease,
-  setPersonnelEmploymentTransition,
-} = await import('@/lib/personnel/lifecycle-actions');
+} = await import('@/lib/personnel/document-actions');
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };

@@ -9,7 +9,7 @@ import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { describeFailure } from '@/lib/action-messages';
-import { deleteEmploymentCondition } from '@/lib/personnel/actions';
+import { deleteEmploymentCondition } from '@/lib/personnel/employment-condition-actions';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
 import { VersionDeleteDialog } from './version-delete-dialog';

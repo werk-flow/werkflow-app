@@ -3,11 +3,8 @@
 import { useState } from 'react';
 
 import { uploadPersonnelDocumentDirect } from '@/lib/documents/upload-client';
-import {
-  getPersonnelDocumentSignedUrl,
-  setPersonnelDocumentRelease,
-  type PersonnelLifecycleView,
-} from '@/lib/personnel/lifecycle-actions';
+import { getPersonnelDocumentSignedUrl, setPersonnelDocumentRelease } from '@/lib/personnel/document-actions';
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 import type { PersonnelDocumentAccessClass } from '@/lib/personnel/lifecycle';
 
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';

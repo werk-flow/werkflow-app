@@ -9,7 +9,7 @@
   "lib/installed-equipment/actions.ts#getAssignedEquipmentForJob": "reads the equipment of a job the caller is assigned to; writes nothing",
   "lib/jobs/actions.ts#getJobByNumber": "reads one job by its number for the field work pack; writes nothing",
   "lib/maintenance/actions.ts#getAssignedMaintenanceContextForJob": "reads the maintenance context of an assigned job; writes nothing",
-  "lib/personnel/lifecycle-actions.ts#getPersonnelDocumentSignedUrl": "signs a download URL for a personnel document the caller may see; writes nothing",
+  "lib/personnel/document-actions.ts#getPersonnelDocumentSignedUrl": "signs a download URL for a personnel document the caller may see; writes nothing",
   "lib/qualifications/actions.ts#expandTeamForAssignment": "reads a team's members and their qualifications to fill the picker; writes nothing",
   "lib/responsibilities/actions.ts#previewResponsibilityConfiguration": "computes the effect of a responsibility change without saving it; applyResponsibilityConfiguration saves",
   "lib/service-cases/actions.ts#getAssignedServiceContextForJob": "reads the service case context of an assigned job; writes nothing",

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
-import { addWorkSchedule, updateWorkSchedule } from '@/lib/personnel/actions';
+import { addWorkSchedule, updateWorkSchedule } from '@/lib/personnel/work-schedule-actions';
 import type { WorkSchedule } from '@/lib/personnel/schedule';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';

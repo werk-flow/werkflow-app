@@ -8,7 +8,7 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { useBanner } from '@/components/ui/banner';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Button } from '@/components/ui/button';
-import { deleteWorkSchedule } from '@/lib/personnel/actions';
+import { deleteWorkSchedule } from '@/lib/personnel/work-schedule-actions';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { getEffectiveCondition, type EmploymentCondition } from '@/lib/personnel/types';
 import { getEffectiveSchedule, getWeeklyScheduleMinutes, type WorkSchedule } from '@/lib/personnel/schedule';
