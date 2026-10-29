@@ -123,16 +123,21 @@ export async function acquireHeavySlot(label: string, signal?: AbortSignal): Pro
         `[heavy-slot] ${label} waits: all ${HEAVY_SLOTS} heavy slots of this machine are busy (${directory}).`,
       );
     }
+    // An abort during the attempts above ends the wait before it starts.
+    signal?.throwIfAborted();
     await new Promise<void>((resume) => {
-      const timer = setTimeout(resume, WAIT_MILLISECONDS + Math.random() * 2_000);
-      signal?.addEventListener(
-        'abort',
+      const stop = (): void => {
+        clearTimeout(timer);
+        resume();
+      };
+      const timer = setTimeout(
         () => {
-          clearTimeout(timer);
+          signal?.removeEventListener('abort', stop);
           resume();
         },
-        { once: true },
+        WAIT_MILLISECONDS + Math.random() * 2_000,
       );
+      signal?.addEventListener('abort', stop, { once: true });
     });
   }
 }
