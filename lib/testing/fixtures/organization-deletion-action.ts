@@ -130,6 +130,8 @@ assert.deepEqual(await deleteOrganization('Musterbetrieb'), {
   error: 'time_recorded_during_deletion',
 });
 assert.ok(organizationRemains(), 'a database refusal removed the organization');
+assert.deepEqual(steps, ['files', 'rows'], 'the late refusal did not follow the file deletion');
+assert.deepEqual([...bucket], [foreignObject], 'the late refusal left own files in the bucket');
 databaseRefusal = null;
 
 // The deletion removes every file of the organization first, then its rows.

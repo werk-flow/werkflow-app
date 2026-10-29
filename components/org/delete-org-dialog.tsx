@@ -64,11 +64,21 @@ function ScopeList({ rows }: { rows: readonly (readonly [string, number])[] }) {
   );
 }
 
-/** Why the organization stays and what it holds. */
-function RetainedDescription({ scope }: { scope: OrganizationDeletionScope }) {
+/**
+ * Why the organization stays and what it holds; after a refusal that came
+ * once the files were gone, it says so first.
+ */
+function RetainedDescription({
+  scope,
+  filesDeleted,
+}: {
+  scope: OrganizationDeletionScope;
+  filesDeleted: boolean;
+}) {
   return (
     <AlertDialogDescription asChild>
       <div className="space-y-3 text-left text-muted-foreground text-sm">
+        {filesDeleted ? <ErrorText>{ERROR_MESSAGES.time_recorded_during_deletion}</ErrorText> : null}
         <p>
           <span className="font-semibold text-foreground">
             Diese Organisation kann nicht gelöscht werden,
@@ -131,11 +141,14 @@ function DeletionConfirmation({
   orgName,
   onDelete,
   onDeleted,
+  onFilesDeleted,
   isLoading,
 }: {
   orgName: string;
   onDelete: (confirmationName: string) => Promise<DeleteOrgResult>;
   onDeleted: () => void;
+  /** The files are gone although the organization stays; the refusal view must say so. */
+  onFilesDeleted: () => void;
   isLoading: boolean;
 }) {
   const [confirmationName, setConfirmationName] = useState('');
@@ -164,6 +177,7 @@ function DeletionConfirmation({
       setError(describeFailure(result.error, ERROR_MESSAGES, SHARED_FAILURE_MESSAGES.unexpected_error));
       // Time recorded since the page loaded: the re-read scope turns the
       // dialog into the refusal with its retention reason and the export.
+      if (result.error === 'time_recorded_during_deletion') onFilesDeleted();
       if (result.error === 'has_time_records' || result.error === 'time_recorded_during_deletion') refresh();
     } catch {
       setError(SHARED_FAILURE_MESSAGES.unexpected_error);
@@ -219,11 +233,17 @@ function DeletionConfirmation({
  */
 export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
   const [open, setOpen] = useState(false);
+  // Lives here, not in the confirmation: the refusal view replaces it.
+  const [filesDeleted, setFilesDeleted] = useState(false);
   const { run: runDelete, isPending: isLoading } = useServerAction(deleteOrganization);
   const retained = scope?.retainsTimeRecords ?? false;
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) setFilesDeleted(false);
+  };
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen} pending={isLoading}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
       <AlertDialogTrigger asChild>
         <Button variant="destructive" size="sm" className="w-full" disabled={!scope}>
           <Trash2 className="size-4" />
@@ -236,7 +256,7 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
             <AlertTriangle className="size-5" />
             Organisation löschen
           </AlertDialogTitle>
-          {scope && retained ? <RetainedDescription scope={scope} /> : null}
+          {scope && retained ? <RetainedDescription scope={scope} filesDeleted={filesDeleted} /> : null}
           {scope && !retained ? <DeletionScopeDescription scope={scope} /> : null}
         </AlertDialogHeader>
         {retained ? (
@@ -251,6 +271,7 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
             orgName={orgName}
             onDelete={runDelete}
             onDeleted={() => setOpen(false)}
+            onFilesDeleted={() => setFilesDeleted(true)}
             isLoading={isLoading}
           />
         )}
