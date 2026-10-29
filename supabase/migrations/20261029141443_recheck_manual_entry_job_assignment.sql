@@ -8,9 +8,11 @@
 -- trigger does the same for a manual entry at insert time and refuses with
 -- 'manual_entry_job_not_assigned'.
 --
--- Only an Admin or Büro member's entry skips the check, as on the clock; a
--- user without a membership is refused. Automatic entries, such as the break
--- end of a settings change, keep their job without a check.
+-- Only an Admin or Büro member's entry skips the check, as on the clock. A
+-- user without a membership is refused, even with an assignment row left from
+-- before the removal (remove_member_with_time_capture keeps those rows).
+-- Automatic entries, such as the break end of a settings change, keep their
+-- job without a check.
 
 create or replace function app_private.guard_manual_time_entry_job_assignment()
 returns trigger
@@ -18,15 +20,14 @@ language plpgsql
 security invoker
 set search_path = ''
 as $$
+declare
+  v_role public.org_role;
 begin
   if new.is_manual is not true or new.job_id is null then return new; end if;
-  if exists (
-    select 1 from public.organization_members member
-    where member.organization_id = new.organization_id
-      and member.user_id = new.user_id
-      and member.role in ('admin', 'buero')
-  ) then return new; end if;
-  if not exists (
+  select member.role into v_role from public.organization_members member
+  where member.organization_id = new.organization_id and member.user_id = new.user_id;
+  if v_role in ('admin', 'buero') then return new; end if;
+  if v_role is null or not exists (
     select 1 from public.job_assignments assignment
     where assignment.organization_id = new.organization_id
       and assignment.job_id = new.job_id

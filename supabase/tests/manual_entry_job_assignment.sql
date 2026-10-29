@@ -1,9 +1,9 @@
 -- A manual entry of an employee names only a job the employee is assigned to,
 -- checked at insert time (migration
 -- 20261029141443_recheck_manual_entry_job_assignment.sql), so an assignment
--- removed after the action's own check refuses the entry. An Admin or Büro
--- member's manual entry and an automatic entry keep their job without an
--- assignment.
+-- or a membership removed after the action's own check refuses the entry. An
+-- Admin or Büro member's manual entry and an automatic entry keep their job
+-- without an assignment.
 begin;
 
 insert into auth.users (
@@ -18,20 +18,26 @@ insert into auth.users (
  '{"first_name":"Buero","last_name":"Manual"}', now(), now()),
 ('29410000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'manual-job-employee@example.test', '', now(), '{}',
- '{"first_name":"Employee","last_name":"Manual"}', now(), now());
+ '{"first_name":"Employee","last_name":"Manual"}', now(), now()),
+('29410000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'manual-job-former@example.test', '', now(), '{}',
+ '{"first_name":"Former","last_name":"Manual"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('29410000-0000-0000-0000-000000000010', 'Manual entry jobs SQL',
   '29410000-0000-0000-0000-000000000001', 'MANJOBSQ');
 insert into public.organization_members (organization_id, user_id, role) values
 ('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000002', 'buero'),
-('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000003', 'employee');
+('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000003', 'employee'),
+('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000004', 'employee');
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('29410000-0000-0000-0000-000000000020', '29410000-0000-0000-0000-000000000010',
   'Manuelle Einträge', 'MANJOB-1', '29410000-0000-0000-0000-000000000001');
 insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
 ('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000020',
-  '29410000-0000-0000-0000-000000000003', '29410000-0000-0000-0000-000000000001');
+  '29410000-0000-0000-0000-000000000003', '29410000-0000-0000-0000-000000000001'),
+('29410000-0000-0000-0000-000000000010', '29410000-0000-0000-0000-000000000020',
+  '29410000-0000-0000-0000-000000000004', '29410000-0000-0000-0000-000000000001');
 
 -- The deployment role of addManualEntry.
 set local role service_role;
@@ -55,6 +61,18 @@ begin
     insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
     values (v_employee, v_org, 'clock_in', now() - interval '4 days', true, 'pending', v_job);
     raise exception 'an unassigned employee''s manual entry was accepted on the job';
+  exception when others then
+    if sqlerrm <> 'manual_entry_job_not_assigned' then raise; end if;
+  end;
+
+  -- A member removed before the insert keeps an assignment row; the entry is refused.
+  delete from public.organization_members
+  where organization_id = v_org and user_id = '29410000-0000-0000-0000-000000000004';
+  begin
+    insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
+    values ('29410000-0000-0000-0000-000000000004', v_org, 'clock_in', now() - interval '4 days', true,
+      'pending', v_job);
+    raise exception 'a removed member''s manual entry was accepted on the job';
   exception when others then
     if sqlerrm <> 'manual_entry_job_not_assigned' then raise; end if;
   end;
