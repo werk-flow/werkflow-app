@@ -124,12 +124,12 @@ A task is a worktree, a branch and one small PR per problem ([decision 0009](doc
 
 - Level 0, no behavior effect (docs, comments, agent instructions): your own read.
 - Level 1, behavior (product code, tests, CI, scripts), the default: `sol-loop`.
-- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
+- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review from the `needs-coderabbit` queue.
 
 1. Run `bun run check:changed`. For level 1 and 2, run `sol-loop`.
 2. Push, and open the PR with the `file-pr` skill, naming the level and its reason.
 3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. The coordinator thread merges a PR that meets the merge gate; under "full send" its own thread does. The owner may merge too. A "full stop" PR waits for the owner's read.
+4. Once the PR meets the merge gate, its own thread squash-merges it. A "full stop" PR, or one that changes `AGENTS.md`, waits for the owner's read and merge.
 
 ## Language
 
