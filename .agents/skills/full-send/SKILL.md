@@ -7,7 +7,7 @@ Adapted for WerkFlow from t3dotgg/tstack (MIT, [license](../LICENSE-tstack)).
 
 # Full Send
 
-The owner is not watching. Take the work from its current state to a merged PR on `main`. Without a clear "full send" in this thread, stop at ready, as `full-stop` does.
+The owner is not watching. Take the work from its current state to a merged PR on `main`, and decide what you can yourself. A PR that changes `AGENTS.md` still stops at ready, as `full-stop` does.
 
 ## The grant
 

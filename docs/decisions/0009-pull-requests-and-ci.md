@@ -102,3 +102,10 @@ Every push to `main` ran every browser group in 14 shards, the free plan's whole
 1. A push to `main` plans its browser groups by diff against the previous `main` commit, like a PR. A push whose previous commit git cannot read runs every browser group. This supersedes "A push to `main` and a nightly run take every browser group" in rule 2.
 2. A full run is `ci.yml` called with `full` from a job named `Full run`: nightly on `main`, by hand, and in the release.
 3. The `release` workflow ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at exactly that commit is green. It reuses a nightly or manual one; without one it runs the full suite first and ships only on green. This replaces "a green `Check` on the `main` commit" in the table row on the release plan and in the amendment on merges without an up-to-date branch. A merge that breaks a group its diff did not select now surfaces in the nightly run or at the release, not on the push.
+
+## Amendment 2026-10-29: threads merge their own PRs, and a queue requests CodeRabbit reviews
+
+The owner removed the need for one coordinator thread to stay alive. A watcher in the coordinator's thread requested CodeRabbit reviews in a fixed order and woke the coordinator to merge, so reviews and merges stopped whenever that thread stopped.
+
+1. Rule 8 now reads: a PR's own thread squash-merges it once the merge gate passes. A "full stop" PR, or one that changes `AGENTS.md`, waits until the owner has read and merged it. The owner may merge any PR. Nobody merges with an admin bypass.
+2. Rule 4 now reads: a level 2 PR whose `Check` is green and whose `sol-loop` approved gets the label `needs-coderabbit`. Its thread never requests the review itself. A scheduled queue outside any thread requests one review at a time, oldest label first, while the app's rate-limit window allows, and messages the PR's thread. [coderabbit.md](../technical/coderabbit.md#the-coderabbit-queue) owns the procedure.
