@@ -20,7 +20,6 @@ import {
   visibleDocumentName,
 } from '../../golden/support/steps/documents';
 import { dismissDialog } from '../../golden/support/steps/interaction';
-import { expectRedirectedAway } from '../../golden/support/steps/organization';
 import {
   closeRequestViaDialog,
   convertedJobLink,
@@ -39,7 +38,6 @@ import {
   requestConvertButton,
   requestDocumentTrashedMessage,
   requestField,
-  requestsNavLink,
   searchRequests,
   setRequestStatusFromDetail,
   showRequestStatus,
@@ -534,30 +532,5 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       await searchRequests(bueroPage, query);
       await expect(visibleText(bueroPage, expected)).toBeVisible();
     }
-  });
-
-  test('A2-D02: Handwerker und fremde Organisation erreichen keine Anfrage', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const summary = `A2 Geschützte Anfrage ${world.runId}`;
-    const requestNumber = `A2-ANF-${world.runId}-D02`;
-    const requestId = await seedRequest({
-      orgId: world.orgId,
-      actorId: world.users.buero.id,
-      summary,
-      requestNumber,
-    });
-
-    await expectRedirectedAway(employeePage, '/anfragen');
-    await expectRedirectedAway(employeePage, `/anfragen/${requestId}`);
-    await expect(textInDom(employeePage, summary)).toHaveCount(0);
-    await employeePage.goto('/dashboard');
-    await expect(requestsNavLink(employeePage)).toHaveCount(0);
-
-    await outsiderPage.goto(`/anfragen/${requestId}`);
-    await expect(textInDom(outsiderPage, summary)).toHaveCount(0);
-    await expect(textInDom(outsiderPage, requestNumber)).toHaveCount(0);
   });
 });

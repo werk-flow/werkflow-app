@@ -46,7 +46,6 @@ import {
   visibleDocumentName,
 } from '../../golden/support/steps/documents';
 import { dismissDialog, pressKey } from '../../golden/support/steps/interaction';
-import { expectRedirectedAway } from '../../golden/support/steps/organization';
 import { expectGone, SHARED_COPY } from '../../golden/support/steps/shared';
 import { createJob, createProject } from '../../golden/support/steps/work';
 import { DOCUMENT_UPLOAD_TIMEOUT_MS } from '../../golden/support/timeouts';
@@ -390,19 +389,13 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     world,
   }) => {
     const assignedJobNumber = `A1-DOC-E-${world.runId}`;
-    const unassignedJobNumber = `A1-DOC-X-${world.runId}`;
     const fileName = `a1-employee-${world.runId}.png`;
     await createJob(adminPage, {
       jobNumber: assignedJobNumber,
       title: `A1 Mitarbeiterdokument ${world.runId}`,
       assignEmployeeName: 'Emil',
     });
-    await createJob(adminPage, {
-      jobNumber: unassignedJobNumber,
-      title: `A1 Nicht zugewiesen ${world.runId}`,
-    });
 
-    await expectRedirectedAway(employeePage, '/dokumente');
     await employeePage.goto(`/auftraege/${assignedJobNumber}`);
     await documentsRegionUploadInput(documentsRegion(employeePage)).setInputFiles({
       name: fileName,
@@ -421,7 +414,6 @@ test.describe('A1 Dokumente @AUDIT-W1-A1', () => {
     await expect(documentViewerImage(viewer, fileName)).toBeVisible();
     await expectSignedWindowOpen(employeePage, () => documentViewerDownloadButton(viewer).click());
     await dismissDialog(viewer);
-    await expectRedirectedAway(employeePage, `/auftraege/${unassignedJobNumber}`);
 
     const liveFileName = `a1-doc-live-${world.runId}.txt`;
     await adminPage.goto('/dokumente?view=all');

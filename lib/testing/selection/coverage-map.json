@@ -660,6 +660,14 @@
           "titles": [
             "A1-38"
           ]
+        },
+        {
+          "file": "lib/org/office-page-access.test.ts",
+          "kind": "unit",
+          "description": "moved from A1-38: a field worker reaches neither the library nor an unassigned job",
+          "titles": [
+            "office pages refuse a field worker and never show another organization’s request or customer"
+          ]
         }
       ],
       "clauses": "PDF-/Bildviewer; signierter Download; zugewiesener/unzugewiesener Handwerker; Realtime\nViewer rendern, echte signierte Fenster-/Download-URLs werden erfasst, Rollengrenzen gelten und ein zweiter Kontext erhält den Upload ohne Reload.",

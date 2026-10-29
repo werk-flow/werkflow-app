@@ -14,6 +14,8 @@ import {
   Wrench,
 } from 'lucide-react';
 
+import { isManagerRole, type OrgRole } from '@/lib/roles';
+
 type NavItem = {
   href: string;
   label: string;
@@ -99,6 +101,12 @@ export const navItems: NavItem[] = [
     managerOrAbove: true,
   },
 ];
+
+/** The items a member with `role` sees; the office pages refuse the others on the server. */
+export function navItemsFor(role: OrgRole | undefined): NavItem[] {
+  const isManager = role !== undefined && isManagerRole(role);
+  return navItems.filter((item) => !item.managerOrAbove || isManager);
+}
 
 /** Whether the item is the highlighted sidebar entry for `pathname`. */
 export function isNavItemActive(item: Pick<NavItem, 'href' | 'activePrefix'>, pathname: string): boolean {
