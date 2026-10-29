@@ -166,6 +166,17 @@ async function attachManualEntryJob(
   return { entries: drafts };
 }
 
+/**
+ * The action failure of a refused manual entry insert. The database refuses
+ * an employee's job whose assignment was removed after
+ * attachManualEntryJob read it (migration
+ * 20261029141443_recheck_manual_entry_job_assignment.sql).
+ */
+function manualEntryInsertFailure(error: { message: string } | null): string {
+  if (error?.message === 'manual_entry_job_not_assigned') return 'job_not_assigned';
+  return timeWriteFailure('Error inserting manual entries:', error, 'insert_failed');
+}
+
 // ============================================
 // Manual Entry Actions
 // ============================================
@@ -280,12 +291,7 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
       .insert(insertData)
       .select();
 
-    if (insertError || !newEntries) {
-      return {
-        success: false,
-        error: timeWriteFailure('Error inserting manual entries:', insertError, 'insert_failed'),
-      };
-    }
+    if (insertError || !newEntries) return { success: false, error: manualEntryInsertFailure(insertError) };
 
     revalidatePath('/zeiterfassung');
 
