@@ -10,7 +10,10 @@
 --
 -- Only an Admin or Büro member's entry skips the check, as on the clock. A
 -- user without a membership is refused, even with an assignment row left from
--- before the removal (remove_member_with_time_capture keeps those rows).
+-- before the removal (remove_member_with_time_capture keeps those rows). The
+-- membership read takes a share lock: a removal locks the membership, checks
+-- that the person has no time, then deletes it, so an unlocked read could let
+-- both the removal and the entry commit.
 -- Automatic entries, such as the break end of a settings change, keep their
 -- job without a check.
 
@@ -24,8 +27,11 @@ declare
   v_role public.org_role;
 begin
   if new.is_manual is not true or new.job_id is null then return new; end if;
+  -- The share lock makes a concurrent remove_member_with_time_capture wait,
+  -- then see this entry and refuse, instead of both committing.
   select member.role into v_role from public.organization_members member
-  where member.organization_id = new.organization_id and member.user_id = new.user_id;
+  where member.organization_id = new.organization_id and member.user_id = new.user_id
+  for share;
   if v_role in ('admin', 'buero') then return new; end if;
   if v_role is null or not exists (
     select 1 from public.job_assignments assignment

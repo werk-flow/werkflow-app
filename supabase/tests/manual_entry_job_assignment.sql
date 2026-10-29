@@ -83,6 +83,28 @@ begin
 end;
 $$;
 
+-- The entry locks the membership it read, so a concurrent
+-- remove_member_with_time_capture waits for it and then sees the entry,
+-- instead of both committing.
+do $$
+declare
+  v_org constant uuid := '29410000-0000-0000-0000-000000000010';
+  v_job constant uuid := '29410000-0000-0000-0000-000000000020';
+  v_buero constant uuid := '29410000-0000-0000-0000-000000000002';
+begin
+  if (
+    select xmax from public.organization_members where organization_id = v_org and user_id = v_buero
+  ) <> '0'::xid then raise exception 'the membership row is already locked'; end if;
+  insert into public.time_entries (user_id, organization_id, entry_type, timestamp, is_manual, status, job_id)
+  values (v_buero, v_org, 'clock_in', now() - interval '6 days', true, 'pending', v_job);
+  if (
+    select xmax from public.organization_members where organization_id = v_org and user_id = v_buero
+  ) <> pg_current_xact_id()::xid then
+    raise exception 'a manual entry did not lock the membership it read';
+  end if;
+end;
+$$;
+
 do $$
 declare
   v_org constant uuid := '29410000-0000-0000-0000-000000000010';
@@ -93,7 +115,7 @@ begin
     ('29410000-0000-0000-0000-000000000001', v_org, 'clock_in', now() - interval '5 days', true, 'approved', v_job),
     ('29410000-0000-0000-0000-000000000002', v_org, 'clock_in', now() - interval '5 days', true, 'pending', v_job);
   if (
-    select count(*) from public.time_entries
+    select count(distinct user_id) from public.time_entries
     where organization_id = v_org and job_id = v_job
       and user_id in ('29410000-0000-0000-0000-000000000001', '29410000-0000-0000-0000-000000000002')
   ) <> 2 then raise exception 'an Admin or Büro member''s manual entry needed an assignment'; end if;
