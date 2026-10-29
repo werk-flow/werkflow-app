@@ -12,6 +12,8 @@ type ShellWord = { text: string; globs: boolean; expands: boolean };
 const OPERATORS = new Set([';', '&', '|', '(', ')', '\n']);
 const GLOB_CHARACTERS = new Set(['*', '?', '[']);
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+/** Words before the program: shell keywords that open a command (`then rm ...`) and `sudo`. */
+const PREFIXES = new Set(['if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{', 'time', 'sudo']);
 const REDIRECTION = /^\d*[<>]/;
 const BARE_REDIRECTION = /^\d*[<>]+&?$/;
 const HEREDOC = /(?<!<)<<-?\s*(["']?)([^\s"';&|<>()]+)\1/g;
@@ -88,9 +90,9 @@ function simpleCommands(command: string): ShellWord[][] {
   return commands.filter((simple) => simple.length > 0);
 }
 
-/** The program and arguments of a simple command, past leading variable assignments and `sudo`. */
+/** The program and arguments of a simple command, past leading variable assignments, keywords and `sudo`. */
 function program(words: ShellWord[]): { name: string; args: ShellWord[] } | undefined {
-  const start = words.findIndex((word) => !ASSIGNMENT.test(word.text) && word.text !== 'sudo');
+  const start = words.findIndex((word) => !ASSIGNMENT.test(word.text) && !PREFIXES.has(word.text));
   const head = words[start];
   if (!head) return undefined;
   return {
