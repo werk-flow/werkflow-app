@@ -139,6 +139,7 @@ test('locator timing preserves a slow correct observation for final qualificatio
       await page.evaluate(
         () =>
           new Promise<void>((resolve) =>
+            // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- the delayed mutation is the stimulus whose latency this contract measures
             setTimeout(() => {
               document.querySelector('p')?.removeAttribute('hidden');
               resolve();

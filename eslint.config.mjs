@@ -12,6 +12,7 @@ import {
 import { LAB_DIGEST_SUPPORT_FILES } from './eslint-rules/playwright-wait-rules.mjs';
 import { qualityRules } from './eslint-rules/quality-rules.mjs';
 import { realtimeRules } from './eslint-rules/realtime-rules.mjs';
+import { testHygieneRules } from './eslint-rules/test-hygiene-rules.mjs';
 import { uiRules } from './eslint-rules/ui-rules.mjs';
 import {
   COMPONENT_FILE_LINE_LIMIT,
@@ -701,33 +702,13 @@ const testSelectors = [
 // and semantically scoped locators; the banned patterns below are the
 // recurring flake classes of past browser failures. The full Playwright API stays
 // available to the shared support modules (tests/golden/support/**), which own
-// the bounded, documented exceptions.
+// the bounded, documented exceptions. Waits, timeouts, retries and skips are
+// the test-hygiene rules (eslint-rules/test-hygiene-rules.mjs).
 const specSelectors = [
   {
     selector: 'CallExpression[callee.property.name=/^(setOffline|routeWebSocket)$/]',
     message:
       'A session that must keep outdated state is frozen with freezeLiveUpdates (tests/golden/support/live.ts) before it opens the page, so a live update cannot dissolve the premise within milliseconds (testing.md, "Spec checklist").',
-  },
-  {
-    selector: 'CallExpression[callee.object.name="test"][callee.property.name="setTimeout"]',
-    message:
-      'Per-test timeout overrides hide regressions and make target budgets meaningless. Use the measured target-keyed default in the Playwright config and fix or classify tests that exceed it.',
-  },
-  {
-    selector: 'CallExpression[callee.object.name="test"][callee.property.name="slow"]',
-    message:
-      'test.slow() silently triples the configured timeout and bypasses the measured scenario budget. Keep the shared target-keyed budget honest and fix or classify tests that exceed it.',
-  },
-  {
-    selector: 'CallExpression[callee.object.name="test"][callee.property.name=/^(fixme|only|skip)$/]',
-    message:
-      "Committed test.only/test.skip/test.fixme silently removes evidence from certification. Keep the test runnable and use the runner's focused or diagnostic mode when narrowing locally.",
-  },
-  {
-    selector:
-      'CallExpression[callee.object.object.name="test"][callee.object.property.name="describe"][callee.property.name=/^(only|skip)$/]',
-    message:
-      "Committed test.describe.only/test.describe.skip silently removes evidence from certification. Keep the suite runnable and use the runner's focused or diagnostic mode when narrowing locally.",
   },
   {
     selector: 'CallExpression[callee.property.name="first"][arguments.length=0]',
@@ -743,11 +724,6 @@ const specSelectors = [
     selector: 'CallExpression[callee.property.name="nth"]',
     message:
       'Positional locators (.first/.last/.nth) break when the full serial run adds rows a focused run never sees (testing.md: scope locators semantically). Tighten the locator (exact name, owning row/section) or assert order explicitly with toHaveText([...]); a genuinely positional need belongs in a documented support helper.',
-  },
-  {
-    selector: 'CallExpression[callee.property.name="waitForTimeout"]',
-    message:
-      'Fixed sleeps hide races and stretch runs — wait on a real app signal instead (visible persisted state, a response, a dialog close). A bounded debounce-drain belongs in a documented support helper.',
   },
   {
     selector: 'Literal[value=/werkflow-golden\\.test|Golden Test SHK|Fremde Firma/]',
@@ -1277,6 +1253,43 @@ const eslintConfig = defineConfig([
     plugins: { 'playwright-spec': playwrightSpecRules },
     rules: {
       'playwright-spec/bounded-timeout': 'error',
+    },
+  },
+  // Test hygiene (docs/technical/testing.md, Never): every unit test,
+  // component contract and browser spec waits on a fact instead of the clock,
+  // runs once under its runner's shared timeout, and is skipped only under a
+  // quarantine comment that names its planning issue. A unit test also reads
+  // no wall clock.
+  {
+    files: ['lib/**/*.test.{ts,tsx,mjs}', 'tests/**/*.spec.ts', 'tests/**/support/**/*.ts'],
+    plugins: { 'test-hygiene': testHygieneRules },
+    rules: {
+      'test-hygiene/no-wall-clock-wait': 'error',
+      'test-hygiene/no-polling-loop': 'error',
+      'test-hygiene/no-per-test-timeout': 'error',
+      'test-hygiene/no-retries': 'error',
+      'test-hygiene/no-excluded-test': 'error',
+    },
+  },
+  {
+    files: ['lib/**/*.test.{ts,tsx,mjs}'],
+    plugins: { 'test-hygiene': testHygieneRules },
+    rules: {
+      'test-hygiene/no-unpinned-clock': 'error',
+    },
+  },
+  // The runners and their configs set no retry and pass no repeat flag.
+  {
+    files: [
+      'playwright*.config.ts',
+      'tests/**/playwright.config.ts',
+      'scripts/**/*.ts',
+      'lib/testing/**/*.ts',
+    ],
+    ignores: ['**/*.test.*'],
+    plugins: { 'test-hygiene': testHygieneRules },
+    rules: {
+      'test-hygiene/no-retries': ['error', { flags: true }],
     },
   },
   // Product code: auth + prod-ref + Realtime ownership + styling canon. The

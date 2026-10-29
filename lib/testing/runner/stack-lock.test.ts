@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -82,12 +82,22 @@ test('a shared holder waits behind a live exclusive holder until it leaves', asy
   const blocker = join(directory, 'exclusive-other.json');
   writeFileSync(blocker, JSON.stringify(holder('other', 'exclusive', '2026-10-25T10:00:00.000Z')));
   let entered = false;
-  const pending = withStackLock({ mode: 'shared', operation: 'waiting', repositoryRoot: root }, async () => {
-    entered = true;
-  });
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
-  expect(entered).toBe(false);
-  rmSync(blocker);
-  await pending;
+  // The holder reports that it waits before its first pause.
+  const waiting = Promise.withResolvers<string>();
+  const report = spyOn(console, 'info').mockImplementation((message: string) => waiting.resolve(message));
+  try {
+    const pending = withStackLock(
+      { mode: 'shared', operation: 'waiting', repositoryRoot: root },
+      async () => {
+        entered = true;
+      },
+    );
+    expect(await waiting.promise).toContain('Waiting for the local stack: other (exclusive');
+    expect(entered).toBe(false);
+    rmSync(blocker);
+    await pending;
+  } finally {
+    report.mockRestore();
+  }
   expect(entered).toBe(true);
 });

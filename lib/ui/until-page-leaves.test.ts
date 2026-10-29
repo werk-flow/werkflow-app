@@ -10,7 +10,7 @@ test('untilPageLeaves never settles, so the owner hook stays pending while the p
       () => 'resolved',
       () => 'rejected',
     ),
-    new Promise<string>((resolve) => setTimeout(() => resolve('still pending'), 25)),
+    new Promise<string>((resolve) => setImmediate(() => resolve('still pending'))),
   ]);
   expect(outcome).toBe('still pending');
 });

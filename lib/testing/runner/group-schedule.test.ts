@@ -109,7 +109,7 @@ test('workers are bounded below by one and above by the requested count', async 
     run: async () => {
       active++;
       maximum = Math.max(maximum, active);
-      await new Promise((done) => setTimeout(done, 5));
+      await new Promise((done) => setImmediate(done));
       active--;
     },
   });
@@ -151,7 +151,7 @@ test('a failed result does not suppress unrelated entries; unexpected runner err
       run: async (entry) => {
         started.push(entry);
         if (entry === 'crash') throw new Error('runner failed');
-        await new Promise((done) => setTimeout(done, 5));
+        await new Promise((done) => setImmediate(done));
       },
     }),
   ).rejects.toThrow('runner failed');
