@@ -31,9 +31,11 @@ const groups = [
   ),
   browser('audit:wave-3:p1-24a', ['planning', 'time'], ['tests/audit/wave-3/p1-24a.spec.ts']),
   browser('audit:wave-2:p1-13', ['work', 'inventory'], ['tests/audit/wave-2/p1-13.spec.ts']),
-  browser('audit:layout', ['*'], ['tests/audit/layout/mobile-viewport.spec.ts']),
-  browser('audit:layout:viewports', ['*'], ['tests/audit/layout/viewport-details.spec.ts']),
-  browser('audit:layout:work', ['work', 'customers'], ['tests/audit/layout/surfaces-work.spec.ts']),
+  { ...browser('audit:layout', ['*'], ['tests/audit/layout/mobile-viewport.spec.ts']), releaseOnly: true },
+  {
+    ...browser('audit:layout:work', ['work', 'customers'], ['tests/audit/layout/surfaces-work.spec.ts']),
+    releaseOnly: true,
+  },
   browser('audit:security:account', ['*'], ['tests/audit/security/account.spec.ts']),
   {
     ...browser('audit:performance:calendar', ['planning'], ['tests/audit/performance/calendar.spec.ts']),
@@ -91,22 +93,17 @@ test('an owned product file selects the browser groups that declare its scope, a
 
 test('the core table is the whole answer for product code no scope owns', () => {
   const expectations: readonly (readonly [string, string[]])[] = [
-    ['components/ui/button.tsx', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports']],
-    [
-      'components/ui/dialog.tsx',
-      ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:layout:work'],
-    ],
-    [
-      'components/shared/area-nav.tsx',
-      ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:layout:work'],
-    ],
-    ['app/globals.css', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports']],
+    // Shared controls and tokens leave the layout sweeps to full runs (decision 0007, amendment 2026-10-29).
+    ['components/ui/button.tsx', ['golden:gg-00']],
+    ['components/ui/dialog.tsx', ['golden:gg-00']],
+    ['components/shared/area-nav.tsx', ['golden:gg-00']],
+    ['app/globals.css', ['golden:gg-00']],
     ['proxy.ts', ['golden:gg-00', 'audit:security:account']],
     ['lib/auth/actions.ts', ['golden:gg-00', 'audit:security:account']],
     ['app/(auth)/login/page.tsx', ['golden:gg-00', 'audit:security:account']],
     ['lib/data/cached.ts', ['golden:gg-00', 'audit:security:account']],
-    ['package.json', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:security:account']],
-    ['<environment>', ['golden:gg-00', 'audit:layout', 'audit:layout:viewports', 'audit:security:account']],
+    ['package.json', ['golden:gg-00', 'audit:security:account']],
+    ['<environment>', ['golden:gg-00', 'audit:security:account']],
     ['hooks/use-live-view.ts', ['golden:gg-00']],
     ['lib/data/background-reads.ts', ['golden:gg-00']],
     ['lib/supabase/database.types.ts', ['golden:gg-00']],
@@ -186,12 +183,11 @@ test('performance groups run in release mode only; release selects every group',
   expect(select([], [], 'release')).toEqual(groups.map((group) => group.id));
 });
 
-test('visual references run in release mode only, even when shared controls, tokens or their spec change', () => {
+test('visual references run in release mode only, even when shared controls or tokens change', () => {
   for (const changed of [
     ['components/ui/button.tsx'],
     ['app/globals.css'],
     ['app/(app)/kunden/page.tsx'],
-    ['tests/audit/visual/references.spec.ts'],
     ['package.json'],
   ]) {
     expect(select(changed)).not.toContain('audit:visual');
@@ -299,39 +295,40 @@ test('the plan names a wall-clock group whose scope owns a changed product file,
   );
 });
 
-test('a change plan selects the lab group whose scope owns a changed product file, and judges it as lab counts', () => {
-  const lab = browser('audit:lab:office', ['planning'], ['tests/audit/lab/office.spec.ts']);
+test('a release-only group runs in a change plan only when its own spec or test support changed', () => {
+  const lab = {
+    ...browser(
+      'audit:lab:office',
+      ['planning'],
+      ['tests/audit/lab/office.spec.ts', 'lib/testing/lab-steps.ts'],
+    ),
+    releaseOnly: true,
+  };
   const withLab = [...groups, lab];
-  const plan = groupSelections({
-    mode: 'change',
-    groups: withLab,
-    changedFiles: ['components/kalender/board/board-row.tsx'],
-    unresolvedGroupIds: [],
+  const plan = (changedFiles: string[], unresolvedGroupIds: string[] = []): Map<string, unknown> =>
+    groupSelections({ mode: 'change', groups: withLab, changedFiles, unresolvedGroupIds });
+  // Its scope owns the file, yet the lab, layout and visual groups wait for a full run.
+  const owned = plan([
+    'components/kalender/board/board-row.tsx',
+    'lib/work/actions.ts',
+    'components/ui/button.tsx',
+  ]);
+  for (const id of ['audit:lab:office', 'audit:layout', 'audit:layout:work', 'audit:visual'])
+    expect([id, owned.has(id)]).toEqual([id, false]);
+  expect(plan(['lib/testing/lab-steps.ts']).get('audit:lab:office')).toEqual({
+    reason: 'Test execution dependency changed',
+    changedFiles: ['lib/testing/lab-steps.ts'],
   });
-  expect(plan.get('audit:lab:office')).toEqual({
-    reason: 'Lab counts; Declared scope: planning',
-    changedFiles: ['components/kalender/board/board-row.tsx'],
-  });
-  expect(plan.has('audit:performance:calendar')).toBe(false);
-  // A lab group is no wall-clock group: the plan selects it, so it is never only named.
-  expect(
-    measuredGroupsForChange(withLab, ['components/kalender/board/board-row.tsx']).map((g) => g.id),
-  ).toEqual(['audit:performance:calendar']);
-  const unrelated = groupSelections({
-    mode: 'change',
-    groups: withLab,
-    changedFiles: ['lib/inventory/actions.ts'],
-    unresolvedGroupIds: [],
-  });
-  expect(unrelated.has('audit:lab:office')).toBe(false);
-  // A failed lab group is repaired like any browser group.
-  const repair = groupSelections({
-    mode: 'change',
-    groups: withLab,
-    changedFiles: [],
-    unresolvedGroupIds: ['audit:lab:office'],
-  });
-  expect(browserOnly([...repair.keys()])).toEqual(['audit:lab:office']);
+  expect(browserOnly([...plan(['tests/audit/layout/surfaces-work.spec.ts']).keys()])).toEqual([
+    'audit:layout:work',
+  ]);
+  expect(browserOnly([...plan(['tests/audit/visual/references.spec.ts']).keys()])).toEqual(['audit:visual']);
+  // A wall-clock group runs on a quiet machine with --group only, even when its own spec changed.
+  expect(plan(['tests/audit/performance/calendar.spec.ts']).has('audit:performance:calendar')).toBe(false);
+  // A failed release-only group is passed again with --group; it starts no repair mode.
+  expect(browserOnly([...plan(['lib/inventory/b.ts'], ['audit:lab:office']).keys()])).toEqual([
+    'audit:wave-2:p1-13',
+  ]);
 });
 
 test('changed-spec-first: a group whose own spec or test support changed is tier 0; harness and product changes decide no order', () => {

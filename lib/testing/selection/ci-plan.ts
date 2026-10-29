@@ -1,3 +1,4 @@
+import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { groupSelections } from './group-selection';
 import { isPerformanceSpec, isReleaseOnlySpec } from './test-groups';
 
@@ -21,23 +22,48 @@ export type CiPlan = {
 };
 
 /**
- * Changes that can alter how every group installs, builds or runs. CI cannot
- * map them to a scope, so a change to one runs everything (fail open).
+ * Changes that can alter how every group installs, builds or runs: the
+ * dependencies, the build and Playwright configuration, the local stack's
+ * configuration, and the CI workflow and its actions. With `runnerModules`
+ * they are the tooling inputs. CI cannot map them to a scope, so a change to
+ * one runs everything (fail open).
  */
 const TOOLING_INPUTS =
-  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|vercel\.json|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/.+|scripts\/(verify|run-playwright|playwright-preflight|test-server|build|ci-plan)\.ts|lib\/testing\/(runner|selection|local-stack)\/.+)$/;
+  /^(package\.json|bun\.lock|bunfig\.toml|tsconfig\.json|next\.config\.ts|playwright(\.[a-z-]+)?\.config\.ts|supabase\/config\.toml|\.github\/(workflows\/ci\.yml|actions\/.+))$/;
 
-/** Product files whose rendering the visual reference group judges. */
-const RENDERED_UI = /^(app\/.+\.(tsx|css)|components\/.+\.tsx?|hooks\/.+\.tsx?|public\/.+)$/;
+/** The scripts that plan, build, serve and run every group. */
+const RUNNER_ENTRY_POINTS = [
+  'scripts/verify.ts',
+  'scripts/run-playwright.ts',
+  'scripts/playwright-preflight.ts',
+  'scripts/test-server.ts',
+  'scripts/build.ts',
+  'scripts/ci-plan.ts',
+];
+const RUNNER_FOLDER = /^lib\/testing\/(runner|selection|local-stack)\//;
 
 /**
- * The visual groups drive a browser in the pinned Playwright image and run for many minutes, so
- * each takes a shard of its own. The acceptance captures run in full runs only: a pull request's
- * before-and-after pair needs the base build, which the author captures locally
- * (docs/technical/standards-audit.md).
+ * The runner entry points and the runner, selection and local-stack modules
+ * they import, directly or through other modules. A module only a spec, a static check or a unit test imports
+ * selects its own groups instead. An import the graph cannot resolve takes
+ * every module of those folders.
  */
+export function runnerModules(graph: ReadonlyMap<string, readonly string[]>): string[] {
+  const reached = new Set<string>();
+  const pending = [...RUNNER_ENTRY_POINTS];
+  while (pending.length) {
+    const file = pending.pop();
+    if (file === undefined || reached.has(file)) continue;
+    reached.add(file);
+    if (file === UNKNOWN_IMPORT_DEPENDENCY)
+      pending.push(...[...graph.keys()].filter((candidate) => RUNNER_FOLDER.test(candidate)));
+    else pending.push(...(graph.get(file) ?? []));
+  }
+  return [...reached].filter((file) => RUNNER_ENTRY_POINTS.includes(file) || RUNNER_FOLDER.test(file));
+}
+
+/** The visual groups drive a browser in the pinned Playwright image and run for many minutes, so each takes a shard of its own. */
 const VISUAL_GROUP = /^audit:visual(:|$)/;
-const ACCEPTANCE_GROUP = 'audit:visual:acceptance';
 
 /** A browser shard holds about this many groups; a typical change then finishes in one shard round. */
 const GROUPS_PER_SHARD = 4;
@@ -53,8 +79,8 @@ const isBrowser = (group: CiGroup): boolean => group.kind === 'golden' || group.
  * groups, whose medians follow a shared runner's load
  * (docs/technical/performance.md). A pull request and a push to `main` take
  * the change-mode selection of `groupSelections` for their diff against the
- * base (a push's previous `main` commit), and the visual groups when it
- * changes rendered UI.
+ * base (a push's previous `main` commit); it leaves out the lab, visual and
+ * layout groups unless their own test code changed.
  */
 export function ciPlan(input: {
   groups: readonly CiGroup[];
@@ -62,11 +88,14 @@ export function ciPlan(input: {
   changedFiles: readonly string[] | undefined;
   /** Set for a call with `full`: the nightly run and the release gate. */
   fullRun: string | undefined;
+  /** The output of `runnerModules`. */
+  runnerModules: readonly string[];
 }): CiPlan {
   const browserGroups = input.groups.filter(
     (group) => isBrowser(group) && !group.files.some(isPerformanceSpec),
   );
-  const tooling = input.changedFiles?.find((file) => TOOLING_INPUTS.test(file));
+  const runner = new Set(input.runnerModules);
+  const tooling = input.changedFiles?.find((file) => TOOLING_INPUTS.test(file) || runner.has(file));
   const fullReason =
     input.fullRun ??
     (input.changedFiles === undefined
@@ -97,14 +126,11 @@ function changeSelection(
     changedFiles,
     unresolvedGroupIds: [],
   });
-  const renderedUi = changedFiles.find((file) => RENDERED_UI.test(file));
   return groups.flatMap((group) => {
     const selection = selections.get(group.id);
-    if (selection)
-      return [{ id: group.id, reason: `${selection.reason} (${selection.changedFiles[0] ?? 'no file'})` }];
-    if (renderedUi && group.files.some(isReleaseOnlySpec) && group.id !== ACCEPTANCE_GROUP)
-      return [{ id: group.id, reason: `Rendered UI changed (${renderedUi})` }];
-    return [];
+    return selection
+      ? [{ id: group.id, reason: `${selection.reason} (${selection.changedFiles[0] ?? 'no file'})` }]
+      : [];
   });
 }
 

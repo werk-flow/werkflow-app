@@ -162,3 +162,13 @@ A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2
 ## Amendment 2026-10-26: the publication gate retired
 
 [Decision 0009](0009-pull-requests-and-ci.md) retires the local publication gate: the pre-push hook, the evidence ledger, the review records and their coverage, and the advisory-age condition. CI on GitHub Actions runs the same groups through `scripts/verify.ts`, and its required check `Check` takes the gate's place; decision 0009 lists where each guarantee went. The independent groups, selection, repair mode, release mode and the failure rules of this decision stay.
+
+## Amendment 2026-10-29: speed measurements, captures and sweeps leave the change plan
+
+The owner decided this on 2026-10-29 for the CI overhaul (werk-flow/werkflow-planning#29). A change plan selected the layout sweeps by scope and by the shared-control row of the core set, the lab groups by scope, and CI added `audit:visual` for any rendered UI. In the three product PRs among the last ten merged into `main`, those groups were 10 to 12 of 46 to 58 selected browser groups, and each PR took 12 to 14 of CI's 14 browser shards.
+
+1. `audit:lab:*`, `audit:performance:*`, `audit:visual`, `audit:visual:acceptance` and every `audit:layout*` group run in release mode, in CI's full runs (nightly and the release gate) and with an explicit `--group` only. A change to a group's own spec or test support still selects it, except a wall-clock group. This supersedes, in the 2026-10-01 amendment, `audit:layout` in the core set for shared controls and tokens, and the selection of lab groups by scope.
+2. CI no longer adds `audit:visual` to a PR that changes rendered UI.
+3. A tooling input, a change that runs every browser group, is a file that can change how every group installs, builds or runs. Of `.github/`, only `workflows/ci.yml` and `actions/` count. Of the runner, selection and local-stack folders, only the modules the runner scripts import count; a module only a spec, a check or a unit test imports selects its own groups. `vercel.json` no longer counts.
+
+Known limit, accepted by the owner: a layout, accessibility or lab-count regression surfaces in the nightly run or the release gate, not on its PR. The author of UI or data-path work runs the matching group with `--group`. Rules and commands: [testing.md](../technical/testing.md#how-selection-works).
