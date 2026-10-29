@@ -1,4 +1,4 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, setSystemTime, spyOn, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,7 +23,9 @@ for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution
       fingerprint: 'a'.repeat(64),
       logPath: join(directory, groupId.replace(':', '-') + '.log'),
     }));
-    const startedAt = new Date(Date.now() - 120_000).toISOString();
+    // The report finishes at the pinned instant, two minutes after it started.
+    setSystemTime(new Date('2026-10-14T10:00:00.000Z'));
+    const startedAt = '2026-10-14T09:58:00.000Z';
     const interruptListeners = process.listenerCount('SIGINT');
     const terminateListeners = process.listenerCount('SIGTERM');
     const previousPlan = process.env[PREPARED_PLAN_ENV];
@@ -87,6 +89,7 @@ for (const phase of ['preflight', 'discovery', 'prepared plan', 'group execution
       expect(process.listenerCount('SIGINT')).toBe(interruptListeners);
       expect(process.listenerCount('SIGTERM')).toBe(terminateListeners);
     } finally {
+      setSystemTime();
       expect(directory.startsWith(prefix)).toBe(true);
       rmSync(directory, { recursive: true, force: true });
     }

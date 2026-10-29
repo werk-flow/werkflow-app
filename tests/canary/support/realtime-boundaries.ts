@@ -126,15 +126,17 @@ export async function captureRealtimeBoundaries(
   }
   async function observe(event: string, expectedReceivers: readonly string[] = ['ordinary']): Promise<void> {
     const deadline = Date.now() + 15_000;
+    // eslint-disable-next-line test-hygiene/no-polling-loop -- backlog: wait on the subscription callback instead (enforcement-ladder-backlog.md)
     while (
       !expectedReceivers.every((receiver) =>
         events.some((entry) => entry.receiver === receiver && entry.event === event),
       )
     ) {
       if (Date.now() >= deadline) throw new Error(`Permitted receivers did not observe ${event}.`);
+      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: wait on the subscription callback instead (enforcement-ladder-backlog.md)
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    // This is an explicit negative-delivery observation window, never a UI readiness wait.
+    // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- an absence proof watches a window after the positive delivery control; no event marks a delivery that never comes
     await new Promise((resolve) => setTimeout(resolve, 1_500));
   }
   try {

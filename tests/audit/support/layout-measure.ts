@@ -53,6 +53,7 @@ export async function nextFrames(page: Page): Promise<void> {
       .filter((animation) => Number.isFinite(Number(animation.effect?.getComputedTiming().endTime)));
     await Promise.race([
       Promise.allSettled(finite.map((animation) => animation.finished)),
+      // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- caps a stuck animation; the race ends as soon as the finite animations finish
       new Promise((resolve) => setTimeout(resolve, 2_000)),
     ]);
   });

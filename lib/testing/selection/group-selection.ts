@@ -1,5 +1,6 @@
 import { ADVISORY_GROUP_ID } from '../evidence/advisory-freshness';
 import { DEPENDENCY_GATE_INPUTS } from '../publication/dependency-audit';
+import type { ChangeTrigger } from './change-triggers';
 import { scopeEntryOwns, TEST_SCOPE_PREFIXES } from './test-groups';
 
 type SelectableGroup = {
@@ -8,8 +9,8 @@ type SelectableGroup = {
   /** A browser group's spec files and the test support they import. */
   executionInputs?: readonly string[];
   scopes?: readonly string[];
-  /** Speed measurements, captures and sweeps: a change plan selects one only when its own test code changed. */
-  releaseOnly?: boolean;
+  /** A browser group's `changeTrigger`; a group without one keeps the scope selection. */
+  trigger?: ChangeTrigger | undefined;
 };
 
 /** Why a group is in the plan, and the changed files that put it there. */
@@ -21,22 +22,21 @@ const ORCHESTRATION_INPUTS =
   /^lib\/testing\/(selection\/(group-selection|test-groups)|evidence\/(group-(qualification|evidence)|campaign-summary|browser-group-evidence)|runner\/(group-(schedule|recovery)|verification-lifecycle|prepared-plan|run-policy|playwright-discovery|backend-health)|publication\/release-breaker|runs\/run-retention|local-stack\/(owned-world-lifecycle|local-stack-startup))\.ts$/;
 
 /**
- * What a changed product file selects when no feature scope owns it, in change
- * mode. Every matching row applies; a product file that matches no row and has
- * no owner selects the core journey alone. Decision 0007, amendment 2026-10-01.
+ * What a changed auth or dependency file selects in change mode besides the
+ * critical journeys, which every row also selects. Every matching row applies.
+ * Decision 0007, amendments 2026-10-01 and 2026-10-29.
  */
-const CORE_JOURNEY = 'golden:gg-00';
 export const CORE_SELECTION: readonly { name: string; pattern: RegExp; groups: readonly string[] }[] = [
   {
     name: 'Authentication and session boundary',
     pattern:
       /^(proxy\.ts$|lib\/auth\/|app\/auth\/|app\/\(auth\)\/|components\/auth\/|lib\/data\/cached\.ts$|hooks\/use-sign-out\.ts$)/,
-    groups: [CORE_JOURNEY, 'audit:security:account'],
+    groups: ['audit:security:account'],
   },
   {
     name: 'Dependencies or backend environment',
     pattern: /^(package\.json|bun\.lock|<environment>)$/,
-    groups: [CORE_JOURNEY, 'audit:security:account'],
+    groups: ['audit:security:account'],
   },
 ];
 
@@ -80,29 +80,42 @@ function scopeOwners(file: string): string[] {
     .map(([scope]) => scope);
 }
 
-/** The browser groups one changed file selects in change mode. */
-function browserSelection(file: string, group: SelectableGroup): string | undefined {
-  if (isRunnerInput(file)) return undefined;
+/**
+ * Why one changed file selects a browser group in change mode, or undefined.
+ * `sharedSupport` holds the test support any browser group executes.
+ */
+function browserSelection(
+  file: string,
+  group: SelectableGroup,
+  sharedSupport: ReadonlySet<string>,
+): string | undefined {
+  const trigger = group.trigger ?? 'scope';
+  const criticalSupport =
+    trigger === 'critical' && sharedSupport.has(file) ? 'Critical journey: test support changed' : undefined;
+  // A shared fixture also runs the integration pilots; only the critical journeys run besides them.
+  if (isRunnerInput(file)) return criticalSupport;
   if (isTestInput(file))
-    return group.executionInputs?.includes(file) ? 'Test execution dependency changed' : undefined;
-  const rows = CORE_SELECTION.filter((row) => row.pattern.test(file));
+    return group.executionInputs?.includes(file) ? 'Test execution dependency changed' : criticalSupport;
+  const rows = CORE_SELECTION.filter((entry) => entry.pattern.test(file));
+  if (trigger === 'critical' && (rows.length || isProductFile(file)))
+    return `Critical journey: ${rows[0]?.name ?? 'product code'} changed`;
   const row = rows.find((entry) => entry.groups.includes(group.id));
   if (row) return `Core set: ${row.name}`;
-  if (!isProductFile(file)) return undefined;
+  if (trigger !== 'scope' || !isProductFile(file)) return undefined;
   const owners = scopeOwners(file);
-  if (owners.some((owner) => group.scopes?.includes(owner))) return `Declared scope: ${owners.join(', ')}`;
-  return !owners.length && !rows.length && group.id === CORE_JOURNEY
-    ? 'Core set: shared application code'
+  return owners.some((owner) => group.scopes?.includes(owner))
+    ? `Permission test, declared scope: ${owners.join(', ')}`
     : undefined;
 }
 
 /**
  * Chooses what a change must check. Release mode selects every group. Change
- * mode selects the cheap gates, browser groups by declared scope or the core
- * table, and a release-only group only when its own test code changed; when a
- * browser group's latest result failed or was blocked, it selects those
- * browser groups and the groups whose own test code changed instead (repair
- * mode).
+ * mode selects the cheap gates and the browser groups each `changeTrigger`
+ * names: the critical journeys for any product, migration or shared test
+ * support change, permission groups by declared scope, the core table, and
+ * any group whose own test code changed. When a browser group's latest result
+ * failed or was blocked, it selects those browser groups and the groups whose
+ * own test code changed instead (repair mode).
  */
 export function groupSelections(input: {
   mode: 'change' | 'release';
@@ -113,13 +126,20 @@ export function groupSelections(input: {
   const selections = new Map<string, GroupSelection>();
   const isBrowser = (group: SelectableGroup): boolean => group.kind === 'golden' || group.kind === 'audit';
   const repairing = input.groups.some(
-    (group) => isBrowser(group) && !group.releaseOnly && input.unresolvedGroupIds.includes(group.id),
+    (group) =>
+      isBrowser(group) && group.trigger !== 'release-only' && input.unresolvedGroupIds.includes(group.id),
   );
   const runnerChanges = input.changedFiles.filter(isRunnerInput);
+  const sharedSupport = new Set(
+    input.groups
+      .filter(isBrowser)
+      .flatMap((group) => group.executionInputs ?? [])
+      .filter((file) => isTestInput(file) && !file.endsWith('.spec.ts')),
+  );
   for (const group of input.groups) {
     if (input.mode === 'release') {
       selections.set(group.id, { reason: 'Release coverage', changedFiles: [] });
-    } else if (group.releaseOnly) {
+    } else if (group.trigger === 'release-only') {
       // The author of a sweep or a capture gets feedback on the change; a wall-clock group never runs in it.
       const testChanges = ownTestChanges(group, input.changedFiles);
       if (testChanges.length && !group.id.startsWith(MEASURED_GROUP_PREFIX))
@@ -154,7 +174,7 @@ export function groupSelections(input: {
       selections.set(group.id, { reason: 'Runner integration pilot', changedFiles: runnerChanges });
     } else {
       const reasons = input.changedFiles
-        .map((file) => [file, browserSelection(file, group)] as const)
+        .map((file) => [file, browserSelection(file, group, sharedSupport)] as const)
         .filter(([, reason]) => reason !== undefined);
       const first = reasons[0]?.[1];
       if (first) selections.set(group.id, { reason: first, changedFiles: reasons.map(([file]) => file) });

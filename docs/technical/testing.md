@@ -55,9 +55,13 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 `bun run test:plan` prints each group with its reason and the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
 
-- A product file selects the browser groups that declare its scope; one without an owner selects `golden:gg-00`. The auth path and dependency files add `audit:security:account`.
-- A spec or support file selects the groups that import it.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, in CI's full runs, or with an explicit `--group`. A change to a group's own spec or support still selects it, except a wall-clock group.
+Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
+
+- **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
+- **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
+- **Other groups** run nightly and in release mode.
+- A spec or support file selects the groups that import it. A documentation-only change selects no browser group.
+- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, CI's full runs, with `--group`, or when their own test code changed (never a wall-clock group).
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Browser groups whose own spec or support changed run first. When one fails, later browser groups are blocked for that attempt.
 - `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
@@ -80,12 +84,12 @@ After a failed release run, pass every failed group with `--group` before the ne
 `.github/workflows/ci.yml` runs on every PR to `main` and every push to `main`. Its aggregate job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs when the diff is unreadable, when a tooling input changed, and in a full run.
-- **Tooling input.** A file that can change how every group installs, builds or runs: dependencies, build, Playwright and local-stack configuration, `ci.yml` and `.github/actions/`, the runner scripts, and the runner, selection and local-stack modules those scripts import (`runnerModules`). Other workflows, `.github/scripts/`, the PR template, and a module only a spec or a check imports plan by diff.
+- **Tooling input.** A file that changes how every group installs, builds or runs makes a full run: `TOOLING_INPUTS` and `runnerModules` in `ci-plan.ts`.
 - **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
-- **One build.** The `Build` job builds the app once per run, beside `Plan`, from the stack's fixed CLI defaults without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build receipt.
+- **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`. A push to `main` runs `Check` on the merged diff; the nightly run and the release gate run every browser group.
+- **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the same retry rules as a local repeat.
 
 ## Commands
@@ -122,15 +126,18 @@ A browser group is one spec file with one disposable organization, a rough check
 
 ### Spec checklist
 
-Lint and `spec-conventions.test.ts` enforce the locator, wait and independence rules. Review owns these:
+Lint (`eslint-rules/test-hygiene-rules.mjs`, unit tests too) and `spec-conventions.test.ts` enforce the locator, wait, timeout, retry, clock, skip and independence rules. Review owns these:
 
 - **Independent.** Each test seeds its own preconditions and passes alone and in any order. A count or "latest row" check covers only the test's own records. A measured test prepares the typical profile through `ensureTypicalProfile`.
 - **One proof per behavior.** The golden file holds the journey a user walks, including second-session and live checks. The audit file holds edge cases, denials and role variants. A second browser proof needs a distinct risk or role.
+- **Denials below the browser.** Prove a new role or organization denial with an SQL assertion or a boundary fixture. `test-groups.test.ts` refuses a browser denial helper in a group without a permission trigger.
+- **Critical journeys.** Changing the critical set, or adding a `ROLE_DENIAL_GROUPS` row, needs the owner ([shrink-only lists](#grow-a-shrink-only-list)).
 - **Bounded group.** A group runs about four minutes, setup included. Split a growing file by catalog area.
 - **Persisted outcome.** A step submits once, waits on the app's busy signals, and checks both the visible confirmation and the persisted row (`Persisted<Row>`, built only by a reader in `tests/golden/support/db/`).
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.
 - **Stale premise.** A session whose premise is outdated state calls `freezeLiveUpdates` before it opens the page, or holds that state in an open dialog.
 - **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why in a `// best-effort: <reason>` comment.
+- **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue. The nightly summary lists every quarantine.
 
 ## Deadlines and measured scenarios
 
@@ -171,7 +178,7 @@ Causes that failed runs more than once. Check them before you classify.
 - **Another worktree's migration.** The shared stack can hold a migration this branch lacks. An SQL failure on an object the branch does not define is `environment`; compare `supabase migration list --local` with `supabase/migrations/`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
 - **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`. Use `recover-interrupted`, and give long plans a timeout that outlasts them.
-- **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is the Windows-to-WSL path: `environment`. Run no CodeRabbit stream or other heavy load beside a browser or measured group.
+- **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is a host network problem: `environment`. Run no heavy load beside a browser or measured group.
 - **Time zone and run day.** CI runs in UTC; a window computed in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days only. Check the run's business date and reproduce in UTC.
 - **Press before hydration.** A server-rendered button ignores a press before hydration. Wait for the hydrated control.
 - **Menus.** A Radix menu opened by mouse can select the item under the pointer on release; open menus through the area module. The row actions menu closes on scroll, and a sideways-overflowing table scrolls on click.
@@ -184,8 +191,11 @@ Causes that failed runs more than once. Check them before you classify.
 
 ## Never
 
-- Commit `test.only`, `test.skip`, `test.fixme`, `test.slow` or a per-test timeout.
-- Add a fixed sleep, or mint a golden cleanup marker outside the seed module.
+- Commit `.only`, or a skip without `// quarantine: werk-flow/werkflow-planning#<n> <why>` above it. Never quarantine a security, SQL or action-boundary test.
+- Wait on the clock (a sleep, `waitForTimeout`, a deadline loop). Wait on the fact.
+- Set a per-test timeout or a non-zero retry.
+- Read the wall clock in a unit test. Pin it with `setSystemTime` or an injected clock.
+- Mint a golden cleanup marker outside the seed module.
 - Locate a control in a spec by its copy, a parent hop, a CSS class, an id or an attribute.
 - Compare `count()` reads taken once. Poll them together with `expect.poll`.
 - Weaken an assertion, or retry until green, a failed CI job included.
@@ -193,9 +203,8 @@ Causes that failed runs more than once. Check them before you classify.
 - Raise a timeout or a budget, or rewrite a visual reference, to make a run pass.
 - Treat a review score or an old report as acceptance.
 - Edit a proof input, reset or stop the local stack, or run a raw `next build` while a test operation holds the workspace lock.
-- Run `rm -r` on a wildcard or variable after a `cd` in one command; Claude Code asks the owner. Use an absolute path or `mktemp -d`.
 - Add a package script that builds, tests or changes the local stack outside the workspace lock.
-- Set a duration assertion or a timeout in a unit test. Make a slow test cheaper.
+- Set a duration assertion in a unit test. Make a slow test cheaper.
 
 ## Verify your work
 

@@ -80,7 +80,7 @@ test('a refused connection, a server error and a timeout each mark the path unhe
 
 function health(healthy: boolean): BackendHealth {
   return {
-    checkedAt: new Date().toISOString(),
+    checkedAt: '2026-10-14T10:00:00.000Z',
     healthy,
     probes: [
       { name: 'Supabase Auth', ok: healthy, detail: healthy ? 'HTTP 200' : 'fetch failed', durationMs: 3 },
