@@ -1,9 +1,9 @@
 /**
- * The rule of the agent delete guard (.claude/hooks/refuse-delete-after-cd.ts):
- * Claude Code's built-in safety check cannot resolve the target of a recursive
- * `rm` whose operand is a wildcard or a variable once an earlier `cd` in the
- * same command moved the directory, so it asks the owner even in full access.
- * The guard refuses that shape and names the form the check can resolve.
+ * The rule of the agent delete guard (.claude/hooks/refuse-unresolvable-delete.ts):
+ * Claude Code's built-in safety check cannot resolve the target of an `rm`
+ * whose operand is a variable or a wildcard on a relative path, so it asks the
+ * owner even in full access, with or without an earlier `cd`. The guard refuses
+ * that shape and names the form the check can resolve.
  */
 
 /** A shell word: its text without quotes, and whether the shell would glob or expand it. */
@@ -12,6 +12,8 @@ type ShellWord = { text: string; globs: boolean; expands: boolean };
 const OPERATORS = new Set([';', '&', '|', '(', ')', '\n']);
 const GLOB_CHARACTERS = new Set(['*', '?', '[']);
 const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+/** Words before the program: shell keywords that open a command (`then rm ...`) and `sudo`. */
+const PREFIXES = new Set(['if', 'then', 'else', 'elif', 'while', 'until', 'do', '!', '{', 'time', 'sudo']);
 const REDIRECTION = /^\d*[<>]/;
 const BARE_REDIRECTION = /^\d*[<>]+&?$/;
 const HEREDOC = /(?<!<)<<-?\s*(["']?)([^\s"';&|<>()]+)\1/g;
@@ -88,9 +90,9 @@ function simpleCommands(command: string): ShellWord[][] {
   return commands.filter((simple) => simple.length > 0);
 }
 
-/** The program and arguments of a simple command, past leading variable assignments and `sudo`. */
+/** The program and arguments of a simple command, past leading variable assignments, keywords and `sudo`. */
 function program(words: ShellWord[]): { name: string; args: ShellWord[] } | undefined {
-  const start = words.findIndex((word) => !ASSIGNMENT.test(word.text) && word.text !== 'sudo');
+  const start = words.findIndex((word) => !ASSIGNMENT.test(word.text) && !PREFIXES.has(word.text));
   const head = words[start];
   if (!head) return undefined;
   return {
@@ -106,13 +108,6 @@ function withoutRedirections(args: readonly ShellWord[]): ShellWord[] {
   );
 }
 
-function isRecursive(args: readonly ShellWord[]): boolean {
-  const end = args.findIndex((arg) => arg.text === '--');
-  return (end === -1 ? args : args.slice(0, end)).some(
-    (arg) => arg.text === '--recursive' || /^-[^-]*[rR]/.test(arg.text),
-  );
-}
-
 /** Operands whose directory the shell decides: a variable anywhere, or a wildcard on a relative path. */
 function unresolvedOperands(args: readonly ShellWord[]): string[] {
   const end = args.findIndex((arg) => arg.text === '--');
@@ -123,20 +118,18 @@ function unresolvedOperands(args: readonly ShellWord[]): string[] {
 }
 
 /**
- * The refusal of a shell command that runs `rm -r` on a wildcard or a variable
- * after a `cd` or `pushd` in the same command, or undefined. A delete with an
- * explicit absolute path (`rm -rf /tmp/x/*`) passes.
+ * The refusal of a shell command that runs `rm`, with any flags, on a variable
+ * or on a wildcard with a relative path, or undefined. A delete with an
+ * explicit absolute path (`rm -f /tmp/x/*`) passes.
  */
-export function deleteAfterCdRefusal(command: string): string | undefined {
-  let changedDirectory = false;
+export function unresolvableDeleteRefusal(command: string): string | undefined {
   for (const words of simpleCommands(withoutHeredocBodies(command))) {
     const call = program(words);
-    if (call?.name === 'cd' || call?.name === 'pushd') changedDirectory = true;
-    if (!changedDirectory || call?.name !== 'rm' || !isRecursive(call.args)) continue;
+    if (call?.name !== 'rm') continue;
     const operands = unresolvedOperands(call.args);
     if (operands.length === 0) continue;
     return [
-      `Refused: rm -r on ${operands.join(' ')} after a cd in the same command.`,
+      `Refused: rm on ${operands.join(' ')}.`,
       'The Claude Code safety check cannot resolve that target, so it would stop for the owner even in full access.',
       'Delete with an explicit absolute path (rm -rf /tmp/x/*), or work in a fresh folder from mktemp -d instead of emptying one.',
     ].join(' ');

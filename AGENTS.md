@@ -97,7 +97,7 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
 3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
 4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
-5. **Deletes after `cd`.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `cd` somewhere and then `rm -rf` a wildcard: Claude Code cannot resolve the target and stops the thread for the owner, even in full access (`.claude/hooks/refuse-delete-after-cd.ts` refuses it).
+5. **Unresolvable deletes.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `rm` a variable or a relative wildcard (`rm -f logs/*`): Claude Code cannot resolve it and stops for the owner, even in full access (`.claude/hooks/refuse-unresolvable-delete.ts` refuses it).
 
 ## Hit every surface
 
@@ -124,12 +124,12 @@ A task is a worktree, a branch and one small PR per problem ([decision 0009](doc
 
 - Level 0, no behavior effect (docs, comments, agent instructions): your own read.
 - Level 1, behavior (product code, tests, CI, scripts), the default: `sol-loop`.
-- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
+- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review from the `needs-coderabbit` queue.
 
 1. Run `bun run check:changed`. For level 1 and 2, run `sol-loop`.
 2. Push, and open the PR with the `file-pr` skill, naming the level and its reason.
 3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. The coordinator thread merges a PR that meets the merge gate; under "full send" its own thread does. The owner may merge too. A "full stop" PR waits for the owner's read.
+4. Once the PR meets the merge gate, its own thread squash-merges it. A "full stop" PR, or one that changes `AGENTS.md`, waits for the owner's read and merge.
 
 ## Language
 

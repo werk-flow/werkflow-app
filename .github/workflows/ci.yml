@@ -2,10 +2,12 @@ name: CI
 
 # The gate every pull request to main passes (docs/technical/testing.md, "CI").
 # `Plan` maps the diff to browser groups with the runner's own selection
-# (lib/testing/selection/ci-plan.ts) and fails open: an unreadable diff or a
-# tooling change runs every browser group. Every job runs its groups through
-# scripts/verify.ts, the same engine as a local run. The required check is
-# `Check` at the end of this file.
+# (lib/testing/selection/ci-plan.ts): a pull request's against its base, a push
+# to main's against the previous main commit. It fails open: an unreadable diff
+# or a tooling change runs every browser group. Only a call with `full` (the
+# nightly run and the release gate) runs every browser group by design. Every
+# job runs its groups through scripts/verify.ts, the same engine as a local
+# run. The required check is `Check` at the end of this file.
 on:
   pull_request:
     branches: [main]
@@ -45,8 +47,9 @@ jobs:
       - name: Plan the browser groups
         id: plan
         env:
-          FULL: ${{ inputs.full || (github.event_name == 'push' && 'Push to main' || '') }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          FULL: ${{ inputs.full }}
+          # A force push or a new branch has no readable `before`, so the plan fails open to a full run.
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
           if test -n "$FULL"; then bun scripts/ci-plan.ts --full "$FULL"
           else bun scripts/ci-plan.ts --base "$BASE"; fi

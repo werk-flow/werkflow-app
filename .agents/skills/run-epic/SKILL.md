@@ -5,7 +5,7 @@ description: Use when you lead an epic: a goal that needs several pull requests,
 
 # Run an epic
 
-You are the lead thread: you plan, start children, merge and close. Children write the code.
+You are the lead thread: you plan, start children, merge and close. Children write the code. A delegated child cannot watch a PR, so you are each child PR's own thread: you watch it, label a level 2 child for [the CodeRabbit queue](../../../docs/technical/coderabbit.md#the-coderabbit-queue), and merge it.
 
 The planning repo `werk-flow/werkflow-planning` is private. Its clone sits beside this repository's main checkout. This repo is public: never copy planning content into it. Cite an issue as `werk-flow/werkflow-planning#<n>`.
 
@@ -46,7 +46,7 @@ For each hand-back:
 
 1. Call `link_pull_request` and `watch_pull_request` for the PR.
 2. Read the diff against its issue. Fix small gaps yourself. Send a large one back as a new `delegate_task`.
-3. Merge a "full send" child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child waits for the owner's merge: call `unwatch_pull_request`, ask through the question tool, and end your turn.
+3. Merge a child with `gh pr merge --squash` once [the merge gate](../../../docs/technical/coderabbit.md#the-merge-gate) passes. A "full stop" child, or one that changes `AGENTS.md`, waits for the owner's merge: call `unwatch_pull_request`, ask through the question tool, and end your turn.
 4. Rebase the open siblings on the new `main`. Where two children edit the same lines, keep both sides.
 5. Classify every failed job by [Failures](../../../docs/technical/testing.md#failures) before any rerun. Only an `environment` failure gets its one retry; cite its issue.
 6. Close the child issue with "Merged in <PR>."
