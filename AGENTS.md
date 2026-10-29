@@ -4,130 +4,145 @@ Reach every other doc through [the docs index](docs/README.md). Do not glob the 
 
 ## Workspace
 
-The parent `Code` directory holds three independent Git repositories, not a monorepo.
+Three independent Git repositories share the parent `Code` directory.
 
 | Repository | Owns | Read when |
 | --- | --- | --- |
-| [werkflow-app](docs/README.md) | The product: web app, future mobile app, implementation, tests, infrastructure, release evidence | Building or checking app behavior |
-| [werkflow-business](../werkflow-business/docs/README.md) | Avatar, offer, acquisition, beta relationship, customer research, Hormozi library | Making business decisions or checking commercial promises |
-| [werkflow-website](../werkflow-website/AGENTS.md) | Public website, campaign pages and their integrations | Building or checking marketing pages |
+| [werkflow-app](docs/README.md) | The product, its tests, infrastructure and releases | App work |
+| [werkflow-business](../werkflow-business/docs/README.md) | Offer, avatar, acquisition, beta partner, customer research | Business decisions, commercial promises |
+| [werkflow-website](../werkflow-website/AGENTS.md) | Public website and campaign pages | Marketing pages |
 
-Open the repository that owns the task. Read a sibling's AGENTS.md and index before using its context; reading never authorizes changing it. Report missing sibling context; never invent it. The business [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and new-machine setup.
-
-For substantive business work, use the [Hormozi advisor](../werkflow-business/.agents/skills/hormozi-advisor/SKILL.md) and its [reasoning baseline](../werkflow-business/docs/library/baseline.md). For customer-facing sales or marketing copy, also use [copywriting](../werkflow-business/.agents/skills/copywriting/SKILL.md) and its [fifth-grade standard](../werkflow-business/docs/copy-standard.md). Routine engineering does not load the business library.
+- Work in the repository that owns the task. Read a sibling's `AGENTS.md` and index before you use its context; reading never authorizes a change there. Report missing context, never invent it. The [workspace workflow](../werkflow-business/docs/workflow.md) owns source freshness and machine setup.
+- Business work uses the [Hormozi advisor](../werkflow-business/.agents/skills/hormozi-advisor/SKILL.md) and its [baseline](../werkflow-business/docs/library/baseline.md); customer-facing copy adds [copywriting](../werkflow-business/.agents/skills/copywriting/SKILL.md) and the [copy standard](../werkflow-business/docs/copy-standard.md). Routine engineering loads neither.
 
 ## Product
 
-WerkFlow is the digital operations backbone for German SHK businesses (`Sanitär-Heizungs-Klima`). Adjacent trades may follow later. It is a TypeScript web app today, with a React Native app planned.
+WerkFlow is the operations backbone for German SHK businesses (`Sanitär-Heizungs-Klima`): a TypeScript web app, with a React Native app planned.
 
-The buyer is the business owner. The users are the whole company: owners, office staff, project leads, field workers (`Handwerker/in`) and apprentices. The commercial target is medium-to-large SHK businesses whose leadership wants to modernize. Nobody needs technical knowledge. Field workers set the bar: clear, forgiving, hard to misuse.
-
-These businesses lose time to paperwork, scattered information, slow legacy software and physical folders, and the owner holds it all together. WerkFlow is the one place that answers: what work is due, for which customer or project, who is assigned, when, in which state, how much time was recorded, and which documents and materials belong to it.
-
-The product has two phases. Phase 1 builds a complete operational core with the depth of serious Handwerkersoftware. Phase 2 builds AI assistance and automation on that data. [The capability map](docs/product/product-capability-map.md) owns the dependency model. Each feature spec's **Current Product Baseline** owns implemented behavior. A planned capability is not an implemented feature.
-
-Before you add a feature, ask three questions. Does it reduce paperwork? Does it make the work more organized? Does it save time for employees or the owner? If all three answers are no, raise it with the owner as likely bloat.
+- The buyer is the owner of a medium-to-large SHK business. The users are the whole company. Field workers (`Handwerker/in`) set the bar: clear, forgiving, hard to misuse.
+- It answers in one place: what work is due, for whom, who does it when, in which state, with how much time, documents and material.
+- Phase 1 builds the operational core, Phase 2 AI on its data ([capability map](docs/product/product-capability-map.md)). A feature spec's **Current Product Baseline** owns implemented behavior; a planned capability is not a feature.
+- A new feature must cut paperwork, organize the work, or save employees or the owner time. If it does none, raise it with the owner as likely bloat.
 
 ## The six virtues
 
-These six virtues define quality in WerkFlow and apply to every change. Each rule names its mechanism by tier ([decision 0005](docs/decisions/0005-enforcement-ladder.md)): Tier 1 makes the mistake unwritable, Tier 2 is an automated check that fails on it, Tier 3 is judgment that a reviewer exercises and records.
+Each rule has a tier ([decision 0005](docs/decisions/0005-enforcement-ladder.md)):
 
-### How to read the virtues
+- **Tier 1** makes the mistake unwritable. **Tier 2** is a check that fails on it. Both are hard rules; change one only with its mechanism and the owner.
+- **Tier 3** is a default a reviewer judges. Diverge when it clearly does not fit, and record in the commit body the default, why, what you did instead, and whether the default should change; if so, change the owner doc too.
+- Every security rule is hard, except the two Tier 3 defaults of virtue 3.
 
-**The owner docs.** Each virtue's owner doc holds five sections: "How to work" (a procedure per recurring task, each step with its fast check), "Checklist" (what a new implementation ticks, with its mechanism), "Never" (the prohibitions and what catches each), "Verify your work" and "Examples" (real files to copy).
+Before you write, read "How to work" and "Never" in each owner doc your task touches. A change is done when its "Verify your work" commands pass and each Tier 3 point has a recorded answer.
 
-**Order of use.** [The docs index](docs/README.md) says which sections to read before you write; build from their defaults. While you work, run each step's fast check. Finish with the Verify commands.
-
-**Hard rules and defaults.** A Tier 1 or Tier 2 rule is a hard rule: a mechanism enforces it, and you never break it. To change one, change its mechanism in the same change, with the owner. Every security rule is hard, even where only review enforces it, except the two defaults of virtue 3. Every other Tier 3 rule and every procedure step is a verified default, not a law. Diverge when it clearly does not fit. Record every divergence in one place: a `Divergences` note in the slice record, or, outside a slice, the commit message body. The note names the default, why it does not fit here, what you did instead, and whether the default should change; if so, change the owner doc in the same change.
-
-**Improve the virtues.** The virtues are a strict baseline, not a fixed one: they evolve with the product, testing system and docs rules included. When a rule is missing, wrong, outdated or costs more than it protects, raise it with the owner and change the rule with its mechanism in the same change. A new rule comes with its mechanism at the highest reachable tier and a plan for the existing code: fix it now, or add a row to the [enforcement-ladder backlog](docs/technical/enforcement-ladder-backlog.md). When you fix a diagnosed defect or keep a review finding, name the tier where its prevention landed.
-
-A change is done when its Verify commands pass and its Tier 3 points have a recorded answer.
+When a rule is missing, wrong or too costly, raise it with the owner and change rule and mechanism together. A new rule takes the highest reachable tier; existing breaches are fixed now or get a [backlog](docs/technical/enforcement-ladder-backlog.md) row. A fixed defect or kept review finding names the tier of its prevention.
 
 ### 1. UI and UX
 
-- **Good.** Build from the component registry: a page is `PageShell`, `PageHeader`, `PageBody`, a field is a `Field`, an empty list is `EmptyState`. Every route has a `loading.tsx` skeleton, and a failed region shows a retry. A submit button stays enabled, and a submit with missing input marks the fields and focuses the first (`focusFirstInvalidField`). German copy addresses the user with "du" and reads naturally.
-- **Never.** Hardcode a hex value, a radius or a numbered palette class. Write a raw `<button>`, a raw text `<input>`, a native date, time or select control, a raw `<h1>`, or a `max-w-*` class on `DialogContent`. Use orange as decoration, or purple as a loud accent. Disable a submit or an action button to express validation. Keep a design the owner rejected as a test baseline.
-- **Enforced by.** Tier 1: the registry in `components/ui/` and `components/shared/`, `hooks/use-client-read.ts` and the tokens in `app/globals.css`. Tier 2: `static:lint` (the ui and jsx-a11y rules and the selector sets), the tests under `lib/` that the skill tags and `tests/ui-contracts/`, `ui:contracts`, `audit:layout*` (tabs, dialogs, axe), `audit:visual` in release.
-- **Defaults (Tier 3).** Hierarchy, density, shadows, natural German and fit for the role, through [rendered design acceptance](docs/technical/standards-audit.md#rendered-design-acceptance).
-- **Verify.** `bun run lint`, `bun run test:unit`, `bun run test:ui`. Then capture each changed screen before and after (`@ACCEPT`): both themes, 375 px and desktop, empty, `-loading` and `-error` captures.
-- **Owner doc.** The `werkflow-design` skill (`.claude/skills/werkflow-design/SKILL.md`). Start from its [How to work](.claude/skills/werkflow-design/SKILL.md#how-to-work).
+Owner: the `werkflow-design` skill ([How to work](.claude/skills/werkflow-design/SKILL.md#how-to-work)).
+
+- Tier 1 and 2: build from the registry in `components/ui/` and `components/shared/`. No raw `<button>`, text `<input>`, `<h1>` or native select or date control. No hardcoded hex value, radius or palette class.
+- Every route has a `loading.tsx` skeleton; a failed region shows a retry.
+- A submit stays enabled. Missing input marks the fields and focuses the first (`focusFirstInvalidField`).
+- Tier 3: hierarchy, density, natural German and fit for the role ([rendered design acceptance](docs/technical/standards-audit.md#rendered-design-acceptance)).
 
 ### 2. Performance and immediate feedback
 
-- **Good.** Every action shows feedback in its first frame, before the network answers (`useServerAction`, `useOptimisticList`). Saved results reach every view, and other sessions within the live target. A list reads completely in pages and reports an overflow (`readAllRows`, `useJobEntityOptions`). Daily journeys keep lab counts that only fall.
-- **Never.** Wait for the network to acknowledge an action. Truncate a list silently. Pass an organization-sized list to `.in()`. Call `updateTag` or `revalidateTag` on a tag that no cached reader carries. Use `useTransition`, polling or a toast in product code. Buy a lower count with staler data. Raise a budget, reference, ceiling or timeout to pass.
-- **Enforced by.** Tier 1: `hooks/use-server-action.ts`, `hooks/use-optimistic-list.ts`, `hooks/use-busy-id.ts`, `lib/ui/unconfirmed.ts`, `components/shared/stale-region.tsx`, `lib/supabase/query-batches.ts`. Tier 2: `static:lint` (`ui/no-derived-state-effect`, `realtime/no-interval`, the Realtime and transition selectors), the tests under `lib/` and `tests/ui-contracts/`, `tests/golden/route-renders.json`, the lab tooling in `scripts/` and `tests/audit/support/`, `sql:list-pagination`, `sql:security`, `ui:contracts`, `audit:layout`, `audit:list-pagination`, `golden:p1-01`, `audit:wave-1:a1-inventar`, `bun run realtime:check`, `audit:lab:*` in change plans, `audit:performance:*` before a release.
-- **Defaults (Tier 3).** Whether a flow is a journey, a reader is cached, or a win earns its code.
-- **Verify.** `bun run test:unit`, `bun run test:ui`. To prove a repair: `bun run test:verify --group audit:lab:<name>` or `audit:performance:<name>`.
-- **Owner doc.** [Realtime and caching](docs/technical/realtime-and-caching.md) and [performance](docs/technical/performance.md). Start from their [How to work](docs/technical/realtime-and-caching.md#how-to-work).
+Owner: [realtime and caching](docs/technical/realtime-and-caching.md#how-to-work) and [performance](docs/technical/performance.md).
+
+- Tier 1 and 2: every action shows feedback in its first frame (`useServerAction`, `useOptimisticList`). A saved result reaches every view and session.
+- A list reads completely in pages and reports an overflow (`readAllRows`). No silent truncation, `useTransition`, polling or toast.
+- Daily journeys keep lab counts that only fall. Never buy a lower count with staler data, or raise a budget or timeout to pass.
+- Tier 3: which flows are journeys, which readers are cached, which wins earn their code.
 
 ### 3. Security
 
-- **Good.** The server establishes identity, organization, role and object permission before every protected operation, and a test drives the real action with a foreign id. A table's migration enables RLS, adds policies and grants explicitly. An identity check that cannot complete is a failure, never a sign-out and never access.
-- **Never.** Restrict only in the UI. Trust an id, an organization or a role that the client sent. Grant to `anon`. Export a helper from a `'use server'` module. Log personal data, codes or provider bodies. Send file bytes through a Server Action. Write to PROD outside a release the owner requested.
-- **Enforced by.** Tier 1: RLS, revoked default grants, `server-only` modules, `lib/org/action-context.ts`, `lib/storage/r2.ts` (storage keys), `lib/logging.ts`. Tier 2: the tests under `lib/security/`, `lib/conventions/` (tenant scope, action input), `lib/data/`, `lib/storage/`, `lib/auth/` and `lib/org/`, `lib/zod.ts`, the auth-scope, production-ref, `htmlSinkSelectors` and `console` rules of `static:lint`, `sql:security` (`supabase/tests/client_read_boundaries.sql`), `sql:closed-period-writes`, `sql:rate-limits`, `sql:planning-options`, `sql:list-pagination`, `canary:security`, `static:dependencies`, `auth:check`, `advisors:check`, `migrations:check`, `types:check`.
-- **Defaults (Tier 3).** Whether a permission check fits its operation, and every accepted residual exposure.
-- **Verify.** `bun run test:unit`, `bun run test:verify --group sql:security`.
-- **Owner doc.** [Security](docs/technical/security.md). Start from its [How to work](docs/technical/security.md#how-to-work).
+Owner: [security](docs/technical/security.md#how-to-work).
+
+- The server establishes identity, organization, role and object permission before every protected operation (`lib/org/action-context.ts`). A test drives the real action with a foreign id.
+- Never restrict only in the UI. Never trust an id, organization or role the client sent.
+- A migration that creates a table enables RLS, adds policies and grants explicitly. Never grant to `anon`.
+- An identity check that cannot complete is a failure, never a sign-out and never access.
+- Never export a helper from a `'use server'` module, or send file bytes through a Server Action.
+- Never log personal data, codes or provider bodies (`lib/logging.ts`).
+- Never write to PROD outside a release the owner requested.
+- Tier 3 defaults: whether a permission check fits its operation, and every accepted residual exposure.
 
 ### 4. Code quality and maintainability
 
-- **Good.** Write the smallest amount of clear code that delivers the confirmed outcome. A domain rule has one owner module with precise types and focused tests. Rows that change together change in one database function call. Use descriptive full-word names and guard clauses. Type every exported signature under `lib/`. End each task with a deletion pass.
-- **Never.** Use `any`, a `!` assertion, an `as` cast, or `undefined` in an optional property. Copy a helper or a type. Write related rows in separate statements. Leave dead code, an unused or test-only export, or an unused dependency. Suppress a rule without a reason. Add an abstraction for possible future scope. Remove authorization, validation, audit history or failure visibility to save lines. Rename existing short identifiers in passing (owner decision).
-- **Enforced by.** Tier 1: strict compiler flags in `tsconfig.json`. Tier 2: `static:typecheck`, `static:lint` (type, cast, size-cap, layering, escape, suppression and typed rules; `quality/function-size` with `eslint-rules/size-cap-exceptions.json`, `quality/no-silent-catch`, `timeOfDaySelectors`), `static:unused`, `static:format`, the tests under `lib/` (duplicates, caps, assertions, failure shapes, guarded writes), `sql:job-plan-bridge`, `sql:user-preference-writes`, `types:check`.
-- **Defaults (Tier 3).** Whether an abstraction earns its place, naming, and the deletion pass with its independent review.
-- **Verify.** `bun run typecheck`, `bun run lint`, `bun run unused:check`, `bun run test:unit`.
-- **Owner doc.** [Code quality](docs/technical/code-quality.md), with the `typescript-best-practices` skill for types. Start from its [How to work](docs/technical/code-quality.md#how-to-work).
+Owner: [code quality](docs/technical/code-quality.md#how-to-work), with the `typescript-best-practices` skill.
+
+- Tier 1 and 2: no `any`, `!` or `as` assertion. No copied helper or type, dead code or unused export. Rows that change together change in one database function call.
+- Tier 3: the smallest clear code for the confirmed outcome, one owner module per domain rule, no abstraction for future scope, a final deletion pass.
+- Never remove authorization, validation, audit history or failure visibility to save lines.
 
 ### 5. Testing and review
 
-- **Good.** Put each rule at the cheapest boundary that can expose its failure: a unit test for a calculation, SQL for permissions, a component contract for a shared control, a browser journey for a connected outcome. A test fails when the behavior breaks and names the broken invariant. Diagnose a failure before you run again. A PR gets the reviews of its [review level](docs/technical/coderabbit.md#choose-the-review-level), and each finding gets a disposition.
-- **Never.** Retry until green. Weaken an assertion, skip a test, add a fixed sleep or raise a timeout to pass. Treat a review score or an old report as acceptance. Merge without a green `Check`.
-- **Enforced by.** Tier 1: `scripts/guard-edits-during-verification.ts` guards a running local verification, `scripts/run-unit-tests.ts` bounds every unit run, `tests/golden/support/db/shared.ts` brands a persisted row. Tier 2: `.github/workflows/ci.yml` with its required check `Check`, the runners in `scripts/` (`scripts/verify.ts`: selection, proof, diagnosis), the tests under `lib/testing/` and `lib/conventions/`, `static:lint` with the spec rules and the spec selector set, `static:coverage`, `unit:all`, `ui:contracts`, `audit:visual`, `tests/golden/support/`, `bun run test:runs`.
-- **Defaults (Tier 3).** Whether an assertion proves its catalog clause, the classification of a failure, a PR's review level, and the disposition of each review finding.
-- **Verify.** `bun run check:changed`, `bun run test:plan`, `bun run test:verify`, the level's reviews, then `Check` on the PR. A wave end or a release adds `bun run test:verify --mode release` and the cloud canary.
-- **Owner doc.** [Testing](docs/technical/testing.md), with [reviews](docs/technical/coderabbit.md) for pull requests. Start from its [How to work](docs/technical/testing.md#how-to-work).
+Owner: [testing](docs/technical/testing.md#how-to-work).
+
+- Tier 2: never merge without a green `Check`.
+- Put each rule at the cheapest boundary that exposes its failure: unit, SQL, component contract or browser journey. A failing test names the broken invariant.
+- Diagnose a failure before you rerun. Never retry until green, weaken an assertion, skip a test, sleep or raise a timeout.
+- Tier 3: whether an assertion proves its clause, a failure's classification, and each review finding's disposition.
 
 ### 6. Documentation
 
-- **Good.** A doc holds what the code and the database cannot say: intent, decisions, rules, reasons, procedures, and a pointer to the mechanism that enforces a rule. Every fact has one home, and other places link to it. Change the owning doc in the same change as the behavior.
-- **Never.** Restate a schema, a file list, a handler list, a function inventory, a count or a current value. Write dated narrative, report ids or build ids into a living doc. Copy a rule into a second doc. Create a report or summary file that nobody asked for. Store repository facts in agent memory.
-- **Enforced by.** Tier 2: `bun run docs:check` with its rules and tests in `lib/docs/`.
-- **Defaults (Tier 3).** Whether a sentence is derivable from code, whether a fact has a second home, and whether narrative or a counter sits in a living doc.
-- **Verify.** `bun run docs:check`.
-- **Owner doc.** [The docs index](docs/README.md), with the `writing-for-agents`, `technical-writing` and `unslop` skills for the prose. Start from its [How to work](docs/README.md#how-to-work).
+Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agents`, `technical-writing` and `unslop` skills.
 
-### Keep the blocks and the owner docs in step
+- Tier 2: `bun run docs:check`.
+- Tier 3: a doc holds what code and the database cannot say, each fact in one home, changed with the behavior. No inventory, count, dated narrative, unrequested report, or repository fact in agent memory.
 
-Change an "Enforced by" line and its owner docs' mechanism tags in the same change.
+## Ways to hurt yourself
 
-## How to work
+1. **PROD.** Never push to `main` or `production`, migrate PROD by hand, or run tests or bulk scripts against it. Read it only through read-only tools ([work on production](docs/technical/environments.md#work-on-production)).
+2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
+3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
+4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
+5. **Deletes after `cd`.** Delete with an explicit absolute path, or inside a fresh `mktemp -d` folder. Never `cd` somewhere and then `rm -rf` a wildcard: Claude Code cannot resolve the target and stops the thread for the owner, even in full access (`.claude/hooks/refuse-delete-after-cd.ts` refuses it).
 
-A rule below without a named mechanism is a Tier 3 default.
+## Hit every surface
 
-- Route every task through the matching skill: [the docs index](docs/README.md#skills) pairs each kind of task with its skill.
-- Do yourself whatever your tools can do, including generating, setting and rotating a secret whose value you create. The owner supplies only what the owner alone holds (passwords, tokens and settings of the owner's own accounts) and decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide every other question with the option you would recommend, record its reason (commit body, or the owning doc for a lasting rule) and report it.
-- Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask the owner through your harness's ask-user tool and end your turn, so T3 Code marks the thread as needing input and notifies the owner. Never bury an owner action in a status message while you keep working or watching a PR.
-- Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every description of the schema. Mechanism: `bun run types:check`.
-- Preserve organization boundaries and intentional role differences (`admin`, `buero`, `employee`); favor defaults over configuration. Mechanism: virtue 3 for the boundaries.
-- A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)); never commit to `main`. Run `bun run check:changed` and, for level 1 and 2, `sol-loop`, push, run `gh pr create`, call `watch_pull_request` and end your turn. Babysit it until it meets [the merge gate](docs/technical/coderabbit.md#the-merge-gate). The owner merges unless they said "full send". "full send" and "full stop" are the owner's request to commit, push and open the task's PR. Mechanism: the ruleset on `main`.
+Before UI work is done, check each surface and name in the PR the ones that applied:
+
+- **Roles:** `admin`, `buero` and `employee`. Keep intentional role differences and the organization boundary; the server enforces both. Favor defaults over configuration.
+- **Screens:** phone at 375 px and desktop.
+- **Themes:** light and dark.
+- **States:** empty, loading and error.
+- **Copy:** natural German that says "du".
+- **Captures:** each changed screen before and after (`@ACCEPT`).
+
+## Decide or ask
+
+- Do whatever your tools can do. The owner supplies only the owner's own passwords, tokens and account settings.
+- The owner decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend, and record why in the commit body, or the owning doc for a lasting rule.
+- Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask through the ask-user tool and end your turn, so T3 Code flags the thread. Never bury an owner action in a status message.
+- **The Willert rule.** When a decision would be expensive to rebuild if an SHK assumption is wrong, ask the owner through the question tool and propose a concrete question for a named role at Willert Haustechnik, the beta partner.
+- Tamay owns product and offer; John owns sales and customers. A business ambition never adds a feature, entitlement or analytics by itself, and sales positioning stays out of feature logic.
+
+## Pull requests
+
+A task is a worktree, a branch and one small PR per problem ([decision 0009](docs/decisions/0009-pull-requests-and-ci.md)). Never commit to `main`. [Reviews](docs/technical/coderabbit.md) owns the levels, babysitting and the merge gate.
+
+- Level 0, no behavior effect (docs, comments, agent instructions): your own read.
+- Level 1, behavior (product code, tests, CI, scripts), the default: `sol-loop`.
+- Level 2, security, auth, RLS, a migration, personal data, deletion, time or payroll: `sol-loop`, then one CodeRabbit review.
+
+1. Run `bun run check:changed`. For level 1 and 2, run `sol-loop`.
+2. Push, and open the PR with the `file-pr` skill, naming the level and its reason.
+3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
+4. The coordinator thread merges a PR that meets the merge gate; under "full send" its own thread does. The owner may merge too. A "full stop" PR waits for the owner's read.
 
 ## Language
 
-- Everything a user sees is natural German with real umlauts and `ß`: labels, messages, tooltips, aria labels. Mechanism: `lib/conventions/german-copy.test.ts` for spelling, address, ellipsis and quotes.
-- Code, identifiers, comments, commits and developer documents are English. Route names and database values keep the German domain terms of the codebase.
+- Everything a user sees, aria labels included, is natural German with real umlauts and `ß`.
+- Code, comments, commits and developer docs are English. Route names and database values keep the German domain terms.
 
-Domain terms: `Auftrag` (work order), `Projekt` (contains several jobs), `Kunde`, `Mitarbeiter`, `Handwerker/in` (field-worker role label), `Organisation` (the company boundary), `Anfrage` (customer request, converted once into work), `Ansprechpartner` and `Einsatzort` (a customer's contact and work site), `Kalender`, `Einsatz` (dispatched work; `Mein Einsatz` is the worker's view), `Arbeitsvorlage`, `Arbeitsnachweis` (site evidence), `Übergabe` (office-reviewed handover), `Aufgaben` (the one task and approval list), `Qualifikationen`, `Anlage`, `Servicefall`, `Wartungsplan`, `Dokumente`, `Zeiterfassung`, `Zeitkonto`, `Perioden`, `Urlaub`, `Krankmeldung`, `Lager`, `geparkt` (intentionally unscheduled work), `buero` (office role between employee and admin). The owning feature spec defines each term.
+Domain terms, each defined by its feature spec: `Auftrag` (work order), `Projekt` (several jobs), `Organisation` (the company boundary), `Anfrage` (customer request), `Einsatz` (dispatched work), `Arbeitsnachweis` (site evidence), `Übergabe` (office-reviewed handover), `Aufgaben` (the one task and approval list), `geparkt` (intentionally unscheduled), `buero` (the office role).
 
 ## Tools, branches and releases
 
-- Use Bun: `bun install`, `bun run <script>`, `bunx <tool>`. Keep `bun.lock`. Keep `package-lock.json` as is; add no other lockfile. Mechanism: `vercel.json` installs from the frozen `bun.lock`.
-- In a worktree, wait for `.t3/setup-done` ([worktrees](docs/technical/environments.md#work-in-a-worktree)).
-- The infrastructure stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
-- `main` is staging on DEV, `production` is PROD; never push to either. Release only when the owner asks in your thread ("release main"): run `gh workflow run release`, follow it to its end with `gh run watch`, and report. Mechanism: the rulesets.
-- Schema changes follow [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only. Mechanism: `bun run migrations:check`, `bun run types:check`, `sql:security`.
-
-## Business context
-
-Tamay owns product and offer. John owns leads, marketing, sales and customer work. The business repository owns the [offer](../werkflow-business/docs/offer.md), the [avatar](../werkflow-business/docs/avatar.md), [acquisition](../werkflow-business/docs/acquisition.md) and the [beta partnership](../werkflow-business/docs/beta-partnership.md) with Willert Haustechnik. A business ambition never adds a feature, an entitlement or analytics by itself. Do not encode sales positioning into feature logic.
+- Use Bun and `bunx`. Keep `bun.lock`, leave `package-lock.json` as is, add no other lockfile.
+- In a worktree, wait for `.t3/setup-done` before you run a script.
+- Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every schema description.
+- A schema change follows [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only.
+- The stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
+- `main` is staging on DEV, `production` is PROD. Release only when the owner or the coordinator thread asks ("release main"): run `gh workflow run release` and `gh run watch`, check production, roll the app back through Vercel if it breaks ([release and rollback](docs/technical/environments.md#release-and-rollback)), and report.

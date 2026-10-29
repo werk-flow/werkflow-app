@@ -3,10 +3,10 @@
 
 /** Word budgets, counted like `wc -w`. */
 const WORD_BUDGETS = {
-  technicalDoc: 4000,
-  agentsFile: 2800,
-  docsIndex: 3600,
-  skillFile: 4000,
+  technicalDoc: 3000,
+  agentsFile: 1800,
+  docsIndex: 800,
+  skillFile: 2700,
 } as const;
 
 /** The word budget of a file by its repository path, or null when none applies. */
