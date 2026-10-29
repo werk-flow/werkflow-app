@@ -104,6 +104,16 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     tests: ['an assigned field worker reports and resolves an own blocker and starts work by clocking in'],
     movesIn: 'werk-flow/werkflow-planning#37',
   },
+  'golden:p1-15': {
+    tests: [
+      'a field worker submits a work report, a second person approves it, and a measurement is recorded',
+    ],
+    movesIn: 'werk-flow/werkflow-planning#37',
+  },
+  'golden:p1-16': {
+    tests: ['an assigned field worker works through the pack and completes the job'],
+    movesIn: 'werk-flow/werkflow-planning#37',
+  },
   'golden:p1-18': {
     tests: ['registers, links, corrects and replaces one site-owned asset @P1-18-journey'],
     movesIn: 'werk-flow/werkflow-planning#37',

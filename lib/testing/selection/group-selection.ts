@@ -89,14 +89,13 @@ function browserSelection(
   group: SelectableGroup,
   sharedSupport: ReadonlySet<string>,
 ): string | undefined {
-  if (isRunnerInput(file)) return undefined;
   const trigger = group.trigger ?? 'scope';
-  if (isTestInput(file)) {
-    if (group.executionInputs?.includes(file)) return 'Test execution dependency changed';
-    return trigger === 'critical' && sharedSupport.has(file)
-      ? 'Critical journey: test support changed'
-      : undefined;
-  }
+  const criticalSupport =
+    trigger === 'critical' && sharedSupport.has(file) ? 'Critical journey: test support changed' : undefined;
+  // A shared fixture also runs the integration pilots; only the critical journeys run besides them.
+  if (isRunnerInput(file)) return criticalSupport;
+  if (isTestInput(file))
+    return group.executionInputs?.includes(file) ? 'Test execution dependency changed' : criticalSupport;
   const rows = CORE_SELECTION.filter((entry) => entry.pattern.test(file));
   if (trigger === 'critical' && (rows.length || isProductFile(file)))
     return `Critical journey: ${rows[0]?.name ?? 'product code'} changed`;

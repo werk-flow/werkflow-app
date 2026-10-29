@@ -110,7 +110,10 @@ export function ciPlan(input: {
   const browser =
     fullReason !== undefined || input.changedFiles === undefined
       ? browserGroups.map((group) => ({ id: group.id, reason: fullReason ?? 'Full run' }))
-      : changeSelection(browserGroups, input.changedFiles);
+      : // Every browser group's support counts as shared; the plan then never runs a wall-clock group.
+        changeSelection(input.groups.filter(isBrowser), input.changedFiles).filter((entry) =>
+          browserGroups.some((group) => group.id === entry.id),
+        );
   return { fullReason, browser, shards: shardsOf(browser.map((entry) => entry.id)) };
 }
 

@@ -190,6 +190,25 @@ test('shards hold every selected group once and never exceed the job budget', ()
   expect(one.shards).toEqual([{ shard: 1, groups: 'golden:gg-00,audit:wave-2:p1-13' }]);
 });
 
+test('support only a wall-clock group imports still runs the critical journeys, never the wall-clock group', () => {
+  const measured = {
+    ...group(
+      'audit:performance:calendar',
+      'tests/audit/performance/calendar.spec.ts',
+      ['planning'],
+      'release-only',
+    ),
+    executionInputs: ['tests/audit/performance/calendar.spec.ts', 'tests/audit/support/calendar-live.ts'],
+  };
+  const plan = ciPlan({
+    groups: [...groups.filter((entry) => entry.id !== measured.id), measured],
+    changedFiles: ['tests/audit/support/calendar-live.ts'],
+    fullRun: undefined,
+    runnerModules,
+  });
+  expect(ids(plan)).toEqual(['golden:gg-00']);
+});
+
 test('the critical journeys of a product change split into three shards', () => {
   const critical = Object.keys(CRITICAL_JOURNEYS).map((id) =>
     group(id, `tests/golden/${id.replace('golden:', '')}.spec.ts`, ['*'], 'critical'),

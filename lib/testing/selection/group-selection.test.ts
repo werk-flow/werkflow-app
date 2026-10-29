@@ -29,7 +29,11 @@ const groups = [
     'golden:gg-00',
     'critical',
     ['*'],
-    ['tests/golden/gg-00.spec.ts', 'tests/golden/support/steps/shared.ts'],
+    [
+      'tests/golden/gg-00.spec.ts',
+      'tests/golden/support/steps/shared.ts',
+      'tests/golden/support/fixtures.ts',
+    ],
   ),
   browser('golden:p1-21', 'critical', ['time', 'work'], ['tests/golden/p1-21.spec.ts']),
   browser(
@@ -174,6 +178,14 @@ test('test code selects the groups that execute it; scripts, documentation tooli
   ]) {
     expect([file, browserOnly(select([file]))]).toEqual([file, []]);
   }
+});
+
+test('a shared fixture runs the integration pilots and the critical journeys', () => {
+  expect(browserOnly(select(['tests/golden/support/fixtures.ts']))).toEqual([
+    ...CRITICAL,
+    'golden:p1-24a',
+    'audit:wave-3:p1-24a',
+  ]);
 });
 
 test('a runner change runs both integration pilots', () => {
