@@ -235,28 +235,56 @@ test('the hook refuses PROD MCP calls with the reason and lets DEV calls through
   expect(dev.exitCode, dev.output).toBe(0);
 });
 
-// Codex runs a command hook in the session's working directory, and a hook that fails to start
-// does not block the call. The registered command must find the script from a subfolder.
-test('the Codex hook command refuses a PROD call from a subfolder of the repository', () => {
-  const { hooks } = z
-    .object({
-      hooks: z.object({
-        PreToolUse: z.array(z.object({ hooks: z.array(z.object({ command: z.string() })) })),
-      }),
-    })
-    .parse(JSON.parse(readFileSync(resolve(repositoryRoot, '.codex/hooks.json'), 'utf8')));
+const hookFileSchema = z.object({
+  hooks: z.object({
+    PreToolUse: z.array(z.object({ hooks: z.array(z.object({ command: z.string() })) })),
+  }),
+});
+
+/** The command an agent's hook file registers for this guard. */
+function registeredGuard(file: string): string {
+  const { hooks } = hookFileSchema.parse(JSON.parse(readFileSync(resolve(repositoryRoot, file), 'utf8')));
   const command = hooks.PreToolUse.flatMap((entry) => entry.hooks)
     .map((hook) => hook.command)
     .find((text) => text.includes('refuse-production-mcp.ts'));
+  if (!command) throw new Error(`${file} registers no production MCP guard.`);
+  return command;
+}
+
+function runGuard(command: string, options: { cwd: string; path?: string }) {
   const result = Bun.spawnSync({
-    cmd: ['sh', '-c', command ?? 'exit 0'],
-    cwd: resolve(repositoryRoot, 'lib/security'),
+    cmd: ['/bin/sh', '-c', command],
+    cwd: options.cwd,
     stdin: Buffer.from(
       JSON.stringify({ tool_name: 'mcp__supabase-prod-readonly__list_tables', tool_input: {} }),
     ),
     stdout: 'pipe',
     stderr: 'pipe',
+    env: { ...process.env, CLAUDE_PROJECT_DIR: repositoryRoot, PATH: options.path ?? process.env.PATH ?? '' },
   });
-  expect(result.exitCode, result.stderr.toString()).toBe(2);
-  expect(result.stderr.toString()).toContain('production server by its name');
+  return { exitCode: result.exitCode, stderr: result.stderr.toString() };
+}
+
+// Codex runs a command hook in the session's working directory. The registered command must
+// find the script from a subfolder.
+test('the Codex hook command refuses a PROD call from a subfolder of the repository', () => {
+  const result = runGuard(registeredGuard('.codex/hooks.json'), {
+    cwd: resolve(repositoryRoot, 'lib/security'),
+  });
+  expect(result.exitCode, result.stderr).toBe(2);
+  expect(result.stderr).toContain('production server by its name');
+});
+
+// Both agents block only on exit 2; any other failure of the guard would let the call through.
+test('both registered hook commands refuse when the guard itself fails', () => {
+  const bin = mkdtempSync(join(tmpdir(), 'broken-bun-'));
+  writeFileSync(join(bin, 'bun'), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  for (const file of ['.claude/settings.json', '.codex/hooks.json']) {
+    const result = runGuard(registeredGuard(file), {
+      cwd: repositoryRoot,
+      path: `${bin}:${process.env.PATH ?? ''}`,
+    });
+    expect(result.exitCode, file).toBe(2);
+    expect(result.stderr, file).toContain('the MCP guard failed with exit 1');
+  }
 });
