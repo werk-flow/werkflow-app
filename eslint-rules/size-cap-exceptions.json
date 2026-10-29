@@ -21,7 +21,6 @@
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
-    "lib/time-corrections/actions.ts": 1439,
     "lib/time-tracking/validation.ts": 806,
     "lib/vacation/actions.ts": 984,
     "lib/work-handover/actions.ts": 1100,
@@ -665,15 +664,6 @@
       "getTimeAccountSettings": 130,
       "getTimeAccountSettings > readRegion#1": 125
     },
-    "lib/time-corrections/actions.ts": {
-      "loadSourceContext": 128,
-      "submitTimeCorrection": 108,
-      "resubmitTimeCorrection": 86,
-      "reviewTimeCorrectionsBatch": 87,
-      "hydrateCorrectionRequests": 118,
-      "getProvisionalTimeCorrectionProjection": 85
-    },
-    "lib/time-corrections/calendar-proposal.ts": { "proposeCalendarCorrection": 107 },
     "lib/time-tracking/approval-queue.ts": { "readPendingSessionQueue": 86 },
     "lib/time-tracking/calendar-blocks.ts": { "calculateCalendarWorkBlocks": 84 },
     "lib/time-tracking/canonical-entries.ts": { "getCanonicalTimeEntries": 151 },
