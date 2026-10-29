@@ -107,8 +107,8 @@ const REVIEWED_UNPAGED_READS: Readonly<Record<string, string>> = {
   'lib/jobs/update-preparation.ts::prepareJobUpdate::job_assignments': ONE_JOB,
   'lib/maintenance/actions.ts::createMaintenanceVisit::maintenance_due_work_events':
     'the replay events of one idempotency key',
-  'lib/personnel/actions.ts::getPersonnelDetail::employment_conditions': ONE_EMPLOYEE,
-  'lib/personnel/actions.ts::getPersonnelDetail::work_schedules': ONE_EMPLOYEE,
+  'lib/personnel/record-read-actions.ts::getPersonnelDetail::employment_conditions': ONE_EMPLOYEE,
+  'lib/personnel/record-read-actions.ts::getPersonnelDetail::work_schedules': ONE_EMPLOYEE,
   'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::personnel_documents': ONE_EMPLOYEE,
   'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::personnel_onboarding_plans': ONE_EMPLOYEE,
   'lib/personnel/lifecycle-actions.ts::getPersonnelLifecycle::personnel_onboarding_requirements':

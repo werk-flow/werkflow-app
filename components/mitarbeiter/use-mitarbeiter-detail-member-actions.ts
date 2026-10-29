@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { updateMemberRole, removeMember, type MemberDetail } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';
 import { bueroMayManage, ROLE_LABELS } from '@/lib/roles';
-import type { PersonnelDetail } from '@/lib/personnel/actions';
+import type { PersonnelDetail } from '@/lib/personnel/record-read-actions';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getMemberActionErrorMessage, getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';

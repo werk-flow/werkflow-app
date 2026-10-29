@@ -8,7 +8,7 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { PersonnelQualificationSummaryData } from './personnel-qualification-summary';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import type { PersonnelDetail } from '@/lib/personnel/actions';
+import type { PersonnelDetail } from '@/lib/personnel/record-read-actions';
 
 import type { MemberDetail } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';

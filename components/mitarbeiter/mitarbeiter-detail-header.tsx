@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { EmploymentStateBadge } from './personnel-state-badges';
 import { getEmploymentState } from '@/lib/personnel/types';
-import type { PersonnelDetail } from '@/lib/personnel/actions';
+import type { PersonnelDetail } from '@/lib/personnel/record-read-actions';
 import type { MemberDetail } from '@/lib/members/actions';
 import { ROLE_LABELS } from '@/lib/roles';
 import { MitarbeiterDetailActionsMenu } from './mitarbeiter-detail-member-actions';

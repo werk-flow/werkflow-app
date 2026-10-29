@@ -12,7 +12,7 @@ import { PersonnelInviteDialog } from '@/components/mitarbeiter/personnel-invite
 import { AccessStateBadge, EmploymentStateBadge } from '@/components/mitarbeiter/personnel-state-badges';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { formatEmployeeRecordName, getAccessState, getEmploymentState } from '@/lib/personnel/types';
-import type { PersonnelDetail } from '@/lib/personnel/actions';
+import type { PersonnelDetail } from '@/lib/personnel/record-read-actions';
 import {
   PersonnelQualificationSummary,
   type PersonnelQualificationSummaryData,

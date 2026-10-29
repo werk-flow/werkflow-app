@@ -12,7 +12,7 @@ import {
 import { ResponsibilitySummarySection } from './responsibility-summary-section';
 import { PersonnelLifecycleSection } from './personnel-lifecycle-section';
 import { RegionLoadError } from '@/components/shared/region-load-error';
-import type { PersonnelDetail } from '@/lib/personnel/actions';
+import type { PersonnelDetail } from '@/lib/personnel/record-read-actions';
 import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 

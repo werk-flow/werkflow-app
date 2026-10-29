@@ -6,7 +6,7 @@ import { getCachedOrganizationSettings, getOrganizationUserPreferencesForView } 
 import { getMemberDetail, getProfilesByIds } from '@/lib/members/actions';
 import { isManagerRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
-import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
+import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/record-read-actions';
 import { getJobsForMember } from '@/lib/jobs/actions';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { MitarbeiterDetailContent } from '@/components/mitarbeiter/mitarbeiter-detail-content';
