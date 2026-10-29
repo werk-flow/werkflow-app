@@ -101,7 +101,7 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 
 ## Hit every surface
 
-Before you call UI work done, check each surface and name in the PR the ones that applied:
+Before UI work is done, check each surface and name in the PR the ones that applied:
 
 - **Roles:** `admin`, `buero` and `employee`. Keep intentional role differences and the organization boundary; the server enforces both. Favor defaults over configuration.
 - **Screens:** phone at 375 px and desktop.
@@ -129,7 +129,7 @@ A task is a worktree, a branch and one small PR per problem ([decision 0009](doc
 1. Run `bun run check:changed`. For level 1 and 2, run `sol-loop`.
 2. Push, and open the PR with the `file-pr` skill, naming the level and its reason.
 3. Call `watch_pull_request`, end your turn, and babysit until [the merge gate](docs/technical/coderabbit.md#the-merge-gate) holds.
-4. The owner merges unless they said "full send". "full send" and "full stop" ask you to commit, push and open the PR.
+4. The coordinator thread merges a PR that meets the merge gate; under "full send" its own thread does. The owner may merge too. A "full stop" PR waits for the owner's read.
 
 ## Language
 
@@ -145,4 +145,4 @@ Domain terms, each defined by its feature spec: `Auftrag` (work order), `Projekt
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every schema description.
 - A schema change follows [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only.
 - The stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
-- `main` is staging on DEV, `production` is PROD. Release only when the owner asks in your thread ("release main"): `gh workflow run release`, follow it with `gh run watch`, and report.
+- `main` is staging on DEV, `production` is PROD. Release only when the owner or the coordinator thread asks ("release main"): run `gh workflow run release` and `gh run watch`, check production, roll the app back through Vercel if it breaks ([release and rollback](docs/technical/environments.md#release-and-rollback)), and report.

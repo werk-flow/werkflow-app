@@ -87,3 +87,10 @@ The owner replaced the code-or-docs split of the CodeRabbit amendment above with
 3. Each `sol-loop` records the usage T3 Code reports, or "not exposed", in the PR description, so the owner can judge whether the ChatGPT Plus plan suffices. On a Sol rate limit the agent asks the owner and substitutes no other model.
 
 The skills `sol-loop`, `full-send`, `full-stop`, `file-pr` and `leaving-pr-comments`, adapted from t3dotgg/tstack under its MIT license, carry the procedures. [coderabbit.md](../technical/coderabbit.md#choose-the-review-level) owns the levels, the babysit procedure and the merge gate. The levels are Tier 3 until the check that the [enforcement-ladder backlog](../technical/enforcement-ladder-backlog.md#testing-and-review) describes lands.
+
+## Amendment 2026-10-29: who merges and who releases
+
+The owner aligned the rules with current practice.
+
+1. Rule 8 now reads: the coordinator thread merges a PR that meets the merge gate, or the PR's own thread does when the owner said "full send" there. The owner may merge any PR. A "full stop" PR waits until the owner has read it. Nobody merges with an admin bypass.
+2. Rule 7 now reads: a release runs when the owner or the coordinator thread asks for it ("release main"). The releasing thread checks production afterwards and rolls the app back through Vercel if it breaks. The database is never rolled back.

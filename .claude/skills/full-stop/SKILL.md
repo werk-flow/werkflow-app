@@ -7,7 +7,7 @@ Adapted for WerkFlow from t3dotgg/tstack (MIT, [license](../LICENSE-tstack)).
 
 # Full Stop
 
-Follow [full-send](../full-send/SKILL.md) with its grant, proof, review and asking rules, but stop with the PR ready. The owner merges.
+Follow [full-send](../full-send/SKILL.md) with its grant, proof, review and asking rules, but stop with the PR ready. The owner reads it; then the owner or the coordinator thread merges.
 
 - Never merge, enable auto-merge, push to `main`, bypass the ruleset, or ask another agent to.
 - Before work and before each push, check `gh pr view <n> --json autoMergeRequest`. Turn auto-merge off if it is on, and report it.
