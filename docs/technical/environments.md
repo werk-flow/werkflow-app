@@ -62,7 +62,7 @@ The platform injects `SUPABASE_SECRET_KEYS` into every function; `supabase_secre
 
 ## The local test stack
 
-The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu on Windows, Docker Desktop on a Mac. Every repository command runs inside Linux or macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
+The test groups run against the Supabase CLI's Docker composition: Docker Engine in WSL Ubuntu on Windows, Colima on macOS. Every repository command runs inside Linux or macOS. `supabase/config.toml` owns ports, auth posture, storage bucket and mail capture.
 
 - `supabase db reset` replays the committed migration history. A failing reset is a finding about that history.
 - The keys are the CLI's shared local defaults, not secrets.
@@ -127,6 +127,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 ## Set up a new machine
 
 1. Install Bun, Node 22 or later, git, the GitHub CLI, Docker and the Supabase CLI. On Windows, clone and work inside WSL Ubuntu.
+   On an Apple Silicon Mac, use `brew install colima docker`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --mount-type virtiofs`. This starts Docker without Docker Desktop; run the repository's pinned CLI with `bunx supabase`. Increase the VM allocation only if measured stack use requires it. Keep the Mac awake on power with `caffeinate -s` while agents run.
 2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
 3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
 4. Add the two scoped Supabase MCP servers above to Claude Code (`claude mcp add --scope user --transport http <name> "<url>"`) and Codex (`[mcp_servers.<name>]` in `~/.codex/config.toml`). The owner signs in once per server and tool. The Vercel CLI, signed in as the owner, serves both.
