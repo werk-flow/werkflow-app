@@ -33,7 +33,7 @@ These overrides apply only before 2026-11-12, the `TRIAL_ENDS` cutoff in `ops/co
 | 1 | CodeRabbit plus `sol-loop`, budget 1 round |
 | 2 | CodeRabbit plus `sol-loop`, full budget |
 
-Add `needs-coderabbit` immediately after `gh pr create`, while `Check` and Sol run. After fixes, CodeRabbit's replies in its threads confirm them. Relabel only when a push changes behavior beyond fixing its findings.
+Add `needs-coderabbit` immediately after `gh pr create`, while `Check` and Sol run. After pushing fixes, add `needs-coderabbit` again so CodeRabbit reviews the new commit.
 
 The merge gate stays unchanged, except every level requires the CodeRabbit review.
 
@@ -67,7 +67,7 @@ Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at 
 `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine, so no thread has to stay alive to hand out reviews. Each pass:
 
 1. Lists the open PRs labelled `needs-coderabbit`, and skips any that already got a CodeRabbit review or a request after their latest push.
-2. In [trial mode](#trial-mode-until-2026-11-12), before `TRIAL_ENDS`, requests up to six waiting PRs and skips the 65-minute wait. Afterward, does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
+2. In [trial mode](#trial-mode-until-2026-11-12), before `TRIAL_ENDS`, requests up to ten waiting PRs and skips the 65-minute wait. Afterward, does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
 3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
 
 The log is `~/.local/state/coderabbit-queue.log`, and `journalctl --user -u coderabbit-queue` shows each run. Automatic review is off, so a PR without the label gets no CodeRabbit review.
