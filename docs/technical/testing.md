@@ -121,6 +121,8 @@ Browser groups run against the recorded production build on the checkout's [port
 
 A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows still work. Its tests share the world.
 
+A seeded world or layout fixture name comes from `worldName` (`lib/testing/seed-world-plan.ts`): a fixed unbroken part wider than any run id, so a name that does not wrap overflows on every run.
+
 - A helper goes into its area module under `tests/golden/support/steps/` or `db/`, or `shared` when two areas need it. Never re-export one module from another.
 - To add a group, add `tests/golden/<slice>.spec.ts` or a row in `auditDefinitions` (SQL: `sqlDefinitions`). Declare its scopes, map its flows in `coverage-map.json`, and register its run-day offsets ([integrated-test-state.md](integrated-test-state.md)).
 
