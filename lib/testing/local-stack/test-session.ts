@@ -15,6 +15,9 @@ function groupExists(groupId: number): boolean {
     return true;
   } catch (error) {
     if (errorCode(error) === 'ESRCH') return false;
+    // macOS reports EPERM for a group containing only unreaped zombies.
+    // A permission denial still means the group exists; keep waiting for reaping.
+    if (errorCode(error) === 'EPERM') return true;
     throw error;
   }
 }
