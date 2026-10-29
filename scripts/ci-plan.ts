@@ -50,6 +50,7 @@ const plan = ciPlan({
     files: group.files,
     scopes: group.scopes,
     executionInputs: qualification.qualify(group).executionInputs ?? [],
+    trigger: group.changeTrigger,
   })),
   changedFiles: flag === '--base' ? changedSince(value) : [],
   fullRun: flag === '--full' ? value : undefined,
