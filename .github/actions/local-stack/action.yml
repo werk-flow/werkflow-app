@@ -7,29 +7,54 @@ inputs:
   save-images:
     description: Save the pulled images to the cache; one job per run does it.
     default: 'false'
+  environment-only:
+    description: >-
+      Point .env.local at the stack from the cached stack environment and start
+      no stack. A cache miss starts the stack once to record it.
+    default: 'false'
 runs:
   using: composite
   steps:
+    # The stack's URL and keys are the CLI's fixed defaults, so its .env.local depends only on the
+    # CLI version and config.toml. A shard that serves the Build job's build proves both match
+    # (scripts/test-server.ts --prebuilt); if that proof fails on a cache hit, raise the v1 here.
+    - name: Restore the stack environment
+      id: environment
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .env.local-stack-backup
+        key: supabase-environment-v1-2.116.0-${{ hashFiles('supabase/config.toml') }}
+
+    - name: Decide whether to start the stack
+      id: start
+      shell: bash
+      env:
+        START: ${{ inputs.environment-only != 'true' || steps.environment.outputs.cache-hit != 'true' }}
+      run: echo "start=$START" >> "$GITHUB_OUTPUT"
+
     # The stack's ports (54321 to 54327) sit inside Linux's default ephemeral range, so an
     # outgoing connection can hold one before the database binds it. Move the range above them.
     - name: Keep outgoing connections off the stack's ports
+      if: steps.start.outputs.start == 'true'
       shell: bash
       run: sudo sysctl -w net.ipv4.ip_local_port_range="55000 65000"
 
-    - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
+    - if: steps.start.outputs.start == 'true'
+      uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb # v1.7.3
       with:
         version: 2.116.0
 
     # The stack's images, saved after the first start. A key change pulls them again.
     - name: Restore the stack images
       id: images
+      if: steps.start.outputs.start == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/supabase-images.tar
         key: supabase-images-v3-ghcr-2.116.0-${{ hashFiles('supabase/config.toml') }}
 
     - name: Load the stack images
-      if: steps.images.outputs.cache-hit == 'true'
+      if: steps.start.outputs.start == 'true' && steps.images.outputs.cache-hit == 'true'
       shell: bash
       run: docker load --quiet --input "$RUNNER_TEMP/supabase-images.tar"
 
@@ -39,6 +64,7 @@ runs:
     # back to GHCR for some images only. The variable is set on the CLI commands alone, because the
     # build identity fingerprints every SUPABASE_ variable the test runner sees.
     - name: Start the stack
+      if: steps.start.outputs.start == 'true'
       shell: bash
       env:
         SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
@@ -49,6 +75,7 @@ runs:
     # the preflight wants: 204 to an OPTIONS request of send-invite-email. Each attempt is bounded,
     # so a hung request cannot outlast the deadline; a failure prints every attempt and the runtime log.
     - name: Wait for the edge-function runtime
+      if: steps.start.outputs.start == 'true'
       shell: bash
       run: |
         deadline=$((SECONDS + 180))
@@ -67,28 +94,27 @@ runs:
         echo "The edge runtime answered 204 after ${SECONDS} s (${answer#* })."
 
     - name: Save the stack images
-      if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
+      if: steps.start.outputs.start == 'true' && steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
       shell: bash
       run: |
         docker ps --filter label=com.supabase.cli.project=werkflow-app --format '{{.Image}}' \
           | sort -u | xargs docker save --output "$RUNNER_TEMP/supabase-images.tar"
 
     - name: Cache the stack images
-      if: steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
+      if: steps.start.outputs.start == 'true' && steps.images.outputs.cache-hit != 'true' && inputs.save-images == 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/supabase-images.tar
         key: ${{ steps.images.outputs.cache-primary-key }}
 
-    - name: Point .env.local at the stack
+    - name: Record the stack environment
+      if: steps.start.outputs.start == 'true'
       shell: bash
       run: |
         supabase status --output env > "$RUNNER_TEMP/stack.env"
         set -a
         . "$RUNNER_TEMP/stack.env"
         set +a
-        otp_secret="$(openssl rand -hex 32)"
-        echo "::add-mask::$otp_secret"
         cat > .env.local-stack-backup <<EOF
         NEXT_PUBLIC_SUPABASE_URL=$API_URL
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY
@@ -99,6 +125,21 @@ runs:
         R2_SECRET_ACCESS_KEY=$S3_PROTOCOL_ACCESS_KEY_SECRET
         R2_BUCKET_NAME=werkflow-documents-local
         R2_ENDPOINT=$STORAGE_S3_URL
-        EMAIL_OTP_HASH_SECRET=$otp_secret
         EOF
+
+    - name: Cache the stack environment
+      if: steps.start.outputs.start == 'true' && steps.environment.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .env.local-stack-backup
+        key: ${{ steps.environment.outputs.cache-primary-key }}
+
+    # The build identity hashes every byte of .env.local, so a random secret there would make each
+    # shard's build its own. The app reads this one from the job's environment instead.
+    - name: Point .env.local at the stack
+      shell: bash
+      run: |
+        otp_secret="$(openssl rand -hex 32)"
+        echo "::add-mask::$otp_secret"
+        echo "EMAIL_OTP_HASH_SECRET=$otp_secret" >> "$GITHUB_ENV"
         bun run env:local
