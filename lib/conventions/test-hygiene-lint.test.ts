@@ -38,9 +38,10 @@ describe('test-hygiene/no-wall-clock-wait', () => {
       'await Bun.sleep(50);',
       'await page.waitForTimeout(300);',
       "import { setTimeout as sleep } from 'node:timers/promises';",
+      "import { sleep as nap, Glob } from 'bun';",
     ].join('\n');
     for (const file of [UNIT, CONTRACT, SPEC, SUPPORT])
-      expect(await reported('no-wall-clock-wait', source, file), file).toEqual([1, 2, 3, 4, 5, 6]);
+      expect(await reported('no-wall-clock-wait', source, file), file).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   test('a flush, a deadline that only rejects and a scheduled callback pass', async () => {
@@ -66,8 +67,9 @@ describe('test-hygiene/no-polling-loop', () => {
       '}',
       'for (let attempt = 0; attempt < 2; attempt += 1) { await page.waitForTimeout(300); await open(); }',
       'do { await refresh(); } while (performance.now() < deadline);',
+      'while (true) { await check(); const elapsed = Date.now() - start; if (elapsed > 1_000) break; }',
     ].join('\n');
-    expect(await reported('no-polling-loop', source, SUPPORT)).toEqual([1, 3, 7, 8]);
+    expect(await reported('no-polling-loop', source, SUPPORT)).toEqual([1, 3, 7, 8, 9]);
   });
 
   test('a loop over items, and the outer loop of a nested poll, pass', async () => {
@@ -149,10 +151,13 @@ describe('test-hygiene/no-retries', () => {
     const source = [
       "const args = ['test', '--rerun-each', '3'];",
       "const more = ['--retries=2', `--repeat-each=${count}`, '--retry'];",
-      "const fine = ['--timeout', '--workers=1'];",
+      "const fine = ['--timeout', '--workers=1', 'no--retries'];",
+      "execFileSync('sh', ['-c', 'bun test --rerun-each 3']);",
     ].join('\n');
-    expect(await reported('no-retries', source, 'scripts/run-unit-tests.ts')).toEqual([1, 2, 2, 2]);
-    expect(await reported('no-retries', source, 'lib/testing/runner/probe-runner.ts')).toEqual([1, 2, 2, 2]);
+    expect(await reported('no-retries', source, 'scripts/run-unit-tests.ts')).toEqual([1, 2, 2, 2, 4]);
+    expect(await reported('no-retries', source, 'lib/testing/runner/probe-runner.ts')).toEqual([
+      1, 2, 2, 2, 4,
+    ]);
     expect(await reported('no-retries', source, UNIT)).toEqual([]);
   });
 
@@ -261,11 +266,14 @@ describe('test-hygiene/no-excluded-test', () => {
 });
 
 describe('quarantine list', () => {
-  test('lists each quarantine with its issue and reason, and says when there is none', () => {
+  test('lists each quarantine comment with its issue and reason, never a quoted one, and says when there is none', () => {
     const source = [
       'import { test } from "bun:test";',
-      `  ${'// quarantine: werk-flow/werkflow-planning#35 a | b'}`,
+      '  // quarantine: werk-flow/werkflow-planning#35 a | b',
       "  test.skip('a', () => {});",
+      "const quoted = '// quarantine: werk-flow/werkflow-planning#36 only a string';",
+      'const template = `',
+      '// quarantine: werk-flow/werkflow-planning#37 only a template`;',
     ].join('\n');
     const listed = quarantinesIn('lib/probe/probe.test.ts', source);
     expect(listed).toEqual([{ file: 'lib/probe/probe.test.ts', line: 2, issue: 35, reason: 'a | b' }]);

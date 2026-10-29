@@ -53,7 +53,8 @@ const REGISTRATION_SEGMENTS = new Set([
 ]);
 const EXCLUDED_SEGMENTS = new Set(['skip', 'fixme', 'todo']);
 const SLEEP_NAME = /^(?:sleep|delay|pause)(?:Ms|For|Sync)?$|^waitForTimeout$/i;
-const RUNNER_REPEAT_FLAG = /^--(?:rerun-each|retries|retry|repeat-each)(?:=|$)/;
+/** A repeat flag as an argument or inside a shell command line. */
+const RUNNER_REPEAT_FLAG = /(?:^|\s)--(?:rerun-each|retries|retry|repeat-each)(?:=|\s|$)/;
 
 /**
  * The names along a callee: `test.describe.skip` is `['test', 'describe', 'skip']`,
@@ -182,6 +183,13 @@ function relativePath(context) {
   return relative(context.cwd ?? process.cwd(), context.filename).replaceAll('\\', '/');
 }
 
+/** Modules whose named imports sleep; a namespace or default import of the timer modules counts too. */
+const SLEEP_IMPORTS = new Map([
+  ['node:timers/promises', { names: ['setTimeout', 'scheduler'], whole: true }],
+  ['timers/promises', { names: ['setTimeout', 'scheduler'], whole: true }],
+  ['bun', { names: ['sleep', 'sleepSync'], whole: false }],
+]);
+
 const waitMessage =
   'A test waits on the fact it needs, never on the clock: a fixed delay hides a race and stretches the run. Await the promise, event or state that proves the step finished (a web-first assertion or expect.poll in the browser; setImmediate to flush callbacks in a unit test).';
 
@@ -203,10 +211,11 @@ const noWallClockWaitRule = {
           context.report({ node, messageId: 'wait' });
       },
       ImportDeclaration(node) {
-        if (!['node:timers/promises', 'timers/promises'].includes(node.source.value)) return;
+        const sleeps = SLEEP_IMPORTS.get(node.source.value);
+        if (!sleeps) return;
         for (const specifier of node.specifiers) {
           const imported = specifier.type === 'ImportSpecifier' ? specifier.imported.name : null;
-          if (imported === 'setTimeout' || imported === 'scheduler' || imported === null)
+          if (imported === null ? sleeps.whole : sleeps.names.includes(imported))
             context.report({ node: specifier, messageId: 'wait' });
         }
       },
@@ -231,8 +240,24 @@ const noPollingLoopRule = {
     function inspect(loop) {
       let awaits = false;
       let waits = false;
+      // `const elapsed = Date.now() - start` inside the loop carries the clock into a later condition.
+      const clockNames = new Set();
+      const readsClock = (root) => {
+        let found = false;
+        visitEager(root, (inner) => {
+          if (isClockRead(inner) || (inner.type === 'Identifier' && clockNames.has(inner.name))) found = true;
+        });
+        return found;
+      };
       visitEager(loop, (node) => {
         if (node.type === 'AwaitExpression' || (node.type === 'ForOfStatement' && node.await)) awaits = true;
+        const [target, value] =
+          node.type === 'VariableDeclarator'
+            ? [node.id, node.init]
+            : node.type === 'AssignmentExpression'
+              ? [node.left, node.right]
+              : [];
+        if (target?.type === 'Identifier' && value && readsClock(value)) clockNames.add(target.name);
       });
       // A nested loop answers for its own waits, so an outer loop over items is not a poll.
       visitEager(
@@ -243,7 +268,7 @@ const noPollingLoopRule = {
             node === loop || node.type === 'IfStatement' || node.type === 'ConditionalExpression'
               ? node.test
               : null;
-          if (condition) visitEager(condition, (inner) => (waits ||= isClockRead(inner)));
+          if (condition && readsClock(condition)) waits = true;
         },
         (node) => LOOP_TYPES.has(node.type),
       );

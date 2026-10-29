@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parse } from '@typescript-eslint/parser';
 import { QUARANTINE_COMMENT } from '../../eslint-rules/test-hygiene-rules.mjs';
 
 /** A skipped test and the planning issue that brings it back (test-hygiene/no-excluded-test). */
@@ -9,13 +10,13 @@ export type Quarantine = { file: string; line: number; issue: number; reason: st
 /** The files where test-hygiene/no-excluded-test lets a test be skipped under a quarantine comment. */
 const TEST_SOURCE = /^(?:lib\/.+\.test\.(?:ts|tsx|mjs)|tests\/.+\.(?:ts|tsx))$/;
 
-/** Every quarantine comment of one source file. */
+/** Every quarantine comment of one source file; a string that only quotes one is no quarantine. */
 export function quarantinesIn(file: string, text: string): Quarantine[] {
-  return text.split('\n').flatMap((content, index) => {
-    const comment = /\/\/(.*)$/.exec(content)?.[1];
-    const match = comment === undefined ? null : QUARANTINE_COMMENT.exec(comment);
+  const { comments = [] } = parse(text, { comment: true, loc: true, jsx: file.endsWith('.tsx') });
+  return comments.flatMap((comment) => {
+    const match = comment.type === 'Line' ? QUARANTINE_COMMENT.exec(comment.value) : null;
     if (!match?.[1] || !match[2]) return [];
-    return [{ file, line: index + 1, issue: Number(match[1]), reason: match[2].trim() }];
+    return [{ file, line: comment.loc.start.line, issue: Number(match[1]), reason: match[2].trim() }];
   });
 }
 
