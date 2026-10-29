@@ -115,3 +115,50 @@ export function ledgerFindings(input: {
   const matchesDev = dev.size === prod.size && [...prod].every((version) => dev.has(version));
   return { pending, problems, matchesDev };
 }
+
+/** A failure the inspection may print: fixed text and a status, never provider content. */
+export class InspectionFailure extends Error {}
+
+/** What the inspection prints for a failure. Any other error's message may quote a response body. */
+export function failureMessage(error: unknown): string {
+  return error instanceof InspectionFailure
+    ? error.message
+    : 'the inspection failed outside a labelled step.';
+}
+
+/**
+ * One Management API read of a project, parsed with the given schema. Every
+ * failure becomes an InspectionFailure that names only the path and the HTTP
+ * status, so no response body reaches the output.
+ */
+export async function readProject<T>(input: {
+  ref: string;
+  path: string;
+  token: string;
+  schema: z.ZodType<T>;
+  query?: string;
+  fetcher?: (url: string, init: RequestInit) => Promise<Response>;
+}): Promise<T> {
+  const fetcher = input.fetcher ?? ((url, init) => fetch(url, init));
+  let response: Response;
+  try {
+    response = await fetcher(`https://api.supabase.com/v1/projects/${input.ref}/${input.path}`, {
+      method: input.query === undefined ? 'GET' : 'POST',
+      headers: { Authorization: `Bearer ${input.token}`, 'Content-Type': 'application/json' },
+      body: input.query === undefined ? null : JSON.stringify({ query: input.query }),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch {
+    throw new InspectionFailure(`${input.path}: the request failed.`);
+  }
+  if (!response.ok) throw new InspectionFailure(`${input.path} returned HTTP ${response.status}.`);
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new InspectionFailure(`${input.path} returned no JSON.`);
+  }
+  const parsed = input.schema.safeParse(body);
+  if (!parsed.success) throw new InspectionFailure(`${input.path} returned an unexpected shape.`);
+  return parsed.data;
+}

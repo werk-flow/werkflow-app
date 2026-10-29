@@ -18,6 +18,7 @@ const servers = new Map<string, unknown[]>([
   ['defaulted', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=\${MISSING:-${PROD}}` }]],
   ['unresolved', [{ type: 'http', url: 'https://mcp.supabase.com/mcp?project_ref=${MISSING}' }]],
   ['supabase_alt', [{ type: 'http', url: '${ENDPOINT}' }]],
+  ['neutral', [{ type: 'http', url: `https://mcp.supabase.com/mcp?project_ref=${DEV}` }]],
   ['search', [{ type: 'http', url: 'https://search.example.test/mcp?key=${MISSING}' }]],
 ]);
 const env = { TARGET_REF: PROD };
@@ -42,11 +43,25 @@ test('the cloud-backend table of the environments doc yields both Supabase refs'
 test('DEV, local and unrelated MCP tools pass', () => {
   expect(refusal('mcp__supabase__execute_sql', { query: 'select 1' })).toBeUndefined();
   expect(refusal('mcp__supabase__list_migrations')).toBeUndefined();
-  expect(refusal('mcp__claude_ai_Supabase__list_tables', { project_id: DEV })).toBeUndefined();
   expect(refusal('mcp__t3-code__task_status', { taskId: 'a' })).toBeUndefined();
   // "prod" in the tool part names no server.
   expect(refusal('mcp__shop__list_products')).toBeUndefined();
   expect(refusal('Bash', { command: `echo ${PROD}` })).toBeUndefined();
+});
+
+test('a Supabase server whose project the hook cannot establish is refused', () => {
+  // No configuration entry: the org-wide connector or a server from a scope the hook does not read.
+  expect(refusal('mcp__claude_ai_Supabase__list_tables', { project_id: DEV })).toContain(
+    'cannot tell whether',
+  );
+  expect(refusal('mcp__supabase__execute_sql', {}, { ...context, servers: new Map() })).toContain(
+    'cannot tell whether',
+  );
+  // Without the ref, the configuration still marks a neutral name as Supabase.
+  expect(refusal('mcp__neutral__execute_sql', {}, { ...context, productionRef: undefined })).toContain(
+    'cannot tell whether',
+  );
+  expect(refusal('mcp__neutral__execute_sql')).toBeUndefined();
 });
 
 test('a call without a tool name is refused', () => {
@@ -160,7 +175,14 @@ test('the hook refuses PROD MCP calls with the reason and lets DEV calls through
   mkdirSync(join(home, 'project'));
   writeFileSync(
     join(home, '.claude.json'),
-    JSON.stringify({ mcpServers: { db: { url: `https://mcp.supabase.com/mcp?project_ref=${production}` } } }),
+    JSON.stringify({
+      mcpServers: {
+        db: { url: `https://mcp.supabase.com/mcp?project_ref=${production}` },
+        supabase: {
+          url: `https://mcp.supabase.com/mcp?project_ref=${supabaseProjectRefs(repositoryRoot)?.dev}`,
+        },
+      },
+    }),
   );
   const script = resolve(repositoryRoot, '.claude/hooks/refuse-production-mcp.ts');
   const call = (stdin: string) => {

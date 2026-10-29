@@ -3,55 +3,62 @@ import { resolve } from 'node:path';
 import { supabaseProjectRefs } from '../lib/security/production-access';
 import {
   CATALOG_QUERY,
+  InspectionFailure,
   LEDGER_QUERY,
   catalogDrift,
   catalogRowsSchema,
+  failureMessage,
   ledgerFindings,
   ledgerRowsSchema,
+  readProject,
 } from '../lib/security/production-inspection';
 import { advisorProblems, advisorResponseSchema } from '../lib/security/supabase-project-checks';
 import { committedMigrationVersions } from '../lib/testing/local-stack/dev-migration-history';
-import { loadEnvLocal, requireEnv } from '../tests/golden/support/env';
+import { loadEnvLocal } from '../tests/golden/support/env';
 
 /**
  * `bun run prod:inspect`: the one way an agent inspects PROD. It prints the
  * pending migration versions, the names of objects that differ from DEV, and
  * the advisor findings outside the reviewed exceptions. It reads through the
  * Management API's read-only query endpoint with the owner's token, and never
- * prints a table row, a definition or a configuration value. Exit 1 means a
- * problem or an unverified check.
+ * prints a table row, a definition, a configuration value or a response body.
+ * Exit 1 means a problem or an unverified check.
  */
 const label = '[prod:inspect]';
 const repositoryRoot = resolve(import.meta.dir, '..');
-
-async function request(ref: string, path: string, query?: string): Promise<unknown> {
-  const response = await fetch(`https://api.supabase.com/v1/projects/${ref}/${path}`, {
-    method: query === undefined ? 'GET' : 'POST',
-    headers: {
-      Authorization: `Bearer ${requireEnv('SUPABASE_ACCESS_TOKEN')}`,
-      'Content-Type': 'application/json',
-    },
-    body: query === undefined ? null : JSON.stringify({ query }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}.`);
-  return response.json();
-}
-
-const readOnlyQuery = (ref: string, query: string) => request(ref, 'database/query/read-only', query);
 
 async function main(): Promise<void> {
   try {
     loadEnvLocal();
     const refs = supabaseProjectRefs(repositoryRoot);
-    if (!refs) throw new Error('docs/technical/environments.md names no Supabase project refs.');
+    if (!refs) throw new InspectionFailure('docs/technical/environments.md names no Supabase project refs.');
+    const token = process.env.SUPABASE_ACCESS_TOKEN;
+    if (!token) throw new InspectionFailure('SUPABASE_ACCESS_TOKEN is not set (expected in .env.local).');
+    const query = 'database/query/read-only';
     const [prodLedger, devLedger, prodCatalog, devCatalog, security, performance] = await Promise.all([
-      readOnlyQuery(refs.production, LEDGER_QUERY).then((rows) => ledgerRowsSchema.parse(rows)),
-      readOnlyQuery(refs.dev, LEDGER_QUERY).then((rows) => ledgerRowsSchema.parse(rows)),
-      readOnlyQuery(refs.production, CATALOG_QUERY).then((rows) => catalogRowsSchema.parse(rows)),
-      readOnlyQuery(refs.dev, CATALOG_QUERY).then((rows) => catalogRowsSchema.parse(rows)),
-      request(refs.production, 'advisors/security').then((body) => advisorResponseSchema.parse(body)),
-      request(refs.production, 'advisors/performance').then((body) => advisorResponseSchema.parse(body)),
+      readProject({
+        ref: refs.production,
+        path: query,
+        token,
+        query: LEDGER_QUERY,
+        schema: ledgerRowsSchema,
+      }),
+      readProject({ ref: refs.dev, path: query, token, query: LEDGER_QUERY, schema: ledgerRowsSchema }),
+      readProject({
+        ref: refs.production,
+        path: query,
+        token,
+        query: CATALOG_QUERY,
+        schema: catalogRowsSchema,
+      }),
+      readProject({ ref: refs.dev, path: query, token, query: CATALOG_QUERY, schema: catalogRowsSchema }),
+      readProject({ ref: refs.production, path: 'advisors/security', token, schema: advisorResponseSchema }),
+      readProject({
+        ref: refs.production,
+        path: 'advisors/performance',
+        token,
+        schema: advisorResponseSchema,
+      }),
     ]);
 
     const ledger = ledgerFindings({
@@ -86,7 +93,7 @@ async function main(): Promise<void> {
     );
     process.exitCode = problems.length === 0 ? 0 : 1;
   } catch (error) {
-    console.error(`${label} unverified: ${error instanceof Error ? error.message : 'request failed'}`);
+    console.error(`${label} unverified: ${failureMessage(error)}`);
     process.exitCode = 1;
   }
 }

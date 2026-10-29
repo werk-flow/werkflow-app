@@ -135,9 +135,9 @@ const INSTEAD = [
 /**
  * Why an MCP tool call may not run, or undefined when it may. It refuses a
  * server whose name contains "prod", a call whose input names the production
- * ref, and a server whose expanded configuration names it. Without the ref or
- * the server configuration, or with a Supabase configuration it cannot
- * resolve, it refuses the Supabase server, since it cannot tell DEV from PROD.
+ * ref, and a server whose expanded configuration names it. A Supabase server,
+ * by name or configuration, is refused whenever the hook cannot establish its
+ * project: no ref, no configuration, or a variable it cannot resolve.
  */
 export function productionMcpRefusal(
   call: { tool_name: unknown; tool_input: unknown },
@@ -157,19 +157,19 @@ export function productionMcpRefusal(
     refuse(`the hook could not read ${what}, so it cannot tell whether "${server}" reaches PROD.`);
   if (/prod/i.test(server)) return refuse(`MCP server "${server}" is a production server by its name.`);
   const { productionRef, servers, env } = context;
-  if (!productionRef)
-    return /supabase/i.test(server) ? unknown(`the production ref from ${ENVIRONMENTS_DOC}`) : undefined;
-  if (JSON.stringify(call.tool_input ?? null).includes(productionRef))
-    return refuse(`the call to "${server}" names the production Supabase project.`);
-  if (!servers) return /supabase/i.test(server) ? unknown('the MCP server configuration') : undefined;
-  const configs = [...servers]
+  const configs = [...(servers ?? [])]
     .filter(([name]) => toolName.startsWith(`mcp__${name}__`))
     .flatMap(([, entries]) => entries.map((entry) => expandedConfig(entry, env)));
+  const supabase =
+    /supabase/i.test(server) || configs.some((config) => /supabase/i.test(`${config.raw} ${config.text}`));
+  if (!productionRef) return supabase ? unknown(`the production ref from ${ENVIRONMENTS_DOC}`) : undefined;
+  if (JSON.stringify(call.tool_input ?? null).includes(productionRef))
+    return refuse(`the call to "${server}" names the production Supabase project.`);
   if (configs.some((config) => config.text.includes(productionRef)))
     return refuse(`MCP server "${server}" is configured for the production Supabase project.`);
-  const supabase = (config: { raw: string; text: string }) =>
-    /supabase/i.test(server) || /supabase/i.test(config.raw) || /supabase/i.test(config.text);
-  if (configs.some((config) => config.unresolved && supabase(config)))
-    return unknown('every variable in its configuration');
+  if (!supabase) return undefined;
+  if (!servers) return unknown('the MCP server configuration');
+  if (configs.length === 0) return unknown('a configuration for it');
+  if (configs.some((config) => config.unresolved)) return unknown('every variable in its configuration');
   return undefined;
 }

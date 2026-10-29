@@ -3,7 +3,15 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { CATALOG_QUERY, LEDGER_QUERY, catalogDrift, ledgerFindings } from './production-inspection';
+import {
+  CATALOG_QUERY,
+  LEDGER_QUERY,
+  catalogDrift,
+  failureMessage,
+  ledgerFindings,
+  ledgerRowsSchema,
+  readProject,
+} from './production-inspection';
 
 /** Every relation a query reads after `from` or `join`, function calls and subqueries aside. */
 function relationsRead(query: string): string[] {
@@ -70,4 +78,31 @@ test('the ledger lists pending versions and refuses versions no committed file h
     ],
     matchesDev: true,
   });
+});
+
+test('a failed read reports its path and status, never the response content', async () => {
+  const secret = 'SECRET_ROW_VALUE';
+  const read = (fetcher: () => Promise<Response>) =>
+    readProject({
+      ref: 'ref',
+      path: 'database/query/read-only',
+      token: 't',
+      schema: ledgerRowsSchema,
+      fetcher,
+    }).then(() => 'passed', failureMessage);
+  const outcomes = await Promise.all([
+    read(async () => new Response(`{"rows": "${secret}`, { status: 201 })),
+    read(async () => new Response(JSON.stringify([{ value: secret }]), { status: 201 })),
+    read(async () => new Response(secret, { status: 400 })),
+    read(async () => {
+      throw new Error(secret);
+    }),
+  ]);
+  expect(outcomes).toEqual([
+    'database/query/read-only returned no JSON.',
+    'database/query/read-only returned an unexpected shape.',
+    'database/query/read-only returned HTTP 400.',
+    'database/query/read-only: the request failed.',
+  ]);
+  expect(failureMessage(new Error(secret))).not.toContain(secret);
 });
