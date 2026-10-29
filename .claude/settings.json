@@ -26,6 +26,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-production-mcp.ts\"",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }

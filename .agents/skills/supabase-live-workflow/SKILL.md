@@ -9,8 +9,8 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 ## Steps
 
-1. Inspect the real project before a schema claim or edit. A claim about PROD needs a PROD read. DEV and the migration files do not stand in for it.
-2. Prefer MCP inspection over guesses from app code or old docs.
+1. Inspect the real project before a schema claim or edit. A claim about PROD needs `bun run prod:inspect`; DEV and the migration files do not stand in for it.
+2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. No tool reads PROD rows: every tool result goes to the model provider, and a hook refuses a PROD MCP tool.
 3. Before a migration, read the migration rule in [environments](../../../docs/technical/environments.md). For a new table, also follow [security](../../../docs/technical/security.md).
 4. After a schema change, run `bun run types:generate`. `bun run types:check` fails while `lib/supabase/database.types.ts` is stale.
 5. Deploy an edge function from `supabase/functions/` with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
@@ -18,4 +18,4 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 
 ## Compare DEV and PROD
 
-No guard compares the two cloud catalogs. Matching migration names and generated types miss a changed function body. To compare, run read-only queries through MCP `execute_sql` on both: `pg_class` (with the RLS flag), `pg_policies`, `pg_proc` with `pg_get_functiondef`, `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_trigger`, `pg_publication_tables`, `supabase_migrations.schema_migrations`. Match by schema-qualified name. Normalize whitespace and comments before you call a differing body formatting. `supabase/tests/security_boundaries.sql` holds the function and ACL queries.
+Matching migration names and generated types miss a changed function body. Run `bun run prod:inspect` from an up-to-date `main`. It lists the versions waiting for a release, every relation, column, constraint, index, trigger, policy, function, enum and published table whose definition differs between the projects, by name only, and PROD's advisor findings. Drift is expected only for objects the pending migrations touch. To see how a named object differs, read its definition on DEV through MCP and in the migration files; never read PROD's.

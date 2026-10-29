@@ -30,7 +30,7 @@ function readLinkedProjectRef(repositoryRoot: string): string | null {
   }
 }
 
-function committedMigrationVersions(repositoryRoot = process.cwd()): string[] {
+export function committedMigrationVersions(repositoryRoot = process.cwd()): string[] {
   return readdirSync(resolve(repositoryRoot, 'supabase/migrations'))
     .map(migrationVersionFromFileName)
     .filter((version): version is string => version !== null)

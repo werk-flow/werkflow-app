@@ -11,6 +11,17 @@
             "statusMessage": "Checking for a running verification"
           }
         ]
+      },
+      {
+        "matcher": "^mcp__.*$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun .claude/hooks/refuse-production-mcp.ts",
+            "timeout": 20,
+            "statusMessage": "Checking that the MCP tool does not reach production"
+          }
+        ]
       }
     ]
   }

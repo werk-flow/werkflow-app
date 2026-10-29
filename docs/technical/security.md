@@ -116,6 +116,7 @@ Every plan carries an advisory check under 24 hours old. An unknown finding, a c
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside a release the owner requested.
+- Read a PROD row in an agent session, through any tool: the result goes to the model provider. `bun run prod:inspect` answers structure questions, and `.claude/hooks/refuse-production-mcp.ts` refuses a PROD MCP tool.
 
 ## Verify your work
 
