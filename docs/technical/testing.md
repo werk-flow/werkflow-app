@@ -43,7 +43,7 @@ Open the PR with `gh pr create` and the template, then babysit it as [reviews](c
 
 ### Grow a shrink-only list
 
-CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Once approved, open a PR that names the added entries and ask the owner to add the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. A label change reruns Unit and `Check` on the head commit (`list-growth.yml`). If that rerun fails, as past GitHub's 30-day limit, push a commit.
+CI refuses a new entry or a raised ceiling in a list of `SHRINK_ONLY_LISTS` (`lib/testing/publication/shrink-only-lists.ts`). Fix the code instead. When an exception is right, ask the owner. Then open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. `list-growth.yml` then reruns Unit.
 
 A shrink counts too. When a function on `eslint-rules/size-cap-exceptions.json` gets shorter, lower its ceiling in the same change, or `module-caps.test.ts` fails.
 
@@ -81,17 +81,16 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main` and every push to `main`. Its aggregate job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
+`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, and every push to `main`. Its job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
 
-- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs when the diff is unreadable, when a tooling input changed, and in a full run.
+- **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's against the previous `main` commit. Every browser group runs when the diff is unreadable or a tooling input changed, and in a full run.
 - **Tooling input.** A file that changes how every group installs, builds or runs makes a full run: `TOOLING_INPUTS` and `runnerModules` in `ci-plan.ts`.
 - **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Labels.** No label event starts a CI run. Unit reads `approved: list growth` when it runs. A cancelled run reports a failed `Check`, never a skipped one: GitHub counts a skipped required check as passed.
 - **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the same retry rules as a local repeat.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 
 ## Commands
 
