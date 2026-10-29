@@ -38,6 +38,7 @@ const colleagueRequestId = '84000000-0000-4000-8000-000000000014';
 const decidableRequestId = '84000000-0000-4000-8000-000000000015';
 const colleagueFindingId = '84000000-0000-4000-8000-000000000016';
 const decidableFindingId = '84000000-0000-4000-8000-000000000017';
+const holderConfigurationId = '84000000-0000-4000-8000-000000000020';
 
 const noAccessRows = { personnel_access_lifecycles: [], personnel_onboarding_requirements: [] };
 const world = installActionWorld({
@@ -221,6 +222,7 @@ assert.deepEqual(await getTimeAccountAccess(), {
   managementReadFailed: false,
   isAdmin: false,
   canProposeAdjustments: false,
+  canExportPayroll: false,
 });
 assert.deepEqual(await submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), forbidden);
 assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId)), forbidden);
@@ -230,6 +232,51 @@ assert.deepEqual(await decidePeriodFinding(forms.finding(foreignFindingId)), for
 assert.deepEqual(await closeTimePeriod(forms.period(foreignPeriodId)), forbidden);
 assert.deepEqual(await generatePayrollExport(forms.period(foreignPeriodId)), forbidden);
 assert.deepEqual(await downloadPayrollExport(forms.download(foreignExportId)), forbidden);
+
+// An employee named as the time-approval holder manages periods, but the
+// payroll export stays Admin and Büro work: the page hides the export card,
+// and both export actions refuse before any read or signed URL.
+world.tables.organization_responsibility_configurations = [
+  {
+    id: holderConfigurationId,
+    organization_id: ORGANIZATION_A,
+    responsibility: 'time_approval',
+    mode: 'selected',
+    effective_from: '2026-01-01T00:00:00.000Z',
+    created_by: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+  },
+];
+world.tables.organization_responsibility_assignments = [
+  {
+    id: '84000000-0000-4000-8000-000000000021',
+    organization_id: ORGANIZATION_A,
+    configuration_id: holderConfigurationId,
+    employee_record_id: callerRecordId,
+    source: 'direct',
+    role_snapshot: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+  },
+];
+assert.deepEqual(await getTimeAccountAccess(), {
+  success: true,
+  canManage: true,
+  managementReadFailed: false,
+  isAdmin: false,
+  canProposeAdjustments: false,
+  canExportPayroll: false,
+});
+const requestsBeforeExport = world.adminClientRequests;
+assert.deepEqual(await generatePayrollExport(forms.period(foreignPeriodId)), forbidden);
+assert.deepEqual(await downloadPayrollExport(forms.download(foreignExportId)), forbidden);
+assert.equal(
+  world.adminClientRequests,
+  requestsBeforeExport,
+  'a holder reached the database through an export action',
+);
+assert.deepEqual(signedPaths, [], 'a holder received a signed export URL');
+delete world.tables.organization_responsibility_configurations;
+delete world.tables.organization_responsibility_assignments;
 
 // Büro changes no rule, opens no account, reopens no period and maps no payroll codes.
 signInWithRole('buero');

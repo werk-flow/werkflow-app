@@ -94,6 +94,38 @@ function PeriodFindingRow({
   );
 }
 
+/** The period's payroll export: Admin and Büro build it and download its versions. */
+function PayrollExportCard({
+  periodId,
+  detail,
+}: {
+  periodId: string;
+  detail: Pick<TimePeriodDetail, 'period' | 'exports'>;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Lohnexport</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {detail.period.state === 'closed' ? (
+          <TimePeriodExportForm periodId={periodId} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Der Export wird nach dem Abschluss freigeschaltet.</p>
+        )}
+        {detail.exports.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 border-t pt-3 text-sm">
+            <span>
+              Version {item.version} · {PAYROLL_EXPORT_STATE_LABELS[item.state]}
+            </span>
+            {item.state === 'ready' ? <TimePeriodExportDownload exportId={item.id} /> : null}
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default async function TimePeriodDetailPage({ params }: { params: Promise<{ periodId: string }> }) {
   const { periodId } = await params;
   const [detailRead, access] = await Promise.all([getTimePeriodDetail(periodId), getTimeAccountAccess()]);
@@ -211,28 +243,7 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Lohnexport</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {detail.period.state === 'closed' ? (
-            <TimePeriodExportForm periodId={periodId} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Der Export wird nach dem Abschluss freigeschaltet.
-            </p>
-          )}
-          {detail.exports.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-3 border-t pt-3 text-sm">
-              <span>
-                Version {item.version} · {PAYROLL_EXPORT_STATE_LABELS[item.state]}
-              </span>
-              {item.state === 'ready' ? <TimePeriodExportDownload exportId={item.id} /> : null}
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      {access.canExportPayroll ? <PayrollExportCard periodId={periodId} detail={detail} /> : null}
     </div>
   );
 }
