@@ -5,9 +5,10 @@ name: CI
 # (lib/testing/selection/ci-plan.ts): a pull request's against its base, a push
 # to main's against the previous main commit. It fails open: an unreadable diff
 # or a tooling change runs every browser group. Only a call with `full` (the
-# nightly run and the release gate) runs every browser group by design. Every
-# job runs its groups through scripts/verify.ts, the same engine as a local
-# run. The required check is `Check` at the end of this file.
+# nightly run and the release gate) runs every browser group by design. `Build`
+# makes the run's one production build beside `Plan`, and every browser shard
+# serves it. Every job runs its groups through scripts/verify.ts, the same
+# engine as a local run. The required check is `Check` at the end of this file.
 on:
   pull_request:
     branches: [main]
@@ -150,12 +151,44 @@ jobs:
         with:
           name: sql
 
+  # The one production build of the run, beside Plan. The stack's URL and keys are the CLI's fixed
+  # defaults, so it needs no stack, and every browser shard serves it.
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/local-stack
+        with:
+          environment-only: 'true'
+      - run: bun run build
+      # A tar keeps the symbolic links Next writes under .next/node_modules. The cache stays here.
+      - name: Pack the build
+        run: tar --create --file "$RUNNER_TEMP/build.tar" --exclude=.next/cache .next
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build
+          path: ${{ runner.temp }}/build.tar
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: build
+
   browser:
     name: Browser ${{ matrix.shard }}
     needs: plan
     if: needs.plan.outputs.browser == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Reads the Build job's state.
+    permissions:
+      contents: read
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -165,10 +198,30 @@ jobs:
       - uses: ./.github/actions/setup
       - uses: ./.github/actions/local-stack
       - uses: ./.github/actions/playwright
-      # The server builds against the stack, then serves the recorded build for the whole job.
+      # A shard needs only Plan, so its stack starts while Build runs; it waits for the build here.
+      # The jobs list holds each job's latest attempt; called by another workflow, the job is
+      # named `<caller> / Build`.
+      - name: Wait for the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$((SECONDS + 1200))
+          until conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name == "Build" or (.name | endswith(" / Build")))][0].conclusion // empty')" \
+            && test -n "$conclusion"; do
+            test $SECONDS -lt $deadline || { echo "::error::The Build job did not finish within its 20 min timeout."; exit 1; }
+            sleep 15
+          done
+          test "$conclusion" = success || { echo "::error::The Build job ended with $conclusion."; exit 1; }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: build
+          path: ${{ runner.temp }}
+      # The server proves the build is this checkout's source and environment, then serves it for the whole job.
       - name: Start the test server
         run: |
-          nohup bun run test:server local > "$RUNNER_TEMP/test-server.log" 2>&1 &
+          tar --extract --file "$RUNNER_TEMP/build.tar"
+          nohup bun run test:server local --prebuilt > "$RUNNER_TEMP/test-server.log" 2>&1 &
           server=$!
           deadline=$((SECONDS + 900))
           until grep -q 'Serving the recorded local build' "$RUNNER_TEMP/test-server.log" \
@@ -198,7 +251,7 @@ jobs:
   check:
     name: Check
     if: always()
-    needs: [plan, lint, static, unit, components, sql, browser]
+    needs: [plan, lint, static, unit, components, sql, build, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
