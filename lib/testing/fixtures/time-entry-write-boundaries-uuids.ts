@@ -421,6 +421,48 @@ assert.deepEqual(entryIds(), unchanged);
 assert.deepEqual(await deleteEntry(formerIn), { success: false, error: 'target_not_found' });
 assert.ok(entryIds().includes(formerIn));
 
+// A manual entry names a job of its organization, and an employee's entry
+// only a job the employee is assigned to, as the live clock requires. A
+// refused job writes nothing; a failed job read is a load failure.
+const quietDay = (hour: number): string => {
+  const date = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
+};
+const employeeClockIn = (jobId: string) =>
+  addManualEntry({
+    organizationId: ownOrganization,
+    targetUserId: employeeUser,
+    jobId,
+    entries: [{ entryType: 'clock_in', timestamp: quietDay(9) }],
+  });
+const beforeJobChecks = entryIds();
+assert.deepEqual(await employeeClockIn(foreignJob), { success: false, error: 'job_not_found' });
+assert.deepEqual(await employeeClockIn(ownJob), { success: false, error: 'job_not_assigned' });
+failingReadTable = 'jobs';
+assert.deepEqual(await employeeClockIn(ownJob), { success: false, error: 'load_failed' });
+failingReadTable = 'job_assignments';
+assert.deepEqual(await employeeClockIn(ownJob), { success: false, error: 'load_failed' });
+failingReadTable = null;
+assert.deepEqual(entryIds(), beforeJobChecks);
+// An Admin's own entry needs no assignment; an assigned employee's entry carries the job.
+const adminEntry = await addManualEntry({
+  organizationId: ownOrganization,
+  targetUserId: callerUser,
+  jobId: ownJob,
+  entries: [{ entryType: 'clock_in', timestamp: quietDay(9) }],
+});
+assert.equal(adminEntry.success, true);
+tables.job_assignments = [
+  { id: crypto.randomUUID(), organization_id: ownOrganization, job_id: ownJob, user_id: employeeUser },
+];
+const assigned = await employeeClockIn(ownJob);
+assert.ok(assigned.success);
+assert.deepEqual(
+  assigned.entries.map((created) => created.jobId),
+  [ownJob],
+);
+
 // A Büro member changes their own time only through a Zeitkorrektur: a direct
 // edit or deletion of an own entry is refused before any write.
 callerRole = 'buero';
