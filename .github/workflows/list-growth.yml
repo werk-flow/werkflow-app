@@ -42,8 +42,7 @@ jobs:
           fi
           # A job reruns only in a completed run.
           gh run watch "$run" --interval 30 > /dev/null
-          # A push since this event started a fresh run that reads the labels itself, and a rerun
-          # here would cancel it through ci.yml's concurrency group.
+          # A push since this event started a fresh run that reads the labels itself.
           head="$(gh api "repos/$GH_REPO/pulls/$PR" --jq .head.sha)"
           if test "$head" != "$SHA"; then
             echo "The PR moved to $head. Its own CI run reads the labels."
