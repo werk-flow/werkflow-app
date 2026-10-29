@@ -4,7 +4,7 @@ Time tracking (`Zeiterfassung`) records attendance, work, travel, breaks, job al
 
 ## Current Product Baseline
 
-Every role clocks in and out, records work, travel, break, standby, call-out and internal-activity segments, and proposes corrections that a second person approves. Admin, Büro and effective holders of the time-approval responsibility review time, close monthly periods and produce a payroll-ready export. Employees see their own history, balance and monthly statements.
+Every role clocks in and out, records work, travel, break, standby, call-out and internal-activity segments, and proposes corrections that a second person approves. Admin, Büro and effective holders of the time-approval responsibility review time and close monthly periods. Admin and Büro produce the payroll-ready export. Employees see their own history, balance and monthly statements.
 
 ### Capture
 
