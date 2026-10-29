@@ -1,4 +1,4 @@
-import { beforeEach, expect, mock, test } from 'bun:test';
+import { beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 
 // The settings write appends to `break_policy_history` and writes it back.
 // It read the current value from a 300-second cache, so a second change
@@ -30,8 +30,11 @@ let todayRows: Record<string, unknown>[];
 let rpcCalls: RpcCall[];
 let invalidatedTags: string[];
 
+/** The pinned instant of the isolated process. */
+const NOW = new Date('2026-10-14T10:00:00.000Z');
+
 function todayEntry(id: string, entryType: string, minutesAgo: number, jobId: string | null) {
-  const timestamp = new Date(Date.now() - minutesAgo * 60_000).toISOString();
+  const timestamp = new Date(NOW.getTime() - minutesAgo * 60_000).toISOString();
   return {
     id,
     user_id: 'worker',
@@ -104,6 +107,7 @@ ${stderr}`,
 });
 
 if (ISOLATED) {
+  setSystemTime(NOW);
   mock.module('server-only', () => ({}));
   // The harness gives the action a complete request context: a cookie store
   // and the caller's current membership. The action reads its organization

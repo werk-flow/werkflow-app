@@ -129,7 +129,7 @@ test('certification rejects a different served build, checkout, source, or backe
     ...inputs,
     repositoryRoot: root,
     buildId: 'build-one',
-    completedAt: new Date().toISOString(),
+    completedAt: '2026-10-14T10:00:00.000Z',
   };
   const request = {
     receipt,
