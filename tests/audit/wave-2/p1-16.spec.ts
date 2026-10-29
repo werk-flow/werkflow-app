@@ -76,7 +76,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     outsiderPage,
     world,
   }) => {
-    // P1-16-F01…F26 and F83: assigned access, shared routes, minimal parent
+    // Assigned access, shared routes, minimal parent
     // projection, office continuity, server authorization, side-effect-free
     // opening, first-viewport order, practical contact actions, and privacy.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
@@ -238,7 +238,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     employeePage,
     world,
   }) => {
-    // P1-16-F27…F35: pending dispatch priority, one CTA, canonical readiness,
+    // Pending dispatch priority, one CTA, canonical readiness,
     // honest unknowns, acknowledgement/challenge ownership, and no cross-domain
     // time, stock, status, promise, or message mutation.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
@@ -334,7 +334,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     employeePage,
     world,
   }) => {
-    // P1-16-F36…F61: execution transitions and gates, ordered/dependent
+    // Execution transitions and gates, ordered/dependent
     // instructions, reopen, completion feedback and the explicit P1-17 handover
     // boundary. Contextual upload, artifact drafts and the terminal read-only
     // pack are the golden journey.
@@ -396,7 +396,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     employeePage,
     world,
   }) => {
-    // P1-16-F62…F77: own time only, start/switch/stop, assignment versus
+    // Own time only, start/switch/stop, assignment versus
     // attendance, planned and unplanned material actions, return, field privacy,
     // persisted stock history, and no schedule/stock/time or consumption repair.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
@@ -488,7 +488,7 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     employeePage,
     world,
   }) => {
-    // P1-16-F78…F82 and F84…F94: own blocker lifecycle, issue summary,
+    // Own blocker lifecycle, issue summary,
     // retry/stale contracts, assignment revocation and Realtime catch-up,
     // accessible field controls, no offline promise or external provider,
     // no handover/message/service/commercial scope, and authoritative actions.

@@ -1,54 +1,45 @@
 # Enforcement-ladder backlog
 
-Status: living — last reviewed 2026-10-27
-
-This list holds the open candidates for moving a prose rule or a known gap up the ladder in [decision 0005](../decisions/0005-enforcement-ladder.md), grouped by the virtue in `AGENTS.md` that owns the rule. Each row names the rule, the gap, and the mechanism with its tier: Tier 1 makes the mistake unwritable, Tier 2 makes a check catch it. A row leaves the list in the same change that lands its mechanism, and that change adds the mechanism to the virtue's checklist. Delete a declined candidate and record the reason in the commit message. Check a row against the code before you implement it.
+Open candidates for moving a rule up the ladder of [decision 0005](../decisions/0005-enforcement-ladder.md). Check a row against the code before you implement it. Delete it in the change that lands its mechanism, or when declined, with the reason in the commit body.
 
 ## UI and UX
 
-| Candidate | Gap today | Target tier and mechanism |
+| Candidate | Gap | Target |
 | --- | --- | --- |
-| Long unbroken names on phones | Every audit-world surname ends in the 32-character run id (`planTestWorld` in `lib/testing/seed-world-plan.ts`). A name without `break-words` or `min-w-0` overflows at 375 px only when that run's id renders wide, so `audit:layout` and the audit overflow checks catch it on some runs and pass on others. | Tier 2: give every world name a fixed worst-case unbroken part, so each run probes the widest name and a missing wrap fails every time. |
-| States drawn as hand-built chips | A state label is a `Badge` (`components/ui/badge.tsx`), but the invitation status and the approval kinds in `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` still render styled spans; the checklist item is judgment. | Tier 2: move the sites to `Badge` variants, then a selector for a rounded-full chip class literal outside the badge primitive. |
+| Long unbroken names on phones | Audit-world surnames end in the run id (`planTestWorld` in `lib/testing/seed-world-plan.ts`), so a name without `break-words` or `min-w-0` overflows at 375 px only on runs whose id renders wide. | Tier 2: a fixed worst-case unbroken part in every world name, so a missing wrap fails every run. |
+| Hand-built state chips | `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` render styled spans instead of `Badge`. | Tier 2: move them to `Badge` variants, then a selector for a rounded-full chip class outside the badge primitive. |
 
 ## Performance and immediate feedback
 
-| Candidate | Gap today | Target tier and mechanism |
+| Candidate | Gap | Target |
 | --- | --- | --- |
-| Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` follows a Server Action passed as a prop or parameter to the caller that passes it, but not one returned by a hook or passed to a component bound through `memo(…)` or `forwardRef(…)`. | Tier 1: a branded type on Server Action references that an effect callback or a live-view `read` cannot call. |
-| Calendar draft reset in an effect | `components/kalender/use-entry-details-draft.ts` resets its draft when the dialog opens from an effect; the calendar has recorded render behaviour, so `derivedStateEffectExceptions` in `eslint.config.mjs` lists it. | Tier 2: in the run that recalibrates the calendar references, adopt the open key during render and delete the exception. |
-| Document library navigation transition | `components/dokumente/document-library-content.tsx` keeps `useTransition` for its folder and search navigation (`transitionExemptFiles` in `eslint.config.mjs`). | Tier 2: bind the pending flag to its `pendingNavigation` state, delete the exemption, and prove it in the documents browser groups. |
+| Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` misses an action returned by a hook or passed through `memo(…)` or `forwardRef(…)`. | Tier 1: a branded type on Server Action references that an effect or a live-view `read` cannot call. |
+| Calendar draft reset in an effect | `components/kalender/use-entry-details-draft.ts` sits on `derivedStateEffectExceptions` in `eslint.config.mjs`. | Tier 2: in the run that recalibrates the calendar references, adopt the open key during render and delete the exception. |
+| Document library transition | `components/dokumente/document-library-content.tsx` keeps `useTransition` (`transitionExemptFiles`). | Tier 2: bind the pending flag to `pendingNavigation`, delete the exemption, prove it in the documents browser groups. |
 
 ## Security
 
-| Candidate | Gap today | Target tier and mechanism |
+| Candidate | Gap | Target |
 | --- | --- | --- |
-| R2 bucket CORS | The runtime R2 tokens get `AccessDenied` on `GetBucketCors`, so nothing checks that the buckets allow only the app's origins. | Tier 2: a script like `auth:check` that reads the rules with an R2 token with Admin Read on each bucket, once the owner provides one. |
-| Vercel environment scopes | No credential on the workstation can read the project's environment variables, so nothing checks that each value is scoped to Production or to pre-production as [environments](environments.md) requires. | Tier 2: a script that reads the scopes through the Vercel API with a Vercel access token, once the owner provides one. |
-| Bounded client collections | Every array and record in a Server Action or route input schema has a bound, but only review keeps the next one bounded. | Tier 2: a unit test that walks each schema an action parameter is parsed with (the parse sites `lib/conventions/server-action-input.test.ts` already finds) and fails on an array without a maximum or a record with an open key set. |
+| R2 bucket CORS | Runtime R2 tokens get `AccessDenied` on `GetBucketCors`. | Tier 2: a script like `auth:check` with an Admin Read R2 token, once the owner provides one. |
+| Vercel environment scopes | No workstation credential reads the project's variables. | Tier 2: a script that reads the scopes through the Vercel API, once the owner provides a token. |
+| Bounded client collections | Every array and record in an action input schema has a bound, but only review keeps the next one bounded. | Tier 2: a unit test that walks each parsed action schema and fails on an array without a maximum or an open record. |
 
 ## Code quality and maintainability
 
-| Candidate | Gap today | Target tier and mechanism |
+| Candidate | Gap | Target |
 | --- | --- | --- |
-| Reviewed separate writes | `ALLOWED_SEPARATE_WRITES` in `lib/conventions/related-writes.test.ts` holds the reviewed action paths that write more than once, but `lib/testing/publication/shrink-only-lists.ts` does not register it, so a new entry passes the gate. | Tier 2: register the list once its current entries are published. |
-| Calendar functions over the function limit | The calendar functions in `eslint-rules/size-cap-exceptions.json` are mostly hook calls and JSX props, and the calendar has recorded render behaviour, so a split waits for a run that recalibrates the calendar references. | Tier 2: in that run, split them and delete their entries. |
-| Type-assertion ratchet | `eslint-rules/type-assertion-ratchet.json` lists the files that still assert types; the rule and `lib/conventions/type-assertions.test.ts` only stop growth. | Tier 2: shrink the list file by file, by typed selects, parsers and guards, until it is empty and the off-block goes. |
-| Bare `toLocaleString` on a date | `timeOfDaySelectors` catches `toLocaleString` with date options only; `date.toLocaleString()` or `toLocaleString('de-DE')` looks like number formatting without type information. | Tier 2: a typed lint rule that refuses `toLocaleString` on a `Date` receiver outside `lib/utils.ts`. |
-| Schema value lists | `lib/customer-relationships/schemas.ts` repeats the channel, purpose and state values that `lib/customer-relationships/types.ts` derives its unions from. | Tier 1: build the zod enums from the value lists. |
-| Date-time shims kept for digest inputs | `lib/planning/date-time.ts` re-exports `resolveBerlinWallTime`, and `shiftIsoDateByDays` in `lib/personnel/types.ts` delegates to `addLocalDays`, because measurement-digest inputs import them. | Tier 2: in the next run that recalibrates the performance references, import `lib/date-time/berlin.ts` there and delete both shims. |
-| Rollback-tolerant reads | The [migration rule](environments.md#the-migration-rule) keeps a rollback of the code safe for the schema, but older code must also read values a newer release wrote. Today a new enum or CHECK value breaks whole reads: `membershipRowsSchema` in `lib/data/cached.ts` throws in the `(app)` layout, so every page fails for that user; `constrainedValue` (`lib/validation/constrained-value.ts`) throws by design in the vacation, sickness, customer-relationship, inventory and qualification mappers; `toTimeSegmentFact` in `lib/time-tracking/segments.ts` fails the clock state; one unknown value rejects the whole payload in `lib/calendar/window-response.ts`, the occurrence schemas of `lib/planning/server.ts`, `parseWorkLifecycleSnapshot` and `lib/clients/list-page.ts`; `Record<Enum, …>` label lookups without a fallback crash `components/zeiterfassung/entry-history.tsx` and `components/service/equipment-form-dialog.tsx` and blank many badges. `employmentTypeLabel` in `lib/personnel/types.ts` and the `?? fallback` labels are the pattern to copy. | Tier 1: a tolerant enum parser that maps an unknown value to an explicit `unknown` variant, and a label helper that requires a fallback. Tier 2: a convention test that a row schema parses an enum column only through it. |
+| Reviewed separate writes | `ALLOWED_SEPARATE_WRITES` in `lib/conventions/related-writes.test.ts` is not a shrink-only list, so a new entry passes. | Tier 2: register it in `lib/testing/publication/shrink-only-lists.ts`. |
+| Calendar functions over the size limit | Their split changes recorded render behavior. | Tier 2: split them in the run that recalibrates the calendar references, and delete their entries. |
+| Type-assertion ratchet | `eslint-rules/type-assertion-ratchet.json` only stops growth. | Tier 2: shrink it file by file with typed selects, parsers and guards, until the off-block goes. |
+| Bare `toLocaleString` on a date | `timeOfDaySelectors` sees only calls with date options. | Tier 2: a typed lint rule that refuses `toLocaleString` on a `Date` outside `lib/utils.ts`. |
+| Schema value lists | `lib/customer-relationships/schemas.ts` repeats the values `types.ts` derives its unions from. | Tier 1: build the zod enums from the value lists. |
+| Date-time shims | `lib/planning/date-time.ts` and `shiftIsoDateByDays` in `lib/personnel/types.ts` stay because digest inputs import them. | Tier 2: import `lib/date-time/berlin.ts` in the next performance recalibration and delete both. |
+| Rollback-tolerant reads | Older code must read values a newer release wrote ([migration rule](environments.md#the-migration-rule)). An unknown enum or CHECK value breaks whole reads: `membershipRowsSchema` in `lib/data/cached.ts` fails every page for that user, `constrainedValue` throws by design, several payload schemas reject the whole payload, and `Record<Enum, …>` label lookups without a fallback crash. `employmentTypeLabel` in `lib/personnel/types.ts` is the pattern. | Tier 1: a tolerant enum parser with an explicit `unknown` variant, and a label helper that requires a fallback. Tier 2: a convention test that row schemas parse enum columns only through it. |
 
 ## Testing and review
 
-| Candidate | Gap today | Target tier and mechanism |
+| Candidate | Gap | Target |
 | --- | --- | --- |
-| Locators of the performance specs | The locator-ownership rules cover `tests/audit/performance/**`. The measured tests still keep copy in their locators: PERF-02 in `calendar.spec.ts`, PERF-L2 in `lists.spec.ts`, PERF-F2 in `field.spec.ts` and the test in `planning-benchmark.spec.ts`. Their code is a measurement-digest input, so each sits inside an `eslint-disable` block that names its scenarios and gives the reason. Each changes only in the run that recalibrates its references. | Tier 2: in that run, move the test's copy into its area module and remove its disable block. |
-| Review levels | A PR states its [review level](coderabbit.md#choose-the-review-level) and its `sol-loop` line, and a level 2 PR waits for its CodeRabbit review, but only the agent's reading checks either. `Check` cannot carry the CodeRabbit half: the app is requested only after `Check` is green, so a gate inside `Check` could never pass. A PR body edit also does not start `.github/workflows/ci.yml`. | Tier 2: a separate small workflow on `pull_request` (`opened`, `edited`, `synchronize`) and `pull_request_review`, added by the owner as a second required check on the `main` ruleset. It fails a PR whose diff leaves docs and agent instructions but whose body lacks the `Reviewed with sol-loop:` line, and a PR that touches a level 2 path without a finished CodeRabbit review on the PR. Fixes pushed after that review need no second one. |
-
-## Documentation
-
-| Candidate | Gap today | Target tier and mechanism |
-| --- | --- | --- |
-| Documents named in prose | A doc that names another doc in prose without a link ("the closed incident archive") escapes the link check, so a reference to a document that never existed passed. Maintenance rule 3 requires a link; only review sees the prose name. | Tier 2 if a reliable pattern for document names appears in `lib/docs/living-doc-rules.ts`; Tier 3 until then. |
-| Provenance notes in four catalog flows | `P1-21-F01`, `F09`, `F10` and `F19` end with a dated change note. Each flow's text is hashed in `lib/testing/selection/coverage-map.json`, so removing the note is a coverage change. The catalog keeps a "Dated lines" exemption in decision 0004 for flow lines meanwhile. | Remove the notes and recompute the four hashes with the next change to `P1-21` coverage, then drop the exemption (Tier 2: the date check covers the whole catalog). |
+| Locators of the performance specs | PERF-02, PERF-L2, PERF-F2 and the planning benchmark keep copy in their locators inside reasoned `eslint-disable` blocks, because their code is a digest input. | Tier 2: move the copy into the area module in the run that recalibrates each reference. |
+| Review levels | Only the agent checks a PR's [review level](coderabbit.md#choose-the-review-level), its `sol-loop` line and a level 2 CodeRabbit review. `Check` cannot carry it: the app review comes after `Check` is green, and a body edit does not start `ci.yml`. | Tier 2: a small workflow on `pull_request` and `pull_request_review`, added by the owner as a second required check. It fails a non-docs PR without the `Reviewed with sol-loop:` line, and a level 2 PR without a finished CodeRabbit review. |

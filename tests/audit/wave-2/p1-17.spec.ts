@@ -151,7 +151,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     outsiderPage,
     world,
   }) => {
-    // P1-17-F01…F22, F31…F39 and F102…F109: job/project ownership,
+    // Job/project ownership,
     // confirmed routes, side-effect-free empty state, office responsibility,
     // assigned-field minimalism and outsider route denial.
     const scope = await seedProjectWithChildren(world, 'SCOPE', 1);
@@ -194,7 +194,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
 
     const childReleaseIds =
       await test.step('The office releases each child job with its exact document version', async () => {
-        // P1-17-F23…F30 and F40…F71: execution-complete boundary, exact
+        // Execution-complete boundary, exact
         // document-version membership, preview, warnings, immutable release,
         // attention resolution and lifecycle/package atomicity.
         const releaseIds: string[] = [];
@@ -230,7 +230,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
       });
 
     await test.step('The project composes the child releases and rejects a stale office draft', async () => {
-      // P1-17-F72…F88: child integrity, one mutable root, stale-write recovery,
+      // Child integrity, one mutable root, stale-write recovery,
       // exact child release IDs, project readiness and lifecycle registration.
       await completeManagerWork(adminPage, `/auftraege/projekt/${scope.projectNumber}`, true);
       // The office session keeps the state it opened with, as a tab that lost
@@ -271,7 +271,7 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     });
 
     await test.step('Withdrawal and correction lead to a successor that keeps its predecessor', async () => {
-      // P1-17-F89…F101: attributed withdrawal and correction, append-only
+      // Attributed withdrawal and correction, append-only
       // events, successor draft, previous-release linkage, re-handover and
       // preserved package documents.
       await adminPage.goto(projectRoute);

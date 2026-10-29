@@ -13,13 +13,20 @@ import {
 } from './actions';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import type { DocumentCategory, DocumentResult, DocumentUploadTarget, VersionResult } from './types';
+import type {
+  DocumentCategory,
+  DocumentResult,
+  DocumentUploadTarget,
+  DocumentUploadTicketResult,
+  VersionResult,
+} from './types';
 import {
   cleanupPersonnelDocumentUpload,
   createPersonnelDocumentUploadTicket,
   finalizePersonnelDocumentUpload,
 } from '@/lib/personnel/lifecycle-actions';
 import type { PersonnelDocumentAccessClass, PersonnelDocumentEvidenceState } from '@/lib/personnel/lifecycle';
+import { createWorkArtifactSignatureUploadTicket } from '@/lib/work-artifacts/signature-upload-actions';
 
 export type UploadProgressHandler = (fraction: number) => void;
 
@@ -56,6 +63,23 @@ function putFileWithProgress(url: string, file: File, onProgress?: UploadProgres
   });
 }
 
+async function putAndFinalizeUpload(
+  ticketResult: DocumentUploadTicketResult,
+  file: File,
+  target: DocumentUploadTarget,
+  category: DocumentCategory | undefined,
+  onProgress: UploadProgressHandler | undefined,
+): Promise<DocumentResult> {
+  if (!ticketResult.success) return ticketResult;
+  await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress);
+  return finalizeDocumentUpload({
+    documentId: ticketResult.ticket.documentId,
+    fileName: file.name,
+    category: category ?? null,
+    ...target,
+  });
+}
+
 export async function uploadDocumentDirect({
   file,
   target,
@@ -74,19 +98,33 @@ export async function uploadDocumentDirect({
       mimeType: file.type || null,
       ...target,
     });
-
-    if (!ticketResult.success) return ticketResult;
-
-    await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress);
-
-    return await finalizeDocumentUpload({
-      documentId: ticketResult.ticket.documentId,
-      fileName: file.name,
-      category: category ?? null,
-      ...target,
-    });
+    return await putAndFinalizeUpload(ticketResult, file, target, category, onProgress);
   } catch (error) {
     logError('Direct document upload failed', error);
+    return { success: false, error: 'upload_failed' };
+  }
+}
+
+/** A customer signature of an artifact: the server reserves the upload, so the dialog can discard it unused. */
+export async function uploadWorkArtifactSignatureDirect({
+  file,
+  artifactId,
+  target,
+}: {
+  file: File;
+  artifactId: string;
+  target: DocumentUploadTarget;
+}): Promise<DocumentResult> {
+  try {
+    const ticketResult = await createWorkArtifactSignatureUploadTicket({
+      artifactId,
+      fileName: file.name,
+      fileSizeBytes: file.size,
+      mimeType: file.type || null,
+    });
+    return await putAndFinalizeUpload(ticketResult, file, target, 'photo', undefined);
+  } catch (error) {
+    logError('Direct signature upload failed', error);
     return { success: false, error: 'upload_failed' };
   }
 }
