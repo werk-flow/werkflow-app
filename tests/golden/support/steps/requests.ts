@@ -26,7 +26,6 @@ import {
  * source, status and close-reason labels come from lib/requests/types.
  */
 const REQUEST_COPY = {
-  navLink: 'Anfragen',
   capture: 'Anfrage erfassen',
   captureTitle: 'Neue Anfrage erfassen',
   search: 'Anfragen durchsuchen',
@@ -96,11 +95,6 @@ const REQUEST_STATUS_ACTIONS = {
     next: 'In Klärung setzen',
   },
 } as const;
-
-/** The sidebar entry of the request list. */
-export function requestsNavLink(page: Page): Locator {
-  return page.getByRole('link', { name: REQUEST_COPY.navLink });
-}
 
 /** The capture action: the list header trigger, or the dialog's submit when scoped to the dialog. */
 export function requestCaptureButton(scope: Page | Locator): Locator {
