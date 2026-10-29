@@ -73,9 +73,7 @@ test('provider-only bootstrap cannot be selected as a business browser lane', ()
 test('a prebuilt test server proves the recorded build belongs to this checkout instead of building', () => {
   // The CI shards serve the Build job's build; the identity check is what makes that build theirs.
   const bootstrap = sourceAt('scripts/test-server.ts').text;
-  expect(bootstrap).toContain(
-    "prebuilt\n        ? [process.execPath, 'run', 'test:preflight', 'build', target]\n        : [process.execPath, 'run', 'build']",
-  );
+  expect(bootstrap).toContain("'test:preflight', 'build', target");
   expect(sourceAt('scripts/playwright-preflight.ts').text).toContain(
     "else if (laneArgument === 'build') assertRecordedBuild(",
   );

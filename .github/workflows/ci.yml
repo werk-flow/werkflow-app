@@ -171,7 +171,8 @@ jobs:
         with:
           name: build
           path: ${{ runner.temp }}/build.tar
-          retention-days: 1
+          # A rerun of failed jobs, possible for 30 days, reuses the passed Build job's artifact.
+          retention-days: 30
           if-no-files-found: error
           overwrite: true
       - uses: ./.github/actions/upload-evidence
