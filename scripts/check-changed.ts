@@ -6,8 +6,9 @@ import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/chan
 // `bun run check:changed`: the fast check an agent runs before it pushes
 // (docs/technical/testing.md, "Run checks while you work"). It formats and
 // lints the files that differ from the merge base, typechecks and looks for
-// unused code across the repository, and runs the unit tests beside the
-// changed files. Committed, uncommitted and untracked changes all count.
+// unused code across the repository, checks that an added migration sorts
+// after main's newest, and runs the unit tests beside the changed files.
+// Committed, uncommitted and untracked changes all count.
 const repositoryRoot = resolve(import.meta.dir, '..');
 
 function git(...args: string[]): string[] {
@@ -76,6 +77,7 @@ const outcomes = await Promise.all([
     resolve(repositoryRoot, 'node_modules/.cache/werkflow/check-changed.tsbuildinfo'),
   ]),
   step('unused', [bin('knip'), '--no-progress', '--cache']),
+  step('migration order', [process.execPath, 'scripts/check-migration-order.ts']),
   plan.unitTests.length
     ? step('unit', [process.execPath, 'scripts/run-unit-tests.ts', ...plan.unitTests])
     : null,

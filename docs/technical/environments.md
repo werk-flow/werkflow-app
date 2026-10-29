@@ -102,7 +102,7 @@ A local file never affects the deployed app. Never run the test harness or a des
 
 This section is the one home of the rule.
 
-1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: apply it locally (`supabase migration up`) and run `bun run types:generate -- --local`. CI fails while the committed types differ.
+1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: apply it locally (`supabase migration up`) and run `bun run types:generate -- --local`. CI fails while the committed types differ. Its version sorts after the newest migration on `main`, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the version to rename it to.
 2. A migration that creates a table follows [add a table](security.md#add-a-table).
 3. DEV receives a migration only when its PR merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, then deploys that commit to staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail when DEV's history diverges. `bun run advisors:check` fails on an advisor finding without a reviewed exception, and on an exception the advisor no longer reports.
 4. PROD receives migrations only through the `release` workflow ([Release and rollback](#release-and-rollback)). Never link, push or apply a migration to PROD by hand.

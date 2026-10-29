@@ -485,39 +485,40 @@ export function getTestGroups(repositoryRoot: string): TestGroup[] {
       timing: untimed,
     });
   }
-  groups.push({
-    id: 'static:dependencies',
+  groups.push(...staticGates());
+  return groups;
+}
+
+/** Static gates run in every plan; each runs its package script. */
+function staticGates(): TestGroup[] {
+  const gate = (id: string, files: readonly string[], script: string): TestGroup => ({
+    id: `static:${id}`,
     kind: 'static',
-    files: [
-      'scripts/check-dependency-security.ts',
-      'lib/security/dependency-exceptions.json',
-      'bun.lock',
-      'package.json',
-    ],
+    files,
     scopes: ['*'],
     isolation: 'process',
     timing: untimed,
-    script: 'security:dependencies',
+    script,
   });
-  for (const [id, file, script] of [
-    ['typecheck', 'tsconfig.json', 'typecheck'],
-    ['lint', 'eslint.config.mjs', 'lint'],
-    ['docs', 'scripts/check-docs.ts', 'docs:check'],
-    ['coverage', 'scripts/check-test-coverage.ts', 'test:coverage'],
-    ['unused', 'knip.ts', 'unused:check'],
-    ['format', '.prettierrc.json', 'format:check'],
-  ] as const) {
-    groups.push({
-      id: `static:${id}`,
-      kind: 'static',
-      files: [file],
-      scopes: ['*'],
-      isolation: 'process',
-      timing: untimed,
-      script,
-    });
-  }
-  return groups;
+  return [
+    gate(
+      'dependencies',
+      [
+        'scripts/check-dependency-security.ts',
+        'lib/security/dependency-exceptions.json',
+        'bun.lock',
+        'package.json',
+      ],
+      'security:dependencies',
+    ),
+    gate('typecheck', ['tsconfig.json'], 'typecheck'),
+    gate('lint', ['eslint.config.mjs'], 'lint'),
+    gate('docs', ['scripts/check-docs.ts'], 'docs:check'),
+    gate('coverage', ['scripts/check-test-coverage.ts'], 'test:coverage'),
+    gate('unused', ['knip.ts'], 'unused:check'),
+    gate('format', ['.prettierrc.json'], 'format:check'),
+    gate('migration-order', ['scripts/check-migration-order.ts'], 'migrations:order'),
+  ];
 }
 
 /** Metadata pins required evidence; AST inspection also catches direct new timing calls. */
