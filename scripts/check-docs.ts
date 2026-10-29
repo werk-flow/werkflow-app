@@ -188,8 +188,13 @@ for (const path of [
 // Decision records grow only by dated amendment sections: the committed and the published texts
 // stay prefixes of the current one. The published text is main's at the merge base: a CI run's
 // merge commit may predate an amendment that reached main since, and must not fail for it.
-const mergeBase = git(['merge-base', 'HEAD', 'refs/remotes/origin/main']);
-const publishedRef = mergeBase.ok ? mergeBase.out.trim() : null;
+const hasPublished = git(['rev-parse', '--verify', '--quiet', 'refs/remotes/origin/main']).ok;
+const mergeBase = hasPublished ? git(['merge-base', 'HEAD', 'refs/remotes/origin/main']) : null;
+const publishedRef = mergeBase?.ok ? mergeBase.out.trim() : null;
+if (mergeBase && !mergeBase.ok)
+  problems.push(
+    'decision: HEAD has no merge base with origin/main, so the published decision records are unchecked; fetch the full history (git fetch --unshallow origin)',
+  );
 for (const path of docPaths.filter((doc) => doc.startsWith('decisions/'))) {
   const refs = [{ ref: 'HEAD', name: 'HEAD' }];
   if (publishedRef !== null) refs.push({ ref: publishedRef, name: 'origin/main at the merge base' });
