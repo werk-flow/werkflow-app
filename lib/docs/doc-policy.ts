@@ -9,16 +9,13 @@ const WORD_BUDGETS = {
   skillFile: 4000,
 } as const;
 
-/** Technical docs without a word budget. */
-const UNBUDGETED_DOCS: readonly string[] = ['docs/technical/test-incident-log.md'];
-
 /** The word budget of a file by its repository path, or null when none applies. */
 export function wordBudgetOf(path: string): number | null {
   if (path === 'AGENTS.md') return WORD_BUDGETS.agentsFile;
   if (path === 'docs/README.md') return WORD_BUDGETS.docsIndex;
   // The .agents mirror equals the .claude tree byte for byte, so the .claude copy stands for both.
   if (/^\.claude\/skills\/.+\.md$/.test(path)) return WORD_BUDGETS.skillFile;
-  if (path.startsWith('docs/technical/') && !UNBUDGETED_DOCS.includes(path)) return WORD_BUDGETS.technicalDoc;
+  if (path.startsWith('docs/technical/')) return WORD_BUDGETS.technicalDoc;
   return null;
 }
 

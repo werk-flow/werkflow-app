@@ -24,7 +24,7 @@ import {
   type VacationBalance,
 } from './balance';
 import {
-  balanceYears,
+  createVacationCountingCache,
   loadPlannedAssignedJobs,
   loadVacationCountingContext,
   loadVacationRequestsForRecord,
@@ -77,6 +77,11 @@ function validateVacationRequestInput(
   if (input.endDate < input.startDate) return 'invalid_range';
   if (countCalendarDaysInRange(input.startDate, input.endDate) > MAX_VACATION_RANGE_DAYS) {
     return 'range_too_long';
+  }
+  // From January 1 of last year (a late request) to December 31 of next year (planning ahead).
+  const businessYear = Number(getBusinessTodayIso().slice(0, 4));
+  if (input.startDate < `${businessYear - 1}-01-01` || input.endDate > `${businessYear + 1}-12-31`) {
+    return 'outside_request_window';
   }
   if (input.dayPortion !== 'full' && input.dayPortion !== 'half_day') {
     return 'invalid_portion';
@@ -706,10 +711,9 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
 
     // Authorization filter: per pending request, keep it only when the actor
     // may decide it right now (self-approval denied by the shared helper).
-    // Per-record work is memoized so duplicate rows never re-query.
+    // Per-record work is memoized so duplicate rows never re-query or re-count.
     const authorizationByRecordId = new Map<string, boolean>();
-    const contextByRecordId = new Map<string, Awaited<ReturnType<typeof loadVacationCountingContext>>>();
-    const requestsByRecordId = new Map<string, Awaited<ReturnType<typeof loadVacationRequestsForRecord>>>();
+    const countingFor = createVacationCountingCache(orgId, pendingRows);
 
     const results: ApproverVacationRequest[] = [];
     for (const row of pendingRows) {
@@ -732,25 +736,11 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       }
       if (!authorized) continue;
 
-      let context = contextByRecordId.get(record.id);
-      if (context === undefined) {
-        context = await loadVacationCountingContext(orgId, record.id);
-        contextByRecordId.set(record.id, context);
-      }
-      if (!context) continue;
-
-      let requests = requestsByRecordId.get(record.id);
-      if (requests === undefined) {
-        requests = await loadVacationRequestsForRecord(
-          orgId,
-          record.id,
-          balanceYears(pendingRows, record.id),
-        );
-        requestsByRecordId.set(record.id, requests);
-      }
+      const counting = await countingFor(record.id);
+      if (!counting) continue;
 
       const year = Number(row.start_date.slice(0, 4));
-      const balance = requests ? computeVacationBalance(year, requests, context) : null;
+      const balance = counting.balanceFor(year);
 
       const hasAbsenceOverlap = activeAbsenceRows.some(
         (absence) =>
@@ -768,11 +758,11 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       results.push({
         request,
         personName: formatTargetName(record, profileByUserId.get(record.user_id)),
-        totalDays: countVacationDays(request, context),
+        totalDays: counting.totalDaysOf(request),
         balance,
         hasAbsenceOverlap,
         assignedJobsInRange,
-        hasEntitlement: resolveVacationEntitlementForYear(context.conditions, year) !== null,
+        hasEntitlement: resolveVacationEntitlementForYear(counting.context.conditions, year) !== null,
       });
     }
 
