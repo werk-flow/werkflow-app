@@ -10,7 +10,7 @@ description: Use for Supabase-related work in this WerkFlow repo: database schem
 ## Steps
 
 1. Inspect the real project before a schema claim or edit. A claim about PROD needs `bun run prod:inspect`; DEV and the migration files do not stand in for it.
-2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. No tool reads PROD rows: every tool result goes to the model provider, and a hook refuses a PROD MCP tool.
+2. Inspect DEV through the MCP server `supabase` rather than guess from app code or old docs. Agents read no PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. The hook enforces this for MCP calls only.
 3. Before a migration, read the migration rule in [environments](../../../docs/technical/environments.md). For a new table, also follow [security](../../../docs/technical/security.md).
 4. After a schema change, run `bun run types:generate`. `bun run types:check` fails while `lib/supabase/database.types.ts` is stale.
 5. Deploy an edge function from `supabase/functions/` with `bunx supabase functions deploy <slug> --project-ref <ref> --no-verify-jwt --use-api`.
