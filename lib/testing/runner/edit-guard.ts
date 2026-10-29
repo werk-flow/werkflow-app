@@ -81,7 +81,7 @@ const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: s
  * `exec_command` included, as `Bash` with `tool_input.command`; `cmd` is read
  * too when `command` is absent, as defense in depth.
  */
-function shellCommand(call: GuardedToolCall): string | undefined {
+export function shellCommand(call: GuardedToolCall): string | undefined {
   if (call.tool_name !== 'Bash') return undefined;
   if (!call.tool_input || typeof call.tool_input !== 'object') return undefined;
   const input = call.tool_input as Record<string, unknown>;

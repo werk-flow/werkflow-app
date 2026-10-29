@@ -699,7 +699,7 @@ const testSelectors = [
 
 // Spec-lint set (docs/technical/testing.md). Spec files compose named steps
 // and semantically scoped locators; the banned patterns below are the
-// recurring flake classes from the incident log. The full Playwright API stays
+// recurring flake classes of past browser failures. The full Playwright API stays
 // available to the shared support modules (tests/golden/support/**), which own
 // the bounded, documented exceptions.
 const specSelectors = [

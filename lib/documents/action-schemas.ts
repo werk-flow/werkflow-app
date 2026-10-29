@@ -98,7 +98,7 @@ const documentUploadTargetSchema = z.discriminatedUnion('kind', [
 ]);
 export type ParsedDocumentUploadTarget = z.output<typeof documentUploadTargetSchema>;
 
-const uploadFileSchema = z.object({
+export const uploadFileSchema = z.object({
   fileName: fileNameSchema,
   fileSizeBytes: z.number(),
   mimeType: z.string().max(255).nullable().optional(),

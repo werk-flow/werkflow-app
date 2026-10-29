@@ -6,7 +6,12 @@ import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
 import type { ApprovedAbsenceSpan } from '@/lib/personnel/targets';
-import type { VacationCountingContext } from './balance';
+import {
+  computeVacationBalance,
+  countVacationDaysByYear,
+  type VacationBalance,
+  type VacationCountingContext,
+} from './balance';
 import { toVacationDayPortion, toVacationRequest, type VacationRequest } from './types';
 import { logError } from '@/lib/logging';
 
@@ -55,32 +60,38 @@ export async function loadVacationCountingContext(
   };
 }
 
-/** All vacation requests of one employee record, newest first. */
+/** All vacation requests of one employee record, newest first; null when the read fails or overflows. */
 export async function loadVacationRequestsForRecord(
   organizationId: string,
   employeeRecordId: string,
   years?: { from: number; to: number },
 ): Promise<VacationRequest[] | null> {
   const admin = createSupabaseAdminClient();
-  const query = admin
-    .from('vacation_requests')
-    .select('*')
-    .eq('organization_id', organizationId)
-    .eq('employee_record_id', employeeRecordId);
-  // A balance of year Y counts only the days of Y, which lie inside requests that overlap Y.
-  const { data, error } = await (
-    years ? query.lte('start_date', `${years.to}-12-31`).gte('end_date', `${years.from}-01-01`) : query
-  ).order('start_date', { ascending: false });
+  const query = () => {
+    const recordQuery = admin
+      .from('vacation_requests')
+      .select('*')
+      .eq('organization_id', organizationId)
+      .eq('employee_record_id', employeeRecordId);
+    // A balance of year Y counts only the days of Y, which lie inside requests that overlap Y.
+    return years
+      ? recordQuery.lte('start_date', `${years.to}-12-31`).gte('end_date', `${years.from}-01-01`)
+      : recordQuery;
+  };
+  const { data, error } = await readCompleteRows(
+    (from, to) => query().order('start_date', { ascending: false }).order('id').range(from, to),
+    LIST_ROW_CAP,
+  );
 
   if (error) {
     logError('Failed to load vacation requests:', error);
     return null;
   }
-  return (data ?? []).map(toVacationRequest);
+  return data.map(toVacationRequest);
 }
 
 /** The years whose balance the pending requests of one record show: the start year of each. */
-export function balanceYears(
+function balanceYears(
   pendingRows: ReadonlyArray<{ employee_record_id: string; start_date: string }>,
   recordId: string,
 ): { from: number; to: number } {
@@ -88,6 +99,71 @@ export function balanceYears(
     .filter((row) => row.employee_record_id === recordId)
     .map((row) => Number(row.start_date.slice(0, 4)));
   return { from: Math.min(...years), to: Math.max(...years) };
+}
+
+type RecordVacationCounting = {
+  context: VacationCountingContext;
+  /** The request's consumed days, counted once per request. */
+  totalDaysOf: (request: VacationRequest) => number;
+  /** The balance of one year, computed once per year; null when the requests could not be read. */
+  balanceFor: (year: number) => VacationBalance | null;
+};
+
+/**
+ * The approver queue's counting inputs per employee record: the context and
+ * the requests are read once per record, each request's days are counted once
+ * and each balance is computed once, however many pending rows show them.
+ * The reader returns null when the record's counting context cannot be read.
+ */
+export function createVacationCountingCache(
+  organizationId: string,
+  pendingRows: ReadonlyArray<{ employee_record_id: string; start_date: string }>,
+): (employeeRecordId: string) => Promise<RecordVacationCounting | null> {
+  const countingByRecordId = new Map<string, Promise<RecordVacationCounting | null>>();
+  return (employeeRecordId) => {
+    let counting = countingByRecordId.get(employeeRecordId);
+    if (!counting) {
+      counting = loadRecordVacationCounting(
+        organizationId,
+        employeeRecordId,
+        balanceYears(pendingRows, employeeRecordId),
+      );
+      countingByRecordId.set(employeeRecordId, counting);
+    }
+    return counting;
+  };
+}
+
+async function loadRecordVacationCounting(
+  organizationId: string,
+  employeeRecordId: string,
+  years: { from: number; to: number },
+): Promise<RecordVacationCounting | null> {
+  const context = await loadVacationCountingContext(organizationId, employeeRecordId);
+  if (!context) return null;
+  const requests = await loadVacationRequestsForRecord(organizationId, employeeRecordId, years);
+  const daysByRequestId = new Map<string, Record<string, number>>();
+  const daysByYearOf = (request: VacationRequest): Record<string, number> => {
+    let days = daysByRequestId.get(request.id);
+    if (!days) {
+      days = countVacationDaysByYear(request, context);
+      daysByRequestId.set(request.id, days);
+    }
+    return days;
+  };
+  const balanceByYear = new Map<number, VacationBalance>();
+  const balanceFor = (year: number): VacationBalance | null => {
+    if (!requests) return null;
+    let balance = balanceByYear.get(year);
+    if (!balance) {
+      balance = computeVacationBalance(year, requests, context, daysByYearOf);
+      balanceByYear.set(year, balance);
+    }
+    return balance;
+  };
+  const totalDaysOf = (request: VacationRequest): number =>
+    Object.values(daysByYearOf(request)).reduce((total, days) => total + days, 0);
+  return { context, totalDaysOf, balanceFor };
 }
 
 /**
