@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
 
@@ -21,7 +21,9 @@ export function useListNavigation() {
   // rapid request chain must keep waiting for the latest target.
   if (requested !== null && (requested.query === current || !requested.knownQueries.includes(current)))
     setRequested(null);
-  useEffect(() => {
+  // A layout effect settles in the commit itself. A passive effect can run after
+  // the next keystroke and cancel that keystroke's queued navigation.
+  useLayoutEffect(() => {
     if (requested === null) {
       if (timer.current) clearTimeout(timer.current);
       pending.current = current;

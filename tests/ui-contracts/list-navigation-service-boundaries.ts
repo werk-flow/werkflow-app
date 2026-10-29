@@ -1,15 +1,18 @@
-import { useSyncExternalStore } from 'react';
+import { startTransition, useEffect, useMemo, useState } from 'react';
 
 const listeners = new Set<() => void>();
+// Next.js commits a navigation as a transition, so a commit's passive effects
+// run in a later task and a keystroke can land in between.
 function notify(): void {
-  for (const listener of listeners) listener();
+  startTransition(() => {
+    for (const listener of listeners) listener();
+  });
 }
+window.addEventListener('popstate', notify);
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  window.addEventListener('popstate', listener);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener('popstate', listener);
   };
 }
 const router = {
@@ -43,6 +46,7 @@ export function usePathname(): string {
   return window.location.pathname;
 }
 export function useSearchParams(): URLSearchParams {
-  const search = useSyncExternalStore(subscribe, () => window.location.search);
-  return new URLSearchParams(search);
+  const [search, setSearch] = useState(() => window.location.search);
+  useEffect(() => subscribe(() => setSearch(window.location.search)), []);
+  return useMemo(() => new URLSearchParams(search), [search]);
 }
