@@ -55,9 +55,13 @@ A proof is a passing result whose fingerprint matches the current inputs; a late
 
 `bun run test:plan` prints each group with its reason and the first file that caused it. Change mode compares the tree with the baseline: the latest passing automatic plan, or `HEAD` without one.
 
-- A product file selects the browser groups that declare its scope; one without an owner selects `golden:gg-00`. The auth path and dependency files add `audit:security:account`.
-- A spec or support file selects the groups that import it.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, in CI's full runs, or with an explicit `--group`. A change to a group's own spec or support still selects it, except a wall-clock group.
+Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers.ts`):
+
+- **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
+- **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
+- **Other groups** run nightly and in release mode.
+- A spec or support file selects the groups that import it. A documentation-only change selects no browser group.
+- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, CI's full runs, with `--group`, or when their own test code changed (never a wall-clock group).
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Browser groups whose own spec or support changed run first. When one fails, later browser groups are blocked for that attempt.
 - `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
@@ -85,7 +89,7 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`. A push to `main` runs `Check` on the merged diff; the nightly run and the release gate run every browser group.
+- **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the same retry rules as a local repeat.
 
 ## Commands
@@ -126,6 +130,8 @@ Lint (`eslint-rules/test-hygiene-rules.mjs`, unit tests too) and `spec-conventio
 
 - **Independent.** Each test seeds its own preconditions and passes alone and in any order. A count or "latest row" check covers only the test's own records. A measured test prepares the typical profile through `ensureTypicalProfile`.
 - **One proof per behavior.** The golden file holds the journey a user walks, including second-session and live checks. The audit file holds edge cases, denials and role variants. A second browser proof needs a distinct risk or role.
+- **Denials below the browser.** Prove a new role or organization denial with an SQL assertion or a boundary fixture. `test-groups.test.ts` refuses a browser denial helper in a group without a permission trigger.
+- **Critical journeys.** Changing the critical set, or adding a `ROLE_DENIAL_GROUPS` row, needs the owner ([shrink-only lists](#grow-a-shrink-only-list)).
 - **Bounded group.** A group runs about four minutes, setup included. Split a growing file by catalog area.
 - **Persisted outcome.** A step submits once, waits on the app's busy signals, and checks both the visible confirmation and the persisted row (`Persisted<Row>`, built only by a reader in `tests/golden/support/db/`).
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.

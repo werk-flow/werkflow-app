@@ -7,7 +7,6 @@ import {
   getGroupTimingRequirements,
   getTestGroups,
   isPerformanceSpec,
-  isReleaseOnlySpec,
   listTestFiles,
   validateTestGroupInventory,
   type TestGroup,
@@ -44,12 +43,12 @@ describe('independent group registry', () => {
       'the registered visual reference group',
     );
     expect(visual.files).toEqual(['tests/audit/visual/references.spec.ts']);
-    expect(visual.files.some(isReleaseOnlySpec)).toBe(true);
+    expect(visual.changeTrigger).toBe('release-only');
     expect(visual.files.some(isPerformanceSpec)).toBe(false);
     expect(visual.timing.exclusive).toBe(false);
     for (const performance of groups.filter((candidate) => candidate.id.startsWith('audit:performance:')))
-      expect([performance.id, performance.files.every(isReleaseOnlySpec)]).toEqual([performance.id, true]);
-    const releaseOnly = groups.filter((candidate) => candidate.files.some(isReleaseOnlySpec));
+      expect([performance.id, performance.changeTrigger]).toEqual([performance.id, 'release-only']);
+    const releaseOnly = groups.filter((candidate) => candidate.changeTrigger === 'release-only');
     expect(releaseOnly.every((candidate) => candidate.kind === 'audit')).toBe(true);
     // Every speed measurement, capture and sweep, and no other group (decision 0007, amendment 2026-10-29).
     expect(
@@ -60,10 +59,7 @@ describe('independent group registry', () => {
     // The runner passes the same flag; a change plan with every file changed still leaves them out.
     const plan = groupSelections({
       mode: 'change',
-      groups: groups.map((candidate) => ({
-        ...candidate,
-        releaseOnly: candidate.files.some(isReleaseOnlySpec),
-      })),
+      groups: groups.map((candidate) => ({ ...candidate, trigger: candidate.changeTrigger })),
       changedFiles: ['components/ui/button.tsx', 'app/globals.css', 'tests/audit/visual/references.spec.ts'],
       unresolvedGroupIds: [],
     });
@@ -135,7 +131,7 @@ describe('independent group registry', () => {
       groups: groups.map((candidate) => ({
         ...candidate,
         executionInputs: candidate.files,
-        releaseOnly: candidate.files.some(isReleaseOnlySpec),
+        trigger: candidate.changeTrigger,
       })),
       changedFiles: ['lib/attention/actions.ts', 'tests/audit/lab/office.spec.ts'],
       unresolvedGroupIds: [],
@@ -144,7 +140,7 @@ describe('independent group registry', () => {
     expect(plan.get('audit:lab:office')?.reason).toBe('Test execution dependency changed');
     for (const id of ['audit:lab:field', 'audit:lab:office']) {
       const group = expectDefined(groups.find((entry) => entry.id === id));
-      expect(group.files.some(isReleaseOnlySpec)).toBe(true);
+      expect(group.changeTrigger).toBe('release-only');
       const timing = getGroupTimingRequirements(group, root);
       expect(timing.exclusive).toBe(true);
       expect(timing.requiredLabSteps).toEqual(labStepsForFiles(group.files).map((step) => step.id));

@@ -23,7 +23,6 @@ import {
   getGroupTimingRequirements,
   getTestGroups,
   isPerformanceSpec,
-  isReleaseOnlySpec,
   type TestGroup,
 } from '../lib/testing/selection/test-groups';
 import {
@@ -324,7 +323,7 @@ async function main(): Promise<void> {
       kind: entry.group.kind,
       scopes: entry.group.scopes,
       executionInputs: entry.executionInputs,
-      releaseOnly: entry.group.files.some(isReleaseOnlySpec),
+      trigger: entry.group.changeTrigger,
     })),
     changedFiles: changed,
     unresolvedGroupIds: unresolved,

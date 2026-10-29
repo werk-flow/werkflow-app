@@ -2,22 +2,29 @@
 import { expect, test } from 'bun:test';
 import { UNKNOWN_IMPORT_DEPENDENCY } from '../evidence/group-evidence';
 import { ciPlan, MAX_SHARDS, runnerModules as runnerModulesOf, type CiGroup } from './ci-plan';
+import { CRITICAL_JOURNEYS, type ChangeTrigger } from './change-triggers';
 
-const group = (id: string, file: string, scopes: string[]): CiGroup => ({
+const group = (id: string, file: string, scopes: string[], trigger?: ChangeTrigger): CiGroup => ({
   id,
   kind: id.startsWith('golden:') ? 'golden' : (id.split(':')[0] ?? 'audit'),
   files: [file],
   scopes,
   executionInputs: [file],
+  trigger,
 });
 const groups: CiGroup[] = [
   group('static:lint', 'eslint.config.mjs', ['*']),
-  group('golden:gg-00', 'tests/golden/gg-00.spec.ts', ['*']),
-  group('golden:p1-04', 'tests/golden/p1-04.spec.ts', ['personnel', 'time']),
-  group('audit:wave-2:p1-13', 'tests/audit/wave-2/p1-13.spec.ts', ['work', 'inventory']),
-  group('audit:performance:calendar', 'tests/audit/performance/calendar.spec.ts', ['planning']),
-  group('audit:visual', 'tests/audit/visual/references.spec.ts', ['*']),
-  group('audit:visual:acceptance', 'tests/audit/visual/acceptance.spec.ts', ['*']),
+  group('golden:gg-00', 'tests/golden/gg-00.spec.ts', ['*'], 'critical'),
+  group('golden:p1-04', 'tests/golden/p1-04.spec.ts', ['personnel', 'time'], 'own-test'),
+  group('audit:wave-2:p1-13', 'tests/audit/wave-2/p1-13.spec.ts', ['work', 'inventory'], 'scope'),
+  group(
+    'audit:performance:calendar',
+    'tests/audit/performance/calendar.spec.ts',
+    ['planning'],
+    'release-only',
+  ),
+  group('audit:visual', 'tests/audit/visual/references.spec.ts', ['*'], 'release-only'),
+  group('audit:visual:acceptance', 'tests/audit/visual/acceptance.spec.ts', ['*'], 'release-only'),
 ];
 // What the runner entry points import, and two selection modules only a spec or a static check imports.
 const graph = new Map<string, string[]>([
@@ -61,7 +68,7 @@ test('an unreadable diff and a tooling change run every browser group except the
   expect(ids(nightly)).toEqual(EVERY_BROWSER_GROUP);
 });
 
-test('a pull request or a push to main runs the browser groups its changed files select', () => {
+test('a pull request or a push to main runs the critical journeys and the groups its changed files select', () => {
   const plan = ciPlan({
     groups,
     changedFiles: ['lib/inventory/stock.ts'],
@@ -69,7 +76,10 @@ test('a pull request or a push to main runs the browser groups its changed files
     runnerModules,
   });
   expect(plan.fullReason).toBeUndefined();
-  expect(ids(plan)).toEqual(['audit:wave-2:p1-13']);
+  expect(ids(plan)).toEqual(['golden:gg-00', 'audit:wave-2:p1-13']);
+  expect(
+    ids(ciPlan({ groups, changedFiles: ['tests/golden/p1-04.spec.ts'], fullRun: undefined, runnerModules })),
+  ).toEqual(['golden:p1-04']);
   expect(
     ids(ciPlan({ groups, changedFiles: ['docs/README.md'], fullRun: undefined, runnerModules })),
   ).toEqual([]);
@@ -117,8 +127,13 @@ test('files that cannot change how every group installs, builds or runs plan by 
 test('lab, visual and layout groups run in a pull request only when their own test code changed', () => {
   const sweeps = [
     ...groups,
-    group('audit:layout:work', 'tests/audit/layout/surfaces-work.spec.ts', ['work', 'customers']),
-    group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning']),
+    group(
+      'audit:layout:work',
+      'tests/audit/layout/surfaces-work.spec.ts',
+      ['work', 'customers'],
+      'release-only',
+    ),
+    group('audit:lab:office', 'tests/audit/lab/office.spec.ts', ['work', 'planning'], 'release-only'),
   ];
   const plan = (changedFiles: string[]): string[] =>
     ids(ciPlan({ groups: sweeps, changedFiles, fullRun: undefined, runnerModules }));
@@ -172,5 +187,38 @@ test('shards hold every selected group once and never exceed the job budget', ()
   const dealt = plan.shards.flatMap((shard) => shard.groups.split(','));
   expect(dealt.sort()).toEqual(many.map((entry) => entry.id).sort());
   const one = ciPlan({ groups, changedFiles: ['lib/inventory/stock.ts'], fullRun: undefined, runnerModules });
-  expect(one.shards).toEqual([{ shard: 1, groups: 'audit:wave-2:p1-13' }]);
+  expect(one.shards).toEqual([{ shard: 1, groups: 'golden:gg-00,audit:wave-2:p1-13' }]);
+});
+
+test('support only a wall-clock group imports still runs the critical journeys, never the wall-clock group', () => {
+  const measured = {
+    ...group(
+      'audit:performance:calendar',
+      'tests/audit/performance/calendar.spec.ts',
+      ['planning'],
+      'release-only',
+    ),
+    executionInputs: ['tests/audit/performance/calendar.spec.ts', 'tests/audit/support/calendar-live.ts'],
+  };
+  const plan = ciPlan({
+    groups: [...groups.filter((entry) => entry.id !== measured.id), measured],
+    changedFiles: ['tests/audit/support/calendar-live.ts'],
+    fullRun: undefined,
+    runnerModules,
+  });
+  expect(ids(plan)).toEqual(['golden:gg-00']);
+});
+
+test('the critical journeys of a product change split into three shards', () => {
+  const critical = Object.keys(CRITICAL_JOURNEYS).map((id) =>
+    group(id, `tests/golden/${id.replace('golden:', '')}.spec.ts`, ['*'], 'critical'),
+  );
+  const plan = ciPlan({
+    groups: critical,
+    changedFiles: ['lib/jobs/actions.ts'],
+    fullRun: undefined,
+    runnerModules,
+  });
+  expect(plan.browser.map((entry) => entry.id)).toEqual(Object.keys(CRITICAL_JOURNEYS));
+  expect(plan.shards.map((shard) => shard.groups.split(',').length)).toEqual([3, 3, 3]);
 });
