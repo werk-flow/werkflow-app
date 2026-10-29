@@ -165,6 +165,7 @@ export const planningOccurrenceStatusSchema = z.object({
 });
 
 export type CreatePlanningEntryInput = z.infer<typeof createPlanningEntrySchema>;
+export type ParsedPlanningCalendarInput = z.infer<typeof updatePlanningCalendarSchema>;
 
 /** The approval a manager sends with a series horizon extension. */
 export const seriesHorizonApprovalSchema = z
