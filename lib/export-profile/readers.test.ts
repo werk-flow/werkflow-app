@@ -48,6 +48,10 @@ describe('XML', () => {
     expect(formatErrorCode(() => [...xmlRecords('<?xml version="1.0"?>\n<a><b>1</b></a>\n')])).toBeNull();
   });
 
+  test('a document without a root element is a format error', () => {
+    expect(formatErrorCode(() => [...xmlRecords('<?xml version="1.0"?>\n  \n')])).toBe('xml_not_well_formed');
+  });
+
   test('markup no rule matches is a format error', () => {
     expect(formatErrorCode(() => [...xmlRecords('<a><b>1</b> < <c>2</c></a>')])).toBe('xml_not_well_formed');
   });
