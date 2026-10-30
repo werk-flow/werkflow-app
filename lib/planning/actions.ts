@@ -2,21 +2,23 @@
 
 import type { ActionResult } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import type { z } from '@/lib/zod';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import {
-  addLocalDays,
-  addLocalMonthsClamped,
-  BERLIN_TIME_ZONE,
-  formatBerlinLocalDateTime,
-  getBusinessTodayIso,
-  resolveBerlinWallTime,
-} from '@/lib/date-time/berlin';
+import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { loadPlanningCalendarEntries } from './calendar-entries';
 import { preparePlanningCreation } from './creation';
-import { materializeSeries } from './recurrence';
+import {
+  assignmentRowsFor,
+  assignmentsPerOccurrence,
+  resolveSelectedPlanningAssignments,
+  splitSourceAssignments,
+} from './edit-assignments';
+import {
+  materializeOccurrenceEdit,
+  planSeriesReschedule,
+  seriesExtensionOccurrences,
+  seriesReschedulePayload,
+} from './edit-drafts';
 import {
   createPlanningEntrySchema,
   planningDateWindowSchema,
@@ -25,13 +27,10 @@ import {
   planningRescheduleScopeSchema,
   seriesHorizonApprovalSchema,
   updatePlanningCalendarSchema,
+  type ParsedPlanningCalendarInput,
 } from './schemas';
-import {
-  assessPlanningOccurrences,
-  expandPlanningTeamsForDates,
-  loadPlanningCalendarEntries,
-  loadPlanningOptions,
-} from './server';
+import { loadRescheduleSource, loadSeriesExtensionSource } from './series-sources';
+import { assessPlanningOccurrences, loadPlanningOptions, type PlanningAssessment } from './server';
 import { rejectUnacknowledgedConflicts } from './conflict-acknowledgement';
 import {
   planningOptionRequestSchema,
@@ -44,7 +43,6 @@ import type {
   PlanningActionResult,
   PlanningAssignmentDraft,
   PlanningCalendarEntry,
-  PlanningSeriesDraft,
 } from './types';
 import { logError } from '@/lib/logging';
 
@@ -122,7 +120,7 @@ export async function createPlanningEntry(rawInput: unknown): Promise<PlanningAc
     logError('Failed to create planning entry', error);
     return { success: false, error: 'create_failed' };
   }
-  return { success: true, occurrenceIds: (data ?? []) as string[] };
+  return { success: true, occurrenceIds: data ?? [] };
 }
 
 export async function extendPlanningSeriesHorizon(
@@ -144,123 +142,43 @@ export async function extendPlanningSeriesHorizon(
   }
 
   const admin = createSupabaseAdminClient();
-  const { data: series, error: seriesError } = await admin
-    .from('planning_series')
-    .select('*')
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', seriesId)
-    .single();
-  if (seriesError || !series) {
-    return { success: false, error: 'series_not_found' };
-  }
-  if (!series.generated_through_local) {
-    return { success: false, error: 'series_not_materialized' };
-  }
-
-  const { data: sourceOccurrence, error: sourceError } = await admin
-    .from('planning_occurrences')
-    .select('id')
-    .eq('organization_id', auth.context.orgId)
-    .eq('series_id', series.id)
-    .eq('is_exception', false)
-    .order('original_start_local', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (sourceError || !sourceOccurrence) {
-    return { success: false, error: 'series_not_materialized' };
-  }
+  const source = await loadSeriesExtensionSource(admin, auth.context.orgId, seriesId);
+  if (!source.success) return source;
+  const { series, generatedThroughLocal } = source;
   const { data: sourceAssignments, error: assignmentError } = await admin
     .from('planning_occurrence_assignments')
     .select('employee_record_id, team_source_id')
     .eq('organization_id', auth.context.orgId)
-    .eq('occurrence_id', sourceOccurrence.id);
+    .eq('occurrence_id', source.sourceOccurrenceId);
   if (assignmentError) {
     logError('Failed to load series source assignments', assignmentError);
     return { success: false, error: 'load_failed' };
   }
 
-  const draft: PlanningSeriesDraft = {
-    entryKind: series.entry_kind,
-    internalType: series.internal_type,
-    jobId: series.job_id,
-    title: series.title,
-    description: series.description,
-    location: series.location,
-    timeKind: series.time_kind,
-    startsAtLocal: series.starts_at_local,
-    durationMinutes: series.duration_minutes,
-    durationDays: series.duration_days,
-    timezone: BERLIN_TIME_ZONE,
-    frequency: series.recurrence_frequency as PlanningSeriesDraft['frequency'],
-    interval: series.recurrence_interval,
-    weekdays: series.weekdays,
-    monthDay: series.month_day,
-    occurrenceCount: series.occurrence_count,
-    untilLocalDate: series.until_local_date,
-  };
-  const currentGeneratedThrough = series.generated_through_local;
-  const horizon = addLocalMonthsClamped(currentGeneratedThrough.slice(0, 10), 6);
-  const occurrences = materializeSeries(draft, horizon).filter(
-    (occurrence) =>
-      occurrence.originalStartLocal > currentGeneratedThrough &&
-      occurrence.originalStartLocal >= series.segment_start_local &&
-      (!series.segment_end_before_local || occurrence.originalStartLocal < series.segment_end_before_local),
-  );
+  const occurrences = seriesExtensionOccurrences(series, generatedThroughLocal);
   if (occurrences.length === 0) {
     return { success: true, occurrenceIds: [] };
   }
-
-  const teamIds = [
-    ...new Set(
-      (sourceAssignments ?? []).flatMap((assignment) =>
-        assignment.team_source_id ? [assignment.team_source_id] : [],
-      ),
-    ),
-  ];
-  const directAssignments: PlanningAssignmentDraft[] = (sourceAssignments ?? [])
-    .filter((assignment) => !assignment.team_source_id)
-    .map((assignment) => ({
-      employeeRecordId: assignment.employee_record_id,
-      teamSourceId: null,
-    }));
-  const teamAssignmentsByDate = await expandPlanningTeamsForDates({
+  const assignmentsByOriginalStartLocal = await assignmentsPerOccurrence({
     admin,
     orgId: auth.context.orgId,
-    teamIds,
-    localDates: occurrences.map((occurrence) => occurrence.originalStartLocal.slice(0, 10)),
+    ...splitSourceAssignments(sourceAssignments ?? []),
+    occurrences,
   });
-  if (!teamAssignmentsByDate) {
+  if (!assignmentsByOriginalStartLocal) {
     return { success: false, error: 'team_load_failed' };
   }
-  const assignmentsByOriginalStartLocal = new Map<string, PlanningAssignmentDraft[]>();
-  const assignments = occurrences.flatMap((occurrence) => {
-    const occurrenceAssignments = [
-      ...new Map(
-        [
-          ...directAssignments,
-          ...(teamAssignmentsByDate.get(occurrence.originalStartLocal.slice(0, 10)) ?? []),
-        ].map((assignment) => [assignment.employeeRecordId, assignment]),
-      ).values(),
-    ];
-    assignmentsByOriginalStartLocal.set(occurrence.originalStartLocal, occurrenceAssignments);
-    return occurrenceAssignments.map((assignment) => ({
-      ...assignment,
-      occurrenceOriginalStartLocal: occurrence.originalStartLocal,
-    }));
-  });
-  const assessment = await assessPlanningOccurrences({
+  const assessed = await assessSeriesChange({
     orgId: auth.context.orgId,
     jobId: series.job_id,
     occurrences,
-    assignments: [],
     assignmentsByOriginalStartLocal,
-  });
-  if (!assessment) return { success: false, error: 'assessment_failed' };
-  const conflictRejection = rejectUnacknowledgedConflicts(assessment, {
+    excludeOccurrenceIds: [],
     overrideReason: approval?.overrideReason ?? null,
     assessmentFingerprint: approval?.assessmentFingerprint ?? null,
   });
-  if (conflictRejection) return conflictRejection;
+  if (!assessed.success) return assessed;
+  const { assessment } = assessed;
 
   const { data, error } = await admin.rpc(
     'extend_planning_series_materialization',
@@ -268,9 +186,9 @@ export async function extendPlanningSeriesHorizon(
       p_organization_id: auth.context.orgId,
       p_actor_id: auth.context.userId,
       p_series_id: series.id,
-      p_expected_generated_through_local: series.generated_through_local,
+      p_expected_generated_through_local: generatedThroughLocal,
       p_occurrences: occurrences,
-      p_assignments: assignments,
+      p_assignments: assignmentRowsFor(occurrences, assignmentsByOriginalStartLocal),
       p_capacity_snapshot: assessment.capacitySnapshot,
       p_capacity_fingerprint: assessment.capacityFingerprint,
       p_qualification_snapshot: assessment.qualificationSnapshot,
@@ -285,7 +203,7 @@ export async function extendPlanningSeriesHorizon(
       error: error.message.includes('stale_planning_series') ? 'stale_series' : 'extension_failed',
     };
   }
-  return { success: true, occurrenceIds: (data ?? []) as string[] };
+  return { success: true, occurrenceIds: data ?? [] };
 }
 
 export type UpdatePlanningCalendarInput = {
@@ -298,6 +216,13 @@ export type UpdatePlanningCalendarInput = {
   overrideReason?: string | null;
   assessmentFingerprint?: string | null;
 };
+
+/** The code of a refused occurrence update: a newer version, an occurrence that already started, or another failure. */
+function occurrenceUpdateFailure(message: string): string {
+  if (message.includes('stale_planning_occurrence')) return 'stale_occurrence';
+  if (message.includes('started_planning_occurrence_immutable')) return 'started_occurrence';
+  return 'update_failed';
+}
 
 export async function updatePlanningCalendarEntry(
   occurrenceId: string,
@@ -344,56 +269,12 @@ export async function updatePlanningCalendarEntry(
   if (!selection.success) return selection;
   if (selection.assignments) assignments = selection.assignments;
 
-  let materialized: MaterializedOccurrence;
-  if (occurrence.time_kind === 'timed') {
-    if (!occurrence.start_at || !occurrence.end_at) {
-      return { success: false as const, error: 'invalid_occurrence' };
-    }
-    const currentLocal = formatBerlinLocalDateTime(occurrence.start_at);
-    const date = input.plannedDate ?? currentLocal.slice(0, 10);
-    const time = input.plannedTime ?? currentLocal.slice(11, 16);
-    const resolved = resolveBerlinWallTime(`${date}T${time}`);
-    if (!resolved) return { success: false as const, error: 'invalid_input' };
-    const durationMinutes =
-      input.estimatedDurationMinutes ??
-      Math.round((new Date(occurrence.end_at).getTime() - new Date(occurrence.start_at).getTime()) / 60_000);
-    materialized = {
-      originalStartLocal: occurrence.original_start_local ?? `${date}T${time}`,
-      timeKind: 'timed',
-      startAt: resolved.instant.toISOString(),
-      endAt: new Date(resolved.instant.getTime() + durationMinutes * 60_000).toISOString(),
-      startDate: null,
-      endDateExclusive: null,
-      dstResolution: resolved.resolution,
-    };
-  } else {
-    if (!occurrence.start_date || !occurrence.end_date_exclusive) {
-      return { success: false as const, error: 'invalid_occurrence' };
-    }
-    const durationDays =
-      input.durationDays ??
-      Math.round(
-        (new Date(`${occurrence.end_date_exclusive}T00:00:00Z`).getTime() -
-          new Date(`${occurrence.start_date}T00:00:00Z`).getTime()) /
-          86_400_000,
-      );
-    const startDate = input.plannedDate ?? occurrence.start_date;
-    materialized = {
-      originalStartLocal: occurrence.original_start_local ?? `${startDate}T00:00`,
-      timeKind: 'all_day',
-      startAt: null,
-      endAt: null,
-      startDate,
-      endDateExclusive: new Date(new Date(`${startDate}T00:00:00Z`).getTime() + durationDays * 86_400_000)
-        .toISOString()
-        .slice(0, 10),
-      dstResolution: 'exact',
-    };
-  }
+  const edit = materializeOccurrenceEdit(occurrence, input);
+  if (!edit.success) return edit;
   const assessment = await assessPlanningOccurrences({
     orgId: auth.context.orgId,
     jobId: occurrence.job_id,
-    occurrences: [materialized],
+    occurrences: [edit.materialized],
     assignments,
     excludeOccurrenceId: occurrenceId,
   });
@@ -410,7 +291,7 @@ export async function updatePlanningCalendarEntry(
       p_actor_id: auth.context.userId,
       p_occurrence_id: occurrenceId,
       p_expected_version: occurrence.version,
-      p_occurrence: materialized,
+      p_occurrence: edit.materialized,
       p_assignments: assignments,
       p_capacity_snapshot: assessment.capacitySnapshot,
       p_capacity_fingerprint: assessment.capacityFingerprint,
@@ -421,118 +302,36 @@ export async function updatePlanningCalendarEntry(
   );
   if (updateError) {
     logError('Failed to update planning occurrence', updateError);
-    return {
-      success: false as const,
-      error: updateError.message.includes('stale_planning_occurrence')
-        ? 'stale_occurrence'
-        : updateError.message.includes('started_planning_occurrence_immutable')
-          ? 'started_occurrence'
-          : 'update_failed',
-    };
+    return { success: false as const, error: occurrenceUpdateFailure(updateError.message) };
   }
-  return { success: true as const, version: version as number };
+  return { success: true as const, version };
 }
 
-type ParsedPlanningCalendarInput = z.infer<typeof updatePlanningCalendarSchema>;
-
-/**
- * The direct assignments an edit selects, by employee record or by member user id, checked against
- * the organization. `assignments` is null when the edit keeps the current assignments.
- */
-async function resolveSelectedPlanningAssignments(
-  admin: AdminClient,
-  orgId: string,
-  request: ParsedPlanningCalendarInput,
-): Promise<ActionResult<{ assignments: PlanningAssignmentDraft[] | null }>> {
-  if (request.selectedEmployeeRecordIds) {
-    const recordIds = [...new Set(request.selectedEmployeeRecordIds)];
-    const { data: records, error: recordsError } = await readInBatches(recordIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    );
-    if (recordsError) logError('Failed to load selected employee records', recordsError);
-    if (recordsError || records.length !== recordIds.length) {
-      return { success: false as const, error: 'employee_not_found' };
-    }
-    return {
-      success: true as const,
-      assignments: recordIds.map((employeeRecordId) => ({ employeeRecordId, teamSourceId: null })),
-    };
-  }
-  if (request.selectedUserIds) {
-    const userIds = [...new Set(request.selectedUserIds)];
-    const { data: records, error: recordsError } = await readInBatches(userIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id')
-        .eq('organization_id', orgId)
-        .in('user_id', [...batch]),
-    );
-    if (recordsError) logError('Failed to load selected member records', recordsError);
-    if (recordsError || records.length !== userIds.length) {
-      return { success: false as const, error: 'member_not_found' };
-    }
-    return {
-      success: true as const,
-      assignments: records.map((record) => ({ employeeRecordId: record.id, teamSourceId: null })),
-    };
-  }
-  return { success: true as const, assignments: null };
-}
-
-type RescheduleSelectedOccurrence = Pick<
-  Database['public']['Tables']['planning_occurrences']['Row'],
-  'start_at' | 'end_at' | 'start_date' | 'end_date_exclusive'
->;
-
-function buildRescheduledSeriesDraft(input: {
-  series: Database['public']['Tables']['planning_series']['Row'];
-  selected: RescheduleSelectedOccurrence;
-  request: ParsedPlanningCalendarInput;
-  startsAtLocal: string;
-  remainingOccurrenceCount: number | null;
-}): PlanningSeriesDraft {
-  const { series, selected, startsAtLocal, remainingOccurrenceCount } = input;
-  const existingDurationMinutes =
-    selected.start_at && selected.end_at
-      ? Math.round((new Date(selected.end_at).getTime() - new Date(selected.start_at).getTime()) / 60_000)
-      : null;
-  const existingDurationDays =
-    selected.start_date && selected.end_date_exclusive
-      ? Math.round(
-          (new Date(`${selected.end_date_exclusive}T00:00:00Z`).getTime() -
-            new Date(`${selected.start_date}T00:00:00Z`).getTime()) /
-            86_400_000,
-        )
-      : null;
-  return {
-    entryKind: series.entry_kind,
-    internalType: series.internal_type,
-    jobId: series.job_id,
-    title: series.title,
-    description: series.description,
-    location: series.location,
-    timeKind: series.time_kind,
-    startsAtLocal,
-    durationMinutes:
-      series.time_kind === 'timed'
-        ? (input.request.estimatedDurationMinutes ?? existingDurationMinutes ?? series.duration_minutes)
-        : null,
-    durationDays:
-      series.time_kind === 'all_day'
-        ? (input.request.durationDays ?? existingDurationDays ?? series.duration_days)
-        : null,
-    timezone: BERLIN_TIME_ZONE,
-    frequency: series.recurrence_frequency as PlanningSeriesDraft['frequency'],
-    interval: series.recurrence_interval,
-    weekdays: series.weekdays,
-    monthDay: series.month_day,
-    occurrenceCount: remainingOccurrenceCount,
-    untilLocalDate: series.until_local_date,
-  };
+/** The assessment of a series change, refused while it holds a conflict the manager has not acknowledged. */
+async function assessSeriesChange(input: {
+  orgId: string;
+  jobId: string | null;
+  occurrences: MaterializedOccurrence[];
+  assignmentsByOriginalStartLocal: Map<string, PlanningAssignmentDraft[]>;
+  excludeOccurrenceIds: string[];
+  overrideReason: string | null;
+  assessmentFingerprint: string | null;
+}): Promise<{ success: true; assessment: PlanningAssessment } | PlanningActionFailure> {
+  const assessment = await assessPlanningOccurrences({
+    orgId: input.orgId,
+    jobId: input.jobId,
+    occurrences: input.occurrences,
+    assignments: [],
+    assignmentsByOriginalStartLocal: input.assignmentsByOriginalStartLocal,
+    excludeOccurrenceIds: input.excludeOccurrenceIds,
+  });
+  if (!assessment) return { success: false as const, error: 'assessment_failed' };
+  const conflictRejection = rejectUnacknowledgedConflicts(assessment, {
+    overrideReason: input.overrideReason,
+    assessmentFingerprint: input.assessmentFingerprint,
+  });
+  if (conflictRejection) return conflictRejection;
+  return { success: true, assessment };
 }
 
 async function resolveSeriesRescheduleAssignments(input: {
@@ -552,44 +351,22 @@ async function resolveSeriesRescheduleAssignments(input: {
     logError('Failed to load occurrence assignments', assignmentsError);
     return { success: false as const, error: 'load_failed' };
   }
-  let teamIds = [
-    ...new Set(
-      (assignmentRows ?? []).flatMap((assignment) =>
-        assignment.team_source_id ? [assignment.team_source_id] : [],
-      ),
-    ),
-  ];
-  let directAssignments: PlanningAssignmentDraft[] = (assignmentRows ?? [])
-    .filter((assignment) => !assignment.team_source_id)
-    .map((assignment) => ({
-      employeeRecordId: assignment.employee_record_id,
-      teamSourceId: null,
-    }));
+  let { teamIds, directAssignments } = splitSourceAssignments(assignmentRows ?? []);
   const selection = await resolveSelectedPlanningAssignments(admin, input.orgId, input.request);
   if (!selection.success) return selection;
   if (selection.assignments) {
     directAssignments = selection.assignments;
     teamIds = [];
   }
-  const teamAssignmentsByDate = await expandPlanningTeamsForDates({
+  const assignmentsByOriginalStartLocal = await assignmentsPerOccurrence({
     admin,
     orgId: input.orgId,
     teamIds,
-    localDates: generated.map((occurrence) => occurrence.originalStartLocal.slice(0, 10)),
+    directAssignments,
+    occurrences: generated,
   });
-  if (!teamAssignmentsByDate) {
+  if (!assignmentsByOriginalStartLocal) {
     return { success: false as const, error: 'team_load_failed' };
-  }
-  const assignmentsByOriginalStartLocal = new Map<string, PlanningAssignmentDraft[]>();
-  for (const occurrence of generated) {
-    assignmentsByOriginalStartLocal.set(occurrence.originalStartLocal, [
-      ...new Map(
-        [
-          ...directAssignments,
-          ...(teamAssignmentsByDate.get(occurrence.originalStartLocal.slice(0, 10)) ?? []),
-        ].map((assignment) => [assignment.employeeRecordId, assignment]),
-      ).values(),
-    ]);
   }
   return { success: true, assignmentsByOriginalStartLocal };
 }
@@ -612,137 +389,41 @@ export async function reschedulePlanningSeries(
     return { success: false as const, error: 'not_authorized' };
   }
   const admin = createSupabaseAdminClient();
-  const { data: selected, error: selectedError } = await admin
-    .from('planning_occurrences')
-    .select(
-      'id, series_id, series_lineage_id, original_start_local, job_id, time_kind, start_at, end_at, start_date, end_date_exclusive, version',
-    )
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', occurrenceId)
-    .single();
-  if (
-    selectedError ||
-    !selected?.series_id ||
-    !selected.series_lineage_id ||
-    !selected.original_start_local
-  ) {
-    return { success: false as const, error: 'series_not_found' };
-  }
-  if (!selected.start_at && !selected.start_date) {
-    return { success: false as const, error: 'invalid_occurrence' };
-  }
-  const { data: series, error: seriesError } = await admin
-    .from('planning_series')
-    .select('*')
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', selected.series_id)
-    .single();
-  if (seriesError || !series) {
-    return { success: false as const, error: 'series_not_found' };
-  }
-  const seriesLineageId = selected.series_lineage_id;
-  const selectedOriginalStartLocal = selected.original_start_local;
-  const { data: lineageOccurrences, error: lineageError } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('planning_occurrences')
-        .select('id, series_id, original_start_local, start_at, start_date, status, is_exception')
-        .eq('organization_id', auth.context.orgId)
-        .eq('series_lineage_id', seriesLineageId)
-        .not('original_start_local', 'is', null)
-        .order('original_start_local', { ascending: true })
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (lineageError) {
-    logError('Failed to load the series lineage', lineageError);
-    return { success: false as const, error: 'load_failed' };
-  }
-  const now = Date.now();
-  const today = getBusinessTodayIso();
-  const mutable = (lineageOccurrences ?? []).filter((occurrence) => {
-    if (!occurrence.original_start_local || occurrence.is_exception) return false;
-    if (scope === 'future' && occurrence.original_start_local < selectedOriginalStartLocal) {
-      return false;
-    }
-    return occurrence.start_at
-      ? new Date(occurrence.start_at).getTime() > now
-      : Boolean(occurrence.start_date && occurrence.start_date > today);
-  });
-  if (mutable.length === 0) {
-    return { success: false as const, error: 'no_mutable_occurrences' };
-  }
-  const identityOriginals = mutable.flatMap((occurrence) =>
-    occurrence.original_start_local ? [occurrence.original_start_local] : [],
-  );
-  const selectedCurrentLocal = selected.start_at
-    ? formatBerlinLocalDateTime(selected.start_at)
-    : `${selected.start_date}T00:00`;
-  const requestedDate = input.plannedDate ?? selectedCurrentLocal.slice(0, 10);
-  const requestedTime =
-    selected.time_kind === 'timed' ? (input.plannedTime ?? selectedCurrentLocal.slice(11, 16)) : '00:00';
-  const dayShift = Math.round(
-    (new Date(`${requestedDate}T00:00:00Z`).getTime() -
-      new Date(`${selectedCurrentLocal.slice(0, 10)}T00:00:00Z`).getTime()) /
-      86_400_000,
-  );
-  const boundaryOriginal = identityOriginals[0];
-  if (boundaryOriginal === undefined) {
-    return { success: false as const, error: 'no_mutable_occurrences' };
-  }
-  const positionsBeforeBoundary = (lineageOccurrences ?? []).filter(
-    (occurrence) => occurrence.original_start_local && occurrence.original_start_local < boundaryOriginal,
-  ).length;
-  const remainingOccurrenceCount = series.occurrence_count
-    ? Math.max(identityOriginals.length, series.occurrence_count - positionsBeforeBoundary)
-    : null;
-  const startsAtLocal = `${addLocalDays(boundaryOriginal.slice(0, 10), dayShift)}T${requestedTime}`;
-  const draft = buildRescheduledSeriesDraft({
-    series,
+  const source = await loadRescheduleSource(admin, auth.context.orgId, occurrenceId);
+  if (!source.success) return source;
+  const { selected } = source;
+  const plan = planSeriesReschedule({
+    series: source.series,
     selected,
+    selectedOriginalStartLocal: source.selectedOriginalStartLocal,
+    lineageOccurrences: source.lineageOccurrences,
+    scope,
     request: input,
-    startsAtLocal,
-    remainingOccurrenceCount,
+    now: Date.now(),
+    today: getBusinessTodayIso(),
   });
-  const horizon = addLocalMonthsClamped(startsAtLocal.slice(0, 10), 18);
-  const generated = materializeSeries(draft, horizon).slice(0, identityOriginals.length);
-  if (generated.length !== identityOriginals.length) {
-    return { success: false as const, error: 'invalid_recurrence' };
-  }
+  if (!plan.success) return plan;
   const assignmentResolution = await resolveSeriesRescheduleAssignments({
     admin,
     orgId: auth.context.orgId,
     occurrenceId,
     request: input,
-    generated,
+    generated: plan.generated,
   });
   if (!assignmentResolution.success) return assignmentResolution;
   const { assignmentsByOriginalStartLocal } = assignmentResolution;
-  const assessment = await assessPlanningOccurrences({
+  const assessed = await assessSeriesChange({
     orgId: auth.context.orgId,
     jobId: selected.job_id,
-    occurrences: generated,
-    assignments: [],
+    occurrences: plan.generated,
     assignmentsByOriginalStartLocal,
-    excludeOccurrenceIds: mutable.map((occurrence) => occurrence.id),
-  });
-  if (!assessment) return { success: false as const, error: 'assessment_failed' };
-  const conflictRejection = rejectUnacknowledgedConflicts(assessment, {
+    excludeOccurrenceIds: plan.replacedOccurrenceIds,
     overrideReason: input.overrideReason ?? null,
     assessmentFingerprint: input.assessmentFingerprint ?? null,
   });
-  if (conflictRejection) return conflictRejection;
-  const occurrencePayload = generated.map((occurrence, index) => ({
-    ...occurrence,
-    identityOriginalStartLocal: identityOriginals[index] ?? occurrence.originalStartLocal,
-  }));
-  const assignmentPayload = occurrencePayload.flatMap((occurrence) =>
-    (assignmentsByOriginalStartLocal.get(occurrence.originalStartLocal) ?? []).map((assignment) => ({
-      ...assignment,
-      occurrenceOriginalStartLocal: occurrence.identityOriginalStartLocal,
-    })),
-  );
+  if (!assessed.success) return assessed;
+  const { assessment } = assessed;
+  const { occurrences, assignments } = seriesReschedulePayload(plan, assignmentsByOriginalStartLocal);
   const { data, error } = await admin.rpc(
     'reschedule_planning_series',
     rpcArgs('reschedule_planning_series', {
@@ -752,11 +433,11 @@ export async function reschedulePlanningSeries(
       p_expected_version: selected.version,
       p_scope: scope,
       p_series: {
-        ...draft,
-        generatedThroughLocal: occurrencePayload.at(-1)?.identityOriginalStartLocal ?? null,
+        ...plan.draft,
+        generatedThroughLocal: occurrences.at(-1)?.identityOriginalStartLocal ?? null,
       },
-      p_occurrences: occurrencePayload,
-      p_assignments: assignmentPayload,
+      p_occurrences: occurrences,
+      p_assignments: assignments,
       p_capacity_snapshot: assessment.capacitySnapshot,
       p_capacity_fingerprint: assessment.capacityFingerprint,
       p_qualification_snapshot: assessment.qualificationSnapshot,
@@ -768,7 +449,7 @@ export async function reschedulePlanningSeries(
     logError('Failed to reschedule planning series', error);
     return { success: false as const, error: 'update_failed' };
   }
-  return { success: true as const, occurrenceIds: (data ?? []) as string[] };
+  return { success: true as const, occurrenceIds: data ?? [] };
 }
 
 export async function setPlanningOccurrenceStatus(
@@ -807,5 +488,5 @@ export async function setPlanningOccurrenceStatus(
     logError('Failed to change planning occurrence status', updateError);
     return { success: false as const, error: 'update_failed' };
   }
-  return { success: true as const, version: version as number };
+  return { success: true as const, version };
 }

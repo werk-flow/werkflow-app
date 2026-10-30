@@ -39,6 +39,7 @@ import {
   templateQuickCreateDialog,
 } from '../p1-13-steps';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 /**
  * Brings the editor of the audit's template draft (version 1) open on
@@ -48,7 +49,7 @@ import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
  * cache, and not through the database.
  */
 async function templateDraftName({ page, world }: SurfaceContext): Promise<string> {
-  const name = testData`Audit Vorlage Heizungswartung ${world.runId}`;
+  const name = worldName('Audit Vorlage Heizungswartung', world.runId);
   await surfaceFixture(world, 'templates.draft', async () => {
     await workTemplateCreateButton(page).click();
     const createDialog = workTemplateCreateDialog(page);
@@ -102,7 +103,7 @@ export const REQUESTS_OPENERS = {
         seedRequest({
           orgId: world.orgId,
           actorId: world.users.admin.id,
-          summary: testData`Audit Anfrage ohne Kundenzuordnung ${world.runId}`,
+          summary: worldName('Audit Anfrage ohne Kundenzuordnung', world.runId),
           requestNumber: testData`AUDIT-ANF-${world.runId}-OHNE`,
           callerName: 'Erika Mustermann',
           callerPhone: '030 1234567',
@@ -120,7 +121,7 @@ export const REQUESTS_OPENERS = {
         const { templateId } = await seedPublishedWorkTemplate({
           orgId: world.orgId,
           actorId: world.users.admin.id,
-          name: testData`Audit Vorlage Inbetriebnahme ${world.runId}`,
+          name: worldName('Audit Vorlage Inbetriebnahme', world.runId),
           targetType: 'job',
           items: [{ content: 'Anlage prüfen' }, { content: 'Inbetriebnahme dokumentieren' }],
         });

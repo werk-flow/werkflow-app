@@ -85,6 +85,11 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Before the name, so nobody fills in a form the server refuses. „Abonnement & Abrechnung“
+              is still a placeholder, so the sentence links nowhere. */}
+          <p className="text-sm text-muted-foreground">
+            Für eine neue Organisation brauchst du ein aktives Abonnement.
+          </p>
           <Field label="Name der Organisation" htmlFor="dialog-org-name" required error={nameError}>
             <Input
               id="dialog-org-name"

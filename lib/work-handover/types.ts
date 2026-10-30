@@ -7,6 +7,8 @@ export type WorkHandoverCommercialReadiness =
   Database['public']['Enums']['work_handover_commercial_readiness_state'];
 export type WorkHandoverPackageState = Database['public']['Enums']['work_handover_package_state'];
 
+export type WorkHandoverTarget = { targetType: WorkTargetType; targetId: string };
+
 export type WorkHandoverSourceOption = {
   key: string;
   kind: Database['public']['Enums']['work_handover_source_kind'];

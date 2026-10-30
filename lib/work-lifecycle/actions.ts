@@ -20,10 +20,16 @@ import { composeReadinessForTarget } from '@/lib/dispatch/readiness-target';
 import { formatBerlin } from '@/lib/utils';
 
 import {
+  loadEntityOptions,
+  loadOwnOwnerOption,
+  predecessorOptionsSchema,
+  toPredecessorOption,
+} from './options';
+
+import {
   parseWorkLifecycleSnapshot,
   WORK_BLOCKER_REASONS,
   WORK_DECLARED_DEPENDENCY_KINDS,
-  WORK_DECLARED_KIND_LABELS,
   WORK_DEPENDENCY_EFFECTS,
   WORK_EXECUTION_STATES,
   type WorkBlockerReason,
@@ -159,126 +165,6 @@ function mapWorkError(error: { message: string } | null): string {
     'work_with_history_cannot_be_deleted',
   ].find((code) => error?.message.includes(code));
   return known ?? 'work_action_failed';
-}
-
-const predecessorOptionsSchema = z
-  .array(z.object({ id: uuidSchema, number: z.string().nullable(), title: z.string() }))
-  .max(50);
-
-function toPredecessorOption(record: { id: string; number: string | null; title: string }): {
-  value: string;
-  label: string;
-} {
-  return { value: record.id, label: record.number ? `${record.number} · ${record.title}` : record.title };
-}
-
-async function loadEntityOptions(
-  organizationId: string,
-  userId: string,
-): Promise<Pick<WorkLifecycleSnapshot, 'ownOwnerId' | 'ownerOptions' | 'predecessorOptions'>> {
-  const admin = createSupabaseAdminClient();
-  const [employeesResult, jobsResult, projectsResult, instructionsResult] = await Promise.all([
-    // Every employee with an account is a possible owner; a cap here
-    // dropped owners, and the actor's own record, above 200 employees.
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('employee_records')
-          .select('id, user_id')
-          .eq('organization_id', organizationId)
-          .not('user_id', 'is', null)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    // The first records in natural number order, selected in the database.
-    admin.rpc('search_work_predecessor_options', {
-      p_organization_id: organizationId,
-      p_kind: 'job',
-      p_limit: 25,
-    }),
-    admin.rpc('search_work_predecessor_options', {
-      p_organization_id: organizationId,
-      p_kind: 'project',
-      p_limit: 25,
-    }),
-    admin
-      .from('job_instruction_items')
-      .select('id, content, job_id, project_id')
-      .eq('organization_id', organizationId)
-      .order('created_at')
-      .limit(25),
-  ]);
-  const jobOptions = predecessorOptionsSchema.safeParse(jobsResult.data);
-  const projectOptions = predecessorOptionsSchema.safeParse(projectsResult.data);
-  const optionsError =
-    employeesResult.error ??
-    jobsResult.error ??
-    projectsResult.error ??
-    instructionsResult.error ??
-    (jobOptions.success && projectOptions.success ? null : { code: 'malformed_options', message: '' });
-  if (optionsError || !jobOptions.success || !projectOptions.success) {
-    logReadFailure('loadEntityOptions: option read failed', {
-      code: optionsError?.code ?? 'malformed_options',
-      message: optionsError?.message ?? '',
-    });
-    throw new Error('work_options_load_failed');
-  }
-  const userIds = employeesResult.data.flatMap((employee) => (employee.user_id ? [employee.user_id] : []));
-  const profilesResult = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logReadFailure('loadEntityOptions: profile read failed', {
-      code: profilesResult.error.code,
-      message: profilesResult.error.message,
-    });
-    throw new Error('work_options_load_failed');
-  }
-  const profiles = new Map(profilesResult.data.map((profile) => [profile.id, profile]));
-  return {
-    ownOwnerId: employeesResult.data.find((employee) => employee.user_id === userId)?.id ?? null,
-    ownerOptions: employeesResult.data.map((employee) => {
-      const profile = employee.user_id ? profiles.get(employee.user_id) : undefined;
-      const name = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
-      return {
-        value: employee.id,
-        label: name || 'Unbenannte Person',
-      };
-    }),
-    predecessorOptions: {
-      job: jobOptions.data.map(toPredecessorOption),
-      project: projectOptions.data.map(toPredecessorOption),
-      instruction: (instructionsResult.data ?? []).map((instruction) => ({
-        value: instruction.id,
-        label: instruction.content,
-        description: instruction.job_id ? 'Auftragseintrag' : 'Projekteintrag',
-      })),
-      declared: Object.entries(WORK_DECLARED_KIND_LABELS).map(([value, label]) => ({ value, label })),
-    },
-  };
-}
-
-async function loadOwnOwnerOption(
-  organizationId: string,
-  userId: string,
-): Promise<Pick<WorkLifecycleSnapshot, 'ownOwnerId' | 'ownerOptions' | 'predecessorOptions'>> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (error) throw new Error('work_options_load_failed');
-  return {
-    ownOwnerId: data?.id ?? null,
-    ownerOptions: data ? [{ value: data.id, label: 'Ich' }] : [],
-    predecessorOptions: { job: [], project: [], instruction: [], declared: [] },
-  };
 }
 
 export async function getWorkLifecycleSnapshot(input: {

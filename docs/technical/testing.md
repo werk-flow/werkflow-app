@@ -121,6 +121,8 @@ Browser groups run against the recorded production build on the checkout's [port
 
 A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows still work. Its tests share the world.
 
+World and layout fixture names come from `worldName` (`lib/testing/seed-world-plan.ts`), whose fixed unbroken part makes a missing wrap fail every run.
+
 - A helper goes into its area module under `tests/golden/support/steps/` or `db/`, or `shared` when two areas need it. Never re-export one module from another.
 - To add a group, add `tests/golden/<slice>.spec.ts` or a row in `auditDefinitions` (SQL: `sqlDefinitions`). Declare its scopes, map its flows in `coverage-map.json`, and register its run-day offsets ([integrated-test-state.md](integrated-test-state.md)).
 
@@ -155,7 +157,7 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. [Per
 
 1. Open the failed browser group's `error-context.md`, screenshot and trace under `.agent-logs/playwright-runs/<run-key>/`. The verification log names the run key; `.agent-logs/test-server/` holds the server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
 2. Find the cause and fix it. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
-3. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its group id, or `<group-id>@<report-id>` for a failed attempt in that report. The command keeps the diagnosis beside its report: in the run manifest, or in the report's `diagnoses.json`. For a failed acceptance run it refuses a prevention without its tier, and a Tier 1 or 2 prevention that names no existing mechanism.
+3. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its group id, or `<group-id>@<report-id>` for a failed attempt in that report. The command keeps the diagnosis beside its report: in the run manifest, or in the report's `diagnoses.json`.
 4. Clean the retained world: `bun run test:runs cleanup <run-key>`.
 5. Run `bun run test:verify`. Repair mode selects the failed groups; their pass closes the repair.
 

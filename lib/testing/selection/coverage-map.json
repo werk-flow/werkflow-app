@@ -1090,9 +1090,18 @@
           "titles": [
             "Vertretung: die Aufmerksamkeit folgt der Delegation ohne Duplikate und endet mit ihr"
           ]
+        },
+        {
+          "file": "tests/ui-contracts/calendar-board.spec.ts",
+          "kind": "browser",
+          "description": "the Plantafel's absence bars paint above the day cells, and the phone list shows each absence under every day it covers",
+          "titles": [
+            "an absence bar paints above the day cells: its label is the hit-test target at its center",
+            "the phone list shows each absence under every day it covers"
+          ]
         }
       ],
-      "clauses": "Kalender: „Urlaub – Name\", „(angefragt)\" gestrichelt\n`A4-R03` belegt pending gestrichelt, approved sichtbar sowie Manager-alle/Beschäftigte-nur-eigene; Golden hält den neutralen Titel fest.",
+      "clauses": "Kalender: „Urlaub – Name\", „(angefragt)\" gestrichelt\n`A4-R03` belegt pending gestrichelt, approved sichtbar sowie Manager-alle/Beschäftigte-nur-eigene; Golden hält den neutralen Titel fest; die Komponentenverträge belegen, dass die Plantafel-Balken über den Tageszellen liegen und die Telefonliste jede Abwesenheit an jedem ihrer Tage zeigt.",
       "review": {
         "kind": "assertions-reviewed",
         "rationale": "Reviewed as row A4-05 of the retired Wave 1 audit ledger; the ledger file is in Git history."

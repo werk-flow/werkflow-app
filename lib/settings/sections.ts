@@ -1,4 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
+
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 import {
   Briefcase,
   Building2,
@@ -14,8 +16,20 @@ import {
 export type SettingsSectionGroup = 'account' | 'organization';
 type SettingsSectionScope = 'user' | 'organization';
 
+export type SettingsSectionSlug =
+  | 'profil'
+  | 'konto-sicherheit'
+  | 'auftraege-projekte'
+  | 'abonnement-abrechnung'
+  | 'dashboard'
+  | 'organisation'
+  | 'kalender'
+  | 'zeiterfassung'
+  | 'mitarbeiter'
+  | 'kunden';
+
 export type SettingsSection = {
-  slug: string;
+  slug: SettingsSectionSlug;
   label: string;
   shortDescription: string;
   description: string;
@@ -23,6 +37,12 @@ export type SettingsSection = {
   group: SettingsSectionGroup;
   scope: SettingsSectionScope;
   adminOnlyWrites?: boolean;
+  /**
+   * Organization settings only Admin and Büro see. An employee's settings hold
+   * their own profile, account, Aufträge columns and responsibilities; the
+   * nav hides the rest and its pages send an employee to the default section.
+   */
+  managersOnly?: boolean;
   implemented: boolean;
 };
 
@@ -48,6 +68,17 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     implemented: true,
   },
   {
+    slug: 'auftraege-projekte',
+    label: 'Aufträge & Projekte',
+    shortDescription: 'Persönliche Tabellenansicht',
+    description:
+      'Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.',
+    icon: Briefcase,
+    group: 'account',
+    scope: 'user',
+    implemented: true,
+  },
+  {
     slug: 'abonnement-abrechnung',
     label: 'Abonnement & Abrechnung',
     shortDescription: 'Plan und Abrechnung',
@@ -56,6 +87,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'account',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
     implemented: false,
   },
   {
@@ -67,6 +99,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
     implemented: false,
   },
   {
@@ -78,6 +111,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
     implemented: true,
   },
   {
@@ -89,6 +123,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
     implemented: false,
   },
   {
@@ -100,17 +135,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
-    implemented: true,
-  },
-  {
-    slug: 'auftraege-projekte',
-    label: 'Aufträge & Projekte',
-    shortDescription: 'Persönliche Tabellenansicht',
-    description:
-      'Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.',
-    icon: Briefcase,
-    group: 'organization',
-    scope: 'organization',
+    managersOnly: true,
     implemented: true,
   },
   {
@@ -133,13 +158,14 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     group: 'organization',
     scope: 'organization',
     adminOnlyWrites: true,
+    managersOnly: true,
     implemented: false,
   },
 ];
 
-export const DEFAULT_SETTINGS_SECTION_SLUG = 'profil';
+export const DEFAULT_SETTINGS_SECTION_SLUG: SettingsSectionSlug = 'profil';
 
-export function getSettingsHref(slug: string): string {
+export function getSettingsHref(slug: SettingsSectionSlug): string {
   return `/einstellungen/${slug}`;
 }
 
@@ -147,6 +173,14 @@ export function getSettingsSectionBySlug(slug: string): SettingsSection | null {
   return SETTINGS_SECTIONS.find((section) => section.slug === slug) ?? null;
 }
 
-export function getSettingsSectionsByGroup(group: SettingsSectionGroup): SettingsSection[] {
-  return SETTINGS_SECTIONS.filter((section) => section.group === group);
+/** Whether a member with this role sees the section in the nav and may open its page. */
+export function isSettingsSectionOpenTo(section: SettingsSection, role: OrgRole): boolean {
+  return !section.managersOnly || isManagerRole(role);
+}
+
+/** The sections of a nav group that a member with this role sees, in nav order. */
+export function getSettingsSectionsByGroup(group: SettingsSectionGroup, role: OrgRole): SettingsSection[] {
+  return SETTINGS_SECTIONS.filter(
+    (section) => section.group === group && isSettingsSectionOpenTo(section, role),
+  );
 }

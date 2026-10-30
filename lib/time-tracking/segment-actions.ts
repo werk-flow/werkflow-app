@@ -13,12 +13,19 @@ import { getBusinessTodayIso, getLocalDayEnd, getLocalDayStart } from '@/lib/dat
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { hasActiveSicknessOn } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Tables } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
 import { isPeriodClosedError } from './closed-periods';
-import { calculateTimeActivityTotals, toTimeActivitySelection, toTimeSegmentFact } from './segments';
+import {
+  calculateTimeActivityTotals,
+  toTimeActivitySelection,
+  toTimeSegmentFact,
+  UNUSUALLY_LONG_SESSION_MS,
+  type TimeSegmentFact,
+} from './segments';
 import { readResumeActivity } from './resume-activity';
-import { computeBreakdownForSettings } from './settings';
+import { computeBreakdownForSettings, type OrganizationTimeTrackingSettings } from './settings';
 import { hashTimeTransitionRequest } from './transition-hash';
 import { TIME_TRANSITION_ERROR_CODES } from './types';
 import type {
@@ -218,16 +225,8 @@ export async function getCanonicalClockState(
     logReadErrors('getCanonicalClockState: read failed', segmentError);
     return { success: false, error: 'fetch_failed' };
   }
-  const segments = (segmentData ?? []).map((row) => toTimeSegmentFact(row as never));
+  const segments = (segmentData ?? []).map((row) => toTimeSegmentFact(row));
   const current = [...segments].reverse().find((segment) => segment.endedAt === null) ?? null;
-  // Closed-block totals intentionally exclude the still-running segment.
-  const totals = calculateTimeActivityTotals(
-    segments,
-    dayStart,
-    dayEnd,
-    current ? new Date(current.startedAt) : now,
-  );
-  const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
   // The activity a break interrupted is read across the whole session, so a
   // break that crosses the Berlin midnight still resumes the right job.
   let resumeActivity: TimeActivitySelection | null = current ? toTimeActivitySelection(current) : null;
@@ -245,60 +244,104 @@ export async function getCanonicalClockState(
       ? activeJob
       : await readClockJobInfo(admin, organizationId, resumeActivity.jobId);
   if (!resumeJob.success) return resumeJob;
-  const activeJobInfo = activeJob.info;
-  const resumeJobInfo = resumeJob.info;
+
+  return {
+    success: true,
+    state: canonicalLiveClockState({
+      organizationId,
+      settings,
+      session,
+      segments,
+      current,
+      now,
+      dayStart,
+      dayEnd,
+      resumeActivity,
+      activeJobInfo: activeJob.info,
+      resumeJobInfo: resumeJob.info,
+    }),
+  };
+}
+
+/**
+ * The live clock state of an open canonical session from its segments of the
+ * Berlin day from `dayStart` to `dayEnd`. The totals count closed segments only; the running
+ * segment counts from its start on the client.
+ */
+function canonicalLiveClockState(input: {
+  organizationId: string;
+  settings: Pick<
+    OrganizationTimeTrackingSettings,
+    'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
+  >;
+  session: Pick<Tables<'time_sessions'>, 'id' | 'status' | 'started_at' | 'version' | 'recovery_reason'>;
+  segments: TimeSegmentFact[];
+  current: TimeSegmentFact | null;
+  now: Date;
+  dayStart: Date;
+  dayEnd: Date;
+  resumeActivity: TimeActivitySelection | null;
+  activeJobInfo: ClockJobInfo | null;
+  resumeJobInfo: ClockJobInfo | null;
+}): LiveClockState {
+  const { settings, session, segments, current, now } = input;
+  // Closed-block totals intentionally exclude the still-running segment.
+  const totals = calculateTimeActivityTotals(
+    segments,
+    input.dayStart,
+    input.dayEnd,
+    current ? new Date(current.startedAt) : now,
+  );
+  const breakdown = computeBreakdownForSettings(totals.presenceMinutes, totals.breakMinutes, settings);
   const derivedRecovery =
     session.status === 'recovery_required'
       ? session.recovery_reason
-      : now.getTime() - new Date(session.started_at).getTime() > 24 * 60 * 60 * 1000
+      : now.getTime() - new Date(session.started_at).getTime() > UNUSUALLY_LONG_SESSION_MS
         ? 'unusually_long'
         : null;
 
   return {
-    success: true,
-    state: {
-      organizationId,
-      breakMode: settings.breakMode,
-      autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
-      autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
-      status: current?.kind === 'break' ? 'on_break' : 'working',
-      isClockedIn: true,
-      isOnBreak: current?.kind === 'break',
-      clockInTime: session.started_at,
-      statusStartedAt: current?.startedAt ?? session.started_at,
-      breakStartTime: current?.kind === 'break' ? current.startedAt : null,
-      todayMinutes: totals.presenceMinutes,
-      workMinutes: breakdown.workMinutes,
-      breakMinutes: breakdown.breakMinutes,
-      timelineSegments: segments.flatMap((segment) =>
-        segment.endedAt === null
-          ? []
-          : [
-              {
-                type: segment.kind === 'break' ? ('break' as const) : ('work' as const),
-                minutes: Math.max(
-                  0,
-                  (new Date(segment.endedAt).getTime() - new Date(segment.startedAt).getTime()) / 60_000,
-                ),
-              },
-            ],
-      ),
-      activeJobId: current?.jobId ?? null,
-      activeJobInfo,
-      captureModel: 'canonical',
-      sessionId: session.id,
-      sessionVersion: session.version,
-      currentSegmentId: current?.id ?? null,
-      currentActivity: current ? toTimeActivitySelection(current) : null,
-      resumeActivity,
-      resumeJobInfo,
-      recoveryReason: derivedRecovery,
-      legacyOpen: false,
-      standbyMinutes: totals.standbyMinutes,
-      travelMinutes: totals.travelMinutes,
-      calloutMinutes: totals.calloutMinutes,
-      internalMinutes: totals.internalMinutes,
-      fetchedAt: now.toISOString(),
-    },
+    organizationId: input.organizationId,
+    breakMode: settings.breakMode,
+    autoBreakThresholdMinutes: settings.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: settings.autoBreakDurationMinutes,
+    status: current?.kind === 'break' ? 'on_break' : 'working',
+    isClockedIn: true,
+    isOnBreak: current?.kind === 'break',
+    clockInTime: session.started_at,
+    statusStartedAt: current?.startedAt ?? session.started_at,
+    breakStartTime: current?.kind === 'break' ? current.startedAt : null,
+    todayMinutes: totals.presenceMinutes,
+    workMinutes: breakdown.workMinutes,
+    breakMinutes: breakdown.breakMinutes,
+    timelineSegments: segments.flatMap((segment) =>
+      segment.endedAt === null
+        ? []
+        : [
+            {
+              type: segment.kind === 'break' ? ('break' as const) : ('work' as const),
+              minutes: Math.max(
+                0,
+                (new Date(segment.endedAt).getTime() - new Date(segment.startedAt).getTime()) / 60_000,
+              ),
+            },
+          ],
+    ),
+    activeJobId: current?.jobId ?? null,
+    activeJobInfo: input.activeJobInfo,
+    captureModel: 'canonical',
+    sessionId: session.id,
+    sessionVersion: session.version,
+    currentSegmentId: current?.id ?? null,
+    currentActivity: current ? toTimeActivitySelection(current) : null,
+    resumeActivity: input.resumeActivity,
+    resumeJobInfo: input.resumeJobInfo,
+    recoveryReason: derivedRecovery,
+    legacyOpen: false,
+    standbyMinutes: totals.standbyMinutes,
+    travelMinutes: totals.travelMinutes,
+    calloutMinutes: totals.calloutMinutes,
+    internalMinutes: totals.internalMinutes,
+    fetchedAt: now.toISOString(),
   };
 }

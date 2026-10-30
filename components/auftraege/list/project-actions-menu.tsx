@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ExternalLink, Trash2, Pencil } from 'lucide-react';
 
-import { ErrorText } from '@/components/ui/error-text';
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import {
@@ -136,8 +135,7 @@ export function ProjectActionsMenu({
               Diese Aktion kann nicht rückgängig gemacht werden.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <ErrorText>{error}</ErrorText>
-          <AlertDialogFooter>
+          <AlertDialogFooter error={error}>
             <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
             <AlertDialogAction
               onClick={(event) => {

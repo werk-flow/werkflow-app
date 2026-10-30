@@ -6,7 +6,7 @@ import {
   resolveBreakPolicyAtTimestamp,
   type OrganizationTimeTrackingSettings,
 } from './settings';
-import { calculateBreakSessions, calculateWorkSessions } from './validation';
+import { calculateBreakSessions, calculateWorkSessions } from './work-sessions';
 import {
   addLocalDays,
   formatBerlinLocalDate,

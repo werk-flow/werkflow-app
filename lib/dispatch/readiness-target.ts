@@ -12,6 +12,7 @@ import { assessPlanningOccurrences } from '@/lib/planning/server';
 import type { MaterializedOccurrence, PlanningAssignmentDraft, PlanningConflict } from '@/lib/planning/types';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { AdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { deriveTravelNotes, type TravelVisitFact } from './derivation';
 import {
@@ -20,7 +21,7 @@ import {
   type ReadinessFacts,
   type SiteReadinessFacts,
 } from './readiness';
-import { loadEmployeeNameFacts } from './server';
+import { dispatchReadFailed, loadEmployeeNameFacts, type EmployeeNameFacts } from './server';
 import type { ReadinessResult, TravelNote } from './types';
 
 async function loadSiteFacts(
@@ -58,55 +59,61 @@ async function loadMaterialFacts(jobId: string): Promise<MaterialReadinessFacts>
   };
 }
 
-// Travel facts for the target occurrence's assignees on its Berlin day. Null
-// means a read failed or overflowed: the caller must not report "no travel
-// conflicts" for a day it could not read completely.
-async function loadTravelNotesForOccurrence(
+type DayVisitRow = Pick<
+  Database['public']['Tables']['planning_occurrences']['Row'],
+  'id' | 'job_id' | 'start_at' | 'end_at'
+>;
+
+type DayVisitAssignmentRow = Pick<
+  Database['public']['Tables']['planning_occurrence_assignments']['Row'],
+  'occurrence_id' | 'employee_record_id'
+>;
+
+type DayVisitJobRow = Pick<
+  Database['public']['Tables']['jobs']['Row'],
+  'id' | 'title' | 'description' | 'site_id'
+>;
+
+function toTravelVisitFacts(input: {
+  assignments: DayVisitAssignmentRow[];
+  sameDayRows: DayVisitRow[];
+  jobs: Map<string, DayVisitJobRow>;
+  nameFacts: Map<string, EmployeeNameFacts>;
+  localDate: string;
+}): TravelVisitFact[] {
+  const { jobs, nameFacts, localDate } = input;
+  const sameDayRowById = new Map(input.sameDayRows.map((row) => [row.id, row]));
+  return input.assignments.flatMap((assignment) => {
+    const row = sameDayRowById.get(assignment.occurrence_id);
+    if (!row?.start_at || !row.end_at) return [];
+    const job = row.job_id ? jobs.get(row.job_id) : null;
+    const startLocal = formatBerlinLocalDateTime(row.start_at);
+    const endLocal = formatBerlinLocalDateTime(row.end_at);
+    const sameDay = endLocal.slice(0, 10) === startLocal.slice(0, 10);
+    return [
+      {
+        occurrenceId: row.id,
+        title: job?.title.trim() || job?.description?.trim() || 'Auftragsbesuch',
+        employeeRecordId: assignment.employee_record_id,
+        employeeName: nameFacts.get(assignment.employee_record_id)?.displayName ?? 'Unbenannt',
+        localDate,
+        startMinutes: Number(startLocal.slice(11, 13)) * 60 + Number(startLocal.slice(14, 16)),
+        endMinutes: sameDay ? Number(endLocal.slice(11, 13)) * 60 + Number(endLocal.slice(14, 16)) : 24 * 60,
+        siteId: job?.site_id ?? null,
+      },
+    ];
+  });
+}
+
+// The assignments and jobs of the day's visits. The day's visits are
+// organization-sized, so they go in id batches; the target's own assignees are
+// filtered in memory to keep one list per query.
+async function loadDayVisitAssignmentsAndJobs(
   admin: AdminClient,
   orgId: string,
-  occurrence: {
-    id: string;
-    start_at: string | null;
-    end_at: string | null;
-  },
-  employeeRecordIds: string[],
-): Promise<TravelNote[] | null> {
-  if (!occurrence.start_at || !occurrence.end_at || !employeeRecordIds.length) {
-    return [];
-  }
-  const localDate = formatBerlinLocalDateTime(occurrence.start_at).slice(0, 10);
-  const dayStart = resolveBerlinWallTime(`${localDate}T00:00`);
-  const dayEnd = resolveBerlinWallTime(`${addLocalDays(localDate, 1)}T00:00`);
-  if (!dayStart || !dayEnd) return [];
-  const travelReadFailed = (read: string, error: { message: string; code?: string }): null => {
-    logReadFailure(`loadTravelNotesForOccurrence: ${read} failed`, {
-      code: error.code ?? 'unknown',
-      message: error.message,
-    });
-    return null;
-  };
-  const { data: dayRows, error } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('planning_occurrences')
-        .select('id, job_id, start_at, end_at')
-        .eq('organization_id', orgId)
-        .eq('status', 'scheduled')
-        .eq('entry_kind', 'job_visit')
-        .gte('start_at', dayStart.instant.toISOString())
-        .lt('start_at', dayEnd.instant.toISOString())
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (error) return travelReadFailed('day occurrences', error);
-  const sameDayRows = dayRows.filter(
-    (row) => row.start_at && formatBerlinLocalDateTime(row.start_at).slice(0, 10) === localDate,
-  );
+  sameDayRows: DayVisitRow[],
+): Promise<{ assignments: DayVisitAssignmentRow[]; jobs: DayVisitJobRow[] } | null> {
   const rowIds = sameDayRows.map((row) => row.id);
-  if (!rowIds.length) return [];
-  // The day's visits are organization-sized, so they go in id batches; the
-  // target's own assignees are filtered in memory to keep one list per query.
   const [assignmentsResult, jobsResult] = await Promise.all([
     readInBatches(rowIds, (batch) =>
       readCompleteRows(
@@ -132,9 +139,54 @@ async function loadTravelNotesForOccurrence(
     ),
   ]);
   const visitError = assignmentsResult.error ?? jobsResult.error;
-  if (visitError) return travelReadFailed('assignments or jobs', visitError);
+  if (visitError)
+    return dispatchReadFailed('loadTravelNotesForOccurrence', 'assignments or jobs', visitError);
+  return { assignments: assignmentsResult.data, jobs: jobsResult.data };
+}
+
+// Travel facts for the target occurrence's assignees on its Berlin day. Null
+// means a read failed or overflowed: the caller must not report "no travel
+// conflicts" for a day it could not read completely.
+async function loadTravelNotesForOccurrence(
+  admin: AdminClient,
+  orgId: string,
+  occurrence: {
+    id: string;
+    start_at: string | null;
+    end_at: string | null;
+  },
+  employeeRecordIds: string[],
+): Promise<TravelNote[] | null> {
+  if (!occurrence.start_at || !occurrence.end_at || !employeeRecordIds.length) {
+    return [];
+  }
+  const localDate = formatBerlinLocalDateTime(occurrence.start_at).slice(0, 10);
+  const dayStart = resolveBerlinWallTime(`${localDate}T00:00`);
+  const dayEnd = resolveBerlinWallTime(`${addLocalDays(localDate, 1)}T00:00`);
+  if (!dayStart || !dayEnd) return [];
+  const { data: dayRows, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('planning_occurrences')
+        .select('id, job_id, start_at, end_at')
+        .eq('organization_id', orgId)
+        .eq('status', 'scheduled')
+        .eq('entry_kind', 'job_visit')
+        .gte('start_at', dayStart.instant.toISOString())
+        .lt('start_at', dayEnd.instant.toISOString())
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) return dispatchReadFailed('loadTravelNotesForOccurrence', 'day occurrences', error);
+  const sameDayRows = dayRows.filter(
+    (row) => row.start_at && formatBerlinLocalDateTime(row.start_at).slice(0, 10) === localDate,
+  );
+  if (!sameDayRows.length) return [];
+  const visitFacts = await loadDayVisitAssignmentsAndJobs(admin, orgId, sameDayRows);
+  if (!visitFacts) return null;
   const targetRecordIds = new Set(employeeRecordIds);
-  const assignments = assignmentsResult.data.filter((assignment) =>
+  const assignments = visitFacts.assignments.filter((assignment) =>
     targetRecordIds.has(assignment.employee_record_id),
   );
   const nameFacts = await loadEmployeeNameFacts(
@@ -143,29 +195,15 @@ async function loadTravelNotesForOccurrence(
     assignments.map((assignment) => assignment.employee_record_id),
   );
   if (!nameFacts) return null;
-  const jobs = new Map(jobsResult.data.map((job) => [job.id, job]));
-  const sameDayRowById = new Map(sameDayRows.map((row) => [row.id, row]));
-  const facts: TravelVisitFact[] = assignments.flatMap((assignment) => {
-    const row = sameDayRowById.get(assignment.occurrence_id);
-    if (!row?.start_at || !row.end_at) return [];
-    const job = row.job_id ? jobs.get(row.job_id) : null;
-    const startLocal = formatBerlinLocalDateTime(row.start_at);
-    const endLocal = formatBerlinLocalDateTime(row.end_at);
-    const sameDay = endLocal.slice(0, 10) === startLocal.slice(0, 10);
-    return [
-      {
-        occurrenceId: row.id,
-        title: job?.title.trim() || job?.description?.trim() || 'Auftragsbesuch',
-        employeeRecordId: assignment.employee_record_id,
-        employeeName: nameFacts.get(assignment.employee_record_id)?.displayName ?? 'Unbenannt',
-        localDate,
-        startMinutes: Number(startLocal.slice(11, 13)) * 60 + Number(startLocal.slice(14, 16)),
-        endMinutes: sameDay ? Number(endLocal.slice(11, 13)) * 60 + Number(endLocal.slice(14, 16)) : 24 * 60,
-        siteId: job?.site_id ?? null,
-      },
-    ];
-  });
-  return deriveTravelNotes(facts);
+  return deriveTravelNotes(
+    toTravelVisitFacts({
+      assignments,
+      sameDayRows,
+      jobs: new Map(visitFacts.jobs.map((job) => [job.id, job])),
+      nameFacts,
+      localDate,
+    }),
+  );
 }
 
 function toMaterializedOccurrence(occurrence: {

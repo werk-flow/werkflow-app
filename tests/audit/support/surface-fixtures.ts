@@ -12,7 +12,8 @@ import { isSurfaceAuditWorld } from './layout-fixtures';
  */
 export type SurfaceContext = {
   page: Page;
-  role: SurfaceRole;
+  /** Büro opens pages only for acceptance captures; the inventories name admin and employee. */
+  role: SurfaceRole | 'buero';
   world: TestWorld;
   businessDate: string;
   /** The concrete page the audit opened for the inventoried route. */

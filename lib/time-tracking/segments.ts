@@ -10,6 +10,13 @@ import type {
 } from './types';
 import { formatBerlinLocalDate, getLocalDayEnd } from '@/lib/date-time/berlin';
 
+/**
+ * A session open longer than this is unusually long: live capture asks for its
+ * recovery, and a time correction refuses open time over midnight beyond it.
+ * The database's segment transition holds the same 24 hours.
+ */
+export const UNUSUALLY_LONG_SESSION_MS = 24 * 60 * 60 * 1000;
+
 export type TimeSegmentFact = TimeActivitySelection & {
   id: string;
   sessionId: string;

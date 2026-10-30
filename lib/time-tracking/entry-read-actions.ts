@@ -18,18 +18,21 @@ import {
   type GetTimeEntriesResult,
   type AuditedEntryState,
   type GetTimeEntryAuditEventsResult,
+  type TimeEntryRow,
+  type TimeEntryStatus,
   toTimeEntries,
 } from './types';
 import { calculateWorkSessions, canViewEntries } from './helpers';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { formatBerlinLocalDate, getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getCanonicalTimeEntries } from './canonical-entries';
-import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
+import { readWindowProjections } from './entry-window-projections';
+import type { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import { applyApprovedTimeCorrections } from '@/lib/time-corrections/projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
 import { verifyCurrentMembership } from './action-access';
-import { isManagerRole } from '@/lib/roles';
+import { isManagerRole, type OrgRole } from '@/lib/roles';
 
 // The Server Actions that read time entries: a window of the organization,
 // one job and the jobs of one project.
@@ -71,6 +74,51 @@ function markPendingCorrections(
         }
       : entry;
   });
+}
+
+/**
+ * The window's entries the caller may see: legacy rows and canonical entries,
+ * with approved corrections applied, filtered to the window, subject and
+ * status, marked with their pending corrections and sorted by time.
+ */
+function visibleWindowEntries(input: {
+  legacyRows: TimeEntryRow[];
+  canonicalEntries: TimeEntry[];
+  applications: readonly TimeCorrectionApplicationProjection[];
+  pendingSources: readonly ProvisionalSource[];
+  callerRole: OrgRole;
+  callerId: string;
+  organizationId: string;
+  fromTimestamp: number;
+  toTimestamp: number;
+  userId: string | undefined;
+  status: TimeEntryStatus | undefined;
+}): TimeEntry[] {
+  const { callerRole, callerId, fromTimestamp, toTimestamp, userId, status } = input;
+  const visibleEntries = input.legacyRows.filter((entry) =>
+    canViewEntries(callerRole, entry.user_id, callerId),
+  );
+  const visibleCanonicalEntries = input.canonicalEntries.filter((entry) =>
+    canViewEntries(callerRole, entry.userId, callerId),
+  );
+  const projectedEntries = applyApprovedTimeCorrections(
+    [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
+    input.applications,
+    input.organizationId,
+  ).filter((entry) => {
+    const timestamp = Date.parse(entry.timestamp);
+    return (
+      canViewEntries(callerRole, entry.userId, callerId) &&
+      timestamp >= fromTimestamp &&
+      timestamp <= toTimestamp &&
+      (!userId || entry.userId === userId) &&
+      (!status || entry.status === status)
+    );
+  });
+  const officialEntries = markPendingCorrections(projectedEntries, input.pendingSources);
+  return officialEntries.sort(
+    (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+  );
 }
 
 export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<GetTimeEntriesResult> {
@@ -121,67 +169,39 @@ export async function getTimeEntries(rawParams: GetTimeEntriesParams): Promise<G
 
     // Every read below depends only on the authorized scope and date window.
     // Start legacy rows alongside projections, not one database roundtrip earlier.
-    const [legacyResult, canonicalResult, applications, provisionalProjection] = await Promise.all([
+    const [legacyResult, [canonicalResult, applications, provisionalProjection]] = await Promise.all([
       readCompleteRows((from, to) => query.range(from, to), LIST_ROW_CAP),
-      status && status !== 'approved'
-        ? Promise.resolve({ success: true as const, entries: [] })
-        : getCanonicalTimeEntries({
-            organizationId,
-            from: normalizedFrom,
-            to: normalizedTo,
-            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
-          }),
-      status && status !== 'approved'
-        ? Promise.resolve([])
-        : loadApprovedCorrectionProjection(admin, {
-            organizationId,
-            from: normalizedFrom,
-            to: normalizedTo,
-            ...(effectiveUserId ? { userIds: [effectiveUserId] } : {}),
-          }),
-      status
-        ? Promise.resolve({ entries: [], sources: [] })
-        : getProvisionalTimeCorrectionProjection({
-            organizationId,
-            from: normalizedFrom,
-            to: normalizedTo,
-            userId: userId ?? (callerRole === 'employee' ? user.id : undefined),
-          }),
+      readWindowProjections(admin, {
+        organizationId,
+        from: normalizedFrom,
+        to: normalizedTo,
+        status,
+        subjectUserId: userId ?? (callerRole === 'employee' ? user.id : undefined),
+        effectiveUserId,
+      }),
     ]);
     if (legacyResult.error) {
       logError('Error fetching time entries:', legacyResult.error);
       return { success: false, error: 'fetch_failed' };
     }
-    const visibleEntries = (legacyResult.data ?? []).filter((entry) =>
-      canViewEntries(callerRole, entry.user_id, user.id),
-    );
     if (!canonicalResult.success) {
       return { success: false, error: 'fetch_failed' };
     }
-    const canonicalEntries = canonicalResult.entries;
-    const visibleCanonicalEntries = canonicalEntries.filter((entry) =>
-      canViewEntries(callerRole, entry.userId, user.id),
-    );
-    const projectedEntries = applyApprovedTimeCorrections(
-      [...toTimeEntries(visibleEntries), ...visibleCanonicalEntries],
-      applications,
-      organizationId,
-    ).filter((entry) => {
-      const timestamp = Date.parse(entry.timestamp);
-      return (
-        canViewEntries(callerRole, entry.userId, user.id) &&
-        timestamp >= fromTimestamp &&
-        timestamp <= toTimestamp &&
-        (!userId || entry.userId === userId) &&
-        (!status || entry.status === status)
-      );
-    });
-    const officialEntries = markPendingCorrections(projectedEntries, provisionalProjection.sources);
     return {
       success: true,
-      entries: officialEntries.sort(
-        (left, right) => new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
-      ),
+      entries: visibleWindowEntries({
+        legacyRows: legacyResult.data ?? [],
+        canonicalEntries: canonicalResult.entries,
+        applications,
+        pendingSources: provisionalProjection.sources,
+        callerRole,
+        callerId: user.id,
+        organizationId,
+        fromTimestamp,
+        toTimestamp,
+        userId,
+        status,
+      }),
       provisionalEntries: provisionalProjection.entries,
     };
   } catch (error) {

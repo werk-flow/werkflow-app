@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { useSaveChangesSubmit } from '@/components/settings/use-save-changes-submit';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,7 +64,7 @@ export function AuftraegeColumnSettingsForm({
     });
   };
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     try {
       const result = await runSave(values);
 
@@ -109,7 +110,7 @@ export function AuftraegeColumnSettingsForm({
                 render={({ field, fieldState }) => (
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-medium">Tabellenspalten</legend>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground wrap-anywhere">
                       Diese Auswahl gilt nur für dich innerhalb von {organizationName}.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -140,7 +141,7 @@ export function AuftraegeColumnSettingsForm({
               <p className="text-sm text-muted-foreground">
                 Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben weiterhin immer sichtbar.
               </p>
-              <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={isSaving}>
                 {isSaving ? 'Speichert…' : 'Ansicht speichern'}
               </Button>
             </CardFooter>
