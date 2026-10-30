@@ -10,10 +10,12 @@ name: CI
 # serves it. Every job runs its groups through scripts/verify.ts, the same
 # engine as a local run. The required check is `Check` at the end of this file.
 on:
+  # No label event starts a run: a relabel on the same commit cancelled the run in progress and
+  # left the required `Check` failed or "Expected". The Unit job reads the PR's labels at run
+  # time, and list-growth.yml reruns it when the owner's `approved: list growth` label changes.
   pull_request:
     branches: [main]
-    # labeled and unlabeled: the owner's `approved: list growth` label changes what the unit job allows.
-    types: [opened, synchronize, reopened, labeled, unlabeled]
+    types: [opened, synchronize, reopened]
   push:
     branches: [main]
   workflow_call:
@@ -26,8 +28,11 @@ on:
 permissions:
   contents: read
 
+# A new commit's run cancels the PR's older run. A rerun takes a group of its own commit:
+# list-growth.yml may rerun a commit the PR has just left, and that rerun must neither cancel nor
+# replace the new head's run.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}
+  group: ci-${{ github.event.pull_request.number || github.sha }}-${{ inputs.full && 'full' || 'diff' }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.event.pull_request.head.sha || github.sha) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -101,15 +106,28 @@ jobs:
     name: Unit
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    # Reads the pull request's labels.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - run: bun scripts/verify.ts run --group unit:all
+      # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a
+      # shrink-only list"). Read now, not from the event, so a rerun after a label change sees it.
+      - name: Read the list growth approval
+        if: github.event_name == 'pull_request'
         env:
-          # The owner's approval for a shrink-only list to grow (docs/technical/testing.md, "Grow a shrink-only list").
-          SHRINK_ONLY_GROWTH_APPROVED: "${{ contains(github.event.pull_request.labels.*.name, 'approved: list growth') }}"
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          labels="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq '.[].name')"
+          if grep -qxF 'approved: list growth' <<< "$labels"; then approved=true; else approved=false; fi
+          echo "SHRINK_ONLY_GROWTH_APPROVED=$approved" >> "$GITHUB_ENV"
+          echo "approved: list growth = $approved"
+      - run: bun scripts/verify.ts run --group unit:all
       - uses: ./.github/actions/upload-evidence
         if: failure()
         with:
@@ -255,6 +273,8 @@ jobs:
 
   # The one required status check. It fails unless every job passed, or the
   # browser shards were skipped because the plan selected no browser group.
+  # `always()`, never `!cancelled()`: a cancelled run reports a failed Check,
+  # and a skipped Check would count as passed.
   check:
     name: Check
     if: always()

@@ -21,7 +21,6 @@
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
-    "lib/time-corrections/actions.ts": 1439,
     "lib/time-tracking/validation.ts": 806,
     "lib/vacation/actions.ts": 984,
     "lib/work-handover/actions.ts": 1100,
@@ -395,7 +394,6 @@
     "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
     "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/org/delete-org-dialog.tsx": { "DeleteOrgDialog": 98 },
     "components/organization/organization-context.tsx": { "OrganizationProvider": 146 },
     "components/otp-form.tsx": { "OTPForm": 124 },
     "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 99 },
@@ -445,7 +443,7 @@
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
     "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 86 },
-    "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 185 },
+    "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 172 },
     "components/settings/password-change-card.tsx": { "PasswordChangeCard": 96 },
     "components/settings/personnel-onboarding-template-settings.tsx": {
       "PersonnelOnboardingTemplateSettings": 178
@@ -665,15 +663,6 @@
       "getTimeAccountSettings": 130,
       "getTimeAccountSettings > readRegion#1": 125
     },
-    "lib/time-corrections/actions.ts": {
-      "loadSourceContext": 128,
-      "submitTimeCorrection": 108,
-      "resubmitTimeCorrection": 86,
-      "reviewTimeCorrectionsBatch": 87,
-      "hydrateCorrectionRequests": 118,
-      "getProvisionalTimeCorrectionProjection": 85
-    },
-    "lib/time-corrections/calendar-proposal.ts": { "proposeCalendarCorrection": 107 },
     "lib/time-tracking/approval-queue.ts": { "readPendingSessionQueue": 86 },
     "lib/time-tracking/calendar-blocks.ts": { "calculateCalendarWorkBlocks": 84 },
     "lib/time-tracking/canonical-entries.ts": { "getCanonicalTimeEntries": 151 },

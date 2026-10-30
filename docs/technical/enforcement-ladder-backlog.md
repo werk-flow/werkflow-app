@@ -30,7 +30,6 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 
 | Candidate | Gap | Target |
 | --- | --- | --- |
-| Reviewed separate writes | `ALLOWED_SEPARATE_WRITES` in `lib/conventions/related-writes.test.ts` is not a shrink-only list, so a new entry passes. | Tier 2: register it in `lib/testing/publication/shrink-only-lists.ts`. |
 | Calendar functions over the size limit | Their split changes recorded render behavior. | Tier 2: split them in the run that recalibrates the calendar references, and delete their entries. |
 | Type-assertion ratchet | `eslint-rules/type-assertion-ratchet.json` only stops growth. | Tier 2: shrink it file by file with typed selects, parsers and guards, until the off-block goes. |
 | Bare `toLocaleString` on a date | `timeOfDaySelectors` sees only calls with date options. | Tier 2: a typed lint rule that refuses `toLocaleString` on a `Date` outside `lib/utils.ts`. |
