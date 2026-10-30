@@ -272,7 +272,9 @@ async function measureDialog(dialog: Locator): Promise<DialogReport> {
     const footer = layer.querySelector(
       '[data-slot="dialog-footer"], [data-slot="alert-dialog-footer"], [data-slot="sheet-footer"]',
     );
-    const scrollBody = layer.querySelector<HTMLElement>('[data-slot="dialog-body"]');
+    const scrollBody = layer.querySelector<HTMLElement>(
+      '[data-slot="dialog-body"], [data-slot="alert-dialog-body"]',
+    );
     const previousScroll = scrollBody?.scrollTop ?? 0;
     if (scrollBody) scrollBody.scrollTop = scrollBody.scrollHeight;
     const outOfReach = Array.from(footer?.querySelectorAll<HTMLElement>('button, a[href]') ?? [])

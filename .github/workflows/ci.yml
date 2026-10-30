@@ -54,8 +54,12 @@ jobs:
         id: plan
         env:
           FULL: ${{ inputs.full }}
-          # A force push or a new branch has no readable `before`, so the plan fails open to a full run.
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # A pull request is checked out as GitHub's merge commit with the current main; its first
+          # parent is that main, so the plan diffs exactly the PR's own changes. The event's
+          # base.sha can predate main's newer commits, which then counted as the PR's own
+          # (2026-10-30: #85 ran all 82 groups for #77's heavy-slot.ts). A force push or a new branch has no
+          # readable `before`, so the plan fails open to a full run.
+          BASE: ${{ github.event_name == 'pull_request' && 'HEAD^1' || github.event.before }}
         run: |
           if test -n "$FULL"; then bun scripts/ci-plan.ts --full "$FULL"
           else bun scripts/ci-plan.ts --base "$BASE"; fi

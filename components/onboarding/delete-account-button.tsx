@@ -15,7 +15,6 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { ErrorText } from '@/components/ui/error-text';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { deleteAccount } from '@/lib/auth/actions';
@@ -78,9 +77,7 @@ export function DeleteAccountButton() {
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        <ErrorText>{error}</ErrorText>
-
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {

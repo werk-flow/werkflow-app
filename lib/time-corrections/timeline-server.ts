@@ -87,7 +87,7 @@ export async function checkCorrectionTimeline(
   ]);
   if (legacy.error || !canonical.success || !applications)
     return { success: false, error: 'correction_timeline_unavailable' };
-  const valid = validateCorrectionTimeline({
+  const refusal = validateCorrectionTimeline({
     organizationId,
     affectedDays,
     entries: [...toTimeEntries(legacy.data), ...canonical.entries],
@@ -102,7 +102,7 @@ export async function checkCorrectionTimeline(
       sources: candidate.sources,
     })),
   });
-  return valid ? revision : { success: false, error: 'correction_timeline_conflict' };
+  return refusal ? { success: false, error: refusal } : revision;
 }
 
 /** Reload the exact revisions about to be approved, and validate a batch as one composed change. */

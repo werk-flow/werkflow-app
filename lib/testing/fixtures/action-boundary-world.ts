@@ -3,6 +3,7 @@
 // replaced. Each fixture is its own process, so these module mocks never reach
 // another test file. Import the action under test only after `installActionWorld`.
 import { mock } from 'bun:test';
+import { getAuftraegePreferencesFromJson } from '@/lib/jobs/auftraege-table-columns';
 import { createInMemoryAdmin, type BeforeWrite, type InMemoryTables } from './in-memory-admin';
 
 type FixtureRole = 'admin' | 'buero' | 'employee';
@@ -82,6 +83,43 @@ function createAdminStandIn(world: ActionWorld, database: () => { from: (table: 
   };
 }
 
+/** A read the fixtures never reach; calling it fails the fixture. */
+function unusedRead(name: string) {
+  return (): never => {
+    throw new Error(`${name} is outside this fixture`);
+  };
+}
+
+/** The cached identity and organization reads, answered from the world. */
+function mockCachedReads(world: ActionWorld): void {
+  const asMembership = (membership: { orgId: string; role: FixtureRole }) => ({
+    ...membership,
+    name: 'Fixture company',
+    uniqueCode: 'ABCDEF',
+    joinedAt: '2026-01-01T00:00:00.000Z',
+  });
+  mock.module('@/lib/data/cached', () => ({
+    // Any tag name resolves to a string; `installActionWorld` replaces invalidation itself.
+    CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
+    getAuthenticatedUser: async () =>
+      world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' },
+    getCachedMemberships: async () => world.memberships.map(asMembership),
+    getCachedUser: unusedRead('getCachedUser'),
+    getCachedPrestartMemberships: async () =>
+      world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),
+    getCachedMemberCount: unusedRead('getCachedMemberCount'),
+    getCachedOrganizationSettings: unusedRead('getCachedOrganizationSettings'),
+    getCachedOrganizationCalendar: unusedRead('getCachedOrganizationCalendar'),
+    getCachedOrganizationUserPreferences: unusedRead('getCachedOrganizationUserPreferences'),
+    // A page reads the caller's column choice; the defaults stand in.
+    getOrganizationUserPreferencesForView: async () => ({
+      visibleColumns: getAuftraegePreferencesFromJson(null),
+      preferences: null,
+    }),
+    getCachedUserProfile: unusedRead('getCachedUserProfile'),
+  }));
+}
+
 export function installActionWorld(
   tables: InMemoryTables,
   columnDefaults: Record<string, () => FixtureRow> = {},
@@ -121,10 +159,6 @@ export function installActionWorld(
       return query;
     },
   });
-  const unusedRead = (name: string) => (): never => {
-    throw new Error(`${name} is outside this fixture`);
-  };
-
   mock.module('server-only', () => ({}));
   mock.module('next/headers', () => ({
     cookies: async () => ({
@@ -153,26 +187,6 @@ export function installActionWorld(
   }));
   // The caller-scoped client reads the same rows; row-level security is SQL-tested.
   mock.module('@/lib/supabase/server', () => ({ createSupabaseServerClient: async () => database() }));
-  const asMembership = (membership: { orgId: string; role: FixtureRole }) => ({
-    ...membership,
-    name: 'Fixture company',
-    uniqueCode: 'ABCDEF',
-    joinedAt: '2026-01-01T00:00:00.000Z',
-  });
-  mock.module('@/lib/data/cached', () => ({
-    // Any tag name resolves to a string; invalidation itself is replaced above.
-    CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
-    getAuthenticatedUser: async () =>
-      world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' },
-    getCachedMemberships: async () => world.memberships.map(asMembership),
-    getCachedUser: unusedRead('getCachedUser'),
-    getCachedPrestartMemberships: async () =>
-      world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),
-    getCachedMemberCount: unusedRead('getCachedMemberCount'),
-    getCachedOrganizationSettings: unusedRead('getCachedOrganizationSettings'),
-    getCachedOrganizationCalendar: unusedRead('getCachedOrganizationCalendar'),
-    getCachedOrganizationUserPreferences: unusedRead('getCachedOrganizationUserPreferences'),
-    getCachedUserProfile: unusedRead('getCachedUserProfile'),
-  }));
+  mockCachedReads(world);
   return world;
 }
