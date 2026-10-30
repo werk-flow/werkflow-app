@@ -10,7 +10,6 @@
     "lib/inventory/actions.ts": 1567,
     "lib/qualifications/actions.ts": 1228,
     "lib/security/server-action-authorization.test.ts": 959,
-    "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
     "lib/vacation/actions.ts": 984
   },
@@ -583,11 +582,6 @@
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
     "lib/testing/performance-calibration.ts": { "draftPerformanceBaselines": 98 },
     "lib/testing/spec-support/spec-independence.ts": { "specIndependenceProblems": 82 },
-    "lib/time-accounts/actions.ts": {
-      "loadPayrollExportSources": 165,
-      "buildPayrollValueRows": 134,
-      "buildAndStorePayrollExport": 170
-    },
     "lib/time-accounts/period-preparation.ts": {
       "resolvePoliciesForPeriod": 165,
       "startPeriodReferenceReads": 89,
@@ -596,16 +590,6 @@
       "pushEmployeeReviewFindings": 82,
       "pushEmployeeWarningFindings": 102,
       "pushEmployeeDailyResults": 115
-    },
-    "lib/time-accounts/queries.ts": {
-      "getTimeAccountOverview": 100,
-      "getTimeAccountOverview > readRegion#1": 97,
-      "getTimePeriods": 102,
-      "getTimePeriods > readRegion#1": 96,
-      "getTimePeriodDetail": 132,
-      "getTimePeriodDetail > readRegion#1": 121,
-      "getTimeAccountSettings": 130,
-      "getTimeAccountSettings > readRegion#1": 125
     },
     "lib/ui/dialog-discovery.ts": { "inspectLayer": 102 },
     "lib/vacation/actions.ts": {
