@@ -1,12 +1,22 @@
 name: release
 
 # The owner's release (docs/technical/environments.md, "Release and rollback").
-# The owner starts it, or an agent does when the owner asks for a release in
-# its thread: gh workflow run release. It releases the main commit it starts on,
-# and only after a green full run on exactly that commit: a nightly or manual
-# one it finds, or its own.
+# It starts on the schedule below, or by hand: gh workflow run release. It releases
+# the main commit it starts on, and only after a green full run on exactly that
+# commit: a nightly or manual one it finds, or its own. A scheduled run ends without
+# a change when main equals production or its newest full run is red
+# (.github/scripts/release-candidate.sh).
 on:
+  # One line per weekday release time, in Berlin time.
+  schedule:
+    - cron: '0 7 * * 1-5'
+      timezone: Europe/Berlin
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Decide like a scheduled run and stop before the full run and PROD
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -24,53 +34,23 @@ jobs:
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       verified: ${{ steps.candidate.outputs.verified }}
+      release: ${{ steps.candidate.outputs.release }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
 
-      # A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
-      # job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly or release run
-      # on main counts: their workflow files come from the commit itself, so no other branch
-      # can stand in for one. The newest completed full run decides; a later failure replaces a pass.
-      - name: Look for a green full run on the commit
+      - name: Decide the release
         id: candidate
-        # Explicit bash runs with pipefail, so a failed request inside the pipeline stops the step.
-        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$GITHUB_REF" = refs/heads/main \
-            || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
-          sha="$(git rev-parse HEAD)"
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          git merge-base --is-ancestor origin/production "$sha" \
-            || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
-          runs="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${sha}&branch=main&per_page=100" \
-            --jq '.workflow_runs[] | select(.head_branch == "main"
-              and (.path == ".github/workflows/nightly.yml" or .path == ".github/workflows/release.yml")
-              and (.event == "schedule" or .event == "workflow_dispatch")) | .id')"
-          # A failed request stops the gate: a missing run could be the newest, failed one.
-          latest="$(for run in $runs; do
-            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
-              --jq '.jobs[] | select(.name == "Full run / Check" and .status == "completed") | "\(.completed_at) \(.conclusion) \(.html_url)"' \
-              || exit 1
-          done | sort | tail -n 1)"
-          echo "Newest full run on ${sha}: ${latest:-none}"
-          if test "$(echo "$latest" | cut -d ' ' -f 2)" = success; then
-            echo "verified=true" >> "$GITHUB_OUTPUT"
-            echo "${sha} has a green full run; the release reuses it."
-          else
-            echo "verified=false" >> "$GITHUB_OUTPUT"
-            echo "${sha} has no green full run; the release runs the full suite first."
-          fi
-          echo "Releasing ${sha}:"
-          git log --oneline origin/production.."$sha"
+          MODE: ${{ inputs.dry_run && 'dry-run' || github.event_name == 'schedule' && 'scheduled' || 'manual' }}
+        run: bash .github/scripts/release-candidate.sh "$MODE"
 
   full:
     name: Full run
     needs: candidate
-    if: needs.candidate.outputs.verified != 'true'
+    if: needs.candidate.outputs.release == 'true' && needs.candidate.outputs.verified != 'true' && !inputs.dry_run
     # A called workflow gets no permission its caller lacks: ci.yml's Unit job asks for pull-requests.
     permissions:
       contents: read
@@ -87,9 +67,10 @@ jobs:
     # Ships only when the candidate had a green full run or its own full run passed.
     if: >-
       !cancelled() && needs.candidate.result == 'success'
+      && needs.candidate.outputs.release == 'true' && !inputs.dry_run
       && (needs.full.result == 'success' || (needs.full.result == 'skipped' && needs.candidate.outputs.verified == 'true'))
     # The PROD secrets live in this environment only, and only main may use it. By the owner's
-    # decision it has no approval step: a run is the release the owner asked for.
+    # decision it has no approval step: a scheduled or manual run is a release the owner wants.
     environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 45

@@ -10,7 +10,7 @@ import type { OrgRole } from '@/lib/roles';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type { TimeFindingDecision } from './presentation';
 
 // Who decides a time-account matter: the approval scope over a personnel

@@ -5,7 +5,7 @@ import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
-import { upsertInventoryItem } from '@/lib/inventory/actions';
+import { upsertInventoryItem } from '@/lib/inventory/catalog-actions';
 import { createCapability } from '@/lib/qualifications/actions';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import type { WorkTemplateDetail, WorkTemplateDraft } from '@/lib/work-templates/types';

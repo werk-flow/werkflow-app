@@ -109,3 +109,20 @@ The owner removed the need for one coordinator thread to stay alive. A watcher i
 
 1. Rule 8 now reads: a PR's own thread squash-merges it once the merge gate passes. A "full stop" PR, or one that changes `AGENTS.md`, waits until the owner has read and merged it. The owner may merge any PR. Nobody merges with an admin bypass.
 2. Rule 4 now reads: a level 2 PR whose `Check` is green and whose `sol-loop` approved gets the label `needs-coderabbit`. Its thread never requests the review itself. A scheduled queue outside any thread requests one review at a time, oldest label first, while the app's rate-limit window allows, and messages the PR's thread. [coderabbit.md](../technical/coderabbit.md#the-coderabbit-queue) owns the procedure.
+
+## Amendment 2026-10-29: a weekday release rhythm
+
+The owner decided on 2026-10-29 that releases follow a fixed weekday rhythm instead of waiting for a request:
+
+1. Rule 7 now reads: the `release` workflow runs every weekday at 07:00 Berlin and releases only when `main` moved since `production` and is green: its newest full run passed, or it has none yet and the release's own full run passes. Otherwise it changes nothing. A red full run is repaired on `main`, never rerun by the schedule. The owner or the coordinator thread may still start a release by hand ("release main"). More release times a weekday are one schedule line each.
+
+## Amendment 2026-10-30: the rhythm's conditions bind scheduled runs
+
+The conditions of the amendment above bind the scheduled run only. A release started by hand goes on as before: it ships `main`'s head after a green full run, its own when the newest is not green, also when `main` has not moved since `production`.
+
+## Amendment 2026-10-30: no Vercel deployments of pull-request branches
+
+On 2026-10-30 the Vercel account reached the Hobby plan's 100 deployments a day, almost all of them previews of pull-request branches, and the limit blocked the owner's other projects. The owner decided:
+
+1. Vercel deploys from Git only the `production` branch (`git.deploymentEnabled` in `vercel.json`). Pull-request branches never deploy, also after a Vercel Pro upgrade; this supersedes "pull-request previews stay automatic" in "Configuration this decision needs". `main` deploys only through `.github/workflows/staging.yml`, after DEV's migrations, as before.
+2. The owner tries a user-visible change on staging after its merge, not on a preview of its branch.
