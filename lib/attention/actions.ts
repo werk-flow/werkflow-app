@@ -16,7 +16,7 @@ import { resolveActionContext, type ActionContext } from '@/lib/org/action-conte
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatProfileName } from '@/lib/members/profile-name';
 import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
-import { getTimeCorrectionRequests } from '@/lib/time-corrections/actions';
+import { getTimeCorrectionRequests } from '@/lib/time-corrections/read-actions';
 import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { readPendingDispatchRecipients } from '@/lib/attention/pending-sets';

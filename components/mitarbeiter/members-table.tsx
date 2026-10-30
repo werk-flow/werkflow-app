@@ -20,7 +20,7 @@ import type { OrgMemberInfo } from '@/lib/members/actions';
 import type { OrgRole } from '@/lib/roles';
 import { ROLE_LABELS } from '@/lib/roles';
 import type { MemberStatus } from '@/hooks/use-member-status';
-import type { PersonnelListEntry } from '@/lib/personnel/actions';
+import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import { getAccessState, getEmploymentState } from '@/lib/personnel/types';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from '@/lib/time-tracking/types';

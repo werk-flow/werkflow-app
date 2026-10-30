@@ -24,10 +24,8 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { useBanner } from '@/components/ui/banner';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
-import {
-  publishPersonnelOnboardingTemplate,
-  type PersonnelOnboardingTemplateSummary,
-} from '@/lib/personnel/lifecycle-actions';
+import type { PersonnelOnboardingTemplateSummary } from '@/lib/personnel/lifecycle-rows';
+import { publishPersonnelOnboardingTemplate } from '@/lib/personnel/onboarding-actions';
 import type { PersonnelRequirementType } from '@/lib/personnel/lifecycle';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 

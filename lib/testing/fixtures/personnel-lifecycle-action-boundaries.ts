@@ -137,14 +137,16 @@ const {
   createPersonnelOnboardingPlan,
   exportPersonnelLifecycleManifest,
   finalizePersonnelDocumentUpload,
-  getPersonnelDocumentSignedUrl,
-  getPersonnelOnboardingTemplates,
-  publishPersonnelOnboardingTemplate,
-  savePersonnelOnboardingRequirement,
   setPersonnelAccessTransition,
   setPersonnelDocumentRelease,
   setPersonnelEmploymentTransition,
 } = await import('@/lib/personnel/lifecycle-actions');
+const {
+  getPersonnelOnboardingTemplates,
+  publishPersonnelOnboardingTemplate,
+  savePersonnelOnboardingRequirement,
+} = await import('@/lib/personnel/onboarding-actions');
+const { getPersonnelDocumentSignedUrl } = await import('@/lib/personnel/document-download-actions');
 
 const initialDatabase = databaseSnapshot(world);
 const notAuthorized = { success: false, error: 'not_authorized' };

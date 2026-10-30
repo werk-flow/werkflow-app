@@ -89,13 +89,15 @@ A local file never affects the deployed app. Never run the test harness or a des
 
 ## Which tool reaches what
 
+Agents never read PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. The hook below enforces this for MCP only; the [backlog](enforcement-ladder-backlog.md) records the shell and `env:prod` paths. For MCP, `.claude/hooks/refuse-production-mcp.ts` refuses, in Claude Code and Codex, a tool whose server name contains `prod` or whose input or server configuration names the production ref, and a Supabase server whose configuration names no other project or local stack. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape. Codex skips a new or changed project hook until someone trusts it: after a change to `.codex/hooks.json`, the owner runs `/hooks` in Codex on each machine and trusts it.
+
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
 | claude.ai Supabase connector | no | no | Organization-wide, so Claude Code denies it (`deniedMcpServers` in `~/.claude/settings.json`). |
 | MCP server `supabase` | never | read and write | `https://mcp.supabase.com/mcp?project_ref=mbkkzuqjbdvzelqvuzcn` |
-| MCP server `supabase-prod-readonly` | read only | never | `https://mcp.supabase.com/mcp?project_ref=jbgaqpdjauzoocplgdsn&read_only=true`, a read-only database user |
 | Supabase CLI (`bunx supabase`) | never link or push | yes | The repository links to the DEV ref only. |
-| Management API | yes | yes | Read-only production inspection and DEV configuration. |
+| `bun run prod:inspect` | structure only | compared | Read-only query endpoint with the owner's token. Prints pending migration versions, objects that differ from DEV by name, and advisor findings. Run it from an up-to-date `main`. |
+| Management API | through `prod:inspect` only | yes | DEV configuration and the `*:check` scripts. |
 | R2 tokens | prod bucket only | dev bucket only | Runtime tokens cannot manage bucket settings. `scripts/setup-r2-cors.ts` needs a bucket-admin token. |
 | Local stack | n/a | n/a | The Supabase CLI and psql through `docker exec`. MCP does not reach it. |
 
@@ -112,7 +114,7 @@ This section is the one home of the rule.
 7. Never edit the `*baseline*` repair migrations.
 8. A Realtime transport change has no expand step: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes.
 
-Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When parity matters, compare the live definitions with the procedure in the `supabase-live-workflow` skill.
+Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When parity matters, run `bun run prod:inspect`: it compares every app object's definition by hash and fails on drift once both ledgers match.
 
 ## Work in a worktree
 
@@ -121,6 +123,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/`. The main checkout serves on port 3000. A linked worktree derives its test-server and dev ports from its path (`lib/testing/runner/app-port.ts`).
 - Every worktree uses the one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
+- `bun run check:changed`, `bun run test:verify` and a local test server's build each take one of three machine-wide slots and print that they wait while all are busy (`lib/testing/runner/heavy-slot.ts`). Serving holds no slot. CI takes no slot.
 - `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 
@@ -130,7 +133,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
    On an Apple Silicon Mac, use `brew install colima docker`, then `colima start --cpu 4 --memory 6 --disk 40 --vm-type vz --mount-type virtiofs`. This starts Docker without Docker Desktop; run the repository's pinned CLI with `bunx supabase`. Increase the VM allocation only if measured stack use requires it. Keep the Mac awake on power with `caffeinate -s` while agents run.
 2. Export the owner's Supabase personal access token as `SUPABASE_ACCESS_TOKEN`, with a copy in every env backup (a switch overwrites `.env.local`). Never commit or print it.
 3. Get the DEV `.env.local` from the owner's password manager and copy it to `.env.dev-backup`. Add `.env.live-backup` only for production sessions.
-4. Add the two scoped Supabase MCP servers above to Claude Code (`claude mcp add --scope user --transport http <name> "<url>"`) and Codex (`[mcp_servers.<name>]` in `~/.codex/config.toml`). The owner signs in once per server and tool. The Vercel CLI, signed in as the owner, serves both.
+4. Add the DEV MCP server `supabase` above to Claude Code (`claude mcp add --scope user --transport http supabase "<url>"`) and Codex (`[mcp_servers.supabase]` in `~/.codex/config.toml`). The owner signs in once per tool. Never add a server for PROD. The Vercel CLI, signed in as the owner, serves both.
 5. Run `supabase start` and `supabase db reset`. Create `.env.local-stack-backup` from `supabase status`, then run `bun run env:local`.
 6. Run `bunx playwright install --with-deps chromium` once.
 7. CodeRabbit: `curl -fsSL https://cli.coderabbit.ai/install.sh | sh` (into `~/.local/bin`). The owner signs in once with `coderabbit auth login`. `bun run review:doctor` confirms both. This is the only time an agent installs CodeRabbit.
@@ -138,10 +141,10 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 ## Work on production
 
-- Reads: the connector, the MCP server or the Management API, read-only.
+- Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
 - Staging: a PR merged to `main` reaches DEV's schema, then staging.
 - Release: only through the `release` workflow, which the owner starts or asks an agent to start.
-- A production-local session: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
+- A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) recreates the demo organizations and refuses the beta partner's. Each run gives the demo members a generated password. To sign in to `bun run dev` as one, seed DEV with `DEMO_MEMBER_PASSWORD` set to a password you choose and run `bun run env:dev` first. PROD refuses a chosen password.
 
 ## Release and rollback

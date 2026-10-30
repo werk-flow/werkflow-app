@@ -5,7 +5,7 @@ import { ResponsibilitySettings } from '@/components/settings/responsibility-set
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { PersonnelOnboardingTemplateSettings } from '@/components/settings/personnel-onboarding-template-settings';
-import { getPersonnelOnboardingTemplates } from '@/lib/personnel/lifecycle-actions';
+import { getPersonnelOnboardingTemplates } from '@/lib/personnel/onboarding-actions';
 
 export default async function EmployeesSettingsPage(): Promise<ReactElement> {
   const [result, templatesResult] = await Promise.all([

@@ -18,7 +18,7 @@ import { isManagerRole, type OrgRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { logError } from '@/lib/logging';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
-import { getPersonnelRecords } from '@/lib/personnel/actions';
+import { getPersonnelRecords } from '@/lib/personnel/record-read-actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
 import { getQualificationWorkspace } from '@/lib/qualifications/actions';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
