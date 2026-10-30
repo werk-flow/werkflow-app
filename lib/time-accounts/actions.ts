@@ -9,14 +9,20 @@ import { logError } from '@/lib/logging';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { putStorageObject, discardStorageObjects, createSignedDownloadUrl } from '@/lib/storage/r2';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { isJsonRecord, toJson } from '@/lib/supabase/json';
+import { Constants } from '@/lib/supabase/database.types';
+import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { readCompleteRows } from '@/lib/supabase/query-batches';
 import { readTimeAccountManagement, requireAuth } from './access';
 import { failureCode, parseStrictInteger, refuseNonManager } from './action-support';
 import { DEFAULT_CREDIT_RULES, DEFAULT_SUPPLEMENT_RULES, DEFAULT_WARNING_RULES } from './defaults';
-import { buildPayrollExportPackage, distributeCreditedMinutes } from './export';
+import type { buildPayrollExportPackage } from './export';
 import { type ClosePeriodResult, isTimeAccountFailureCode, type TimeAccountActionResult } from './messages';
+import {
+  buildReservedPayrollExportPackage,
+  failReservedExportOnError,
+  reservePayrollExport,
+} from './payroll-export-server';
 import {
   buildTimePeriodPreparation,
   getBerlinInstant,
@@ -25,13 +31,7 @@ import {
   requirePeriodRows,
 } from './period-preparation';
 import { readOpenPeriodSessions } from './queries';
-import type {
-  PayrollExportAllocationRow,
-  PayrollExportCorrectionRow,
-  PayrollExportValueRow,
-  PayrollValueKind,
-} from './types';
-import { isValidOptionalIsoDateRange, requireJsonRecord, requirePresent } from './validation';
+import { isValidOptionalIsoDateRange } from './validation';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { optionalFormText, parseFormData } from '@/lib/validation/form-data';
@@ -71,6 +71,7 @@ const closeTimePeriodFormSchema = z.object({ periodId: id });
 const reopenTimePeriodFormSchema = z.object({ periodId: id, reason: text(2000) });
 const generatePayrollExportFormSchema = z.object({ periodId: id });
 const downloadPayrollExportFormSchema = z.object({ exportId: id });
+const adjustmentKindSchema = z.enum(Constants.public.Enums.time_account_adjustment_kind);
 
 /**
  * The caller's time-account rights. `managementReadFailed` marks a failed
@@ -289,6 +290,7 @@ export async function submitTimeAccountAdjustment(
   const accountId = String(formData.get('accountId') ?? '');
   const expectedVersion = parseStrictInteger(formData.get('expectedVersion'));
   const adjustmentKind = String(formData.get('adjustmentKind') ?? '');
+  const parsedAdjustmentKind = adjustmentKindSchema.safeParse(adjustmentKind);
   const minutes = parseStrictInteger(formData.get('minutes'));
   const effectiveDate = String(formData.get('effectiveDate') ?? '');
   const reason = String(formData.get('reason') ?? '');
@@ -297,7 +299,7 @@ export async function submitTimeAccountAdjustment(
     expectedVersion === null ||
     minutes === null ||
     minutes === 0 ||
-    !['manual_adjustment', 'expiry', 'payout'].includes(adjustmentKind) ||
+    !parsedAdjustmentKind.success ||
     !isValidIsoDate(effectiveDate) ||
     !reason.trim()
   )
@@ -315,7 +317,7 @@ export async function submitTimeAccountAdjustment(
     p_organization_id: context.orgId,
     p_account_id: accountId,
     p_expected_account_version: expectedVersion,
-    p_adjustment_kind: adjustmentKind as 'manual_adjustment' | 'expiry' | 'payout',
+    p_adjustment_kind: parsedAdjustmentKind.data,
     p_minutes: minutes,
     p_effective_date: effectiveDate,
     p_reason: reason,
@@ -565,458 +567,6 @@ async function saveDefaultPayrollMapping(context: { orgId: string; userId: strin
   if (error) throw error;
 }
 
-/** Account events that the payroll export carries as value rows. */
-const PAYROLL_ACCOUNT_EVENT_KINDS = [
-  'opening_balance',
-  'manual_adjustment',
-  'expiry',
-  'payout',
-] as const satisfies readonly PayrollValueKind[];
-
-function isPayrollAccountEventKind(kind: string): kind is (typeof PAYROLL_ACCOUNT_EVENT_KINDS)[number] {
-  return PAYROLL_ACCOUNT_EVENT_KINDS.some((payrollKind) => payrollKind === kind);
-}
-
-async function loadPayrollExportSources(input: {
-  admin: ReturnType<typeof createSupabaseAdminClient>;
-  context: { orgId: string };
-  calculationId: string;
-  closeVersionId: string;
-  mappingVersionId: string;
-  periodStartDate: string;
-  periodEndDate: string;
-}) {
-  const { admin, context, calculationId, closeVersionId, mappingVersionId, periodStartDate, periodEndDate } =
-    input;
-  const [
-    { data: calculation },
-    { data: closeVersion },
-    { data: mappingVersion },
-    { data: employeeMappings },
-    { data: codeMappings },
-    { data: employeeResults },
-  ] = await Promise.all([
-    admin
-      .from('time_period_calculations')
-      .select('*')
-      .eq('organization_id', context.orgId)
-      .eq('id', calculationId)
-      .single(),
-    admin
-      .from('time_period_close_versions')
-      .select('*')
-      .eq('organization_id', context.orgId)
-      .eq('id', closeVersionId)
-      .single(),
-    admin
-      .from('payroll_mapping_versions')
-      .select('*')
-      .eq('organization_id', context.orgId)
-      .eq('id', mappingVersionId)
-      .single(),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('payroll_employee_mappings')
-          .select('*')
-          .eq('organization_id', context.orgId)
-          .eq('mapping_version_id', mappingVersionId)
-          .order('id')
-          .range(from, to),
-      PERIOD_SOURCE_ROW_CAP,
-    ).then(requirePeriodRows),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('payroll_code_mappings')
-          .select('*')
-          .eq('organization_id', context.orgId)
-          .eq('mapping_version_id', mappingVersionId)
-          .order('id')
-          .range(from, to),
-      PERIOD_SOURCE_ROW_CAP,
-    ).then(requirePeriodRows),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('time_period_employee_results')
-          .select('*')
-          .eq('organization_id', context.orgId)
-          .eq('calculation_id', calculationId)
-          .order('id')
-          .range(from, to),
-      PERIOD_SOURCE_ROW_CAP,
-    ).then(requirePeriodRows),
-  ]);
-  if (!calculation || !closeVersion || !mappingVersion) throw new Error('export_context_missing');
-  const employeeResultIds = (employeeResults ?? []).map((result) => result.id);
-  const employeeIds = (employeeResults ?? []).map((result) => result.employee_record_id);
-  const [
-    { data: dailyResults },
-    { data: resultSources },
-    { data: accountEvents },
-    { data: correctionRequests },
-  ] = await Promise.all([
-    readInBatches(employeeResultIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_period_daily_results')
-            .select('*')
-            .eq('organization_id', context.orgId)
-            .in('employee_result_id', [...batch])
-            .order('id')
-            .range(from, to),
-        PERIOD_SOURCE_ROW_CAP,
-      ),
-    ).then(requirePeriodRows),
-    readInBatches(employeeResultIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_period_result_sources')
-            .select('*')
-            .eq('organization_id', context.orgId)
-            .in('employee_result_id', [...batch])
-            .order('id')
-            .range(from, to),
-        PERIOD_SOURCE_ROW_CAP,
-      ),
-    ).then(requirePeriodRows),
-    readInBatches(employeeIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_account_events')
-            .select('*')
-            .eq('organization_id', context.orgId)
-            .in('employee_record_id', [...batch])
-            .gte('effective_date', periodStartDate)
-            .lte('effective_date', periodEndDate)
-            .in('event_kind', [...PAYROLL_ACCOUNT_EVENT_KINDS])
-            .order('id')
-            .range(from, to),
-        PERIOD_SOURCE_ROW_CAP,
-      ),
-    ).then(requirePeriodRows),
-    readInBatches(employeeIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_correction_requests')
-            .select('id, subject_employee_record_id')
-            .eq('organization_id', context.orgId)
-            .in('subject_employee_record_id', [...batch])
-            .order('id')
-            .range(from, to),
-        PERIOD_SOURCE_ROW_CAP,
-      ),
-    ).then(requirePeriodRows),
-  ]);
-  const correctionRequestIds = (correctionRequests ?? []).map((request) => request.id);
-  const { data: correctionApplications } = await readInBatches(correctionRequestIds, (batch) =>
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('time_correction_applications')
-          .select('id, request_id, revision, source_fingerprint, applied_snapshot')
-          .eq('organization_id', context.orgId)
-          .in('request_id', [...batch])
-          .order('id')
-          .range(from, to),
-      PERIOD_SOURCE_ROW_CAP,
-    ),
-  ).then(requirePeriodRows);
-  return {
-    calculation,
-    closeVersion,
-    mappingVersion,
-    employeeMappings,
-    codeMappings,
-    employeeResults,
-    employeeIds,
-    dailyResults,
-    resultSources,
-    accountEvents,
-    correctionRequests,
-    correctionApplications,
-  };
-}
-
-type PayrollExportSources = Awaited<ReturnType<typeof loadPayrollExportSources>>;
-type PayrollEmployeeResult = PayrollExportSources['employeeResults'][number];
-type PayrollExternalReferences = Map<
-  string,
-  PayrollExportSources['employeeMappings'][number]['external_employee_reference']
->;
-
-function buildPayrollValueRows(input: {
-  calculation: { version: number };
-  period: { period_end_date: string };
-  dailyResults: PayrollExportSources['dailyResults'];
-  employeeResults: PayrollExportSources['employeeResults'];
-  accountEvents: PayrollExportSources['accountEvents'];
-  resultById: Map<string, PayrollEmployeeResult>;
-  resultByEmployeeRecordId: Map<string, PayrollEmployeeResult>;
-  externalByEmployee: PayrollExternalReferences;
-  outputCodeFor: (valueKind: string, activityKind?: string) => string;
-}): PayrollExportValueRow[] {
-  const { calculation, period, dailyResults, employeeResults, accountEvents } = input;
-  const { resultById, resultByEmployeeRecordId, externalByEmployee, outputCodeFor } = input;
-  const valueRows: PayrollExportValueRow[] = [];
-  const appendValue = (input: {
-    rowId: string;
-    employeeRecordId: string;
-    localDate: string;
-    valueKind: PayrollValueKind;
-    activityKind?: string;
-    sourceSeconds?: number;
-    minutes: number;
-    roundingDeltaSeconds?: number;
-    policyVersionId: string;
-  }): void => {
-    if (input.minutes === 0 && (input.sourceSeconds ?? 0) === 0) return;
-    valueRows.push({
-      rowId: input.rowId,
-      employeeRecordId: input.employeeRecordId,
-      externalEmployeeReference: requirePresent(
-        externalByEmployee.get(input.employeeRecordId),
-        'payroll_employee_mapping_missing',
-      ),
-      localDate: input.localDate,
-      valueKind: input.valueKind,
-      outputCode: outputCodeFor(input.valueKind, input.activityKind),
-      sourceSeconds: input.sourceSeconds ?? 0,
-      minutes: input.minutes,
-      roundingDeltaSeconds: input.roundingDeltaSeconds ?? 0,
-      policyVersionId: input.policyVersionId,
-      calculationVersion: calculation.version,
-    });
-  };
-  for (const daily of dailyResults ?? []) {
-    const result = resultById.get(daily.employee_result_id);
-    if (!result) continue;
-    const common = {
-      employeeRecordId: daily.employee_record_id,
-      localDate: daily.local_date,
-      policyVersionId: result.policy_version_id ?? '',
-    };
-    appendValue({
-      ...common,
-      rowId: `${daily.id}:source`,
-      valueKind: 'source_attendance',
-      sourceSeconds: Number(daily.source_seconds),
-      minutes: daily.source_minutes,
-      roundingDeltaSeconds: Number(daily.rounding_delta_seconds),
-    });
-    appendValue({
-      ...common,
-      rowId: `${daily.id}:effective`,
-      valueKind: 'effective_attendance',
-      sourceSeconds: Number(daily.credited_seconds),
-      minutes: daily.credited_minutes,
-    });
-    appendValue({
-      ...common,
-      rowId: `${daily.id}:credited`,
-      valueKind: 'credited_activity',
-      activityKind: daily.activity_kind,
-      sourceSeconds: Number(daily.source_seconds),
-      minutes: daily.credited_minutes,
-      roundingDeltaSeconds: Number(daily.rounding_delta_seconds),
-    });
-    for (const [valueKind, minutes] of [
-      ['vacation', daily.vacation_minutes],
-      ['sickness', daily.sickness_minutes],
-      ['night_supplement', daily.night_minutes],
-      ['sunday_supplement', daily.sunday_minutes],
-      ['public_holiday_supplement', daily.public_holiday_minutes],
-    ] as const)
-      appendValue({
-        ...common,
-        rowId: `${daily.id}:${valueKind}`,
-        valueKind,
-        minutes,
-      });
-  }
-  for (const result of employeeResults ?? []) {
-    const common = {
-      employeeRecordId: result.employee_record_id,
-      localDate: period.period_end_date,
-      policyVersionId: result.policy_version_id ?? '',
-    };
-    appendValue({
-      ...common,
-      rowId: `${result.id}:target`,
-      valueKind: 'target',
-      minutes: result.target_minutes,
-    });
-    appendValue({
-      ...common,
-      rowId: `${result.id}:overtime`,
-      valueKind: 'overtime',
-      minutes: result.overtime_candidate_minutes,
-    });
-    appendValue({
-      ...common,
-      rowId: `${result.id}:opening`,
-      valueKind: 'opening_balance',
-      minutes: result.previous_balance_minutes,
-    });
-    appendValue({
-      ...common,
-      rowId: `${result.id}:closing`,
-      valueKind: 'closing_balance',
-      minutes: result.closing_balance_minutes,
-    });
-  }
-  for (const event of accountEvents ?? []) {
-    if (!isPayrollAccountEventKind(event.event_kind)) continue;
-    const result = resultByEmployeeRecordId.get(event.employee_record_id);
-    appendValue({
-      rowId: `${event.id}:${event.event_kind}`,
-      employeeRecordId: event.employee_record_id,
-      localDate: event.effective_date,
-      valueKind: event.event_kind,
-      minutes: event.minutes,
-      policyVersionId: result?.policy_version_id ?? '',
-    });
-  }
-  return valueRows;
-}
-
-function buildPayrollAllocationRows(input: {
-  resultSources: PayrollExportSources['resultSources'];
-  dailyById: Map<string, PayrollExportSources['dailyResults'][number]>;
-  resultById: Map<string, PayrollEmployeeResult>;
-  externalByEmployee: PayrollExternalReferences;
-}): PayrollExportAllocationRow[] {
-  const { resultSources, dailyById, resultById, externalByEmployee } = input;
-  const allocationMinutesBySourceId = new Map<string, number>();
-  const sourcesByDailyResultId = new Map<string, Array<NonNullable<typeof resultSources>[number]>>();
-  for (const source of resultSources ?? []) {
-    if (!source.daily_result_id) continue;
-    const list = sourcesByDailyResultId.get(source.daily_result_id) ?? [];
-    list.push(source);
-    sourcesByDailyResultId.set(source.daily_result_id, list);
-  }
-  for (const [dailyResultId, dailySources] of sourcesByDailyResultId) {
-    const daily = dailyById.get(dailyResultId);
-    if (!daily) continue;
-    const distribution = distributeCreditedMinutes(
-      dailySources.map((source) => ({
-        id: source.id,
-        sourceSeconds: Number(
-          requireJsonRecord(source.source_snapshot, 'period_source_snapshot_invalid').sourceSeconds ?? 0,
-        ),
-      })),
-      daily.credited_minutes,
-    );
-    for (const [sourceId, minutes] of distribution) allocationMinutesBySourceId.set(sourceId, minutes);
-  }
-  const allocationRows: PayrollExportAllocationRow[] = (resultSources ?? []).flatMap((source) => {
-    if (!source.daily_result_id) return [];
-    const daily = dailyById.get(source.daily_result_id);
-    const result = resultById.get(source.employee_result_id);
-    if (!daily || !result) return [];
-    const snapshot = requireJsonRecord(source.source_snapshot, 'period_source_snapshot_invalid');
-    const sourceSeconds = Number(snapshot.sourceSeconds ?? 0);
-    const creditedMinutes = allocationMinutesBySourceId.get(source.id) ?? 0;
-    return [
-      {
-        rowId: source.id,
-        employeeRecordId: result.employee_record_id,
-        externalEmployeeReference: requirePresent(
-          externalByEmployee.get(result.employee_record_id),
-          'payroll_employee_mapping_missing',
-        ),
-        localDate: daily.local_date,
-        activityKind: daily.activity_kind,
-        sourceReference: `${source.source_kind}:${source.source_id ?? source.source_key}`,
-        sourceSeconds,
-        creditedMinutes,
-        allocationKind: String(snapshot.allocationKind ?? 'unallocated'),
-        jobNumber: String(snapshot.jobNumber ?? ''),
-        projectNumber: String(snapshot.projectNumber ?? ''),
-      },
-    ];
-  });
-  return allocationRows;
-}
-
-function buildPayrollCorrectionRows(input: {
-  correctionApplications: PayrollExportSources['correctionApplications'];
-  requestEmployeeById: Map<
-    string,
-    PayrollExportSources['correctionRequests'][number]['subject_employee_record_id']
-  >;
-  period: { period_start_date: string; period_end_date: string };
-}): PayrollExportCorrectionRow[] {
-  const { correctionApplications, requestEmployeeById, period } = input;
-  // Facts carry any ISO offset; compare instants, not strings. Start inclusive, end exclusive.
-  const periodStart = Date.parse(getBerlinInstant(`${period.period_start_date}T00:00`));
-  const periodEnd = Date.parse(getBerlinInstant(`${addLocalDays(period.period_end_date, 1)}T00:00`));
-  const correctionRows: PayrollExportCorrectionRow[] = (correctionApplications ?? []).flatMap(
-    (application) => {
-      const employeeRecordId = requestEmployeeById.get(application.request_id);
-      const snapshot: unknown = application.applied_snapshot;
-      const facts: unknown[] = isJsonRecord(snapshot) && Array.isArray(snapshot.facts) ? snapshot.facts : [];
-      const affectsPeriod = facts.some((fact) => {
-        if (!isJsonRecord(fact) || typeof fact.timestamp !== 'string') return false;
-        const instant = Date.parse(fact.timestamp);
-        return instant >= periodStart && instant < periodEnd;
-      });
-      if (!employeeRecordId || !affectsPeriod) return [];
-      return [
-        {
-          rowId: application.id,
-          employeeRecordId,
-          requestId: application.request_id,
-          revision: Number(application.revision),
-          applicationId: application.id,
-          sourceFingerprint: application.source_fingerprint,
-        },
-      ];
-    },
-  );
-  return correctionRows;
-}
-
-// A safe reason for the failed export row: a thrown code, or the provider's
-// error code. A message that is not a code (a database or storage message can
-// carry row values or keys) becomes generation_failed.
-function exportFailureReason(error: unknown): string {
-  if (error instanceof Error && /^[a-z][a-z0-9_]*$/.test(error.message)) return error.message;
-  if (typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string')
-    return `provider_error:${error.code}`;
-  return 'generation_failed';
-}
-
-// Runs the generation of a reserved export. Any failure marks the export
-// failed and rethrows, so no export stays generating; one whose process
-// stopped altogether fails at the next reservation of its period
-// (reserve_payroll_export).
-async function failReservedExportOnError(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  context: { orgId: string; userId: string },
-  exportId: string,
-  generate: () => Promise<void>,
-): Promise<void> {
-  try {
-    await generate();
-  } catch (error) {
-    const { error: failError } = await admin.rpc('fail_payroll_export', {
-      p_actor_id: context.userId,
-      p_organization_id: context.orgId,
-      p_export_id: exportId,
-      p_failure_reason: exportFailureReason(error),
-      p_operation_id: randomUUID(),
-    });
-    if (failError) logError('generatePayrollExport: fail_payroll_export failed', failError);
-    throw error;
-  }
-}
-
 // Stores the package, records its document, and finalizes the export; any
 // failure removes the document row, discards the stored object, and rethrows.
 async function storePayrollExportPackage(input: {
@@ -1111,169 +661,11 @@ async function buildAndStorePayrollExport(
   periodId: string,
 ): Promise<void> {
   const admin = createSupabaseAdminClient();
-  const { data: period, error: periodError } = await loggedRead(
-    'generatePayrollExport: time_periods read failed',
-    admin
-      .from('time_periods')
-      .select('*')
-      .eq('id', periodId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
-  if (periodError) throw new Error('load_failed');
-  if (!period?.current_calculation_id || !period.current_close_version_id)
-    throw new Error('period_not_closed');
-  const { data: profile, error: profileError } = await loggedRead(
-    'generatePayrollExport: payroll_mapping_profiles read failed',
-    admin
-      .from('payroll_mapping_profiles')
-      .select('current_version_id')
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
-  if (profileError) throw new Error('load_failed');
-  if (!profile?.current_version_id) throw new Error('mapping_not_configured');
-  const {
-    calculation,
-    closeVersion,
-    mappingVersion,
-    employeeMappings,
-    codeMappings,
-    employeeResults,
-    employeeIds,
-    dailyResults,
-    resultSources,
-    accountEvents,
-    correctionRequests,
-    correctionApplications,
-  } = await loadPayrollExportSources({
-    admin,
-    context,
-    calculationId: period.current_calculation_id,
-    closeVersionId: period.current_close_version_id,
-    mappingVersionId: profile.current_version_id,
-    periodStartDate: period.period_start_date,
-    periodEndDate: period.period_end_date,
-  });
-  const externalByEmployee = new Map(
-    (employeeMappings ?? []).map((mapping) => [
-      mapping.employee_record_id,
-      mapping.external_employee_reference,
-    ]),
-  );
-  for (const employeeId of employeeIds) {
-    if (!externalByEmployee.get(employeeId)?.trim()) throw new Error('payroll_employee_mapping_missing');
-  }
-  const codeByKey = new Map(
-    (codeMappings ?? []).map((mapping) => [
-      `${mapping.value_kind}|${mapping.activity_kind ?? ''}`,
-      mapping.output_code,
-    ]),
-  );
-  const resultById = new Map((employeeResults ?? []).map((result) => [result.id, result]));
-  const resultByEmployeeRecordId = new Map(
-    (employeeResults ?? []).map((result) => [result.employee_record_id, result]),
-  );
-  const dailyById = new Map((dailyResults ?? []).map((daily) => [daily.id, daily]));
-  const requestEmployeeById = new Map(
-    (correctionRequests ?? []).map((request) => [request.id, request.subject_employee_record_id]),
-  );
-  const outputCodeFor = (valueKind: string, activityKind = ''): string =>
-    codeByKey.get(`${valueKind}|${activityKind}`) ?? codeByKey.get(`${valueKind}|`) ?? '';
-  const valueRows = buildPayrollValueRows({
-    calculation,
-    period,
-    dailyResults,
-    employeeResults,
-    accountEvents,
-    resultById,
-    resultByEmployeeRecordId,
-    externalByEmployee,
-    outputCodeFor,
-  });
-  const allocationRows = buildPayrollAllocationRows({
-    resultSources,
-    dailyById,
-    resultById,
-    externalByEmployee,
-  });
-  const correctionRows = buildPayrollCorrectionRows({ correctionApplications, requestEmployeeById, period });
-  valueRows.sort((left, right) => left.rowId.localeCompare(right.rowId));
-  allocationRows.sort((left, right) => left.rowId.localeCompare(right.rowId));
-  correctionRows.sort((left, right) => left.rowId.localeCompare(right.rowId));
-  const contentFingerprint = hashPayload({
-    periodId,
-    closeVersion: closeVersion.id,
-    mappingVersion: mappingVersion.id,
-    valueRows,
-    allocationRows,
-    correctionRows,
-  });
-  const { data: latestReadyExport, error: latestReadyError } = await loggedRead(
-    'generatePayrollExport: payroll_exports read failed',
-    admin
-      .from('payroll_exports')
-      .select('id, close_version_id, content_fingerprint')
-      .eq('organization_id', context.orgId)
-      .eq('period_id', periodId)
-      .eq('state', 'ready')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  );
-  // Without the current ready export, the new one would not supersede it.
-  if (latestReadyError) throw new Error('export_failed');
-  if (
-    latestReadyExport?.close_version_id === closeVersion.id &&
-    latestReadyExport?.content_fingerprint === contentFingerprint
-  )
-    return;
-  const supersedesExportId = latestReadyExport?.id ?? null;
-  const operationId = randomUUID();
-  const { data: exportId, error: reserveError } = await admin.rpc(
-    'reserve_payroll_export',
-    rpcArgs('reserve_payroll_export', {
-      p_actor_id: context.userId,
-      p_organization_id: context.orgId,
-      p_period_id: periodId,
-      p_mapping_version_id: mappingVersion.id,
-      p_generator_version: 'p1-23-v1',
-      p_content_fingerprint: contentFingerprint,
-      p_supersedes_export_id: supersedesExportId,
-      p_operation_id: operationId,
-      p_request_hash: hashPayload({ periodId, contentFingerprint }),
-    }),
-  );
-  if (reserveError || !exportId) throw new Error(reserveError?.message ?? 'export_reservation_failed');
+  const reservation = await reservePayrollExport(admin, context, periodId);
+  if (!reservation) return;
+  const { exportId, period } = reservation;
   await failReservedExportOnError(admin, context, exportId, async () => {
-    const { data: exportRow, error: exportRowError } = await admin
-      .from('payroll_exports')
-      .select('version')
-      .eq('organization_id', context.orgId)
-      .eq('id', exportId)
-      .single();
-    if (exportRowError || !exportRow)
-      throw new Error(exportRowError?.message ?? 'export_reservation_missing');
-    const generatedAt = closeVersion.closed_at;
-    const packageResult = buildPayrollExportPackage({
-      manifest: {
-        schemaVersion: 1,
-        exportId,
-        exportVersion: exportRow.version,
-        supersedesExportId,
-        organizationId: context.orgId,
-        periodStart: period.period_start_date,
-        periodEnd: period.period_end_date,
-        closeVersion: closeVersion.version,
-        mappingVersion: mappingVersion.version,
-        generatorVersion: 'p1-23-v1',
-        generatedAt,
-        scope: 'organization_period',
-      },
-      valueRows,
-      allocationRows,
-      correctionRows,
-    });
+    const packageResult = await buildReservedPayrollExportPackage(admin, context, reservation);
     await storePayrollExportPackage({ admin, context, period, exportId, packageResult });
   });
 }

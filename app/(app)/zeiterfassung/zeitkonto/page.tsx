@@ -14,7 +14,7 @@ import {
   OVERVIEW_EVENT_LIMIT,
   OVERVIEW_PERIOD_LIMIT,
   type TimeAccountOverview,
-} from '@/lib/time-accounts/queries';
+} from '@/lib/time-accounts/overview-queries';
 
 export default async function TimeAccountPage() {
   const overview = await getTimeAccountOverview();
