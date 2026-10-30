@@ -159,6 +159,8 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
         columns={columns}
         rowModels={rowModels}
         jobsByRow={jobsByRow}
+        vacation={vacation}
+        sickness={sickness}
         dispatch={dispatch}
         materialDemandJobIds={materialDemandJobIds}
         actions={actions}

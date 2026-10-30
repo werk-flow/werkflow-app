@@ -164,6 +164,39 @@ test('capacity and recorded time stay below occupied lanes in both densities', a
   }
 });
 
+test('an absence bar paints above the day cells: its label is the hit-test target at its center', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Abwesenheiten', exact: true }).click();
+  for (const label of [
+    'Urlaub – Alex Test',
+    'Urlaub – Bea Zwei (angefragt)',
+    'Abwesend – Bea Zwei (bis auf Weiteres)',
+  ]) {
+    const text = page.getByText(label, { exact: true });
+    await expect(text).toBeVisible();
+    const box = await text.boundingBox();
+    if (!box) throw new Error(`Missing geometry for ${label}`);
+    const hit = await page.evaluate(
+      ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-calendar-bar]')?.textContent ?? null,
+      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+    );
+    expect(hit, `${label} is covered at its center`).toBe(label);
+  }
+});
+
+test('the phone list shows each absence under every day it covers', async ({ page }) => {
+  await page.getByRole('button', { name: 'Abwesenheiten', exact: true }).click();
+  await page.getByRole('button', { name: 'Telefonansicht', exact: true }).click();
+  const day = (label: string) => page.getByRole('region', { name: label, exact: true });
+  await expect(day('Mo 7.9.')).toContainText('Urlaub – Bea Zwei (angefragt)');
+  await expect(day('Mi 9.9.').locator('[data-calendar-bar]')).toHaveCount(0);
+  for (const label of ['Do 10.9.', 'Fr 11.9.']) {
+    await expect(day(label)).toContainText('Abwesend – Bea Zwei (bis auf Weiteres)');
+  }
+  await expect(day('Fr 11.9.')).toContainText('Urlaub – Alex Test');
+});
+
 test('leaving a saving calendar disposes only its own progress feedback', async ({ page }) => {
   await dragPointer(page, card(page, TITLE), boardCell(page, 'r2', '2026-09-09'));
   await expect(page.getByRole('alert')).toContainText('gespeichert');

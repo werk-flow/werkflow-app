@@ -4,9 +4,12 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import { isNoteEntry } from '@/lib/calendar/board';
 import { WEEKDAY_SHORT, type BoardColumn } from '@/lib/calendar/board-layout';
-import type { BoardRowModel } from '@/lib/calendar/board-model';
+import { absenceItems, type BoardRowModel } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
+import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import { BarSegment } from '../surface/bar-segment';
 import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
 import type { CalendarSurfaceActions } from './types';
 
@@ -15,6 +18,8 @@ export function PhoneBoard({
   columns,
   rowModels,
   jobsByRow,
+  vacation,
+  sickness,
   dispatch,
   materialDemandJobIds,
   actions,
@@ -23,6 +28,8 @@ export function PhoneBoard({
   columns: BoardColumn[];
   rowModels: BoardRowModel[];
   jobsByRow: ReadonlyMap<string, CalendarJob[]>;
+  vacation: readonly VacationCalendarEntry[];
+  sickness: readonly SicknessCalendarEntry[];
   dispatch: ReadonlyMap<
     string,
     'ausstehend' | 'bestaetigt' | 'uebernommen' | 'rueckfrage' | 'nicht_moeglich'
@@ -33,6 +40,12 @@ export function PhoneBoard({
 }): React.JSX.Element {
   // Every row's visits, day by day: a manager's phone list carries the person's name on each card.
   const showNames = rowModels.length > 1;
+  // The visible people's absences; each label already names the person.
+  const absences = rowModels.flatMap((model) =>
+    model.kind === 'person'
+      ? absenceItems({ vacation, sickness, employeeRecordId: model.row.employeeRecordId })
+      : [],
+  );
   return (
     <div data-plantafel="" data-layout="list" className="divide-y" aria-label="Woche">
       {columns.map((column) => {
@@ -45,6 +58,9 @@ export function PhoneBoard({
                 column.date < (job.endDateExclusive ?? `${job.plannedDate}!`),
             )
             .map((job) => ({ job, model })),
+        );
+        const dayAbsences = absences.filter(
+          (absence) => column.date >= absence.startDate && column.date < absence.endDateExclusive,
         );
         const label = headerLabels.get(column.date);
         return (
@@ -59,6 +75,16 @@ export function PhoneBoard({
               </span>
               {label && <span className="text-xs text-muted-foreground">{label}</span>}
             </h2>
+            {dayAbsences.map((absence) => (
+              <BarSegment
+                key={absence.key}
+                tone={absence.pending ? 'absence-pending' : 'absence'}
+                edge="single"
+                label={absence.label}
+                startDate={absence.startDate}
+                className="h-6"
+              />
+            ))}
             {dayJobs.length === 0 ? (
               <EmptyState size="compact" className="text-xs" title="Keine Termine" />
             ) : (
