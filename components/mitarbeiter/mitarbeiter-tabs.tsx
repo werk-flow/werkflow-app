@@ -14,7 +14,7 @@ import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
 import type { OrgRole } from '@/lib/roles';
-import type { PersonnelListEntry } from '@/lib/personnel/actions';
+import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import type { QualificationWorkspace } from '@/lib/qualifications/types';
