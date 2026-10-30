@@ -26,10 +26,15 @@ export function OwnVacationBalanceSummary({
 }: OwnVacationBalanceSummaryProps) {
   // Non-null exactly when an entitlement is stored for the year.
   const entitlementDays = balance?.entitlementDays ?? null;
-  const usedPercentage =
-    balance && entitlementDays !== null && entitlementDays > 0
-      ? Math.min(Math.round((balance.takenDays / entitlementDays) * 100), 100)
+  // Approved days split at today: taken so far, and planned („verplant“) after today.
+  const plannedDays = overview?.plannedDays ?? 0;
+  const takenDays = Math.max(0, (balance?.takenDays ?? 0) - plannedDays);
+  const percentageOf = (days: number) =>
+    entitlementDays !== null && entitlementDays > 0
+      ? Math.min(Math.round((days / entitlementDays) * 100), 100)
       : 0;
+  const takenPercentage = percentageOf(takenDays);
+  const plannedPercentage = Math.min(percentageOf(plannedDays), 100 - takenPercentage);
 
   return (
     <div className="flex items-start gap-4">
@@ -41,17 +46,22 @@ export function OwnVacationBalanceSummary({
           <span className="text-sm font-medium">Urlaubsanspruch {overview?.year}</span>
           {balance && entitlementDays !== null ? (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {formatGermanNumber(balance.takenDays)} von {formatGermanNumber(entitlementDays)} Tagen genommen
+              {formatGermanNumber(takenDays)} von {formatGermanNumber(entitlementDays)} Tagen genommen
+              {plannedDays > 0 ? `, ${formatGermanNumber(plannedDays)} verplant` : ''}
             </span>
           ) : null}
         </div>
 
         {balance && entitlementDays !== null ? (
           <>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
-                className="h-full rounded-full bg-brand-purple transition-all"
-                style={{ width: `${usedPercentage}%` }}
+                className="h-full bg-brand-purple transition-all"
+                style={{ width: `${takenPercentage}%` }}
+              />
+              <div
+                className="h-full bg-brand-purple/40 transition-all"
+                style={{ width: `${plannedPercentage}%` }}
               />
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

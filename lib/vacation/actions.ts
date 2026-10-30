@@ -17,6 +17,7 @@ import {
   resolveVacationEntitlementForYear,
   type VacationBalance,
 } from './balance';
+import { plannedVacationDays } from './planned';
 import {
   createDecisionAuthorization,
   loadActiveAbsences,
@@ -126,6 +127,8 @@ export type OwnVacationOverview = {
   businessDate: string;
   year: number;
   balance: VacationBalance | null;
+  /** The approved days of the year after today („verplant“); part of `balance.takenDays`. */
+  plannedDays: number;
   requests: VacationRequestListItem[];
 };
 
@@ -165,6 +168,7 @@ export async function getOwnVacationOverview(): Promise<OwnVacationOverviewResul
           businessDate,
           year,
           balance: null,
+          plannedDays: 0,
           requests: [],
         },
       };
@@ -185,6 +189,7 @@ export async function getOwnVacationOverview(): Promise<OwnVacationOverviewResul
         businessDate,
         year,
         balance: computeVacationBalance(year, requests, context),
+        plannedDays: plannedVacationDays(year, requests, context, businessDate),
         requests: requests.map((request) => ({
           ...request,
           totalDays:
