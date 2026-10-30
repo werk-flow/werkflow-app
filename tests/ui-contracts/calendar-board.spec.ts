@@ -173,7 +173,7 @@ test('an absence bar paints above the day cells: its label is the hit-test targe
     'Urlaub – Bea Zwei (angefragt)',
     'Abwesend – Bea Zwei (bis auf Weiteres)',
   ]) {
-    const text = page.getByText(label, { exact: true });
+    const text = page.getByRole('region', { name: 'Kalenderansicht' }).getByText(label, { exact: true });
     await expect(text).toBeVisible();
     const box = await text.boundingBox();
     if (!box) throw new Error(`Missing geometry for ${label}`);
