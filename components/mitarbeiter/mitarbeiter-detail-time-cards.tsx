@@ -35,12 +35,13 @@ export function MitarbeiterDetailTimeCards({
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
 }: MitarbeiterDetailTimeCardsProps) {
-  const { status, statusError, statusStale, refetchStatus, weekLoading, refetchWeek } = liveTime;
+  const { status, statusError, statusStale, refetchStatus, weekLoading, weekError, refetchWeek } = liveTime;
   const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
   // An unknown target is never measured against 8h: while the week loads the
-  // card shows the worked time only, and a failed read offers a retry.
+  // card shows the worked time only, and a failed target read offers a retry.
+  // A failed week read is the week card's one failure.
   const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
-  const targetReadFailed = !todayTarget && !weekLoading;
+  const targetReadFailed = !todayTarget && !weekLoading && !weekError;
 
   return (
     <>

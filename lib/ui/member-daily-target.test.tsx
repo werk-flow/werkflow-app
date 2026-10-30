@@ -35,7 +35,11 @@ const weekTargets = resolveDailyTargets(getBusinessWeekDates(), {
 const todayTarget = weekTargets[getTodayIndex()];
 
 /** The hook's result for a member who has not worked yet today, after the week's read settled. */
-function liveTimeWith(target: DailyTarget | undefined, weekLoading = false): MitarbeiterDetailLiveTime {
+function liveTimeWith(
+  target: DailyTarget | undefined,
+  weekLoading = false,
+  weekError: string | null = null,
+): MitarbeiterDetailLiveTime {
   return {
     status: undefined,
     statusError: null,
@@ -44,7 +48,7 @@ function liveTimeWith(target: DailyTarget | undefined, weekLoading = false): Mit
     weekData: [],
     weekLoading,
     weekStale: false,
-    weekError: null,
+    weekError,
     refetchWeek: async () => {},
     weekTargets: target ? weekTargets : undefined,
     todayIndex: getTodayIndex(),
@@ -58,10 +62,14 @@ function liveTimeWith(target: DailyTarget | undefined, weekLoading = false): Mit
   };
 }
 
-function renderCard(target: DailyTarget | undefined, weekLoading = false): string {
+function renderCard(
+  target: DailyTarget | undefined,
+  weekLoading = false,
+  weekError: string | null = null,
+): string {
   return renderToStaticMarkup(
     <MitarbeiterDetailTimeCards
-      liveTime={liveTimeWith(target, weekLoading)}
+      liveTime={liveTimeWith(target, weekLoading, weekError)}
       breakMode="automatic"
       autoBreakThresholdMinutes={360}
       autoBreakDurationMinutes={30}
@@ -87,6 +95,15 @@ describe('the personnel detail status card', () => {
     expect(markup).not.toContain('/ 8 Std.');
     expect(markup).toContain('Das Tagesziel konnte nicht geladen werden.');
     expect(markup).toContain('Erneut laden');
+  });
+
+  // CodeRabbit on werk-flow/werkflow-app#112: a failed week read showed its
+  // failure twice, in the week card and again as a target error.
+  test('a failed week read shows one failure, in the week card', () => {
+    const markup = renderCard(undefined, false, 'load_failed');
+    expect(markup).toContain('Die Stunden dieser Woche konnten nicht geladen werden.');
+    expect(markup).not.toContain('Das Tagesziel konnte nicht geladen werden.');
+    expect(markup.split('Erneut laden')).toHaveLength(2);
   });
 });
 
