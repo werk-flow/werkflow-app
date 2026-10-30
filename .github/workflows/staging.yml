@@ -4,7 +4,7 @@ name: Staging
 # app (docs/technical/environments.md, "The migration rule"). vercel.json turns
 # off Git deployments of main, and this workflow deploys the exact commit whose
 # migrations it applied, so staging never runs code ahead of its schema;
-# pull-request previews stay automatic.
+# pull-request branches never deploy (vercel.json).
 on:
   push:
     branches: [main]

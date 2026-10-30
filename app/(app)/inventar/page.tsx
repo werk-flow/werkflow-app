@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { InventoryContent } from '@/components/inventar/inventory-content';
-import { getInventoryOverview } from '@/lib/inventory/actions';
+import { getInventoryOverview } from '@/lib/inventory/catalog-actions';
 
 export default async function InventoryPage({
   searchParams,
