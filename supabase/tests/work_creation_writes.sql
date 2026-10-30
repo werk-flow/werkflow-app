@@ -337,10 +337,11 @@ begin
   v_listed := public.list_job_entries_page('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', true,
     '{"active": {"search": "WC-J-3"}, "parked": {"search": "WC-J-3"}}');
-  if v_converted.planned_date is not null or v_converted.status <> 'nicht_bearbeitet'
+  -- Null-safe throughout: a listing field that goes missing fails the test.
+  if v_converted.planned_date is not null or v_converted.status is distinct from 'nicht_bearbeitet'
     or exists (select 1 from public.work_blockers where job_id = v_converted.id and kind = 'parking')
-    or not (v_listed -> 'active' -> 'entries') @> jsonb_build_array(jsonb_build_object('id', v_converted.id))
-    or (v_listed -> 'parked' ->> 'total')::int <> 0
+    or not coalesce((v_listed -> 'active' -> 'entries') @> jsonb_build_array(jsonb_build_object('id', v_converted.id)), false)
+    or (v_listed -> 'parked' ->> 'total')::int is distinct from 0
   then
     raise exception 'an undated converted job is not open, unparked work among the current jobs';
   end if;
