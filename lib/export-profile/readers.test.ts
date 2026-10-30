@@ -42,6 +42,9 @@ describe('delimited text', () => {
 describe('XML', () => {
   test('text outside the root element is a format error', () => {
     expect(formatErrorCode(() => [...xmlRecords('<a><b>1</b><c>2</c></a>Rest')])).toBe('xml_not_well_formed');
+    expect(formatErrorCode(() => [...xmlRecords('<a><b>1</b></a><a><b>2</b></a>')])).toBe(
+      'xml_not_well_formed',
+    );
     expect(formatErrorCode(() => [...xmlRecords('<?xml version="1.0"?>\n<a><b>1</b></a>\n')])).toBeNull();
   });
 

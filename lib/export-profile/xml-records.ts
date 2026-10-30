@@ -29,6 +29,7 @@ export function declaredXmlEncoding(head: string): string | null {
 export function* xmlRecords(xml: string): Generator<XmlRecord> {
   const stack: OpenElement[] = [];
   let expectedOffset = 0;
+  let rootSeen = false;
   for (const token of xml.matchAll(TOKEN)) {
     // A gap between tokens is markup no rule matched, such as a stray `<`.
     if (token.index !== expectedOffset) throw new ExportFormatError('xml_not_well_formed');
@@ -44,6 +45,8 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
     }
     if (openingName !== undefined) {
       if (top) top.hasChildElements = true;
+      else if (rootSeen) throw new ExportFormatError('xml_not_well_formed');
+      rootSeen = true;
       const element: OpenElement = {
         name: openingName,
         path: top ? `${top.path}/${openingName}` : openingName,
