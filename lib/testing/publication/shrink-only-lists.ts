@@ -108,6 +108,8 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
     'lib/testing/spec-support/persisted-returns.test.ts',
     'NON_PERSISTED_RETURNS',
   ),
+  variable('critical journeys', 'lib/testing/selection/change-triggers.ts', 'CRITICAL_JOURNEYS'),
+  variable('role denial groups', 'lib/testing/selection/change-triggers.ts', 'ROLE_DENIAL_GROUPS'),
   variable('interval files', 'eslint.config.mjs', 'intervalAllowList'),
   variable('derived-state effects', 'eslint.config.mjs', 'derivedStateEffectExceptions'),
   {

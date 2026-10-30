@@ -1,7 +1,4 @@
-import { expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { expect, spyOn, test } from 'bun:test';
 import { getEventListeners } from 'node:events';
 import { runSessionCommand, withTestSession } from './test-session';
 
@@ -14,13 +11,6 @@ function alive(pid: number): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-async function waitForFile(path: string): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  while (!existsSync(path)) {
-    if (Date.now() > deadline) throw new Error(`Child did not create ${path}`);
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
   }
 }
 
@@ -46,27 +36,39 @@ test('cancellation between commands prevents the next process from starting', as
 });
 
 test('cancellation terminates an owned descendant, not only its launcher', async () => {
-  const directory = mkdtempSync(join(tmpdir(), 'werkflow-lease-'));
-  const pidFile = join(directory, 'grandchild');
   const controller = new AbortController();
-  const descendant = `require('fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000);`;
-  const launcher = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:'ignore'}); setInterval(() => {}, 1000);`;
-  const pending = runSessionCommand(command(launcher), { signal: controller.signal, stdio: 'ignore' });
+  const kill = process.kill.bind(process);
+  let deniedProbe = false;
+  const killSpy = spyOn(process, 'kill').mockImplementation((pid, signal) => {
+    if (pid < 0 && signal === 0 && !deniedProbe) {
+      deniedProbe = true;
+      throw Object.assign(new Error('Group is awaiting reaping'), { code: 'EPERM' });
+    }
+    return kill(pid, signal);
+  });
+  // The descendant prints its pid through the launcher's stdout once it runs.
+  const descendant = `console.log(process.pid); setInterval(() => {}, 1000);`;
+  const launcher = `require('child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendant)}], {stdio:['ignore','inherit','ignore']}); setInterval(() => {}, 1000);`;
+  const started = Promise.withResolvers<number>();
+  const pending = runSessionCommand(command(launcher), {
+    signal: controller.signal,
+    onStdout: (chunk) => started.resolve(Number(chunk.toString())),
+  });
   const settled = pending.then(
     () => null,
     (error: unknown) => error,
   );
   try {
-    await waitForFile(pidFile);
-    const pid = Number(readFileSync(pidFile, 'utf8'));
+    const pid = await started.promise;
     expect(alive(pid)).toBe(true);
     controller.abort(new Error('Cancel tree'));
     expect(await settled).toMatchObject({ message: 'Cancel tree' });
+    expect(deniedProbe).toBe(true);
     expect(alive(pid)).toBe(false);
   } finally {
     if (!controller.signal.aborted) controller.abort(new Error('Cancel tree'));
     await settled;
-    rmSync(directory, { recursive: true, force: true });
+    killSpy.mockRestore();
   }
 });
 
@@ -82,10 +84,14 @@ test('a session restores signal listeners, also when its operation fails', async
 });
 
 test('a closed terminal (SIGHUP) cancels the session and stops its owned command', async () => {
+  const started = Promise.withResolvers<void>();
   const pending = withTestSession((signal) =>
-    runSessionCommand(command('setInterval(() => {}, 1000);'), { signal, stdio: 'ignore' }),
+    runSessionCommand(command("console.log('started'); setInterval(() => {}, 1000);"), {
+      signal,
+      onStdout: () => started.resolve(),
+    }),
   );
-  await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  await started.promise;
   process.emit('SIGHUP', 'SIGHUP');
   await expect(pending).rejects.toThrow('The test session was cancelled.');
 });

@@ -349,10 +349,12 @@ export async function addConditionViaDialog(
   },
 ): Promise<void> {
   const detailUrl = page.url();
+  // eslint-disable-next-line test-hygiene/no-polling-loop -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (page.url() !== detailUrl) await page.goto(detailUrl);
     // Drain a pending refresh from the preceding test of the file before the
     // modal owns user input. The hook itself debounces for 150 ms (REALTIME_DEBOUNCE_MS).
+    // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;
@@ -556,10 +558,12 @@ export async function addWorkScheduleViaDialog(
   },
 ): Promise<void> {
   const detailUrl = page.url();
+  // eslint-disable-next-line test-hygiene/no-polling-loop -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (page.url() !== detailUrl) await page.goto(detailUrl);
     // A schedule event from the preceding test's action can arrive after
     // navigation. Let the 150 ms router-refresh debounce (REALTIME_DEBOUNCE_MS) settle first.
+    // eslint-disable-next-line test-hygiene/no-wall-clock-wait -- backlog: no signal names a pending debounced refresh yet (enforcement-ladder-backlog.md)
     await page.waitForTimeout(300);
     if (page.url() !== detailUrl) {
       if (attempt === 0) continue;

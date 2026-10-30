@@ -23,12 +23,26 @@ Choose the level from the diff before you open the PR, and state it with its rea
 
 Wrong turn: calling a change level 0 because it is small. A one-line change to a role check is level 2.
 
+### Trial mode until 2026-11-12
+
+These overrides apply only before 2026-11-12, the `TRIAL_ENDS` cutoff in `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning`. From that date, ignore this section even if it remains; the table above applies again. Level definitions stay unchanged.
+
+| Level | Trial reviews |
+| --- | --- |
+| 0 | Your own read plus one CodeRabbit review |
+| 1 | CodeRabbit plus `sol-loop`, budget 1 round |
+| 2 | CodeRabbit plus `sol-loop`, full budget |
+
+Add `needs-coderabbit` immediately after `gh pr create`, while `Check` and Sol run. After pushing fixes, add `needs-coderabbit` again so CodeRabbit reviews the new commit.
+
+The merge gate stays unchanged, except every level requires the CodeRabbit review.
+
 ### Babysit a pull request
 
 1. After `gh pr create`, call `link_pull_request`, handle the existing checks and comments, then call `watch_pull_request` and end your turn. T3 Code wakes you on a check result, a comment, a review or a conflict. Never poll, sleep or write a watcher.
 2. On each wake, act only on news newer than your last push: the failed job (`gh run view <run-id> --log-failed`, its `evidence-<job>` artifact) or new comments (`gh pr view <number> --comments`, inline threads in `gh api repos/{owner}/{repo}/pulls/<number>/comments`). When a wake needs no action, end your turn without a message.
 3. Verify each finding against the source before you change anything. A CI failure follows [testing.md, "Failures"](testing.md#failures): classify it before any repair, never rerun until green.
-4. A level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved and `Check` is green, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
+4. In [trial mode](#trial-mode-until-2026-11-12), label every PR at creation; otherwise, a level 2 PR gets one CodeRabbit app review, at the end, from [the queue](#the-coderabbit-queue): once Sol approved and `Check` is green, run `gh pr edit <n> --add-label needs-coderabbit` once, then keep watching. Never comment `@coderabbitai review` yourself: a request outside the queue restarts the app's rate-limit window for every waiting PR. The queue requests the review and messages your thread; the review itself wakes you too.
 5. Fix a real finding in a new commit and push. Reply in its thread with what changed and the tier where its prevention landed ([decision 0005](../decisions/0005-enforcement-ladder.md)). Every comment follows the `leaving-pr-comments` skill.
 6. Dismiss a false finding with the evidence that the code is right, and resolve the thread. Decline scope creep the same way and list it as a follow-up: unneeded tests, guards for cases that do not occur, extra compatibility. Every CodeRabbit finding gets a disposition.
 7. "Stopped watching, could not read it" usually means GitHub's rate limit is spent (`gh api rate_limit --jq .resources.graphql`). Wait for `reset` with one background command, then watch again.
@@ -53,8 +67,8 @@ Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at 
 `ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine, so no thread has to stay alive to hand out reviews. Each pass:
 
 1. Lists the open PRs labelled `needs-coderabbit`, and skips any that already got a CodeRabbit review or a request after their latest push.
-2. Does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
-3. Otherwise comments `@coderabbitai review` on the PR labelled longest ago, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
+2. In [trial mode](#trial-mode-until-2026-11-12), before `TRIAL_ENDS`, requests up to ten waiting PRs and skips the 65-minute wait. Afterward, does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
+3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
 
 The log is `~/.local/state/coderabbit-queue.log`, and `journalctl --user -u coderabbit-queue` shows each run. Automatic review is off, so a PR without the label gets no CodeRabbit review.
 

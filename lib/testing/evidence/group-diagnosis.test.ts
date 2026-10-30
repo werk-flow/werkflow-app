@@ -106,7 +106,7 @@ test('the diagnosis is stored beside its report, replaces an earlier one of the 
       classification: 'environment',
       rootCause: ' ',
       prevention: 'x',
-      now: new Date(),
+      now: new Date('2026-10-05T10:00:00.000Z'),
     }),
   ).toThrow();
   // A named report is read alone, and only a folder name can name it.
@@ -127,7 +127,7 @@ test('the diagnosis is stored beside its report, replaces an earlier one of the 
       classification: 'harness',
       rootCause: 'cause',
       prevention: 'prevention',
-      now: new Date(),
+      now: new Date('2026-10-05T10:00:00.000Z'),
     }),
   ).toThrow('no report id');
 });
