@@ -486,10 +486,10 @@ export function canViewEntries(
 
 /**
  * Calculate work sessions from a list of entries
- * Re-exported from validation for convenience
+ * Re-exported from work-sessions for convenience
  */
-export { calculateWorkSessions } from './validation';
-export { calculateBreakSessions } from './validation';
+export { calculateWorkSessions } from './work-sessions';
+export { calculateBreakSessions } from './work-sessions';
 
 /**
  * Calculate total worked minutes from work sessions
