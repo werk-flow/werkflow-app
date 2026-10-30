@@ -83,37 +83,12 @@ async function getChallengeRow(
   return data;
 }
 
-export async function getInitialEmailChangeWizardState({
-  failOnReadError = false,
-}: { failOnReadError?: boolean } = {}): Promise<EmailChangeWizardState> {
-  const {
-    data: { user },
-  } = await getCachedUser();
-
-  if (!user?.email) {
-    return buildIdleState(null);
-  }
-
-  const currentEmail = user.email;
-  // The custom email-change wizard intentionally persists all intermediate state
-  // in public.email_change_challenges and does not depend on auth.users
-  // pending email-change columns.
-  const challenge = await getChallengeRow(user.id, failOnReadError);
-  const now = Date.now();
-
-  // Recover cleanup after Auth changed the account but its HTTP response was
-  // lost. This only consumes the existing claim; it never repeats the Auth write.
-  if (challenge?.completion_token) {
-    if (challenge.new_email === currentEmail.trim().toLowerCase()) {
-      const result = await transitionEmailChange(user, 'complete', {
-        challengeId: challenge.challenge_id,
-        completionToken: challenge.completion_token,
-      });
-      if (!('error' in result)) return buildIdleState(currentEmail);
-    }
-    return { ...buildIdleState(currentEmail), step: 'completion_pending', newEmail: challenge.new_email };
-  }
-
+/** The wizard step a stored challenge resumes at, or idle when it expired or belongs to another address. */
+function wizardStateForChallenge(
+  challenge: EmailChangeChallengeRow | null,
+  currentEmail: string,
+  now: number,
+): EmailChangeWizardState {
   if (!challenge || challenge.current_email !== currentEmail) {
     return buildIdleState(currentEmail);
   }
@@ -178,4 +153,38 @@ export async function getInitialEmailChangeWizardState({
   }
 
   return buildIdleState(currentEmail);
+}
+
+export async function getInitialEmailChangeWizardState({
+  failOnReadError = false,
+}: { failOnReadError?: boolean } = {}): Promise<EmailChangeWizardState> {
+  const {
+    data: { user },
+  } = await getCachedUser();
+
+  if (!user?.email) {
+    return buildIdleState(null);
+  }
+
+  const currentEmail = user.email;
+  // The custom email-change wizard intentionally persists all intermediate state
+  // in public.email_change_challenges and does not depend on auth.users
+  // pending email-change columns.
+  const challenge = await getChallengeRow(user.id, failOnReadError);
+  const now = Date.now();
+
+  // Recover cleanup after Auth changed the account but its HTTP response was
+  // lost. This only consumes the existing claim; it never repeats the Auth write.
+  if (challenge?.completion_token) {
+    if (challenge.new_email === currentEmail.trim().toLowerCase()) {
+      const result = await transitionEmailChange(user, 'complete', {
+        challengeId: challenge.challenge_id,
+        completionToken: challenge.completion_token,
+      });
+      if (!('error' in result)) return buildIdleState(currentEmail);
+    }
+    return { ...buildIdleState(currentEmail), step: 'completion_pending', newEmail: challenge.new_email };
+  }
+
+  return wizardStateForChallenge(challenge, currentEmail, now);
 }

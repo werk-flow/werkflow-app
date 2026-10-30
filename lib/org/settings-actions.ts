@@ -9,8 +9,12 @@ import {
   normalizeOrganizationName,
   type OrganizationSettingsValues,
 } from '@/lib/org/schemas';
+import {
+  isDuplicateName,
+  organizationSettingsConflict,
+  writeOrganizationSettings,
+} from '@/lib/org/settings-checks';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 
 export type UpdateOrganizationSettingsResult = ActionResult<
@@ -28,25 +32,6 @@ export type UpdateOrganizationSettingsResult = ActionResult<
   | 'no_changes'
   | 'update_failed'
 >;
-
-function isDuplicateName(existingName: string, nextName: string): boolean {
-  return (
-    normalizeOrganizationName(existingName).toLocaleLowerCase() ===
-    normalizeOrganizationName(nextName).toLocaleLowerCase()
-  );
-}
-
-function mapUniqueViolation(errorMessage: string): 'name_taken' | 'code_taken' | null {
-  if (errorMessage.includes('organizations_unique_code_key') || errorMessage.includes('unique_code')) {
-    return 'code_taken';
-  }
-
-  if (errorMessage.includes('organizations_admin_id_normalized_name_key')) {
-    return 'name_taken';
-  }
-
-  return null;
-}
 
 // The raw shape only; the named validators below return the stable error codes.
 const settingsInputSchema = z.object({ name: z.string(), uniqueCode: z.string() });
@@ -99,68 +84,9 @@ export async function updateOrganizationSettings(
     return { success: false, error: 'no_changes' };
   }
 
-  const { data: siblingOrganizations, error: siblingOrganizationsError } = await admin
-    .from('organizations')
-    .select('id, name')
-    .eq('admin_id', userId)
-    .neq('id', activeOrgId);
+  const change = { userId, organizationId: activeOrgId, normalizedName, normalizedCode };
+  const conflict = await organizationSettingsConflict(admin, change);
+  if (conflict) return conflict;
 
-  if (siblingOrganizationsError) {
-    logError('updateOrganizationSettings: duplicate name check failed', siblingOrganizationsError);
-    return { success: false, error: 'update_failed' };
-  }
-
-  const hasDuplicateName = (siblingOrganizations ?? []).some((sibling) =>
-    isDuplicateName(sibling.name, normalizedName),
-  );
-
-  if (hasDuplicateName) {
-    return { success: false, error: 'name_taken' };
-  }
-
-  const { data: existingCode, error: existingCodeError } = await admin
-    .from('organizations')
-    .select('id')
-    .eq('unique_code', normalizedCode)
-    .neq('id', activeOrgId)
-    .maybeSingle();
-
-  if (existingCodeError) {
-    logError('updateOrganizationSettings: code uniqueness check failed', existingCodeError);
-    return { success: false, error: 'update_failed' };
-  }
-
-  if (existingCode) {
-    return { success: false, error: 'code_taken' };
-  }
-
-  const { data: updatedOrganization, error: updateError } = await admin
-    .from('organizations')
-    .update({
-      name: normalizedName,
-      unique_code: normalizedCode,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', activeOrgId)
-    .select('name, unique_code')
-    .single();
-
-  if (updateError || !updatedOrganization) {
-    if (updateError?.code === '23505') {
-      const mappedError = mapUniqueViolation(updateError.message);
-
-      if (mappedError) {
-        return { success: false, error: mappedError };
-      }
-    }
-
-    logError('updateOrganizationSettings: organization write failed', updateError);
-    return { success: false, error: 'update_failed' };
-  }
-
-  return {
-    success: true,
-    name: updatedOrganization.name,
-    uniqueCode: updatedOrganization.unique_code,
-  };
+  return writeOrganizationSettings(admin, change);
 }
