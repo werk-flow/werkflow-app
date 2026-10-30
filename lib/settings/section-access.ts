@@ -1,10 +1,8 @@
 import 'server-only';
 
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
-import { CURRENT_ORG_COOKIE, selectActiveMembership } from '@/lib/org/action-context';
+import { resolvePageMembership } from '@/lib/org/page-context';
 import type { UserOrg } from '@/lib/org/types';
 import {
   DEFAULT_SETTINGS_SECTION_SLUG,
@@ -22,16 +20,7 @@ import {
 export async function readSettingsSectionMembership(
   slug: SettingsSectionSlug,
 ): Promise<{ userId: string; membership: UserOrg }> {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
-  if (!user) redirect('/login');
-
-  const memberships = await getCachedMemberships(user.id);
-  const membership = selectActiveMembership(memberships, cookieStore.get(CURRENT_ORG_COOKIE)?.value);
+  const { user, membership } = await resolvePageMembership();
   if (!membership) redirect('/dashboard');
 
   const section = getSettingsSectionBySlug(slug);

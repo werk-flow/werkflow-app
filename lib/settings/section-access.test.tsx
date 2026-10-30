@@ -28,7 +28,6 @@ async function runFixture(): Promise<void> {
   }));
   mock.module('@/lib/data/cached', () => ({
     getAuthenticatedUser: async () => ({ id: 'user' }),
-    getCachedUser: async () => ({ data: { user: { id: 'user' } } }),
     getCachedMemberships: async () => [
       { orgId: 'organization', name: 'Organisation', uniqueCode: 'ABC123', role, joinedAt: '2026-01-01' },
     ],
