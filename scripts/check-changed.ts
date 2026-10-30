@@ -2,6 +2,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/changed-check';
+import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 // `bun run check:changed`: the fast check an agent runs before it pushes
 // (docs/technical/testing.md, "Run checks while you work"). It formats and
@@ -9,6 +10,8 @@ import { CHANGED_CHECK_BASE, changedCheckPlan } from '../lib/testing/runner/chan
 // unused code across the repository, checks that an added migration sorts
 // after main's newest, and runs the unit tests beside the changed files.
 // Committed, uncommitted and untracked changes all count.
+// It holds one of the machine's heavy slots until it exits (lib/testing/runner/heavy-slot.ts).
+await acquireHeavySlot('check:changed');
 const repositoryRoot = resolve(import.meta.dir, '..');
 
 function git(...args: string[]): string[] {
