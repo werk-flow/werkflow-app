@@ -2,7 +2,7 @@
 
 import { SortableTableHead } from '@/components/ui/sortable-table-head';
 import { TableHead, TableRow } from '@/components/ui/table';
-import type { SortColumn } from '@/lib/jobs/types';
+import type { SortColumn } from '@/lib/jobs/unified-list';
 import type { AuftraegeTableColumn, AuftraegeTableColumnId } from './unified-auftraege-columns';
 
 function isSortableColumn(columnId: AuftraegeTableColumnId): columnId is SortColumn {

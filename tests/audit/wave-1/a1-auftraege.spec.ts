@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 
 import { expect, test } from '../support/fixtures';
-import { UNIFIED_STATUS_LABELS } from '../../../lib/jobs/types';
+import { UNIFIED_STATUS_LABELS } from '../../../lib/jobs/unified-list';
 import { WORK_EXECUTION_LABELS } from '../../../lib/work-lifecycle/types';
 import { createCustomer } from '../../golden/support/steps/customers';
 import {
