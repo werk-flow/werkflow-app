@@ -1,7 +1,7 @@
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { LIST_PAGE_SIZE, parseListPage } from '@/lib/ui/list-pagination';
-import type { SortColumn, UnifiedListEntry } from './types';
+import type { SortColumn, UnifiedListEntry } from './unified-list';
 import { resolveAuftraegeSortColumn, type AuftraegeColumnId } from './auftraege-table-columns';
 
 export const JOB_LIST_SECTIONS = ['active', 'parked', 'archived'] as const;
