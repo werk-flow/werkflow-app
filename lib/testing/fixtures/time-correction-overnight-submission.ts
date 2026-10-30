@@ -1,15 +1,18 @@
 // The actual submitTimeCorrection over the in-memory database: a forgotten
 // overnight shift from 22:00 to 01:30 goes in as one request whose proposal
 // closes and reopens at Berlin midnight, and recorded time after midnight
-// still refuses it as an overlap before any request is written. Only legacy
+// still refuses it as an overlap before any request is written. A lone
+// clock-out after midnight that closes the evening's recorded clock-in is
+// refused with the midnight rule, never as an overlap. Only legacy
 // entries are recorded here, so canonical segments and approved corrections read empty.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs, tableRows } from './action-boundary-world';
+import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 
 const ownRecordId = '86000000-0000-4000-8000-000000000001';
 const firstOperationId = '86000000-0000-4000-8000-000000000002';
 const secondOperationId = '86000000-0000-4000-8000-000000000003';
+const thirdOperationId = '86000000-0000-4000-8000-000000000004';
 
 const world = installActionWorld({
   employee_records: [{ id: ownRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID }],
@@ -73,12 +76,8 @@ assert.deepEqual(
   ],
 );
 
-// Recorded time after midnight is a real overlap: refused before any request is written.
-tableRows(world, 'time_entries').push(
-  ...[
-    ['clock_in', '2026-10-20T22:30:00.000Z'],
-    ['clock_out', '2026-10-20T23:00:00.000Z'],
-  ].map(([entryType, timestamp], index) => ({
+function recordEntries(entries: ReadonlyArray<readonly [string, string]>): void {
+  world.tables.time_entries = entries.map(([entryType, timestamp], index) => ({
     id: `86000000-0000-4000-8000-00000000001${index}`,
     organization_id: ORGANIZATION_A,
     user_id: CALLER_ID,
@@ -91,10 +90,38 @@ tableRows(world, 'time_entries').push(
     reviewed_at: null,
     created_at: timestamp,
     updated_at: timestamp,
-  })),
-);
+  }));
+}
+
+// Recorded time after midnight is a real overlap: refused before any request is written.
+recordEntries([
+  ['clock_in', '2026-10-20T22:30:00.000Z'],
+  ['clock_out', '2026-10-20T23:00:00.000Z'],
+]);
 assert.deepEqual(await overnightShift(secondOperationId), {
   success: false,
   error: 'correction_timeline_conflict',
 });
+
+// Only the end after midnight, closing the clock-in recorded at 22:00 the evening before.
+recordEntries([['clock_in', '2026-10-20T20:00:00.000Z']]);
+assert.deepEqual(
+  await submitTimeCorrection({
+    organizationId: ORGANIZATION_A,
+    subjectEmployeeRecordId: ownRecordId,
+    kind: 'missed_clock',
+    reason: 'Ausstempeln vergessen',
+    source: null,
+    proposedFacts: [
+      {
+        factId: 'end',
+        employeeRecordId: ownRecordId,
+        entryType: 'clock_out',
+        timestamp: '2026-10-21T01:30:00+02:00',
+      },
+    ],
+    operationId: thirdOperationId,
+  }),
+  { success: false, error: 'correction_crosses_midnight' },
+);
 assert.equal(world.rpcCalls.length, 1, 'a refused overnight correction writes nothing');

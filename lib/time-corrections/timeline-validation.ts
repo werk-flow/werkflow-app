@@ -99,7 +99,10 @@ export function correctionTimelineWindow(
     affectedDays: new Set(
       facts.map((fact) => `${fact.userId}:${formatBerlinLocalDate(correctionDayOwner(fact))}`),
     ),
-    from: getLocalDayStart(new Date(Math.min(...owners.map((date) => date.getTime())))).toISOString(),
+    // The day before is read too, so time left open the evening before meets the midnight rule.
+    from: getLocalDayStart(
+      new Date(getLocalDayStart(new Date(Math.min(...owners.map((date) => date.getTime())))).getTime() - 1),
+    ).toISOString(),
     // The closing boundary belongs to this day even when it lands at the next midnight.
     to: new Date(
       getLocalDayEnd(new Date(Math.max(...owners.map((date) => date.getTime())))).getTime() + 1,

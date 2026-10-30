@@ -60,7 +60,7 @@ test('a single midnight closing correction reads and validates the preceding Ber
   const window = correctionTimelineWindow([end, midnight]);
   if (!window) throw new Error('Missing window.');
   expect([...window.affectedDays].sort()).toEqual(['person:2026-09-07', 'person:2026-09-08']);
-  expect(window.from).toBe('2026-09-06T22:00:00.000Z');
+  expect(window.from).toBe('2026-09-05T22:00:00.000Z');
   expect(window.to).toBe('2026-09-08T22:00:00.000Z');
   const candidate = {
     ...original,
@@ -108,7 +108,7 @@ test('a timeline window includes the next midnight across a Berlin DST day', () 
   const fact = interval('window', 'person', 6, 8).snapshot.facts[0];
   if (!fact) throw new Error('Missing fact.');
   const window = correctionTimelineWindow([{ ...fact, timestamp: '2026-03-29T12:00:00.000Z' }]);
-  expect(window?.from).toBe('2026-03-28T23:00:00.000Z');
+  expect(window?.from).toBe('2026-03-27T23:00:00.000Z');
   expect(window?.to).toBe('2026-03-29T22:00:00.000Z');
 });
 
