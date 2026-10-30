@@ -3,7 +3,7 @@ import 'server-only';
 import type { AdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type { PayrollValueKind } from './types';
 
 // The closed-period rows a payroll export is built from. generatePayrollExport

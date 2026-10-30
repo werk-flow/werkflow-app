@@ -4,7 +4,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Tables } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { requireAuth } from './access';
-import { requirePeriodRows } from './period-preparation';
+import { requirePeriodRows } from './period-sources';
 import type { TimePeriodState } from './presentation';
 import { readRegion, type ReaderContext, requireRead, type TimeAccountRead } from './read-support';
 
