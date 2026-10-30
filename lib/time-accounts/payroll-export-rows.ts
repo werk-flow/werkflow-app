@@ -2,7 +2,7 @@ import { addLocalDays } from '@/lib/date-time/berlin';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { distributeCreditedMinutes } from './export';
 import { PAYROLL_ACCOUNT_EVENT_KINDS, type PayrollExportSources } from './payroll-export-sources';
-import { getBerlinInstant } from './period-preparation';
+import { getBerlinInstant } from './period-sources';
 import type {
   PayrollExportAllocationRow,
   PayrollExportCorrectionRow,
