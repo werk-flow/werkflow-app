@@ -214,11 +214,23 @@ begin
   select * into account_record from public.time_accounts where id = p_account_id;
   if account_record.opened_on = p_opened_on then raise exception 'opening_date_unchanged'; end if;
   earliest_date := least(account_record.opened_on, p_opened_on);
-  -- Periods first, then the account row: the order of close_time_period, so
-  -- the two never deadlock. FOR SHARE conflicts with the close's FOR UPDATE:
-  -- a close that holds the row first makes this read see 'closed'; a close
-  -- that waits for this commit finds a changed fingerprint and refuses with
-  -- stale_calculation.
+  -- The month lock that prepare_time_period and close_time_period take before
+  -- they compare a fingerprint, for every month from the earlier date to
+  -- today, oldest first: a month without a period row yet is prepared or
+  -- closed only after this commit, against a fingerprint that includes it.
+  perform pg_advisory_xact_lock(hashtextextended(
+    p_organization_id::text || ':p1-23-period:' || month_start::date::text, 0
+  ))
+  from generate_series(
+    date_trunc('month', earliest_date),
+    (clock_timestamp() at time zone 'Europe/Berlin')::date,
+    interval '1 month'
+  ) as month_start;
+  -- Then the periods, then the account row: the order of close_time_period,
+  -- so the two never deadlock. FOR SHARE conflicts with the close's FOR
+  -- UPDATE: a close that holds the row first makes this read see 'closed'; a
+  -- close that waits for this commit finds a changed fingerprint and refuses
+  -- with stale_calculation.
   perform 1 from public.time_periods period
   where period.organization_id = p_organization_id and period.period_end_date >= earliest_date
   order by period.period_start_date

@@ -159,6 +159,15 @@ begin
   if v_fingerprint = app_private.compute_p1_23_source_fingerprint(v_org, '2026-09-01', '2026-09-30') then
     raise exception 'the correction left a prepared September calculation fresh';
   end if;
+  -- October has no period row yet: the correction holds the month lock that
+  -- its later prepare and close wait for.
+  if not exists (
+    select 1 from pg_locks lock
+    where lock.locktype = 'advisory' and lock.pid = pg_backend_pid() and lock.granted
+      and lock.objsubid = 1
+      and ((lock.classid::bigint << 32) | lock.objid::bigint)
+        = hashtextextended(v_org::text || ':p1-23-period:' || '2026-10-01', 0)
+  ) then raise exception 'the correction left a month without a period row unlocked'; end if;
 
   -- A replay returns the first result; another payload under its id is refused.
   v_replayed := public.correct_time_account_opening_date(
