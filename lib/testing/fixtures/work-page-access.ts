@@ -226,6 +226,7 @@ const employeeRefusals: ReadonlyArray<readonly [keyof typeof pages, string]> = [
   ['/arbeitsvorlagen', 'redirect:/dashboard'],
   ['/auftraege/projekt/[projectNumber]/[jobNumber]', 'redirect:/auftraege'],
   ['/auftraege/projekt/[projectNumber]/[jobNumber]/uebergabe', 'redirect:/auftraege'],
+  ['/auftraege/projekt/[projectNumber]/uebergabe', 'redirect:/auftraege'],
   ['/service/anlagen/[equipmentNumber]', 'redirect:/auftraege'],
   ['/service/faelle', 'redirect:/auftraege'],
   ['/service/faelle/[caseNumber]', 'redirect:/auftraege'],
@@ -243,6 +244,10 @@ assert.deepEqual(await getServiceCaseDetailByNumber('SF-0001'), notAuthorized);
 assert.deepEqual(await getMaintenanceWorkspace(workspaceQuery), notAuthorized);
 assert.deepEqual(
   await getWorkHandoverWorkspaceByNumber({ targetType: 'job', targetNumber: childJobNumber, projectNumber }),
+  { success: false, error: 'work_handover_not_authorized' },
+);
+assert.deepEqual(
+  await getWorkHandoverWorkspaceByNumber({ targetType: 'project', targetNumber: projectNumber }),
   { success: false, error: 'work_handover_not_authorized' },
 );
 

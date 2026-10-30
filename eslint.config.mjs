@@ -1523,10 +1523,11 @@ const eslintConfig = defineConfig([
   },
   // The layering rule for lib/, composed with the full import set above
   // (flat config replaces a rule per block). The UI and convention contract
-  // tests under lib/ render or inspect components on purpose.
+  // tests and the page-access fixtures under lib/ render or inspect components
+  // on purpose.
   {
     files: ['lib/**/*.{ts,tsx}'],
-    ignores: ['lib/ui/*.test.*', 'lib/conventions/*.test.*'],
+    ignores: ['lib/ui/*.test.*', 'lib/conventions/*.test.*', 'lib/testing/fixtures/*-page-access.ts'],
     rules: {
       'no-restricted-imports': importRestrictions({ libLayer: true }),
     },
