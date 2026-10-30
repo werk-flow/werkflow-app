@@ -143,7 +143,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 - Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
 - Staging: a PR merged to `main` reaches DEV's schema, then staging.
-- Release: only through the `release` workflow, which the owner starts or asks an agent to start.
+- Release: only through the `release` workflow ([release and rollback](#release-and-rollback)).
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) recreates the demo organizations and refuses the beta partner's. Each run gives the demo members a generated password. To sign in to `bun run dev` as one, seed DEV with `DEMO_MEMBER_PASSWORD` set to a password you choose and run `bun run env:dev` first. PROD refuses a chosen password.
 
@@ -151,7 +151,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 [Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. The `production` branch is what Vercel serves on `app.werk-flow.app`.
 
-1. Release when the owner or the coordinator thread asks ("release main"): `gh workflow run release`, then `gh run watch` until it ends. Starting it is the release; the `production` environment has no approval step by the owner's decision. `.github/workflows/release.yml` requires a green full run on the `main` commit it ships, reusing a nightly or manual one or running the full suite itself first, then migrates PROD, deploys the edge functions, advances `production` and promotes Vercel's build. When it fails, find the cause in the build log, repair it on `main` through a PR, and release again. A rerun is safe.
+1. `.github/workflows/release.yml` ships a `main` commit only after a green full run ([release gate](testing.md#ci)), then migrates PROD, deploys the edge functions, advances `production` and promotes Vercel's build. It runs every weekday at 07:00 Berlin and releases only when `main` moved since `production` and its newest full run is not red. By hand, when the owner or the coordinator thread asks ("release main"): `gh workflow run release`, then `gh run watch`; with `-f dry_run=true` it only prints a scheduled run's decision. The `production` environment has no approval step by the owner's decision. When it fails, repair the cause on `main` through a PR and release again. A rerun is safe.
 2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data. After a rollback Vercel stops assigning new production builds to the domain, so the next release must promote explicitly, which the workflow does.
-3. After every release, the releasing thread checks production: the app loads and signs in, and Vercel shows no new runtime errors. If production breaks, it rolls the app back through Vercel (step 2), then reports.
+3. After every release, the releasing thread, or the coordinator thread after a scheduled one, checks production: the app loads and signs in, and Vercel shows no new runtime errors. If production breaks, it rolls the app back through Vercel (step 2), then reports.
 4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).

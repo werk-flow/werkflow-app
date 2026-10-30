@@ -109,3 +109,9 @@ The owner removed the need for one coordinator thread to stay alive. A watcher i
 
 1. Rule 8 now reads: a PR's own thread squash-merges it once the merge gate passes. A "full stop" PR, or one that changes `AGENTS.md`, waits until the owner has read and merged it. The owner may merge any PR. Nobody merges with an admin bypass.
 2. Rule 4 now reads: a level 2 PR whose `Check` is green and whose `sol-loop` approved gets the label `needs-coderabbit`. Its thread never requests the review itself. A scheduled queue outside any thread requests one review at a time, oldest label first, while the app's rate-limit window allows, and messages the PR's thread. [coderabbit.md](../technical/coderabbit.md#the-coderabbit-queue) owns the procedure.
+
+## Amendment 2026-10-29: a weekday release rhythm
+
+The owner decided on 2026-10-29 that releases follow a fixed weekday rhythm instead of waiting for a request:
+
+1. Rule 7 now reads: the `release` workflow runs every weekday at 07:00 Berlin and releases only when `main` moved since `production` and is green: its newest full run passed, or it has none yet and the release's own full run passes. Otherwise it changes nothing. A red full run is repaired on `main`, never rerun by the schedule. The owner or the coordinator thread may still start a release by hand ("release main"). More release times a weekday are one schedule line each.
