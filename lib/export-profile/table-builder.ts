@@ -99,10 +99,29 @@ function looksLikeHeader(
   return typed.length > 0 && typed.every(isWordLabel);
 }
 
-const PLACEHOLDERS = new Set(['k.a.', 'n/a', 'null', 'none', 'keine', 'kein', 'leer', 'unbekannt', 'offen']);
+// Placeholders compared by their letters only, so "k. A.", "K.A." and "n / a" match.
+const PLACEHOLDERS = new Set([
+  'ka',
+  'na',
+  'nv',
+  'nn',
+  'null',
+  'none',
+  'keine',
+  'kein',
+  'leer',
+  'fehlt',
+  'unbek',
+  'unbekannt',
+  'offen',
+  'tbd',
+  'xx',
+  'xxx',
+]);
 
 function isWordLabel(label: string): boolean {
-  return (label.match(/\p{L}/gu)?.length ?? 0) >= 2 && !PLACEHOLDERS.has(label.toLowerCase());
+  const letters = (label.match(/\p{L}/gu) ?? []).join('').toLowerCase();
+  return letters.length >= 2 && !PLACEHOLDERS.has(letters);
 }
 
 function nameColumns(columns: readonly ColumnAccumulator[], header: readonly Cell[]): void {
