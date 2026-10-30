@@ -8,6 +8,7 @@
  * is meant to grow as features land (add a section, re-run).
  *
  * Usage:
+ *   bun scripts/seed-demo-data.ts --target local
  *   bun scripts/seed-demo-data.ts --target dev
  *   bun scripts/seed-demo-data.ts --target prod --confirm-prod
  *   ... --phase reset   (only delete the owner's organizations)
@@ -17,8 +18,10 @@
  * For a manual look on DEV, set DEMO_MEMBER_PASSWORD to one you choose; PROD
  * refuses it (lib/security/demo-member-password.ts).
  *
- * Reads the gitignored `.env.dev-backup` / `.env.live-backup` directly, so
- * `.env.local` stays untouched. The reset deletes only organizations whose
+ * Reads the gitignored `.env.local-stack-backup` / `.env.dev-backup` /
+ * `.env.live-backup` directly, so `.env.local` stays untouched. A local stack
+ * without the owner, such as CI's, gets the owner created with the members'
+ * password. The reset deletes only organizations whose
  * `admin_id` is the owner's user, their R2 objects, and member users that are
  * left without any membership. Willert Haustechnik's organization is refused by
  * id as a second guard; the owner is not a member there.
@@ -30,6 +33,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database, Json } from '../lib/supabase/database.types';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
+import { generateOrganizationCode } from '../lib/org/schemas';
 import { DEMO_MEMBER_PASSWORD_ENV, resolveDemoMemberPassword } from '../lib/security/demo-member-password';
 import { deleteStorageObjects, listStorageObjectPaths } from '../lib/storage/r2';
 
@@ -42,8 +46,11 @@ const WILLERT_ORGANIZATION_ID = '351e9e05-b8c6-4d5c-b29f-b33b2f1f04de';
 const TODAY = '2026-09-18';
 const RANGE_START = '2026-08-03';
 const RANGE_END = '2026-11-27';
-const ENV_FILES = { dev: '.env.dev-backup', prod: '.env.live-backup' } as const;
-const ORGANIZATION_CODE_CHARSET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const ENV_FILES = {
+  local: '.env.local-stack-backup',
+  dev: '.env.dev-backup',
+  prod: '.env.live-backup',
+} as const;
 
 // ---------------------------------------------------------------------------
 // Company specifications
@@ -1920,13 +1927,6 @@ function listWorkdays(from: string, to: string, holidays: Set<string>): string[]
   return days;
 }
 
-function randomOrganizationCode(random: Random): string {
-  let code = '';
-  for (let index = 0; index < 6; index += 1)
-    code += ORGANIZATION_CODE_CHARSET.charAt(random.int(0, ORGANIZATION_CODE_CHARSET.length - 1));
-  return code;
-}
-
 function slug(value: string): string {
   return value
     .normalize('NFD')
@@ -2001,14 +2001,27 @@ function loadEnvironment(target: Target): { url: string; secretKey: string } {
   return { url, secretKey };
 }
 
-async function findOwner(admin: Admin): Promise<{ id: string; firstName: string; lastName: string }> {
+async function findOwner(
+  admin: Admin,
+  target: Target,
+  password: string,
+): Promise<{ id: string; firstName: string; lastName: string }> {
   const { data, error } = await admin
     .from('profiles')
     .select('id, first_name, last_name')
     .eq('email', OWNER_EMAIL)
-    .single();
-  if (error || !data) fail(`owner ${OWNER_EMAIL} lookup`, error);
-  return { id: data.id, firstName: data.first_name ?? 'Tamay', lastName: data.last_name ?? 'Can' };
+    .maybeSingle();
+  if (error) fail(`owner ${OWNER_EMAIL} lookup`, error);
+  if (data) return { id: data.id, firstName: data.first_name ?? 'Tamay', lastName: data.last_name ?? 'Can' };
+  if (target !== 'local') throw new Error(`owner ${OWNER_EMAIL} lookup: no profile`);
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email: OWNER_EMAIL,
+    password,
+    email_confirm: true,
+    user_metadata: { first_name: 'Tamay', last_name: 'Can' },
+  });
+  if (createError) fail(`create local owner ${OWNER_EMAIL}`, createError);
+  return { id: created.user.id, firstName: 'Tamay', lastName: 'Can' };
 }
 
 // ---------------------------------------------------------------------------
@@ -2982,6 +2995,9 @@ async function seedWork(
   }
 
   await insertRows(admin, 'jobs', jobRows);
+  const assignedAt = (job: SeededJob): string =>
+    berlinInstant(shiftDate(job.plannedDate ?? '2026-08-03', -2), '16:00');
+  await seedVisitAssignments(admin, organizationId, ownerId, jobs, assignedAt);
   await insertRows(
     admin,
     'job_assignments',
@@ -2991,11 +3007,46 @@ async function seedWork(
         user_id: member.userId,
         assigned_by: ownerId,
         organization_id: organizationId,
-        assigned_at: berlinInstant(shiftDate(job.plannedDate ?? '2026-08-03', -2), '16:00'),
+        assigned_at: assignedAt(job),
       })),
     ),
   );
   return jobs;
+}
+
+// Each dated job got its visit from the jobs trigger. The job_assignments trigger puts a person
+// only on visits that start after the database's now(), but this timeline is fixed around TODAY,
+// so it would leave every visit before the real date without people: the Plantafel would list
+// them under "Ohne Zuweisung" and issue_planning_dispatch would find no recipients. Each person
+// was assigned two days before the visit, when the app would have put them on it, so the visit
+// teams are written here, before the job_assignments rows whose trigger then skips them.
+async function seedVisitAssignments(
+  admin: Admin,
+  organizationId: string,
+  ownerId: string,
+  jobs: SeededJob[],
+  assignedAt: (job: SeededJob) => string,
+): Promise<void> {
+  const { data, error, count } = await admin
+    .from('planning_occurrences')
+    .select('id, job_id', { count: 'exact' })
+    .eq('organization_id', organizationId);
+  if (error) fail('load visits', error);
+  const visits = requireComplete('load visits', data, count);
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+  const rows = visits.flatMap((visit) => {
+    const job = visit.job_id ? jobsById.get(visit.job_id) : undefined;
+    if (!job) throw new Error(`visit ${visit.id} has no seeded job`);
+    return job.assignees.map((member) => ({
+      organization_id: organizationId,
+      occurrence_id: visit.id,
+      employee_record_id: member.employeeRecordId,
+      assigned_by: ownerId,
+      assigned_at: assignedAt(job),
+    }));
+  });
+  await insertRows(admin, 'planning_occurrence_assignments', rows);
+  log(`  visits: ${visits.length}, visit assignments: ${rows.length}`);
 }
 
 async function seedTimeEntries(
@@ -3048,6 +3099,8 @@ async function seedTimeEntries(
       const hasBreak = worked > 300;
       const end = start + worked + (hasBreak ? 30 : 0);
       const dayJobs = jobsByMemberDay.get(`${member.employeeRecordId}:${date}`) ?? [];
+      // The job rides on the entries that start a work block, as the app writes them: clock_out
+      // and break_start carry none (validateManualEntryJobOwnership, the sign-out clock_out).
       const base = {
         organization_id: organizationId,
         user_id: member.userId,
@@ -3432,6 +3485,80 @@ async function seedDispatches(
   log(`  dispatches issued: ${issued}`);
 }
 
+function requireComplete<T>(step: string, rows: T[] | null, count: number | null): T[] {
+  if (!rows || rows.length !== count) throw new Error(`${step}: read ${rows?.length ?? 0} of ${count}`);
+  return rows;
+}
+
+// Reads the seeded rows back: every visit of a job carries each person the job lists, past visits
+// and visits outside the dispatch window included. Read-only; the failure names counts only.
+async function verifyVisitTeams(admin: Admin, organizationId: string): Promise<void> {
+  const [jobAssignments, records, visits, visitAssignments] = await Promise.all([
+    admin
+      .from('job_assignments')
+      .select('job_id, user_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('employee_records')
+      .select('id, user_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('planning_occurrences')
+      .select('id, job_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+    admin
+      .from('planning_occurrence_assignments')
+      .select('occurrence_id, employee_record_id', { count: 'exact' })
+      .eq('organization_id', organizationId),
+  ]);
+  for (const result of [jobAssignments, records, visits, visitAssignments])
+    if (result.error) fail('verify visit teams', result.error);
+  const recordByUser = new Map(
+    requireComplete('verify employee records', records.data, records.count).map((row) => [
+      row.user_id,
+      row.id,
+    ]),
+  );
+  const teamByJob = new Map<string, string[]>();
+  for (const row of requireComplete('verify job assignments', jobAssignments.data, jobAssignments.count)) {
+    const recordId = recordByUser.get(row.user_id);
+    if (!recordId) throw new Error('verify visit teams: a job assignee has no employee record');
+    teamByJob.set(row.job_id, [...(teamByJob.get(row.job_id) ?? []), recordId]);
+  }
+  const onVisit = new Set(
+    requireComplete('verify visit assignments', visitAssignments.data, visitAssignments.count).map(
+      (row) => `${row.occurrence_id}:${row.employee_record_id}`,
+    ),
+  );
+  let expected = 0;
+  let missing = 0;
+  for (const visit of requireComplete('verify visits', visits.data, visits.count)) {
+    for (const recordId of (visit.job_id ? teamByJob.get(visit.job_id) : undefined) ?? []) {
+      expected += 1;
+      if (!onVisit.has(`${visit.id}:${recordId}`)) missing += 1;
+    }
+  }
+  if (missing > 0) throw new Error(`verify visit teams: ${missing} of ${expected} visit assignments missing`);
+  log(`  visit teams verified: ${expected} visit assignments`);
+}
+
+// The join code is a secret, so it comes from the cryptographic source and never from the
+// seeded generator. A drawn code another organization holds is drawn again, as the app does.
+async function insertOrganization(
+  admin: Admin,
+  row: Omit<Insert<'organizations'>, 'unique_code'>,
+): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const { error } = await admin
+      .from('organizations')
+      .insert({ ...row, unique_code: generateOrganizationCode() });
+    if (!error) return;
+    if (!error.message.includes('organizations_unique_code_key'))
+      fail(`insert organization ${row.name}`, error);
+  }
+  throw new Error(`insert organization ${row.name}: no free code after 10 draws`);
+}
+
 async function seedCompany(
   admin: Admin,
   owner: { id: string },
@@ -3444,14 +3571,7 @@ async function seedCompany(
   const organizationId = crypto.randomUUID();
   log(`seed: creating "${company.name}" (${organizationId})`);
 
-  await insertRows(admin, 'organizations', [
-    {
-      id: organizationId,
-      name: company.name,
-      admin_id: owner.id,
-      unique_code: randomOrganizationCode(random),
-    },
-  ]);
+  await insertOrganization(admin, { id: organizationId, name: company.name, admin_id: owner.id });
   await insertRows(admin, 'organization_settings', [
     {
       organization_id: organizationId,
@@ -3496,6 +3616,7 @@ async function seedCompany(
   await seedRequests(admin, organizationId, owner.id, members, customers, jobs, equipmentBySite, random);
   await seedMaintenance(admin, organizationId, owner.id, customers, equipmentBySite, templateVersions);
   await seedDispatches(admin, organizationId, owner.id, jobs);
+  await verifyVisitTeams(admin, organizationId);
 }
 
 // ---------------------------------------------------------------------------
@@ -3509,9 +3630,9 @@ async function main(): Promise<void> {
     return index >= 0 ? (args[index + 1] ?? null) : null;
   };
   const target = readFlag('--target');
-  if (target !== 'dev' && target !== 'prod')
+  if (target !== 'local' && target !== 'dev' && target !== 'prod')
     throw new Error(
-      'Usage: bun scripts/seed-demo-data.ts --target dev|prod [--phase reset|seed] [--confirm-prod]',
+      'Usage: bun scripts/seed-demo-data.ts --target local|dev|prod [--phase reset|seed] [--confirm-prod]',
     );
   if (target === 'prod' && !args.includes('--confirm-prod')) throw new Error('PROD needs --confirm-prod');
   const phase = readFlag('--phase') ?? 'all';
@@ -3521,7 +3642,7 @@ async function main(): Promise<void> {
   const admin = createClient<Database>(url, secretKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const owner = await findOwner(admin);
+  const owner = await findOwner(admin, target, password);
   log(`target ${target} (${url}), owner ${OWNER_EMAIL} = ${owner.id}`);
 
   if (phase === 'all' || phase === 'reset') await resetOwnerOrganizations(admin, owner.id);
