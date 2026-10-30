@@ -101,15 +101,14 @@ describe('incomplete input is unreadable, never a quiet partial profile', () => 
     const folder = mkdtempSync(join(tmpdir(), 'export-profile-csv-'));
     try {
       writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
+      writeFileSync(join(folder, 'zoll.csv'), 'Name\n5" Rohr, "Bogen\n');
       writeFileSync(join(folder, 'einspaltig.csv'), 'Name\n"Meier, Max"\n"Kurz"\n');
       const profile = profileExportFolder(folder, { maskLabels: false });
-      expect(profile.unreadable).toEqual([
-        {
-          file: 'mehrdeutig.csv',
-          reason: 'delimiter_ambiguous',
-          advice: expect.stringContaining('ask Willert'),
-        },
+      expect(profile.unreadable.map((file) => [file.file, file.reason])).toEqual([
+        ['mehrdeutig.csv', 'delimiter_ambiguous'],
+        ['zoll.csv', 'delimiter_ambiguous'],
       ]);
+      expect(profile.unreadable[0]?.advice).toContain('ask Willert');
       expect(profile.tables.map((table) => [table.file, table.columns.length])).toEqual([
         ['einspaltig.csv', 1],
       ]);

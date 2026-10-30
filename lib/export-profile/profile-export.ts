@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { newRunSalt, type ColumnProfile } from './column-statistics';
 import { datanormTables } from './datanorm';
-import { delimitedRows, detectDelimiter } from './delimited-text';
+import { delimitedRows, detectDelimiter, hasUnquotedDelimiter } from './delimited-text';
 import { DocumentInventory, type DocumentGroup, type FolderShape } from './document-inventory';
 import { readWorkbook } from './excel-workbook';
 import { categorize, extensionLabel, readHead, walkExportFolder, type ExportFile } from './export-files';
@@ -229,9 +229,7 @@ function addTable(run: Run, source: TableSource, built: BuiltTable): void {
  */
 function singleColumnCsv(path: string, text: string): ';' | null {
   if (extname(path).toLowerCase() !== '.csv') return null;
-  // A separator inside a quoted value ("Meier, Max") is data, not ambiguity.
-  const unquoted = text.replace(/"(?:[^"]|"")*"/g, '');
-  if (/[;,\t|]/.test(unquoted)) throw new ExportFormatError('delimiter_ambiguous');
+  if (hasUnquotedDelimiter(text)) throw new ExportFormatError('delimiter_ambiguous');
   return ';';
 }
 

@@ -56,6 +56,28 @@ function mostCommon(values: readonly number[]): number {
   return best;
 }
 
+/**
+ * True when a candidate delimiter appears outside a quoted field. A quote
+ * opens a field only at its start, as in delimitedRows, so the comma in
+ * `5" Rohr, "Bogen` counts and the one in `"Meier, Max"` does not.
+ */
+export function hasUnquotedDelimiter(text: string): boolean {
+  let quoted = false;
+  let atFieldStart = true;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text.charAt(index);
+    if (quoted) {
+      if (character === '"' && text.charAt(index + 1) === '"') index += 1;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (CANDIDATE_DELIMITERS.some((delimiter) => delimiter === character)) return true;
+    if (character === '"' && atFieldStart) quoted = true;
+    atFieldStart = character === '\n' || character === '\r';
+  }
+  return false;
+}
+
 /** The rows of delimited text, with RFC 4180 quoting. Blank lines are skipped. */
 export function* delimitedRows(text: string, delimiter: Delimiter): Generator<string[]> {
   const body = text.replace(/^sep=.\r?\n/i, '');
