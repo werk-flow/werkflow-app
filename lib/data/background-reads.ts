@@ -42,11 +42,11 @@ import { getServiceCasePage } from '@/lib/service-cases/list-page-server';
 import { getOwnSicknessReports, getSicknessReportsForRecord } from '@/lib/sickness/actions';
 import { getMaintenanceEvidenceOptions, getMaintenanceWorkspace } from '@/lib/maintenance/actions';
 import { maintenanceWorkspaceQuerySchema } from '@/lib/maintenance/workspace-page';
+import { getAssignmentTeamOptions } from '@/lib/qualifications/actions';
 import {
-  getAssignmentTeamOptions,
   getJobQualificationDetail,
   getProjectCapabilityRequirements,
-} from '@/lib/qualifications/actions';
+} from '@/lib/qualifications/requirement-actions';
 import {
   getProvisionalTimeSummary,
   getTimeCorrectionFormOptions,

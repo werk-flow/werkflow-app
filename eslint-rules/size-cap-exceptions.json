@@ -9,10 +9,8 @@
     "lib/customer-relationships/actions.ts": 1427,
     "lib/documents/actions.ts": 1584,
     "lib/inventory/actions.ts": 1567,
-    "lib/qualifications/actions.ts": 1228,
     "lib/security/server-action-authorization.test.ts": 959,
-    "lib/time-accounts/period-preparation.ts": 1277,
-    "lib/vacation/actions.ts": 984
+    "lib/time-accounts/period-preparation.ts": 1277
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
@@ -559,23 +557,11 @@
       "readPlanItems": 95,
       "readMaintenanceWorkspace": 118
     },
-    "lib/qualifications/actions.ts": {
-      "getQualificationWorkspace": 152,
-      "getPersonnelQualificationSummary": 115,
-      "getOwnQualificationProfile": 99,
-      "getJobQualificationDetail": 101,
-      "expandTeamForAssignment": 86
-    },
-    "lib/qualifications/server.ts": {
-      "loadAssignmentEvaluation": 130,
-      "loadCertificationExpiryNotifications": 127
-    },
     "lib/responsibilities/actions.ts": { "previewResponsibilityConfiguration": 90 },
     "lib/responsibilities/resolution.ts": { "resolveEffectiveResponsibility": 102 },
     "lib/responsibilities/server.ts": { "loadResponsibilityRuntimeState": 137 },
     "lib/service-cases/actions.ts": { "loadClientOption": 113, "getServiceCaseDetailByNumber": 115 },
     "lib/service-cases/list-page-server.ts": { "hydrateListItems": 126 },
-    "lib/sickness/actions.ts": { "getSicknessCalendarEntries": 90 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
@@ -589,10 +575,6 @@
       "pushEmployeeReviewFindings": 82,
       "pushEmployeeWarningFindings": 102,
       "pushEmployeeDailyResults": 115
-    },
-    "lib/vacation/actions.ts": {
-      "getPendingVacationRequestsForApprover": 116,
-      "getVacationCalendarEntries": 98
     }
   }
 }

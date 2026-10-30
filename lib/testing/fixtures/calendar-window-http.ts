@@ -91,7 +91,7 @@ mock.module('@/lib/time-tracking/review-actions', () => ({
   getChangeRequestsForEntries: async () => ({ success: true, requests: [] }),
 }));
 mock.module('@/lib/planning/actions', () => ({ getPlanningEntries: readEmpty }));
-mock.module('@/lib/vacation/actions', () => ({ getVacationCalendarEntries: readEmpty }));
+mock.module('@/lib/vacation/calendar-actions', () => ({ getVacationCalendarEntries: readEmpty }));
 mock.module('@/lib/sickness/actions', () => ({ getSicknessCalendarEntries: readEmpty }));
 mock.module('@/lib/personnel/calendar-reader', () => ({
   readOrganizationCalendar: async () => {

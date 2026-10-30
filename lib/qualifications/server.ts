@@ -179,7 +179,7 @@ async function readAssignmentQualificationRows(
   };
 }
 
-function toJobCapabilityRequirements(
+export function toJobCapabilityRequirements(
   requirementRows: Array<{ id: string; capability_id: string; require_confirmation: boolean }>,
   definitionRows: Array<Parameters<typeof toCapabilityDefinition>[0]>,
 ): JobCapabilityRequirement[] {
@@ -241,7 +241,7 @@ function toAssignmentCandidates(
   }));
 }
 
-export async function loadAssignmentEvaluation(input: {
+type AssignmentEvaluationInput = {
   admin: AdminClient;
   orgId: string;
   jobId?: string | null | undefined;
@@ -255,12 +255,12 @@ export async function loadAssignmentEvaluation(input: {
         require_confirmation: boolean;
       }>
     | undefined;
-}): Promise<{ success: true; evaluation: AssignmentEvaluation } | ActionFailure> {
-  const selectedUserIds = [...new Set(input.selectedUserIds ?? [])].sort();
-  const selectedEmployeeRecordIds = [...new Set(input.selectedEmployeeRecordIds ?? [])].sort();
-  if (selectedUserIds.length + selectedEmployeeRecordIds.length > 200) {
-    return { success: false, error: 'invalid_input' };
-  }
+};
+
+/** The day an evaluation assesses: the given date, else the job's planned date, else today. */
+async function resolveAssessedForDate(
+  input: AssignmentEvaluationInput,
+): Promise<{ success: true; assessedForDate: string } | ActionFailure> {
   let assessedForDate = input.assessedForDate || null;
 
   if (input.jobId) {
@@ -276,8 +276,15 @@ export async function loadAssignmentEvaluation(input: {
     }
     assessedForDate = assessedForDate || job.planned_date;
   }
-  assessedForDate = assessedForDate || getBusinessTodayIso();
+  return { success: true, assessedForDate: assessedForDate || getBusinessTodayIso() };
+}
 
+/** The requirements, the apprentice setting and the selected employees of one evaluation; null after logging a failed read. */
+async function readAssignmentContext(
+  input: AssignmentEvaluationInput,
+  selectedEmployeeRecordIds: string[],
+  selectedUserIds: string[],
+) {
   const [requirementsResult, settingsResult, selectedRecordsResult, selectedUsersResult] = await Promise.all([
     input.requirementRows
       ? Promise.resolve({ data: input.requirementRows, error: null })
@@ -324,14 +331,35 @@ export async function loadAssignmentEvaluation(input: {
         selectedRecordsResult.error ??
         selectedUsersResult.error,
     );
-    return { success: false, error: 'load_failed' };
+    return null;
   }
 
-  const employeeRows = [
-    ...new Map(
-      [...selectedRecordsResult.data, ...selectedUsersResult.data].map((row) => [row.id, row]),
-    ).values(),
-  ];
+  return {
+    requirementRows: requirementsResult.data ?? [],
+    apprenticeWarningEnabled: settingsResult.data?.apprentice_warning_enabled ?? false,
+    employeeRows: [
+      ...new Map(
+        [...selectedRecordsResult.data, ...selectedUsersResult.data].map((row) => [row.id, row]),
+      ).values(),
+    ],
+  };
+}
+
+export async function loadAssignmentEvaluation(
+  input: AssignmentEvaluationInput,
+): Promise<{ success: true; evaluation: AssignmentEvaluation } | ActionFailure> {
+  const selectedUserIds = [...new Set(input.selectedUserIds ?? [])].sort();
+  const selectedEmployeeRecordIds = [...new Set(input.selectedEmployeeRecordIds ?? [])].sort();
+  if (selectedUserIds.length + selectedEmployeeRecordIds.length > 200) {
+    return { success: false, error: 'invalid_input' };
+  }
+  const dateResult = await resolveAssessedForDate(input);
+  if (!dateResult.success) return dateResult;
+  const { assessedForDate } = dateResult;
+
+  const context = await readAssignmentContext(input, selectedEmployeeRecordIds, selectedUserIds);
+  if (!context) return { success: false, error: 'load_failed' };
+  const { employeeRows } = context;
   const returnedRecordIds = new Set(employeeRows.map((row) => row.id));
   const returnedUserIds = new Set(employeeRows.map((row) => row.user_id));
   if (
@@ -342,7 +370,7 @@ export async function loadAssignmentEvaluation(input: {
   }
 
   // A job holds at most 100 requirements (the write path refuses more).
-  const requirementRows = requirementsResult.data ?? [];
+  const { requirementRows } = context;
   if (requirementRows.length > 100) {
     logError('Assignment qualification requirements exceeded their bound:', {
       code: 'requirement_overflow',
@@ -374,53 +402,32 @@ export async function loadAssignmentEvaluation(input: {
       assessedForDate,
       candidates,
       requirements,
-      apprenticeWarningEnabled: settingsResult.data?.apprentice_warning_enabled ?? false,
+      apprenticeWarningEnabled: context.apprenticeWarningEnabled,
     }),
   };
 }
 
-export async function loadCertificationExpiryNotifications(input: {
-  admin: AdminClient;
-  orgId: string;
-  today?: string;
-}): Promise<{
-  notices: Array<{
-    sourceId: string;
-    stateVersion: string;
-    employeeRecordId: string;
-    employeeName: string;
-    capabilityName: string;
-    validUntil: string;
-    phase: 'approaching' | 'expired';
-    occurredAt: string;
-  }>;
-  failed: boolean;
-}> {
-  const today = input.today ?? getBusinessTodayIso();
-  // Every current certification with an end date: a few hundred employees
-  // hold more of them than one response returns.
-  const { data: rows, error } = await readCompleteRows(
-    (from, to) =>
-      input.admin
-        .from('employee_capabilities')
-        .select('id, employee_record_id, capability_id, valid_until, superseded_at')
-        .eq('organization_id', input.orgId)
-        .eq('capability_kind', 'certification')
-        .is('superseded_at', null)
-        .not('valid_until', 'is', null)
-        .order('valid_until', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (error) {
-    logError('Failed to load certification expiry rows:', error);
-    return { notices: [], failed: true };
-  }
-  if (rows.length === 0) {
-    return { notices: [], failed: false };
-  }
+type CertificationExpiryNotice = {
+  sourceId: string;
+  stateVersion: string;
+  employeeRecordId: string;
+  employeeName: string;
+  capabilityName: string;
+  validUntil: string;
+  phase: 'approaching' | 'expired';
+  occurredAt: string;
+};
 
+type CertificationExpiryRow = Pick<
+  Database['public']['Tables']['employee_capabilities']['Row'],
+  'id' | 'employee_record_id' | 'capability_id' | 'valid_until' | 'superseded_at'
+>;
+
+/** The definitions and employee names the expiry rows name; null after logging a failed read. */
+async function readCertificationAttentionContext(
+  input: { admin: AdminClient; orgId: string },
+  rows: CertificationExpiryRow[],
+) {
   const [definitionsResult, employeesResult] = await Promise.all([
     readInBatches(
       rows.map((row) => row.capability_id),
@@ -446,7 +453,7 @@ export async function loadCertificationExpiryNotifications(input: {
       'Failed to load certification attention context:',
       definitionsResult.error ?? employeesResult.error,
     );
-    return { notices: [], failed: true };
+    return null;
   }
   const definitions = new Map(definitionsResult.data.map((row) => [row.id, row]));
   const profilesResult = await readInBatches(
@@ -459,7 +466,7 @@ export async function loadCertificationExpiryNotifications(input: {
   );
   if (profilesResult.error) {
     logError('Failed to load certification attention profile names:', profilesResult.error);
-    return { notices: [], failed: true };
+    return null;
   }
   const profileNames = new Map(
     profilesResult.data.map((profile) => [
@@ -475,8 +482,15 @@ export async function loadCertificationExpiryNotifications(input: {
         'Mitarbeiter',
     ]),
   );
+  return { definitions, employees };
+}
 
-  const notices = rows.flatMap((row) => {
+function toCertificationExpiryNotices(
+  rows: CertificationExpiryRow[],
+  { definitions, employees }: NonNullable<Awaited<ReturnType<typeof readCertificationAttentionContext>>>,
+  today: string,
+): CertificationExpiryNotice[] {
+  return rows.flatMap((row) => {
     if (!row.valid_until) return [];
     const definition = definitions.get(row.capability_id);
     if (!definition) return [];
@@ -508,5 +522,42 @@ export async function loadCertificationExpiryNotifications(input: {
       },
     ];
   });
-  return { notices, failed: false };
+}
+
+export async function loadCertificationExpiryNotifications(input: {
+  admin: AdminClient;
+  orgId: string;
+  today?: string;
+}): Promise<{
+  notices: CertificationExpiryNotice[];
+  failed: boolean;
+}> {
+  const today = input.today ?? getBusinessTodayIso();
+  // Every current certification with an end date: a few hundred employees
+  // hold more of them than one response returns.
+  const { data: rows, error } = await readCompleteRows(
+    (from, to) =>
+      input.admin
+        .from('employee_capabilities')
+        .select('id, employee_record_id, capability_id, valid_until, superseded_at')
+        .eq('organization_id', input.orgId)
+        .eq('capability_kind', 'certification')
+        .is('superseded_at', null)
+        .not('valid_until', 'is', null)
+        .order('valid_until', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+  if (error) {
+    logError('Failed to load certification expiry rows:', error);
+    return { notices: [], failed: true };
+  }
+  if (rows.length === 0) {
+    return { notices: [], failed: false };
+  }
+
+  const context = await readCertificationAttentionContext(input, rows);
+  if (!context) return { notices: [], failed: true };
+  return { notices: toCertificationExpiryNotices(rows, context, today), failed: false };
 }

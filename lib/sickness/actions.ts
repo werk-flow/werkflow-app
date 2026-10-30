@@ -3,11 +3,11 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
 import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { defaultCalendarWindow, parseIsoDateRange, type IsoDateRange } from '@/lib/calendar/date-range';
-import { loadSicknessReportsForRecord } from './server';
+import { loadSicknessCalendarPersonNames, loadSicknessReportsForRecord } from './server';
 import {
   toSicknessReport,
   type SicknessAbsenceType,
@@ -682,43 +682,10 @@ export async function getSicknessCalendarEntries(
     }
     if (!rows || rows.length === 0) return { success: true, entries: [] };
 
-    const recordIds = [...new Set(rows.map((row) => row.employee_record_id))];
-    const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) =>
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', orgId)
-        .in('id', [...ids]),
-    );
-    if (recordsError) {
-      logReadFailure('Failed to load sickness calendar records:', recordsError);
-      return { success: false, error: 'load_failed' };
-    }
-    const userIds = [
-      ...new Set((records ?? []).map((row) => row.user_id).filter((id): id is string => Boolean(id))),
-    ];
-    const profilesResult =
-      userIds.length > 0
-        ? await readInBatches(userIds, (ids) =>
-            admin
-              .from('profiles')
-              .select('id, first_name, last_name')
-              .in('id', [...ids]),
-          )
-        : { data: [], error: null };
-    if (profilesResult.error) {
-      logReadFailure('Failed to load sickness calendar profiles:', profilesResult.error);
-      return { success: false, error: 'load_failed' };
-    }
-    const profileByUserId = new Map((profilesResult.data ?? []).map((row) => [row.id, row]));
-    const nameByRecordId = new Map(
-      (records ?? []).map((record) => {
-        const profile = record.user_id ? profileByUserId.get(record.user_id) : undefined;
-        const firstName = profile?.first_name ?? record.first_name ?? '';
-        const lastName = profile?.last_name ?? record.last_name ?? '';
-        return [record.id, `${firstName} ${lastName}`.trim() || 'Unbekannt'];
-      }),
-    );
+    const nameByRecordId = await loadSicknessCalendarPersonNames(admin, orgId, [
+      ...new Set(rows.map((row) => row.employee_record_id)),
+    ]);
+    if (!nameByRecordId) return { success: false, error: 'load_failed' };
 
     return {
       success: true,

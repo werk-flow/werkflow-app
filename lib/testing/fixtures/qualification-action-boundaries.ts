@@ -25,9 +25,16 @@ const world = installActionWorld({
     { id: foreignEmployeeRecordId, organization_id: ORGANIZATION_B, user_id: null, first_name: 'Fremd' },
   ],
 });
+const { getQualificationWorkspace, getPersonnelQualificationSummary } = await import(
+  '@/lib/qualifications/workspace-actions'
+);
 const {
-  getQualificationWorkspace,
-  getPersonnelQualificationSummary,
+  getJobQualificationDetail,
+  getProjectCapabilityRequirements,
+  setJobCapabilityRequirements,
+  setProjectCapabilityRequirements,
+} = await import('@/lib/qualifications/requirement-actions');
+const {
   createTeam,
   updateTeam,
   dissolveTeam,
@@ -38,10 +45,6 @@ const {
   addEmployeeCapability,
   updateEmployeeCapability,
   setApprenticeWarningEnabled,
-  setJobCapabilityRequirements,
-  getJobQualificationDetail,
-  getProjectCapabilityRequirements,
-  setProjectCapabilityRequirements,
   expandTeamForAssignment,
   getAssignmentTeamOptions,
 } = await import('@/lib/qualifications/actions');
