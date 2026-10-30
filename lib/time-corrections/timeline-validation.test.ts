@@ -388,6 +388,15 @@ test('open time over midnight may last at most 24 hours', () => {
       fact('end', 'clock_out', '2026-10-21T06:01:00.000Z'),
     ]),
   ).toBe(true);
+  // A resumed clock_in without a later clock_out still counts from the original start.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T12:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-20T12:30:00.000Z'),
+      fact('switch', 'clock_in', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
   // A clock_in after a clock_out starts new time.
   expect(
     exceedsLongestOpenTime([

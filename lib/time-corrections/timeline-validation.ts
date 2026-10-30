@@ -36,7 +36,6 @@ export function exceedsLongestOpenTime(facts: readonly TimeCorrectionFact[]): bo
     const start = opened.get(fact.userId);
     if (
       start &&
-      fact.entryType !== 'clock_in' &&
       Date.parse(fact.timestamp) - Date.parse(start.timestamp) > UNUSUALLY_LONG_SESSION_MS &&
       formatBerlinLocalDate(correctionDayOwner(start)) !== formatBerlinLocalDate(correctionDayOwner(fact))
     )
