@@ -24,9 +24,13 @@ until answer="$(curl --silent --max-time 10 --output /dev/null --write-out '%{ht
     echo "::warning::The edge runtime exited after ${SECONDS} s; starting it once."
     state
     docker logs --timestamps "$runtime"
-    docker start "$runtime" > /dev/null
     restarted=true
-    attempts+="${SECONDS}s: started the stopped runtime"$'\n'
+    if docker start "$runtime" > /dev/null; then
+      attempts+="${SECONDS}s: started the stopped runtime"$'\n'
+    else
+      attempts+="${SECONDS}s: could not start the stopped runtime"$'\n'
+      deadline=$SECONDS
+    fi
   fi
   if test $SECONDS -ge $deadline; then
     echo "::error::The edge runtime did not answer 204 within 180 s."
