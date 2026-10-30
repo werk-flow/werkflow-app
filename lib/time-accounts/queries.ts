@@ -13,7 +13,7 @@ import {
   readLatestFindingDecisions,
   readPendingAdjustments,
 } from './decision-reads';
-import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
   PayrollExportState,
   TimeFindingDecision,
