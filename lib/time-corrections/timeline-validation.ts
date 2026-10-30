@@ -42,7 +42,9 @@ export function exceedsLongestOpenTime(facts: readonly TimeCorrectionFact[]): bo
     )
       return true;
     if (fact.entryType === 'clock_out') opened.delete(fact.userId);
-    else if (!start || fact.entryType === 'clock_in') opened.set(fact.userId, fact);
+    // A clock_in right after break_end resumes the same open time, so only a clock_in after
+    // a clock_out starts a new one.
+    else if (!start) opened.set(fact.userId, fact);
   }
   return false;
 }

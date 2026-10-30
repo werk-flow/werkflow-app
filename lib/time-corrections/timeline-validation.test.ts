@@ -378,6 +378,25 @@ test('open time over midnight may last at most 24 hours', () => {
       fact('resume', 'break_end', '2026-10-21T06:01:00.000Z'),
     ]),
   ).toBe(true);
+  // A clock_in that resumes work after a break keeps the original start.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T12:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-20T12:30:00.000Z'),
+      fact('switch', 'clock_in', '2026-10-20T12:30:00.000Z'),
+      fact('end', 'clock_out', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
+  // A clock_in after a clock_out starts new time.
+  expect(
+    exceedsLongestOpenTime([
+      fact('first', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('first-end', 'clock_out', '2026-10-20T14:00:00.000Z'),
+      fact('second', 'clock_in', '2026-10-20T20:00:00.000Z'),
+      fact('second-end', 'clock_out', '2026-10-21T06:00:00.000Z'),
+    ]),
+  ).toBe(false);
   // The whole 25-hour day of the autumn clock change, as a recorded session's day piece.
   expect(exceedsLongestOpenTime(shift('2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'))).toBe(false);
 });
