@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { extname } from 'node:path';
 import { newRunSalt, type ColumnProfile } from './column-statistics';
 import { datanormTables } from './datanorm';
-import { delimitedRows, detectDelimiter, hasUnquotedDelimiter } from './delimited-text';
+import { delimitedRows, detectDelimiter, hasUnquotedDelimiter, type Delimiter } from './delimited-text';
 import { DocumentInventory, type DocumentGroup, type FolderShape } from './document-inventory';
 import { readWorkbook } from './excel-workbook';
 import { categorize, extensionLabel, readHead, walkExportFolder, type ExportFile } from './export-files';
@@ -223,19 +223,20 @@ function addTable(run: Run, source: TableSource, built: BuiltTable): void {
 }
 
 /**
- * A .csv without a consistent delimiter is one column only when it holds no
- * delimiter character at all; otherwise the separator is ambiguous. Any
- * other text file without one is a document.
+ * A .csv or .tsv without a consistent delimiter is one column only when it
+ * holds no delimiter character outside quotes; otherwise the separator is
+ * ambiguous. Any other text file without one is a document.
  */
-function singleColumnCsv(path: string, text: string): ';' | null {
-  if (extname(path).toLowerCase() !== '.csv') return null;
+function singleColumnTable(path: string, text: string): Delimiter | null {
+  const extension = extname(path).toLowerCase();
+  if (extension !== '.csv' && extension !== '.tsv') return null;
   if (hasUnquotedDelimiter(text)) throw new ExportFormatError('delimiter_ambiguous');
-  return ';';
+  return extension === '.tsv' ? '\t' : ';';
 }
 
 function profileDelimited(run: Run, file: ExportFile, label: string, segments: readonly string[]): void {
   const decoded = decodeText(readFileSync(file.path));
-  const delimiter = detectDelimiter(decoded.text) ?? singleColumnCsv(file.path, decoded.text);
+  const delimiter = detectDelimiter(decoded.text) ?? singleColumnTable(file.path, decoded.text);
   if (delimiter === null) return countDocument(run, file, 'document', segments);
   const rows = (function* () {
     for (const row of delimitedRows(decoded.text, delimiter)) yield row.map((text) => ({ text }));

@@ -44,6 +44,11 @@ describe('XML', () => {
     expect(formatErrorCode(() => [...xmlRecords('<a><b>1</b> < <c>2</c></a>')])).toBe('xml_not_well_formed');
   });
 
+  test('repeated text-only children keep every value', () => {
+    const [record] = [...xmlRecords('<tags><tag>rot</tag><tag>blau</tag><tag>grün</tag></tags>')];
+    expect(record ? [...record.fields.keys()] : null).toEqual(['tag', 'tag #2', 'tag #3']);
+  });
+
   test('a character reference beyond Unicode stays literal text', () => {
     expect(decodeXmlEntities('&#x110000;&#228;')).toBe('&#x110000;ä');
   });
@@ -102,10 +107,12 @@ describe('incomplete input is unreadable, never a quiet partial profile', () => 
     try {
       writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
       writeFileSync(join(folder, 'zoll.csv'), 'Name\n5" Rohr, "Bogen\n');
+      writeFileSync(join(folder, 'zerfasert.tsv'), 'Nr\tName\n1\tA\nnur Text\nnoch Text\n');
       writeFileSync(join(folder, 'einspaltig.csv'), 'Name\n"Meier, Max"\n"Kurz"\n');
       const profile = profileExportFolder(folder, { maskLabels: false });
       expect(profile.unreadable.map((file) => [file.file, file.reason])).toEqual([
         ['mehrdeutig.csv', 'delimiter_ambiguous'],
+        ['zerfasert.tsv', 'delimiter_ambiguous'],
         ['zoll.csv', 'delimiter_ambiguous'],
       ]);
       expect(profile.unreadable[0]?.advice).toContain('ask Willert');
