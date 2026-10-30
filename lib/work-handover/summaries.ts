@@ -17,7 +17,12 @@ const MAX_HANDOVER_SUMMARY_ROWS = 5_000;
 const MATERIAL_SELECTION = 'id, planned_quantity, taken_quantity, returned_quantity, status';
 
 type TimeRow = { id: string; timestamp: string };
-type MaterialRow = { id: string; planned_quantity: number; taken_quantity: number; returned_quantity: number };
+type MaterialRow = {
+  id: string;
+  planned_quantity: number;
+  taken_quantity: number;
+  returned_quantity: number;
+};
 
 async function readTargetJobIds(
   admin: AdminClient,

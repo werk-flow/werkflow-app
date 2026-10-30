@@ -178,7 +178,6 @@
   "lib/ui/card-padding.test.ts": 1,
   "lib/ui/select-registry.test.ts": 1,
   "lib/vacation/actions.ts": 1,
-  "lib/work-artifacts/actions.ts": 4,
   "lib/work-artifacts/export.test.ts": 6,
   "lib/work-artifacts/field-visibility.test.ts": 4,
   "lib/work-lifecycle/types.test.ts": 4,

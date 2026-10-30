@@ -19,7 +19,12 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { composeReadinessForTarget } from '@/lib/dispatch/readiness-target';
 import { formatBerlin } from '@/lib/utils';
 
-import { loadEntityOptions, loadOwnOwnerOption, predecessorOptionsSchema, toPredecessorOption } from './options';
+import {
+  loadEntityOptions,
+  loadOwnOwnerOption,
+  predecessorOptionsSchema,
+  toPredecessorOption,
+} from './options';
 
 import {
   parseWorkLifecycleSnapshot,

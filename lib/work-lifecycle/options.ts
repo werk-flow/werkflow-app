@@ -79,7 +79,10 @@ async function readOwnerProfiles(admin: AdminClient, employees: EmployeeOwner[])
   return profilesResult.data;
 }
 
-function toOwnerOptions(employees: EmployeeOwner[], profileRows: ProfileName[]): EntityOptions['ownerOptions'] {
+function toOwnerOptions(
+  employees: EmployeeOwner[],
+  profileRows: ProfileName[],
+): EntityOptions['ownerOptions'] {
   const profiles = new Map(profileRows.map((profile) => [profile.id, profile]));
   return employees.map((employee) => {
     const profile = employee.user_id ? profiles.get(employee.user_id) : undefined;

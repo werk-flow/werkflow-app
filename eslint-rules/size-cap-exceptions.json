@@ -661,9 +661,6 @@
       "getPendingVacationRequestsForApprover": 116,
       "getVacationCalendarEntries": 98
     },
-    "lib/work-artifacts/actions.ts": { "getWorkArtifactDetail": 136, "exportWorkArtifact": 97 },
-    "lib/work-artifacts/export.ts": { "buildWorkArtifactExport": 170 },
-    "lib/work-artifacts/validation.ts": { "saveWorkArtifactSchema": 102 },
     "lib/work-templates/actions.ts": { "saveWorkTemplateDraft": 82, "applyWorkTemplate": 93 },
     "lib/work-templates/server.ts": { "loadWorkTemplateDetail": 181 }
   }

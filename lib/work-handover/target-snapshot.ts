@@ -68,7 +68,11 @@ function partySnapshot(
   };
 }
 
-async function loadJobTarget(admin: AdminClient, organizationId: string, jobId: string): Promise<LoadedTarget> {
+async function loadJobTarget(
+  admin: AdminClient,
+  organizationId: string,
+  jobId: string,
+): Promise<LoadedTarget> {
   const { data: job, error } = await admin
     .from('jobs')
     .select(

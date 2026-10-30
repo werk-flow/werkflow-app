@@ -176,7 +176,9 @@ async function loadChildReleaseSources(
   const jobsById = new Map(jobsResult.data.map((job) => [job.id, job]));
   const releasesById = new Map(releasesResult.data.map((release) => [release.id, release]));
   return packagesResult.data.flatMap((childPackage) => {
-    const release = childPackage.current_release_id ? releasesById.get(childPackage.current_release_id) : null;
+    const release = childPackage.current_release_id
+      ? releasesById.get(childPackage.current_release_id)
+      : null;
     const job = childPackage.job_id ? jobsById.get(childPackage.job_id) : null;
     if (!release || !job) return [];
     return [

@@ -5,7 +5,7 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { authorizeResponsibilityForTarget } from '@/lib/responsibilities/server';
@@ -27,47 +27,29 @@ import {
   workArtifactTargetSchema,
 } from './validation';
 import { buildWorkArtifactExport } from './export';
-import { redactWorkArtifactActionForField } from './field-visibility';
-import type {
-  SaveWorkArtifactInput,
-  WorkArtifactActionInput,
-  WorkArtifactDetail,
-  WorkArtifactActionType,
-  WorkArtifactMutationResult,
-  WorkArtifactSaveResult,
-  WorkArtifactStatus,
-  WorkArtifactSummary,
+import { mapArtifactError } from './errors';
+import { readRenderedExport, refuseWorkArtifactExport, registerWorkArtifactExport } from './export-storage';
+import { readArtifactForDetail, refuseHiddenCoworkerDraft, toVisibleArtifactDetail } from './detail';
+import {
+  WORK_ARTIFACT_STATUSES,
+  type SaveWorkArtifactInput,
+  type WorkArtifactActionInput,
+  type WorkArtifactDetail,
+  type WorkArtifactMutationResult,
+  type WorkArtifactSaveResult,
+  type WorkArtifactStatus,
+  type WorkArtifactSummary,
 } from './types';
 
 type Target = { targetType: 'job' | 'project'; targetId: string };
 
-const FIELD_DISCLOSING_ARTIFACT_ACTIONS = new Set<WorkArtifactActionType>([
-  'review_requested',
-  'internal_approved',
-  'internal_rejected',
-  'correction_requested',
-  'customer_acknowledged',
-  'customer_refused',
-  'customer_reserved',
-  'signature_captured',
-  'voided',
-]);
+const workArtifactStatusSchema = z.enum(WORK_ARTIFACT_STATUSES);
 
-function mapArtifactError(error: { message?: string } | null): string {
-  const known = [
-    'work_artifact_not_authorized',
-    'work_artifact_stale_version',
-    'work_artifact_correction_reason_required',
-    'work_artifact_self_approval_not_allowed',
-    'work_artifact_not_responsible',
-    'work_artifact_review_not_pending',
-    'work_artifact_customer_action_requires_customer_visibility',
-    'work_artifact_defect_closure_proof_required',
-    'work_artifact_is_voided',
-    'instruction_evidence_already_fulfilled',
-    'instruction_evidence_not_authorized',
-  ].find((code) => error?.message?.includes(code));
-  return known ?? 'work_artifact_action_failed';
+/** The status a write function returns, or null when its result is not an object with a known status. */
+function mutationStatus(data: Json | null): WorkArtifactStatus | null {
+  if (!isJsonRecord(data)) return null;
+  const status = workArtifactStatusSchema.safeParse(String(data.status));
+  return status.success ? status.data : null;
 }
 
 async function authorizeTarget(
@@ -183,43 +165,12 @@ export async function getWorkArtifactDetail(
   const auth = await authenticateAndAuthorize();
   if (!auth.success) return auth;
   const admin = createSupabaseAdminClient();
-  const { data: artifact, error: artifactError } = await loggedRead(
-    'getWorkArtifactDetail: work_artifacts read failed',
-    admin
-      .from('work_artifacts')
-      .select('*')
-      .eq('id', artifactId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle(),
-  );
-  if (artifactError) return { success: false, error: 'work_artifact_load_failed' };
-  if (!artifact) return { success: false, error: 'work_artifact_not_found' };
-  const target: Target | null = artifact.job_id
-    ? { targetType: 'job', targetId: artifact.job_id }
-    : artifact.project_id
-      ? { targetType: 'project', targetId: artifact.project_id }
-      : null;
-  if (!target) return { success: false, error: 'work_artifact_not_found' };
-  const access = await authorizeTarget(auth, target);
+  const opened = await readArtifactForDetail(admin, auth.context.orgId, artifactId);
+  if (!opened.success) return opened;
+  const access = await authorizeTarget(auth, opened.target);
   if (!access.success) return access;
-  if (!auth.context.isManagerOrAbove && artifact.status === 'draft' && artifact.current_revision_id) {
-    const { data: currentRevision, error: currentRevisionError } = await admin
-      .from('work_artifact_revisions')
-      .select('visibility, created_by')
-      .eq('organization_id', auth.context.orgId)
-      .eq('id', artifact.current_revision_id)
-      .maybeSingle();
-    if (currentRevisionError || !currentRevision) {
-      logReadErrors('getWorkArtifactDetail: read failed', currentRevisionError);
-      return { success: false, error: 'work_artifact_load_failed' };
-    }
-    if (
-      currentRevision?.visibility === 'internal_only' &&
-      currentRevision.created_by !== auth.context.userId
-    ) {
-      return { success: false, error: 'not_authorized' };
-    }
-  }
+  const hiddenDraft = await refuseHiddenCoworkerDraft(admin, auth.context, opened.artifact);
+  if (hiddenDraft) return hiddenDraft;
   const orgId = auth.context.orgId;
   const [revisions, actions, lines, defects, changes, documents, sources] = await Promise.all([
     admin
@@ -266,48 +217,17 @@ export async function getWorkArtifactDetail(
   if ([revisions, actions, lines, defects, changes, documents, sources].some((result) => result.error)) {
     return { success: false, error: 'work_artifact_load_failed' };
   }
-  const disclosedRevisionIds = new Set(
-    (actions.data ?? [])
-      .filter((action) => FIELD_DISCLOSING_ARTIFACT_ACTIONS.has(action.action_type))
-      .map((action) => action.revision_id),
-  );
-  const visibleRevisions = auth.context.isManagerOrAbove
-    ? (revisions.data ?? [])
-    : (revisions.data ?? []).filter(
-        (revision) =>
-          revision.visibility !== 'internal_only' ||
-          revision.created_by === auth.context.userId ||
-          disclosedRevisionIds.has(revision.id),
-      );
-  const visibleRevisionIds = new Set(visibleRevisions.map((revision) => revision.id));
-  const visibleActions = (actions.data ?? []).filter(
-    (action) => auth.context.isManagerOrAbove || visibleRevisionIds.has(action.revision_id),
-  );
-  const onlyVisibleRevisionRows = <T extends { revision_id: string }>(rows: T[]): T[] =>
-    auth.context.isManagerOrAbove ? rows : rows.filter((row) => visibleRevisionIds.has(row.revision_id));
-  const stripJoin = <T extends object>(rows: T[]): T[] =>
-    rows.map(
-      (row) =>
-        Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'work_artifact_revisions')) as T,
-    );
   return {
     success: true,
-    artifact: {
-      ...artifact,
-      revisions: visibleRevisions.map((revision) =>
-        revision.corrects_revision_id && !visibleRevisionIds.has(revision.corrects_revision_id)
-          ? { ...revision, corrects_revision_id: null }
-          : revision,
-      ),
-      actions: auth.context.isManagerOrAbove
-        ? visibleActions
-        : visibleActions.map((action) => redactWorkArtifactActionForField(action, auth.context.userId)),
-      measurementLines: stripJoin(onlyVisibleRevisionRows(lines.data ?? [])),
-      defectDetails: stripJoin(onlyVisibleRevisionRows(defects.data ?? [])),
-      changeDetails: stripJoin(onlyVisibleRevisionRows(changes.data ?? [])),
-      documents: stripJoin(onlyVisibleRevisionRows(documents.data ?? [])),
-      sources: stripJoin(onlyVisibleRevisionRows(sources.data ?? [])),
-    },
+    artifact: toVisibleArtifactDetail(auth.context, opened.artifact, {
+      revisions: revisions.data ?? [],
+      actions: actions.data ?? [],
+      lines: lines.data ?? [],
+      defects: defects.data ?? [],
+      changes: changes.data ?? [],
+      documents: documents.data ?? [],
+      sources: sources.data ?? [],
+    }),
   };
 }
 
@@ -345,7 +265,8 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
     p_submit_action_id: parsed.data.submitActionId ?? null,
   });
   const { data, error } = await admin.rpc('create_work_artifact_revision', args);
-  if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
+  const status = mutationStatus(data);
+  if (error || !data || typeof data !== 'object' || Array.isArray(data) || !status) {
     return { success: false, error: mapArtifactError(error) };
   }
   revalidateWorkEvidenceViews();
@@ -355,7 +276,7 @@ export async function saveWorkArtifact(input: SaveWorkArtifactInput): Promise<Wo
     success: true,
     artifactId: parsed.data.artifactId,
     version: Number(data.version),
-    status: String(data.status) as WorkArtifactStatus,
+    status,
     data,
     artifact: saved.success ? saved.artifact : null,
   };
@@ -425,7 +346,8 @@ export async function recordWorkArtifactAction(
       p_signature_document_id: parsed.data.signatureDocumentId ?? null,
     }),
   );
-  if (error || !data || typeof data !== 'object' || Array.isArray(data)) {
+  const status = mutationStatus(data);
+  if (error || !data || typeof data !== 'object' || Array.isArray(data) || !status) {
     return { success: false, error: mapArtifactError(error) };
   }
   revalidateWorkEvidenceViews();
@@ -433,7 +355,7 @@ export async function recordWorkArtifactAction(
     success: true,
     artifactId: parsed.data.artifactId,
     version: Number(data.version),
-    status: String(data.status) as WorkArtifactStatus,
+    status,
     data,
   };
 }
@@ -670,19 +592,13 @@ export async function exportWorkArtifact(
     return { success: false, error: 'work_artifact_stale_version' };
   }
   const exportFile = buildWorkArtifactExport(artifact);
-  const { bytes, contentHash, rendererVersion, fileName } = exportFile;
+  const { bytes, contentHash, rendererVersion } = exportFile;
   const admin = createSupabaseAdminClient();
-  const { data: existing, error: existingError } = await loggedRead(
-    'exportWorkArtifact: work_artifact_revision_documents read failed',
-    admin
-      .from('work_artifact_revision_documents')
-      .select('document_id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('revision_id', revisionId)
-      .eq('relation', 'rendered_export')
-      .eq('renderer_version', rendererVersion)
-      .eq('content_hash', contentHash)
-      .maybeSingle(),
+  const { data: existing, error: existingError } = await readRenderedExport(
+    admin,
+    auth.context.orgId,
+    revisionId,
+    exportFile,
   );
   if (existingError) return { success: false, error: 'load_failed' };
   if (existing) {
@@ -706,48 +622,25 @@ export async function exportWorkArtifact(
     logError('Failed to store the work artifact export', storageError);
     return { success: false, error: 'work_artifact_export_failed' };
   }
-  // One transaction registers the document, its link, the artifact relation
-  // and action and the audit event, or refuses and changes nothing.
-  const { data, error } = await admin.rpc('export_work_artifact', {
-    p_organization_id: auth.context.orgId,
-    p_actor_id: auth.context.userId,
-    p_artifact_id: artifact.id,
-    p_revision_id: revisionId,
-    p_link_id: input.linkId,
-    p_action_id: input.actionId,
-    p_expected_version: input.expectedVersion,
-    p_document_id: input.documentId,
-    p_storage_path: storagePath,
-    p_file_name: fileName,
-    p_size_bytes: bytes.byteLength,
-    p_renderer_version: rendererVersion,
-    p_content_hash: contentHash,
+  const { data, error } = await registerWorkArtifactExport(admin, {
+    organizationId: auth.context.orgId,
+    actorId: auth.context.userId,
+    artifactId: artifact.id,
+    revisionId,
+    input,
+    storagePath,
+    exportFile,
   });
-  if (error || !isJsonRecord(data)) {
-    // A committed export of the same content owns an object of this same path.
-    const reference = await admin
-      .from('documents')
-      .select('id')
-      .eq('organization_id', auth.context.orgId)
-      .eq('storage_path', storagePath)
-      .limit(1);
-    if (reference.error) logError('Failed to verify a work artifact export reference', reference.error);
-    if (!reference.error && (reference.data?.length ?? 0) === 0) {
-      await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-    }
-    logError('Failed to export work artifact', error);
-    const code = mapArtifactError(error);
-    return {
-      success: false,
-      error: code === 'work_artifact_action_failed' ? 'work_artifact_export_failed' : code,
-    };
+  const status = mutationStatus(data);
+  if (error || !isJsonRecord(data) || !status) {
+    return refuseWorkArtifactExport(admin, auth.context.orgId, storagePath, error);
   }
   revalidateWorkEvidenceViews();
   return {
     success: true,
     artifactId: artifact.id,
     version: Number(data.version),
-    status: String(data.status) as WorkArtifactStatus,
+    status,
     data,
     documentId: String(data.documentId),
   };
