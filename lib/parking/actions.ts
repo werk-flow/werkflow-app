@@ -13,15 +13,14 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { PARKING_REASON_LABELS, type JobParkingContext, type JobParkingReason } from './types';
+import { WORK_BLOCKER_REASONS } from '@/lib/work-lifecycle/types';
+import type { JobParkingContext } from './types';
+import { loadResponsibleNames } from './responsible-names';
 import { logError } from '@/lib/logging';
-
-// One source of truth for the reason vocabulary: the label map's keys.
-const PARKING_REASONS = Object.keys(PARKING_REASON_LABELS) as [JobParkingReason, ...JobParkingReason[]];
 
 const parkingContextSchema = z.object({
   jobId: uuidSchema,
-  reason: z.enum(PARKING_REASONS),
+  reason: z.enum(WORK_BLOCKER_REASONS),
   note: z.string().trim().max(1000).nullable(),
   responsibleEmployeeRecordId: uuidSchema,
   nextReviewDate: z.string().date(),
@@ -177,42 +176,8 @@ export async function getJobParkingContexts(): Promise<ActionResult<{ contexts: 
       ),
     ),
   ];
-  const recordsResult = await readInBatches(responsibleIds, (batch) =>
-    admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .eq('organization_id', auth.context.orgId)
-      .in('id', [...batch]),
-  );
-  if (recordsResult.error) {
-    logError('Failed to resolve parking responsibles:', recordsResult.error);
-    return { success: false, error: 'load_failed' };
-  }
-  const userIds = (recordsResult.data ?? []).flatMap((record) => (record.user_id ? [record.user_id] : []));
-  const profilesResult = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logError('Failed to resolve parking responsible profiles:', profilesResult.error);
-    return { success: false, error: 'load_failed' };
-  }
-  const profileNames = new Map(
-    (profilesResult.data ?? []).map((profile) => [
-      profile.id,
-      [profile.first_name, profile.last_name].filter(Boolean).join(' '),
-    ]),
-  );
-  const responsibleNames = new Map(
-    (recordsResult.data ?? []).map((record) => [
-      record.id,
-      (record.user_id ? profileNames.get(record.user_id) : null) ||
-        [record.first_name, record.last_name].filter(Boolean).join(' ') ||
-        'Unbenannt',
-    ]),
-  );
+  const responsibleNames = await loadResponsibleNames(admin, auth.context.orgId, responsibleIds);
+  if (!responsibleNames) return { success: false, error: 'load_failed' };
 
   return {
     success: true,
