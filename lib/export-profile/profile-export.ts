@@ -286,7 +286,7 @@ function profileDatanorm(run: Run, file: ExportFile, label: string): void {
       : null;
     const source: TableSource = {
       file: label,
-      table: `record type ${exportLabel(recordType, run.options.maskLabels)}`,
+      table: `record type ${recordType}`,
       format: 'datanorm',
       encoding: decoded.encoding,
       delimiter: fixedWidth ? null : ';',

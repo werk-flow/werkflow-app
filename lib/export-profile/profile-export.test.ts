@@ -135,6 +135,13 @@ describe('export profile: tables', () => {
     expect(column(articles, 'field_3')).toMatchObject({ type: 'text', unique: true, keyLike: true });
     expect(tableNamed('Artikel/DATANORM.001', 'record type V').rows).toBe(1);
   });
+
+  test('a DATANORM line whose first field is not a record letter names no table', () => {
+    expect(
+      profile.tables.filter((table) => table.file === 'Artikel/DATANORM.002').map((table) => table.table),
+    ).toEqual(['record type (other)', 'record type A']);
+    expect(tableNamed('Artikel/DATANORM.002', 'record type (other)').rows).toBe(2);
+  });
 });
 
 describe('export profile: relations and other files', () => {
@@ -198,14 +205,14 @@ describe('export profile: relations and other files', () => {
     expect(profile.skippedSystemFiles).toBe(1);
     expect(profile.otherFiles).toEqual([{ extension: '.cfg', files: 1, bytes: expect.any(Number) }]);
     expect(profile.files).toMatchObject({
-      total: 16,
-      tableFiles: 7,
+      total: 17,
+      tableFiles: 8,
       binaries: 1,
       documents: 4,
       photos: 2,
       other: 1,
     });
-    expect(profile.tables).toHaveLength(9);
+    expect(profile.tables).toHaveLength(11);
   });
 });
 

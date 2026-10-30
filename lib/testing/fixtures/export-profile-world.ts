@@ -34,6 +34,7 @@ export const SENSITIVE_VALUES = [
   'Kessel defekt',
   'Sonderrabatt zugesagt',
   'Ventil undicht',
+  '47110815',
   'zeynep',
 ];
 
@@ -247,6 +248,7 @@ export function writeSyntheticExport(root: string): void {
   write('Auftraege.xlsx', workbook());
   write('Zeiten.xml', XML);
   write('Notizen.csv', NOTES);
+  write('Artikel/DATANORM.002', '47110815;abc\r\n47110816;def\r\nA;N;ART-1004;00\r\n');
   write('Einsatznotizen.csv', VISIT_NOTES);
   write('Kaputt.xml', '<Export><Kunde><Name>x</Kunde>');
   write('Scans/scan.zeynep', pdf(1));
