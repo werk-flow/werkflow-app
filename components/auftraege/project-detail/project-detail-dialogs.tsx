@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { updateJob } from '@/lib/jobs/actions';
 import type { Client, Job, Project } from '@/lib/jobs/types';
@@ -260,8 +259,7 @@ function ProjectDetailDeleteDialog({
             werden nicht gelöscht, aber ihre Projektzuordnung wird entfernt.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{deleteError}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={deleteError}>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {

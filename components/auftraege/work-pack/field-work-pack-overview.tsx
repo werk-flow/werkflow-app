@@ -65,7 +65,7 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
   return (
     <section
       ref={overviewRef}
-      className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
+      className="rounded-lg border bg-card p-4 shadow-xs wrap-anywhere sm:p-5"
       aria-labelledby="field-overview-heading"
       data-testid="field-work-pack-overview"
     >

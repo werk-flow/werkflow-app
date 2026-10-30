@@ -10,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 
 type InviteConfirmDialogProps = {
   open: boolean;
@@ -39,8 +38,7 @@ export function InviteCancelConfirmDialog({
             stornieren möchtest? Der Einladungslink wird ungültig und kann nicht mehr verwendet werden.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             // Keep the dialog open until the server confirms; a failure
@@ -78,8 +76,7 @@ export function InviteDeleteConfirmDialog({
             endgültig löschen möchtest? Diese Aktion kann nicht rückgängig gemacht werden.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {

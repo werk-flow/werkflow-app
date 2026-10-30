@@ -2,7 +2,6 @@
 
 import { useState, type RefObject } from 'react';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { ErrorText } from '@/components/ui/error-text';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,8 +85,7 @@ export function JobDetailDeleteDialog({
             rückgängig gemacht werden.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{deleteError}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={deleteError}>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {

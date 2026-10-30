@@ -5,6 +5,7 @@ import type { CheckpointValues } from '../../../lib/testing/spec-support/checkpo
 import { equipmentCreateSchema } from '../../../lib/installed-equipment/validation';
 import { serviceCaseCreateSchema } from '../../../lib/service-cases/validation';
 import type { Locator, Page } from '@playwright/test';
+import { worldName } from '../../../lib/testing/seed-world-plan';
 import { requireEnv } from '../../golden/support/env';
 import { testSupabaseClientOptions } from '../../golden/support/client-options';
 import { SERVICE_AREA_HEADER } from '../../golden/support/steps/service';
@@ -45,13 +46,13 @@ export function layoutNames(
   world: TestWorld,
 ): Record<'client' | 'project' | 'job' | 'nestedJob' | 'request' | 'equipment' | 'serviceCase', string> {
   return {
-    client: `Layout Heizungsbau Kunde ${world.runId}`,
-    project: `Layout Modernisierung Heizungsanlage ${world.runId}`,
-    job: `Layout Wartung und Sicherheitsprüfung ${world.runId}`,
-    nestedJob: `Layout Montage und Inbetriebnahme ${world.runId}`,
-    request: `Layout Anfrage zur Heizungsmodernisierung ${world.runId}`,
-    equipment: `Layout Wärmeerzeuger im Technikraum ${world.runId}`,
-    serviceCase: `Layout Heizungsstörung mit Kundenrückfrage ${world.runId}`,
+    client: worldName('Layout Heizungsbau Kunde', world.runId),
+    project: worldName('Layout Modernisierung Heizungsanlage', world.runId),
+    job: worldName('Layout Wartung und Sicherheitsprüfung', world.runId),
+    nestedJob: worldName('Layout Montage und Inbetriebnahme', world.runId),
+    request: worldName('Layout Anfrage zur Heizungsmodernisierung', world.runId),
+    equipment: worldName('Layout Wärmeerzeuger im Technikraum', world.runId),
+    serviceCase: worldName('Layout Heizungsstörung mit Kundenrückfrage', world.runId),
   };
 }
 

@@ -140,16 +140,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     tests: ['A1-21/A1-24: Kalenderansichten und getrennte Plan-/Arbeitszeitfilter'],
     movesIn: 'werk-flow/werkflow-planning#38',
   },
-  'audit:wave-1:a1-dokumente': {
-    tests: [
-      'A1-38: Handwerker lädt am zugewiesenen Auftrag hoch, öffnet und lädt signiert herunter [BASE-DOCUMENT-F04/P1-00A-F02]',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#36',
-  },
-  'audit:wave-1:a1-inventar': {
-    tests: ['A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten'],
-    movesIn: 'werk-flow/werkflow-planning#36',
-  },
   'audit:wave-1:a1-organisation': {
     tests: [
       'A1-02/A1-03/A1-05/A1-26/A1-27/A1-28: Beitritt per Code, Organisationswechsel, Live-Status, Pause, Auftragwechsel und Org-Sperre',

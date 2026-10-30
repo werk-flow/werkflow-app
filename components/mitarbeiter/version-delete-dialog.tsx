@@ -1,6 +1,5 @@
 'use client';
 
-import { ErrorText } from '@/components/ui/error-text';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,8 +50,7 @@ export function VersionDeleteDialog({
             Löschung wird im Verlauf nachvollziehbar festgehalten.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{deleteError}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={deleteError}>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
