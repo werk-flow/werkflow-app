@@ -9,7 +9,7 @@ import { calendarDateFromQuery } from '@/lib/calendar/date-range';
 import { getPlanningEntries } from '@/lib/planning/actions';
 import { getCalendarBoardContext } from '@/lib/calendar/board-actions';
 import { getSicknessCalendarEntries } from '@/lib/sickness/actions';
-import { getVacationCalendarEntries } from '@/lib/vacation/actions';
+import { getVacationCalendarEntries } from '@/lib/vacation/calendar-actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
 import { CalendarContainer } from '@/components/kalender/calendar-container';
 import type { CalendarInitialData } from '@/components/kalender/use-calendar-range-data';

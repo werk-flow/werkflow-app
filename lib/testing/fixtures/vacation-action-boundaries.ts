@@ -78,9 +78,9 @@ const {
   decideVacationRequest,
   getDecidableApprovedVacationRequests,
   getPendingVacationRequestsForApprover,
-  getVacationCalendarEntries,
   withdrawVacationRequest,
 } = await import('@/lib/vacation/actions');
+const { getVacationCalendarEntries } = await import('@/lib/vacation/calendar-actions');
 
 const initialDatabase = databaseSnapshot(world);
 const requestNotFound = { success: false, error: 'request_not_found' };
