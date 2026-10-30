@@ -147,15 +147,13 @@ function AlertDialogFooter({
   children,
   ...props
 }: React.ComponentProps<'div'> & { error?: React.ReactNode }) {
-  const sticky = 'bg-background sticky -bottom-6 -mx-6 -mb-6 px-6 pb-6';
-  if (!error)
-    return (
-      <div data-slot="alert-dialog-footer" className={cn(sticky, FOOTER_ACTIONS, className)} {...props}>
-        {children}
-      </div>
-    );
+  // One structure with and without an error: a failed confirm must not remount the actions under the focus.
   return (
-    <div data-slot="alert-dialog-footer" className={cn(sticky, 'flex flex-col gap-2')} {...props}>
+    <div
+      data-slot="alert-dialog-footer"
+      className="bg-background sticky -bottom-6 -mx-6 -mb-6 flex flex-col gap-2 px-6 pb-6"
+      {...props}
+    >
       <ErrorText>{error}</ErrorText>
       <div className={cn(FOOTER_ACTIONS, className)}>{children}</div>
     </div>

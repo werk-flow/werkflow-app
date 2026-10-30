@@ -123,6 +123,27 @@ for (const width of [375, 1280]) {
   });
 }
 
+test('a failed keyboard confirmation keeps focus on its action and shows the error in reach', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'Lange Bestätigung öffnen' }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Organisation „Probe“ löschen?' });
+  const cancel = confirmation.getByRole('button', { name: 'Abbrechen' });
+  const confirm = confirmation.getByRole('button', { name: 'Endgültig löschen' });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Enter');
+  // The error appears inside the sticky footer without replacing the actions under the keyboard focus.
+  await expect(confirmation.getByRole('alert')).toHaveText('Die Organisation konnte nicht gelöscht werden.');
+  await expect(confirmation.getByRole('alert')).toBeInViewport();
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(cancel).toBeFocused();
+  await expectDialogFits(confirmation, 'failed long confirmation at 375');
+});
+
 test('focus remains visible without adding an orange border or shifting the field', async ({ page }) => {
   const input = page.getByLabel('Bezeichnung');
   const before = await input.evaluate((element) => ({

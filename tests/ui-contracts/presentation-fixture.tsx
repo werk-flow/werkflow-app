@@ -60,9 +60,13 @@ const savedLocation: InventoryLocation = {
   isActive: true,
 };
 
-/** A confirmation longer than a phone screen, built without AlertDialogBody or an extra class. */
+/**
+ * A confirmation longer than a phone screen, built without AlertDialogBody or an extra class. Its
+ * action fails at once and keeps the dialog open, as a refused server answer does.
+ */
 function LongConfirmation(): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
       <Button onClick={() => setOpen(true)}>Lange Bestätigung öffnen</Button>
@@ -76,9 +80,17 @@ function LongConfirmation(): React.JSX.Element {
             </AlertDialogDescription>
           ))}
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-          <AlertDialogAction variant="destructive">Endgültig löschen</AlertDialogAction>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={(event) => {
+              event.preventDefault();
+              setError('Die Organisation konnte nicht gelöscht werden.');
+            }}
+          >
+            Endgültig löschen
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
