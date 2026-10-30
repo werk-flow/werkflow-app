@@ -38,6 +38,7 @@ import {
   requestConvertButton,
   requestDocumentTrashedMessage,
   requestField,
+  renderedMainNavigation,
   requestsNavLink,
   searchRequests,
   setRequestStatusFromDetail,
@@ -540,6 +541,8 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     await bueroPage.goto('/dashboard');
     await expect(requestsNavLink(bueroPage)).toBeVisible();
     await employeePage.goto('/dashboard');
+    // The absence counts only once the employee's sidebar rendered its links, not on its loading shell.
+    await expect(renderedMainNavigation(employeePage)).toBeVisible();
     await expect(requestsNavLink(employeePage)).toHaveCount(0);
   });
 });
