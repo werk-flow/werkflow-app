@@ -67,7 +67,8 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
       yield* closeElement(element, stack.at(-1));
     }
   }
-  if (stack.length > 0 || expectedOffset !== xml.length) throw new ExportFormatError('xml_not_well_formed');
+  if (!rootSeen || stack.length > 0 || expectedOffset !== xml.length)
+    throw new ExportFormatError('xml_not_well_formed');
 }
 
 function* closeElement(element: OpenElement, parent: OpenElement | undefined): Generator<XmlRecord> {
