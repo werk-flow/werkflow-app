@@ -56,119 +56,11 @@ function breakAction(state: LiveClockState): ClockAction[] {
 }
 
 export function deriveClockActions(state: LiveClockState | null): ClockAction[] {
-  if (!state || !state.isClockedIn) {
-    return [
-      {
-        id: 'start-work',
-        kind: 'transition',
-        label: 'Arbeit starten',
-        icon: 'work',
-        selection: createActivitySelection('work'),
-      },
-      {
-        id: 'start-work-job',
-        kind: 'picker',
-        label: 'Arbeit an Auftrag …',
-        icon: 'job',
-        pickerMode: 'clock_in',
-      },
-      {
-        id: 'start-travel',
-        kind: 'transition',
-        label: 'Fahrt starten',
-        icon: 'travel',
-        selection: createActivitySelection('travel'),
-      },
-      MORE_ACTION,
-    ];
-  }
+  if (!state || !state.isClockedIn) return clockedOutActions();
   const current = state.currentActivity;
-  const activeJobId = state.activeJobId;
-  if (current?.kind === 'break') {
-    const resume = state.resumeActivity ?? createActivitySelection('work');
-    const actions: ClockAction[] = [
-      {
-        id: 'resume',
-        kind: 'transition',
-        label: `Weiter: ${describeActivity(resume, state.resumeJobInfo)}`,
-        icon: 'resume',
-        selection: resume,
-      },
-    ];
-    if (resume.allocationKind === 'job') {
-      actions.push({
-        id: 'resume-unallocated',
-        kind: 'transition',
-        label: 'Weiter ohne Auftrag',
-        icon: 'work',
-        selection: createActivitySelection('work'),
-      });
-    }
-    actions.push(
-      {
-        id: 'resume-other-job',
-        kind: 'picker',
-        label: 'Anderer Auftrag …',
-        icon: 'job',
-        pickerMode: 'resume',
-      },
-      END_ACTION,
-      MORE_ACTION,
-    );
-    return actions;
-  }
-  if (current?.kind === 'travel') {
-    return [
-      activeJobId
-        ? {
-            id: 'arrive',
-            kind: 'transition',
-            label: `Arbeit an ${jobLabel(state.activeJobInfo)}`,
-            icon: 'work',
-            selection: createActivitySelection('work', activeJobId),
-          }
-        : {
-            id: 'arrive',
-            kind: 'transition',
-            label: 'Arbeit starten',
-            icon: 'work',
-            selection: createActivitySelection('work'),
-          },
-      {
-        id: 'arrive-other-job',
-        kind: 'picker',
-        label: activeJobId ? 'Arbeit an anderem Auftrag …' : 'Arbeit an Auftrag …',
-        icon: 'job',
-        pickerMode: 'switch',
-      },
-      ...breakAction(state),
-      END_ACTION,
-      MORE_ACTION,
-    ];
-  }
-  if (current?.kind === 'work' || current?.kind === 'callout') {
-    return [
-      ...breakAction(state),
-      {
-        id: 'travel',
-        kind: 'transition',
-        label: 'Fahrt starten',
-        icon: 'travel',
-        selection: createActivitySelection('travel', activeJobId),
-      },
-      activeJobId
-        ? { id: 'switch-job', kind: 'picker', label: 'Auftrag wechseln …', icon: 'job', pickerMode: 'switch' }
-        : {
-            id: 'assign-job',
-            kind: 'picker',
-            label: 'Auftrag zuordnen …',
-            icon: 'job',
-            pickerMode: 'switch',
-          },
-      END_ACTION,
-      MORE_ACTION,
-    ];
-  }
+  if (current?.kind === 'break') return onBreakActions(state);
+  if (current?.kind === 'travel') return travelActions(state);
+  if (current?.kind === 'work' || current?.kind === 'callout') return workActions(state);
   // Standby, internal activity, and the bridged legacy session: back to work first.
   return [
     {
@@ -180,6 +72,123 @@ export function deriveClockActions(state: LiveClockState | null): ClockAction[] 
     },
     { id: 'work-job', kind: 'picker', label: 'Arbeit an Auftrag …', icon: 'job', pickerMode: 'switch' },
     ...breakAction(state),
+    END_ACTION,
+    MORE_ACTION,
+  ];
+}
+
+function clockedOutActions(): ClockAction[] {
+  return [
+    {
+      id: 'start-work',
+      kind: 'transition',
+      label: 'Arbeit starten',
+      icon: 'work',
+      selection: createActivitySelection('work'),
+    },
+    {
+      id: 'start-work-job',
+      kind: 'picker',
+      label: 'Arbeit an Auftrag …',
+      icon: 'job',
+      pickerMode: 'clock_in',
+    },
+    {
+      id: 'start-travel',
+      kind: 'transition',
+      label: 'Fahrt starten',
+      icon: 'travel',
+      selection: createActivitySelection('travel'),
+    },
+    MORE_ACTION,
+  ];
+}
+
+function onBreakActions(state: LiveClockState): ClockAction[] {
+  const resume = state.resumeActivity ?? createActivitySelection('work');
+  const actions: ClockAction[] = [
+    {
+      id: 'resume',
+      kind: 'transition',
+      label: `Weiter: ${describeActivity(resume, state.resumeJobInfo)}`,
+      icon: 'resume',
+      selection: resume,
+    },
+  ];
+  if (resume.allocationKind === 'job') {
+    actions.push({
+      id: 'resume-unallocated',
+      kind: 'transition',
+      label: 'Weiter ohne Auftrag',
+      icon: 'work',
+      selection: createActivitySelection('work'),
+    });
+  }
+  actions.push(
+    {
+      id: 'resume-other-job',
+      kind: 'picker',
+      label: 'Anderer Auftrag …',
+      icon: 'job',
+      pickerMode: 'resume',
+    },
+    END_ACTION,
+    MORE_ACTION,
+  );
+  return actions;
+}
+
+function travelActions(state: LiveClockState): ClockAction[] {
+  const activeJobId = state.activeJobId;
+  return [
+    activeJobId
+      ? {
+          id: 'arrive',
+          kind: 'transition',
+          label: `Arbeit an ${jobLabel(state.activeJobInfo)}`,
+          icon: 'work',
+          selection: createActivitySelection('work', activeJobId),
+        }
+      : {
+          id: 'arrive',
+          kind: 'transition',
+          label: 'Arbeit starten',
+          icon: 'work',
+          selection: createActivitySelection('work'),
+        },
+    {
+      id: 'arrive-other-job',
+      kind: 'picker',
+      label: activeJobId ? 'Arbeit an anderem Auftrag …' : 'Arbeit an Auftrag …',
+      icon: 'job',
+      pickerMode: 'switch',
+    },
+    ...breakAction(state),
+    END_ACTION,
+    MORE_ACTION,
+  ];
+}
+
+function workActions(state: LiveClockState): ClockAction[] {
+  const activeJobId = state.activeJobId;
+  return [
+    ...breakAction(state),
+    {
+      id: 'travel',
+      kind: 'transition',
+      label: 'Fahrt starten',
+      icon: 'travel',
+      selection: createActivitySelection('travel', activeJobId),
+    },
+    activeJobId
+      ? { id: 'switch-job', kind: 'picker', label: 'Auftrag wechseln …', icon: 'job', pickerMode: 'switch' }
+      : {
+          id: 'assign-job',
+          kind: 'picker',
+          label: 'Auftrag zuordnen …',
+          icon: 'job',
+          pickerMode: 'switch',
+        },
     END_ACTION,
     MORE_ACTION,
   ];

@@ -332,6 +332,18 @@ export function createSessionFromCalendarBlock(
   };
 }
 
+/** The synthetic clock_out that closes a segment still open at the end of its own Berlin day. */
+function dayEndClockOut(segmentStart: TimeEntry): TimeEntry {
+  return {
+    ...segmentStart,
+    id: `${segmentStart.id}-day-end`,
+    entryType: 'clock_out',
+    timestamp: getLocalDayEnd(new Date(segmentStart.timestamp)).toISOString(),
+    createdAt: segmentStart.updatedAt,
+    updatedAt: segmentStart.updatedAt,
+  };
+}
+
 export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkBlock[] {
   const effectiveEntries = getEffectiveTimeEntries(entries);
   const blocks: CalendarWorkBlock[] = [];
@@ -348,14 +360,7 @@ export function calculateCalendarWorkBlocks(entries: TimeEntry[]): CalendarWorkB
     const entry = effectiveEntries[index];
     if (!entry) continue;
     if (current && !isSameLocalDay(new Date(current.segmentStart.timestamp), new Date(entry.timestamp))) {
-      const dayEndEntry: TimeEntry = {
-        ...current.segmentStart,
-        id: `${current.segmentStart.id}-day-end`,
-        entryType: 'clock_out',
-        timestamp: getLocalDayEnd(new Date(current.segmentStart.timestamp)).toISOString(),
-        createdAt: current.segmentStart.updatedAt,
-        updatedAt: current.segmentStart.updatedAt,
-      };
+      const dayEndEntry = dayEndClockOut(current.segmentStart);
 
       current = addClosedSegment(current, dayEndEntry);
       blocks.push(cloneBlock(current, dayEndEntry, false));
