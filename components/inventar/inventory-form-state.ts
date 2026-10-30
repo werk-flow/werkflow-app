@@ -1,5 +1,5 @@
 import { describeFailure } from '@/lib/action-messages';
-import type { UpsertInventoryItemInput } from '@/lib/inventory/actions';
+import type { UpsertInventoryItemInput } from '@/lib/inventory/action-inputs';
 import type { InventoryItemType, InventoryLocationType, InventoryOverviewItem } from '@/lib/inventory/types';
 import { NEW_SUPPLIER_VALUE } from './supplier-quick-create-dialog';
 import { parseDecimalInput } from '@/lib/ui/decimal';

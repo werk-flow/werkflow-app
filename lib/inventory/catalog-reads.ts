@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { ActionResult } from '@/lib/action-result';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { logReadErrors } from '@/lib/data/read-request-cache';
 import type {
   InventoryBarcodeRow,
@@ -29,11 +29,9 @@ import {
   toNumber,
 } from './types';
 
-// The catalog reads behind the inventory Server Actions in `./actions`. The
-// callers authorize the organization first; every read here keeps the
-// organization filter as the tenant boundary.
-
-export type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
+// The catalog reads behind the inventory Server Actions in `./actions` and
+// `./catalog-actions`. The callers authorize the organization first; every
+// read here keeps the organization filter as the tenant boundary.
 
 function getStockStatus(item: InventoryItem, totalOnHand: number): InventoryStockStatus {
   if (!item.trackQuantity) return 'in_stock';
@@ -44,13 +42,8 @@ function getStockStatus(item: InventoryItem, totalOnHand: number): InventoryStoc
   return 'in_stock';
 }
 
-function readInventoryOverviewSupportRows(
-  admin: SupabaseAdminClient,
-  orgId: string,
-  supportIds: string[],
-  jobIds: string[],
-  projectIds: string[],
-) {
+/** The organization's categories, locations and suppliers in their display order. */
+function readInventoryCatalogLookups(admin: AdminClient, orgId: string) {
   return Promise.all([
     readCompleteRows(
       (from, to) =>
@@ -87,6 +80,12 @@ function readInventoryOverviewSupportRows(
           .range(from, to),
       1000,
     ),
+  ]);
+}
+
+/** The items with their barcodes, stock levels, open material lines and asset instances. */
+function readInventoryItemSupportRows(admin: AdminClient, orgId: string, supportIds: string[]) {
+  return Promise.all([
     readInBatches(supportIds, (batch) =>
       admin
         .from('inventory_items')
@@ -148,6 +147,17 @@ function readInventoryOverviewSupportRows(
         10000,
       ),
     ),
+  ]);
+}
+
+/** The jobs and projects the latest movements name. */
+function readInventoryMovementTargets(
+  admin: AdminClient,
+  orgId: string,
+  jobIds: string[],
+  projectIds: string[],
+) {
+  return Promise.all([
     readInBatches(jobIds, (batch) =>
       admin
         .from('jobs')
@@ -163,6 +173,22 @@ function readInventoryOverviewSupportRows(
         .in('id', [...batch]),
     ),
   ]);
+}
+
+/** Every support read of the inventory page, started together, in one flat result list. */
+async function readInventoryOverviewSupportRows(
+  admin: AdminClient,
+  orgId: string,
+  supportIds: string[],
+  jobIds: string[],
+  projectIds: string[],
+) {
+  const [lookups, itemRows, targets] = await Promise.all([
+    readInventoryCatalogLookups(admin, orgId),
+    readInventoryItemSupportRows(admin, orgId, supportIds),
+    readInventoryMovementTargets(admin, orgId, jobIds, projectIds),
+  ]);
+  return [...lookups, ...itemRows, ...targets] as const;
 }
 
 function groupRowsByItem<Row extends { item_id: string }>(rows: Row[]): Map<string, Row[]> {
@@ -242,7 +268,7 @@ function toInventoryOverviewItems(
  * items. Returns `inventory_failed` when any read fails.
  */
 export async function loadInventoryOverviewLists(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   orgId: string,
   page: { ids: string[]; supportIds: string[] },
   movements: InventoryMovementRow[],
@@ -327,7 +353,7 @@ export async function loadInventoryOverviewLists(
 
 /** The ids a picker search matches by name, SKU, manufacturer, or barcode, plus the barcode each matched by. */
 async function searchInventoryPickerItemIds(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   orgId: string,
   searchTerm: string,
   itemLimit: number | undefined,
@@ -387,20 +413,13 @@ async function searchInventoryPickerItemIds(
   return { success: true, itemIds, matchedBarcodeByItem };
 }
 
-/** The category, supplier, stock, and barcode rows of the loaded picker items, or the first failing read's code. */
-async function readInventoryPickerSupportRows(
-  admin: SupabaseAdminClient,
+/** The category, supplier, stock, and barcode reads of the loaded picker items, started together. */
+function readInventoryPickerSupportResults(
+  admin: AdminClient,
   orgId: string,
   itemRows: InventoryItemRow[],
   includeOfficeDetails: boolean,
-): Promise<
-  ActionResult<{
-    categories: InventoryCategory[];
-    suppliers: InventorySupplier[];
-    stockRows: InventoryStockLevelRow[];
-    barcodeRows: InventoryBarcodeRow[];
-  }>
-> {
+) {
   const loadedItemIds = itemRows.map((item) => item.id);
   const categoryIds = Array.from(
     new Set(itemRows.flatMap((item) => (item.category_id ? [item.category_id] : []))),
@@ -408,7 +427,7 @@ async function readInventoryPickerSupportRows(
   const supplierIds = Array.from(
     new Set(itemRows.flatMap((item) => (item.supplier_id ? [item.supplier_id] : []))),
   );
-  const [categoriesResult, suppliersResult, stockResult, barcodesResult] = await Promise.all([
+  return Promise.all([
     readInBatches(categoryIds, (batch) =>
       admin
         .from('inventory_categories')
@@ -452,6 +471,24 @@ async function readInventoryPickerSupportRows(
       ),
     ),
   ]);
+}
+
+/** The category, supplier, stock, and barcode rows of the loaded picker items, or the first failing read's code. */
+async function readInventoryPickerSupportRows(
+  admin: AdminClient,
+  orgId: string,
+  itemRows: InventoryItemRow[],
+  includeOfficeDetails: boolean,
+): Promise<
+  ActionResult<{
+    categories: InventoryCategory[];
+    suppliers: InventorySupplier[];
+    stockRows: InventoryStockLevelRow[];
+    barcodeRows: InventoryBarcodeRow[];
+  }>
+> {
+  const [categoriesResult, suppliersResult, stockResult, barcodesResult] =
+    await readInventoryPickerSupportResults(admin, orgId, itemRows, includeOfficeDetails);
   if (categoriesResult.error) {
     logReadErrors('loadInventoryPickerOptions: read failed', categoriesResult.error);
     return { success: false, error: 'categories_failed' };
@@ -528,7 +565,7 @@ function toInventoryPickerOptions(
 
 /** The organization's active storage locations in their display order; a company holds a handful. */
 export async function loadActiveInventoryLocations(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   orgId: string,
 ): Promise<ActionResult<{ locations: InventoryLocation[] }>> {
   const { data, error } = await readCompleteRows(
@@ -553,7 +590,7 @@ export async function loadActiveInventoryLocations(
 
 /** One bounded page of the picker catalog: the first `itemLimit` items, the matches of a search, or one item. */
 export async function loadInventoryPickerOptions(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   orgId: string,
   includeOfficeDetails: boolean,
   options: { searchTerm?: string; itemLimit: number; exactItemId?: string | undefined },

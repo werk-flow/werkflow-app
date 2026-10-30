@@ -6,7 +6,8 @@ import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useServerAction } from '@/hooks/use-server-action';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
-import { adjustInventoryStock, createInventoryLocation, upsertInventoryItem } from '@/lib/inventory/actions';
+import { adjustInventoryStock, createInventoryLocation } from '@/lib/inventory/actions';
+import { upsertInventoryItem } from '@/lib/inventory/catalog-actions';
 import type { InventoryLocation, InventoryOverview, InventoryOverviewItem } from '@/lib/inventory/types';
 import {
   buildItemSaveInput,

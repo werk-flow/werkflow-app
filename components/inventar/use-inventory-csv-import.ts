@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
-import { importInventoryRows, type ImportInventoryRowsInput } from '@/lib/inventory/actions';
+import type { ImportInventoryRowsInput } from '@/lib/inventory/action-inputs';
+import { importInventoryRows } from '@/lib/inventory/actions';
 import {
   buildImportRows,
   guessMapping,

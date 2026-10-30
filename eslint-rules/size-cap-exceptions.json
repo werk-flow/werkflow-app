@@ -7,7 +7,6 @@
     "lib/attention/actions.ts": 1440,
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/documents/actions.ts": 1584,
-    "lib/inventory/actions.ts": 1567,
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/period-preparation.ts": 1277
   },
@@ -530,16 +529,6 @@
     "lib/documents/folder-copy.ts": { "copyFolderTree": 109 },
     "lib/documents/hydration.ts": { "readDocumentLinkTargets": 121 },
     "lib/documents/work-context-groups.ts": { "buildWorkContextGroups": 94 },
-    "lib/inventory/actions.ts": {
-      "updateJobMaterialLine": 84,
-      "getProjectMaterialSummary": 99,
-      "hydrateJobMaterialLines": 97,
-      "importInventoryRows": 99
-    },
-    "lib/inventory/catalog-reads.ts": {
-      "readInventoryOverviewSupportRows": 120,
-      "readInventoryPickerSupportRows": 87
-    },
     "lib/invites/send-invite.ts": { "createAndMailOrganizationInvite": 120 },
     "lib/members/actions.ts": { "removeMember": 90 },
     "lib/org/settings-actions.ts": { "updateOrganizationSettings": 94 },
