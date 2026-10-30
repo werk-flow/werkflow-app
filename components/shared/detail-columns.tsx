@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils';
  * 1024 px, UI audit of 2026-10-15). A detail page and its loading skeleton
  * name the same layout, so the skeleton switches where the page switches
  * (`lib/ui/detail-columns.test.ts`). Column tracks are `minmax(0, …)`, so a
- * long name cannot widen them.
+ * long name cannot widen them, and the grid breaks a long word anywhere, so
+ * it cannot stick out of its card either. A table keeps normal wrapping.
  */
 const DETAIL_COLUMN_LAYOUTS = {
   /** Two equal columns from a 56rem content width: the job detail. */
@@ -35,7 +36,7 @@ export type DetailColumnLayout = keyof typeof DETAIL_COLUMN_LAYOUTS;
 export function DetailColumns({ layout, children }: { layout: DetailColumnLayout; children: ReactNode }) {
   return (
     <div className="@container/detail">
-      <div className={cn('grid grid-cols-1', DETAIL_COLUMN_LAYOUTS[layout])}>{children}</div>
+      <div className={cn('grid grid-cols-1 wrap-anywhere', DETAIL_COLUMN_LAYOUTS[layout])}>{children}</div>
     </div>
   );
 }

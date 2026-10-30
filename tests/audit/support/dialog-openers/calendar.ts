@@ -58,6 +58,7 @@ import { moveCalendarBlockToMember } from '../a1-steps';
 import { auditCheckpoint } from '../checkpoints';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 // Every calendar dialog of the inventory, opened on /kalender as the admin.
 // Visits are seeded on a weekday a few days after the business date, so they
@@ -138,7 +139,7 @@ function warningVisit({ world, businessDate }: SurfaceContext): Promise<string> 
 /** A parked job with its context (reason, responsible admin, review date); returns its title. */
 function parkedJob({ world, businessDate }: SurfaceContext): Promise<string> {
   return surfaceFixture(world, 'calendar.parked-job', async () => {
-    const title = `Geparkter Kalenderauftrag ${world.runId}`;
+    const title = worldName('Geparkter Kalenderauftrag', world.runId);
     const jobId = await seedJob({
       orgId: world.orgId,
       actorId: world.users.admin.id,

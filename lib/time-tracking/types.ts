@@ -4,12 +4,15 @@ import type { OrgRole } from '@/lib/roles';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import type { TimeValidationCode, TimeValidationFailure } from '@/lib/time-tracking/validation-messages';
 import type { Database } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
 // Database types
 export type TimeEntryRow = Database['public']['Tables']['time_entries']['Row'];
 
 // Entry type and status
-export type TimeEntryType = 'clock_in' | 'clock_out' | 'break_start' | 'break_end';
+/** The entry types the time_entries.entry_type check constraint allows. */
+export const TIME_ENTRY_TYPES = ['clock_in', 'clock_out', 'break_start', 'break_end'] as const;
+export type TimeEntryType = (typeof TIME_ENTRY_TYPES)[number];
 export type TimeEntryStatus = Database['public']['Enums']['time_entry_status'];
 export type ClockStatus = 'clocked_out' | 'working' | 'on_break';
 
@@ -421,7 +424,7 @@ export type GetPendingSessionsResult = { success: true; sessions: PendingSession
 export type ValidationResult = { valid: true } | { valid: false; failure: TimeValidationFailure };
 
 /** A time rule refusal as an action answers it: the code, with the instants it names beside it. */
-type TimeValidationActionFailure = ActionFailure<TimeValidationCode> & TimeValidationFailure;
+export type TimeValidationActionFailure = ActionFailure<TimeValidationCode> & TimeValidationFailure;
 
 /**
  * Roles that a manager can manage (roles below manager)
@@ -457,7 +460,7 @@ export function toTimeEntry(row: TimeEntryRow): TimeEntry {
     id: row.id,
     userId: row.user_id,
     organizationId: row.organization_id,
-    entryType: row.entry_type as TimeEntryType,
+    entryType: constrainedValue(TIME_ENTRY_TYPES, row.entry_type, 'time_entries.entry_type'),
     timestamp: row.timestamp,
     isManual: row.is_manual,
     jobId: row.job_id ?? null,
