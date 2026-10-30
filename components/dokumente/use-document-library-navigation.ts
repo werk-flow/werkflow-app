@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type TransitionStartFunction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type TransitionStartFunction } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type {
@@ -85,7 +85,9 @@ export function useDocumentLibraryNavigation({
     linkFilter,
   });
 
-  useEffect(() => {
+  // A layout effect settles in the commit itself. A passive effect can run after
+  // the next search or filter change and revert that change's request.
+  useLayoutEffect(() => {
     requestedSearchLocation.current = { searchQuery: initialSearchQuery.trim(), category, linkFilter };
     // eslint-disable-next-line react-hooks/set-state-in-effect -- route props are the authoritative state after folder or filter navigation
     setPendingNavigation(null);

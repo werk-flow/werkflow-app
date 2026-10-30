@@ -1,0 +1,59 @@
+name: List growth
+
+# Reruns the head commit's Unit job, and with it Check, when the owner adds or removes the label
+# `approved: list growth` (docs/technical/testing.md, "Grow a shrink-only list"). ci.yml starts
+# no run on a label event, and its Unit job reads the label at run time. Every other label skips
+# this job, so it never touches CI.
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled, unlabeled]
+
+permissions: {}
+
+# The newest change of this label wins and still waits for a rerun an older one started. Other
+# labels take their own group, so a queue relabel never cancels a waiting rerun.
+concurrency:
+  group: "list-growth-${{ github.event.pull_request.number }}-${{ github.event.label.name == 'approved: list growth' }}"
+  cancel-in-progress: true
+
+jobs:
+  rerun:
+    name: Rerun Unit
+    if: "github.event.label.name == 'approved: list growth'"
+    runs-on: ubuntu-24.04
+    # A CI run in progress can take its own 45 min browser timeout after a runner queue.
+    timeout-minutes: 90
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Rerun the head commit's Unit job
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          run="$(gh run list --workflow ci.yml --event pull_request --commit "$SHA" --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+          if test -z "$run"; then
+            echo "No CI run on $SHA yet. Its Unit job reads the labels when it starts."
+            exit 0
+          fi
+          # A job reruns only in a completed run.
+          gh run watch "$run" --interval 30 > /dev/null
+          # A push since this event started a fresh run that reads the labels itself.
+          head="$(gh api "repos/$GH_REPO/pulls/$PR" --jq .head.sha)"
+          if test "$head" != "$SHA"; then
+            echo "The PR moved to $head. Its own CI run reads the labels."
+            exit 0
+          fi
+          job="$(gh run view "$run" --json jobs --jq '.jobs[] | select(.name == "Unit") | .databaseId')"
+          test -n "$job" || { echo "::error::CI run $run has no Unit job."; exit 1; }
+          # A job's rerun also reruns the jobs that need it, so Check reports again on $SHA.
+          # GitHub reruns a run only within 30 days of its start; a push starts a fresh one.
+          gh run rerun "$run" --job "$job" || {
+            echo "::error::CI run $run could not rerun. Push a commit, such as a merge of main, so a fresh CI run reads the label."
+            exit 1
+          }
+          echo "Reran Unit and Check in CI run $run: https://github.com/$GH_REPO/actions/runs/$run"

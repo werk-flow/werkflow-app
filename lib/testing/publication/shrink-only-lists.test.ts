@@ -240,6 +240,20 @@ test('a JSON array keys by its items, so replacing one is growth', () => {
   ).toEqual([]);
 });
 
+test('the reviewed separate writes refuse a new action and let a removed one pass', () => {
+  const list = SHRINK_ONLY_LISTS.find((entry) => entry.id === 'reviewed separate writes');
+  if (!list) throw new Error('reviewed separate writes is not registered in SHRINK_ONLY_LISTS');
+  const current = workingTreeText(list.file);
+  if (current === null) throw new Error(`${list.file} is missing`);
+  const opening = /(const ALLOWED_SEPARATE_WRITES: [^=]+= \{\n)/;
+  expect(current).toMatch(opening);
+  const planted = current.replace(opening, `$1  'lib/probe/actions.ts::saveTwice': 'planted reason',\n`);
+  expect(growth(list, current, planted)).toEqual([
+    'reviewed separate writes (lib/conventions/related-writes.test.ts) gained "lib/probe/actions.ts::saveTwice"',
+  ]);
+  expect(growth(list, planted, current)).toEqual([]);
+});
+
 test('the browser wait registry ratchets each exported wait', () => {
   const list: ShrinkOnlyList = {
     id: 'waits',

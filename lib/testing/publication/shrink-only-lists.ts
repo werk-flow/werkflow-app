@@ -76,6 +76,7 @@ export const SHRINK_ONLY_LISTS: readonly ShrinkOnlyList[] = [
     'NO_DEPENDENT_ACTIONS',
   ),
   variable('unscoped functions', 'lib/conventions/tenant-scope.test.ts', 'UNSCOPED_FUNCTIONS'),
+  variable('reviewed separate writes', 'lib/conventions/related-writes.test.ts', 'ALLOWED_SEPARATE_WRITES'),
   variable('known duplicate helpers', 'lib/conventions/duplicate-helpers.test.ts', 'KNOWN_DUPLICATE_HELPERS'),
   variable('known renamed copies', 'lib/conventions/duplicate-helpers.test.ts', 'KNOWN_RENAMED_COPIES'),
   variable('known erased copies', 'lib/conventions/duplicate-helpers.test.ts', 'KNOWN_ERASED_COPIES'),

@@ -26,6 +26,16 @@
             "timeout": 20
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/.claude/hooks/refuse-production-mcp.ts\"; code=$?; [ \"$code\" -eq 0 ] || [ \"$code\" -eq 2 ] || echo \"Refused: the MCP guard failed with exit $code, so it cannot rule out PROD.\" >&2; [ \"$code\" -eq 0 ] && exit 0; exit 2",
+            "timeout": 20
+          }
+        ]
       }
     ]
   }

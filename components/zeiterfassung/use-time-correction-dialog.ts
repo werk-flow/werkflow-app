@@ -7,7 +7,8 @@ import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { submitTimeCorrection, type TimeCorrectionFormOptions } from '@/lib/time-corrections/actions';
+import { submitTimeCorrection } from '@/lib/time-corrections/actions';
+import type { TimeCorrectionFormOptions } from '@/lib/time-corrections/read-actions';
 import { TIME_CORRECTION_FAILURE_MESSAGES } from '@/lib/time-corrections/messages';
 import type { TimeCorrectionKind } from '@/lib/time-corrections/types';
 import {

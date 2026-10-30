@@ -8,6 +8,7 @@ import { z } from 'zod';
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const GUARD = 'scripts/guard-edits-during-verification.ts';
 const DELETE_GUARD = '.claude/hooks/refuse-unresolvable-delete.ts';
+const PRODUCTION_MCP_GUARD = '.claude/hooks/refuse-production-mcp.ts';
 
 const hookFileSchema = z.object({
   hooks: z.object({
@@ -53,4 +54,16 @@ test('Codex runs the edit guard before every file and shell tool', () => {
 // (lib/testing/runner/unresolvable-delete.ts); Codex in full access runs it without asking.
 test('Claude runs the delete guard before every shell call', () => {
   expect(guardedTools('.claude/settings.json', ['Bash'], DELETE_GUARD)).toEqual(['Bash']);
+});
+
+// Agents never read production data (lib/security/production-access.ts); both tools name an
+// MCP tool `mcp__<server>__<tool>` in hook payloads.
+test('both agent tools run the production MCP guard before every MCP tool', () => {
+  const tools = [
+    'mcp__supabase__execute_sql',
+    'mcp__supabase-prod-readonly__execute_sql',
+    'mcp__claude_ai_Supabase__list_tables',
+  ];
+  expect(guardedTools('.claude/settings.json', tools, PRODUCTION_MCP_GUARD)).toEqual(tools);
+  expect(guardedTools('.codex/hooks.json', tools, PRODUCTION_MCP_GUARD)).toEqual(tools);
 });

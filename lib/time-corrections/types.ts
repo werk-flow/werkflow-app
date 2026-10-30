@@ -1,5 +1,6 @@
 import type { ActionFailure } from '@/lib/action-result';
 import type { Database, Json } from '@/lib/supabase/database.types';
+import { isJsonRecord } from '@/lib/supabase/json';
 import { timeActivitySelectionSchema } from '@/lib/time-tracking/activity-selection-schema';
 import type {
   TimeEntry,
@@ -112,17 +113,38 @@ export type TimeCorrectionHistoryResult =
   | { success: true; page: { requests: TimeCorrectionRequest[]; total: number } }
   | ActionFailure;
 
-export function isTimeCorrectionSnapshot(value: Json): value is TimeCorrectionSnapshot {
-  if (!value || Array.isArray(value) || typeof value !== 'object') return false;
-  const record = value as Record<string, Json | undefined>;
+/** A source version as the database writes a timestamp: `2026-01-02 03:04:05+00`. */
+export function normalizeTimestampSourceVersion(value: string): string {
+  return value
+    .replace('T', ' ')
+    .replace(/Z$/, '+00')
+    .replace(/\+00:00$/, '+00');
+}
+
+/** The source a request source row links, whichever of its id columns is set. */
+export function correctionSourceId(
+  source: Pick<
+    Database['public']['Tables']['time_correction_request_sources']['Row'],
+    'time_entry_id' | 'time_session_id' | 'time_segment_id' | 'correction_application_id'
+  >,
+): string | null {
   return (
-    record.schemaVersion === 1 &&
-    Array.isArray(record.facts) &&
-    record.facts.every(
-      (fact) =>
-        fact !== null &&
-        typeof fact === 'object' &&
-        !Array.isArray(fact) &&
+    source.time_entry_id ??
+    source.time_session_id ??
+    source.time_segment_id ??
+    source.correction_application_id
+  );
+}
+
+export function isTimeCorrectionSnapshot(value: Json): value is TimeCorrectionSnapshot {
+  if (!isJsonRecord(value)) return false;
+  const facts = value.facts;
+  return (
+    value.schemaVersion === 1 &&
+    Array.isArray(facts) &&
+    facts.every(
+      (fact: unknown) =>
+        isJsonRecord(fact) &&
         (fact.activity === undefined || timeActivitySelectionSchema.safeParse(fact.activity).success),
     )
   );
