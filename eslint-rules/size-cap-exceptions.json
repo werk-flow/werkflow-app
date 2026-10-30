@@ -11,8 +11,6 @@
     "lib/inventory/actions.ts": 1567,
     "lib/jobs/actions.ts": 1021,
     "lib/jobs/types.ts": 890,
-    "lib/planning/actions.ts": 811,
-    "lib/planning/server.ts": 1165,
     "lib/qualifications/actions.ts": 1228,
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/actions.ts": 1332,
@@ -524,7 +522,6 @@
     "hooks/use-live-view.ts": { "useLiveView": 192 },
     "hooks/use-member-status.ts": { "useMemberStatus": 97 },
     "hooks/use-optimistic-list.ts": { "useOptimisticList": 120 },
-    "hooks/use-planning-options.ts": { "usePlanningOptions": 141 },
     "hooks/use-weekly-time-data.ts": { "useWeeklyTimeData": 96 },
     "lib/attention/actions.ts": {
       "deriveFollowUpTasks": 95,
@@ -539,7 +536,6 @@
       "deriveWorkArtifactTasks": 92,
       "deriveWorkHandoverTasks": 95
     },
-    "lib/calendar/board-actions.ts": { "getCalendarBoardContext": 147 },
     "lib/customer-relationships/actions.ts": {
       "buildTimelineRecordQueries": 105,
       "buildTimelineLinkAndEventQueries": 104,
@@ -586,19 +582,6 @@
     },
     "lib/members/actions.ts": { "removeMember": 90 },
     "lib/org/settings-actions.ts": { "updateOrganizationSettings": 94 },
-    "lib/parking/actions.ts": { "getJobParkingContexts": 92 },
-    "lib/planning/actions.ts": {
-      "extendPlanningSeriesHorizon": 157,
-      "updatePlanningCalendarEntry": 131,
-      "reschedulePlanningSeries": 176
-    },
-    "lib/planning/capacity.ts": { "evaluateCapacity": 97 },
-    "lib/planning/server.ts": {
-      "loadPlanningQualificationEvaluations": 190,
-      "loadDailyTargetsByRecord": 81,
-      "assessPlanningOccurrences": 164,
-      "loadPlanningCalendarEntries": 126
-    },
     "lib/projects/actions.ts": { "updateProject": 110 },
     "lib/qualifications/actions.ts": {
       "getQualificationWorkspace": 152,
