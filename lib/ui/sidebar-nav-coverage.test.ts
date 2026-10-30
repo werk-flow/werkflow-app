@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { isNavItemActive, navItems } from '@/components/sidebar/sidebar-nav-items';
+import { isNavItemActive, navItemsFor } from '@/components/sidebar/sidebar-nav-items';
 
 // Every authenticated page highlights exactly one sidebar entry, so the user
 // always sees which area they are in. `/service/anlagen` and `/service/wartung`
@@ -31,7 +31,9 @@ test('the route inventory finds the authenticated pages', () => {
 
 test('every authenticated route highlights exactly one sidebar entry', () => {
   const unmapped = routes.flatMap((route) => {
-    const owners = navItems.filter((item) => isNavItemActive(item, route)).map((item) => item.label);
+    const owners = navItemsFor('admin')
+      .filter((item) => isNavItemActive(item, route))
+      .map((item) => item.label);
     const ownedByProfileCard = isNavItemActive({ href: PROFILE_CARD_SECTION }, route);
     const count = owners.length + (ownedByProfileCard ? 1 : 0);
     return count === 1 ? [] : [`${route}: ${count === 0 ? 'no entry' : owners.join(', ')}`];

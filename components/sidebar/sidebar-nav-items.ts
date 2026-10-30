@@ -26,7 +26,7 @@ type NavItem = {
   activePrefix?: string;
 };
 
-export const navItems: NavItem[] = [
+const navItems: NavItem[] = [
   {
     href: '/dashboard',
     label: 'Dashboard',
