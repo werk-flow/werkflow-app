@@ -17,6 +17,7 @@ state() {
 deadline=$((SECONDS + 180))
 attempts=""
 restarted=false
+start_failed=false
 until answer="$(curl --silent --max-time 10 --output /dev/null --write-out '%{http_code} %{time_total}s' \
   --request OPTIONS http://127.0.0.1:54321/functions/v1/send-invite-email)"; test "${answer%% *}" = 204; do
   attempts+="${SECONDS}s: ${answer}"$'\n'
@@ -29,11 +30,16 @@ until answer="$(curl --silent --max-time 10 --output /dev/null --write-out '%{ht
       attempts+="${SECONDS}s: started the stopped runtime"$'\n'
     else
       attempts+="${SECONDS}s: could not start the stopped runtime"$'\n'
+      start_failed=true
       deadline=$SECONDS
     fi
   fi
   if test $SECONDS -ge $deadline; then
-    echo "::error::The edge runtime did not answer 204 within 180 s."
+    if test "$start_failed" = true; then
+      echo "::error::The edge runtime exited, and docker start could not start it again."
+    else
+      echo "::error::The edge runtime did not answer 204 within 180 s."
+    fi
     printf 'Attempts (time since the step started: status, request time):\n%s' "$attempts"
     state
     docker stats --no-stream --format '{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}}'
