@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyDropdownFilters } from './dropdown-filters';
-import { EMPTY_FILTER_STATE, type Job, type ProjectWithDetails, type UnifiedListEntry } from './types';
+import { type Job, type ProjectWithDetails } from './types';
+import { EMPTY_FILTER_STATE, type UnifiedListEntry } from './unified-list';
 
 function buildFilterTestJob(id: string, clientId: string | null, plannedDate: string | null): Job {
   return {

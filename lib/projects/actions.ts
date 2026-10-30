@@ -6,7 +6,7 @@ import { readCompleteRows, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { CACHE_TAGS } from '@/lib/data/cached';
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import {
   type Project,
   type ProjectRow,
@@ -21,13 +21,13 @@ import {
   calculateTrafficLight,
   getEffectiveProjectStatus,
 } from '@/lib/jobs/types';
-import { validateSiteAndContactForClient } from '@/lib/clients/site-contact-validation';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { createProjectInputSchema, updateProjectArgumentsSchema } from './action-schemas';
 import { projectFieldClient } from '@/lib/jobs/field-work-pack';
 import { PROJECT_CREATION_REFUSALS, projectCreationColumns } from './creation';
+import { prepareProjectUpdate } from './update-preparation';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { toJson } from '@/lib/supabase/json';
 import { CUSTOMER_REFERENCE_REFUSALS, workWriteFailure } from '@/lib/jobs/write-refusals';
@@ -129,93 +129,8 @@ export async function updateProject(
 
     const admin = createSupabaseAdminClient();
 
-    const { data: existing, error: fetchError } = await admin
-      .from('projects')
-      .select('id, client_id, site_id, contact_id, name, description')
-      .eq('id', projectId)
-      .eq('organization_id', orgId)
-      .single();
-
-    if (fetchError || !existing) {
-      return { success: false, error: 'project_not_found' };
-    }
-
-    const resultingName = input.name !== undefined ? input.name.trim() : existing.name.trim();
-    const resultingDescription =
-      input.description !== undefined
-        ? (input.description?.trim() ?? '')
-        : (existing.description?.trim() ?? '');
-
-    if (!resultingName && !resultingDescription) {
-      return { success: false, error: 'name_or_description_required' };
-    }
-
-    if (input.clientId !== undefined && input.clientId) {
-      const { data: client, error: clientError } = await admin
-        .from('clients')
-        .select('id')
-        .eq('id', input.clientId)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (clientError || !client) {
-        return { success: false, error: 'client_not_found' };
-      }
-    }
-
-    if (input.projectNumber !== undefined && input.projectNumber?.trim()) {
-      const { data: numberConflict, error: numberConflictError } = await loggedRead(
-        'updateProject: projects read failed',
-        admin
-          .from('projects')
-          .select('id')
-          .eq('organization_id', orgId)
-          .eq('project_number', input.projectNumber.trim())
-          .neq('id', projectId)
-          .maybeSingle(),
-      );
-      if (numberConflictError) return { success: false, error: 'load_failed' };
-
-      if (numberConflict) {
-        return { success: false, error: 'project_number_taken' };
-      }
-    }
-
-    const resultingClientId = input.clientId !== undefined ? input.clientId || null : existing.client_id;
-    const clientChanged = resultingClientId !== existing.client_id;
-
-    // A customer change invalidates the previous customer's site/contact.
-    const resultingSiteId =
-      input.siteId !== undefined ? input.siteId || null : clientChanged ? null : existing.site_id;
-    const resultingContactId =
-      input.contactId !== undefined ? input.contactId || null : clientChanged ? null : existing.contact_id;
-
-    if (input.siteId !== undefined || input.contactId !== undefined || clientChanged) {
-      const siteContactCheck = await validateSiteAndContactForClient(
-        admin,
-        orgId,
-        resultingClientId,
-        resultingSiteId,
-        resultingContactId,
-      );
-      if (!siteContactCheck.success) {
-        return siteContactCheck;
-      }
-    }
-
-    const updateData: Record<string, unknown> = {};
-    if (input.name !== undefined) updateData.name = input.name.trim();
-    if (input.description !== undefined) updateData.description = input.description?.trim() || null;
-    if (input.clientId !== undefined) updateData.client_id = input.clientId || null;
-    if (input.siteId !== undefined || clientChanged) updateData.site_id = resultingSiteId;
-    if (input.contactId !== undefined || clientChanged) updateData.contact_id = resultingContactId;
-    if (input.projectNumber !== undefined) updateData.project_number = input.projectNumber?.trim() || null;
-    if (input.plannedStartDate !== undefined) updateData.planned_start_date = input.plannedStartDate || null;
-    if (input.plannedEndDate !== undefined) updateData.planned_end_date = input.plannedEndDate || null;
-
-    if (Object.keys(updateData).length === 0) {
-      return { success: false, error: 'no_changes' };
-    }
+    const prepared = await prepareProjectUpdate(admin, orgId, projectId, input);
+    if (!prepared.success) return prepared;
 
     // One transaction: the project and, on a customer change, its jobs, which
     // lose the previous customer's site and contact.
@@ -224,7 +139,7 @@ export async function updateProject(
       rpcArgs('update_project_with_jobs', {
         p_organization_id: orgId,
         p_project_id: projectId,
-        p_changes: toJson(updateData),
+        p_changes: toJson(prepared.changes),
       }),
     );
 
@@ -474,7 +389,7 @@ export async function getNextProjectNumber(): Promise<ActionResult<{ projectNumb
       return { success: false, error: 'generation_failed' };
     }
 
-    return { success: true, projectNumber: data as string };
+    return { success: true, projectNumber: data };
   } catch (error) {
     logError('Unexpected error in getNextProjectNumber:', error);
     return { success: false, error: 'unexpected_error' };

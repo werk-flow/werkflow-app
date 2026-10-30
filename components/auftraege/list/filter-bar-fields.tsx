@@ -6,7 +6,7 @@ import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { FilterState, EntryTypeFilter } from '@/lib/jobs/types';
+import type { FilterState, EntryTypeFilter } from '@/lib/jobs/unified-list';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { toLocalDateString } from '@/lib/utils';
 

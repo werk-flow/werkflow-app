@@ -1,4 +1,4 @@
-import type { UnifiedListEntry } from '@/lib/jobs/types';
+import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type {
   UnifiedAuftraegeJobMenuProps,
