@@ -119,7 +119,6 @@
   "lib/realtime/scheduler.ts": 1,
   "lib/requests/actions.ts": 6,
   "lib/requests/list-page.ts": 1,
-  "lib/responsibilities/server.ts": 3,
   "lib/security/dependency-audit.test.ts": 2,
   "lib/service-cases/actions.ts": 1,
   "lib/service-cases/list-scale.test.ts": 2,
