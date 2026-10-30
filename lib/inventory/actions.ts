@@ -2,40 +2,46 @@
 
 import { revalidatePath } from 'next/cache';
 
-import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { inventoryPageQuerySchema, inventoryPageResultSchema } from './list-page';
+import type { ActionResult } from '@/lib/action-result';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import type { AuthContext } from '@/lib/jobs/auth';
-import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import type {
-  InventoryItem,
-  InventoryItemType,
+  AdjustInventoryStockInput,
+  CreateInventoryLocationInput,
+  CreateJobMaterialLineInput,
+  CreateProjectMaterialLineInput,
+  ImportInventoryRowsInput,
+  ReturnJobMaterialInput,
+  TakeJobMaterialInput,
+  UpdateJobMaterialLineInput,
+} from './action-inputs';
+import type {
   InventoryLocation,
-  InventoryLocationType,
-  InventoryOverview,
   InventoryPickerOption,
   ProjectMaterialSummary,
   JobMaterialLine,
-  JobMaterialLineRow,
 } from './types';
+import { INVENTORY_PICKER_PAGE_SIZE, toInventoryLocation, toNumber } from './types';
+import { loadInventoryPickerOptions } from './catalog-reads';
+import { getJobContext, getProjectContext } from './job-project-access';
+import { hydrateJobMaterialLines, readProjectMaterialSummary } from './material-line-reads';
+import { insertMaterialLine, materialLineChanges } from './material-line-writes';
 import {
-  INVENTORY_PICKER_PAGE_SIZE,
-  toInventoryCategory,
-  toInventoryItem,
-  toInventoryLocation,
-  toJobMaterialStatus,
-  toNumber,
-} from './types';
-import {
-  loadActiveInventoryLocations,
-  loadInventoryOverviewLists,
-  loadInventoryPickerOptions,
-} from './catalog-reads';
-import type { SupabaseAdminClient } from './catalog-reads';
+  cleanText,
+  completeInventoryImportBatch,
+  ensureInventoryDefaults,
+  invalidateInventory,
+  inventoryImportItem,
+  inventoryWriteFailure,
+  normalizeQuantity,
+  resolveInventoryLocation,
+  takeUnplannedMaterial,
+} from './write-support';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import {
@@ -50,116 +56,7 @@ import {
   takeJobMaterialSchema,
   takeProjectMaterialSchema,
   updateJobMaterialLineSchema,
-  upsertInventoryItemSchema,
 } from './action-schemas';
-
-export type CreateInventoryLocationInput = {
-  name: string;
-  description?: string | null;
-  locationType?: InventoryLocationType;
-  parentLocationId?: string | null;
-};
-
-export type UpsertInventoryItemInput = {
-  id?: string;
-  name: string;
-  itemType: InventoryItemType;
-  description?: string | null;
-  categoryId?: string | null;
-  unit: string;
-  internalSku?: string | null;
-  manufacturer?: string | null;
-  supplierId?: string | null;
-  supplierName?: string | null;
-  supplierArticleNumber?: string | null;
-  purchasePriceCents?: number | null;
-  salePriceCents?: number | null;
-  isBillable: boolean;
-  globalMinimumStock?: number;
-  globalTargetStock?: number | null;
-  trackQuantity?: boolean;
-  trackIndividualAssets?: boolean;
-  barcode?: string | null;
-  notes?: string | null;
-  initialLocationId?: string | null;
-  initialQuantity?: number | null;
-};
-
-export type AdjustInventoryStockInput = {
-  itemId: string;
-  locationId: string;
-  direction?: 'add' | 'remove';
-  quantityDelta?: number;
-  quantity?: number;
-  reason?: string | null;
-};
-
-export type CreateJobMaterialLineInput = {
-  jobId: string;
-  itemId: string;
-  preferredLocationId?: string | null;
-  plannedQuantity: number;
-  notes?: string | null;
-};
-
-export type CreateProjectMaterialLineInput = {
-  projectId: string;
-  itemId: string;
-  preferredLocationId?: string | null;
-  plannedQuantity: number;
-  notes?: string | null;
-};
-
-export type UpdateJobMaterialLineInput = {
-  lineId: string;
-  itemId?: string;
-  preferredLocationId?: string | null;
-  plannedQuantity?: number;
-  isBillable?: boolean;
-  notes?: string | null;
-};
-
-export type TakeJobMaterialInput = {
-  jobId: string;
-  lineId?: string | null;
-  itemId?: string | null;
-  locationId: string;
-  quantity: number;
-  reason?: string | null;
-};
-
-export type ReturnJobMaterialInput = {
-  lineId: string;
-  locationId: string;
-  quantity: number;
-  reason?: string | null;
-};
-
-export type InventoryImportRow = {
-  name: string;
-  itemType?: InventoryItemType;
-  categoryName?: string | null;
-  locationName?: string | null;
-  unit?: string | null;
-  quantity?: number | null;
-  minimumStock?: number | null;
-  targetStock?: number | null;
-  internalSku?: string | null;
-  barcode?: string | null;
-  manufacturer?: string | null;
-  supplierName?: string | null;
-  supplierArticleNumber?: string | null;
-  purchasePriceCents?: number | null;
-  salePriceCents?: number | null;
-  isBillable?: boolean | null;
-  notes?: string | null;
-};
-
-export type ImportInventoryRowsInput = {
-  fileName: string;
-  columnMapping: Record<string, string>;
-  rows: InventoryImportRow[];
-};
 
 async function getAuthContext(): Promise<ActionResult<{ context: AuthContext }>> {
   const auth = await authenticateAndAuthorize();
@@ -179,173 +76,8 @@ async function requireInventoryManager(): Promise<ActionResult<{ context: AuthCo
   return auth;
 }
 
-function cleanText(value: string | null | undefined): string | null {
-  const trimmed = value?.trim() ?? '';
-  return trimmed ? trimmed : null;
-}
-
-// Quantities are `numeric(12,3)`: rounding to two digits turned a booked
-// 0,125 m into 0,13 and refused its return as more than was taken.
-function normalizeQuantity(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.round(value * 1000) / 1000);
-}
-
-function normalizePrice(value: number | null | undefined): number | null {
-  if (value === null || value === undefined || !Number.isFinite(value)) return null;
-  return Math.max(0, Math.round(value));
-}
-
-function normalizeInventoryUnitInput(value: string | null | undefined): string {
-  const normalized = (value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/ü/g, 'ue')
-    .replace(/ä/g, 'ae')
-    .replace(/ö/g, 'oe');
-
-  if (!normalized) return 'piece';
-
-  const aliases: Record<string, string> = {
-    stueck: 'piece',
-    stuck: 'piece',
-    stk: 'piece',
-    st: 'piece',
-    piece: 'piece',
-    pieces: 'piece',
-    meter: 'meter',
-    m: 'meter',
-    rolle: 'roll',
-    roll: 'roll',
-    packung: 'package',
-    paket: 'package',
-    package: 'package',
-    karton: 'box',
-    box: 'box',
-    set: 'set',
-    paar: 'pair',
-    pair: 'pair',
-    liter: 'liter',
-    l: 'liter',
-    kilogramm: 'kilogram',
-    kilogram: 'kilogram',
-    kg: 'kilogram',
-    sack: 'sack',
-    kartusche: 'cartridge',
-    cartridge: 'cartridge',
-    bund: 'bundle',
-    bundle: 'bundle',
-    palette: 'pallet',
-    pallet: 'pallet',
-  };
-
-  return aliases[normalized] ?? value?.trim() ?? 'piece';
-}
-
-function invalidateInventory() {
-  revalidatePath('/inventar');
-}
-
-async function ensureInventoryDefaults(admin: SupabaseAdminClient, context: AuthContext): Promise<void> {
-  const { error } = await admin.rpc('ensure_inventory_defaults', {
-    p_org_id: context.orgId,
-    p_actor_id: context.userId,
-  });
-
-  if (error) {
-    logError('Error ensuring inventory defaults:', error);
-  }
-}
-
-async function getJobContext(
-  context: AuthContext,
-  jobId: string,
-): Promise<ActionResult<{ job: { id: string; project_id: string | null } }>> {
-  const { data: job, error } = await readOrganizationJob(context.orgId, jobId);
-  if (error) return { success: false, error: 'load_failed' };
-  if (!job) {
-    return { success: false, error: 'job_not_found' };
-  }
-
-  if (!context.isManagerOrAbove) {
-    const { data: assignment, error: assignmentError } = await readJobAssignmentOfUser(
-      context.orgId,
-      jobId,
-      context.userId,
-    );
-    if (assignmentError) return { success: false, error: 'load_failed' };
-
-    if (!assignment) {
-      return { success: false, error: 'not_authorized' };
-    }
-  }
-
-  return { success: true, job };
-}
-
-async function getProjectContext(
-  admin: SupabaseAdminClient,
-  context: AuthContext,
-  projectId: string,
-): Promise<ActionResult<{ project: { id: string } }>> {
-  const { data, error } = await loggedRead(
-    'getProjectContext: projects read failed',
-    admin
-      .from('projects')
-      .select('id')
-      .eq('id', projectId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
-
-  const project = data;
-  if (error) return { success: false, error: 'load_failed' };
-  if (!project) {
-    return { success: false, error: 'project_not_found' };
-  }
-
-  if (!context.isManagerOrAbove) {
-    return { success: false, error: 'not_authorized' };
-  }
-
-  return { success: true, project };
-}
-
-// The refusals of save_inventory_item, import_inventory_row (migration
-// 20261004151000) and take_unplanned_inventory_material (20261004151100) that
-// the action passes on as its failure code.
-const INVENTORY_WRITE_REFUSALS = new Set([
-  'not_authorized',
-  'invalid_input',
-  'location_required_for_initial_stock',
-  'item_not_found',
-  'category_not_found',
-  'supplier_not_found',
-  'location_not_found',
-  'barcode_taken',
-  'batch_not_found',
-  'job_not_found',
-  'project_not_found',
-]);
-
-function inventoryWriteFailure(
-  label: string,
-  error: { code?: string; message?: string },
-  fallback: 'save_failed' | 'movement_failed',
-): ActionFailure {
-  const message = error.message ?? '';
-  if (INVENTORY_WRITE_REFUSALS.has(message)) return { success: false, error: message };
-  logError(label, error);
-  if (message.includes('inventory stock cannot go below zero')) {
-    return { success: false, error: 'stock_would_go_negative' };
-  }
-  if (message.includes('not available for stock movement'))
-    return { success: false, error: 'movement_failed' };
-  return { success: false, error: fallback };
-}
-
 async function recordMovement(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   context: AuthContext,
   input: {
     itemId: string;
@@ -394,146 +126,6 @@ async function recordMovement(
     return { success: false, error: 'movement_failed' };
   }
   return { success: true, quantityAfter: toNumber(movement.quantity_after) };
-}
-
-// A take without a planned line: the unplanned line and the take commit
-// together, so a refused take leaves no empty line behind.
-async function takeUnplannedMaterial(
-  admin: SupabaseAdminClient,
-  context: AuthContext,
-  input: {
-    jobId: string | null;
-    projectId: string | null;
-    itemId: string;
-    locationId: string;
-    quantity: number;
-    reason: string | null | undefined;
-    defaultReason: string;
-  },
-): Promise<ActionResult<{ quantityAfter: number }>> {
-  const { data, error } = await admin.rpc(
-    'take_unplanned_inventory_material',
-    rpcArgs('take_unplanned_inventory_material', {
-      p_organization_id: context.orgId,
-      p_actor_id: context.userId,
-      p_job_id: input.jobId,
-      p_project_id: input.projectId,
-      p_item_id: input.itemId,
-      p_location_id: input.locationId,
-      p_quantity: input.quantity,
-      p_reason: cleanText(input.reason) ?? input.defaultReason,
-      p_notes: cleanText(input.reason),
-    }),
-  );
-  if (error) {
-    return inventoryWriteFailure(
-      'takeUnplannedMaterial: take_unplanned_inventory_material failed',
-      error,
-      'movement_failed',
-    );
-  }
-  return { success: true, quantityAfter: toNumber(data) };
-}
-
-/** A location id of the caller's organization, null for none, or `location_not_found`. */
-async function resolveInventoryLocation(
-  admin: SupabaseAdminClient,
-  organizationId: string,
-  inputId: string | null | undefined,
-): Promise<ActionResult<{ referenceId: string | null }>> {
-  const table = 'inventory_locations';
-  const referenceId = cleanText(inputId);
-  if (!referenceId) return { success: true, referenceId: null };
-
-  const { data, error } = await admin
-    .from(table)
-    .select('id')
-    .eq('id', referenceId)
-    .eq('organization_id', organizationId)
-    .maybeSingle();
-
-  if (error) {
-    logError('Error resolving inventory organization reference.', {
-      code: error.code ?? 'unknown',
-      table,
-    });
-    return { success: false, error: 'reference_lookup_failed' };
-  }
-
-  const resolvedReference = data;
-  if (!resolvedReference) return { success: false, error: 'location_not_found' };
-
-  return { success: true, referenceId: resolvedReference.id };
-}
-
-export async function getInventoryOverview(
-  input: unknown = {},
-): Promise<ActionResult<{ overview: InventoryOverview }>> {
-  const auth = await requireInventoryManager();
-  if (!auth.success) return auth;
-  const parsedQuery = inventoryPageQuerySchema.safeParse(input);
-  if (!parsedQuery.success) return { success: false, error: 'inventory_failed' };
-  const query = parsedQuery.data;
-  const admin = createSupabaseAdminClient();
-  const { orgId } = auth.context;
-  await ensureInventoryDefaults(admin, auth.context);
-  const [pageResult, movementsResult] = await Promise.all([
-    admin.rpc('list_inventory_page', { p_organization_id: orgId, p_query: query }),
-    admin
-      .from('inventory_movements')
-      .select('*')
-      .eq('organization_id', orgId)
-      .order('created_at', { ascending: false })
-      .order('id')
-      .limit(40),
-  ]);
-  if (pageResult.error || movementsResult.error) {
-    logReadErrors('getInventoryOverview: read failed', pageResult.error, movementsResult.error);
-    return { success: false, error: 'inventory_failed' };
-  }
-  const parsedPage = inventoryPageResultSchema.safeParse(pageResult.data);
-  if (!parsedPage.success) return { success: false, error: 'inventory_failed' };
-  const page = parsedPage.data;
-  const movements = movementsResult.data ?? [];
-  const lists = await loadInventoryOverviewLists(admin, orgId, page, movements);
-  if (!lists.success) return lists;
-
-  const summary = page.summary;
-
-  return {
-    success: true,
-    overview: {
-      categories: lists.categories,
-      locations: lists.locations,
-      suppliers: lists.suppliers,
-      items: lists.items,
-      movements: lists.movements,
-      summary,
-      page: {
-        query,
-        ids: page.ids,
-        total: page.total,
-        locationIds: page.locationIds,
-        locationCounts: page.locationCounts,
-      },
-    },
-  };
-}
-
-/**
- * The active storage locations for the work-template editor. A company holds
- * a handful of locations, so they come complete; the material picker searches
- * the catalog on the server (`'entity-options'`, kind `inventory-items`).
- */
-export async function getInventoryLocationOptions(): Promise<
-  ActionResult<{ locations: InventoryLocation[] }>
-> {
-  const auth = await requireInventoryManager();
-  if (!auth.success) return auth;
-
-  const admin = createSupabaseAdminClient();
-  await ensureInventoryDefaults(admin, auth.context);
-  return loadActiveInventoryLocations(admin, auth.context.orgId);
 }
 
 /**
@@ -634,71 +226,6 @@ export async function createInventoryLocation(
   return { success: true, location: toInventoryLocation(data) };
 }
 
-export async function upsertInventoryItem(
-  rawInput: UpsertInventoryItemInput,
-): Promise<ActionResult<{ item: InventoryItem }>> {
-  const parsedInput = upsertInventoryItemSchema.safeParse(rawInput);
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const input = parsedInput.data;
-  const auth = await requireInventoryManager();
-  if (!auth.success) return auth;
-
-  const name = cleanText(input.name);
-  if (!name) return { success: false, error: 'name_required' };
-  if (!input.unit.trim()) return { success: false, error: 'unit_required' };
-
-  const initialQuantity = normalizeQuantity(input.initialQuantity ?? 0);
-  const requestedInitialLocationId = input.id ? null : (input.initialLocationId ?? null);
-  if (initialQuantity > 0 && !requestedInitialLocationId) {
-    return { success: false, error: 'location_required_for_initial_stock' };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const item = {
-    item_type: input.itemType,
-    name,
-    description: cleanText(input.description),
-    category_id: cleanText(input.categoryId),
-    unit: normalizeInventoryUnitInput(input.unit),
-    internal_sku: cleanText(input.internalSku),
-    manufacturer: cleanText(input.manufacturer),
-    supplier_id: cleanText(input.supplierId),
-    supplier_article_number: cleanText(input.supplierArticleNumber),
-    purchase_price_cents: normalizePrice(input.purchasePriceCents),
-    sale_price_cents: normalizePrice(input.salePriceCents),
-    is_billable: input.isBillable,
-    global_minimum_stock: normalizeQuantity(input.globalMinimumStock ?? 0),
-    global_target_stock:
-      input.globalTargetStock === null || input.globalTargetStock === undefined
-        ? null
-        : normalizeQuantity(input.globalTargetStock),
-    track_quantity: input.trackQuantity ?? true,
-    track_individual_assets: input.trackIndividualAssets ?? ['asset', 'tool'].includes(input.itemType),
-    notes: cleanText(input.notes),
-  };
-
-  // The item, its primary barcode and its first count commit together or not at all.
-  const { data, error } = await admin.rpc(
-    'save_inventory_item',
-    rpcArgs('save_inventory_item', {
-      p_organization_id: auth.context.orgId,
-      p_actor_id: auth.context.userId,
-      p_item_id: input.id ?? null,
-      p_item: item,
-      p_supplier_name: cleanText(input.supplierName),
-      p_barcode: cleanText(input.barcode),
-      p_initial_location_id: requestedInitialLocationId,
-      p_initial_quantity: input.id ? 0 : initialQuantity,
-    }),
-  );
-  if (error) {
-    return inventoryWriteFailure('upsertInventoryItem: save_inventory_item failed', error, 'save_failed');
-  }
-
-  invalidateInventory();
-  return { success: true, item: toInventoryItem(data) };
-}
-
 export async function adjustInventoryStock(
   rawInput: AdjustInventoryStockInput,
 ): Promise<ActionResult<{ quantityAfter: number }>> {
@@ -736,76 +263,6 @@ export async function adjustInventoryStock(
 
   invalidateInventory();
   return result;
-}
-
-// The shared write of a planned material line for a job or a project whose
-// access the calling action has already checked.
-async function insertMaterialLine(
-  admin: SupabaseAdminClient,
-  context: AuthContext,
-  {
-    owner,
-    input,
-    readLabel,
-    failureLabel,
-  }: {
-    owner: { job_id: string | null; project_id: string | null };
-    input: {
-      itemId: string;
-      preferredLocationId?: string | null | undefined;
-      plannedQuantity: number;
-      notes?: string | null | undefined;
-    };
-    readLabel: string;
-    failureLabel: string;
-  },
-): Promise<ActionResult<{ lineId: string }>> {
-  const plannedQuantity = normalizeQuantity(input.plannedQuantity);
-  if (plannedQuantity <= 0) return { success: false, error: 'quantity_required' };
-
-  const { data: itemRow, error: itemRowError } = await loggedRead(
-    readLabel,
-    admin
-      .from('inventory_items')
-      .select('*')
-      .eq('id', input.itemId)
-      .eq('organization_id', context.orgId)
-      .maybeSingle(),
-  );
-  if (itemRowError) return { success: false, error: 'load_failed' };
-
-  const item = itemRow ? toInventoryItem(itemRow) : null;
-  if (!item) return { success: false, error: 'item_not_found' };
-
-  const locationReference = await resolveInventoryLocation(admin, context.orgId, input.preferredLocationId);
-  if (!locationReference.success) return locationReference;
-
-  const { data, error } = await admin
-    .from('job_material_lines')
-    .insert({
-      organization_id: context.orgId,
-      ...owner,
-      item_id: item.id,
-      preferred_location_id: locationReference.referenceId,
-      planned_quantity: plannedQuantity,
-      is_billable: item.isBillable,
-      notes: cleanText(input.notes),
-      created_by: context.userId,
-    })
-    .select()
-    .single();
-
-  if (error || !data) {
-    logError(failureLabel, error);
-    return { success: false, error: 'create_failed' };
-  }
-
-  invalidateInventory();
-  revalidatePath('/auftraege', 'layout');
-
-  // The write already committed. Refreshing labels/stock belongs to the reader;
-  // a failed read must never tell the caller to repeat this mutation.
-  return { success: true, lineId: data.id };
 }
 
 export async function createJobMaterialLine(
@@ -873,51 +330,9 @@ export async function updateJobMaterialLine(
 
   if (!existing) return { success: false, error: 'line_not_found' };
 
-  const updateData: Record<string, unknown> = {};
-  if (input.itemId !== undefined && input.itemId !== existing.item_id) {
-    const existingLine = existing;
-    const hasMovement =
-      toNumber(existingLine.taken_quantity) > 0 || toNumber(existingLine.returned_quantity) > 0;
-
-    if (hasMovement) {
-      return { success: false, error: 'line_has_movements' };
-    }
-
-    const { data: itemRow, error: itemRowError } = await loggedRead(
-      'updateJobMaterialLine: inventory_items read failed',
-      admin
-        .from('inventory_items')
-        .select('*')
-        .eq('id', input.itemId)
-        .eq('organization_id', auth.context.orgId)
-        .maybeSingle(),
-    );
-    if (itemRowError) return { success: false, error: 'load_failed' };
-
-    const item = itemRow ? toInventoryItem(itemRow) : null;
-    if (!item) return { success: false, error: 'item_not_found' };
-
-    updateData.item_id = item.id;
-    updateData.is_billable = item.isBillable;
-  }
-  if (input.preferredLocationId !== undefined) {
-    const locationReference = await resolveInventoryLocation(
-      admin,
-      auth.context.orgId,
-      input.preferredLocationId,
-    );
-    if (!locationReference.success) return locationReference;
-    updateData.preferred_location_id = locationReference.referenceId;
-  }
-  if (input.plannedQuantity !== undefined) {
-    updateData.planned_quantity = normalizeQuantity(input.plannedQuantity);
-  }
-  if (input.isBillable !== undefined) {
-    updateData.is_billable = input.isBillable;
-  }
-  if (input.notes !== undefined) {
-    updateData.notes = cleanText(input.notes);
-  }
+  const changes = await materialLineChanges(admin, auth.context.orgId, existing, input);
+  if (!changes.success) return changes;
+  const { updateData } = changes;
 
   if (Object.keys(updateData).length === 0) {
     return { success: false, error: 'no_changes' };
@@ -1060,203 +475,7 @@ export async function getProjectMaterialSummary(
   const projectContext = await getProjectContext(admin, auth.context, projectId);
   if (!projectContext.success) return projectContext;
 
-  const [linesResult, jobsResult] = await Promise.all([
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('job_material_lines')
-          .select('*')
-          .eq('organization_id', auth.context.orgId)
-          .eq('project_id', projectId)
-          .neq('status', 'cancelled')
-          .order('created_at', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('jobs')
-          .select('id, job_number, title')
-          .eq('organization_id', auth.context.orgId)
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-  ]);
-
-  if (linesResult.error) {
-    logError('Error fetching project material lines:', linesResult.error);
-    return { success: false, error: 'lines_failed' };
-  }
-  if (jobsResult.error) {
-    logError('Error fetching project jobs for material summary:', jobsResult.error);
-    return { success: false, error: 'jobs_failed' };
-  }
-
-  const rows = linesResult.data;
-  const hydrated = await hydrateJobMaterialLines(admin, auth.context.orgId, rows);
-  if (!hydrated.success) return hydrated;
-  const { lines } = hydrated;
-  const directLines = lines.filter((line) => !line.jobId);
-  const jobLines = lines.filter((line) => line.jobId);
-  const jobs = jobsResult.data;
-  const jobMap = new Map(jobs.map((job) => [job.id, job]));
-  const jobGroups = jobs
-    .map((job) => ({
-      jobId: job.id,
-      jobNumber: job.job_number,
-      jobTitle: job.title ?? 'Auftrag',
-      lines: jobLines.filter((line) => line.jobId === job.id),
-    }))
-    .filter((group) => group.lines.length > 0);
-
-  for (const line of jobLines) {
-    if (line.jobId && !jobMap.has(line.jobId)) {
-      jobGroups.push({
-        jobId: line.jobId,
-        jobNumber: null,
-        jobTitle: 'Auftrag',
-        lines: [line],
-      });
-    }
-  }
-
-  const totalMap = new Map<string, ProjectMaterialSummary['totals'][number]>();
-  for (const line of lines) {
-    const key = `${line.itemId}:${line.unit}`;
-    const current = totalMap.get(key) ?? {
-      itemId: line.itemId,
-      itemName: line.itemName,
-      unit: line.unit,
-      plannedQuantity: 0,
-      takenQuantity: 0,
-      returnedQuantity: 0,
-      billableQuantity: 0,
-    };
-    current.plannedQuantity += line.plannedQuantity;
-    current.takenQuantity += line.takenQuantity;
-    current.returnedQuantity += line.returnedQuantity;
-    current.billableQuantity += line.billableQuantity;
-    totalMap.set(key, current);
-  }
-
-  return {
-    success: true,
-    summary: {
-      directLines,
-      jobGroups,
-      totals: Array.from(totalMap.values()).sort((a, b) => a.itemName.localeCompare(b.itemName, 'de')),
-    },
-  };
-}
-
-async function hydrateJobMaterialLines(
-  admin: SupabaseAdminClient,
-  orgId: string,
-  rows: JobMaterialLineRow[],
-): Promise<ActionResult<{ lines: JobMaterialLine[] }>> {
-  if (rows.length === 0) return { success: true, lines: [] };
-
-  const itemIds = Array.from(new Set(rows.map((line) => line.item_id)));
-  const locationIds = Array.from(
-    new Set(rows.flatMap((line) => (line.preferred_location_id ? [line.preferred_location_id] : []))),
-  );
-
-  const [itemsResult, categoriesResult, locationsResult, stockResult] = await Promise.all([
-    readInBatches(itemIds, (batch) =>
-      admin
-        .from('inventory_items')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('inventory_categories')
-          .select('*')
-          .eq('organization_id', orgId)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    readInBatches(locationIds, (batch) =>
-      admin
-        .from('inventory_locations')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(itemIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('inventory_stock_levels')
-            .select('*')
-            .eq('organization_id', orgId)
-            .in('item_id', [...batch])
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ),
-  ]);
-  const hydrationError =
-    itemsResult.error ?? categoriesResult.error ?? locationsResult.error ?? stockResult.error;
-  if (hydrationError) {
-    // A missing item read would drop its lines; never show a partial list.
-    logError('Error hydrating job material lines:', hydrationError);
-    return { success: false, error: 'lines_failed' };
-  }
-
-  const items = itemsResult.data.map(toInventoryItem);
-  const categories = categoriesResult.data.map(toInventoryCategory);
-  const locations = locationsResult.data.map(toInventoryLocation);
-  const stockLevels = stockResult.data;
-  const itemMap = new Map(items.map((item) => [item.id, item]));
-  const categoryMap = new Map(categories.map((category) => [category.id, category]));
-  const locationMap = new Map(locations.map((location) => [location.id, location]));
-
-  const stockByItem = new Map<string, number>();
-  for (const stock of stockLevels) {
-    stockByItem.set(stock.item_id, (stockByItem.get(stock.item_id) ?? 0) + toNumber(stock.quantity_on_hand));
-  }
-
-  const lines = rows.flatMap((line): JobMaterialLine[] => {
-    const item = itemMap.get(line.item_id);
-    if (!item) return [];
-
-    return [
-      {
-        id: line.id,
-        jobId: line.job_id,
-        projectId: line.project_id,
-        itemId: line.item_id,
-        itemName: item.name,
-        itemType: item.itemType,
-        unit: item.unit,
-        categoryName: item.categoryId ? (categoryMap.get(item.categoryId)?.name ?? null) : null,
-        preferredLocationId: line.preferred_location_id,
-        preferredLocationName: line.preferred_location_id
-          ? (locationMap.get(line.preferred_location_id)?.name ?? null)
-          : null,
-        plannedQuantity: toNumber(line.planned_quantity),
-        takenQuantity: toNumber(line.taken_quantity),
-        returnedQuantity: toNumber(line.returned_quantity),
-        billableQuantity: toNumber(line.billable_quantity),
-        isBillable: line.is_billable,
-        isUnplanned: line.is_unplanned,
-        status: toJobMaterialStatus(line.status),
-        notes: line.notes,
-        availableQuantity: stockByItem.get(item.id) ?? 0,
-      },
-    ];
-  });
-  return { success: true, lines };
+  return readProjectMaterialSummary(admin, auth.context.orgId, projectId);
 }
 
 export async function takeJobMaterial(
@@ -1507,23 +726,7 @@ export async function importInventoryRows(
           p_organization_id: auth.context.orgId,
           p_actor_id: auth.context.userId,
           p_import_batch_id: batch.id,
-          p_item: {
-            item_type: row.itemType ?? 'material',
-            name,
-            unit: normalizeInventoryUnitInput(row.unit),
-            internal_sku: cleanText(row.internalSku),
-            manufacturer: cleanText(row.manufacturer),
-            supplier_article_number: cleanText(row.supplierArticleNumber),
-            purchase_price_cents: normalizePrice(row.purchasePriceCents),
-            sale_price_cents: normalizePrice(row.salePriceCents),
-            is_billable: row.isBillable ?? true,
-            global_minimum_stock: normalizeQuantity(row.minimumStock ?? 0),
-            global_target_stock:
-              row.targetStock === null || row.targetStock === undefined
-                ? null
-                : normalizeQuantity(row.targetStock),
-            notes: cleanText(row.notes),
-          },
+          p_item: inventoryImportItem(row, name),
           p_category_name: cleanText(row.categoryName),
           p_supplier_name: cleanText(row.supplierName),
           p_location_name: cleanText(row.locationName),
@@ -1546,21 +749,11 @@ export async function importInventoryRows(
     }
   }
 
-  const { error: updateError } = await admin
-    .from('inventory_import_batches')
-    .update({
-      status: failedCount > 0 ? 'failed' : 'imported',
-      // The batch has no column for rows without a Lager; their items were imported.
-      imported_count: importedCount + missingLocationCount,
-      failed_count: failedCount,
-      completed_at: new Date().toISOString(),
-    })
-    .eq('organization_id', auth.context.orgId)
-    .eq('id', batch.id);
-
-  if (updateError) {
-    logError('Error updating inventory import batch:', updateError);
-  }
+  await completeInventoryImportBatch(admin, auth.context.orgId, batch.id, {
+    importedCount,
+    missingLocationCount,
+    failedCount,
+  });
 
   invalidateInventory();
   return { success: true, importedCount, missingLocationCount, failedCount };

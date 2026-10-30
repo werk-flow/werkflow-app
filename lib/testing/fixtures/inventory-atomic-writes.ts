@@ -84,9 +84,8 @@ const logged: unknown[][] = [];
 // Capture the reviewed log sink: only the label and the classification may reach it.
 console.error = (...args: unknown[]) => logged.push(args);
 
-const { returnJobMaterial, takeJobMaterial, takeProjectMaterial, upsertInventoryItem } = await import(
-  '../../inventory/actions'
-);
+const { returnJobMaterial, takeJobMaterial, takeProjectMaterial } = await import('../../inventory/actions');
+const { upsertInventoryItem } = await import('../../inventory/catalog-actions');
 
 function reset(result: RpcResult, { isManager = true }: { isManager?: boolean } = {}) {
   tables = {
