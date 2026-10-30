@@ -15,6 +15,72 @@ const CAPACITY_CONFLICT_MESSAGES = {
   over_capacity: 'Die geplante Zeit überschreitet die verfügbare Tageskapazität.',
 } as const;
 
+/** The warnings of one person's proposed day, in the order the assessment lists them. */
+function dayConflicts(
+  allocation: ProposedEmployeeMinutes,
+  context: CapacityDayContext,
+  remainingMinutes: number | null,
+): PlanningConflict[] {
+  const conflicts: PlanningConflict[] = [];
+  const common = {
+    severity: 'warning' as const,
+    employeeRecordId: allocation.employeeRecordId,
+    localDate: allocation.localDate,
+  };
+  if (context.targetMinutes === null) {
+    conflicts.push({
+      ...common,
+      kind: 'no_schedule',
+      message: CAPACITY_CONFLICT_MESSAGES.no_schedule,
+      details: { targetSource: context.targetSource },
+    });
+  } else if (context.targetMinutes === 0) {
+    conflicts.push({
+      ...common,
+      kind: 'holiday_or_closure',
+      message: CAPACITY_CONFLICT_MESSAGES.holiday_or_closure,
+      details: { targetSource: context.targetSource },
+    });
+  }
+  if (context.approvedAbsenceMinutes > 0) {
+    conflicts.push({
+      ...common,
+      kind: 'approved_absence',
+      message: CAPACITY_CONFLICT_MESSAGES.approved_absence,
+      details: { absenceMinutes: context.approvedAbsenceMinutes },
+    });
+  }
+  if (context.pendingAbsenceMinutes > 0) {
+    conflicts.push({
+      ...common,
+      kind: 'pending_absence',
+      message: CAPACITY_CONFLICT_MESSAGES.pending_absence,
+      details: { provisional: true, absenceMinutes: context.pendingAbsenceMinutes },
+    });
+  }
+  if (context.overlapMinutes > 0) {
+    conflicts.push({
+      ...common,
+      kind: 'overlap',
+      message: CAPACITY_CONFLICT_MESSAGES.overlap,
+      details: { overlapMinutes: context.overlapMinutes },
+    });
+  }
+  if (remainingMinutes !== null && allocation.minutes > remainingMinutes) {
+    conflicts.push({
+      ...common,
+      kind: 'over_capacity',
+      message: CAPACITY_CONFLICT_MESSAGES.over_capacity,
+      details: {
+        proposedMinutes: allocation.minutes,
+        remainingMinutes,
+        targetMinutes: context.targetMinutes,
+      },
+    });
+  }
+  return conflicts;
+}
+
 export function evaluateCapacity(
   proposed: ProposedEmployeeMinutes[],
   contexts: CapacityDayContext[],
@@ -56,62 +122,7 @@ export function evaluateCapacity(
           );
     employeeDays.push({ ...context, proposedMinutes: allocation.minutes, remainingMinutes });
 
-    const common = {
-      severity: 'warning' as const,
-      employeeRecordId: allocation.employeeRecordId,
-      localDate: allocation.localDate,
-    };
-    if (context.targetMinutes === null) {
-      conflicts.push({
-        ...common,
-        kind: 'no_schedule',
-        message: CAPACITY_CONFLICT_MESSAGES.no_schedule,
-        details: { targetSource: context.targetSource },
-      });
-    } else if (context.targetMinutes === 0) {
-      conflicts.push({
-        ...common,
-        kind: 'holiday_or_closure',
-        message: CAPACITY_CONFLICT_MESSAGES.holiday_or_closure,
-        details: { targetSource: context.targetSource },
-      });
-    }
-    if (context.approvedAbsenceMinutes > 0) {
-      conflicts.push({
-        ...common,
-        kind: 'approved_absence',
-        message: CAPACITY_CONFLICT_MESSAGES.approved_absence,
-        details: { absenceMinutes: context.approvedAbsenceMinutes },
-      });
-    }
-    if (context.pendingAbsenceMinutes > 0) {
-      conflicts.push({
-        ...common,
-        kind: 'pending_absence',
-        message: CAPACITY_CONFLICT_MESSAGES.pending_absence,
-        details: { provisional: true, absenceMinutes: context.pendingAbsenceMinutes },
-      });
-    }
-    if (context.overlapMinutes > 0) {
-      conflicts.push({
-        ...common,
-        kind: 'overlap',
-        message: CAPACITY_CONFLICT_MESSAGES.overlap,
-        details: { overlapMinutes: context.overlapMinutes },
-      });
-    }
-    if (remainingMinutes !== null && allocation.minutes > remainingMinutes) {
-      conflicts.push({
-        ...common,
-        kind: 'over_capacity',
-        message: CAPACITY_CONFLICT_MESSAGES.over_capacity,
-        details: {
-          proposedMinutes: allocation.minutes,
-          remainingMinutes,
-          targetMinutes: context.targetMinutes,
-        },
-      });
-    }
+    conflicts.push(...dayConflicts(allocation, context, remainingMinutes));
   }
 
   return { conflicts, employeeDays };
