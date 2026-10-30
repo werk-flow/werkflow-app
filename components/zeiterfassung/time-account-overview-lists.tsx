@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/skeleton-table';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import { formatMinutes, formatPeriod } from '@/lib/time-accounts/presentation';
-import type { TimeAccountOverview } from '@/lib/time-accounts/queries';
+import type { TimeAccountOverview } from '@/lib/time-accounts/overview-queries';
 import { formatBerlin } from '@/lib/utils';
 import { TimePeriodStateBadge } from './time-period-list';
 

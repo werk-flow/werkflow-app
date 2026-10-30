@@ -4,7 +4,7 @@ import { PlainButton } from '@/components/ui/plain-button';
 import { X } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import type { FilterState } from '@/lib/jobs/types';
+import type { FilterState } from '@/lib/jobs/unified-list';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { formatGermanDate } from '@/lib/utils';
 import type { OrgMemberOption } from '../shared/employee-multi-select';

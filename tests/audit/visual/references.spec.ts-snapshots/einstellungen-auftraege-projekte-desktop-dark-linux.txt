@@ -24,6 +24,8 @@ Profil
 Name und Profilbild
 Konto & Sicherheit
 E-Mail und Passwort
+Aufträge & Projekte
+Persönliche Tabellenansicht
 Abonnement & Abrechnung
 Plan und Abrechnung
 Organisation
@@ -35,15 +37,13 @@ Kalender
 Kalenderansichten und Regeln
 Zeiterfassung
 Arbeitszeiten und Freigaben
-Aufträge & Projekte
-Persönliche Tabellenansicht
 Mitarbeiter
 Freigaben und Vertretungen
 Kunden
 Kundenverwaltung und Defaults
 Aufträge & Projekte
 Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.
-Gilt für Haustechnik Krämer GmbH
+Persönliche Einstellungen
 Sichtbare Spalten
 Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle zeigen soll.
 Tabellenspalten

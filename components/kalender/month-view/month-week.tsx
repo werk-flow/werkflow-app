@@ -7,7 +7,7 @@ import { isMultiDay, type MonthCellItem } from '@/lib/calendar/month-cell-items'
 import { monthRowTemplate } from '@/lib/calendar/month-layout';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { BarSegment } from '../surface/bar-segment';
 import { CalendarCard } from '../surface/calendar-card';
 import { MonthDayCell } from './month-day-cell';

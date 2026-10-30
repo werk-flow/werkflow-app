@@ -10,7 +10,7 @@ import type { CalendarJob } from '@/lib/jobs/types';
 import type { OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import type { JobParkingContext } from '@/lib/parking/types';
 import { useCalendarDrag, useDragSurface } from '../drag-engine/drag-engine';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';

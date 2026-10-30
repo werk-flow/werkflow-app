@@ -20,7 +20,7 @@ import { logError } from '@/lib/logging';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import { getPersonnelRecords } from '@/lib/personnel/record-read-actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
-import { getQualificationWorkspace } from '@/lib/qualifications/actions';
+import { getQualificationWorkspace } from '@/lib/qualifications/workspace-actions';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';

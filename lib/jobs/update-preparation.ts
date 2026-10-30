@@ -15,32 +15,29 @@ import {
   assignmentReplacementArguments,
   getProjectClientContext,
 } from './assignment-assessment';
-import { normalizeJobPlannedTime, type QualificationWarningResult } from './types';
+import { normalizeJobPlannedTime, type JobRow, type QualificationWarningResult } from './types';
 
 /** A job edit after the boundary parse. */
 type JobUpdateChanges = z.output<typeof updateJobArgumentsSchema>['input'];
 
 type JobUpdateArguments = Database['public']['Functions']['update_job_with_assignments']['Args'];
 
-/**
- * Checks a job edit against the stored job and assesses its assignments, and
- * returns the arguments of `update_job_with_assignments`. It writes nothing:
- * a refusal or a qualification warning leaves the job as it was. The caller
- * has established the actor's right to edit jobs of the organization.
- */
-export async function prepareJobUpdate({
-  admin,
-  orgId,
-  actorId,
-  jobId,
-  input,
-}: {
-  admin: AdminClient;
-  orgId: string;
-  actorId: string;
-  jobId: string;
-  input: JobUpdateChanges;
-}): Promise<{ success: true; arguments: JobUpdateArguments } | QualificationWarningResult | ActionFailure> {
+type StoredJob = Pick<
+  JobRow,
+  | 'id'
+  | 'project_id'
+  | 'client_id'
+  | 'site_id'
+  | 'contact_id'
+  | 'status'
+  | 'execution_state'
+  | 'title'
+  | 'description'
+  | 'planned_date'
+>;
+
+/** The stored job the edit is checked against; null when it is missing or the read failed. */
+async function readStoredJob(admin: AdminClient, orgId: string, jobId: string): Promise<StoredJob | null> {
   const { data: existing, error: fetchError } = await admin
     .from('jobs')
     .select(
@@ -49,11 +46,22 @@ export async function prepareJobUpdate({
     .eq('id', jobId)
     .eq('organization_id', orgId)
     .single();
+  return fetchError || !existing ? null : existing;
+}
 
-  if (fetchError || !existing) {
-    return { success: false, error: 'job_not_found' };
-  }
-
+/**
+ * Checks the edit's title, project, customer and job number against the
+ * stored job, and returns the resulting project with the customer it passes
+ * on to its jobs.
+ */
+async function checkJobReferences(
+  admin: AdminClient,
+  orgId: string,
+  { jobId, input, existing }: { jobId: string; input: JobUpdateChanges; existing: StoredJob },
+): Promise<
+  | { success: true; resultingProjectId: string | null; inheritedProjectClientId: string | null | undefined }
+  | ActionFailure
+> {
   const resultingTitle = input.title !== undefined ? input.title.trim() : existing.title.trim();
   const resultingDescription =
     input.description !== undefined
@@ -107,7 +115,33 @@ export async function prepareJobUpdate({
       return { success: false, error: 'job_number_taken' };
     }
   }
+  return { success: true, resultingProjectId, inheritedProjectClientId };
+}
 
+/** The customer, site and contact the edit leaves on the job, checked to belong together. */
+async function resolveJobCustomer(
+  admin: AdminClient,
+  orgId: string,
+  {
+    input,
+    existing,
+    resultingProjectId,
+    inheritedProjectClientId,
+  }: {
+    input: JobUpdateChanges;
+    existing: StoredJob;
+    resultingProjectId: string | null;
+    inheritedProjectClientId: string | null | undefined;
+  },
+): Promise<
+  | {
+      success: true;
+      clientChanged: boolean;
+      resultingSiteId: string | null;
+      resultingContactId: string | null;
+    }
+  | ActionFailure
+> {
   const resultingClientId = resultingProjectId
     ? (inheritedProjectClientId ?? null)
     : input.clientId !== undefined
@@ -134,7 +168,27 @@ export async function prepareJobUpdate({
       return siteContactCheck;
     }
   }
+  return { success: true, clientChanged, resultingSiteId, resultingContactId };
+}
 
+/** The job columns the edit changes, as `update_job_with_assignments` takes them. */
+function jobChangeColumns({
+  input,
+  existing,
+  resultingProjectId,
+  inheritedProjectClientId,
+  clientChanged,
+  resultingSiteId,
+  resultingContactId,
+}: {
+  input: JobUpdateChanges;
+  existing: StoredJob;
+  resultingProjectId: string | null;
+  inheritedProjectClientId: string | null | undefined;
+  clientChanged: boolean;
+  resultingSiteId: string | null;
+  resultingContactId: string | null;
+}): Record<string, unknown> {
   const updateData: Record<string, unknown> = {};
   if (input.title !== undefined) updateData.title = input.title.trim();
   if (input.description !== undefined) updateData.description = input.description?.trim() || null;
@@ -166,6 +220,101 @@ export async function prepareJobUpdate({
     // is resolved explicitly before planning and never follows the date.
     updateData.status = 'nicht_bearbeitet';
   }
+  return updateData;
+}
+
+/** The arguments of `update_job_with_assignments`: the job row and, when assessed, its assignments. */
+function jobUpdateArguments({
+  orgId,
+  jobId,
+  actorId,
+  input,
+  updateData,
+  assignmentAssessment,
+  finalSelectedUserIds,
+}: {
+  orgId: string;
+  jobId: string;
+  actorId: string;
+  input: JobUpdateChanges;
+  updateData: Record<string, unknown>;
+  assignmentAssessment: AssignmentEvaluation | null;
+  finalSelectedUserIds: string[] | null;
+}): JobUpdateArguments {
+  // One transaction: the job row and, when assessed, its assignments with the assessment.
+  const assignmentArguments =
+    assignmentAssessment && finalSelectedUserIds
+      ? assignmentReplacementArguments({
+          selectedUserIds: finalSelectedUserIds,
+          evaluation: assignmentAssessment,
+          approval: input.assignmentApproval,
+          teamSourceId: input.assignmentTeamSourceId,
+        })
+      : null;
+  return rpcArgs('update_job_with_assignments', {
+    p_organization_id: orgId,
+    p_job_id: jobId,
+    p_actor_id: actorId,
+    p_changes: toJson(updateData),
+    p_replace_assignments: assignmentArguments !== null,
+    p_selected_user_ids: assignmentArguments?.p_selected_user_ids ?? null,
+    p_assessed_for_date: assignmentArguments?.p_assessed_for_date ?? null,
+    p_selected_employee_record_ids: assignmentArguments?.p_selected_employee_record_ids ?? null,
+    p_requirements_snapshot: assignmentArguments?.p_requirements_snapshot ?? null,
+    p_coverage_snapshot: assignmentArguments?.p_coverage_snapshot ?? null,
+    p_coverage_fingerprint: assignmentArguments?.p_coverage_fingerprint ?? null,
+    p_override_reason: assignmentArguments?.p_override_reason ?? null,
+    p_team_source_id: assignmentArguments?.p_team_source_id ?? null,
+    p_record_assessment: assignmentArguments?.p_record_assessment ?? null,
+  });
+}
+
+/**
+ * Checks a job edit against the stored job and assesses its assignments, and
+ * returns the arguments of `update_job_with_assignments`. It writes nothing:
+ * a refusal or a qualification warning leaves the job as it was. The caller
+ * has established the actor's right to edit jobs of the organization.
+ */
+export async function prepareJobUpdate({
+  admin,
+  orgId,
+  actorId,
+  jobId,
+  input,
+}: {
+  admin: AdminClient;
+  orgId: string;
+  actorId: string;
+  jobId: string;
+  input: JobUpdateChanges;
+}): Promise<{ success: true; arguments: JobUpdateArguments } | QualificationWarningResult | ActionFailure> {
+  const existing = await readStoredJob(admin, orgId, jobId);
+  if (!existing) {
+    return { success: false, error: 'job_not_found' };
+  }
+
+  const references = await checkJobReferences(admin, orgId, { jobId, input, existing });
+  if (!references.success) return references;
+  const { resultingProjectId, inheritedProjectClientId } = references;
+
+  const customer = await resolveJobCustomer(admin, orgId, {
+    input,
+    existing,
+    resultingProjectId,
+    inheritedProjectClientId,
+  });
+  if (!customer.success) return customer;
+  const { clientChanged, resultingSiteId, resultingContactId } = customer;
+
+  const updateData = jobChangeColumns({
+    input,
+    existing,
+    resultingProjectId,
+    inheritedProjectClientId,
+    clientChanged,
+    resultingSiteId,
+    resultingContactId,
+  });
 
   const shouldAssessAssignments = input.selectedUserIds !== undefined || input.plannedDate !== undefined;
   let assignmentAssessment: AssignmentEvaluation | null = null;
@@ -199,33 +348,16 @@ export async function prepareJobUpdate({
     return { success: false, error: 'no_changes' };
   }
 
-  // One transaction: the job row and, when assessed, its assignments with the assessment.
-  const assignmentArguments =
-    assignmentAssessment && finalSelectedUserIds
-      ? assignmentReplacementArguments({
-          selectedUserIds: finalSelectedUserIds,
-          evaluation: assignmentAssessment,
-          approval: input.assignmentApproval,
-          teamSourceId: input.assignmentTeamSourceId,
-        })
-      : null;
   return {
     success: true,
-    arguments: rpcArgs('update_job_with_assignments', {
-      p_organization_id: orgId,
-      p_job_id: jobId,
-      p_actor_id: actorId,
-      p_changes: toJson(updateData),
-      p_replace_assignments: assignmentArguments !== null,
-      p_selected_user_ids: assignmentArguments?.p_selected_user_ids ?? null,
-      p_assessed_for_date: assignmentArguments?.p_assessed_for_date ?? null,
-      p_selected_employee_record_ids: assignmentArguments?.p_selected_employee_record_ids ?? null,
-      p_requirements_snapshot: assignmentArguments?.p_requirements_snapshot ?? null,
-      p_coverage_snapshot: assignmentArguments?.p_coverage_snapshot ?? null,
-      p_coverage_fingerprint: assignmentArguments?.p_coverage_fingerprint ?? null,
-      p_override_reason: assignmentArguments?.p_override_reason ?? null,
-      p_team_source_id: assignmentArguments?.p_team_source_id ?? null,
-      p_record_assessment: assignmentArguments?.p_record_assessment ?? null,
+    arguments: jobUpdateArguments({
+      orgId,
+      jobId,
+      actorId,
+      input,
+      updateData,
+      assignmentAssessment,
+      finalSelectedUserIds,
     }),
   };
 }
