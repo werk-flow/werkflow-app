@@ -142,7 +142,7 @@ mock.module('@/lib/personnel/lifecycle-actions', () => ({
   getOwnPersonnelActions: selfSeam('own-personnel-actions'),
   getPersonnelLifecycle: seam('personnel-lifecycle'),
 }));
-mock.module('@/lib/time-corrections/actions', () => ({
+mock.module('@/lib/time-corrections/read-actions', () => ({
   getProvisionalTimeSummary: seam('provisional-time-summary'),
   getTimeCorrectionRequests: seam('time-correction-requests'),
   getTimeCorrectionHistoryPage: seam('time-correction-history'),

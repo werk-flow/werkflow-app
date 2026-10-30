@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
+import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import {
   organizationSettingsSchema,
   type OrganizationSettingsValues,
 } from '@/lib/org/schemas';
+import type { OrganizationDeletionScope } from '@/lib/org/types';
 import { getRoleLabel } from '@/lib/roles';
 
 const ERROR_MESSAGES = {
@@ -45,9 +47,14 @@ type OrganizationSettingsFormProps = {
     createdAtLabel: string;
     role: 'admin' | 'buero' | 'employee';
   };
+  /** What a deletion removes, read for Admins only; null for other roles. */
+  deletionScope: OrganizationDeletionScope | 'load_failed' | null;
 };
 
-export function OrganizationSettingsForm({ initialOrganization }: OrganizationSettingsFormProps) {
+export function OrganizationSettingsForm({
+  initialOrganization,
+  deletionScope,
+}: OrganizationSettingsFormProps) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const { run: runSave, isPending: isSaving } = useServerAction(updateOrganizationSettings);
@@ -226,23 +233,43 @@ export function OrganizationSettingsForm({ initialOrganization }: OrganizationSe
         </Form>
       </Card>
 
-      <Card className="border-destructive/30">
-        <CardHeader>
-          <CardTitle>Gefahrenzone</CardTitle>
-          <CardDescription>
-            Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
-          </p>
-          <DeleteOrgDialog disabled={!canEdit} orgName={initialOrganization.name} />
-          {!canEdit ? (
-            <p className="text-sm text-muted-foreground">Nur Admins können die Organisation löschen.</p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <DangerZoneCard orgName={initialOrganization.name} canEdit={canEdit} deletionScope={deletionScope} />
     </div>
+  );
+}
+
+function DangerZoneCard({
+  orgName,
+  canEdit,
+  deletionScope,
+}: {
+  orgName: string;
+  canEdit: boolean;
+  deletionScope: OrganizationDeletionScope | 'load_failed' | null;
+}) {
+  return (
+    <Card className="border-destructive/30">
+      <CardHeader>
+        <CardTitle>Gefahrenzone</CardTitle>
+        <CardDescription>
+          Löscht die Organisation dauerhaft inklusive Mitgliedschaften und Einladungen.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Diese Aktion sollte nur genutzt werden, wenn die Organisation wirklich nicht mehr benötigt wird.
+        </p>
+        {deletionScope === 'load_failed' ? (
+          <RegionLoadError title="Der Umfang der Löschung konnte nicht geladen werden">
+            Versuche es in einem Moment erneut.
+          </RegionLoadError>
+        ) : (
+          <DeleteOrgDialog orgName={orgName} scope={canEdit ? deletionScope : null} />
+        )}
+        {!canEdit ? (
+          <p className="text-sm text-muted-foreground">Nur Admins können die Organisation löschen.</p>
+        ) : null}
+      </CardContent>
+    </Card>
   );
 }

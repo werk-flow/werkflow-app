@@ -164,8 +164,6 @@
   "lib/time-accounts/calculation.ts": 1,
   "lib/time-accounts/export.test.ts": 1,
   "lib/time-accounts/period-preparation.ts": 6,
-  "lib/time-corrections/actions.ts": 8,
-  "lib/time-corrections/types.ts": 1,
   "lib/time-tracking/canonical-entries.ts": 2,
   "lib/time-tracking/clock-state-actions.ts": 2,
   "lib/time-tracking/entry-write-actions.ts": 4,

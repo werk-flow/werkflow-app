@@ -5,6 +5,7 @@ import { OrganizationSettingsForm } from '@/components/settings/organization-set
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
+import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { formatBerlin } from '@/lib/utils';
 
@@ -30,11 +31,15 @@ export default async function OrganizationSettingsPage() {
   }
 
   const supabase = await createSupabaseServerClient();
-  const { data: organization, error } = await supabase
-    .from('organizations')
-    .select('id, name, unique_code, created_at')
-    .eq('id', activeMembership.orgId)
-    .single();
+  // Only an Admin may delete, so only an Admin reads what a deletion removes.
+  const [{ data: organization, error }, deletionScope] = await Promise.all([
+    supabase
+      .from('organizations')
+      .select('id, name, unique_code, created_at')
+      .eq('id', activeMembership.orgId)
+      .single(),
+    activeMembership.role === 'admin' ? readOrganizationDeletionScope(activeMembership.orgId) : null,
+  ]);
 
   if (error && error.code !== 'PGRST116') {
     return (
@@ -55,6 +60,7 @@ export default async function OrganizationSettingsPage() {
         createdAtLabel,
         role: activeMembership.role,
       }}
+      deletionScope={deletionScope && (deletionScope.success ? deletionScope.scope : deletionScope.error)}
     />
   );
 }

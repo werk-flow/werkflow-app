@@ -52,7 +52,7 @@ import {
   getTimeCorrectionFormOptions,
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
-} from '@/lib/time-corrections/actions';
+} from '@/lib/time-corrections/read-actions';
 import {
   getTimeEntries,
   getTimeEntriesForJob,

@@ -54,11 +54,13 @@ world.rpc = ({ name, args }) => {
   return { data: null, error: { code: 'P0001', message: 'unexpected_withdrawal' } };
 };
 const {
-  getProvisionalTimeCorrectionProjection,
   getProvisionalTimeSummary,
   getTimeCorrectionFormOptions,
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
+} = await import('@/lib/time-corrections/read-actions');
+const {
+  getProvisionalTimeCorrectionProjection,
   resubmitTimeCorrection,
   reviewTimeCorrectionsBatch,
   submitTimeCorrection,
