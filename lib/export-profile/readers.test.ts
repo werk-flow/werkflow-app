@@ -85,14 +85,30 @@ describe('incomplete input is unreadable, never a quiet partial profile', () => 
     expect(formatErrorCode(() => readWorkbook(bytes))).toBe('xlsx_sheet_missing');
   });
 
+  test('a worksheet target relative to the workbook resolves', () => {
+    const bytes = zipArchive({
+      'xl/workbook.xml':
+        '<workbook xmlns:r="r"><sheets><sheet name="Tabelle" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels':
+        '<Relationships><Relationship Id="rId1" Target="./worksheets/sheet1.xml"/></Relationships>',
+      'xl/worksheets/sheet1.xml':
+        '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Nr</t></is></c></row></sheetData></worksheet>',
+    });
+    expect(readWorkbook(bytes).map((sheet) => [...sheet.rows()])).toEqual([[[{ text: 'Nr' }]]]);
+  });
+
   test('a .csv whose separator cannot be told apart is reported, and one without any is one column', () => {
     const folder = mkdtempSync(join(tmpdir(), 'export-profile-csv-'));
     try {
       writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
-      writeFileSync(join(folder, 'einspaltig.csv'), 'Nr\n1\n2\n');
+      writeFileSync(join(folder, 'einspaltig.csv'), 'Name\n"Meier, Max"\n"Kurz"\n');
       const profile = profileExportFolder(folder, { maskLabels: false });
       expect(profile.unreadable).toEqual([
-        { file: 'mehrdeutig.csv', reason: 'delimiter_ambiguous', advice: expect.stringContaining('sep=;') },
+        {
+          file: 'mehrdeutig.csv',
+          reason: 'delimiter_ambiguous',
+          advice: expect.stringContaining('ask Willert'),
+        },
       ]);
       expect(profile.tables.map((table) => [table.file, table.columns.length])).toEqual([
         ['einspaltig.csv', 1],

@@ -1,3 +1,4 @@
+import { posix } from 'node:path';
 import type { ClassifiedValue } from './column-statistics';
 import { decodeXmlEntities, parseXmlAttributes } from './xml-text';
 import { ExportFormatError, openZip, type ZipArchive } from './zip-archive';
@@ -51,7 +52,8 @@ function relationshipTargets(xml: string): Map<string, string> {
     const id = attributes.get('Id');
     const target = attributes.get('Target');
     if (id === undefined || target === undefined) continue;
-    targets.set(id, target.startsWith('/') ? target.slice(1) : `xl/${target}`);
+    // A target is relative to xl/workbook.xml (./worksheets/sheet1.xml, ../xl/...) or absolute from the package root.
+    targets.set(id, target.startsWith('/') ? target.slice(1) : posix.join('xl', target));
   }
   return targets;
 }

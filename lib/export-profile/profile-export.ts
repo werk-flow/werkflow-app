@@ -65,7 +65,7 @@ const UNREADABLE_ADVICE: Record<ExportFormatCode, string> = {
   xlsx_workbook_missing: RESAVE,
   xlsx_sheet_missing: RESAVE,
   delimiter_ambiguous:
-    'The separator cannot be told apart: add the line sep=; (or sep=,) at the top of the file, or export it again, then run the profiler again.',
+    'The separator cannot be told apart: ask Willert which separator the export uses (or export it again). If the file is otherwise intact, add that separator as the first line, such as sep=;, then run the profiler again.',
   zip_directory_damaged: RESAVE,
   zip_entry_damaged: RESAVE,
   zip_method_unsupported: RESAVE,
@@ -229,7 +229,9 @@ function addTable(run: Run, source: TableSource, built: BuiltTable): void {
  */
 function singleColumnCsv(path: string, text: string): ';' | null {
   if (extname(path).toLowerCase() !== '.csv') return null;
-  if (/[;,\t|]/.test(text)) throw new ExportFormatError('delimiter_ambiguous');
+  // A separator inside a quoted value ("Meier, Max") is data, not ambiguity.
+  const unquoted = text.replace(/"(?:[^"]|"")*"/g, '');
+  if (/[;,\t|]/.test(unquoted)) throw new ExportFormatError('delimiter_ambiguous');
   return ';';
 }
 
