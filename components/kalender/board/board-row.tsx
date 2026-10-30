@@ -14,7 +14,7 @@ import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar
 import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import type { DispatchRecipientDerivedState } from '@/lib/dispatch/types';
 import { getRoleLabel } from '@/lib/roles';
 import { memoPropsEqual } from '@/lib/ui/memo-equality';

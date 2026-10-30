@@ -41,7 +41,7 @@ import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import type { EntryChangeRequestMap, TimeEntry } from '@/lib/time-tracking/types';
 import { EMPTY_HOLIDAY_CALENDAR, type OrganizationHolidayCalendar } from '@/lib/personnel/targets';
 import { toLocalDateString } from '@/lib/utils';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 
 /**
  * The calendar's data owner (Step 2, PF-02 to PF-06, PF-23; P1-24a adds the
