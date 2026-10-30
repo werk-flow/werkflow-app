@@ -47,6 +47,10 @@ Start the key with the owning organization id and go through `lib/storage/r2.ts`
 
 Call `logError('<function>: <what failed>', error)` from `lib/logging.ts`; it keeps only the error's name, code and status. Keep the label free of recipients, codes, links, row values and provider bodies. Wrong turn: `console.error(error)`, because a provider message can quote row values.
 
+### Profile a customer export
+
+A customer's export stays on the owner's machine, outside every repository. The owner runs `bun scripts/migration/profile-export.ts <export-folder>` offline; it writes a structure-only `profile.md` and `profile.json` to `~/werkflow-export-profiles/<date>/` and refuses to write when its self-check finds a name, email, phone number, IBAN or address. The owner reads `profile.md` before sharing it. Only the profile reaches an agent; fixtures are synthetic, derived from the profile. Wrong turn: opening a row of the export in an agent session to "check one field".
+
 ## Trust boundaries
 
 ### Requests
