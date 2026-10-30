@@ -72,8 +72,7 @@ const outcomes = await Promise.all([
   // The build info under node_modules/.cache makes a repeat typecheck re-read only what changed.
   step('typecheck', [
     'node',
-    '--max-old-space-size=4096',
-    resolve(repositoryRoot, 'node_modules/typescript/bin/tsc'),
+    resolve(repositoryRoot, 'node_modules/typescript7/bin/tsc'),
     '--noEmit',
     '--incremental',
     '--tsBuildInfoFile',

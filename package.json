@@ -21,7 +21,7 @@
     "test:server": "bun scripts/test-server.ts",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
-    "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --noEmit",
+    "typecheck": "node node_modules/typescript7/bin/tsc --noEmit",
     "check:changed": "bun scripts/check-changed.ts",
     "review": "bun scripts/run-coderabbit-review.ts",
     "review:doctor": "bun scripts/run-coderabbit-review.ts --doctor",
@@ -112,6 +112,7 @@
     "prettier": "3.6.2",
     "supabase": "2.116.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "typescript7": "npm:typescript@7.0.2"
   }
 }

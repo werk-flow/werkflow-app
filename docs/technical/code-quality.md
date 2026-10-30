@@ -2,6 +2,8 @@
 
 This doc owns virtue 4 in `AGENTS.md`: how to reach good code, the deletion pass and the independent review. The `typescript-best-practices` skill owns the type patterns. Lint, the compiler and the tests under `lib/conventions/` enforce the mechanical rules; their messages name the fix.
 
+`bun run typecheck` and `check:changed` type-check with TypeScript 7 (the `typescript7` package). TypeScript 5 (`typescript`) stays for the tools that need its JavaScript API: typescript-eslint's typed rules, Next's build-time check and the source scanners under `lib/`.
+
 ## How to work
 
 ### Place new code
