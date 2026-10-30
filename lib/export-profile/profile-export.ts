@@ -70,6 +70,8 @@ const UNREADABLE_ADVICE: Record<ExportFormatCode, string> = {
     'The workbook is too large for this reader: save each sheet as CSV, then run the profiler again.',
   zip_entry_encrypted:
     'The workbook is password-protected: remove the password in Excel, save it as .xlsx, then run the profiler again.',
+  delimited_quote_unclosed:
+    'A quoted field never closes, so the rows cannot be told apart: export the file again or open it in LibreOffice Calc and save it as CSV.',
   xml_not_well_formed: 'The XML file is damaged or incomplete: ask Willert for a fresh export of it.',
 };
 const UNEXPECTED_ADVICE =
@@ -243,9 +245,13 @@ function profileDelimited(run: Run, file: ExportFile, label: string, segments: r
 }
 
 function profileWorkbook(run: Run, file: ExportFile, label: string): void {
-  for (const sheet of readWorkbook(readFileSync(file.path))) {
-    const built = buildRowTable(sheet.rows(), { salt: run.salt, detectHeader: true });
-    const table = exportLabel(sheet.name, run.options.maskLabels);
+  // Every sheet is read before the first table is added, so a damaged workbook adds nothing.
+  const sheets = readWorkbook(readFileSync(file.path)).map((sheet) => ({
+    name: sheet.name,
+    built: buildRowTable(sheet.rows(), { salt: run.salt, detectHeader: true }),
+  }));
+  for (const { name, built } of sheets) {
+    const table = exportLabel(name, run.options.maskLabels);
     addTable(
       run,
       { file: label, table, format: 'excel', encoding: null, delimiter: null, note: null },
@@ -278,9 +284,10 @@ function profileXml(run: Run, file: ExportFile, label: string): void {
 }
 
 function profileDatanorm(run: Run, file: ExportFile, label: string): void {
-  run.counts.tableFiles += 1;
   const decoded = decodeText(readFileSync(file.path));
-  for (const { recordType, fixedWidth, table } of datanormTables(decoded.text, run.salt)) {
+  const tables = datanormTables(decoded.text, run.salt);
+  run.counts.tableFiles += 1;
+  for (const { recordType, fixedWidth, table } of tables) {
     const note = fixedWidth
       ? 'fixed-width lines (DATANORM 3): reading the fields needs the DATANORM 3 field layout'
       : null;

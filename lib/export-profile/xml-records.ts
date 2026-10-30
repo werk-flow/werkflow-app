@@ -26,7 +26,11 @@ export function declaredXmlEncoding(head: string): string | null {
 /** Every record of an XML document, in document order. */
 export function* xmlRecords(xml: string): Generator<XmlRecord> {
   const stack: OpenElement[] = [];
+  let expectedOffset = 0;
   for (const token of xml.matchAll(TOKEN)) {
+    // A gap between tokens is markup no rule matched, such as a stray `<`.
+    if (token.index !== expectedOffset) throw new ExportFormatError('xml_not_well_formed');
+    expectedOffset = token.index + token[0].length;
     const [, cdata, closingName, openingName, attributeText, selfClosing, text] = token;
     const top = stack.at(-1);
     if (cdata !== undefined || text !== undefined) {
@@ -54,7 +58,7 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
       yield* closeElement(element, stack.at(-1));
     }
   }
-  if (stack.length > 0) throw new ExportFormatError('xml_not_well_formed');
+  if (stack.length > 0 || expectedOffset !== xml.length) throw new ExportFormatError('xml_not_well_formed');
 }
 
 function* closeElement(element: OpenElement, parent: OpenElement | undefined): Generator<XmlRecord> {

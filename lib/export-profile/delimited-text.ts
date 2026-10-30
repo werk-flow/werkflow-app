@@ -1,22 +1,25 @@
+import { ExportFormatError } from './zip-archive';
+
 // Delimited text (CSV, TSV, semicolon exports): the delimiter and the rows.
 
 const CANDIDATE_DELIMITERS = [';', '\t', ',', '|'] as const;
 
 export type Delimiter = (typeof CANDIDATE_DELIMITERS)[number];
 
-/** The delimiter the first lines use most consistently, or null when the text is not delimited. */
+/**
+ * The delimiter the first records use most consistently, or null when the
+ * text is not delimited. Records are read with the parser's own quote rules,
+ * so a quoted line break or a literal quote counts the same in both.
+ */
 export function detectDelimiter(text: string): Delimiter | null {
   const declared = /^sep=(.)\r?\n/i.exec(text)?.[1];
   const declaredDelimiter = CANDIDATE_DELIMITERS.find((candidate) => candidate === declared);
   if (declaredDelimiter) return declaredDelimiter;
-  const lines = text
-    .split(/\r\n|\n|\r/)
-    .filter((line) => line.trim() !== '')
-    .slice(0, 30);
-  if (lines.length === 0) return null;
   let best: { delimiter: Delimiter; score: number } | null = null;
   for (const delimiter of CANDIDATE_DELIMITERS) {
-    const counts = lines.map((line) => countOutsideQuotes(line, delimiter));
+    const counts = firstRecordWidths(text, delimiter);
+    if (counts === null) continue;
+    if (counts.length === 0) return null;
     const modal = mostCommon(counts);
     if (modal === 0) continue;
     const consistent = counts.filter((count) => count === modal).length / counts.length;
@@ -27,14 +30,19 @@ export function detectDelimiter(text: string): Delimiter | null {
   return best?.delimiter ?? null;
 }
 
-function countOutsideQuotes(line: string, delimiter: string): number {
-  let count = 0;
-  let quoted = false;
-  for (const character of line) {
-    if (character === '"') quoted = !quoted;
-    else if (character === delimiter && !quoted) count += 1;
+/** The number of delimiters in each of the first records, or null when a quote opened under this delimiter never closes. */
+function firstRecordWidths(text: string, delimiter: Delimiter): number[] | null {
+  const widths: number[] = [];
+  try {
+    for (const row of delimitedRows(text, delimiter)) {
+      widths.push(row.length - 1);
+      if (widths.length === 30) break;
+    }
+  } catch (error) {
+    if (error instanceof ExportFormatError) return null;
+    throw error;
   }
-  return count;
+  return widths;
 }
 
 function mostCommon(values: readonly number[]): number {
@@ -76,6 +84,7 @@ export function* delimitedRows(text: string, delimiter: Delimiter): Generator<st
       field = '';
     } else field += character;
   }
+  if (quoted) throw new ExportFormatError('delimited_quote_unclosed');
   row.push(field);
   if (row.some((cell) => cell !== '')) yield row;
 }

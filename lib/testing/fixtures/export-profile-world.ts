@@ -108,7 +108,7 @@ function pdf(pages: number): string {
 }
 
 /** A ZIP archive with deflated entries, as Excel writes it. */
-function zip(entries: Readonly<Record<string, string>>): Uint8Array {
+export function zipArchive(entries: Readonly<Record<string, string>>): Uint8Array {
   const locals: Buffer[] = [];
   const directory: Buffer[] = [];
   let offset = 0;
@@ -223,7 +223,7 @@ function workbook(): Uint8Array {
         number('G5', '3', 3),
     ),
   ].join('');
-  return zip({
+  return zipArchive({
     '[Content_Types].xml': '<Types/>',
     'xl/workbook.xml':
       '<workbook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Aufträge" sheetId="1" r:id="rId1"/></sheets></workbook>',

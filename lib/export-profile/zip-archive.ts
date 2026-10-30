@@ -4,6 +4,7 @@ import { inflateRawSync } from 'node:zlib';
 // or deflated entries. ZIP64 and encrypted entries are refused.
 
 export type ExportFormatCode =
+  | 'delimited_quote_unclosed'
   | 'not_a_zip_archive'
   | 'xlsx_workbook_missing'
   | 'xml_not_well_formed'
@@ -41,11 +42,12 @@ export function openZip(bytes: Uint8Array): ZipArchive {
   const entries = new Map<string, ZipEntry>();
   const decoder = new TextDecoder('utf-8');
   for (let index = 0; index < count; index += 1) {
-    if (view.getUint32(offset, true) !== DIRECTORY_ENTRY)
+    if (!fits(bytes, offset, 46) || view.getUint32(offset, true) !== DIRECTORY_ENTRY)
       throw new ExportFormatError('zip_directory_damaged');
     const nameLength = view.getUint16(offset + 28, true);
     const extraLength = view.getUint16(offset + 30, true);
     const commentLength = view.getUint16(offset + 32, true);
+    if (!fits(bytes, offset, 46 + nameLength)) throw new ExportFormatError('zip_directory_damaged');
     const name = decoder.decode(bytes.subarray(offset + 46, offset + 46 + nameLength));
     entries.set(name, {
       name,
@@ -59,6 +61,11 @@ export function openZip(bytes: Uint8Array): ZipArchive {
   return { names: [...entries.keys()], read: (name) => readEntry(bytes, view, entries.get(name)) };
 }
 
+/** True when `length` bytes from `offset` lie inside the archive. */
+function fits(bytes: Uint8Array, offset: number, length: number): boolean {
+  return offset >= 0 && offset + length <= bytes.length;
+}
+
 function findEndOfDirectory(view: DataView): number {
   const earliest = Math.max(0, view.byteLength - 65_557);
   for (let offset = view.byteLength - 22; offset >= earliest; offset -= 1) {
@@ -70,13 +77,14 @@ function findEndOfDirectory(view: DataView): number {
 function readEntry(bytes: Uint8Array, view: DataView, entry: ZipEntry | undefined): Uint8Array | null {
   if (!entry) return null;
   if (entry.flags & 0x1) throw new ExportFormatError('zip_entry_encrypted');
-  if (view.getUint32(entry.localOffset, true) !== LOCAL_HEADER)
+  if (!fits(bytes, entry.localOffset, 30) || view.getUint32(entry.localOffset, true) !== LOCAL_HEADER)
     throw new ExportFormatError('zip_entry_damaged');
   const start =
     entry.localOffset +
     30 +
     view.getUint16(entry.localOffset + 26, true) +
     view.getUint16(entry.localOffset + 28, true);
+  if (!fits(bytes, start, entry.compressedSize)) throw new ExportFormatError('zip_entry_damaged');
   const data = bytes.subarray(start, start + entry.compressedSize);
   if (entry.method === 0) return data;
   if (entry.method === 8) return inflateRawSync(data);

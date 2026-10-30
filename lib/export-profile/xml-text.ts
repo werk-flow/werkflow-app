@@ -5,9 +5,11 @@ const NAMED_ENTITIES: Readonly<Record<string, string>> = { lt: '<', gt: '>', amp
 /** Replaces the five named entities and numeric character references. */
 export function decodeXmlEntities(text: string): string {
   return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity: string, body: string) => {
-    if (body.startsWith('#x') || body.startsWith('#X'))
-      return String.fromCodePoint(Number.parseInt(body.slice(2), 16));
-    if (body.startsWith('#')) return String.fromCodePoint(Number.parseInt(body.slice(1), 10));
+    if (body.startsWith('#')) {
+      const hex = body.startsWith('#x') || body.startsWith('#X');
+      const codePoint = Number.parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : entity;
+    }
     return NAMED_ENTITIES[body] ?? entity;
   });
 }

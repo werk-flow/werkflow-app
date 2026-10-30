@@ -156,5 +156,7 @@ function cellValue(attributes: ReadonlyMap<string, string>, inner: string, conte
   if (format === 'time') return { text: raw, known: { kind: 'time' } };
   const serial = Number(raw);
   const year = new Date(context.epoch + serial * 86_400_000).getUTCFullYear();
+  // A number beyond the calendar (an id formatted as a date by mistake) stays an ordinary value.
+  if (Number.isNaN(year)) return { text: raw };
   return { text: raw, known: { kind: Number.isInteger(serial) ? 'date' : 'datetime', year } };
 }

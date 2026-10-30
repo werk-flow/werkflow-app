@@ -56,16 +56,24 @@ function isMaskedShape(text: string): boolean {
 
 /** Every place in `text` that looks like a name, an email, a phone number, an IBAN or an address. */
 export function findPersonalDataLike(text: string): PersonalDataFinding[] {
+  // NFC joins a decomposed "u" plus diaeresis into "ü"; indexes refer to the normalized text.
+  const normalized = text.normalize('NFC');
   const findings: PersonalDataFinding[] = [];
   for (const [kind, pattern] of PATTERNS) {
-    for (const match of text.matchAll(pattern)) {
+    for (const match of normalized.matchAll(pattern)) {
       if (!isMaskedShape(match[0])) findings.push({ kind, index: match.index });
     }
   }
-  for (const word of text.matchAll(/\p{L}+/gu)) {
-    if (COMMON_NAMES.has(word[0])) findings.push({ kind: 'person_name', index: word.index });
+  for (const word of normalized.matchAll(/[\p{L}\p{M}]+/gu)) {
+    if (COMMON_NAMES.has(asListedName(word[0]))) findings.push({ kind: 'person_name', index: word.index });
   }
   return findings.sort((first, second) => first.index - second.index);
+}
+
+/** An all-caps word (MÜLLER) in the capitalized form the name list holds (Müller). */
+function asListedName(word: string): string {
+  const allCaps = word.length > 1 && word === word.toUpperCase() && word !== word.toLowerCase();
+  return allCaps ? `${word.charAt(0)}${word.slice(1).toLowerCase()}` : word;
 }
 
 /**
@@ -76,7 +84,7 @@ export function findPersonalDataLike(text: string): PersonalDataFinding[] {
 export function maskShape(value: string, maxLength = 40): string {
   let shape = '';
   let length = 0;
-  for (const character of value) {
+  for (const character of value.normalize('NFC')) {
     if (length === maxLength) return `${shape}…`;
     shape += maskCharacter(character);
     length += 1;

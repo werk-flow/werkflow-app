@@ -104,6 +104,9 @@ describe('output safety: the self-check', () => {
     ['postal_code_and_place', 'in 10115 Berlin'],
     ['salutation_and_name', 'Ansprechpartner Herr Obermeier'],
     ['person_name', 'Mitarbeiter Jürgen'],
+    ['person_name', 'Kunde MÜLLER'],
+    ['person_name', 'Kunde MUELLER'],
+    ['person_name', 'Kunde Mu\u0308ller'],
   ])('finds a %s and names its line, never its text', (kind, line) => {
     const findings = selfCheckOutput([
       { file: 'profile.md', text: `# Export profile\n\n## Tables\n${line}` },
