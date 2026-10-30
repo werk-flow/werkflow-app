@@ -93,7 +93,7 @@ Owner: [the docs index](docs/README.md#how-to-work), with the `writing-for-agent
 
 ## Ways to hurt yourself
 
-1. **PROD.** Never push to `main` or `production`, migrate PROD by hand, or run tests or bulk scripts against it. Read it only through read-only tools ([work on production](docs/technical/environments.md#work-on-production)).
+1. **PROD.** Never push to `main` or `production`, migrate PROD by hand, or run tests or bulk scripts against it. Never read its data ([work on production](docs/technical/environments.md#work-on-production)).
 2. **The shared local stack.** Every worktree uses one Supabase stack. On Windows it runs in WSL Ubuntu; run every command inside Linux or macOS. `supabase db reset` and `supabase stop` hit all worktrees ([work in a worktree](docs/technical/environments.md#work-in-a-worktree)).
 3. **Money and time records.** Recorded time, the Zeitkonto, Perioden, payroll exports and prices are money, so their logic is review level 2. Change recorded time only through an audited correction. Never erase history or write into a closed period.
 4. **The public repo.** `werkflow-app` is public. Never commit a secret, customer or personal data, or content from `werkflow-planning` or `werkflow-business`. Cite a planning issue as `werk-flow/werkflow-planning#<n>`.
