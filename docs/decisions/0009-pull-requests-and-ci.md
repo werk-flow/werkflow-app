@@ -124,5 +124,5 @@ The conditions of the amendment above bind the scheduled run only. A release sta
 
 On 2026-10-30 the Vercel account reached the Hobby plan's 100 deployments a day, almost all of them previews of pull-request branches, and the limit blocked the owner's other projects. The owner decided:
 
-1. Vercel deploys from Git only the `production` branch (`git.deploymentEnabled` in `vercel.json`). Pull-request branches never deploy, also after a Vercel Pro upgrade. `main` deploys only through `.github/workflows/staging.yml`, after DEV's migrations, as before.
+1. Vercel deploys from Git only the `production` branch (`git.deploymentEnabled` in `vercel.json`). Pull-request branches never deploy, also after a Vercel Pro upgrade; this supersedes "pull-request previews stay automatic" in "Configuration this decision needs". `main` deploys only through `.github/workflows/staging.yml`, after DEV's migrations, as before.
 2. The owner tries a user-visible change on staging after its merge, not on a preview of its branch.
