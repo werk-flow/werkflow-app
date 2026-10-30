@@ -7,7 +7,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { CapabilityDefinition, JobQualificationDetail } from './types';
 import { loadJobQualificationRows } from './qualification-reads';
-import { loadAssignmentEvaluation, toCapabilityDefinition } from './server';
+import { loadAssignmentEvaluation, toCapabilityDefinition, toJobCapabilityRequirements } from './server';
 import { logError } from '@/lib/logging';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -71,27 +71,6 @@ export async function setJobCapabilityRequirements(rawInput: {
   return { success: true };
 }
 
-// The job's requirements on active definitions, each named by its definition.
-function toJobRequirements(
-  rows: ReadonlyArray<{ id: string; capability_id: string; require_confirmation: boolean }>,
-  definitionById: ReadonlyMap<string, CapabilityDefinition>,
-): JobQualificationDetail['requirements'] {
-  return rows.flatMap((row) => {
-    const definition = definitionById.get(row.capability_id);
-    return definition
-      ? [
-          {
-            id: row.id,
-            capabilityId: definition.id,
-            capabilityName: definition.name,
-            capabilityKind: definition.kind,
-            requireConfirmation: row.require_confirmation,
-          },
-        ]
-      : [];
-  });
-}
-
 export async function getJobQualificationDetail(
   jobIdInput: string,
 ): Promise<{ success: true; data: JobQualificationDetail } | ActionFailure> {
@@ -124,12 +103,11 @@ export async function getJobQualificationDetail(
   });
   if (!evaluationResult.success) return evaluationResult;
   const definitions = rows.definitions.map(toCapabilityDefinition);
-  const definitionById = new Map(definitions.map((definition) => [definition.id, definition]));
   return {
     success: true,
     data: {
       capabilities: definitions,
-      requirements: toJobRequirements(rows.requirements, definitionById),
+      requirements: toJobCapabilityRequirements(rows.requirements, rows.definitions),
       evaluation: evaluationResult.evaluation,
       latestAssessment: rows.latest
         ? {

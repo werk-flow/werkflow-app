@@ -179,7 +179,7 @@ async function readAssignmentQualificationRows(
   };
 }
 
-function toJobCapabilityRequirements(
+export function toJobCapabilityRequirements(
   requirementRows: Array<{ id: string; capability_id: string; require_confirmation: boolean }>,
   definitionRows: Array<Parameters<typeof toCapabilityDefinition>[0]>,
 ): JobCapabilityRequirement[] {
