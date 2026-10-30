@@ -218,17 +218,12 @@ function violations(contract: DialogContract, exception?: DialogException, requi
   return failures;
 }
 
-let productDialogs: DialogContract[] | undefined;
 // This whole-repository AST census measured 5.3 s on Windows; it is not a latency contract.
-// The census tests share one read.
-function census(): DialogContract[] {
-  productDialogs ??= inspectDialogs(readProductSources(resolve(import.meta.dir, '../..')));
-  return productDialogs;
-}
-
 test('every application dialog has an owned form or a reasoned interaction exception', () => {
   // The form contract covers DialogContent; confirmations and sheets have their own rules.
-  const dialogs = census().filter((dialog) => dialog.kind === 'dialog');
+  const dialogs = inspectDialogs(readProductSources(resolve(import.meta.dir, '../..'))).filter(
+    (dialog) => dialog.kind === 'dialog',
+  );
   const failures = dialogs.flatMap((dialog) => {
     const editingMode = editingModes[dialog.owner];
     return [
@@ -249,15 +244,6 @@ test('every application dialog has an owned form or a reasoned interaction excep
   }
   expect(dialogs.length).toBeGreaterThan(0);
   expect(failures).toEqual([]);
-});
-
-test('a confirmation scrolls only in its AlertDialogBody, so its footer actions stay in reach', () => {
-  const scrolling = census()
-    .filter((dialog) => dialog.kind === 'alert-dialog' && dialog.contentScrolls)
-    .map(
-      (dialog) => `${dialog.key}: AlertDialogContent scrolls; move the scroll region into AlertDialogBody`,
-    );
-  expect(scrolling).toEqual([]);
 });
 
 function fixture(source: string, additional: Record<string, string> = {}): DialogContract {

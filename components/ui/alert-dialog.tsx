@@ -80,8 +80,8 @@ function AlertDialogContent({
         className={cn(
           'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] flex-col gap-4 rounded-lg border p-6 shadow-lg duration-200 wrap-anywhere sm:max-w-lg',
           // Never grow past the viewport. A plain confirmation scrolls as a
-          // whole; an AlertDialogBody child takes over scrolling, so the
-          // header and the footer actions stay in reach.
+          // whole under its sticky footer; an AlertDialogBody child takes
+          // over scrolling, so the header stays in view too.
           'max-h-[calc(100dvh-3rem)] overflow-y-auto has-[[data-slot=alert-dialog-body]]:overflow-hidden',
           className,
         )}
@@ -131,11 +131,20 @@ function AlertDialogBody({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+/**
+ * Sticks to the bottom of a confirmation that scrolls as a whole, so its
+ * actions stay in reach without an AlertDialogBody. The negative margins with
+ * matching padding cover the content's padding, so text scrolls under the
+ * footer instead of showing below it.
+ */
 function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="alert-dialog-footer"
-      className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:justify-end', className)}
+      className={cn(
+        'bg-background sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 px-6 pb-6 sm:flex-row sm:justify-end',
+        className,
+      )}
       {...props}
     />
   );

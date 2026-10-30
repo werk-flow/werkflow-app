@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { expectDialogFits } from '../audit/support/layout-measure';
 
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
@@ -100,6 +101,20 @@ test('tabbed dialogs keep their frame and footer while long content scrolls', as
   await page.getByLabel('Zeile 20', { exact: true }).focus();
   await expect(page.getByLabel('Zeile 20', { exact: true })).toBeInViewport();
 });
+
+for (const width of [375, 1280]) {
+  test(`a long confirmation without a scroll body keeps its footer actions in reach at width ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await page.getByRole('button', { name: 'Lange Bestätigung öffnen' }).click();
+    const confirmation = page.getByRole('alertdialog', { name: 'Organisation „Probe“ löschen?' });
+    // The content is taller than the layer, so the layer itself scrolls.
+    expect(await confirmation.evaluate((layer) => layer.scrollHeight > layer.clientHeight)).toBe(true);
+    await expect(confirmation.getByRole('button', { name: 'Abbrechen' })).toBeFocused();
+    await expectDialogFits(confirmation, `long confirmation at ${width}`);
+  });
+}
 
 test('focus remains visible without adding an orange border or shifting the field', async ({ page }) => {
   const input = page.getByLabel('Bezeichnung');
