@@ -23,7 +23,7 @@ export const RESPONSIBILITY_LABELS: Record<OrganizationResponsibility, string> =
 export const RESPONSIBILITY_DESCRIPTIONS: Record<OrganizationResponsibility, string> = {
   time_approval:
     'Erlaubt die Freigabe eingereichter Arbeitszeiten, ohne weitere Verwaltungsrechte zu vergeben.',
-  leave_approval: 'Legt fest, wer Urlaubsanträge freigeben darf, sobald der Urlaubsprozess verfügbar ist.',
+  leave_approval: 'Legt fest, wer Urlaubsanträge freigeben darf.',
   work_artifact_approval:
     'Legt fest, wer eingereichte Arbeitsnachweise nach dem Vier-Augen-Prinzip intern freigeben darf.',
   work_handover_review:

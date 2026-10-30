@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
+import { useSaveChangesSubmit } from '@/components/settings/use-save-changes-submit';
+import { saveFailureBanner } from '@/lib/settings/save-answers';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -36,7 +38,6 @@ const ERROR_MESSAGES = {
   code_invalid:
     'Der Organisationscode muss genau 6 Zeichen lang sein und darf nur Großbuchstaben sowie Zahlen enthalten.',
   code_taken: 'Dieser Organisationscode ist bereits vergeben.',
-  no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Organisation konnte nicht gespeichert werden.',
 } satisfies Record<string, string>;
 
@@ -75,7 +76,7 @@ export function OrganizationSettingsForm({
     });
   }, [form, initialOrganization.name, initialOrganization.uniqueCode]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
       return;
     }
@@ -116,10 +117,7 @@ export function OrganizationSettingsForm({
           return;
         }
 
-        showBanner({
-          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
-          variant: 'error',
-        });
+        showBanner(saveFailureBanner(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed));
         return;
       }
 
@@ -225,7 +223,7 @@ export function OrganizationSettingsForm({
                   ? 'Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.'
                   : 'Du kannst diese Daten einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={!canEdit || isSaving}>
                 {isSaving ? 'Speichert…' : 'Organisation speichern'}
               </Button>
             </CardFooter>

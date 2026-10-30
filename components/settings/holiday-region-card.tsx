@@ -3,6 +3,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import { useState } from 'react';
 
+import { NOTHING_TO_SAVE } from '@/lib/settings/save-answers';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,16 +32,16 @@ export function HolidayRegionCard({
 }) {
   const { showBanner } = useBanner();
 
-  const [selectedRegion, setSelectedRegion] = useState<string>(
-    holidayRegion && isHolidayRegion(holidayRegion) ? holidayRegion : NO_REGION_VALUE,
-  );
+  const savedRegion = holidayRegion && isHolidayRegion(holidayRegion) ? holidayRegion : NO_REGION_VALUE;
+  const [selectedRegion, setSelectedRegion] = useState<string>(savedRegion);
   const { run: runSaveRegion, isPending: isSavingRegion } = useServerAction(setHolidayRegion);
-
-  const regionDirty =
-    selectedRegion !== (holidayRegion && isHolidayRegion(holidayRegion) ? holidayRegion : NO_REGION_VALUE);
 
   const handleSaveRegion = async () => {
     if (!canEditRegion || isSavingRegion) return;
+    if (selectedRegion === savedRegion) {
+      showBanner(NOTHING_TO_SAVE);
+      return;
+    }
     try {
       const result = await runSaveRegion(selectedRegion === NO_REGION_VALUE ? null : selectedRegion);
       if (!result.success) {
@@ -102,11 +103,7 @@ export function HolidayRegionCard({
             ? 'Änderungen gelten ab dem Zeitpunkt der Speicherung.'
             : 'Du kannst den Feiertagskalender einsehen, aber nur der Admin kann ihn ändern.'}
         </p>
-        <Button
-          type="button"
-          onClick={handleSaveRegion}
-          disabled={!canEditRegion || isSavingRegion || !regionDirty}
-        >
+        <Button type="button" onClick={handleSaveRegion} disabled={!canEditRegion || isSavingRegion}>
           {isSavingRegion ? 'Speichert…' : 'Feiertagskalender speichern'}
         </Button>
       </CardFooter>

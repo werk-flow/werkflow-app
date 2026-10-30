@@ -22,6 +22,10 @@ for (const set of ACCEPTANCE_SETS) {
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ adminPage, world, businessDate }, testInfo) => {
         await captureAcceptance({ page: adminPage, world, businessDate, testInfo }, set.id, capture);
       });
+    for (const capture of set.captures.filter((spec) => spec.role === 'buero'))
+      test(`@ACCEPT ${set.id} ${capture.id}`, async ({ bueroPage, world, businessDate }, testInfo) => {
+        await captureAcceptance({ page: bueroPage, world, businessDate, testInfo }, set.id, capture);
+      });
     for (const capture of set.captures.filter((spec) => spec.role === 'employee'))
       test(`@ACCEPT ${set.id} ${capture.id}`, async ({ employeePage, world, businessDate }, testInfo) => {
         await captureAcceptance({ page: employeePage, world, businessDate, testInfo }, set.id, capture);
