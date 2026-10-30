@@ -93,56 +93,6 @@ function memberStatusOf(memberEntries: TimeEntry[], policy: BreakPolicy): Member
   };
 }
 
-/** Today's status of every listed member, read through the background-read route. */
-async function readMemberStatuses(
-  organizationId: string,
-  memberIds: string[],
-  policy: BreakPolicy,
-  signal: AbortSignal,
-): Promise<LiveViewResult<MemberStatusMap>> {
-  if (!organizationId || memberIds.length === 0) {
-    return { ok: true, data: EMPTY_STATUS_MAP };
-  }
-
-  try {
-    // Get today's date range
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Fetch all entries for today
-    // A route handler keeps this live client read independent from the
-    // current React Server Component tree. A server-action read can
-    // complete after a link click and restore the page it started from.
-    const result = await fetchTimeEntries(
-      {
-        organizationId,
-        from: today.toISOString(),
-        to: tomorrow.toISOString(),
-      },
-      signal,
-    );
-
-    if (!result.success) {
-      return { ok: false, error: result.error };
-    }
-
-    // Group entries by user and calculate status
-    const newStatusMap: MemberStatusMap = {};
-
-    for (const memberId of memberIds) {
-      const memberEntries = result.entries.filter((e) => e.userId === memberId);
-      newStatusMap[memberId] = memberStatusOf(memberEntries, policy);
-    }
-
-    return { ok: true, data: newStatusMap };
-  } catch (err) {
-    logError('member_status.read_failed', err);
-    return { ok: false, error: 'Failed to fetch status' };
-  }
-}
-
 interface UseMemberStatusOptions {
   organizationId: string;
   memberIds: string[];
@@ -170,13 +120,54 @@ export function useMemberStatus({
 } {
   const view = useLiveView<MemberStatusMap>({
     tables: ['time_entries', 'time_sessions', 'time_segments', 'organization_settings'],
-    read: ({ signal }) =>
-      readMemberStatuses(
-        organizationId,
-        memberIds,
-        { breakMode, autoBreakThresholdMinutes, autoBreakDurationMinutes },
-        signal,
-      ),
+    read: async ({ signal }): Promise<LiveViewResult<MemberStatusMap>> => {
+      if (!organizationId || memberIds.length === 0) {
+        return { ok: true, data: EMPTY_STATUS_MAP };
+      }
+
+      try {
+        // Get today's date range
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        // Fetch all entries for today
+        // A route handler keeps this live client read independent from the
+        // current React Server Component tree. A server-action read can
+        // complete after a link click and restore the page it started from.
+        const result = await fetchTimeEntries(
+          {
+            organizationId,
+            from: today.toISOString(),
+            to: tomorrow.toISOString(),
+          },
+          signal,
+        );
+
+        if (!result.success) {
+          return { ok: false, error: result.error };
+        }
+
+        // Group entries by user and calculate status
+        const newStatusMap: MemberStatusMap = {};
+
+        for (const memberId of memberIds) {
+          const memberEntries = result.entries.filter((e) => e.userId === memberId);
+
+          newStatusMap[memberId] = memberStatusOf(memberEntries, {
+            breakMode,
+            autoBreakThresholdMinutes,
+            autoBreakDurationMinutes,
+          });
+        }
+
+        return { ok: true, data: newStatusMap };
+      } catch (err) {
+        logError('member_status.read_failed', err);
+        return { ok: false, error: 'Failed to fetch status' };
+      }
+    },
     enabled,
     // Membership or break-policy changes must discard the old map and read
     // fresh. The read then uses the current inputs through its closure.
