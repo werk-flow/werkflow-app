@@ -1,7 +1,6 @@
 'use server';
 
 import { revalidateWorkEvidenceViews } from '@/lib/work-artifacts/revalidate';
-import { createHash } from 'node:crypto';
 import { z } from '@/lib/zod';
 import type { ActionFailure } from '@/lib/action-result';
 import { uuidSchema } from '@/lib/validation/uuid';
@@ -14,37 +13,24 @@ import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resol
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord, toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import type { Database, Json } from '@/lib/supabase/database.types';
-import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { discardStorageObjects, putStorageObject } from '@/lib/storage/r2';
+import type { Json } from '@/lib/supabase/database.types';
+import { putStorageObject } from '@/lib/storage/r2';
 import { logError } from '@/lib/logging';
-import type { WorkExecutionState, WorkTargetType } from '@/lib/work-lifecycle/types';
-import { DOCUMENT_CATEGORY_LABELS, toDocumentCategory } from '@/lib/documents/types';
-import { WORK_ARTIFACT_KIND_LABELS } from '@/lib/work-artifacts/types';
+import { discardUnreferencedExportObject } from '@/lib/work-artifacts/export-storage';
+import type { WorkTargetType } from '@/lib/work-lifecycle/types';
+import { mapHandoverError } from './errors';
 import { buildWorkHandoverExport } from './export';
-import { deterministicWorkHandoverUuid, workHandoverPackageId } from './identity';
-import { resolveChildState, resolveProjectHandoverExecutionState } from './project-state';
+import { deterministicWorkHandoverUuid } from './identity';
+import { draftSourceKey } from './sources';
+import { loadFrozenSummaries } from './summaries';
 import type {
   WorkHandoverDraftItem,
   WorkHandoverFieldStatus,
-  WorkHandoverSourceOption,
-  WorkHandoverTargetSnapshot,
+  WorkHandoverTarget,
   WorkHandoverWorkspace,
 } from './types';
+import { loadWorkspaceBasis, toLoadedWorkspace, type LoadedWorkspace } from './workspace';
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
-type Target = { targetType: WorkTargetType; targetId: string };
-type LoadedWorkspace = {
-  organizationId: string;
-  workspace: WorkHandoverWorkspace;
-  draftItems: WorkHandoverDraftItem[];
-  holder: EffectiveResponsibilityHolder;
-  availableSources: LoadedSourceOption[];
-};
-type LoadedSourceOption = WorkHandoverSourceOption & { customerPayload: Json };
-
-const MAX_HANDOVER_SOURCE_ROWS = 500;
-const MAX_HANDOVER_SUMMARY_ROWS = 5_000;
 const EXPOSED_HANDOVER_ERROR_CODES = new Set([
   'work_handover_target_not_found',
   'work_handover_target_load_failed',
@@ -95,28 +81,6 @@ const reopenSchema = targetSchema.extend({
   reason: z.string().trim().min(3).max(1000),
 });
 
-function mapHandoverError(error: { message?: string } | null): string {
-  const codes = [
-    'work_handover_not_authorized',
-    'work_handover_stale_version',
-    'work_handover_execution_state_invalid',
-    'work_handover_source_stale',
-    'work_handover_package_empty',
-    'work_handover_gate_stale',
-    'work_handover_gate_snapshot_invalid',
-    'work_handover_active_clock',
-    'work_handover_review_blocked',
-    'work_handover_override_reason_required',
-    'work_handover_override_not_needed',
-    'work_handover_release_state_invalid',
-    'work_handover_release_required',
-    'work_transition_stale_version',
-    'work_transition_not_allowed',
-    'work_handover_idempotency_conflict',
-  ];
-  return codes.find((code) => error?.message?.includes(code)) ?? 'work_handover_action_failed';
-}
-
 function handoverFailureFromException(error: unknown, fallback: string, operation: string): ActionFailure {
   if (error instanceof Error && EXPOSED_HANDOVER_ERROR_CODES.has(error.message)) {
     logReadFailure('Work handover read failed:', { operation, code: error.message });
@@ -141,378 +105,14 @@ async function requireHandoverHolder(): Promise<
     : { success: false, error: 'work_handover_not_authorized' };
 }
 
-function documentSourceKey(documentId: string, version: number): string {
-  return `document:${documentId}:${version}`;
-}
-
-function draftSourceKey(item: WorkHandoverDraftItem): string {
-  if (item.work_artifact_revision_id) return `artifact:${item.work_artifact_revision_id}`;
-  if (item.document_id && item.document_version_number) {
-    return documentSourceKey(item.document_id, item.document_version_number);
-  }
-  return `child:${item.child_handover_release_id}`;
-}
-
-async function loadTargetSnapshot(
-  admin: AdminClient,
-  organizationId: string,
-  target: Target,
-): Promise<{
-  snapshot: WorkHandoverTargetSnapshot;
-  executionState: WorkExecutionState;
-  executionVersion: number;
-  projectJobIds: string[];
-}> {
-  if (target.targetType === 'job') {
-    const { data: job, error } = await admin
-      .from('jobs')
-      .select(
-        'id, job_number, title, location, client_id, site_id, contact_id, status, execution_state, execution_version',
-      )
-      .eq('organization_id', organizationId)
-      .eq('id', target.targetId)
-      .maybeSingle();
-    if (error || !job) throw new Error('work_handover_target_not_found');
-    const [clientResult, siteResult, contactResult] = await Promise.all([
-      job.client_id
-        ? admin
-            .from('clients')
-            .select('name')
-            .eq('organization_id', organizationId)
-            .eq('id', job.client_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      job.site_id
-        ? admin
-            .from('client_sites')
-            .select('name, street, postal_code, city')
-            .eq('organization_id', organizationId)
-            .eq('id', job.site_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-      job.contact_id
-        ? admin
-            .from('client_contacts')
-            .select('name, role, email, phone')
-            .eq('organization_id', organizationId)
-            .eq('id', job.contact_id)
-            .maybeSingle()
-        : Promise.resolve({ data: null, error: null }),
-    ]);
-    if (clientResult.error || siteResult.error || contactResult.error) {
-      throw new Error('work_handover_target_load_failed');
-    }
-    const siteAddress = siteResult.data
-      ? [
-          siteResult.data.street,
-          [siteResult.data.postal_code, siteResult.data.city].filter(Boolean).join(' '),
-        ]
-          .filter(Boolean)
-          .join(', ')
-      : job.location;
-    return {
-      snapshot: {
-        targetType: 'job',
-        targetId: job.id,
-        number: job.job_number,
-        title: job.title,
-        customerName: clientResult.data?.name ?? null,
-        contactName: contactResult.data?.name ?? null,
-        contactRole: contactResult.data?.role ?? null,
-        contactEmail: contactResult.data?.email ?? null,
-        contactPhone: contactResult.data?.phone ?? null,
-        siteName: siteResult.data?.name ?? null,
-        siteAddress: siteAddress || null,
-      },
-      executionState: resolveChildState({
-        executionState: job.execution_state,
-        status: job.status,
-      }),
-      executionVersion: job.execution_version,
-      projectJobIds: [job.id],
-    };
-  }
-
-  const { data: project, error } = await admin
-    .from('projects')
-    .select(
-      'id, project_number, name, client_id, site_id, contact_id, status_override, execution_state_override, execution_version',
-    )
-    .eq('organization_id', organizationId)
-    .eq('id', target.targetId)
-    .maybeSingle();
-  if (error || !project) throw new Error('work_handover_target_not_found');
-  const [clientResult, siteResult, contactResult, jobsResult] = await Promise.all([
-    project.client_id
-      ? admin
-          .from('clients')
-          .select('name')
-          .eq('organization_id', organizationId)
-          .eq('id', project.client_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    project.site_id
-      ? admin
-          .from('client_sites')
-          .select('name, street, postal_code, city')
-          .eq('organization_id', organizationId)
-          .eq('id', project.site_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    project.contact_id
-      ? admin
-          .from('client_contacts')
-          .select('name, role, email, phone')
-          .eq('organization_id', organizationId)
-          .eq('id', project.contact_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null, error: null }),
-    admin
-      .from('jobs')
-      .select('id, execution_state, status')
-      .eq('organization_id', organizationId)
-      .eq('project_id', project.id)
-      .order('job_number')
-      .limit(MAX_HANDOVER_SOURCE_ROWS + 1),
-  ]);
-  if (clientResult.error || siteResult.error || contactResult.error || jobsResult.error) {
-    throw new Error('work_handover_target_load_failed');
-  }
-  if ((jobsResult.data?.length ?? 0) > MAX_HANDOVER_SOURCE_ROWS) {
-    throw new Error('work_handover_sources_overflow');
-  }
-  const siteAddress = siteResult.data
-    ? [siteResult.data.street, [siteResult.data.postal_code, siteResult.data.city].filter(Boolean).join(' ')]
-        .filter(Boolean)
-        .join(', ')
-    : null;
-  return {
-    snapshot: {
-      targetType: 'project',
-      targetId: project.id,
-      number: project.project_number,
-      title: project.name,
-      customerName: clientResult.data?.name ?? null,
-      contactName: contactResult.data?.name ?? null,
-      contactRole: contactResult.data?.role ?? null,
-      contactEmail: contactResult.data?.email ?? null,
-      contactPhone: contactResult.data?.phone ?? null,
-      siteName: siteResult.data?.name ?? null,
-      siteAddress: siteAddress || null,
-    },
-    executionState: resolveProjectHandoverExecutionState(
-      project.execution_state_override,
-      project.status_override,
-      (jobsResult.data ?? []).map((job) => ({
-        executionState: job.execution_state,
-        status: job.status,
-      })),
-    ),
-    executionVersion: project.execution_version,
-    projectJobIds: (jobsResult.data ?? []).map((job) => job.id),
-  };
-}
-
-async function loadAvailableSources(
-  admin: AdminClient,
-  organizationId: string,
-  target: Target,
-  projectJobIds: string[],
-): Promise<LoadedSourceOption[]> {
-  const targetColumn = target.targetType === 'job' ? 'job_id' : 'project_id';
-  const [artifactsResult, linksResult] = await Promise.all([
-    admin
-      .from('work_artifacts')
-      .select('id, current_revision_id, kind, status')
-      .eq('organization_id', organizationId)
-      .eq(targetColumn, target.targetId)
-      .eq('status', 'approved')
-      .order('updated_at')
-      .limit(MAX_HANDOVER_SOURCE_ROWS + 1),
-    admin
-      .from('document_links')
-      .select('document_id')
-      .eq('organization_id', organizationId)
-      .eq(targetColumn, target.targetId)
-      .limit(MAX_HANDOVER_SOURCE_ROWS + 1),
-  ]);
-  if (artifactsResult.error || linksResult.error) throw new Error('work_handover_sources_load_failed');
-  if (
-    (artifactsResult.data?.length ?? 0) > MAX_HANDOVER_SOURCE_ROWS ||
-    (linksResult.data?.length ?? 0) > MAX_HANDOVER_SOURCE_ROWS
-  ) {
-    throw new Error('work_handover_sources_overflow');
-  }
-
-  const revisionIds = (artifactsResult.data ?? []).flatMap((artifact) =>
-    artifact.current_revision_id ? [artifact.current_revision_id] : [],
-  );
-  const documentIds = [...new Set((linksResult.data ?? []).map((link) => link.document_id))];
-  // Both id lists are capped above, so these reads return at most one row per id.
-  const [revisionsResult, documentsResult] = await Promise.all([
-    readInBatches(revisionIds, (batch) =>
-      admin
-        .from('work_artifact_revisions')
-        .select(
-          'id, artifact_id, title, visibility, revision_number, summary, performed_work, outstanding_work, work_date',
-        )
-        .eq('organization_id', organizationId)
-        .in('id', [...batch])
-        .eq('visibility', 'customer_facing'),
-    ),
-    readInBatches(documentIds, (batch) =>
-      admin
-        .from('documents')
-        .select('id, display_name, category, mime_type, storage_path, current_version_number')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch])
-        .is('deleted_at', null),
-    ),
-  ]);
-  if (revisionsResult.error || documentsResult.error) throw new Error('work_handover_sources_load_failed');
-  const artifactsById = new Map((artifactsResult.data ?? []).map((artifact) => [artifact.id, artifact]));
-  const sources: LoadedSourceOption[] = revisionsResult.data.flatMap((revision) => {
-    const artifact = artifactsById.get(revision.artifact_id);
-    if (!artifact || artifact.current_revision_id !== revision.id) return [];
-    const artifactKind = artifact.kind as Database['public']['Enums']['work_artifact_kind'];
-    return [
-      {
-        key: `artifact:${revision.id}`,
-        kind: 'work_artifact_revision' as const,
-        label: revision.title,
-        description: `Freigegebener Arbeitsnachweis · Version ${revision.revision_number}`,
-        customerPayload: toJson({
-          Art: WORK_ARTIFACT_KIND_LABELS[artifactKind],
-          Arbeitstag: revision.work_date,
-          Zusammenfassung: revision.summary,
-          'Ausgeführte Arbeiten': revision.performed_work,
-          'Offene Arbeiten': revision.outstanding_work,
-        }),
-        workArtifactRevisionId: revision.id,
-        documentId: null,
-        documentVersionNumber: null,
-        documentStoragePath: null,
-        childHandoverReleaseId: null,
-      },
-    ];
-  });
-  for (const document of documentsResult.data) {
-    sources.push({
-      key: documentSourceKey(document.id, document.current_version_number),
-      kind: 'document_version',
-      label: document.display_name,
-      description: `Dokument · Version ${document.current_version_number}`,
-      customerPayload: toJson({
-        Dokument: document.display_name,
-        Kategorie: DOCUMENT_CATEGORY_LABELS[toDocumentCategory(document.category)],
-        Dateityp: document.mime_type,
-        Version: document.current_version_number,
-      }),
-      workArtifactRevisionId: null,
-      documentId: document.id,
-      documentVersionNumber: document.current_version_number,
-      documentStoragePath: document.storage_path,
-      childHandoverReleaseId: null,
-    });
-  }
-
-  if (target.targetType === 'project') {
-    const [jobsResult, packagesResult] = await Promise.all([
-      readInBatches(projectJobIds, (batch) =>
-        admin
-          .from('jobs')
-          .select('id, job_number, title')
-          .eq('organization_id', organizationId)
-          .in('id', [...batch]),
-      ),
-      readInBatches(projectJobIds, (batch) =>
-        admin
-          .from('work_handover_packages')
-          .select('job_id, current_release_id')
-          .eq('organization_id', organizationId)
-          .in('job_id', [...batch])
-          .eq('state', 'released')
-          .not('current_release_id', 'is', null),
-      ),
-    ]);
-    if (jobsResult.error || packagesResult.error) throw new Error('work_handover_sources_load_failed');
-    if (packagesResult.data.length > MAX_HANDOVER_SOURCE_ROWS) {
-      throw new Error('work_handover_sources_overflow');
-    }
-    const releaseIds = packagesResult.data.flatMap((entry) =>
-      entry.current_release_id ? [entry.current_release_id] : [],
-    );
-    const releasesResult = await readInBatches(releaseIds, (batch) =>
-      admin
-        .from('work_handover_releases')
-        .select('id, release_number, commercial_readiness')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    );
-    if (releasesResult.error) throw new Error('work_handover_sources_load_failed');
-    const jobsById = new Map(jobsResult.data.map((job) => [job.id, job]));
-    const releasesById = new Map(releasesResult.data.map((release) => [release.id, release]));
-    for (const childPackage of packagesResult.data) {
-      const release = childPackage.current_release_id
-        ? releasesById.get(childPackage.current_release_id)
-        : null;
-      const job = childPackage.job_id ? jobsById.get(childPackage.job_id) : null;
-      if (!release || !job) continue;
-      sources.push({
-        key: `child:${release.id}`,
-        kind: 'child_handover_release',
-        label: job.job_number ? `${job.job_number} · ${job.title}` : job.title,
-        description: `Unveränderliche Auftragsübergabe · Freigabe ${release.release_number}`,
-        customerPayload: toJson({
-          Auftrag: job.job_number ?? job.title,
-          Freigabe: release.release_number,
-        }),
-        workArtifactRevisionId: null,
-        documentId: null,
-        documentVersionNumber: null,
-        documentStoragePath: null,
-        childHandoverReleaseId: release.id,
-      });
-    }
-  }
-  return sources.toSorted((left, right) => left.label.localeCompare(right.label, 'de'));
-}
-
 async function loadWorkspace(
   context: AuthContext,
   holder: EffectiveResponsibilityHolder,
-  target: Target,
+  target: WorkHandoverTarget,
 ): Promise<LoadedWorkspace> {
   const admin = createSupabaseAdminClient();
-  const targetData = await loadTargetSnapshot(admin, context.orgId, target);
-  const targetColumn = target.targetType === 'job' ? 'job_id' : 'project_id';
-  const [packageResult, gateResult, sources] = await Promise.all([
-    admin
-      .from('work_handover_packages')
-      .select('*')
-      .eq('organization_id', context.orgId)
-      .eq(targetColumn, target.targetId)
-      .maybeSingle(),
-    admin.rpc('get_work_handover_gate_snapshot', {
-      p_organization_id: context.orgId,
-      p_actor_id: context.userId,
-      p_target_type: target.targetType,
-      p_target_id: target.targetId,
-    }),
-    loadAvailableSources(admin, context.orgId, target, targetData.projectJobIds),
-  ]);
-  if (
-    packageResult.error ||
-    gateResult.error ||
-    !isJsonRecord(gateResult.data) ||
-    typeof gateResult.data.fingerprint !== 'string' ||
-    !('snapshot' in gateResult.data)
-  ) {
-    throw new Error(mapHandoverError(packageResult.error ?? gateResult.error));
-  }
-  const handoverPackage = packageResult.data;
-  const packageId =
-    handoverPackage?.id ?? workHandoverPackageId(context.orgId, target.targetType, target.targetId);
+  const basis = await loadWorkspaceBasis(admin, context, target);
+  const handoverPackage = basis.handoverPackage;
   const [draftResult, releasesResult, eventsResult] = handoverPackage
     ? await Promise.all([
         admin
@@ -545,167 +145,16 @@ async function loadWorkspace(
   if (draftResult.error || releasesResult.error || eventsResult.error) {
     throw new Error('work_handover_workspace_load_failed');
   }
-  const draftItems = (draftResult.data ?? []) as WorkHandoverDraftItem[];
-  const sourceKeys = new Set(sources.map((source) => source.key));
-  const draftKeys = draftItems.map(draftSourceKey);
-  const currentRelease =
-    (releasesResult.data ?? []).find((release) => release.id === handoverPackage?.current_release_id) ?? null;
-  return {
-    organizationId: context.orgId,
+  const draftItems: WorkHandoverDraftItem[] = draftResult.data ?? [];
+  return toLoadedWorkspace({
+    context,
     holder,
+    target,
+    basis,
     draftItems,
-    availableSources: sources,
-    workspace: {
-      targetType: target.targetType,
-      targetId: target.targetId,
-      targetSnapshot: targetData.snapshot,
-      executionState: targetData.executionState,
-      executionVersion: targetData.executionVersion,
-      packageId,
-      packageVersion: handoverPackage?.version ?? 0,
-      packageState: handoverPackage?.state ?? 'missing',
-      currentReleaseId: handoverPackage?.current_release_id ?? null,
-      currentReleaseNumber: currentRelease?.release_number ?? null,
-      currentReleaseDocumentId: currentRelease?.package_document_id ?? null,
-      commercialReadiness: currentRelease?.commercial_readiness ?? null,
-      selectedSourceKeys: handoverPackage ? draftKeys.filter((key) => sourceKeys.has(key)) : [],
-      staleSourceCount: draftKeys.filter((key) => !sourceKeys.has(key)).length,
-      availableSources: sources.map((source) => ({
-        key: source.key,
-        kind: source.kind,
-        label: source.label,
-        description: source.description,
-        workArtifactRevisionId: source.workArtifactRevisionId,
-        documentId: source.documentId,
-        documentVersionNumber: source.documentVersionNumber,
-        documentStoragePath: source.documentStoragePath,
-        childHandoverReleaseId: source.childHandoverReleaseId,
-      })),
-      gateSnapshot: gateResult.data.snapshot as Json,
-      gateFingerprint: gateResult.data.fingerprint,
-      releases: releasesResult.data ?? [],
-      events: eventsResult.data ?? [],
-    },
-  };
-}
-
-async function loadFrozenSummaries(
-  admin: AdminClient,
-  organizationId: string,
-  target: Target,
-): Promise<{ timeSummary: Json; materialSummary: Json }> {
-  const projectJobsResult =
-    target.targetType === 'project'
-      ? await admin
-          .from('jobs')
-          .select('id')
-          .eq('organization_id', organizationId)
-          .eq('project_id', target.targetId)
-          .limit(MAX_HANDOVER_SOURCE_ROWS + 1)
-      : null;
-  if (projectJobsResult?.error) throw new Error('work_handover_summary_load_failed');
-  if ((projectJobsResult?.data?.length ?? 0) > MAX_HANDOVER_SOURCE_ROWS) {
-    throw new Error('work_handover_sources_overflow');
-  }
-  const jobIds =
-    target.targetType === 'job' ? [target.targetId] : (projectJobsResult?.data ?? []).map((job) => job.id);
-  // Read in pages: `.limit()` alone stops at PostgREST's 1,000 rows without
-  // an error, so the overflow check below never saw a longer result.
-  const materialSelection = 'id, planned_quantity, taken_quantity, returned_quantity, status';
-  const [timeResult, ...materialResults] = await Promise.all([
-    readInBatches(jobIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_entries')
-            .select('id, timestamp, status')
-            .eq('organization_id', organizationId)
-            .in('job_id', [...batch])
-            .neq('status', 'rejected')
-            .neq('status', 'pending_delete')
-            .order('timestamp')
-            .order('id')
-            .range(from, to),
-        MAX_HANDOVER_SUMMARY_ROWS,
-      ),
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('job_material_lines')
-          .select(materialSelection)
-          .eq('organization_id', organizationId)
-          .eq(target.targetType === 'job' ? 'job_id' : 'project_id', target.targetId)
-          .order('id')
-          .range(from, to),
-      MAX_HANDOVER_SUMMARY_ROWS,
-    ),
-    ...(target.targetType === 'project'
-      ? [
-          readInBatches(jobIds, (batch) =>
-            readCompleteRows(
-              (from, to) =>
-                admin
-                  .from('job_material_lines')
-                  .select(materialSelection)
-                  .eq('organization_id', organizationId)
-                  .in('job_id', [...batch])
-                  .order('id')
-                  .range(from, to),
-              MAX_HANDOVER_SUMMARY_ROWS,
-            ),
-          ),
-        ]
-      : []),
-  ]);
-  const summaryError = timeResult.error ?? materialResults.find((result) => result.error)?.error;
-  if (summaryError) {
-    throw new Error(
-      summaryError.code === 'row_overflow'
-        ? 'work_handover_summary_overflow'
-        : 'work_handover_summary_load_failed',
-    );
-  }
-  if (timeResult.data.length > MAX_HANDOVER_SUMMARY_ROWS) {
-    throw new Error('work_handover_summary_overflow');
-  }
-  // The database order (`timestamp`, then `id`), restored across job batches.
-  const timeRows = timeResult.data.toSorted((left, right) =>
-    left.timestamp === right.timestamp
-      ? left.id < right.id
-        ? -1
-        : 1
-      : left.timestamp < right.timestamp
-        ? -1
-        : 1,
-  );
-  const materialRows = [
-    ...new Map(materialResults.flatMap((result) => result.data).map((row) => [row.id, row])).values(),
-  ].toSorted((left, right) => left.id.localeCompare(right.id));
-  if (materialRows.length > MAX_HANDOVER_SUMMARY_ROWS) {
-    throw new Error('work_handover_summary_overflow');
-  }
-  const timeSourceFingerprint = createHash('sha256').update(JSON.stringify(timeRows), 'utf8').digest('hex');
-  const materialSourceFingerprint = createHash('sha256')
-    .update(JSON.stringify(materialRows), 'utf8')
-    .digest('hex');
-  return {
-    timeSummary: toJson({
-      'Erfasste Buchungen': timeRows.length,
-      'Erste Buchung': timeRows.at(0)?.timestamp ?? null,
-      'Letzte Buchung': timeRows.at(-1)?.timestamp ?? null,
-      Quellenfingerabdruck: timeSourceFingerprint,
-      Hinweis: 'Die Vollständigkeit der Zeitsegmente ist in Phase 1 nicht automatisch bewertet.',
-    }),
-    materialSummary: toJson({
-      Materialpositionen: materialRows.length,
-      'Geplante Menge': materialRows.reduce((sum, row) => sum + row.planned_quantity, 0),
-      'Entnommene Menge': materialRows.reduce((sum, row) => sum + row.taken_quantity, 0),
-      'Zurückgegebene Menge': materialRows.reduce((sum, row) => sum + row.returned_quantity, 0),
-      Quellenfingerabdruck: materialSourceFingerprint,
-      Hinweis: 'Verbrauch und Abrechenbarkeit werden in Phase 1 nicht automatisch bewertet.',
-    }),
-  };
+    releases: releasesResult.data ?? [],
+    events: eventsResult.data ?? [],
+  });
 }
 
 async function buildCurrentExport(
@@ -751,7 +200,7 @@ async function buildCurrentExport(
 }
 
 export async function getWorkHandoverWorkspace(
-  input: Target,
+  input: WorkHandoverTarget,
 ): Promise<{ success: true; workspace: WorkHandoverWorkspace } | ActionFailure> {
   const parsed = targetSchema.safeParse(input);
   if (!parsed.success) return { success: false, error: 'invalid_input' };
@@ -984,18 +433,12 @@ export async function releaseWorkHandover(
       }),
     );
     if (error) {
-      const referenceResult = await admin
-        .from('documents')
-        .select('id')
-        .eq('organization_id', auth.context.orgId)
-        .eq('storage_path', storagePath)
-        .limit(1);
-      if (referenceResult.error) {
-        logError('Failed to verify a work handover object reference', referenceResult.error);
-      }
-      if (!referenceResult.error && (referenceResult.data?.length ?? 0) === 0) {
-        await discardStorageObjects({ organizationId: auth.context.orgId, paths: [storagePath] });
-      }
+      await discardUnreferencedExportObject(
+        admin,
+        auth.context.orgId,
+        storagePath,
+        'Failed to verify a work handover object reference',
+      );
       return { success: false, error: mapHandoverError(error) };
     }
     revalidateWorkEvidenceViews();

@@ -18,9 +18,7 @@
     "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
     "lib/time-tracking/validation.ts": 806,
-    "lib/vacation/actions.ts": 984,
-    "lib/work-handover/actions.ts": 1100,
-    "lib/work-lifecycle/actions.ts": 907
+    "lib/vacation/actions.ts": 984
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
@@ -666,14 +664,6 @@
     "lib/work-artifacts/actions.ts": { "getWorkArtifactDetail": 136, "exportWorkArtifact": 97 },
     "lib/work-artifacts/export.ts": { "buildWorkArtifactExport": 170 },
     "lib/work-artifacts/validation.ts": { "saveWorkArtifactSchema": 102 },
-    "lib/work-handover/actions.ts": {
-      "loadTargetSnapshot": 158,
-      "loadAvailableSources": 161,
-      "loadWorkspace": 110,
-      "loadFrozenSummaries": 115,
-      "releaseWorkHandover": 84
-    },
-    "lib/work-lifecycle/actions.ts": { "loadEntityOptions": 86 },
     "lib/work-templates/actions.ts": { "saveWorkTemplateDraft": 82, "applyWorkTemplate": 93 },
     "lib/work-templates/server.ts": { "loadWorkTemplateDetail": 181 }
   }
