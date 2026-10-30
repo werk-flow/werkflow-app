@@ -24,7 +24,7 @@ A journey is a step one role repeats many times a day, measured from the user's 
 5. **Change, rebuild, measure again.** State the result as absolute numbers before and after, for count and time. A percentage appears only beside the numbers (`bun scripts/lab-counts.ts report --runs <run keys>`).
 6. **Refuse complexity for a tiny win.** When the gain is a few milliseconds or bytes and the code grows, drop the change and record the decision.
 7. **Lower the reference.** Run `bun scripts/lab-counts.ts ratchet --run <run key>` and commit the file with the change. An unlowered win is room for the next regression.
-8. **Have a person feel it.** A user-visible change counts as accepted only after the owner tried its preview on a phone and a laptop. Record device and verdict.
+8. **Have a person feel it.** A user-visible change counts as accepted only after the owner tried it on staging on a phone and a laptop. Record device and verdict.
 
 ### Read a lab table
 
