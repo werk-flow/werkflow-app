@@ -5,12 +5,10 @@ import { z } from '@/lib/zod';
 import { revalidatePath, updateTag } from 'next/cache';
 
 import { CACHE_TAGS } from '@/lib/data/cached';
-import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { toJson } from '@/lib/supabase/json';
-import { loadAssignmentEvaluation } from '@/lib/qualifications/server';
 import type { AssignmentApproval, AssignmentEvaluation } from '@/lib/qualifications/types';
 import type { Json } from '@/lib/supabase/database.types';
 
@@ -24,13 +22,13 @@ import {
   workTemplatePreviewInputSchema,
   workTemplateTargetTypeSchema,
 } from './schemas';
+import { assessWorkTemplateQualifications } from './qualification-assessment';
 import {
   applyWorkTemplateWithAdmin,
   findUnavailableWorkTemplateReference,
   loadPublishedWorkTemplateOptions,
   loadWorkTemplateApplicationPreview,
   loadWorkTemplateDetail,
-  loadWorkTemplateRequirementRows,
   loadWorkTemplateSummaries,
 } from './server';
 import type {
@@ -185,6 +183,58 @@ export async function createWorkTemplate(
 // The draft is parsed on its own below so a dependency cycle keeps its error code.
 const saveDraftInputSchema = z.object({ templateId: uuidSchema, draft: z.unknown() });
 
+/** The draft's rows in the shape save_work_template_draft stores. */
+function draftRows(draft: WorkTemplateDraft) {
+  return {
+    p_items: toJson(
+      draft.items.map((item) => ({
+        id: item.id,
+        item_kind: item.itemKind,
+        content: item.content,
+        requirement_state: item.requirementState,
+        group_label: item.groupLabel,
+        notes: item.notes,
+        sort_order: item.sortOrder,
+      })),
+    ),
+    p_evidence: toJson(
+      draft.evidence.map((item) => ({
+        id: item.id,
+        template_item_id: item.templateItemId,
+        description: item.description,
+        document_category: item.documentCategory,
+        sort_order: item.sortOrder,
+      })),
+    ),
+    p_dependencies: toJson(
+      draft.dependencies.map((item) => ({
+        id: item.id,
+        predecessor_item_id: item.predecessorItemId,
+        dependent_item_id: item.dependentItemId,
+      })),
+    ),
+    p_materials: toJson(
+      draft.materials.map((item) => ({
+        id: item.id,
+        item_id: item.itemId,
+        preferred_location_id: item.preferredLocationId,
+        planned_quantity: item.plannedQuantity,
+        is_billable: item.isBillable,
+        notes: item.notes,
+        sort_order: item.sortOrder,
+      })),
+    ),
+    p_capabilities: toJson(
+      draft.capabilities.map((item) => ({
+        id: item.id,
+        capability_id: item.capabilityId,
+        require_confirmation: item.requireConfirmation,
+        sort_order: item.sortOrder,
+      })),
+    ),
+  };
+}
+
 export async function saveWorkTemplateDraft(input: {
   templateId: string;
   draft: WorkTemplateDraft;
@@ -209,52 +259,7 @@ export async function saveWorkTemplateDraft(input: {
       p_actor_id: result.context.userId,
       p_name: draft.name,
       ...(draft.description ? { p_description: draft.description } : {}),
-      p_items: toJson(
-        draft.items.map((item) => ({
-          id: item.id,
-          item_kind: item.itemKind,
-          content: item.content,
-          requirement_state: item.requirementState,
-          group_label: item.groupLabel,
-          notes: item.notes,
-          sort_order: item.sortOrder,
-        })),
-      ),
-      p_evidence: toJson(
-        draft.evidence.map((item) => ({
-          id: item.id,
-          template_item_id: item.templateItemId,
-          description: item.description,
-          document_category: item.documentCategory,
-          sort_order: item.sortOrder,
-        })),
-      ),
-      p_dependencies: toJson(
-        draft.dependencies.map((item) => ({
-          id: item.id,
-          predecessor_item_id: item.predecessorItemId,
-          dependent_item_id: item.dependentItemId,
-        })),
-      ),
-      p_materials: toJson(
-        draft.materials.map((item) => ({
-          id: item.id,
-          item_id: item.itemId,
-          preferred_location_id: item.preferredLocationId,
-          planned_quantity: item.plannedQuantity,
-          is_billable: item.isBillable,
-          notes: item.notes,
-          sort_order: item.sortOrder,
-        })),
-      ),
-      p_capabilities: toJson(
-        draft.capabilities.map((item) => ({
-          id: item.id,
-          capability_id: item.capabilityId,
-          require_confirmation: item.requireConfirmation,
-          sort_order: item.sortOrder,
-        })),
-      ),
+      ...draftRows(draft),
     });
     if (error) {
       logError('Failed to save work template draft', error);
@@ -347,59 +352,15 @@ export async function applyWorkTemplate(
   try {
     let qualificationAssessment: ApplyWorkTemplateInput['qualificationAssessment'];
     if (input.jobId) {
-      const [assignmentsResult, requirements] = await Promise.all([
-        result.admin
-          .from('job_assignments')
-          .select('user_id')
-          .eq('organization_id', result.context.orgId)
-          .eq('job_id', input.jobId)
-          .limit(201),
-        loadWorkTemplateRequirementRows({
-          admin: result.admin,
-          organizationId: result.context.orgId,
-          versionId: input.templateVersionId,
-          jobId: input.jobId,
-        }),
-      ]);
-      if (assignmentsResult.error || (assignmentsResult.data?.length ?? 0) > 200) {
-        logReadFailure('applyWorkTemplate: assignment read failed or exceeded 200 rows', {
-          code: assignmentsResult.error?.code ?? 'assignment_overflow',
-        });
-        return fail('load_failed');
-      }
-      if (!requirements.success) return fail('load_failed');
-      const evaluationResult = await loadAssignmentEvaluation({
+      const assessment = await assessWorkTemplateQualifications({
         admin: result.admin,
-        orgId: result.context.orgId,
+        organizationId: result.context.orgId,
         jobId: input.jobId,
-        selectedUserIds: (assignmentsResult.data ?? []).map((row) => row.user_id),
-        requirementRows: requirements.rows,
+        templateVersionId: input.templateVersionId,
+        assignmentApproval,
       });
-      if (!evaluationResult.success) return evaluationResult;
-      const evaluation = evaluationResult.evaluation;
-      if (evaluation.requiresOverride) {
-        if (!assignmentApproval)
-          return { success: false as const, error: 'qualification_warning', evaluation };
-        if (assignmentApproval.fingerprint !== evaluation.fingerprint)
-          return { success: false as const, error: 'stale_evaluation', evaluation };
-        if (assignmentApproval.reason.trim().length < 3)
-          return { success: false as const, error: 'qualification_warning', evaluation };
-      }
-      if (requirements.templateRequirementCount > 0) {
-        qualificationAssessment = {
-          assessedForDate: evaluation.assessedForDate,
-          selectedUserIds: evaluation.selectedUserIds,
-          selectedEmployeeRecordIds: evaluation.selectedEmployeeRecordIds,
-          requirementsSnapshot: toJson(evaluation.requirementCoverage),
-          coverageSnapshot: toJson({
-            requirements: evaluation.requirementCoverage,
-            apprentice_warning: evaluation.apprenticeWarning,
-          }),
-          coverageFingerprint: evaluation.fingerprint,
-          overrideReason: evaluation.requiresOverride ? assignmentApproval?.reason.trim() || null : null,
-          teamSourceId: assignmentApproval?.teamSourceId ?? null,
-        };
-      }
+      if (!assessment.success) return assessment;
+      qualificationAssessment = assessment.qualificationAssessment;
     }
     const { data, error } = await applyWorkTemplateWithAdmin(
       result.admin,

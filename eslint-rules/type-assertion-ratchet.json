@@ -182,7 +182,6 @@
   "lib/work-artifacts/field-visibility.test.ts": 4,
   "lib/work-lifecycle/types.test.ts": 4,
   "lib/work-templates/action-boundaries.test.ts": 1,
-  "lib/work-templates/server.ts": 7,
   "scripts/check-r2.ts": 1,
   "scripts/check-realtime-parity.ts": 1,
   "scripts/check-supabase-project.ts": 1,

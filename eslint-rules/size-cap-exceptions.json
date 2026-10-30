@@ -660,8 +660,6 @@
     "lib/vacation/actions.ts": {
       "getPendingVacationRequestsForApprover": 116,
       "getVacationCalendarEntries": 98
-    },
-    "lib/work-templates/actions.ts": { "saveWorkTemplateDraft": 82, "applyWorkTemplate": 93 },
-    "lib/work-templates/server.ts": { "loadWorkTemplateDetail": 181 }
+    }
   }
 }
