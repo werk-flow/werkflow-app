@@ -10,7 +10,7 @@
     "lib/documents/actions.ts": 1584,
     "lib/inventory/actions.ts": 1567,
     "lib/security/server-action-authorization.test.ts": 959,
-    "lib/time-accounts/period-preparation.ts": 1277
+    "lib/time-accounts/period-preparation.ts": 1275
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
@@ -20,7 +20,7 @@
     "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 156 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/kunden/[clientId]/page.tsx": { "KundenDetailData": 85 },
-    "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
+    "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 132 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
@@ -314,7 +314,6 @@
     "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
     "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
     "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
-    "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
     "components/mitarbeiter/invitations-table.tsx": { "InvitationsTable": 104 },
     "components/mitarbeiter/invite-actions-menu.tsx": { "InviteActionsMenu": 108 },
     "components/mitarbeiter/invite-dialog.tsx": { "InviteDialog": 125 },
@@ -325,7 +324,7 @@
       "MemberTableRow": 91,
       "MembersTable": 93
     },
-    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
+    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 134 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
     "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
     "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 99 },

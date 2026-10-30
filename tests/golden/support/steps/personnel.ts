@@ -49,7 +49,7 @@ export const PERSONNEL_COPY = {
   inviteSent: 'Einladung versendet',
   scheduleWins: 'Für Zeitziele gilt der Wochenplan.',
   noSchedule: 'Kein Arbeitszeitmodell hinterlegt',
-  noScheduleDefaultTarget: 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.',
+  noScheduleDefaultTarget: 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden von Montag bis Freitag.',
   noScheduleSection: 'Kein Arbeitszeitmodell hinterlegt. Ohne Wochenplan gilt',
   closurePastDay:
     'Vergangene Tage können nicht geändert werden – frühere Zeiträume behalten ihre damalige Bedeutung.',

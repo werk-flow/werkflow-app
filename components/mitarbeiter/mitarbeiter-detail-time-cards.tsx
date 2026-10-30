@@ -8,6 +8,7 @@ import { SectionError } from '@/components/ui/section-error';
 import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { formatDuration } from '@/lib/time-tracking/helpers';
+import { getNoTargetReason } from '@/lib/personnel/targets';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
@@ -53,6 +54,13 @@ export function MitarbeiterDetailTimeCards({
     dailyPercentage,
   } = liveTime;
   const liveBreakMinutes = memberBreakdown.breakMinutes;
+  // A target that is not known yet is said so, never measured against 8h.
+  const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
+  const noTargetText = !todayTarget
+    ? 'Tagesziel nicht geladen.'
+    : noTargetReason
+      ? `${noTargetReason} – heute keine Sollarbeitszeit.`
+      : null;
 
   return (
     <>
@@ -105,15 +113,7 @@ export function MitarbeiterDetailTimeCards({
                 className="h-2"
                 indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
               />
-              {todayTarget && todayTarget.targetMinutes === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {todayTarget.isHoliday
-                    ? `Feiertag: ${todayTarget.holidayName} – keine Sollarbeitszeit.`
-                    : todayTarget.isClosureDay
-                      ? `Betriebsruhe${todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} – keine Sollarbeitszeit.`
-                      : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'}
-                </p>
-              )}
+              {noTargetText && <p className="text-xs text-muted-foreground">{noTargetText}</p>}
               {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
             </div>
 
@@ -137,9 +137,11 @@ export function MitarbeiterDetailTimeCards({
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
                 <span className="text-muted-foreground">Überstunden heute</span>
                 <span className="font-medium tabular-nums">
-                  {memberBreakdown.overtimeMinutes > 0
-                    ? formatDuration(memberBreakdown.overtimeMinutes)
-                    : '0 Min.'}
+                  {!todayTarget
+                    ? '–'
+                    : memberBreakdown.overtimeMinutes > 0
+                      ? formatDuration(memberBreakdown.overtimeMinutes)
+                      : '0 Min.'}
                 </span>
               </span>
             </div>

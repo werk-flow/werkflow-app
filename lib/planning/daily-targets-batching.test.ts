@@ -24,6 +24,25 @@ mock.module('@/lib/sickness/server', () => ({
 
 const { loadDailyTargetsByRecord } = await import('./server');
 
+/** An admin client whose every read answers no rows. */
+function rowlessAdmin(): Parameters<typeof loadDailyTargetsByRecord>[0]['admin'] {
+  const admin = {
+    from: () => {
+      const query = {
+        select: () => query,
+        eq: () => query,
+        lte: () => query,
+        gte: () => query,
+        in: () => query,
+        then: (resolve: (result: { data: unknown[]; error: null }) => void) =>
+          resolve({ data: [], error: null }),
+      };
+      return query;
+    },
+  };
+  return admin as unknown as Parameters<typeof loadDailyTargetsByRecord>[0]['admin'];
+}
+
 test('daily targets read organization-sized id lists in gateway-safe batches', async () => {
   const batchSizes: Record<string, number[]> = {};
   const admin = {
@@ -43,11 +62,15 @@ test('daily targets read organization-sized id lists in gateway-safe batches', a
       return query;
     },
   };
-  const employeeRecordIds = Array.from({ length: 205 }, (_, index) => `record-${index}`);
+  const employees = Array.from({ length: 205 }, (_, index) => ({
+    id: `record-${index}`,
+    entry_date: null,
+    exit_date: null,
+  }));
   const targets = await loadDailyTargetsByRecord({
     admin: admin as unknown as Parameters<typeof loadDailyTargetsByRecord>[0]['admin'],
     orgId: 'org',
-    employeeRecordIds,
+    employees,
     dates: ['2026-10-01', '2026-10-02'],
   });
   expect(targets).not.toBeNull();
@@ -64,24 +87,10 @@ test('daily targets read organization-sized id lists in gateway-safe batches', a
 });
 
 test('a failed absence span read fails the daily targets instead of reading as no absence', async () => {
-  const admin = {
-    from: () => {
-      const query = {
-        select: () => query,
-        eq: () => query,
-        lte: () => query,
-        gte: () => query,
-        in: () => query,
-        then: (resolve: (result: { data: unknown[]; error: null }) => void) =>
-          resolve({ data: [], error: null }),
-      };
-      return query;
-    },
-  };
   const input = {
-    admin: admin as unknown as Parameters<typeof loadDailyTargetsByRecord>[0]['admin'],
+    admin: rowlessAdmin(),
     orgId: 'org',
-    employeeRecordIds: ['record-0'],
+    employees: [{ id: 'record-0', entry_date: null, exit_date: null }],
     dates: ['2026-10-01'],
   };
   try {
@@ -94,6 +103,20 @@ test('a failed absence span read fails the daily targets instead of reading as n
     vacationSpansFail = false;
     sicknessSpansFail = false;
   }
+});
+
+// werk-flow/werkflow-planning#79: the Plantafel showed a target on the day
+// after the exit date.
+test('daily targets end at each record\'s exit date', async () => {
+  // 2026-10-29 is a Thursday, 2026-10-30 a Friday.
+  const targets = await loadDailyTargetsByRecord({
+    admin: rowlessAdmin(),
+    orgId: 'org',
+    employees: [{ id: 'record-0', entry_date: null, exit_date: '2026-10-29' }],
+    dates: ['2026-10-29', '2026-10-30'],
+  });
+  expect(targets?.targetByEmployeeDate.get('record-0:2026-10-29')?.targetMinutes).toBeGreaterThan(0);
+  expect(targets?.targetByEmployeeDate.get('record-0:2026-10-30')?.targetMinutes).toBe(0);
 });
 
 // A team may hold every employee: the expansion refused more than 5,000

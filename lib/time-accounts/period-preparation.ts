@@ -14,7 +14,7 @@ import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { addLocalDays, formatBerlinLocalDate, resolveBerlinWallTime } from '@/lib/date-time/berlin';
 import { toEmploymentCondition } from '@/lib/personnel/types';
 import { toWorkSchedule } from '@/lib/personnel/schedule';
-import { resolveDailyTarget, type DailyTarget } from '@/lib/personnel/targets';
+import { resolveDailyTargets, type DailyTarget } from '@/lib/personnel/targets';
 import { loadActiveSicknessSpansByRecord } from '@/lib/sickness/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
@@ -661,15 +661,13 @@ function resolveEmployeeDailyTargets(
     .filter((condition) => condition.employee_record_id === employee.id)
     .map(toEmploymentCondition);
   const absenceSpans = [...(vacations.get(employee.id) ?? []), ...(sickness.get(employee.id) ?? [])];
-  const resolvedTargets = dates.map((date) =>
-    resolveDailyTarget({
-      dateIso: date,
-      schedules: employeeSchedules,
-      conditions: employeeConditions,
-      calendar,
-      absences: absenceSpans,
-    }),
-  );
+  const resolvedTargets = resolveDailyTargets(dates, {
+    schedules: employeeSchedules,
+    conditions: employeeConditions,
+    calendar,
+    employment: { entryDate: employee.entry_date, exitDate: employee.exit_date },
+    absences: absenceSpans,
+  });
   const dailyTargets: DailyTargetInput[] = resolvedTargets.map((target) => {
     const vacationMinutes =
       target.absence?.type === 'vacation' ? target.baseTargetMinutes - target.targetMinutes : 0;

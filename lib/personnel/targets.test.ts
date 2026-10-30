@@ -6,10 +6,13 @@ import { getBusinessWeekDates, getWeekdayIndex } from './schedule';
 import {
   DEFAULT_DAILY_TARGET_MINUTES,
   EMPTY_HOLIDAY_CALENDAR,
+  getNoTargetReason,
+  getTargetSourceHint,
   resolveDailyTarget,
   resolveHolidayRegionOnDate,
   sumTargetMinutes,
   resolveDailyTargets,
+  type EmploymentInterval,
   type OrganizationHolidayCalendar,
 } from './targets';
 
@@ -43,6 +46,8 @@ function makeCondition(validFrom: string, weeklyHours: number | null): Employmen
   };
 }
 
+const OPEN_EMPLOYMENT: EmploymentInterval = { entryDate: null, exitDate: null };
+
 const FULL_TIME = [480, 480, 480, 480, 480, 0, 0];
 const PART_TIME = [240, 240, 240, 240, 240, 0, 0];
 
@@ -54,6 +59,7 @@ describe('resolveDailyTarget — schedule source', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME)],
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.source).toBe('schedule');
     expect(target.targetMinutes).toBe(480);
@@ -67,6 +73,7 @@ describe('resolveDailyTarget — schedule source', () => {
       schedules,
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     // 2026-08-08 is a Saturday.
     const saturday = resolveDailyTarget({
@@ -74,6 +81,7 @@ describe('resolveDailyTarget — schedule source', () => {
       schedules,
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(tuesday.targetMinutes).toBe(240);
     expect(saturday.targetMinutes).toBe(0);
@@ -87,12 +95,14 @@ describe('resolveDailyTarget — schedule source', () => {
       schedules,
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     const onChange = resolveDailyTarget({
       dateIso: '2026-08-05',
       schedules,
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(before.targetMinutes).toBe(480);
     expect(onChange.targetMinutes).toBe(240);
@@ -104,6 +114,7 @@ describe('resolveDailyTarget — schedule source', () => {
       schedules: [makeSchedule('2026-09-01', FULL_TIME)],
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.source).toBe('default');
   });
@@ -117,12 +128,14 @@ describe('resolveDailyTarget — fallback cascade', () => {
       schedules: [],
       conditions,
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     const saturday = resolveDailyTarget({
       dateIso: '2026-08-08',
       schedules: [],
       conditions,
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(tuesday.source).toBe('derived');
     expect(tuesday.targetMinutes).toBe(360);
@@ -136,34 +149,135 @@ describe('resolveDailyTarget — fallback cascade', () => {
       schedules: [],
       conditions,
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     const after = resolveDailyTarget({
       dateIso: '2026-08-05',
       schedules: [],
       conditions,
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(before.targetMinutes).toBe(480);
     expect(after.targetMinutes).toBe(240);
   });
 
-  test('default source is the labeled legacy 480 on every day', () => {
-    const tuesday = resolveDailyTarget({
+  // werk-flow/werkflow-planning#81: an unconfigured person owed 8 h on
+  // Saturday and Sunday too, a 56-hour week.
+  test('default source is the labeled 480 on Montag–Freitag and nothing on the weekend', () => {
+    const week = resolveDailyTargets(getBusinessWeekDates(new Date('2026-08-05T12:00:00Z')), {
+      schedules: [],
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
+    });
+    expect(week.map((target) => target.source)).toEqual(Array(7).fill('default'));
+    expect(week.map((target) => target.targetMinutes)).toEqual([480, 480, 480, 480, 480, 0, 0]);
+    expect(sumTargetMinutes(week)).toBe(5 * DEFAULT_DAILY_TARGET_MINUTES);
+  });
+});
+
+// werk-flow/werkflow-planning#79: the target ran on after the exit date, so the
+// Plantafel, the week's Soll and the period's Soll counted days of a person who
+// had left.
+describe('resolveDailyTarget — employment interval', () => {
+  const schedules = [makeSchedule('2026-01-01', FULL_TIME)];
+  const employment: EmploymentInterval = { entryDate: '2026-08-04', exitDate: '2026-08-06' };
+  const resolveOn = (dateIso: string) =>
+    resolveDailyTarget({ dateIso, schedules, conditions: [], calendar: EMPTY_HOLIDAY_CALENDAR, employment });
+
+  test('the exit date is the last day with a target', () => {
+    // 2026-08-06 is a Thursday, 2026-08-07 a Friday.
+    expect(resolveOn('2026-08-06').targetMinutes).toBe(480);
+    expect(resolveOn('2026-08-06').outsideEmployment).toBeNull();
+    const dayAfterExit = resolveOn('2026-08-07');
+    expect(dayAfterExit.targetMinutes).toBe(0);
+    expect(dayAfterExit.baseTargetMinutes).toBe(0);
+    expect(dayAfterExit.outsideEmployment).toBe('after_exit');
+  });
+
+  test('the entry date is the first day with a target', () => {
+    const dayBeforeEntry = resolveOn('2026-08-03');
+    expect(dayBeforeEntry.targetMinutes).toBe(0);
+    expect(dayBeforeEntry.baseTargetMinutes).toBe(0);
+    expect(dayBeforeEntry.outsideEmployment).toBe('before_entry');
+    expect(resolveOn('2026-08-04').targetMinutes).toBe(480);
+  });
+
+  test('an absence after the exit date brings back no base target', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-07',
+      schedules,
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment,
+      absences: [{ type: 'vacation', startDate: '2026-08-07', endDate: '2026-08-07', dayPortion: 'full' }],
+    });
+    expect(target.baseTargetMinutes).toBe(0);
+    expect(target.targetMinutes).toBe(0);
+  });
+
+  test('an unconfigured person after the exit date shows no missing-configuration hint', () => {
+    const target = resolveDailyTarget({
+      dateIso: '2026-08-07',
+      schedules: [],
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment,
+    });
+    expect(target.source).toBe('default');
+    expect(getTargetSourceHint(target)).toBeNull();
+  });
+});
+
+describe('getNoTargetReason', () => {
+  const base = {
+    schedules: [makeSchedule('2026-01-01', FULL_TIME)],
+    conditions: [],
+    calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: OPEN_EMPLOYMENT,
+  };
+
+  test('a day with a target has no reason', () => {
+    expect(getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-04', ...base }))).toBeNull();
+  });
+
+  test('employment outranks every other reason', () => {
+    const employment: EmploymentInterval = { entryDate: '2026-08-05', exitDate: '2026-08-06' };
+    const closure: OrganizationHolidayCalendar = {
+      ...EMPTY_HOLIDAY_CALENDAR,
+      closureDays: [{ closureDate: '2026-08-07', label: 'Inventur' }],
+    };
+    expect(getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-04', ...base, employment }))).toBe(
+      'Noch nicht eingetreten',
+    );
+    expect(
+      getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-07', ...base, calendar: closure, employment })),
+    ).toBe('Ausgeschieden');
+  });
+
+  test('a closure day, an absence and a free schedule day name themselves', () => {
+    const closure: OrganizationHolidayCalendar = {
+      ...EMPTY_HOLIDAY_CALENDAR,
+      closureDays: [{ closureDate: '2026-08-04', label: 'Inventur' }],
+    };
+    expect(getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-04', ...base, calendar: closure }))).toBe(
+      'Betriebsruhe (Inventur)',
+    );
+    const sickness = resolveDailyTarget({
       dateIso: '2026-08-04',
-      schedules: [],
-      conditions: [],
-      calendar: EMPTY_HOLIDAY_CALENDAR,
+      ...base,
+      absences: [{ type: 'sickness', startDate: '2026-08-04', endDate: '2026-08-04', dayPortion: 'full' }],
     });
-    const saturday = resolveDailyTarget({
-      dateIso: '2026-08-08',
-      schedules: [],
-      conditions: [],
-      calendar: EMPTY_HOLIDAY_CALENDAR,
-    });
-    expect(tuesday.source).toBe('default');
-    expect(tuesday.targetMinutes).toBe(DEFAULT_DAILY_TARGET_MINUTES);
-    // Exactly the pre-P1-04 behavior: 480 also on weekend days with work.
-    expect(saturday.targetMinutes).toBe(DEFAULT_DAILY_TARGET_MINUTES);
+    expect(getNoTargetReason(sickness)).toBe('Krankmeldung');
+    expect(getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-08', ...base }))).toBe(
+      'Kein Arbeitstag laut Wochenplan',
+    );
+  });
+
+  test('an unconfigured person rests on the weekend, not by a Wochenplan', () => {
+    const saturday = resolveDailyTarget({ dateIso: '2026-08-08', ...base, schedules: [] });
+    expect(getNoTargetReason(saturday)).toBe('Wochenende');
   });
 });
 
@@ -181,6 +295,7 @@ describe('resolveDailyTarget — holidays and closure days', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME)],
       conditions: [],
       calendar: bavarianCalendar,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.isHoliday).toBe(true);
     expect(target.holidayName).toBe('Fronleichnam');
@@ -195,6 +310,7 @@ describe('resolveDailyTarget — holidays and closure days', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME)],
       conditions: [],
       calendar: bavarianCalendar,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.isHoliday).toBe(false);
   });
@@ -211,6 +327,7 @@ describe('resolveDailyTarget — holidays and closure days', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME)],
       conditions: [],
       calendar,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.isHoliday).toBe(false);
     expect(target.targetMinutes).toBe(480);
@@ -227,6 +344,7 @@ describe('resolveDailyTarget — holidays and closure days', () => {
       schedules: [],
       conditions: [],
       calendar,
+      employment: OPEN_EMPLOYMENT,
     });
     expect(target.isClosureDay).toBe(true);
     expect(target.closureLabel).toBe('Betriebsausflug');
@@ -279,6 +397,7 @@ describe('week helpers', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME), makeSchedule('2026-08-06', PART_TIME)],
       conditions: [],
       calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: OPEN_EMPLOYMENT,
     });
     // Mo–Mi full time (3 × 480), Do–Fr part time (2 × 240), weekend 0.
     expect(sumTargetMinutes(targets)).toBe(3 * 480 + 2 * 240);
@@ -291,6 +410,7 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
     schedules: [makeSchedule('2026-01-01', FULL_TIME)],
     conditions: [],
     calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: OPEN_EMPLOYMENT,
   };
 
   test('a full-day sickness span zeroes the target', () => {
@@ -340,6 +460,7 @@ describe('resolveDailyTarget — sickness absence (P1-08)', () => {
       schedules: [makeSchedule('2025-01-01', FULL_TIME)],
       conditions: [],
       calendar,
+      employment: OPEN_EMPLOYMENT,
       absences: [
         {
           type: 'sickness',

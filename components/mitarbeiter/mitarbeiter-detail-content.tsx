@@ -8,6 +8,7 @@ import { ContextualDocumentsSection } from '@/components/dokumente/contextual-do
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import type { PersonnelQualificationSummaryData } from './personnel-qualification-summary';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { PersonnelDetail } from '@/lib/personnel/actions';
 
 import type { MemberDetail } from '@/lib/members/actions';
@@ -25,8 +26,20 @@ import { MemberRemoveConfirmDialog } from './member-actions-menu-remove-dialog';
 import { MitarbeiterDetailPersonnelSections } from './mitarbeiter-detail-personnel-sections';
 import { MitarbeiterDetailProfileSection } from './mitarbeiter-detail-profile-section';
 import { MitarbeiterDetailTimeCards } from './mitarbeiter-detail-time-cards';
-import { useMitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
+import { useMitarbeiterDetailLiveTime, type MemberInitialWeek } from './use-mitarbeiter-detail-live-time';
 import { useMitarbeiterDetailMemberActions } from './use-mitarbeiter-detail-member-actions';
+
+// The server props of the detail page that a change of these tables outdates.
+const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
+  'organization_settings',
+  'employee_records',
+  'employment_conditions',
+  'work_schedules',
+  'teams',
+  'team_memberships',
+  'organization_capabilities',
+  'employee_capabilities',
+];
 
 interface MitarbeiterDetailContentProps {
   member: MemberDetail;
@@ -50,6 +63,8 @@ interface MitarbeiterDetailContentProps {
   breakMode: OrgBreakMode;
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
+  /** `null` when the server read of the week failed. */
+  initialWeek: MemberInitialWeek | null;
   /** `null` when the responsibility settings failed to load. */
   responsibilitySettings: ResponsibilitySettingsData | null;
   qualificationSummary: PersonnelQualificationSummaryData | null;
@@ -76,6 +91,7 @@ export function MitarbeiterDetailContent({
   breakMode,
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
+  initialWeek,
   responsibilitySettings,
   qualificationSummary,
   lifecycle,
@@ -93,18 +109,7 @@ export function MitarbeiterDetailContent({
     responsibilitySettings,
   });
 
-  useRealtimeRouterRefresh({
-    tables: [
-      'organization_settings',
-      'employee_records',
-      'employment_conditions',
-      'work_schedules',
-      'teams',
-      'team_memberships',
-      'organization_capabilities',
-      'employee_capabilities',
-    ],
-  });
+  useRealtimeRouterRefresh({ tables: DETAIL_REFRESH_TABLES });
 
   const liveTime = useMitarbeiterDetailLiveTime({
     organizationId,
@@ -112,6 +117,7 @@ export function MitarbeiterDetailContent({
     breakMode,
     autoBreakThresholdMinutes,
     autoBreakDurationMinutes,
+    initialWeek,
   });
 
   const {

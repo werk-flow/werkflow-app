@@ -7,7 +7,16 @@ import { useWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';
-import { DEFAULT_DAILY_TARGET_MINUTES, getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
+import { getTargetSourceHint, type DailyTarget } from '@/lib/personnel/targets';
+import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
+
+/** The member's week as the server read it, with the resolved daily targets. */
+export type MemberInitialWeek = {
+  weekData: WeeklyTimeDataPoint[];
+  todayIndex: number;
+  weekLabel: WeeklyTimeLabel;
+  weekTargets: DailyTarget[];
+};
 
 function computeLiveBreakMinutesForMember(
   status: MemberStatus | undefined,
@@ -35,12 +44,25 @@ function computeLiveBreakMinutesForMember(
   );
 }
 
+/** The server's week as the week view's initial data; none when its read failed. */
+function initialWeekOptions(initialWeek: MemberInitialWeek | null) {
+  if (!initialWeek) return {};
+  return {
+    initialWeekData: initialWeek.weekData,
+    initialTodayIndex: initialWeek.todayIndex,
+    initialWeekLabel: initialWeek.weekLabel,
+    initialWeekTargets: initialWeek.weekTargets,
+  };
+}
+
 type MitarbeiterDetailLiveTimeInput = {
   organizationId: string;
   userId: string;
   breakMode: OrgBreakMode;
   autoBreakThresholdMinutes: number;
   autoBreakDurationMinutes: number;
+  /** Null when the server read failed: the week then loads on mount. */
+  initialWeek: MemberInitialWeek | null;
 };
 
 export type MitarbeiterDetailLiveTime = ReturnType<typeof useMitarbeiterDetailLiveTime>;
@@ -52,6 +74,7 @@ export function useMitarbeiterDetailLiveTime({
   breakMode,
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
+  initialWeek,
 }: MitarbeiterDetailLiveTimeInput) {
   const memberIds = useMemo(() => [userId], [userId]);
 
@@ -82,6 +105,7 @@ export function useMitarbeiterDetailLiveTime({
     breakMode,
     autoBreakThresholdMinutes,
     autoBreakDurationMinutes,
+    ...initialWeekOptions(initialWeek),
   });
 
   // Today's minutes with the running ones, from the first render that knows
@@ -94,10 +118,10 @@ export function useMitarbeiterDetailLiveTime({
     nowMs,
   );
 
-  // This member's resolved target for today (P1-04); the legacy 8h value only
-  // appears as the visibly labeled `default` source.
+  // This member's resolved target for today (P1-04). Until it is known the
+  // card shows the worked minutes only, never a progress against 8h.
   const todayTarget: DailyTarget | undefined = weekTargets?.[todayIndex];
-  const todayTargetMinutes = todayTarget?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES;
+  const todayTargetMinutes = todayTarget?.targetMinutes ?? 0;
   const todayTargetHint = todayTarget ? getTargetSourceHint(todayTarget) : null;
 
   const memberBreakdown = computeLiveBreakMinutesForMember(
