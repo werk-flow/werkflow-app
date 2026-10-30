@@ -15,6 +15,8 @@ import type { CalendarBoardContext, CalendarBoardRow } from '@/lib/calendar/boar
 import { getCalendarFetchRange } from '@/lib/calendar/navigation';
 import { DEFAULT_CALENDAR_PREFERENCES } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
+import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/actions';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { toLocalDateString } from '@/lib/utils';
 import { getDefaultTimeTrackingSettings } from '@/lib/time-tracking/settings';
@@ -306,10 +308,43 @@ const boardJobs = [
   visit('Begonnener Termin', 'o0', '2026-09-08', '07:00', ['r2'], ['worker-2']),
   { ...visit('Zweiter Besuch', 'o2', '2026-09-10', '09:00', ['r1'], ['worker']), jobId: 'job-o1' },
 ];
+const boardVacation: VacationCalendarEntry[] = [
+  {
+    id: 'vacation-approved',
+    employeeRecordId: 'r1',
+    personName: 'Alex Test',
+    startDate: '2026-09-11',
+    endDate: '2026-09-11',
+    dayPortion: 'full',
+    status: 'approved',
+  },
+  {
+    id: 'vacation-pending',
+    employeeRecordId: 'r2',
+    personName: 'Bea Zwei',
+    startDate: '2026-09-07',
+    endDate: '2026-09-07',
+    dayPortion: 'full',
+    status: 'pending',
+  },
+];
+const boardSickness: SicknessCalendarEntry[] = [
+  {
+    id: 'sickness-open',
+    employeeRecordId: 'r2',
+    personName: 'Bea Zwei',
+    startDate: '2026-09-10',
+    endDate: '2026-09-11',
+    openEnded: true,
+    dayPortion: 'full',
+  },
+];
 
 export function CalendarBoardContractFixture(): React.JSX.Element {
   const [compact, setCompact] = useState(false);
   const [populated, setPopulated] = useState(false);
+  const [absent, setAbsent] = useState(false);
+  const [phone, setPhone] = useState(false);
   const entries: TimeEntry[] = [0, 1].map((index) => {
     const timestamp = `2026-09-08T0${5 + index}:00:00.000Z`;
     return {
@@ -336,6 +371,12 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
       <button type="button" onClick={() => setPopulated(true)}>
         Volle Zeile
       </button>
+      <button type="button" onClick={() => setAbsent(true)}>
+        Abwesenheiten
+      </button>
+      <button type="button" onClick={() => setPhone(!phone)}>
+        Telefonansicht
+      </button>
       <ViewHarness
         jobs={boardJobs}
         board={boardFor(weekDates)}
@@ -360,8 +401,8 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
                 : jobs
             }
             entries={entries}
-            vacation={[]}
-            sickness={[]}
+            vacation={absent ? boardVacation : []}
+            sickness={absent ? boardSickness : []}
             holidays={holidays}
             mutations={mutations}
             parkingContexts={new Map()}
@@ -369,7 +410,7 @@ export function CalendarBoardContractFixture(): React.JSX.Element {
             actions={actions}
             verticalScroller={scroller}
             onIsolateRow={() => {}}
-            phone={false}
+            phone={phone}
           />
         )}
       </ViewHarness>

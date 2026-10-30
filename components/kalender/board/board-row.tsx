@@ -172,8 +172,9 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
       })}
       {lanes.map(({ item, ...placement }) => {
         if (item.kind === 'absence') {
+          // Positioned like a card: the day cells are `relative`, so a static bar would paint beneath them.
           return (
-            <div key={item.key} className="min-w-0 p-0.5" style={boardLaneStyle(placement)}>
+            <div key={item.key} className="relative min-w-0 p-0.5" style={boardLaneStyle(placement)}>
               <BarSegment
                 tone={item.pending ? 'absence-pending' : 'absence'}
                 edge="single"
