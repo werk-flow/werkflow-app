@@ -211,7 +211,11 @@ mock.module('@/lib/storage/r2', () => ({
   },
   uploadStagingPath: stagingPathOf,
 }));
-const actions = await import('@/lib/documents/actions');
+const actions = {
+  ...(await import('@/lib/documents/actions')),
+  ...(await import('@/lib/documents/library-actions')),
+  ...(await import('@/lib/documents/upload-actions')),
+};
 
 const overviewJobs = [
   { id: assignedJobId, jobNumber: 'A-001', title: 'Rohinstallation' },
