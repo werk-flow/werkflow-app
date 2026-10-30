@@ -123,6 +123,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/`. The main checkout serves on port 3000. A linked worktree derives its test-server and dev ports from its path (`lib/testing/runner/app-port.ts`).
 - Every worktree uses the one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
+- `bun run check:changed`, `bun run test:verify` and a local test server's build each take one of three machine-wide slots and print that they wait while all are busy (`lib/testing/runner/heavy-slot.ts`). Serving holds no slot. CI takes no slot.
 - `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).
 
@@ -144,7 +145,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 - Staging: a PR merged to `main` reaches DEV's schema, then staging.
 - Release: only through the `release` workflow, which the owner starts or asks an agent to start.
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
-- Owner demo data: `bun scripts/seed-demo-data.ts --target dev|prod` (production adds `--confirm-prod`) recreates the demo organizations and refuses the beta partner's. `--target local` seeds the local stack and creates the owner there if missing; CI's SQL job runs it twice, so a seeder that a migration broke fails `Check`. Each run gives the demo members a generated password. To sign in to `bun run dev` as one, seed DEV with `DEMO_MEMBER_PASSWORD` set to a password you choose and run `bun run env:dev` first. PROD refuses a chosen password.
+- Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. CI's SQL job seeds twice, so a migration that breaks the seeder fails `Check`. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
 
 ## Release and rollback
 

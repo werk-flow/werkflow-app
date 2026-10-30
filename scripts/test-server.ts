@@ -7,6 +7,7 @@ import { subscribeForDatabaseReadiness } from './realtime-probe';
 import { runSessionCommand, withTestSession } from '../lib/testing/local-stack/test-session';
 import { workspacePorts } from '../lib/testing/runner/app-port';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
+import { acquireHeavySlot } from '../lib/testing/runner/heavy-slot';
 
 const target = process.argv[2];
 const prebuiltArgument = process.argv[3];
@@ -166,11 +167,16 @@ await withTestSession(async (signal) => {
     await run([process.execPath, 'run', target === 'local' ? 'env:local' : 'env:dev']);
     if (target === 'local') await run(['docker', 'start', 'supabase_edge_runtime_werkflow-app']);
     await run([process.execPath, 'run', 'test:preflight', 'backend', target]);
-    await run(
-      prebuilt
-        ? [process.execPath, 'run', 'test:preflight', 'build', target]
-        : [process.execPath, 'run', 'build'],
-    );
+    if (prebuilt) await run([process.execPath, 'run', 'test:preflight', 'build', target]);
+    else {
+      // The build holds a heavy slot; serving does not, so three idle servers never block verification.
+      const slot = target === 'local' ? await acquireHeavySlot('test:server local build', signal) : null;
+      try {
+        await run([process.execPath, 'run', 'build']);
+      } finally {
+        slot?.release();
+      }
+    }
   });
   const releaseRealtimeWarmUp = target === 'local' ? await keepRealtimeWarm() : null;
   const serverLog = openServerLog();
