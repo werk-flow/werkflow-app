@@ -20,7 +20,7 @@ First ask of every choice: entities or a fixed enum? A raw `Select` holds a fixe
 | Link inside running text | `TextLink`; a standalone link is `Button variant="link"` |
 | State label | `Badge` (`secondary`, `success`, `warning`, `destructive`, `outline`; no orange) |
 | Dialog | `DialogContent size` (`sm` to `4xl`, `window`), `DialogBody`, root `pending`; `placement="anchored"` for a sheet above the clock button; `workspace` for tabbed create forms |
-| Destructive confirmation | `AlertDialog` |
+| Destructive confirmation | `AlertDialog`, root `pending`; `AlertDialogBody` scrolls a long confirmation between header and footer |
 | Sheet, menu, popover | `Sheet`, `DropdownMenu`, `ContextMenu`, `Popover` |
 | Row menu that survives an optimistic replace or a Realtime remount | `RowActionsMenu` |
 | Table | `Table`, `SortableTableHead`, `TableRow interactive` (`"select"`: click selects, double click opens) |

@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Trash2, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
+  AlertDialogBody,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -134,8 +135,9 @@ function DeletionScopeDescription({ scope }: { scope: OrganizationDeletionScope 
 }
 
 /**
- * The typed name and the delete of a deletion the server allows. The content
- * unmounts on close, so a reopened dialog starts empty.
+ * The typed name and the delete of a deletion the server allows, below the
+ * scope description it receives as children. The content unmounts on close,
+ * so a reopened dialog starts empty.
  */
 function DeletionConfirmation({
   orgName,
@@ -143,6 +145,7 @@ function DeletionConfirmation({
   onDeleted,
   onFilesDeleted,
   isLoading,
+  children,
 }: {
   orgName: string;
   onDelete: (confirmationName: string) => Promise<DeleteOrgResult>;
@@ -150,6 +153,7 @@ function DeletionConfirmation({
   /** The files are gone although the organization stays; the refusal view must say so. */
   onFilesDeleted: () => void;
   isLoading: boolean;
+  children: ReactNode;
 }) {
   const [confirmationName, setConfirmationName] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
@@ -186,7 +190,8 @@ function DeletionConfirmation({
 
   return (
     <>
-      <div className="space-y-3 py-2">
+      <AlertDialogBody className="space-y-4">
+        {children}
         <Field
           label="Gib den Namen der Organisation ein, um zu bestätigen:"
           htmlFor={CONFIRM_NAME_ID}
@@ -207,23 +212,29 @@ function DeletionConfirmation({
           />
         </Field>
         <ErrorText>{error}</ErrorText>
-      </div>
-      <AlertDialogFooter>
-        <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
-        <AlertDialogAction
-          // Keep the dialog open until the server confirms; a failure must
-          // stay visible at the point of action.
-          onClick={(event) => {
-            event.preventDefault();
-            void handleDelete();
-          }}
-          pending={isLoading}
-          variant="destructive"
-        >
-          {isLoading ? 'Wird gelöscht…' : 'Endgültig löschen'}
-        </AlertDialogAction>
-      </AlertDialogFooter>
+      </AlertDialogBody>
+      <DeletionActions isLoading={isLoading} onConfirm={() => void handleDelete()} />
     </>
+  );
+}
+
+function DeletionActions({ isLoading, onConfirm }: { isLoading: boolean; onConfirm: () => void }) {
+  return (
+    <AlertDialogFooter>
+      <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
+      <AlertDialogAction
+        // Keep the dialog open until the server confirms; a failure must
+        // stay visible at the point of action.
+        onClick={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+        pending={isLoading}
+        variant="destructive"
+      >
+        {isLoading ? 'Wird gelöscht…' : 'Endgültig löschen'}
+      </AlertDialogAction>
+    </AlertDialogFooter>
   );
 }
 
@@ -250,22 +261,25 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
           Organisation löschen
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent className="max-h-[calc(100dvh-3rem)] overflow-y-auto sm:max-w-md">
+      <AlertDialogContent className="sm:max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle className={cn('flex items-center gap-2', !retained && 'text-destructive')}>
             <AlertTriangle className="size-5" />
             Organisation löschen
           </AlertDialogTitle>
-          {scope && retained ? <RetainedDescription scope={scope} filesDeleted={filesDeleted} /> : null}
-          {scope && !retained ? <DeletionScopeDescription scope={scope} /> : null}
         </AlertDialogHeader>
         {retained ? (
-          <AlertDialogFooter>
-            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
-            <AlertDialogAction asChild>
-              <Link href="/zeiterfassung/perioden">Zu den Perioden</Link>
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          <>
+            <AlertDialogBody>
+              {scope ? <RetainedDescription scope={scope} filesDeleted={filesDeleted} /> : null}
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+              <AlertDialogAction asChild>
+                <Link href="/zeiterfassung/perioden">Zu den Perioden</Link>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </>
         ) : (
           <DeletionConfirmation
             orgName={orgName}
@@ -273,7 +287,9 @@ export function DeleteOrgDialog({ orgName, scope }: DeleteOrgDialogProps) {
             onDeleted={() => setOpen(false)}
             onFilesDeleted={() => setFilesDeleted(true)}
             isLoading={isLoading}
-          />
+          >
+            {scope ? <DeletionScopeDescription scope={scope} /> : null}
+          </DeletionConfirmation>
         )}
       </AlertDialogContent>
     </AlertDialog>
