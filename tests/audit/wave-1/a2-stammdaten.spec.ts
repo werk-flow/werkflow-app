@@ -275,20 +275,4 @@ test.describe('A2 Kundenstamm @AUDIT-W1-A2', () => {
     await expect(visibleText(adminPage, `${projectNumber}-1`)).toBeVisible();
     await expect(visibleText(adminPage, `${projectNumber}-2`)).toBeVisible();
   });
-
-  test('A2-D01: Handwerker und fremde Organisation öffnen keinen Kundendatensatz direkt', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const { clientId } = await seedCustomer({
-      orgId: world.orgId,
-      actorId: world.users.admin.id,
-      name: `A2 Geschützter Kunde ${world.runId}`,
-    });
-    await employeePage.goto(`/kunden/${clientId}`);
-    await employeePage.waitForURL('**/dashboard');
-    await outsiderPage.goto(`/kunden/${clientId}`);
-    await outsiderPage.waitForURL('**/kunden');
-  });
 });

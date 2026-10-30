@@ -97,6 +97,14 @@ const REQUEST_STATUS_ACTIONS = {
   },
 } as const;
 
+/**
+ * A link of the rendered sidebar, whichever comes first: its loading skeleton carries the same
+ * navigation name but no link, so a visible one proves the role's real navigation rendered.
+ */
+export function renderedMainNavigation(page: Page): Locator {
+  return page.getByRole('navigation', { name: 'Hauptnavigation', exact: true }).getByRole('link').first();
+}
+
 /** The sidebar entry of the request list. */
 export function requestsNavLink(page: Page): Locator {
   return page.getByRole('link', { name: REQUEST_COPY.navLink });
