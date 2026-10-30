@@ -8,7 +8,6 @@
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/customer-relationships/actions.ts": 1427,
     "lib/documents/actions.ts": 1584,
-    "lib/inventory/actions.ts": 1567,
     "lib/jobs/actions.ts": 1021,
     "lib/jobs/types.ts": 890,
     "lib/qualifications/actions.ts": 1228,
@@ -547,16 +546,6 @@
     "lib/documents/work-context-groups.ts": { "buildWorkContextGroups": 94 },
     "lib/installed-equipment/actions.ts": { "loadEquipmentDetail": 126 },
     "lib/installed-equipment/source-options-server.ts": { "readWorkSources": 97 },
-    "lib/inventory/actions.ts": {
-      "updateJobMaterialLine": 84,
-      "getProjectMaterialSummary": 99,
-      "hydrateJobMaterialLines": 97,
-      "importInventoryRows": 99
-    },
-    "lib/inventory/catalog-reads.ts": {
-      "readInventoryOverviewSupportRows": 120,
-      "readInventoryPickerSupportRows": 87
-    },
     "lib/invites/send-invite.ts": { "createAndMailOrganizationInvite": 120 },
     "lib/jobs/actions.ts": {
       "readJobDetails": 95,
