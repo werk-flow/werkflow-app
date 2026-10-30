@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -55,8 +54,7 @@ export function EquipmentCorrectionDialog({
         >
           <Textarea value={reason} onChange={(event) => setReason(event.target.value)} />
         </Field>
-        <ErrorText>{errorFor('correction')}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={errorFor('correction')}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             pending={busy.isBusy('correction')}
@@ -113,8 +111,7 @@ export function EquipmentArchiveDialog({
         >
           <Textarea value={reason} onChange={(event) => setReason(event.target.value)} />
         </Field>
-        <ErrorText>{errorFor('archive')}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={errorFor('archive')}>
           <AlertDialogCancel>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             pending={busy.isBusy('archive')}

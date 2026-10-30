@@ -6,7 +6,6 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 
 | Candidate | Gap | Target |
 | --- | --- | --- |
-| Long unbroken names on phones | Audit-world surnames end in the run id (`planTestWorld` in `lib/testing/seed-world-plan.ts`), so a name without `break-words` or `min-w-0` overflows at 375 px only on runs whose id renders wide. | Tier 2: a fixed worst-case unbroken part in every world name, so a missing wrap fails every run. |
 | Hand-built state chips | `components/mitarbeiter/invitations-table.tsx` and `components/zeiterfassung/pending-approvals-cards.tsx` render styled spans instead of `Badge`. | Tier 2: move them to `Badge` variants, then a selector for a rounded-full chip class outside the badge primitive. |
 
 ## Performance and immediate feedback

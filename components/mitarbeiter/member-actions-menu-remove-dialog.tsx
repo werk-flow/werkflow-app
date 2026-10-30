@@ -1,6 +1,5 @@
 'use client';
 
-import { ErrorText } from '@/components/ui/error-text';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,8 +48,7 @@ export function MemberRemoveConfirmDialog({
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={isRemoving}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             // Keep the dialog open until the server confirms; a failure
