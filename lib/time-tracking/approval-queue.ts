@@ -3,7 +3,7 @@ import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { canApproveEntries } from './helpers';
 import { groupPendingEntries, type PendingEntryGroup } from './pending-sessions';
@@ -17,7 +17,6 @@ import {
   type TimeEntryRow,
 } from './types';
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type PersonName = { first_name: string | null; last_name: string | null };
 
 /**

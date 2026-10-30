@@ -2,7 +2,7 @@ import 'server-only';
 import type { ActionFailure } from '@/lib/action-result';
 import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDate, isSameLocalDay } from '@/lib/date-time/berlin';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { z } from '@/lib/zod';
 import { getDayBounds } from './action-access';
@@ -14,8 +14,6 @@ import type { TimeValidationFailure } from './validation-messages';
 // The checks updateEntry (entry-write-actions.ts) runs on an authorized edit
 // before it writes: the day rules on the recorded and the new day, and the
 // organization of a named job. The action authorizes the caller first.
-
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 /** The user's complete entries on the timestamps' local days; null when a read fails or overflows. */
 async function getUserEntriesOnDays(

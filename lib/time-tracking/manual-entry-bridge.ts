@@ -44,9 +44,9 @@ export function queueManualEntryBridge(entries: TimeEntry[]): void {
 
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    // A stored queue this module cannot read is replaced, so it never blocks the bridge.
     const existing = raw ? readQueuedEntries(raw) : [];
-    if (!existing) return;
-    const merged = [...existing];
+    const merged = [...(existing ?? [])];
 
     for (const entry of entries) {
       if (!merged.some((candidate) => candidate.id === entry.id)) {
@@ -72,7 +72,10 @@ export function consumeManualEntryBridge(organizationId: string): TimeEntry[] {
     }
 
     const queued = readQueuedEntries(raw);
-    if (!queued) return [];
+    if (!queued) {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+      return [];
+    }
     const matching = queued.filter((entry) => entry.organizationId === organizationId);
     const remaining = queued.filter((entry) => entry.organizationId !== organizationId);
 

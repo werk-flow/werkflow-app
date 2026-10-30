@@ -1,6 +1,6 @@
 import 'server-only';
 import type { ActionResult } from '@/lib/action-result';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { getProvisionalTimeCorrectionProjection } from '@/lib/time-corrections/actions';
 import { loadApprovedCorrectionProjection } from '@/lib/time-corrections/approved-projection';
 import type { TimeCorrectionApplicationProjection } from '@/lib/time-corrections/types';
@@ -9,8 +9,6 @@ import type { TimeEntry, TimeEntryStatus } from './types';
 
 // The projections getTimeEntries (entry-read-actions.ts) reads beside the
 // legacy rows. The caller authorizes the organization and the subject first.
-
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 /**
  * Canonical entries, approved corrections and pending corrections of the

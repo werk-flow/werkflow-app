@@ -1,7 +1,7 @@
 import 'server-only';
 import type { ActionFailure } from '@/lib/action-result';
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import type { Tables } from '@/lib/supabase/database.types';
 
@@ -9,7 +9,6 @@ import type { Tables } from '@/lib/supabase/database.types';
 // verifies the caller's membership in their one organization and the
 // time_approval responsibility for each person before it writes.
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type ReviewEntry = Pick<
   Tables<'time_entries'>,
   'id' | 'organization_id' | 'user_id' | 'status' | 'timestamp'

@@ -1,5 +1,5 @@
 import 'server-only';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
@@ -22,8 +22,6 @@ type CanonicalEntryParams = {
   jobId?: string;
   referenceTime?: string;
 };
-
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 
 /** A canonical segment with the row timestamps its projected entries carry. */
 type CanonicalSegment = {

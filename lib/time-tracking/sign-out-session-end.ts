@@ -1,6 +1,6 @@
 import 'server-only';
 import { logError } from '@/lib/logging';
-import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { Tables } from '@/lib/supabase/database.types';
 import { hashTimeTransitionRequest } from './transition-hash';
@@ -9,7 +9,6 @@ import { hashTimeTransitionRequest } from './transition-hash';
 // one open session of the signed-in user, recovering it first when the
 // database asks for that. The caller resolves the user and reads the sessions.
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type OpenSession = Pick<Tables<'time_sessions'>, 'id' | 'organization_id' | 'version' | 'status'>;
 
 function getTransitionOutcome(value: unknown): string | null {
