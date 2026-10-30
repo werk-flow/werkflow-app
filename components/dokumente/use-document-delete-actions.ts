@@ -3,7 +3,9 @@
 import { useState } from 'react';
 
 import { describeFailure } from '@/lib/action-messages';
-import { deleteDocument, deleteDocumentFolder, permanentlyDeleteDocument } from '@/lib/documents/actions';
+import { permanentlyDeleteDocument } from '@/lib/documents/actions';
+import { deleteDocumentFolder } from '@/lib/documents/folder-actions';
+import { deleteDocument } from '@/lib/documents/library-actions';
 import type { DocumentFolder, DocumentMutationResult, OrganizationDocument } from '@/lib/documents/types';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
 import type { DocumentLibrarySelection } from './use-document-library-selection';

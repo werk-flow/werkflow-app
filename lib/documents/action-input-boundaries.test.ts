@@ -36,7 +36,12 @@ async function runScenario(): Promise<void> {
     getCachedOrganizationSettings: async () => null,
     getCachedOrganizationCalendar: async () => null,
   }));
-  const documents = await import('@/lib/documents/actions');
+  const documents = {
+    ...(await import('@/lib/documents/actions')),
+    ...(await import('@/lib/documents/folder-actions')),
+    ...(await import('@/lib/documents/library-actions')),
+    ...(await import('@/lib/documents/upload-actions')),
+  };
   const attention = await import('@/lib/attention/actions');
 
   const rejected: Array<[string, () => Promise<unknown>]> = [

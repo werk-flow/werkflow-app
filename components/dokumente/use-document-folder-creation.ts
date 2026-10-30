@@ -3,7 +3,7 @@
 import { useState } from 'react';
 
 import { useServerAction } from '@/hooks/use-server-action';
-import { createDocumentFolder } from '@/lib/documents/actions';
+import { createDocumentFolder } from '@/lib/documents/folder-actions';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export const FOLDER_NAME_INPUT_ID = 'document-folder-name';

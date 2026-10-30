@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 
-import { getDocumentDetails, updateDocumentCategory } from '@/lib/documents/actions';
+import { getDocumentDetails } from '@/lib/documents/actions';
+import { updateDocumentCategory } from '@/lib/documents/library-actions';
 import type { DocumentCategory, DocumentDetailsResult, OrganizationDocument } from '@/lib/documents/types';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
 
