@@ -28,7 +28,6 @@ import { hydrateWrittenDocument } from './hydration';
 import { readDocumentStoragePath } from './reads';
 import { buildDocumentStoragePath, buildDocumentVersionStoragePath } from './storage-path';
 import {
-  DOCUMENT_CATEGORIES,
   DOCUMENT_MAX_FILE_SIZE_BYTES,
   DOCUMENT_STORAGE_BUCKET,
   toDocumentCategory,
@@ -47,10 +46,9 @@ import {
   discardStagedUpload,
 } from './write-support';
 
-function parseDocumentCategory(value: FormDataEntryValue | null): DocumentCategory | null {
-  if (typeof value !== 'string') return null;
-  const category = toDocumentCategory(value);
-  return DOCUMENT_CATEGORIES.includes(category) ? category : null;
+// A sent category maps to its known value or 'other'; only a missing one falls back to inference.
+function parseDocumentCategory(value: string | null): DocumentCategory | null {
+  return value === null ? null : toDocumentCategory(value);
 }
 
 const UPLOAD_LINK_KINDS = [
