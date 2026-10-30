@@ -21,9 +21,11 @@ const caseId = '6b000000-0000-4000-8000-000000000007';
 const coverageId = '6b000000-0000-4000-8000-000000000008';
 const clientId = '6b000000-0000-4000-8000-00000000000a';
 const siteId = '6b000000-0000-4000-8000-00000000000b';
+const ownChildJobId = '6b000000-0000-4000-8000-00000000000c';
 const projectNumber = 'P-2026-016';
 const jobNumber = 'A-2026-014';
 const childJobNumber = 'P-2026-016-1';
+const ownChildJobNumber = 'P-2026-016-2';
 const now = '2026-10-01T08:00:00.000Z';
 
 const jobRow = (id: string, number: string, jobProjectId: string | null) => ({
@@ -71,12 +73,18 @@ const world = await installPageWorld({
       updated_at: now,
     },
   ],
-  jobs: [jobRow(jobId, jobNumber, null), jobRow(childJobId, childJobNumber, projectId)],
+  jobs: [
+    jobRow(jobId, jobNumber, null),
+    jobRow(childJobId, childJobNumber, projectId),
+    jobRow(ownChildJobId, ownChildJobNumber, projectId),
+  ],
   job_assignments: [
     assignment('6b000000-0000-4000-8000-000000000011', jobId),
     assignment('6b000000-0000-4000-8000-000000000012', childJobId),
     // The field worker's own job: the project job's refusal answers the assignment.
     assignment('6b000000-0000-4000-8000-000000000013', jobId, CALLER_ID),
+    // The field worker's own project job: its handover still needs the handover review.
+    assignment('6b000000-0000-4000-8000-000000000014', ownChildJobId, CALLER_ID),
   ],
   work_templates: [
     {
@@ -248,6 +256,25 @@ assert.deepEqual(
 );
 assert.deepEqual(
   await getWorkHandoverWorkspaceByNumber({ targetType: 'project', targetNumber: projectNumber }),
+  { success: false, error: 'work_handover_not_authorized' },
+);
+// The assignment opens the project job, never its handover.
+assert.equal(
+  (await getJobByNumber(ownChildJobNumber)).success,
+  true,
+  'the field worker opens no own project job',
+);
+assert.equal(
+  await refused(() => ProjectJobHandoverPage(params({ projectNumber, jobNumber: ownChildJobNumber }))),
+  'redirect:/auftraege',
+  'employee on the handover of their own project job',
+);
+assert.deepEqual(
+  await getWorkHandoverWorkspaceByNumber({
+    targetType: 'job',
+    targetNumber: ownChildJobNumber,
+    projectNumber,
+  }),
   { success: false, error: 'work_handover_not_authorized' },
 );
 
