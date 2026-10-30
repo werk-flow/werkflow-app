@@ -1,11 +1,11 @@
 Menü öffnen
 Einstellungen
-Kalender
-Zeiterfassung
+Profil
+Konto & Sicherheit
 Aufträge & Projekte
 Aufträge & Projekte
 Steuert, welche Spalten du in der Aufträge-Ansicht innerhalb der aktiven Organisation sehen möchtest.
-Gilt für Haustechnik Krämer GmbH
+Persönliche Einstellungen
 Sichtbare Spalten
 Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle zeigen soll.
 Tabellenspalten

@@ -2,7 +2,7 @@ Menü öffnen
 Einstellungen
 Profil
 Konto & Sicherheit
-Abonnement & Abrechnung
+Aufträge & Projekte
 Profil
 Persönliche Angaben, die appweit als Anzeigename verwendet werden.
 Persönliche Einstellungen
