@@ -734,6 +734,14 @@
             "Direkter Folgeauftrag funktioniert ohne künstliche Anfrage",
             "Eine Anfrage kann ohne Auftrag mit Grund geschlossen werden"
           ]
+        },
+        {
+          "file": "supabase/tests/work_creation_writes.sql",
+          "kind": "sql",
+          "description": "sql:work-creation-writes — a job converted without a date stays open, unparked work listed with the current jobs for managers",
+          "titles": [
+            "an undated converted job is not open, unparked work among the current jobs"
+          ]
         }
       ],
       "clauses": "Umwandlung genau einmal in **Auftrag**; Schließen mit Grund; Direktauftrag ohne Anfrage\nVollständige `@GG-01`-Bodies re-verifiziert; finale Golden-Suite 93/93.",

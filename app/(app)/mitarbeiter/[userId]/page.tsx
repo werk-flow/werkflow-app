@@ -14,7 +14,7 @@ import { PersonnelRecordDetailContent } from '@/components/mitarbeiter/personnel
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
-import { getPersonnelQualificationSummary } from '@/lib/qualifications/actions';
+import { getPersonnelQualificationSummary } from '@/lib/qualifications/workspace-actions';
 import { getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { logError } from '@/lib/logging';
 import MitarbeiterDetailLoading from './loading';

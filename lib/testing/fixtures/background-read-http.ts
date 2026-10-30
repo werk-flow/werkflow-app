@@ -178,8 +178,10 @@ mock.module('@/lib/dispatch/actions', () => ({
   previewDispatchReadiness: seam('dispatch-readiness'),
 }));
 mock.module('@/lib/qualifications/actions', () => ({
-  getJobQualificationDetail: seam('job-qualification-detail'),
   getAssignmentTeamOptions: seam('assignment-team-options'),
+}));
+mock.module('@/lib/qualifications/requirement-actions', () => ({
+  getJobQualificationDetail: seam('job-qualification-detail'),
   getProjectCapabilityRequirements: seam('project-capability-requirements'),
 }));
 mock.module('@/lib/inventory/actions', () => ({

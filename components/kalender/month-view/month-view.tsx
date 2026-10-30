@@ -14,7 +14,7 @@ import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { InteractiveCalendarSession, TimeEntry } from '@/lib/time-tracking/types';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { memberDisplayName, type CalendarMember } from '../members';
 import type { CalendarSurfaceActions } from '../board/types';
 import { useCalendarDrag, useDragSurface } from '../drag-engine/drag-engine';
