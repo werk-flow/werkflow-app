@@ -14,7 +14,7 @@ import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
 import { getChangeRequestsForEntries } from '@/lib/time-tracking/review-actions';
 import { completeCalendarEntryRead } from './entry-read';
 import type { TimeEntry, EntryChangeRequestMap } from '@/lib/time-tracking/types';
-import { getVacationCalendarEntries, type VacationCalendarEntry } from '@/lib/vacation/actions';
+import { getVacationCalendarEntries, type VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 
