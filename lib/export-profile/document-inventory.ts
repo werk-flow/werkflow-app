@@ -1,5 +1,4 @@
 import { readFileSync } from 'node:fs';
-import { extname } from 'node:path';
 
 // Documents and photos: counts, sizes and PDF page counts per top-level
 // folder and type. No content, no text extraction, no names below the
@@ -39,19 +38,22 @@ export class DocumentInventory {
     { files: number; subfolders: Set<string>; deepestLevel: number }
   >();
 
-  /** Counts one file. `below` holds the folder names between the top-level folder and the file. */
+  /**
+   * Counts one file. `extension` is the shown label; `below` holds the folder
+   * names between the top-level folder and the file, used only as counts.
+   */
   add(
-    file: { name: string; path: string; bytes: number },
+    file: { path: string; bytes: number; extension: string; isPdf: boolean },
     kind: 'document' | 'photo',
     folder: string,
     below: readonly string[],
   ): void {
-    const extension = extname(file.name).toLowerCase() || '(none)';
+    const { extension } = file;
     const key = `${folder}\u0000${kind}\u0000${extension}`;
     const group = this.groups.get(key) ?? { folder, kind, extension, files: 0, bytes: 0, pages: null };
     group.files += 1;
     group.bytes += file.bytes;
-    if (extension === '.pdf') group.pages = addPages(group.pages, pdfPageCount(file.path, file.bytes));
+    if (file.isPdf) group.pages = addPages(group.pages, pdfPageCount(file.path, file.bytes));
     this.groups.set(key, group);
     const shape = this.folders.get(folder) ?? { files: 0, subfolders: new Set<string>(), deepestLevel: 0 };
     shape.files += 1;

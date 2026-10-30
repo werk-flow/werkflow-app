@@ -11,7 +11,8 @@ type RelationColumn = {
   maxLength: number | null;
 };
 
-export type TableColumns = { table: string; columns: readonly RelationColumn[] };
+/** `id` tells tables apart; `table` is the shown label, which masking can make equal for two tables. */
+export type TableColumns = { id: number; table: string; columns: readonly RelationColumn[] };
 
 export type Relation = {
   key: { table: string; column: string };
@@ -33,7 +34,7 @@ export function findRelations(tables: readonly TableColumns[]): Relation[] {
     for (const key of keyTable.columns) {
       if (!key.keyLike || key.accumulator.hashes.size < MIN_SHARED) continue;
       for (const otherTable of tables) {
-        if (otherTable.table === keyTable.table) continue;
+        if (otherTable.id === keyTable.id) continue;
         for (const candidate of otherTable.columns) {
           const relation = compare(keyTable.table, key, otherTable.table, candidate);
           if (relation) relations.push(relation);

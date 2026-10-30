@@ -1,5 +1,6 @@
 import { closeSync, lstatSync, openSync, readdirSync, readSync } from 'node:fs';
 import { extname, join } from 'node:path';
+import { maskShape } from './personal-data';
 import { looksLikeText } from './text-decoding';
 
 // Walks the export folder and sorts each file into a category by its
@@ -82,6 +83,28 @@ const BINARY_BY_EXTENSION: Readonly<Record<string, { format: string; toRead: str
   '.tgz': { format: 'gzip archive', toRead: TO_READ.archive },
   '.tar': { format: 'tar archive', toRead: TO_READ.archive },
 };
+
+const KNOWN_EXTENSIONS: ReadonlySet<string> = new Set([
+  ...PHOTO,
+  ...DOCUMENT,
+  ...DELIMITED,
+  ...Object.keys(BINARY_BY_EXTENSION),
+  '.xlsx',
+  '.xlsm',
+  '.xls',
+  '.xml',
+  '.cfg',
+  '.ini',
+  '.log',
+  '.json',
+]);
+
+/** A file's extension as the profile may show it: a known one in clear, any other as a shape. */
+export function extensionLabel(name: string): string {
+  const extension = extname(name).toLowerCase();
+  if (extension === '') return '(none)';
+  return KNOWN_EXTENSIONS.has(extension) ? extension : maskShape(extension, 12);
+}
 
 /** Every regular file below `root`, without system files and symbolic links. */
 export function walkExportFolder(root: string): { files: ExportFile[]; skippedSystemFiles: number } {

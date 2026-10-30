@@ -54,17 +54,16 @@ export function decideOutputFolder(request: OutputRequest): OutputDecision {
     return { ok: false, reason: 'input_missing' };
   const input = canonicalPath(request.input);
   if (enclosingRepository(input) !== null) return { ok: false, reason: 'input_inside_repository' };
-  const base = canonicalPath(
-    request.requestedOutput ?? join(request.home, 'werkflow-export-profiles', request.today),
-  );
-  if (enclosingRepository(base) !== null) return { ok: false, reason: 'output_inside_repository' };
-  if (isSameOrInside(base, input) || isSameOrInside(input, base))
-    return { ok: false, reason: 'output_overlaps_input' };
-  if (isEmptyOrMissing(base)) return { ok: true, folder: base };
-  if (request.requestedOutput !== null) return { ok: false, reason: 'output_not_empty' };
-  for (let attempt = 2; ; attempt += 1) {
-    const candidate = `${base}-${attempt}`;
+  const base = request.requestedOutput ?? join(request.home, 'werkflow-export-profiles', request.today);
+  for (let attempt = 1; ; attempt += 1) {
+    // Each candidate is checked after resolving links: `<date>-2` may be a
+    // link into a repository even when `<date>` is not.
+    const candidate = canonicalPath(attempt === 1 ? base : `${base}-${attempt}`);
+    if (enclosingRepository(candidate) !== null) return { ok: false, reason: 'output_inside_repository' };
+    if (isSameOrInside(candidate, input) || isSameOrInside(input, candidate))
+      return { ok: false, reason: 'output_overlaps_input' };
     if (isEmptyOrMissing(candidate)) return { ok: true, folder: candidate };
+    if (request.requestedOutput !== null) return { ok: false, reason: 'output_not_empty' };
   }
 }
 

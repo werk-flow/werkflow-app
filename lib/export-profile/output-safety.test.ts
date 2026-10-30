@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { decideOutputFolder, selfCheckOutput } from './output-safety';
@@ -59,6 +67,24 @@ describe('output safety: where the profile may go', () => {
     mkdirSync(first.folder, { recursive: true });
     writeFileSync(join(first.folder, 'profile.md'), '# Export profile');
     expect(decide(join(workspace, 'export'), null)).toEqual({ ok: true, folder: `${first.folder}-2` });
+  });
+
+  test('refuses a numbered output folder that links into a Git repository', () => {
+    const home = join(workspace, 'linked-home');
+    const base = join(home, 'werkflow-export-profiles', '2026-11-05');
+    mkdirSync(base, { recursive: true });
+    writeFileSync(join(base, 'profile.md'), '# Export profile');
+    const target = join(workspace, 'repository', 'empty-target');
+    mkdirSync(target);
+    symlinkSync(target, `${base}-2`);
+    expect(
+      decideOutputFolder({
+        input: join(workspace, 'export'),
+        requestedOutput: null,
+        home,
+        today: '2026-11-05',
+      }),
+    ).toEqual({ ok: false, reason: 'output_inside_repository' });
   });
 
   test('refuses an output folder inside this repository or a worktree of it', () => {

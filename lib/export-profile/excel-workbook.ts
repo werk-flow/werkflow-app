@@ -10,7 +10,10 @@ export type Cell = { text: string; known?: ClassifiedValue };
 
 export type WorkbookSheet = { name: string; rows: () => Generator<Cell[]> };
 
-const BUILT_IN_DATE_FORMATS = new Set([14, 15, 16, 17, 18, 19, 20, 21, 22, 45, 46, 47]);
+const BUILT_IN_DATE_FORMATS = new Set([14, 15, 16, 17, 22]);
+const BUILT_IN_TIME_FORMATS = new Set([18, 19, 20, 21, 45, 46, 47]);
+
+type TemporalFormat = 'date' | 'time';
 const PREFIXED = '(?:[A-Za-z_][\\w.-]*:)?';
 
 /** The sheets of an Excel workbook, in workbook order. */
@@ -69,26 +72,36 @@ function textRuns(xml: string): string {
   return text;
 }
 
-/** The style indexes whose number format shows a date. */
-function readDateStyles(xml: string): Set<number> {
-  const customDateFormats = new Set<number>();
+/** The style indexes whose number format shows a calendar date or a time of day or duration. */
+function readDateStyles(xml: string): Map<number, TemporalFormat> {
+  const customFormats = new Map<number, TemporalFormat>();
   for (const match of xml.matchAll(/<numFmt\b([^>]*?)\/?>/g)) {
     const attributes = parseXmlAttributes(match[1] ?? '');
     const code = (attributes.get('formatCode') ?? '').replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
-    if (/[dmy]/i.test(code)) customDateFormats.add(Number(attributes.get('numFmtId')));
+    const kind = /[dy]/i.test(code) ? 'date' : /[hs]/i.test(code) ? 'time' : /m/i.test(code) ? 'date' : null;
+    if (kind) customFormats.set(Number(attributes.get('numFmtId')), kind);
   }
   const cellFormats = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)?.[1] ?? '';
-  const dateStyles = new Set<number>();
+  const styles = new Map<number, TemporalFormat>();
   let index = 0;
   for (const match of cellFormats.matchAll(/<xf\b([^>]*?)(?:\/>|>)/g)) {
     const formatId = Number(parseXmlAttributes(match[1] ?? '').get('numFmtId') ?? 0);
-    if (BUILT_IN_DATE_FORMATS.has(formatId) || customDateFormats.has(formatId)) dateStyles.add(index);
+    const kind = BUILT_IN_DATE_FORMATS.has(formatId)
+      ? 'date'
+      : BUILT_IN_TIME_FORMATS.has(formatId)
+        ? 'time'
+        : customFormats.get(formatId);
+    if (kind) styles.set(index, kind);
     index += 1;
   }
-  return dateStyles;
+  return styles;
 }
 
-type SheetContext = { sharedStrings: readonly string[]; dateStyles: ReadonlySet<number>; epoch: number };
+type SheetContext = {
+  sharedStrings: readonly string[];
+  dateStyles: ReadonlyMap<number, TemporalFormat>;
+  epoch: number;
+};
 
 function* sheetRows(xml: string, context: SheetContext): Generator<Cell[]> {
   const rowPattern = new RegExp(`<${PREFIXED}row\\b[^>]*?(?:/>|>([\\s\\S]*?)</${PREFIXED}row>)`, 'g');
@@ -126,7 +139,9 @@ function cellValue(attributes: ReadonlyMap<string, string>, inner: string, conte
   if (type === 'd') return { text: raw };
   if (type !== 'n' || raw === '') return { text: raw };
   const style = Number(attributes.get('s') ?? -1);
-  if (!context.dateStyles.has(style)) return { text: raw };
+  const format = context.dateStyles.get(style);
+  if (format === undefined) return { text: raw };
+  if (format === 'time') return { text: raw, known: { kind: 'time' } };
   const serial = Number(raw);
   const year = new Date(context.epoch + serial * 86_400_000).getUTCFullYear();
   return { text: raw, known: { kind: Number.isInteger(serial) ? 'date' : 'datetime', year } };

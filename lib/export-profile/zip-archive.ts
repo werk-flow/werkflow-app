@@ -3,10 +3,20 @@ import { inflateRawSync } from 'node:zlib';
 // A minimal ZIP reader for Excel workbooks: the central directory, and stored
 // or deflated entries. ZIP64 and encrypted entries are refused.
 
-export class ExportFormatError extends Error {
-  readonly code: string;
+export type ExportFormatCode =
+  | 'not_a_zip_archive'
+  | 'xlsx_workbook_missing'
+  | 'xml_not_well_formed'
+  | 'zip64_unsupported'
+  | 'zip_directory_damaged'
+  | 'zip_entry_damaged'
+  | 'zip_entry_encrypted'
+  | 'zip_method_unsupported';
 
-  constructor(code: string) {
+export class ExportFormatError extends Error {
+  readonly code: ExportFormatCode;
+
+  constructor(code: ExportFormatCode) {
     super(code);
     this.name = 'ExportFormatError';
     this.code = code;

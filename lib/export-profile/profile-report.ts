@@ -80,8 +80,8 @@ function renderMarkdown(profile: ExportProfile, generatedOn: string): string {
     ),
     '## Unreadable files\n',
     table(
-      ['File', 'Reason'],
-      profile.unreadable.map((file) => [file.file, file.reason]),
+      ['File', 'Reason', 'What to do'],
+      profile.unreadable.map((file) => [file.file, file.reason, file.advice]),
     ),
   ].join('\n');
 }

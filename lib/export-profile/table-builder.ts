@@ -1,12 +1,15 @@
-import { ColumnAccumulator, classifyValue } from './column-statistics';
+import { ColumnAccumulator, classifyValue, type ColumnType } from './column-statistics';
 import type { Cell } from './excel-workbook';
 import { findPersonalDataLike } from './personal-data';
 import type { XmlRecord } from './xml-records';
 
 // Turns rows or named records into column accumulators. A row table decides
 // whether its first row names the columns: it does only when every filled
-// cell reads as a label, not as a number, date, contact detail, name or a
-// value the column holds again. Otherwise the columns are column_1, column_2.
+// cell reads as a short label, not as a number, date, contact detail, name or
+// a value the column holds again, and when at least one filled cell heads a
+// column of numbers, dates or contact details. An all-text first row can be
+// a data row (free-text notes), so it never becomes column names. Otherwise
+// the columns are column_1, column_2.
 
 export type HeaderMode = 'first row' | 'none detected' | 'positional' | 'named fields';
 
@@ -59,20 +62,41 @@ export function buildRowTable(rows: Iterable<readonly Cell[]>, options: RowTable
   return { rows: bodyRows + 1, raggedRows, header: 'none detected', columns };
 }
 
+const HEADER_LABEL_LIMIT = 40;
+const TYPED_COLUMNS: ReadonlySet<ColumnType> = new Set([
+  'integer',
+  'digit_code',
+  'decimal',
+  'date',
+  'datetime',
+  'time',
+  'boolean',
+  'email',
+  'phone',
+  'iban',
+]);
+
 function looksLikeHeader(
   first: readonly Cell[],
   columns: readonly ColumnAccumulator[],
   bodyRows: number,
 ): boolean {
   const filled = first.filter((cell) => cell.text.trim() !== '');
-  if (filled.length === 0 || filled.length < first.length / 2) return false;
-  return first.every((cell, index) => {
+  if (bodyRows === 0 || filled.length === 0 || filled.length < first.length / 2) return false;
+  const labels = first.every((cell, index) => {
     const label = cell.text.trim();
     if (label === '') return true;
-    if (cell.known || classifyValue(label).kind !== 'text') return false;
+    if (label.length > HEADER_LABEL_LIMIT || cell.known || classifyValue(label).kind !== 'text') return false;
     if (findPersonalDataLike(label).length > 0) return false;
-    return bodyRows === 0 || !(columns[index]?.has(label) ?? false);
+    return !(columns[index]?.has(label) ?? false);
   });
+  return (
+    labels &&
+    first.some(
+      (cell, index) =>
+        cell.text.trim() !== '' && TYPED_COLUMNS.has(columns[index]?.profile(bodyRows).type ?? 'text'),
+    )
+  );
 }
 
 function nameColumns(columns: readonly ColumnAccumulator[], header: readonly Cell[]): void {

@@ -31,6 +31,9 @@ export const SENSITIVE_VALUES = [
   'Rechnung 2023-001',
   'Baustelle Hauptstraße 12',
   'Heizungswartung Keller',
+  'Kessel defekt',
+  'Sonderrabatt zugesagt',
+  'zeynep',
 ];
 
 function windows1252(text: string): Uint8Array {
@@ -57,6 +60,13 @@ const HEADERLESS = [
   'Müller;Jürgen;Hauptstraße 12;10115;Berlin;DE89 3704 0044 0532 0130 00',
   'Schmidt;Erika;Lindenallee 3a;01067;Dresden;DE02 1203 0000 0000 2020 51',
   'Weißgerber;Anna;Am Ring 7;20095;Hamburg;DE12 5001 0517 0648 4898 90',
+].join('\n');
+
+// Free text only, without a header row: its first row must not become column names.
+const NOTES = [
+  'Kessel defekt;Sonderrabatt zugesagt',
+  'Thermostat tauschen;Kunde ruft zurück',
+  'Pumpe läuft laut;Termin verschoben',
 ].join('\n');
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -146,6 +156,7 @@ function workbook(): Uint8Array {
     'A-5004',
     'offen',
     'erledigt',
+    'Beginn',
   ];
   const sharedXml = `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${shared.map((text) => `<si><t>${text}</t></si>`).join('')}</sst>`;
   const row = (index: number, cells: string): string => `<row r="${index}">${cells}</row>`;
@@ -154,14 +165,18 @@ function workbook(): Uint8Array {
   const number = (reference: string, value: string, style?: number): string =>
     `<c r="${reference}"${style === undefined ? '' : ` s="${style}"`}><v>${value}</v></c>`;
   const rows = [
-    row(1, [0, 1, 2, 3, 4].map((sharedIndex, column) => text(`${'ABCDE'[column]}1`, sharedIndex)).join('')),
+    row(
+      1,
+      [0, 1, 2, 3, 4, 11].map((sharedIndex, column) => text(`${'ABCDEF'[column]}1`, sharedIndex)).join(''),
+    ),
     row(
       2,
       text('A2', 5) +
         number('B2', '10001') +
         number('C2', '43831', 1) +
         number('D2', '1250.5') +
-        text('E2', 9),
+        text('E2', 9) +
+        number('F2', '0.5', 2),
     ),
     row(
       3,
@@ -169,7 +184,8 @@ function workbook(): Uint8Array {
         number('B3', '10002') +
         number('C3', '44197', 1) +
         number('D3', '89.9') +
-        text('E3', 10),
+        text('E3', 10) +
+        number('F3', '0.3125', 2),
     ),
     row(
       4,
@@ -177,7 +193,8 @@ function workbook(): Uint8Array {
         number('B4', '10001') +
         number('C4', '45292', 1) +
         number('D4', '3200') +
-        text('E4', 10),
+        text('E4', 10) +
+        number('F4', '0.75', 2),
     ),
     row(
       5,
@@ -185,7 +202,8 @@ function workbook(): Uint8Array {
         number('B5', '10005') +
         number('C5', '45658', 1) +
         number('D5', '17.25') +
-        text('E5', 9),
+        text('E5', 9) +
+        number('F5', '0.333', 2),
     ),
   ].join('');
   return zip({
@@ -196,7 +214,7 @@ function workbook(): Uint8Array {
       '<Relationships><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
     'xl/sharedStrings.xml': sharedXml,
     'xl/styles.xml':
-      '<styleSheet><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs></styleSheet>',
+      '<styleSheet><cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/><xf numFmtId="20" applyNumberFormat="1"/></cellXfs></styleSheet>',
     'xl/worksheets/sheet1.xml': `<worksheet><sheetData>${rows}</sheetData></worksheet>`,
   });
 }
@@ -213,6 +231,9 @@ export function writeSyntheticExport(root: string): void {
   write('Kontakte_ohne_Kopf.csv', HEADERLESS);
   write('Auftraege.xlsx', workbook());
   write('Zeiten.xml', XML);
+  write('Notizen.csv', NOTES);
+  write('Kaputt.xml', '<Export><Kunde><Name>x</Kunde>');
+  write('Scans/scan.zeynep', pdf(1));
   write('Artikel/DATANORM.001', windows1252(DATANORM));
   write(
     'Sicherung/sykasoft.bak',

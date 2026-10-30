@@ -50,12 +50,6 @@ export function newRunSalt(): Uint8Array {
   return randomBytes(32);
 }
 
-/** The comparable form of a value: trimmed, leading zeros of a digit string dropped. */
-function normalizeForComparison(value: string): string {
-  const trimmed = value.trim();
-  return /^\d+$/.test(trimmed) ? trimmed.replace(/^0+(?=\d)/, '') : trimmed;
-}
-
 export class ColumnAccumulator {
   name: string;
   readonly hashes = new Set<string>();
@@ -77,10 +71,7 @@ export class ColumnAccumulator {
 
   /** The salted hash of a value, comparable across columns of one run. */
   hashOf(value: string): string {
-    return createHmac('sha256', this.salt)
-      .update(normalizeForComparison(value))
-      .digest('base64')
-      .slice(0, 22);
+    return createHmac('sha256', this.salt).update(value.trim()).digest('base64').slice(0, 22);
   }
 
   /** Records one cell. `known` carries a kind and year a binary format already knows (an Excel date). */

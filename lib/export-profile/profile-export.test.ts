@@ -89,6 +89,12 @@ describe('export profile: tables', () => {
     expect(column(headerless, 'column_6').type).toBe('iban');
   });
 
+  test('a free-text first row without a typed column never becomes column names', () => {
+    const notes = tableNamed('Notizen.csv');
+    expect(notes).toMatchObject({ header: 'none detected', rows: 3 });
+    expect(notes.columns.map((entry) => entry.name)).toEqual(['column_1', 'column_2']);
+  });
+
   test('an Excel sheet reports its rows, its date cells as years and its decimal amounts', () => {
     const orders = tableNamed('Auftraege.xlsx', 'Aufträge');
     expect(orders).toMatchObject({ format: 'excel', header: 'first row', rows: 4 });
@@ -100,6 +106,7 @@ describe('export profile: tables', () => {
     });
     expect(column(orders, 'Betrag').type).toBe('decimal');
     expect(column(orders, 'KdNr')).toMatchObject({ type: 'integer', distinct: 3, unique: false });
+    expect(column(orders, 'Beginn')).toMatchObject({ type: 'time', years: null });
   });
 
   test('an XML record set becomes one table with its attributes and child elements as columns', () => {
@@ -169,20 +176,32 @@ describe('export profile: relations and other files', () => {
     expect(profile.folders).toContainEqual({ folder: 'Dokumente', files: 3, subfolders: 4, deepestLevel: 3 });
   });
 
+  test('an unknown document extension is shown as a shape', () => {
+    expect(profile.documents).toContainEqual(
+      expect.objectContaining({ folder: 'Scans', kind: 'document', extension: '.xxxxxx', files: 1 }),
+    );
+  });
+
+  test('an unreadable file names a fixed reason and what to do, and counts as no table', () => {
+    expect(profile.unreadable).toEqual([
+      { file: 'Kaputt.xml', reason: 'xml_not_well_formed', advice: expect.stringContaining('fresh export') },
+    ]);
+    expect(profile.tables.filter((table) => table.file === 'Kaputt.xml')).toEqual([]);
+  });
+
   test('the wrapper folder, system files and unknown files are accounted for', () => {
     expect(profile.wrapperFolders).toBe(1);
     expect(profile.skippedSystemFiles).toBe(1);
     expect(profile.otherFiles).toEqual([{ extension: '.cfg', files: 1, bytes: expect.any(Number) }]);
-    expect(profile.unreadable).toEqual([]);
     expect(profile.files).toMatchObject({
-      total: 12,
-      tableFiles: 5,
+      total: 15,
+      tableFiles: 6,
       binaries: 1,
-      documents: 3,
+      documents: 4,
       photos: 2,
       other: 1,
     });
-    expect(profile.tables).toHaveLength(7);
+    expect(profile.tables).toHaveLength(8);
   });
 });
 
@@ -205,6 +224,7 @@ describe('export profile: no raw value leaves the profiler', () => {
     const masked = profileExportFolder(exportFolder, { maskLabels: true });
     expect(masked.tables.map((table) => table.file)).toContain('Xxxxxxxx.xxx');
     expect(masked.tables.flatMap((table) => table.columns.map((entry) => entry.name))).toContain('XxXx');
+    expect(masked.relations).toHaveLength(profile.relations.length);
   });
 });
 

@@ -5,13 +5,13 @@ import { datanormTables } from './datanorm';
 import { delimitedRows, detectDelimiter } from './delimited-text';
 import { DocumentInventory, type DocumentGroup, type FolderShape } from './document-inventory';
 import { readWorkbook } from './excel-workbook';
-import { categorize, readHead, walkExportFolder, type ExportFile } from './export-files';
+import { categorize, extensionLabel, readHead, walkExportFolder, type ExportFile } from './export-files';
 import { exportLabel } from './personal-data';
 import { findRelations, type Relation, type TableColumns } from './relations';
 import { buildNamedTables, buildRowTable, type BuiltTable, type HeaderMode } from './table-builder';
 import { decodeText } from './text-decoding';
 import { declaredXmlEncoding, xmlRecords } from './xml-records';
-import { ExportFormatError } from './zip-archive';
+import { ExportFormatError, type ExportFormatCode } from './zip-archive';
 
 // Profiles an export folder into a structure-only description. Every name
 // from the export passes through exportLabel; every value stays in memory.
@@ -49,10 +49,31 @@ export type ExportProfile = {
   documents: DocumentGroup[];
   folders: FolderShape[];
   otherFiles: { extension: string; files: number; bytes: number }[];
-  unreadable: { file: string; reason: string }[];
+  unreadable: UnreadableFile[];
 };
 
+type UnreadableFile = { file: string; reason: string; advice: string };
+
 type ProfileOptions = { maskLabels: boolean };
+
+const RESAVE =
+  'Open it in Excel or LibreOffice Calc, save it again as .xlsx or each sheet as CSV, then run the profiler again.';
+
+/** A fixed instruction per refusal; a parser message never reaches the profile. */
+const UNREADABLE_ADVICE: Record<ExportFormatCode, string> = {
+  not_a_zip_archive: RESAVE,
+  xlsx_workbook_missing: RESAVE,
+  zip_directory_damaged: RESAVE,
+  zip_entry_damaged: RESAVE,
+  zip_method_unsupported: RESAVE,
+  zip64_unsupported:
+    'The workbook is too large for this reader: save each sheet as CSV, then run the profiler again.',
+  zip_entry_encrypted:
+    'The workbook is password-protected: remove the password in Excel, save it as .xlsx, then run the profiler again.',
+  xml_not_well_formed: 'The XML file is damaged or incomplete: ask Willert for a fresh export of it.',
+};
+const UNEXPECTED_ADVICE =
+  'Check that the file opens on this Mac and that you may read it, then run the profiler again.';
 
 type Collected = { profile: TableProfile; built: BuiltTable };
 
@@ -63,7 +84,7 @@ type Run = {
   binaries: BinaryFileProfile[];
   inventory: DocumentInventory;
   other: Map<string, { files: number; bytes: number }>;
-  unreadable: { file: string; reason: string }[];
+  unreadable: UnreadableFile[];
   counts: { tableFiles: number; binaries: number; documents: number; photos: number; other: number };
 };
 
@@ -87,7 +108,7 @@ export function profileExportFolder(root: string, options: ProfileOptions): Expo
     wrapperFolders,
     skippedSystemFiles,
     tables: run.tables.map((table) => table.profile),
-    relations: findRelations(run.tables.map(relationColumns)),
+    relations: findRelations(run.tables.map((table, index) => relationColumns(table, index))),
     binaries: run.binaries,
     documents: run.inventory.documentGroups(),
     folders: run.inventory.folderShapes(),
@@ -143,10 +164,11 @@ function profileFile(run: Run, file: ExportFile, segments: readonly string[]): v
         return addOther(run, file, name);
     }
   } catch (error) {
-    run.unreadable.push({
-      file: label,
-      reason: error instanceof ExportFormatError ? error.code : `${errorName(error)} while reading`,
-    });
+    run.unreadable.push(
+      error instanceof ExportFormatError
+        ? { file: label, reason: error.code, advice: UNREADABLE_ADVICE[error.code] }
+        : { file: label, reason: `${errorName(error)} while reading`, advice: UNEXPECTED_ADVICE },
+    );
   }
 }
 
@@ -165,12 +187,19 @@ function countDocument(
   run.counts[kind === 'document' ? 'documents' : 'photos'] += 1;
   const folder = segments.length > 1 ? exportLabel(segments[0] ?? '', run.options.maskLabels) : '(top level)';
   const name = segments.at(-1) ?? '';
-  run.inventory.add({ name, path: file.path, bytes: file.bytes }, kind, folder, segments.slice(1, -1));
+  const extension = extensionLabel(name);
+  const isPdf = extname(name).toLowerCase() === '.pdf';
+  run.inventory.add(
+    { path: file.path, bytes: file.bytes, extension, isPdf },
+    kind,
+    folder,
+    segments.slice(1, -1),
+  );
 }
 
 function addOther(run: Run, file: ExportFile, name: string): void {
   run.counts.other += 1;
-  const extension = exportLabel(extname(name).toLowerCase() || '(none)', run.options.maskLabels);
+  const extension = extensionLabel(name);
   const group = run.other.get(extension) ?? { files: 0, bytes: 0 };
   run.other.set(extension, { files: group.files + 1, bytes: group.bytes + file.bytes });
 }
@@ -214,7 +243,6 @@ function profileDelimited(run: Run, file: ExportFile, label: string, segments: r
 }
 
 function profileWorkbook(run: Run, file: ExportFile, label: string): void {
-  run.counts.tableFiles += 1;
   for (const sheet of readWorkbook(readFileSync(file.path))) {
     const built = buildRowTable(sheet.rows(), { salt: run.salt, detectHeader: true });
     const table = exportLabel(sheet.name, run.options.maskLabels);
@@ -224,16 +252,17 @@ function profileWorkbook(run: Run, file: ExportFile, label: string): void {
       built,
     );
   }
+  run.counts.tableFiles += 1;
 }
 
 function profileXml(run: Run, file: ExportFile, label: string): void {
-  run.counts.tableFiles += 1;
   const bytes = readFileSync(file.path);
   const declared = declaredXmlEncoding(new TextDecoder('latin1').decode(bytes.subarray(0, 200)));
   const latin = declared !== null && /^(?:iso-8859-1|iso-8859-15|latin1|windows-1252|cp1252)$/.test(declared);
   const decoded = latin
     ? { encoding: 'windows-1252', text: new TextDecoder('windows-1252').decode(bytes) }
     : decodeText(bytes);
+  // Every record is read before the first table is added, so a damaged file adds nothing.
   for (const [path, built] of buildNamedTables(xmlRecords(decoded.text), run.salt)) {
     const table = path
       .split('/')
@@ -245,6 +274,7 @@ function profileXml(run: Run, file: ExportFile, label: string): void {
       built,
     );
   }
+  run.counts.tableFiles += 1;
 }
 
 function profileDatanorm(run: Run, file: ExportFile, label: string): void {
@@ -266,8 +296,9 @@ function profileDatanorm(run: Run, file: ExportFile, label: string): void {
   }
 }
 
-function relationColumns({ profile, built }: Collected): TableColumns {
+function relationColumns({ profile, built }: Collected, id: number): TableColumns {
   return {
+    id,
     table: profile.table === null ? profile.file : `${profile.file} › ${profile.table}`,
     columns: built.columns.map((accumulator, index) => {
       const column = profile.columns[index];
