@@ -211,16 +211,24 @@ function DeletionConfirmation({
             disabled={isLoading}
           />
         </Field>
-        <ErrorText>{error}</ErrorText>
       </AlertDialogBody>
-      <DeletionActions isLoading={isLoading} onConfirm={() => void handleDelete()} />
+      <DeletionActions error={error} isLoading={isLoading} onConfirm={() => void handleDelete()} />
     </>
   );
 }
 
-function DeletionActions({ isLoading, onConfirm }: { isLoading: boolean; onConfirm: () => void }) {
+function DeletionActions({
+  error,
+  isLoading,
+  onConfirm,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  onConfirm: () => void;
+}) {
   return (
-    <AlertDialogFooter>
+    // A failure shows beside the actions, not at the end of the scrolling body.
+    <AlertDialogFooter error={error}>
       <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
       <AlertDialogAction
         // Keep the dialog open until the server confirms; a failure must
