@@ -15,23 +15,11 @@ Profil
 Name und Profilbild
 Konto & Sicherheit
 E-Mail und Passwort
-Abonnement & Abrechnung
-Plan und Abrechnung
-Organisation
-Dashboard
-Startansicht und Widgets
-Organisation
-Allgemeine Organisationsdaten
-Kalender
-Kalenderansichten und Regeln
-Zeiterfassung
-Arbeitszeiten und Freigaben
 Aufträge & Projekte
 Persönliche Tabellenansicht
+Organisation
 Mitarbeiter
 Freigaben und Vertretungen
-Kunden
-Kundenverwaltung und Defaults
 Profil
 Persönliche Angaben, die appweit als Anzeigename verwendet werden.
 Persönliche Einstellungen

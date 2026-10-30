@@ -7,7 +7,7 @@ import { SlidersHorizontal } from 'lucide-react';
 import { SearchInput } from '@/components/ui/search-input';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { EMPTY_FILTER_STATE, countActiveFilters, type FilterState } from '@/lib/jobs/types';
+import { EMPTY_FILTER_STATE, countActiveFilters, type FilterState } from '@/lib/jobs/unified-list';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { FilterBarActiveChips } from './filter-bar-active-chips';
 import { FilterBarFields } from './filter-bar-fields';

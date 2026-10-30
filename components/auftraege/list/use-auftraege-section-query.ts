@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 
 import type { useListNavigation } from '@/hooks/use-list-navigation';
 import type { JobListPagination, JobListSection } from '@/lib/jobs/list-page';
-import { EMPTY_FILTER_STATE, type FilterState, type SortColumn } from '@/lib/jobs/types';
+import { EMPTY_FILTER_STATE, type FilterState, type SortColumn } from '@/lib/jobs/unified-list';
 
 type AuftraegeSectionQueryOptions = {
   section: JobListSection;

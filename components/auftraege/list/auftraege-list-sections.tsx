@@ -14,7 +14,7 @@ import {
   matchesSearch,
   sortUnifiedEntries,
   type UnifiedListEntry,
-} from '@/lib/jobs/types';
+} from '@/lib/jobs/unified-list';
 import { cn } from '@/lib/utils';
 import { applyDropdownFilters } from '@/lib/jobs/dropdown-filters';
 import type { AuftraegeActiveStatusFilter } from './auftraege-list-filters';
