@@ -69,14 +69,14 @@ const outcomes = await Promise.all([
   plan.linted.length
     ? step('lint', [bin('eslint'), '--max-warnings', '0', '--no-warn-ignored', ...plan.linted])
     : null,
-  // The build info under node_modules/.cache makes a repeat typecheck re-read only what changed.
+  // Cold on purpose: TypeScript 7.0.2's incremental build info keeps stale diagnostics after a JSON
+  // module or a lib/target change (microsoft/TypeScript#64025, #64552). A cold run takes about 10 s.
   step('typecheck', [
     'node',
     resolve(repositoryRoot, 'node_modules/typescript7/bin/tsc'),
     '--noEmit',
     '--incremental',
-    '--tsBuildInfoFile',
-    resolve(repositoryRoot, 'node_modules/.cache/werkflow/check-changed.tsbuildinfo'),
+    'false',
   ]),
   step('unused', [bin('knip'), '--no-progress', '--cache']),
   step('migration order', [process.execPath, 'scripts/check-migration-order.ts']),
