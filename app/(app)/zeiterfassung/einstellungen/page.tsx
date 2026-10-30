@@ -82,11 +82,11 @@ function TimeAccountSettingsContent({
               </span>
             </div>
           ))}
-          <StarterTimePolicyForm today={today} />
+          <StarterTimePolicyForm startDate={settings.suggestedStartDate} />
         </CardContent>
       </Card>
       <EmployeeTimePolicyAssignmentCard settings={settings} today={today} />
-      <MissingTimeAccountsCard settings={settings} today={today} />
+      <MissingTimeAccountsCard settings={settings} />
       <TimeAccountAdjustmentCard settings={settings} today={today}>
         Korrekturen, Verfall und Auszahlung werden beantragt und erst nach einer getrennten Freigabe in den
         Saldo übernommen.
