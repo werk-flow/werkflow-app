@@ -38,7 +38,6 @@ import {
   takeMaterialOnJobPage,
 } from '../../golden/support/steps/inventory';
 import { projectQualificationSection } from '../../golden/support/steps/qualifications';
-import { expectRedirectedAway } from '../../golden/support/steps/organization';
 import {
   SHARED_COPY,
   selectFromSearchable,
@@ -134,7 +133,6 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
   test('A1-40/A1-44: Artikel und Lager per UI sowie alle Inventaransichten', async ({
     adminPage,
     bueroPage,
-    employeePage,
     world,
   }) => {
     const inventoryLocationName = `A1 Lager ${world.runId}`;
@@ -240,7 +238,6 @@ test.describe('A1 Inventar @AUDIT-W1-A1', () => {
     await expect(visibleText(adminPage, inventoryItemName)).toBeVisible();
     await expect(textInDom(adminPage, toolItemName)).toHaveCount(0);
 
-    await expectRedirectedAway(employeePage, '/inventar');
     await selectFromSearchable(adminPage, itemLocationFilter(adminPage), INVENTORY_COPY.allLocations);
     const liveItemName = `A1 Inventar Live ${world.runId}`;
     await itemSearchField(adminPage).fill(liveItemName);

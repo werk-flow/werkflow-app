@@ -20,7 +20,7 @@ import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboar
 import { AttentionCountProvider, useAttentionCounts } from '@/components/realtime/attention-count-provider';
 import type { AttentionCounts } from '@/lib/attention/types';
 import { OrgSwitchOverlay } from './org-switch-overlay';
-import { isNavItemActive, navItems } from './sidebar-nav-items';
+import { isNavItemActive, navItemsFor } from './sidebar-nav-items';
 
 const OrganizationSwitcher = dynamic(
   () => import('@/components/organization/organization-switcher').then((mod) => mod.OrganizationSwitcher),
@@ -104,9 +104,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
   const { activeOrg } = useOrganization();
   const { actionableCount, approvalsCount, unreadNotificationCount } = useAttentionCounts();
 
-  const isAdminOrManager = activeOrg?.role === 'admin' || activeOrg?.role === 'buero';
-
-  const visibleNavItems = navItems.filter((item) => !item.managerOrAbove || isAdminOrManager);
+  const visibleNavItems = navItemsFor(activeOrg?.role);
 
   const activePath = pathname;
 
