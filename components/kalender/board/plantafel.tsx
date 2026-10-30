@@ -75,8 +75,6 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
     board,
     jobs,
     entries,
-    vacation,
-    sickness,
     holidays,
     mutations,
     parkingContexts,
@@ -159,6 +157,8 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
         columns={columns}
         rowModels={rowModels}
         jobsByRow={jobsByRow}
+        vacation={props.vacation}
+        sickness={props.sickness}
         dispatch={dispatch}
         materialDemandJobIds={materialDemandJobIds}
         actions={actions}
@@ -212,8 +212,8 @@ export function Plantafel(props: PlantafelProps): React.JSX.Element {
                           rowIndex={rowIndex}
                           columns={columns}
                           jobs={jobsByRow.get(model.key) ?? []}
-                          vacation={vacation}
-                          sickness={sickness}
+                          vacation={props.vacation}
+                          sickness={props.sickness}
                           days={days}
                           planned={planned}
                           actual={actual}
