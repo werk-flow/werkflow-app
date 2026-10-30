@@ -38,6 +38,7 @@ Every role clocks in and out, records work, travel, break, standby, call-out and
 
 - **Failed reads.** A failed read on the Zeiterfassung and Perioden pages shows the failure with a retry, never an empty list or a hidden tab.
 - **Access suspension.** Suspending a member removes all their access and deletes no time record, session, statement or closed period.
+- **Organization deletion.** Recorded time or a closed period blocks deleting the organization ([employee management](employee-management.md#current-product-baseline)).
 - **Connected views.** Calendar time blocks, job and project time views and the field work pack show the same accepted time. The work pack uses the global session and has no job-local timer. Moving a plan never creates or rewrites actual time. An office handover may include a customer-safe time summary. An active clock blocks the handover, and handover review never edits or approves time.
 
 ### Current limits

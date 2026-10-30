@@ -71,6 +71,11 @@ jobs:
     name: Full run
     needs: candidate
     if: needs.candidate.outputs.verified != 'true'
+    # A called workflow gets no permission its caller lacks: ci.yml's Unit job asks for pull-requests.
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     uses: ./.github/workflows/ci.yml
     with:
       full: Release ${{ needs.candidate.outputs.sha }}

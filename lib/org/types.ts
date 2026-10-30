@@ -27,3 +27,22 @@ export type PendingJoinRequest = {
   email: string | null;
   requestedAt: string;
 };
+
+/** What deleting an organization removes, and whether its time records forbid the deletion. */
+export type OrganizationDeletionScope = {
+  members: number;
+  openInvites: number;
+  clients: number;
+  projects: number;
+  jobs: number;
+  employeeRecords: number;
+  documents: number;
+  timeTrackedPeople: number;
+  closedPeriods: number;
+  payrollExports: number;
+  /**
+   * Recorded working time or a closed period falls under retention duties, so
+   * the organization is not deleted (owner decision, werk-flow/werkflow-planning#85).
+   */
+  retainsTimeRecords: boolean;
+};
