@@ -9,8 +9,10 @@ import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { readJobAssignmentOfUser } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { formatSiteRowAddress } from '@/lib/clients/types';
+import type { Tables } from '@/lib/supabase/database.types';
 import { toJson } from '@/lib/supabase/json';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import {
@@ -35,10 +37,15 @@ import type {
   ServiceCaseMutationResult,
   ServiceCaseRelation,
   ServiceCaseRelationInput,
+  ServiceCaseRow,
   ServiceCaseUpdateInput,
 } from './types';
 import { logError } from '@/lib/logging';
-import { requireServiceManager, type ServiceAdminClient as AdminClient } from './manager-context';
+import {
+  requireServiceManager,
+  type ServiceAdminClient as AdminClient,
+  type ServiceManagerContext,
+} from './manager-context';
 
 function serviceCaseFailureCode(error: { message?: string } | null, fallback: string): string {
   const known = [
@@ -67,12 +74,8 @@ function serviceCaseFailureCode(error: { message?: string } | null, fallback: st
   return known.find((value) => error?.message?.includes(value)) ?? fallback;
 }
 
-/** One customer's sites, contacts and active equipment: the choices of the case form. */
-async function loadClientOption(
-  admin: AdminClient,
-  organizationId: string,
-  clientId: string,
-): Promise<ServiceCaseClientOption | null> {
+/** The customer row, its sites, contacts and active equipment; a failed read throws after logging. */
+async function readClientOptionRows(admin: AdminClient, organizationId: string, clientId: string) {
   const [clientsResult, sitesResult, contactsResult, equipmentResult] = await Promise.all([
     readCompleteRows(
       (from, to) =>
@@ -136,27 +139,47 @@ async function loadClientOption(
     });
     throw new Error('service_case_client_options_failed');
   }
-  const sitesByClient = new Map<string, NonNullable<typeof sitesResult.data>[number][]>();
-  for (const site of sitesResult.data ?? []) {
+  return {
+    clients: clientsResult.data,
+    sites: sitesResult.data,
+    contacts: contactsResult.data,
+    equipment: equipmentResult.data,
+  };
+}
+
+type ClientOptionRows = Awaited<ReturnType<typeof readClientOptionRows>>;
+
+/** One customer's sites, contacts and active equipment: the choices of the case form. */
+async function loadClientOption(
+  admin: AdminClient,
+  organizationId: string,
+  clientId: string,
+): Promise<ServiceCaseClientOption | null> {
+  return toClientOption(await readClientOptionRows(admin, organizationId, clientId));
+}
+
+function toClientOption(rows: ClientOptionRows): ServiceCaseClientOption | null {
+  const sitesByClient = new Map<string, ClientOptionRows['sites']>();
+  for (const site of rows.sites ?? []) {
     const sites = sitesByClient.get(site.client_id) ?? [];
     sites.push(site);
     sitesByClient.set(site.client_id, sites);
   }
-  const equipmentBySite = new Map<string, NonNullable<typeof equipmentResult.data>[number][]>();
-  for (const equipment of (equipmentResult.data ?? []).toSorted((left, right) =>
+  const equipmentBySite = new Map<string, ClientOptionRows['equipment']>();
+  for (const equipment of (rows.equipment ?? []).toSorted((left, right) =>
     compareRecordNumbers(left.equipment_number, right.equipment_number),
   )) {
     const items = equipmentBySite.get(equipment.site_id) ?? [];
     items.push(equipment);
     equipmentBySite.set(equipment.site_id, items);
   }
-  const contactsByClient = new Map<string, NonNullable<typeof contactsResult.data>[number][]>();
-  for (const contact of contactsResult.data ?? []) {
+  const contactsByClient = new Map<string, ClientOptionRows['contacts']>();
+  for (const contact of rows.contacts ?? []) {
     const contacts = contactsByClient.get(contact.client_id) ?? [];
     contacts.push(contact);
     contactsByClient.set(contact.client_id, contacts);
   }
-  const [client] = (clientsResult.data ?? []).map((client) => ({
+  const [client] = (rows.clients ?? []).map((client) => ({
     id: client.id,
     name: client.name,
     sites: (sitesByClient.get(client.id) ?? []).map((site) => ({
@@ -414,10 +437,73 @@ async function loadFollowUpOwnerOptions(
           [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
           profile?.email ||
           'Unbekannt',
-        role: member.role as 'admin' | 'buero',
+        // The read filters on these two roles.
+        role: constrainedValue(['admin', 'buero'], member.role, 'organization_members.role'),
       };
     })
     .sort((left, right) => left.name.localeCompare(right.name, 'de'));
+}
+
+/** Every read of one case detail beside its events' actors, in parallel; a failed helper read throws. */
+function readServiceCaseDetailParts(context: ServiceManagerContext, row: ServiceCaseRow) {
+  return Promise.all([
+    hydrateListItems(context.admin, context.organizationId, [row]),
+    loadClientOption(context.admin, context.organizationId, row.client_id),
+    readCompleteRows(
+      (from, to) =>
+        context.admin
+          .from('service_case_events')
+          .select('*')
+          .eq('organization_id', context.organizationId)
+          .eq('service_case_id', row.id)
+          .order('recorded_at', { ascending: false })
+          .order('id')
+          .range(from, to),
+      LIST_ROW_CAP,
+    ),
+    loadDetailRelations(context.admin, context.organizationId, row.id),
+    loadDetailEvidence(context.admin, context.organizationId, row.id),
+    loadDetailDocuments(context.admin, context.organizationId, row.id),
+    row.contact_id
+      ? context.admin
+          .from('client_contacts')
+          .select('name')
+          .eq('id', row.contact_id)
+          .eq('organization_id', context.organizationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    loadFollowUpOwnerOptions(context.admin, context.organizationId),
+  ]);
+}
+
+/** The case's events with their actors named; a failed actor read throws. */
+async function loadServiceCaseEvents(
+  admin: AdminClient,
+  eventRows: Tables<'service_case_events'>[],
+): Promise<ServiceCaseEvent[]> {
+  const actorIds = [...new Set(eventRows.map((event) => event.actor_id))];
+  const actorsResult = await readInBatches(actorIds, (batch) =>
+    admin
+      .from('profiles')
+      .select('id, first_name, last_name, email')
+      .in('id', [...batch]),
+  );
+  if (actorsResult.error) throw new Error('service_case_actors_failed');
+  const actorNames = new Map(
+    actorsResult.data.map((actor) => [
+      actor.id,
+      [actor.first_name, actor.last_name].filter(Boolean).join(' ') || actor.email || 'Unbekannt',
+    ]),
+  );
+  return eventRows.map((event) => ({
+    id: event.id,
+    eventType: event.event_type,
+    actorName: actorNames.get(event.actor_id) ?? 'Unbekannt',
+    reason: event.reason,
+    beforeSnapshot: event.before_snapshot,
+    afterSnapshot: event.after_snapshot,
+    recordedAt: event.recorded_at,
+  }));
 }
 
 export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promise<ServiceCaseDetailResult> {
@@ -440,34 +526,7 @@ export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promi
 
   try {
     const [listItems, client, eventsResult, relations, evidence, documents, contactResult, followUpOwners] =
-      await Promise.all([
-        hydrateListItems(context.admin, context.organizationId, [row]),
-        loadClientOption(context.admin, context.organizationId, row.client_id),
-        readCompleteRows(
-          (from, to) =>
-            context.admin
-              .from('service_case_events')
-              .select('*')
-              .eq('organization_id', context.organizationId)
-              .eq('service_case_id', row.id)
-              .order('recorded_at', { ascending: false })
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-        loadDetailRelations(context.admin, context.organizationId, row.id),
-        loadDetailEvidence(context.admin, context.organizationId, row.id),
-        loadDetailDocuments(context.admin, context.organizationId, row.id),
-        row.contact_id
-          ? context.admin
-              .from('client_contacts')
-              .select('name')
-              .eq('id', row.contact_id)
-              .eq('organization_id', context.organizationId)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-        loadFollowUpOwnerOptions(context.admin, context.organizationId),
-      ]);
+      await readServiceCaseDetailParts(context, row);
     if (!listItems[0] || eventsResult.error || contactResult.error) {
       logReadFailure('getServiceCaseDetailByNumber: detail read failed', {
         hydrated: Boolean(listItems[0]),
@@ -476,29 +535,7 @@ export async function getServiceCaseDetailByNumber(rawCaseNumber: string): Promi
       });
       return { success: false, error: 'service_case_load_failed' };
     }
-    const actorIds = [...new Set(eventsResult.data.map((event) => event.actor_id))];
-    const actorsResult = await readInBatches(actorIds, (batch) =>
-      context.admin
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .in('id', [...batch]),
-    );
-    if (actorsResult.error) throw new Error('service_case_actors_failed');
-    const actorNames = new Map(
-      actorsResult.data.map((actor) => [
-        actor.id,
-        [actor.first_name, actor.last_name].filter(Boolean).join(' ') || actor.email || 'Unbekannt',
-      ]),
-    );
-    const events: ServiceCaseEvent[] = eventsResult.data.map((event) => ({
-      id: event.id,
-      eventType: event.event_type,
-      actorName: actorNames.get(event.actor_id) ?? 'Unbekannt',
-      reason: event.reason,
-      beforeSnapshot: event.before_snapshot,
-      afterSnapshot: event.after_snapshot,
-      recordedAt: event.recorded_at,
-    }));
+    const events = await loadServiceCaseEvents(context.admin, eventsResult.data);
     const contactName = contactResult.data?.name ?? null;
     const serviceCase: ServiceCaseDetail = {
       ...listItems[0],

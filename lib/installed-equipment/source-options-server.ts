@@ -128,14 +128,11 @@ async function readWorkLabel(
   return data ? `Projekt ${data.project_number ?? data.name}` : null;
 }
 
-async function readWorkSources(
+/** The artifact and handover package ids of one job or project; null after logging a failed read. */
+async function readWorkRecordIds(
   context: ServiceManagerContext,
-  equipment: EquipmentScope,
   work: SourceWork,
-): Promise<SourceOptionsResult> {
-  const workLabel = await readWorkLabel(context, equipment, work);
-  if (workLabel === 'failed') return LOAD_FAILED;
-  if (workLabel === null) return { success: false, error: 'installed_equipment_source_target_invalid' };
+): Promise<{ artifactIds: string[]; packageIds: string[] } | null> {
   const column = work.type === 'job' ? 'job_id' : 'project_id';
   const [artifactsResult, packagesResult] = await Promise.all([
     readCompleteRows(
@@ -163,38 +160,45 @@ async function readWorkSources(
   ]);
   if (artifactsResult.error || packagesResult.error) {
     logReadErrors('getEquipmentSourceOptions: work read failed', artifactsResult.error, packagesResult.error);
-    return LOAD_FAILED;
+    return null;
   }
+  return {
+    artifactIds: artifactsResult.data.map((artifact) => artifact.id),
+    packageIds: packagesResult.data.map((item) => item.id),
+  };
+}
+
+/** The Arbeitsnachweis revisions and handover releases of the given records; null after logging a failed read. */
+async function readWorkVersions(
+  context: ServiceManagerContext,
+  { artifactIds, packageIds }: { artifactIds: string[]; packageIds: string[] },
+) {
   const [revisionsResult, releasesResult] = await Promise.all([
-    readInBatches(
-      artifactsResult.data.map((artifact) => artifact.id),
-      (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            context.admin
-              .from('work_artifact_revisions')
-              .select('id, revision_number, title')
-              .eq('organization_id', context.organizationId)
-              .in('artifact_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
+    readInBatches(artifactIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('work_artifact_revisions')
+            .select('id, revision_number, title')
+            .eq('organization_id', context.organizationId)
+            .in('artifact_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ),
-    readInBatches(
-      packagesResult.data.map((item) => item.id),
-      (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            context.admin
-              .from('work_handover_releases')
-              .select('id, release_number')
-              .eq('organization_id', context.organizationId)
-              .in('package_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
+    readInBatches(packageIds, (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          context.admin
+            .from('work_handover_releases')
+            .select('id, release_number')
+            .eq('organization_id', context.organizationId)
+            .in('package_id', [...batch])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
     ),
   ]);
   if (revisionsResult.error || releasesResult.error) {
@@ -203,19 +207,34 @@ async function readWorkSources(
       revisionsResult.error,
       releasesResult.error,
     );
-    return LOAD_FAILED;
+    return null;
   }
+  return { revisions: revisionsResult.data, releases: releasesResult.data };
+}
+
+async function readWorkSources(
+  context: ServiceManagerContext,
+  equipment: EquipmentScope,
+  work: SourceWork,
+): Promise<SourceOptionsResult> {
+  const workLabel = await readWorkLabel(context, equipment, work);
+  if (workLabel === 'failed') return LOAD_FAILED;
+  if (workLabel === null) return { success: false, error: 'installed_equipment_source_target_invalid' };
+  const recordIds = await readWorkRecordIds(context, work);
+  if (!recordIds) return LOAD_FAILED;
+  const versions = await readWorkVersions(context, recordIds);
+  if (!versions) return LOAD_FAILED;
   return {
     success: true,
     options: [
-      ...revisionsResult.data.map((revision) => ({
+      ...versions.revisions.map((revision) => ({
         value: `artifact_revision:${revision.id}`,
         targetType: 'artifact_revision' as const,
         targetId: revision.id,
         label: `${revision.title}, Revision ${revision.revision_number}`,
         description: 'Exakte Arbeitsnachweis-Revision',
       })),
-      ...releasesResult.data.map((release) => ({
+      ...versions.releases.map((release) => ({
         value: `handover_release:${release.id}`,
         targetType: 'handover_release' as const,
         targetId: release.id,
