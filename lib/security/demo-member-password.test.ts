@@ -11,7 +11,8 @@ test('each seeder run generates its own demo member password', () => {
   expect(resolveDemoMemberPassword('dev', undefined)).not.toBe(first);
 });
 
-test('a chosen demo member password works on DEV and is refused for PROD', () => {
+test('a chosen demo member password works locally and on DEV and is refused for PROD', () => {
+  expect(resolveDemoMemberPassword('local', 'owner-chosen-password')).toBe('owner-chosen-password');
   expect(resolveDemoMemberPassword('dev', 'owner-chosen-password')).toBe('owner-chosen-password');
   expect(() => resolveDemoMemberPassword('prod', 'owner-chosen-password')).toThrow(/generated password/);
 });

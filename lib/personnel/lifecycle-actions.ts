@@ -1,23 +1,18 @@
 'use server';
 
+import { randomUUID } from 'node:crypto';
 import { loggedRead } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
-import { revalidatePath } from 'next/cache';
-import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { isManagerRole } from '@/lib/roles';
-
-import { getAuthenticatedUser } from '@/lib/data/cached';
 import type { ActionFailure } from '@/lib/action-result';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { resolveSelfServiceContext, resolveSelfServiceContextFor } from '@/lib/org/self-service-context';
+import { resolveSelfServiceContext } from '@/lib/org/self-service-context';
 import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { getSupabaseSecretKey } from '@/lib/env/server';
 import type { Database, Json } from '@/lib/supabase/database.types';
-import { createSignedDownloadUrl, createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
+import { createSignedUploadUrl, discardStorageObjects } from '@/lib/storage/r2';
 import { acceptPersonnelUpload, discardPersonnelUpload, readPersonnelUploadOwner } from './upload-storage';
 import { DOCUMENT_MAX_FILE_SIZE_BYTES, DOCUMENT_STORAGE_BUCKET } from '@/lib/documents/types';
 import { buildDocumentStoragePath } from '@/lib/documents/storage-path';
@@ -27,26 +22,36 @@ import {
   acknowledgeRequirementInputSchema,
   createOnboardingPlanInputSchema,
   employmentTransitionInputSchema,
-  getEffectiveAccessState,
   personnelDocumentUploadInputSchema,
   personnelDocumentUploadCleanupInputSchema,
   personnelDocumentUploadTicketInputSchema,
   personnelDocumentReleaseInputSchema,
-  publishTemplateInputSchema,
-  saveRequirementInputSchema,
-  toTemplateRpcItems,
-  type PersonnelAccessState,
   type PersonnelDocumentAccessClass,
   type PersonnelDocumentEvidenceState,
-  type PersonnelEmploymentState,
-  type PersonnelRequirementState,
-  type PersonnelRequirementType,
 } from './lifecycle';
-
-// A lifecycle success nests its payload under `data`; a rejected transition may return the blocking inventory there.
-type LifecycleResult<T = undefined> =
-  | ({ success: true } & (T extends undefined ? object : { data: T }))
-  | (ActionFailure & { data?: T });
+import {
+  hashRequest,
+  lifecycleFailureCode,
+  revalidatePersonnel,
+  type LifecycleResult,
+} from './lifecycle-results';
+import {
+  documentFileSchema,
+  toAccessView,
+  toActiveJobOptions,
+  toEmploymentView,
+  toManagerDocuments,
+  toPlanViews,
+  toRequirement,
+  toTemplateSummaries,
+  type PersonnelLifecycleAccess,
+  type PersonnelLifecycleEmployment,
+  type PersonnelOnboardingPlanView,
+  type PersonnelLifecycleRequirement,
+  type PersonnelOnboardingTemplateSummary,
+  type ProtectedPersonnelDocument,
+} from './lifecycle-rows';
+import { createUploadCleanupToken, isValidUploadCleanupToken } from './upload-cleanup-token';
 
 type TransitionInventory = {
   activeJobs: Array<{ id: string; label: string }>;
@@ -57,155 +62,16 @@ type EmploymentTransitionResult =
   | { success: true; data: { lifecycleId: string } }
   | (ActionFailure & { data?: TransitionInventory });
 
-type RequirementRow = Database['public']['Tables']['personnel_onboarding_requirements']['Row'];
-
-// The admin client is untyped, so embedded relations are parsed where they cross in.
-const documentFileSchema = z.object({
-  id: z.string(),
-  display_name: z.string(),
-  current_version_number: z.number(),
-  deleted_at: z.string().nullable(),
-});
-const signedDocumentFileSchema = documentFileSchema.extend({
-  organization_id: z.string(),
-  storage_path: z.string(),
-});
-const templateVersionsSchema = z.array(z.object({ id: z.string(), version_number: z.number() }));
-const assignedJobSchema = z.object({ id: z.string(), title: z.string(), job_number: z.string().nullable() });
-
-function toActiveJobOptions(
-  assignments: ReadonlyArray<{ jobs: unknown }>,
-): Array<{ id: string; label: string }> {
-  return assignments.flatMap((assignment) => {
-    const job = assignedJobSchema.safeParse(assignment.jobs);
-    if (!job.success) return [];
-    const { id, title, job_number: jobNumber } = job.data;
-    return [{ id, label: jobNumber ? `${jobNumber} · ${title}` : title }];
-  });
-}
-
 const ACTIVE_JOB_STATUSES = ['nicht_bearbeitet', 'in_bearbeitung', 'geparkt'] satisfies Array<
   Database['public']['Enums']['job_status']
 >;
-// Covers the 25-minute browser upload timeout plus finalize and cleanup retries.
-const UPLOAD_CLEANUP_TOKEN_TTL_MS = 45 * 60 * 1000;
-
-type UploadCleanupTokenPayload = {
-  actorId: string;
-  organizationId: string;
-  employeeRecordId: string;
-  documentId: string;
-  fileName: string;
-  accessClass: PersonnelDocumentAccessClass;
-  operationId: string;
-  expiresAt: number;
-};
-
-function uploadCleanupTokenSecret(): Buffer {
-  const secret = getSupabaseSecretKey();
-  return createHmac('sha256', secret).update('werkflow:p1-24-upload-cleanup:v1').digest();
-}
-
-function createUploadCleanupToken(payload: Omit<UploadCleanupTokenPayload, 'expiresAt'>): string {
-  const encoded = Buffer.from(
-    JSON.stringify({
-      ...payload,
-      expiresAt: Date.now() + UPLOAD_CLEANUP_TOKEN_TTL_MS,
-    }),
-  ).toString('base64url');
-  const signature = createHmac('sha256', uploadCleanupTokenSecret()).update(encoded).digest('base64url');
-  return `${encoded}.${signature}`;
-}
-
-function isValidUploadCleanupToken(
-  token: string,
-  expected: Omit<UploadCleanupTokenPayload, 'expiresAt'>,
-): boolean {
-  const [encoded, signature, extra] = token.split('.');
-  if (!encoded || !signature || extra) return false;
-  const actualSignature = createHmac('sha256', uploadCleanupTokenSecret()).update(encoded).digest();
-  const suppliedSignature = Buffer.from(signature, 'base64url');
-  if (
-    suppliedSignature.length !== actualSignature.length ||
-    !timingSafeEqual(suppliedSignature, actualSignature)
-  )
-    return false;
-  try {
-    const payload = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8'),
-    ) as UploadCleanupTokenPayload;
-    return (
-      payload.expiresAt >= Date.now() &&
-      payload.actorId === expected.actorId &&
-      payload.organizationId === expected.organizationId &&
-      payload.employeeRecordId === expected.employeeRecordId &&
-      payload.documentId === expected.documentId &&
-      payload.fileName === expected.fileName &&
-      payload.accessClass === expected.accessClass &&
-      payload.operationId === expected.operationId
-    );
-  } catch {
-    return false;
-  }
-}
-
-type PersonnelLifecycleRequirement = {
-  id: string;
-  planId: string;
-  requirementType: PersonnelRequirementType;
-  title: string;
-  description: string | null;
-  isRequired: boolean;
-  blocksAccess: boolean;
-  ownerEmployeeRecordId: string | null;
-  dueDate: string | null;
-  state: PersonnelRequirementState;
-  blockerReason: string | null;
-  version: number;
-};
-
-type ProtectedPersonnelDocument = {
-  id: string;
-  documentId: string;
-  displayName: string;
-  documentType: string;
-  accessClass: PersonnelDocumentAccessClass;
-  evidenceState: PersonnelDocumentEvidenceState;
-  validUntil: string | null;
-  currentVersionNumber: number;
-  releasedToEmployee: boolean;
-  deletedAt: string | null;
-  version: number;
-};
 
 export type PersonnelLifecycleView = {
   employeeRecordId: string;
   userId: string | null;
-  access: {
-    id: string | null;
-    state: PersonnelAccessState;
-    storedState: PersonnelAccessState | null;
-    effectiveAt: string | null;
-    scheduledState: PersonnelAccessState | null;
-    scheduledFor: string | null;
-    version: number;
-  };
-  employment: {
-    id: string | null;
-    state: PersonnelEmploymentState | null;
-    effectiveOn: string | null;
-    scheduledState: PersonnelEmploymentState | null;
-    scheduledFor: string | null;
-    version: number;
-  };
-  plans: Array<{
-    id: string;
-    name: string;
-    state: Database['public']['Enums']['personnel_onboarding_plan_state'];
-    targetStartDate: string | null;
-    version: number;
-    requirements: PersonnelLifecycleRequirement[];
-  }>;
+  access: PersonnelLifecycleAccess;
+  employment: PersonnelLifecycleEmployment;
+  plans: PersonnelOnboardingPlanView[];
   templates: PersonnelOnboardingTemplateSummary[];
   documents: ProtectedPersonnelDocument[];
   transitionInventory: {
@@ -214,75 +80,32 @@ export type PersonnelLifecycleView = {
   };
 };
 
-function hashRequest(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+function readAccessLifecycle(admin: AdminClient, organizationId: string, employeeRecordId: string) {
+  return admin
+    .from('personnel_access_lifecycles')
+    .select('*')
+    .eq('employee_record_id', employeeRecordId)
+    .eq('organization_id', organizationId)
+    .maybeSingle();
 }
 
-function lifecycleFailureCode(error: { code?: string; message?: string } | null): string {
-  const message = error?.message ?? 'mutation_failed';
-  const known = [
-    'forbidden',
-    'stale_version',
-    'operation_id_conflict',
-    'last_admin_protected',
-    'organization_owner_protected',
-    'last_responsibility_holder',
-    'membership_required',
-    'future_effective_at_required',
-    'immediate_effective_at_required',
-    'future_effective_date_required',
-    'no_scheduled_transition',
-    'access_requirements_incomplete',
-    'document_not_released',
-    'document_version_not_found',
-    'personnel_document_not_found',
-    'requirement_not_found',
-    'requirement_not_open',
-    'employee_record_not_found',
-    'template_version_not_found',
-    'template_not_found',
-    'plan_not_found',
-    'owner_not_found',
-    'release_not_active',
-    'active_access_required',
-    'invalid_transition',
-    'invalid_template_item',
-    'invalid_template',
-    'invalid_requirement',
-    'invalid_document_type',
-    'invalid_document',
-    'invalid_reference',
-    'invalid_acknowledgement',
-    'invalid_plan',
-    'reason_required',
-    'statement_required',
-  ].find((code) => message.includes(code));
-  if (known) return known;
-  logError('Unexpected personnel lifecycle database error', error);
-  return 'mutation_failed';
+function readEmploymentLifecycle(admin: AdminClient, organizationId: string, employeeRecordId: string) {
+  return admin
+    .from('personnel_employment_lifecycles')
+    .select('*')
+    .eq('employee_record_id', employeeRecordId)
+    .eq('organization_id', organizationId)
+    .maybeSingle();
 }
 
-function revalidatePersonnel(): void {
-  revalidatePath('/mitarbeiter');
-  revalidatePath('/aufgaben');
-  revalidatePath('/onboarding/meine-aufgaben');
-}
-
-function toRequirement(row: RequirementRow): PersonnelLifecycleRequirement {
-  return {
-    id: row.id,
-    planId: row.plan_id,
-    requirementType: row.requirement_type,
-    title: row.title,
-    description: row.description,
-    isRequired: row.is_required,
-    blocksAccess: row.blocks_access,
-    ownerEmployeeRecordId: row.owner_employee_record_id,
-    dueDate: row.due_date,
-    state: row.state,
-    blockerReason: row.blocker_reason,
-    version: row.version,
-  };
+function readPublishedTemplates(admin: AdminClient, organizationId: string) {
+  return admin
+    .from('personnel_onboarding_templates')
+    .select(
+      'id, name, description, state, current_version_number, version, personnel_onboarding_template_versions!inner(id, version_number)',
+    )
+    .eq('organization_id', organizationId)
+    .eq('state', 'published');
 }
 
 async function requireManagerRecord(employeeRecordId: string): Promise<
@@ -324,6 +147,42 @@ async function requireManagerRecord(employeeRecordId: string): Promise<
   };
 }
 
+async function getSelfContext(): Promise<
+  | {
+      success: true;
+      admin: AdminClient;
+      organizationId: string;
+      actorId: string;
+      employeeRecordId: string;
+      prestart: boolean;
+    }
+  | ActionFailure
+> {
+  const caller = await resolveSelfServiceContext();
+  if (!caller.success) return caller;
+  const { orgId, userId, prestart } = caller.context;
+  const admin = createSupabaseAdminClient();
+  const { data: employee, error: employeeError } = await loggedRead(
+    'getSelfContext: employee_records read failed',
+    admin
+      .from('employee_records')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('user_id', userId)
+      .maybeSingle(),
+  );
+  if (employeeError) return { success: false, error: 'load_failed' };
+  if (!employee) return { success: false, error: 'record_not_found' };
+  return {
+    success: true,
+    admin,
+    organizationId: orgId,
+    actorId: userId,
+    employeeRecordId: employee.id,
+    prestart,
+  };
+}
+
 export async function getPersonnelLifecycle(
   employeeRecordIdInput: string,
 ): Promise<LifecycleResult<PersonnelLifecycleView>> {
@@ -343,27 +202,9 @@ export async function getPersonnelLifecycle(
     .order('updated_at', { ascending: false });
   const authorizedDocumentsQuery =
     role === 'admin' ? documentsQuery : documentsQuery.eq('access_class', 'personnel_standard');
-  const [
-    accessResult,
-    employmentResult,
-    plansResult,
-    requirementsResult,
-    documentsResult,
-    jobsResult,
-    templatesResult,
-  ] = await Promise.all([
-    admin
-      .from('personnel_access_lifecycles')
-      .select('*')
-      .eq('employee_record_id', employeeRecordId)
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
-    admin
-      .from('personnel_employment_lifecycles')
-      .select('*')
-      .eq('employee_record_id', employeeRecordId)
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
+  const [access, employment, plans, requirements, documents, jobs, templates] = await Promise.all([
+    readAccessLifecycle(admin, organizationId, employeeRecordId),
+    readEmploymentLifecycle(admin, organizationId, employeeRecordId),
     admin
       .from('personnel_onboarding_plans')
       .select('*')
@@ -385,122 +226,32 @@ export async function getPersonnelLifecycle(
           .eq('organization_id', organizationId)
           .in('jobs.status', ACTIVE_JOB_STATUSES)
       : Promise.resolve({ data: [], error: null }),
-    admin
-      .from('personnel_onboarding_templates')
-      .select(
-        'id, name, description, state, current_version_number, version, personnel_onboarding_template_versions!inner(id, version_number)',
-      )
-      .eq('organization_id', organizationId)
-      .eq('state', 'published'),
+    readPublishedTemplates(admin, organizationId),
   ]);
-  const failed = [
-    accessResult,
-    employmentResult,
-    plansResult,
-    requirementsResult,
-    documentsResult,
-    jobsResult,
-    templatesResult,
-  ].find((result) => result.error);
+  const failed = [access, employment, plans, requirements, documents, jobs, templates].find(
+    (result) => result.error,
+  );
   if (failed?.error) {
     logError('Failed to load personnel lifecycle', failed.error);
     return { success: false, error: 'load_failed' };
   }
 
-  const access = accessResult.data;
-  const employment = employmentResult.data;
-  const requirements = (requirementsResult.data ?? []).map(toRequirement);
   const strandedResponsibilities = userId
     ? await getResponsibilitiesStrandedByMemberRemoval({ organizationId, userId })
     : [];
   if (!strandedResponsibilities) return { success: false, error: 'load_failed' };
-  const documents = (documentsResult.data ?? [])
-    .filter((document) => role === 'admin' || document.access_class === 'personnel_standard')
-    .flatMap((document) => {
-      const parsedFile = documentFileSchema.safeParse(document.documents);
-      if (!parsedFile.success) return [];
-      const file = parsedFile.data;
-      const releases = document.personnel_document_releases;
-      return [
-        {
-          id: document.id,
-          documentId: file.id,
-          displayName: file.display_name,
-          documentType: document.document_type,
-          accessClass: document.access_class,
-          evidenceState: document.evidence_state,
-          validUntil: document.valid_until,
-          currentVersionNumber: file.current_version_number,
-          releasedToEmployee: releases.some(
-            (release) =>
-              release.document_version_number === file.current_version_number && release.revoked_at === null,
-          ),
-          deletedAt: file.deleted_at,
-          version: document.version,
-        },
-      ];
-    });
-  const activeJobs = toActiveJobOptions(jobsResult.data ?? []);
 
   return {
     success: true,
     data: {
       employeeRecordId,
       userId,
-      access: {
-        id: access?.id ?? null,
-        state: getEffectiveAccessState(
-          access
-            ? {
-                state: access.state,
-                scheduledState: access.scheduled_state,
-                scheduledFor: access.scheduled_for,
-              }
-            : null,
-        ),
-        storedState: access?.state ?? null,
-        effectiveAt: access?.state_effective_at ?? null,
-        scheduledState: access?.scheduled_state ?? null,
-        scheduledFor: access?.scheduled_for ?? null,
-        version: access?.version ?? 0,
-      },
-      employment: {
-        id: employment?.id ?? null,
-        state: employment?.state ?? null,
-        effectiveOn: employment?.state_effective_on ?? null,
-        scheduledState: employment?.scheduled_state ?? null,
-        scheduledFor: employment?.scheduled_for ?? null,
-        version: employment?.version ?? 0,
-      },
-      plans: (plansResult.data ?? []).map((plan) => ({
-        id: plan.id,
-        name: plan.name,
-        state: plan.state,
-        targetStartDate: plan.target_start_date,
-        version: plan.version,
-        requirements: requirements.filter((requirement) => requirement.planId === plan.id),
-      })),
-      templates: (templatesResult.data ?? []).flatMap((template) => {
-        const versions = templateVersionsSchema.safeParse(template.personnel_onboarding_template_versions);
-        const current = versions.data?.find(
-          (version) => version.version_number === template.current_version_number,
-        );
-        return current
-          ? [
-              {
-                id: template.id,
-                currentVersionId: current.id,
-                name: template.name,
-                description: template.description,
-                state: template.state,
-                currentVersionNumber: template.current_version_number,
-                version: template.version,
-              },
-            ]
-          : [];
-      }),
-      documents,
-      transitionInventory: { activeJobs, strandedResponsibilities },
+      access: toAccessView(access.data),
+      employment: toEmploymentView(employment.data),
+      plans: toPlanViews(plans.data ?? [], (requirements.data ?? []).map(toRequirement)),
+      templates: toTemplateSummaries(templates.data ?? []),
+      documents: toManagerDocuments(documents.data ?? [], role),
+      transitionInventory: { activeJobs: toActiveJobOptions(jobs.data ?? []), strandedResponsibilities },
     },
   };
 }
@@ -607,145 +358,22 @@ export async function createPersonnelOnboardingPlan(
   const context = await requireManagerRecord(parsed.data.employeeRecordId);
   if (!context.success) return context;
   const request = parsed.data;
-  const { data, error } = await context.admin.rpc('create_personnel_onboarding_plan', {
-    p_actor_id: context.actorId,
-    p_organization_id: context.organizationId,
-    p_employee_record_id: request.employeeRecordId,
-    p_template_version_id: request.templateVersionId as string,
-    p_name: request.name,
-    p_target_start_date: request.targetStartDate as string,
-    p_operation_id: request.operationId,
-    p_request_hash: hashRequest(request),
-  });
+  const { data, error } = await context.admin.rpc(
+    'create_personnel_onboarding_plan',
+    rpcArgs('create_personnel_onboarding_plan', {
+      p_actor_id: context.actorId,
+      p_organization_id: context.organizationId,
+      p_employee_record_id: request.employeeRecordId,
+      p_template_version_id: request.templateVersionId,
+      p_name: request.name,
+      p_target_start_date: request.targetStartDate,
+      p_operation_id: request.operationId,
+      p_request_hash: hashRequest(request),
+    }),
+  );
   if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { planId: data } };
-}
-
-export async function savePersonnelOnboardingRequirement(
-  input: unknown,
-): Promise<LifecycleResult<{ requirementId: string }>> {
-  const parsed = saveRequirementInputSchema.safeParse(input);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  const admin = createSupabaseAdminClient();
-  const { data: plan, error: planError } = await loggedRead(
-    'savePersonnelOnboardingRequirement: personnel_onboarding_plans read failed',
-    admin
-      .from('personnel_onboarding_plans')
-      .select('employee_record_id')
-      .eq('id', parsed.data.planId)
-      .eq('organization_id', auth.context.orgId)
-      .maybeSingle(),
-  );
-  if (planError) return { success: false, error: 'load_failed' };
-  if (!plan) return { success: false, error: 'plan_not_found' };
-  const request = parsed.data;
-  const { data, error } = await admin.rpc('save_personnel_onboarding_requirement', {
-    p_actor_id: auth.context.userId,
-    p_organization_id: auth.context.orgId,
-    p_plan_id: request.planId,
-    p_requirement_id: request.requirementId as string,
-    p_expected_version: request.expectedVersion,
-    p_requirement_type: request.requirementType,
-    p_title: request.title,
-    p_description: request.description as string,
-    p_is_required: request.isRequired,
-    p_blocks_access: request.blocksAccess,
-    p_owner_employee_record_id: request.ownerEmployeeRecordId as string,
-    p_due_date: request.dueDate as string,
-    p_state: request.state,
-    p_blocker_reason: request.blockerReason as string,
-    p_operation_id: request.operationId,
-    p_request_hash: hashRequest(request),
-  });
-  if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
-  revalidatePersonnel();
-  return { success: true, data: { requirementId: data } };
-}
-
-export async function publishPersonnelOnboardingTemplate(
-  input: unknown,
-): Promise<LifecycleResult<{ versionId: string }>> {
-  const parsed = publishTemplateInputSchema.safeParse(input);
-  if (!parsed.success) return { success: false, error: 'invalid_input' };
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (auth.context.role !== 'admin') return { success: false, error: 'not_authorized' };
-  const admin = createSupabaseAdminClient();
-  const request = parsed.data;
-  const items = toTemplateRpcItems(request.items);
-  const { data, error } = await admin.rpc('publish_personnel_onboarding_template', {
-    p_actor_id: auth.context.userId,
-    p_organization_id: auth.context.orgId,
-    p_template_id: request.templateId as string,
-    p_expected_version: request.expectedVersion,
-    p_name: request.name,
-    p_description: request.description as string,
-    p_items: items,
-    p_operation_id: request.operationId,
-    p_request_hash: hashRequest(request),
-  });
-  if (error || !data) {
-    logError('Failed to publish personnel onboarding template', error);
-    return { success: false, error: lifecycleFailureCode(error) };
-  }
-  revalidatePersonnel();
-  return { success: true, data: { versionId: data } };
-}
-
-export type PersonnelOnboardingTemplateSummary = {
-  id: string;
-  currentVersionId: string;
-  name: string;
-  description: string | null;
-  state: Database['public']['Enums']['personnel_template_state'];
-  currentVersionNumber: number;
-  version: number;
-};
-
-export async function getPersonnelOnboardingTemplates(): Promise<
-  LifecycleResult<PersonnelOnboardingTemplateSummary[]>
-> {
-  const auth = await authenticateAndAuthorize();
-  if (!auth.success) return auth;
-  if (!auth.context.isManagerOrAbove) return { success: false, error: 'not_authorized' };
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from('personnel_onboarding_templates')
-    .select(
-      'id, name, description, state, current_version_number, version, personnel_onboarding_template_versions!inner(id, version_number)',
-    )
-    .eq('organization_id', auth.context.orgId)
-    .order('name');
-  if (error) {
-    logError('Failed to load personnel onboarding templates', error);
-    return { success: false, error: 'load_failed' };
-  }
-  return {
-    success: true,
-    data: (data ?? []).flatMap((template) => {
-      const versions = templateVersionsSchema.safeParse(template.personnel_onboarding_template_versions);
-      const current = versions.data?.find(
-        (version) => version.version_number === template.current_version_number,
-      );
-      return current
-        ? [
-            {
-              id: template.id,
-              currentVersionId: current.id,
-              name: template.name,
-              description: template.description,
-              state: template.state,
-              currentVersionNumber: template.current_version_number,
-              version: template.version,
-            },
-          ]
-        : [];
-    }),
-  };
 }
 
 export async function setPersonnelDocumentRelease(
@@ -756,55 +384,22 @@ export async function setPersonnelDocumentRelease(
   const context = await requireManagerRecord(parsed.data.employeeRecordId);
   if (!context.success) return context;
   const request = parsed.data;
-  const { data, error } = await context.admin.rpc('set_personnel_document_release', {
-    p_actor_id: context.actorId,
-    p_organization_id: context.organizationId,
-    p_personnel_document_id: request.personnelDocumentId,
-    p_document_version_number: request.documentVersionNumber,
-    p_release: request.release,
-    p_reason: request.reason as string,
-    p_operation_id: request.operationId,
-    p_request_hash: hashRequest(request),
-  });
+  const { data, error } = await context.admin.rpc(
+    'set_personnel_document_release',
+    rpcArgs('set_personnel_document_release', {
+      p_actor_id: context.actorId,
+      p_organization_id: context.organizationId,
+      p_personnel_document_id: request.personnelDocumentId,
+      p_document_version_number: request.documentVersionNumber,
+      p_release: request.release,
+      p_reason: request.reason,
+      p_operation_id: request.operationId,
+      p_request_hash: hashRequest(request),
+    }),
+  );
   if (error || !data) return { success: false, error: lifecycleFailureCode(error) };
   revalidatePersonnel();
   return { success: true, data: { releaseId: data } };
-}
-
-async function getSelfContext(): Promise<
-  | {
-      success: true;
-      admin: AdminClient;
-      organizationId: string;
-      actorId: string;
-      employeeRecordId: string;
-      prestart: boolean;
-    }
-  | ActionFailure
-> {
-  const caller = await resolveSelfServiceContext();
-  if (!caller.success) return caller;
-  const { orgId, userId, prestart } = caller.context;
-  const admin = createSupabaseAdminClient();
-  const { data: employee, error: employeeError } = await loggedRead(
-    'getSelfContext: employee_records read failed',
-    admin
-      .from('employee_records')
-      .select('id')
-      .eq('organization_id', orgId)
-      .eq('user_id', userId)
-      .maybeSingle(),
-  );
-  if (employeeError) return { success: false, error: 'load_failed' };
-  if (!employee) return { success: false, error: 'record_not_found' };
-  return {
-    success: true,
-    admin,
-    organizationId: orgId,
-    actorId: userId,
-    employeeRecordId: employee.id,
-    prestart,
-  };
 }
 
 type PersonnelUploadActor = {
@@ -1144,25 +739,28 @@ export async function finalizePersonnelDocumentUpload(
     await discardStorageObjects({ organizationId: context.organizationId, paths: [storagePath] });
     return { success: false, error: 'file_too_large' };
   }
-  const { data, error } = await context.admin.rpc('finalize_personnel_document_metadata', {
-    p_actor_id: context.actorId,
-    p_organization_id: context.organizationId,
-    p_employee_record_id: request.employeeRecordId,
-    p_document_id: request.documentId,
-    p_storage_bucket: DOCUMENT_STORAGE_BUCKET,
-    p_storage_path: storagePath,
-    p_original_file_name: request.fileName,
-    p_display_name: request.fileName,
-    p_category: 'other',
-    p_mime_type: head.contentType || 'application/octet-stream',
-    p_size_bytes: head.sizeBytes,
-    p_document_type: request.documentType,
-    p_access_class: request.accessClass,
-    p_evidence_state: request.evidenceState,
-    p_valid_until: request.validUntil as string,
-    p_operation_id: request.operationId,
-    p_request_hash: hashRequest(request),
-  });
+  const { data, error } = await context.admin.rpc(
+    'finalize_personnel_document_metadata',
+    rpcArgs('finalize_personnel_document_metadata', {
+      p_actor_id: context.actorId,
+      p_organization_id: context.organizationId,
+      p_employee_record_id: request.employeeRecordId,
+      p_document_id: request.documentId,
+      p_storage_bucket: DOCUMENT_STORAGE_BUCKET,
+      p_storage_path: storagePath,
+      p_original_file_name: request.fileName,
+      p_display_name: request.fileName,
+      p_category: 'other',
+      p_mime_type: head.contentType || 'application/octet-stream',
+      p_size_bytes: head.sizeBytes,
+      p_document_type: request.documentType,
+      p_access_class: request.accessClass,
+      p_evidence_state: request.evidenceState,
+      p_valid_until: request.validUntil,
+      p_operation_id: request.operationId,
+      p_request_hash: hashRequest(request),
+    }),
+  );
   if (error || !data) {
     const normalized = lifecycleFailureCode(error);
     const owner = await readPersonnelUploadOwner(
@@ -1176,69 +774,4 @@ export async function finalizePersonnelDocumentUpload(
   }
   revalidatePersonnel();
   return { success: true, data: { documentId: data } };
-}
-
-export async function getPersonnelDocumentSignedUrl(
-  documentIdInput: string,
-): Promise<LifecycleResult<{ signedUrl: string }>> {
-  const parsedDocumentId = uuidSchema.safeParse(documentIdInput);
-  if (!parsedDocumentId.success) return { success: false, error: 'invalid_input' };
-  const documentId = parsedDocumentId.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const admin = createSupabaseAdminClient();
-  const { data: document, error: documentError } = await loggedRead(
-    'getPersonnelDocumentSignedUrl: personnel_documents read failed',
-    admin
-      // tenant-scope: by-id-then-verified — the document's organization must be one of the caller's memberships, checked below before a URL is signed
-      .from('personnel_documents')
-      .select(
-        'access_class, employee_record_id, documents!inner(id, organization_id, storage_path, display_name, current_version_number, deleted_at), personnel_document_releases(document_version_number, revoked_at)',
-      )
-      .eq('document_id', documentId)
-      .maybeSingle(),
-  );
-  if (documentError) return { success: false, error: 'load_failed' };
-  if (!document) return { success: false, error: 'document_not_found' };
-  const parsedFile = signedDocumentFileSchema.safeParse(document.documents);
-  if (!parsedFile.success || parsedFile.data.deleted_at)
-    return { success: false, error: 'document_not_found' };
-  const file = parsedFile.data;
-  // A prestart employee may open their own released document; only an
-  // operational membership carries the manager role.
-  const caller = await resolveSelfServiceContextFor(file.organization_id);
-  if (!caller.success) return { success: false, error: 'not_authorized' };
-  const { role } = caller.context;
-  const { data: employee, error: employeeError } = await loggedRead(
-    'getPersonnelDocumentSignedUrl: employee_records read failed',
-    admin
-      .from('employee_records')
-      .select('user_id')
-      .eq('organization_id', file.organization_id)
-      .eq('id', document.employee_record_id)
-      .maybeSingle(),
-  );
-  if (employeeError) return { success: false, error: 'load_failed' };
-  const releases = document.personnel_document_releases;
-  const ownReleased =
-    employee?.user_id === caller.context.userId &&
-    releases.some(
-      (release) =>
-        release.document_version_number === file.current_version_number && release.revoked_at === null,
-    );
-  const managerAllowed =
-    role === 'admin' || (role === 'buero' && document.access_class === 'personnel_standard');
-  if (!ownReleased && !managerAllowed) return { success: false, error: 'not_authorized' };
-  try {
-    const signedUrl = await createSignedDownloadUrl({
-      organizationId: file.organization_id,
-      path: file.storage_path,
-      disposition: 'attachment',
-      downloadFileName: file.display_name,
-    });
-    return { success: true, data: { signedUrl } };
-  } catch (error) {
-    logError('Failed to sign personnel document download', error);
-    return { success: false, error: 'download_failed' };
-  }
 }

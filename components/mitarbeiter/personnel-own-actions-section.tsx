@@ -26,10 +26,10 @@ import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { uploadPersonnelDocumentDirect } from '@/lib/documents/upload-client';
+import { getPersonnelDocumentSignedUrl } from '@/lib/personnel/document-download-actions';
 import {
   acknowledgePersonnelDocument,
   acknowledgePersonnelRequirement,
-  getPersonnelDocumentSignedUrl,
   type OwnPersonnelActions,
 } from '@/lib/personnel/lifecycle-actions';
 import { PersonnelOwnDocumentList, PersonnelOwnRequirementList } from './personnel-own-actions-lists';

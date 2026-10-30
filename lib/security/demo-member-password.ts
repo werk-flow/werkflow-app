@@ -7,7 +7,10 @@ import { randomBytes } from 'node:crypto';
 export const DEMO_MEMBER_PASSWORD_ENV = 'DEMO_MEMBER_PASSWORD';
 
 /** The password of the demo members one seeder run creates. */
-export function resolveDemoMemberPassword(target: 'dev' | 'prod', chosen: string | undefined): string {
+export function resolveDemoMemberPassword(
+  target: 'local' | 'dev' | 'prod',
+  chosen: string | undefined,
+): string {
   if (!chosen) return randomBytes(24).toString('base64url');
   if (target === 'prod') {
     throw new Error(`PROD demo members get a generated password; unset ${DEMO_MEMBER_PASSWORD_ENV}`);
