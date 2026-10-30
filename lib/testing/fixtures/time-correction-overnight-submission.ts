@@ -3,7 +3,9 @@
 // closes and reopens at Berlin midnight, and recorded time after midnight
 // still refuses it as an overlap before any request is written. A lone
 // clock-out after midnight that closes the evening's recorded clock-in is
-// refused with the midnight rule, never as an overlap. Only legacy
+// refused with the midnight rule, never as an overlap. Open time over 24
+// hours is refused before the midnight split runs, so a span of years builds
+// no facts. Only legacy
 // entries are recorded here, so canonical segments and approved corrections read empty.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
@@ -13,6 +15,8 @@ const ownRecordId = '86000000-0000-4000-8000-000000000001';
 const firstOperationId = '86000000-0000-4000-8000-000000000002';
 const secondOperationId = '86000000-0000-4000-8000-000000000003';
 const thirdOperationId = '86000000-0000-4000-8000-000000000004';
+const fourthOperationId = '86000000-0000-4000-8000-000000000005';
+const fifthOperationId = '86000000-0000-4000-8000-000000000006';
 
 const world = installActionWorld({
   employee_records: [{ id: ownRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID }],
@@ -25,13 +29,25 @@ mock.module('@/lib/time-tracking/canonical-entries', () => ({
 mock.module('@/lib/time-corrections/approved-projection', () => ({
   loadApprovedCorrectionProjection: async () => [],
 }));
+// Counts the midnight splits; the real split is captured first, because the
+// mock replaces the module's live bindings.
+const timelineValidation = { ...(await import('@/lib/time-corrections/timeline-validation')) };
+const split = timelineValidation.splitCorrectionFactsAtMidnight;
+let splits = 0;
+mock.module('@/lib/time-corrections/timeline-validation', () => ({
+  ...timelineValidation,
+  splitCorrectionFactsAtMidnight: (...args: Parameters<typeof split>) => {
+    splits += 1;
+    return split(...args);
+  },
+}));
 world.rpc = ({ name }) => {
   assert.equal(name, 'create_time_correction_request');
   return { data: { requestId: 'request', status: 'submitted', replayed: false }, error: null };
 };
 const { submitTimeCorrection } = await import('@/lib/time-corrections/actions');
 
-const overnightShift = (operationId: string) =>
+const shift = (operationId: string, start: string, end: string) =>
   submitTimeCorrection({
     organizationId: ORGANIZATION_A,
     subjectEmployeeRecordId: ownRecordId,
@@ -43,17 +59,19 @@ const overnightShift = (operationId: string) =>
         factId: 'start',
         employeeRecordId: ownRecordId,
         entryType: 'clock_in',
-        timestamp: '2026-10-20T22:00:00+02:00',
+        timestamp: start,
       },
       {
         factId: 'end',
         employeeRecordId: ownRecordId,
         entryType: 'clock_out',
-        timestamp: '2026-10-21T01:30:00+02:00',
+        timestamp: end,
       },
     ],
     operationId,
   });
+const overnightShift = (operationId: string) =>
+  shift(operationId, '2026-10-20T22:00:00+02:00', '2026-10-21T01:30:00+02:00');
 
 signInAs(world, 'employee');
 assert.deepEqual(await overnightShift(firstOperationId), {
@@ -124,4 +142,19 @@ assert.deepEqual(
   }),
   { success: false, error: 'correction_crosses_midnight' },
 );
+
+// Open time over 24 hours is refused before the split: one minute over, or years.
+recordEntries([]);
+const splitsBefore = splits;
+for (const [operationId, start] of [
+  [fourthOperationId, '2026-10-20T01:29:00+02:00'],
+  [fifthOperationId, '2020-01-01T08:00:00+01:00'],
+] as const) {
+  assert.deepEqual(await shift(operationId, start, '2026-10-21T01:30:00+02:00'), {
+    success: false,
+    error: 'correction_open_time_too_long',
+  });
+}
+assert.equal(splits, splitsBefore, 'refused open time is never split');
+assert.ok(splitsBefore > 0, 'the accepted shift ran through the split');
 assert.equal(world.rpcCalls.length, 1, 'a refused overnight correction writes nothing');

@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import {
   correctionTimelineWindow,
+  exceedsLongestOpenTime,
   splitCorrectionFactsAtMidnight,
   validateCorrectionTimeline,
 } from './timeline-validation';
@@ -358,4 +359,25 @@ test('a lone clock-out that closes the previous day is refused with the midnight
   const lateEnd = [fact('end', 'clock_out', '2026-10-20T23:30:00.000Z')];
   expect(splitCorrectionFactsAtMidnight(lateEnd)).toEqual(lateEnd);
   expect(validateOvernight(lateEnd, [opened])).toBe('correction_crosses_midnight');
+});
+
+test('open time over midnight may last at most 24 hours', () => {
+  const shift = (start: string, end: string) => [
+    fact('start', 'clock_in', start),
+    fact('end', 'clock_out', end),
+  ];
+  expect(exceedsLongestOpenTime(overnightShift)).toBe(false);
+  expect(exceedsLongestOpenTime(shift('2026-10-20T20:00:00.000Z', '2026-10-21T20:00:00.000Z'))).toBe(false);
+  expect(exceedsLongestOpenTime(shift('2026-10-20T20:00:00.000Z', '2026-10-21T20:01:00.000Z'))).toBe(true);
+  expect(exceedsLongestOpenTime(shift('2020-01-01T08:00:00.000Z', '2026-10-20T23:30:00.000Z'))).toBe(true);
+  // A break does not restart the clock, and an open end still counts.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T18:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
+  // The whole 25-hour day of the autumn clock change, as a recorded session's day piece.
+  expect(exceedsLongestOpenTime(shift('2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'))).toBe(false);
 });

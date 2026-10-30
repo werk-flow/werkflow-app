@@ -7,7 +7,7 @@ import type { Json } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { proposeCalendarCorrection } from './calendar-proposal';
 import { mergeCorrectionProposal } from './merge-proposal';
-import { splitCorrectionFactsAtMidnight } from './timeline-validation';
+import { exceedsLongestOpenTime, splitCorrectionFactsAtMidnight } from './timeline-validation';
 import {
   loadEmployeeIdentities,
   loadSourceContext,
@@ -265,6 +265,7 @@ export async function proposeSubmission(input: {
   if (!hasValidChronology(merged)) {
     return { success: false, error: 'invalid_time_order' };
   }
+  if (exceedsLongestOpenTime(merged.facts)) return { success: false, error: 'correction_open_time_too_long' };
   const proposed: TimeCorrectionSnapshot = {
     ...merged,
     facts: splitCorrectionFactsAtMidnight(merged.facts),

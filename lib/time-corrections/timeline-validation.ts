@@ -23,11 +23,38 @@ function continuesOpenTime(open: TimeEntryType, next: TimeEntryType): boolean {
     : next === 'clock_out' || next === 'break_start';
 }
 
+/** Live capture flags a session open this long as unusually long. */
+const LONGEST_OPEN_TIME_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether proposed time stays open across Berlin midnight for more than 24
+ * hours. Checked before the midnight split, so a span of years never builds a
+ * fact per midnight. A day piece of recorded time never crosses midnight, so
+ * it stays correctable even on the 25-hour day of the autumn clock change.
+ */
+export function exceedsLongestOpenTime(facts: readonly TimeCorrectionFact[]): boolean {
+  const opened = new Map<string, TimeCorrectionFact>();
+  for (const fact of facts) {
+    const start = opened.get(fact.userId);
+    if (
+      start &&
+      fact.entryType !== 'clock_in' &&
+      Date.parse(fact.timestamp) - Date.parse(start.timestamp) > LONGEST_OPEN_TIME_MS &&
+      formatBerlinLocalDate(correctionDayOwner(start)) !== formatBerlinLocalDate(correctionDayOwner(fact))
+    )
+      return true;
+    if (fact.entryType === 'clock_out') opened.delete(fact.userId);
+    else if (!start || fact.entryType === 'clock_in') opened.set(fact.userId, fact);
+  }
+  return false;
+}
+
 /**
  * Splits proposed time that runs past Berlin midnight into one piece per day,
  * as live capture projects an overnight session: the open time closes at
  * 00:00 and reopens at 00:00. Each day then validates, displays, counts and
- * meets the closed-period guard on its own facts.
+ * meets the closed-period guard on its own facts. Call it only on facts that
+ * `exceedsLongestOpenTime` accepts: it adds facts for every midnight.
  */
 export function splitCorrectionFactsAtMidnight(facts: readonly TimeCorrectionFact[]): TimeCorrectionFact[] {
   const open = new Map<string, TimeCorrectionFact>();
