@@ -9,7 +9,7 @@ import type { ActionResult } from '@/lib/action-result';
 import type { AuthorizedDocumentContext } from './access';
 import { getCopyDisplayName } from './names';
 import { buildDocumentStoragePath } from './storage-path';
-import type { DocumentFolderRow } from './types';
+import type { DocumentFolderRow, DocumentRow } from './types';
 import { documentWriteFailure, getAvailableFolderName } from './write-support';
 
 /** The source subtree below the root in breadth-first order, so a parent is copied before its children. */
@@ -36,6 +36,119 @@ export function orderCopiedFolderTree(
     stack.push(...(childFoldersByParent.get(folder.id) ?? []));
   }
   return { sourceFolderIds, orderedSourceFolders };
+}
+
+type PlannedFolder = { id: string; parentFolderId: string | null; name: string };
+
+type SourceDocument = Pick<
+  DocumentRow,
+  'id' | 'folder_id' | 'original_file_name' | 'display_name' | 'storage_path' | 'mime_type'
+>;
+
+type PlannedDocument = {
+  source: SourceDocument;
+  planned: {
+    id: string;
+    sourceDocumentId: string;
+    folderId: string;
+    storagePath: string;
+    displayName: string;
+  };
+};
+
+/**
+ * The new folders with their ids and names, the root first. A source folder's
+ * names are unique, so the copies inside the new folders are too; only the
+ * root meets existing siblings. Null when a parent has no planned copy.
+ */
+async function planFolderCopies({
+  context,
+  sourceFolder,
+  targetParentFolderId,
+  orderedSourceFolders,
+}: {
+  context: AuthorizedDocumentContext;
+  sourceFolder: DocumentFolderRow;
+  targetParentFolderId: string | null | undefined;
+  orderedSourceFolders: DocumentFolderRow[];
+}): Promise<{ folders: PlannedFolder[]; folderIdMap: Map<string, string> } | null> {
+  const rootFolderId = randomUUID();
+  const folderIdMap = new Map([[sourceFolder.id, rootFolderId]]);
+  const folders: PlannedFolder[] = [
+    {
+      id: rootFolderId,
+      parentFolderId: targetParentFolderId || null,
+      name: await getAvailableFolderName({
+        admin: context.admin,
+        orgId: context.orgId,
+        parentFolderId: targetParentFolderId,
+        preferredName: getCopyDisplayName(sourceFolder.name),
+      }),
+    },
+  ];
+  for (const sourceChildFolder of orderedSourceFolders) {
+    const parentFolderId = sourceChildFolder.parent_folder_id
+      ? folderIdMap.get(sourceChildFolder.parent_folder_id)
+      : undefined;
+    if (!parentFolderId) return null;
+    const folderId = randomUUID();
+    folderIdMap.set(sourceChildFolder.id, folderId);
+    folders.push({ id: folderId, parentFolderId, name: getCopyDisplayName(sourceChildFolder.name) });
+  }
+  return { folders, folderIdMap };
+}
+
+/** Each source document with its planned copy in the new folders; null when its folder has no planned copy. */
+function planDocumentCopies(
+  organizationId: string,
+  sourceDocuments: SourceDocument[],
+  folderIdMap: Map<string, string>,
+): PlannedDocument[] | null {
+  const documents: PlannedDocument[] = [];
+  for (const sourceDocument of sourceDocuments) {
+    const folderId = sourceDocument.folder_id ? folderIdMap.get(sourceDocument.folder_id) : undefined;
+    if (!folderId) return null;
+    const documentId = randomUUID();
+    documents.push({
+      source: sourceDocument,
+      planned: {
+        id: documentId,
+        sourceDocumentId: sourceDocument.id,
+        folderId,
+        storagePath: buildDocumentStoragePath({
+          organizationId,
+          documentId,
+          fileName: sourceDocument.original_file_name,
+        }),
+        displayName: getCopyDisplayName(sourceDocument.display_name),
+      },
+    });
+  }
+  return documents;
+}
+
+/** Copies every planned object; a failed copy discards the ones copied before it and returns null. */
+async function copyPlannedObjects(
+  organizationId: string,
+  documents: PlannedDocument[],
+): Promise<string[] | null> {
+  const copiedPaths: string[] = [];
+  for (const { source, planned } of documents) {
+    try {
+      await copyStorageObject({
+        organizationId,
+        sourcePath: source.storage_path,
+        targetPath: planned.storagePath,
+        contentType: source.mime_type,
+      });
+    } catch (storageCopyError) {
+      logError('Failed to copy document storage object in folder', storageCopyError);
+      await discardStorageObjects({ organizationId, paths: copiedPaths });
+      return null;
+    }
+    copiedPaths.push(planned.storagePath);
+  }
+  return copiedPaths;
 }
 
 /**
@@ -79,69 +192,18 @@ export async function copyFolderTree({
     return { success: false, error: 'copy_failed' };
   }
 
-  // A source folder's names are unique, so the copies inside the new folders
-  // are too; only the root meets existing siblings.
-  const rootFolderId = randomUUID();
-  const folderIdMap = new Map([[sourceFolder.id, rootFolderId]]);
-  const folders = [
-    {
-      id: rootFolderId,
-      parentFolderId: targetParentFolderId || null,
-      name: await getAvailableFolderName({
-        admin: context.admin,
-        orgId: context.orgId,
-        parentFolderId: targetParentFolderId,
-        preferredName: getCopyDisplayName(sourceFolder.name),
-      }),
-    },
-  ];
-  for (const sourceChildFolder of orderedSourceFolders) {
-    const parentFolderId = sourceChildFolder.parent_folder_id
-      ? folderIdMap.get(sourceChildFolder.parent_folder_id)
-      : undefined;
-    if (!parentFolderId) return { success: false, error: 'copy_failed' };
-    const folderId = randomUUID();
-    folderIdMap.set(sourceChildFolder.id, folderId);
-    folders.push({ id: folderId, parentFolderId, name: getCopyDisplayName(sourceChildFolder.name) });
-  }
+  const folderPlan = await planFolderCopies({
+    context,
+    sourceFolder,
+    targetParentFolderId,
+    orderedSourceFolders,
+  });
+  if (!folderPlan) return { success: false, error: 'copy_failed' };
+  const documents = planDocumentCopies(context.orgId, sourceDocuments, folderPlan.folderIdMap);
+  if (!documents) return { success: false, error: 'copy_failed' };
 
-  const documents = [];
-  for (const sourceDocument of sourceDocuments) {
-    const folderId = sourceDocument.folder_id ? folderIdMap.get(sourceDocument.folder_id) : undefined;
-    if (!folderId) return { success: false, error: 'copy_failed' };
-    const documentId = randomUUID();
-    documents.push({
-      source: sourceDocument,
-      planned: {
-        id: documentId,
-        sourceDocumentId: sourceDocument.id,
-        folderId,
-        storagePath: buildDocumentStoragePath({
-          organizationId: context.orgId,
-          documentId,
-          fileName: sourceDocument.original_file_name,
-        }),
-        displayName: getCopyDisplayName(sourceDocument.display_name),
-      },
-    });
-  }
-
-  const copiedPaths: string[] = [];
-  for (const { source, planned } of documents) {
-    try {
-      await copyStorageObject({
-        organizationId: context.orgId,
-        sourcePath: source.storage_path,
-        targetPath: planned.storagePath,
-        contentType: source.mime_type,
-      });
-    } catch (storageCopyError) {
-      logError('Failed to copy document storage object in folder', storageCopyError);
-      await discardStorageObjects({ organizationId: context.orgId, paths: copiedPaths });
-      return { success: false, error: 'copy_failed' };
-    }
-    copiedPaths.push(planned.storagePath);
-  }
+  const copiedPaths = await copyPlannedObjects(context.orgId, documents);
+  if (!copiedPaths) return { success: false, error: 'copy_failed' };
 
   const { data: rootFolder, error } = await context.admin.rpc(
     'copy_document_folder',
@@ -150,7 +212,7 @@ export async function copyFolderTree({
       p_organization_id: context.orgId,
       p_source_folder_id: sourceFolder.id,
       p_target_parent_folder_id: targetParentFolderId || null,
-      p_folders: folders,
+      p_folders: folderPlan.folders,
       p_documents: documents.map(({ planned }) => planned),
     }),
   );

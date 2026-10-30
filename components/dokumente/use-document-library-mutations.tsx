@@ -8,7 +8,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import type { ActionResult } from '@/lib/action-result';
-import { deleteDocument, restoreDocument } from '@/lib/documents/actions';
+import { deleteDocument, restoreDocument } from '@/lib/documents/library-actions';
 import type { DocumentMutationResult, OrganizationDocument } from '@/lib/documents/types';
 
 function getDocumentId(document: OrganizationDocument): string {

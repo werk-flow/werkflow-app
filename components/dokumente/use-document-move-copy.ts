@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { useBatchProgress } from '@/hooks/use-batch-progress';
 import type { ActionResult } from '@/lib/action-result';
-import { copyDocument, copyDocumentFolder, moveDocument, moveDocumentFolder } from '@/lib/documents/actions';
+import { copyDocumentFolder, moveDocumentFolder } from '@/lib/documents/folder-actions';
+import { copyDocument, moveDocument } from '@/lib/documents/library-actions';
 import type { DocumentFolder, DocumentLibraryView, OrganizationDocument } from '@/lib/documents/types';
 import {
   getSharedSourceFolderId,

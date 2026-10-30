@@ -2,7 +2,7 @@ import 'server-only';
 
 // Hydration of document, folder, version, and audit rows into their view
 // models. These are internal server helpers, not Server Actions: they take the
-// admin client from an authorized caller in actions.ts and must never be
+// admin client from an authorized caller in the action modules and must never be
 // exported from a 'use server' module.
 
 import { toProfileReference } from '@/lib/profile-reference';
@@ -78,31 +78,15 @@ function collectDocumentLinkTargetIds(linkRows: DocumentLinkRow[]): {
   };
 }
 
-async function readDocumentLinkTargets(
+type DocumentLinkTargetIds = ReturnType<typeof collectDocumentLinkTargetIds>;
+
+/** The jobs, projects, clients and employees the links name. */
+function readCoreLinkTargets(
   admin: SupabaseAdmin,
   organizationIds: string[],
-  targetIds: ReturnType<typeof collectDocumentLinkTargetIds>,
+  { jobIds, projectIds, clientIds, employeeIds }: DocumentLinkTargetIds,
 ) {
-  const {
-    jobIds,
-    projectIds,
-    clientIds,
-    employeeIds,
-    requestIds,
-    equipmentIds,
-    serviceCaseIds,
-    maintenanceCoverageIds,
-  } = targetIds;
-  const [
-    jobsResult,
-    projectsResult,
-    clientsResult,
-    employeesResult,
-    requestsResult,
-    equipmentResult,
-    serviceCasesResult,
-    maintenanceCoveragesResult,
-  ] = await Promise.all([
+  return Promise.all([
     jobIds.length > 0
       ? readInBatches(jobIds, (ids) =>
           admin
@@ -138,6 +122,16 @@ async function readDocumentLinkTargets(
             .in('id', [...ids]),
         )
       : Promise.resolve({ data: [], error: null }),
+  ]);
+}
+
+/** The requests, equipment, service cases and maintenance coverages the links name. */
+function readServiceLinkTargets(
+  admin: SupabaseAdmin,
+  organizationIds: string[],
+  { requestIds, equipmentIds, serviceCaseIds, maintenanceCoverageIds }: DocumentLinkTargetIds,
+) {
+  return Promise.all([
     requestIds.length > 0
       ? readInBatches(requestIds, (ids) =>
           admin
@@ -174,6 +168,20 @@ async function readDocumentLinkTargets(
             .in('id', [...ids]),
         )
       : Promise.resolve({ data: [], error: null }),
+  ]);
+}
+
+async function readDocumentLinkTargets(
+  admin: SupabaseAdmin,
+  organizationIds: string[],
+  targetIds: DocumentLinkTargetIds,
+) {
+  const [
+    [jobsResult, projectsResult, clientsResult, employeesResult],
+    [requestsResult, equipmentResult, serviceCasesResult, maintenanceCoveragesResult],
+  ] = await Promise.all([
+    readCoreLinkTargets(admin, organizationIds, targetIds),
+    readServiceLinkTargets(admin, organizationIds, targetIds),
   ]);
 
   if (
@@ -289,7 +297,7 @@ function buildDocumentLinksByDocumentId(
   return linksByDocumentId;
 }
 
-type OrdinaryDocumentViewRow = Database['public']['Views']['ordinary_documents']['Row'];
+export type OrdinaryDocumentViewRow = Database['public']['Views']['ordinary_documents']['Row'];
 
 /**
  * Rows of the `ordinary_documents` view as `documents` rows. The view selects
