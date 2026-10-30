@@ -13,8 +13,6 @@
     "lib/inventory/actions.ts": 1567,
     "lib/jobs/actions.ts": 1021,
     "lib/jobs/types.ts": 890,
-    "lib/personnel/actions.ts": 891,
-    "lib/personnel/lifecycle-actions.ts": 1244,
     "lib/planning/actions.ts": 811,
     "lib/planning/server.ts": 1165,
     "lib/qualifications/actions.ts": 1228,
@@ -599,9 +597,6 @@
     "lib/members/actions.ts": { "removeMember": 90 },
     "lib/org/settings-actions.ts": { "updateOrganizationSettings": 94 },
     "lib/parking/actions.ts": { "getJobParkingContexts": 92 },
-    "lib/personnel/actions.ts": { "getPersonnelDetail": 90 },
-    "lib/personnel/lifecycle-actions.ts": { "getPersonnelLifecycle": 178 },
-    "lib/personnel/target-actions.ts": { "getTodayTargetsForMembers": 82 },
     "lib/planning/actions.ts": {
       "extendPlanningSeriesHorizon": 157,
       "updatePlanningCalendarEntry": 131,

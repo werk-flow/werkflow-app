@@ -67,7 +67,7 @@ export const HOLIDAY_REGION_LABELS: Record<HolidayRegion, string> = {
 };
 
 export function isHolidayRegion(value: string): value is HolidayRegion {
-  return (HOLIDAY_REGIONS as string[]).includes(value);
+  return HOLIDAY_REGIONS.some((region) => region === value);
 }
 
 export type PublicHoliday = {
