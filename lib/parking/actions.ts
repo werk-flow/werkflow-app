@@ -10,11 +10,12 @@ import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
-import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { WORK_BLOCKER_REASONS } from '@/lib/work-lifecycle/types';
 import type { JobParkingContext } from './types';
+import { loadResponsibleNames } from './responsible-names';
 import { logError } from '@/lib/logging';
 
 const parkingContextSchema = z.object({
@@ -139,53 +140,6 @@ export async function getParkingResponsibleOptions(): Promise<
       }))
       .sort((left, right) => left.label.localeCompare(right.label)),
   };
-}
-
-/**
- * The display name of each responsible employee record: the member's profile name, else the
- * record's own. Null when a read failed.
- */
-async function loadResponsibleNames(
-  admin: AdminClient,
-  orgId: string,
-  responsibleIds: string[],
-): Promise<Map<string, string> | null> {
-  const recordsResult = await readInBatches(responsibleIds, (batch) =>
-    admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .eq('organization_id', orgId)
-      .in('id', [...batch]),
-  );
-  if (recordsResult.error) {
-    logError('Failed to resolve parking responsibles:', recordsResult.error);
-    return null;
-  }
-  const userIds = (recordsResult.data ?? []).flatMap((record) => (record.user_id ? [record.user_id] : []));
-  const profilesResult = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logError('Failed to resolve parking responsible profiles:', profilesResult.error);
-    return null;
-  }
-  const profileNames = new Map(
-    (profilesResult.data ?? []).map((profile) => [
-      profile.id,
-      [profile.first_name, profile.last_name].filter(Boolean).join(' '),
-    ]),
-  );
-  return new Map(
-    (recordsResult.data ?? []).map((record) => [
-      record.id,
-      (record.user_id ? profileNames.get(record.user_id) : null) ||
-        [record.first_name, record.last_name].filter(Boolean).join(' ') ||
-        'Unbenannt',
-    ]),
-  );
 }
 
 export async function getJobParkingContexts(): Promise<ActionResult<{ contexts: JobParkingContext[] }>> {
