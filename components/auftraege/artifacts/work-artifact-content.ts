@@ -6,7 +6,6 @@ export type WorkArtifactEvidenceRequirement = {
   documentCategory: string;
   fulfillment?: { id: string; version: number } | null;
 };
-export type WorkArtifactTarget = { targetType: 'job' | 'project'; targetId: string };
 
 // Editor state: a patch may set a field to undefined to clear it; `compact` drops
 // those before the input reaches the server action.

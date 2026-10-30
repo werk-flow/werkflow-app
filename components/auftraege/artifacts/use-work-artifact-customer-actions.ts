@@ -10,7 +10,7 @@ import { discardUnlinkedWorkArtifactSignature, recordWorkArtifactAction } from '
 import { WORK_ARTIFACT_LEGAL_NOTICE } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
-import type { WorkArtifactTarget } from './work-artifact-content';
+import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 
 const CUSTOMER_NAME_REQUIRED = 'Bitte gib den Namen der unterzeichnenden Person an.';
 

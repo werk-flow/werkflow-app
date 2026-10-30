@@ -7,22 +7,39 @@ import type { PostgrestSingleResponse } from '@supabase/supabase-js';
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { failCachedRead } from '@/lib/data/cached-read-failure';
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import type { Json } from '@/lib/supabase/database.types';
+import { DOCUMENT_CATEGORIES } from '@/lib/documents/types';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
+import type { Database, Json } from '@/lib/supabase/database.types';
 import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
-import type {
-  ApplyWorkTemplateInput,
-  PublishedWorkTemplateOption,
-  WorkTemplateApplicationPreview,
-  WorkTemplateDetail,
-  WorkTemplateDraft,
-  WorkTemplateSummary,
-  WorkTemplateTargetType,
+import {
+  WORK_TEMPLATE_ITEM_KINDS,
+  WORK_TEMPLATE_REQUIREMENT_STATES,
+  WORK_TEMPLATE_TARGET_TYPES,
+  WORK_TEMPLATE_VERSION_STATUSES,
+  type ApplyWorkTemplateInput,
+  type PublishedWorkTemplateOption,
+  type WorkTemplateApplicationPreview,
+  type WorkTemplateDetail,
+  type WorkTemplateDraft,
+  type WorkTemplateSummary,
+  type WorkTemplateTargetType,
 } from './types';
 
-type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
+type TemplateRow = Pick<
+  Database['public']['Tables']['work_templates']['Row'],
+  'id' | 'target_type' | 'archived_at' | 'draft_version_id' | 'current_published_version_id' | 'updated_at'
+>;
+type VersionRow = Awaited<ReturnType<typeof loadVersions>>[number];
+type VersionRows = Awaited<ReturnType<typeof readVersionRows>>;
+type TemplateEvent = NonNullable<VersionRows[5]['data']>[number];
+type HistoryLabels = {
+  actorNames: Map<string, string>;
+  versionNumbers: Map<string, number>;
+  targetLabels: Map<string, string>;
+};
 
 function emptyDraft(name: string, description: string | null): WorkTemplateDraft {
   return { name, description, items: [], evidence: [], dependencies: [], materials: [], capabilities: [] };
@@ -38,6 +55,25 @@ async function loadVersions(admin: AdminClient, organizationId: string, versionI
   );
   if (error) throw error;
   return data;
+}
+
+function toWorkTemplateSummary(template: TemplateRow, version: VersionRow): WorkTemplateSummary {
+  return {
+    id: template.id,
+    targetType: constrainedValue(
+      WORK_TEMPLATE_TARGET_TYPES,
+      template.target_type,
+      'work_templates.target_type',
+    ),
+    archivedAt: template.archived_at,
+    draftVersionId: template.draft_version_id,
+    currentPublishedVersionId: template.current_published_version_id,
+    name: version.name,
+    description: version.description,
+    versionNumber: version.version_number,
+    status: constrainedValue(WORK_TEMPLATE_VERSION_STATUSES, version.status, 'work_template_versions.status'),
+    updatedAt: template.updated_at,
+  };
 }
 
 /**
@@ -78,20 +114,7 @@ export async function loadWorkTemplateSummaries(organizationId: string): Promise
     const version =
       byId.get(template.draft_version_id ?? '') ?? byId.get(template.current_published_version_id ?? '');
     if (!version) return [];
-    return [
-      {
-        id: template.id,
-        targetType: template.target_type as WorkTemplateTargetType,
-        archivedAt: template.archived_at,
-        draftVersionId: template.draft_version_id,
-        currentPublishedVersionId: template.current_published_version_id,
-        name: version.name,
-        description: version.description,
-        versionNumber: version.version_number,
-        status: version.status as 'draft' | 'published',
-        updatedAt: template.updated_at,
-      },
-    ];
+    return [toWorkTemplateSummary(template, version)];
   });
 }
 
@@ -156,87 +179,65 @@ async function loadWorkTemplateSummary(
   const version =
     byId.get(template.draft_version_id ?? '') ?? byId.get(template.current_published_version_id ?? '');
   if (!version) return null;
-  return {
-    id: template.id,
-    targetType: template.target_type as WorkTemplateTargetType,
-    archivedAt: template.archived_at,
-    draftVersionId: template.draft_version_id,
-    currentPublishedVersionId: template.current_published_version_id,
-    name: version.name,
-    description: version.description,
-    versionNumber: version.version_number,
-    status: version.status as 'draft' | 'published',
-    updatedAt: template.updated_at,
-  };
+  return toWorkTemplateSummary(template, version);
 }
 
-export async function loadWorkTemplateDetail(
+async function readVersionRows(
+  admin: AdminClient,
   organizationId: string,
   templateId: string,
-): Promise<WorkTemplateDetail | null> {
-  const admin = createSupabaseAdminClient();
-  const summary = await loadWorkTemplateSummary(admin, organizationId, templateId);
-  if (!summary) return null;
-  const versionId = summary.draftVersionId ?? summary.currentPublishedVersionId;
-  if (!versionId) return { ...summary, draft: emptyDraft(summary.name, summary.description), history: [] };
-
-  const [itemsResult, evidenceResult, dependenciesResult, materialsResult, capabilitiesResult, eventsResult] =
-    await Promise.all([
-      admin
-        .from('work_template_items')
-        .select('id, item_kind, content, requirement_state, group_label, notes, sort_order')
-        .eq('organization_id', organizationId)
-        .eq('version_id', versionId)
-        .order('sort_order')
-        .limit(200),
-      admin
-        .from('work_template_item_evidence_requirements')
-        .select('id, template_item_id, description, document_category, sort_order')
-        .eq('organization_id', organizationId)
-        .eq('version_id', versionId)
-        .order('sort_order')
-        .limit(500),
-      admin
-        .from('work_template_item_dependencies')
-        .select('id, predecessor_item_id, dependent_item_id')
-        .eq('organization_id', organizationId)
-        .eq('version_id', versionId)
-        .limit(1000),
-      admin
-        .from('work_template_material_lines')
-        .select('id, item_id, preferred_location_id, planned_quantity, is_billable, notes, sort_order')
-        .eq('organization_id', organizationId)
-        .eq('version_id', versionId)
-        .order('sort_order')
-        .limit(500),
-      admin
-        .from('work_template_capability_requirements')
-        .select('id, capability_id, require_confirmation, sort_order')
-        .eq('organization_id', organizationId)
-        .eq('version_id', versionId)
-        .order('sort_order')
-        .limit(200),
-      admin
-        .from('work_template_events')
-        .select('id, event_type, template_version_id, event_payload, actor_id, created_at')
-        .eq('organization_id', organizationId)
-        .eq('template_id', templateId)
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ]);
-  const failed = [
-    itemsResult,
-    evidenceResult,
-    dependenciesResult,
-    materialsResult,
-    capabilitiesResult,
-    eventsResult,
-  ].find((result) => result.error);
+  versionId: string,
+) {
+  const results = await Promise.all([
+    admin
+      .from('work_template_items')
+      .select('id, item_kind, content, requirement_state, group_label, notes, sort_order')
+      .eq('organization_id', organizationId)
+      .eq('version_id', versionId)
+      .order('sort_order')
+      .limit(200),
+    admin
+      .from('work_template_item_evidence_requirements')
+      .select('id, template_item_id, description, document_category, sort_order')
+      .eq('organization_id', organizationId)
+      .eq('version_id', versionId)
+      .order('sort_order')
+      .limit(500),
+    admin
+      .from('work_template_item_dependencies')
+      .select('id, predecessor_item_id, dependent_item_id')
+      .eq('organization_id', organizationId)
+      .eq('version_id', versionId)
+      .limit(1000),
+    admin
+      .from('work_template_material_lines')
+      .select('id, item_id, preferred_location_id, planned_quantity, is_billable, notes, sort_order')
+      .eq('organization_id', organizationId)
+      .eq('version_id', versionId)
+      .order('sort_order')
+      .limit(500),
+    admin
+      .from('work_template_capability_requirements')
+      .select('id, capability_id, require_confirmation, sort_order')
+      .eq('organization_id', organizationId)
+      .eq('version_id', versionId)
+      .order('sort_order')
+      .limit(200),
+    admin
+      .from('work_template_events')
+      .select('id, event_type, template_version_id, event_payload, actor_id, created_at')
+      .eq('organization_id', organizationId)
+      .eq('template_id', templateId)
+      .order('created_at', { ascending: false })
+      .limit(200),
+  ]);
+  const failed = results.find((result) => result.error);
   if (failed?.error) throw failed.error;
+  return results;
+}
 
-  const actorIds = Array.from(
-    new Set((eventsResult.data ?? []).flatMap((event) => (event.actor_id ? [event.actor_id] : []))),
-  );
+async function loadActorNames(admin: AdminClient, events: TemplateEvent[]): Promise<Map<string, string>> {
+  const actorIds = Array.from(new Set(events.flatMap((event) => (event.actor_id ? [event.actor_id] : []))));
   const profilesResult = await readInBatches(actorIds, (batch) =>
     admin
       .from('profiles')
@@ -244,22 +245,20 @@ export async function loadWorkTemplateDetail(
       .in('id', [...batch]),
   );
   if (profilesResult.error) throw profilesResult.error;
-  const actorNames = new Map(
+  return new Map(
     profilesResult.data.map((profile) => [
       profile.id,
       [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email || 'Unbekannt',
     ]),
   );
-  const eventVersionIds = Array.from(
-    new Set(
-      (eventsResult.data ?? []).flatMap((event) =>
-        event.template_version_id ? [event.template_version_id] : [],
-      ),
-    ),
-  );
-  const eventVersions = await loadVersions(admin, organizationId, eventVersionIds);
-  const versionNumbers = new Map(eventVersions.map((version) => [version.id, version.version_number]));
-  const eventPayloads = (eventsResult.data ?? []).map((event) => jsonRecordOrEmpty(event.event_payload));
+}
+
+async function loadTargetLabels(
+  admin: AdminClient,
+  organizationId: string,
+  events: TemplateEvent[],
+): Promise<Map<string, string>> {
+  const eventPayloads = events.map((event) => jsonRecordOrEmpty(event.event_payload));
   const jobIds = eventPayloads.flatMap((payload) =>
     typeof payload.jobId === 'string' ? [payload.jobId] : [],
   );
@@ -284,75 +283,116 @@ export async function loadWorkTemplateDetail(
   ]);
   if (jobsResult.error) throw jobsResult.error;
   if (projectsResult.error) throw projectsResult.error;
-  const targetLabels = new Map<string, string>([
+  return new Map<string, string>([
     ...jobsResult.data.map((job) => [job.id, `${job.job_number} · ${job.title}`] as const),
     ...projectsResult.data.map(
       (project) => [project.id, `${project.project_number} · ${project.name}`] as const,
     ),
   ]);
+}
 
+async function loadHistoryLabels(
+  admin: AdminClient,
+  organizationId: string,
+  events: TemplateEvent[],
+): Promise<HistoryLabels> {
+  const actorNames = await loadActorNames(admin, events);
+  const eventVersionIds = Array.from(
+    new Set(events.flatMap((event) => (event.template_version_id ? [event.template_version_id] : []))),
+  );
+  const eventVersions = await loadVersions(admin, organizationId, eventVersionIds);
+  const versionNumbers = new Map(eventVersions.map((version) => [version.id, version.version_number]));
+  const targetLabels = await loadTargetLabels(admin, organizationId, events);
+  return { actorNames, versionNumbers, targetLabels };
+}
+
+function toDraft(summary: WorkTemplateSummary, rows: VersionRows): WorkTemplateDraft {
+  const [itemsResult, evidenceResult, dependenciesResult, materialsResult, capabilitiesResult] = rows;
   return {
-    ...summary,
-    draft: {
-      name: summary.name,
-      description: summary.description,
-      items: (itemsResult.data ?? []).map((item) => ({
-        id: item.id,
-        itemKind: item.item_kind as 'task' | 'checklist',
-        content: item.content,
-        requirementState: item.requirement_state as 'required' | 'optional',
-        groupLabel: item.group_label,
-        notes: item.notes,
-        sortOrder: item.sort_order,
-      })),
-      evidence: (evidenceResult.data ?? []).map((item) => ({
-        id: item.id,
-        templateItemId: item.template_item_id,
-        description: item.description,
-        documentCategory: item.document_category as WorkTemplateDraft['evidence'][number]['documentCategory'],
-        sortOrder: item.sort_order,
-      })),
-      dependencies: (dependenciesResult.data ?? []).map((item) => ({
-        id: item.id,
-        predecessorItemId: item.predecessor_item_id,
-        dependentItemId: item.dependent_item_id,
-      })),
-      materials: (materialsResult.data ?? []).map((item) => ({
-        id: item.id,
-        itemId: item.item_id,
-        preferredLocationId: item.preferred_location_id,
-        plannedQuantity: Number(item.planned_quantity),
-        isBillable: item.is_billable,
-        notes: item.notes,
-        sortOrder: item.sort_order,
-      })),
-      capabilities: (capabilitiesResult.data ?? []).map((item) => ({
-        id: item.id,
-        capabilityId: item.capability_id,
-        requireConfirmation: item.require_confirmation,
-        sortOrder: item.sort_order,
-      })),
-    },
-    history: (eventsResult.data ?? []).map((event) => {
-      const payload = jsonRecordOrEmpty(event.event_payload);
-      const targetId =
-        typeof payload.jobId === 'string'
-          ? payload.jobId
-          : typeof payload.projectId === 'string'
-            ? payload.projectId
-            : null;
-      return {
-        id: event.id,
-        eventType: event.event_type,
-        versionNumber: event.template_version_id
-          ? (versionNumbers.get(event.template_version_id) ?? null)
-          : null,
-        actorName: event.actor_id ? (actorNames.get(event.actor_id) ?? 'Unbekannt') : 'System',
-        targetLabel: targetId ? (targetLabels.get(targetId) ?? 'Gelöschte Arbeit') : null,
-        createdAt: event.created_at,
-      };
-    }),
+    name: summary.name,
+    description: summary.description,
+    items: (itemsResult.data ?? []).map((item) => ({
+      id: item.id,
+      itemKind: constrainedValue(WORK_TEMPLATE_ITEM_KINDS, item.item_kind, 'work_template_items.item_kind'),
+      content: item.content,
+      requirementState: constrainedValue(
+        WORK_TEMPLATE_REQUIREMENT_STATES,
+        item.requirement_state,
+        'work_template_items.requirement_state',
+      ),
+      groupLabel: item.group_label,
+      notes: item.notes,
+      sortOrder: item.sort_order,
+    })),
+    evidence: (evidenceResult.data ?? []).map((item) => ({
+      id: item.id,
+      templateItemId: item.template_item_id,
+      description: item.description,
+      documentCategory: constrainedValue(
+        DOCUMENT_CATEGORIES,
+        item.document_category,
+        'work_template_item_evidence_requirements.document_category',
+      ),
+      sortOrder: item.sort_order,
+    })),
+    dependencies: (dependenciesResult.data ?? []).map((item) => ({
+      id: item.id,
+      predecessorItemId: item.predecessor_item_id,
+      dependentItemId: item.dependent_item_id,
+    })),
+    materials: (materialsResult.data ?? []).map((item) => ({
+      id: item.id,
+      itemId: item.item_id,
+      preferredLocationId: item.preferred_location_id,
+      plannedQuantity: Number(item.planned_quantity),
+      isBillable: item.is_billable,
+      notes: item.notes,
+      sortOrder: item.sort_order,
+    })),
+    capabilities: (capabilitiesResult.data ?? []).map((item) => ({
+      id: item.id,
+      capabilityId: item.capability_id,
+      requireConfirmation: item.require_confirmation,
+      sortOrder: item.sort_order,
+    })),
   };
+}
+
+function toHistory(events: TemplateEvent[], labels: HistoryLabels): WorkTemplateDetail['history'] {
+  return events.map((event) => {
+    const payload = jsonRecordOrEmpty(event.event_payload);
+    const targetId =
+      typeof payload.jobId === 'string'
+        ? payload.jobId
+        : typeof payload.projectId === 'string'
+          ? payload.projectId
+          : null;
+    return {
+      id: event.id,
+      eventType: event.event_type,
+      versionNumber: event.template_version_id
+        ? (labels.versionNumbers.get(event.template_version_id) ?? null)
+        : null,
+      actorName: event.actor_id ? (labels.actorNames.get(event.actor_id) ?? 'Unbekannt') : 'System',
+      targetLabel: targetId ? (labels.targetLabels.get(targetId) ?? 'Gelöschte Arbeit') : null,
+      createdAt: event.created_at,
+    };
+  });
+}
+
+export async function loadWorkTemplateDetail(
+  organizationId: string,
+  templateId: string,
+): Promise<WorkTemplateDetail | null> {
+  const admin = createSupabaseAdminClient();
+  const summary = await loadWorkTemplateSummary(admin, organizationId, templateId);
+  if (!summary) return null;
+  const versionId = summary.draftVersionId ?? summary.currentPublishedVersionId;
+  if (!versionId) return { ...summary, draft: emptyDraft(summary.name, summary.description), history: [] };
+  const rows = await readVersionRows(admin, organizationId, templateId, versionId);
+  const events = rows[5].data ?? [];
+  const labels = await loadHistoryLabels(admin, organizationId, events);
+  return { ...summary, draft: toDraft(summary, rows), history: toHistory(events, labels) };
 }
 
 async function countVersionRows(
