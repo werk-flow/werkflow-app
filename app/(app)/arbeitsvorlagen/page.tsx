@@ -9,7 +9,7 @@ import { PageActionButton, PageActionProvider } from '@/components/shared/page-a
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
-import { getInventoryLocationOptions } from '@/lib/inventory/actions';
+import { getInventoryLocationOptions } from '@/lib/inventory/catalog-actions';
 import type { OrgRole } from '@/lib/roles';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getQualificationWorkspace } from '@/lib/qualifications/workspace-actions';

@@ -76,8 +76,8 @@ export function ConvertRequestJobFields({ form }: { form: ConvertRequestForm }) 
       )}
       {!plannedDate && (
         <p className="text-xs text-muted-foreground">
-          Ohne Datum landet der Auftrag im Parkplatz und kann später eingeplant werden. Es wird nichts
-          automatisch terminiert.
+          Ohne Datum bleibt der Auftrag ungeplant und steht unter „Aufträge“ bei den aktuellen Aufträgen. Dort
+          planst du ihn später ein oder parkst ihn bewusst. Nichts wird automatisch terminiert.
         </p>
       )}
     </>

@@ -1,4 +1,4 @@
-import type { InventoryImportRow } from '@/lib/inventory/actions';
+import type { InventoryImportRow } from '@/lib/inventory/action-inputs';
 import type { InventoryItemType } from '@/lib/inventory/types';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 

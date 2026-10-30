@@ -221,7 +221,7 @@ export function useConvertRequestForm({
             jobNumber: number.trim(),
             priority,
             ...(plannedDate ? { plannedDate } : {}),
-            // The time field hides without a date; a parked job carries no time.
+            // The time field hides without a date; an undated job carries no time.
             ...(plannedDate && plannedTime ? { plannedTime } : {}),
             ...(location.trim() ? { location: location.trim() } : {}),
             ...(templateVersionId ? { templateVersionId } : {}),
