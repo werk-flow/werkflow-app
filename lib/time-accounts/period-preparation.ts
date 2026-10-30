@@ -94,7 +94,10 @@ export function resolveEmployeeDailyTargets(
   employee: Pick<PeriodEmployee, 'id' | 'entry_date' | 'exit_date'>,
   policiesByDate: PeriodPolicies,
   shared: {
-    sources: Pick<PeriodShared['sources'], 'schedules' | 'conditions' | 'vacations' | 'sickness' | 'calendar'>;
+    sources: Pick<
+      PeriodShared['sources'],
+      'schedules' | 'conditions' | 'vacations' | 'sickness' | 'calendar'
+    >;
     index: Pick<PeriodShared['index'], 'dates'>;
   },
 ): { resolvedTargets: DailyTarget[]; dailyTargets: DailyTargetInput[] } {
