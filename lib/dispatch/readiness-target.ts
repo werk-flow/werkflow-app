@@ -21,7 +21,7 @@ import {
   type ReadinessFacts,
   type SiteReadinessFacts,
 } from './readiness';
-import { loadEmployeeNameFacts, type EmployeeNameFacts } from './server';
+import { dispatchReadFailed, loadEmployeeNameFacts, type EmployeeNameFacts } from './server';
 import type { ReadinessResult, TravelNote } from './types';
 
 async function loadSiteFacts(
@@ -73,14 +73,6 @@ type DayVisitJobRow = Pick<
   Database['public']['Tables']['jobs']['Row'],
   'id' | 'title' | 'description' | 'site_id'
 >;
-
-function travelReadFailed(read: string, error: { message: string; code?: string }): null {
-  logReadFailure(`loadTravelNotesForOccurrence: ${read} failed`, {
-    code: error.code ?? 'unknown',
-    message: error.message,
-  });
-  return null;
-}
 
 function toTravelVisitFacts(input: {
   assignments: DayVisitAssignmentRow[];
@@ -147,7 +139,8 @@ async function loadDayVisitAssignmentsAndJobs(
     ),
   ]);
   const visitError = assignmentsResult.error ?? jobsResult.error;
-  if (visitError) return travelReadFailed('assignments or jobs', visitError);
+  if (visitError)
+    return dispatchReadFailed('loadTravelNotesForOccurrence', 'assignments or jobs', visitError);
   return { assignments: assignmentsResult.data, jobs: jobsResult.data };
 }
 
@@ -185,7 +178,7 @@ async function loadTravelNotesForOccurrence(
         .range(from, to),
     LIST_ROW_CAP,
   );
-  if (error) return travelReadFailed('day occurrences', error);
+  if (error) return dispatchReadFailed('loadTravelNotesForOccurrence', 'day occurrences', error);
   const sameDayRows = dayRows.filter(
     (row) => row.start_at && formatBerlinLocalDateTime(row.start_at).slice(0, 10) === localDate,
   );

@@ -309,8 +309,13 @@ export type CommitmentWindowRow = Pick<
   'occurrence_id' | 'committed_date' | 'window_start_time' | 'window_end_time'
 >;
 
-function dispatchCardsReadFailed(read: string, error: { message: string; code?: string }): null {
-  logReadFailure(`loadEmployeeDispatchCards: ${read} failed`, {
+/** Logs a failed dispatch read under its reader's name and returns the reader's `null` failure. */
+export function dispatchReadFailed(
+  scope: string,
+  read: string,
+  error: { message: string; code?: string },
+): null {
+  logReadFailure(`${scope}: ${read} failed`, {
     code: error.code ?? 'unknown',
     message: error.message,
   });
@@ -366,7 +371,11 @@ async function loadOwnDispatchRevisions(
   ]);
   const revisionError = revisionsResult.error ?? myRecipientsResult.error ?? acksResult.error;
   if (revisionError) {
-    return dispatchCardsReadFailed('revisions, recipients or acknowledgements', revisionError);
+    return dispatchReadFailed(
+      'loadEmployeeDispatchCards',
+      'revisions, recipients or acknowledgements',
+      revisionError,
+    );
   }
   return {
     revisions: revisionsResult.data,
@@ -433,7 +442,7 @@ async function loadCardCommitments(
       .in('occurrence_id', [...batch]),
   );
   if (commitmentsResult.error) {
-    return dispatchCardsReadFailed('commitments', commitmentsResult.error);
+    return dispatchReadFailed('loadEmployeeDispatchCards', 'commitments', commitmentsResult.error);
   }
   return new Map(commitmentsResult.data.map((row) => [row.occurrence_id, row]));
 }
@@ -482,7 +491,7 @@ export async function loadEmployeeDispatchCards(input: {
     .eq('organization_id', input.orgId)
     .eq('user_id', input.userId)
     .maybeSingle();
-  if (recordError) return dispatchCardsReadFailed('employee record', recordError);
+  if (recordError) return dispatchReadFailed('loadEmployeeDispatchCards', 'employee record', recordError);
   if (!record) return [];
 
   // A daily series over two years gives one job more than 700 visits: read
@@ -499,7 +508,8 @@ export async function loadEmployeeDispatchCards(input: {
         .range(from, to),
     LIST_ROW_CAP,
   );
-  if (occurrenceError) return dispatchCardsReadFailed('job occurrences', occurrenceError);
+  if (occurrenceError)
+    return dispatchReadFailed('loadEmployeeDispatchCards', 'job occurrences', occurrenceError);
 
   const dispatchSelect = 'id, organization_id, occurrence_id, job_id, status, current_revision_id';
   const [jobDispatchResult, occurrenceDispatchResult] = await Promise.all([
@@ -521,7 +531,7 @@ export async function loadEmployeeDispatchCards(input: {
     ),
   ]);
   const dispatchError = jobDispatchResult.error ?? occurrenceDispatchResult.error;
-  if (dispatchError) return dispatchCardsReadFailed('dispatches', dispatchError);
+  if (dispatchError) return dispatchReadFailed('loadEmployeeDispatchCards', 'dispatches', dispatchError);
   const dispatchRows = [
     ...new Map(
       [...(jobDispatchResult.data ?? []), ...occurrenceDispatchResult.data].map((row) => [row.id, row]),

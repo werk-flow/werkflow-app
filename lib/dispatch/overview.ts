@@ -9,10 +9,15 @@ import { formatBerlinLocalDateTime } from '@/lib/date-time/berlin';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { isCommitmentMismatch, type CustomerCommitment } from '@/lib/commitments/types';
-import { logReadFailure } from '@/lib/data/read-request-cache';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { deriveTravelNotes, type TravelVisitFact } from './derivation';
-import { loadDispatchViews, loadEmployeeNameFacts, type DispatchRow, type EmployeeNameFacts } from './server';
+import {
+  dispatchReadFailed,
+  loadDispatchViews,
+  loadEmployeeNameFacts,
+  type DispatchRow,
+  type EmployeeNameFacts,
+} from './server';
 import type {
   DispatchCommitmentSummary,
   DispatchOverview,
@@ -67,14 +72,6 @@ type OverviewCommitmentRow = Pick<
   | 'contact_id'
   | 'recorded_at'
 >;
-
-function dispatchOverviewReadFailed(read: string, error: { message: string; code?: string }): null {
-  logReadFailure(`loadDispatchOverview: ${read} failed`, {
-    code: error.code ?? 'unknown',
-    message: error.message,
-  });
-  return null;
-}
 
 function buildDispatchTravelFacts(
   occurrences: OverviewOccurrence[],
@@ -193,7 +190,7 @@ async function loadUnscheduledDispatchJobs(
       .in('id', [...batch]),
   );
   if (unscheduledJobsResult.error) {
-    return dispatchOverviewReadFailed('unscheduled jobs', unscheduledJobsResult.error);
+    return dispatchReadFailed('loadDispatchOverview', 'unscheduled jobs', unscheduledJobsResult.error);
   }
   const unscheduledClientIds = unscheduledJobsResult.data.flatMap((job) =>
     job.client_id ? [job.client_id] : [],
@@ -206,7 +203,7 @@ async function loadUnscheduledDispatchJobs(
       .in('id', [...batch]),
   );
   if (unscheduledClientsResult.error) {
-    return dispatchOverviewReadFailed('unscheduled clients', unscheduledClientsResult.error);
+    return dispatchReadFailed('loadDispatchOverview', 'unscheduled clients', unscheduledClientsResult.error);
   }
   const unscheduledClients = new Map(unscheduledClientsResult.data.map((client) => [client.id, client]));
   const unscheduledJobById = new Map(unscheduledJobsResult.data.map((job) => [job.id, job]));
@@ -246,7 +243,7 @@ async function loadOverviewCommitments(
       .in('occurrence_id', [...batch]),
   );
   if (commitmentsResult.error) {
-    return dispatchOverviewReadFailed('commitments', commitmentsResult.error);
+    return dispatchReadFailed('loadDispatchOverview', 'commitments', commitmentsResult.error);
   }
   const contactIds = commitmentsResult.data.flatMap((row) => (row.contact_id ? [row.contact_id] : []));
   const contactsResult = await readInBatches(contactIds, (batch) =>
@@ -256,7 +253,8 @@ async function loadOverviewCommitments(
       .eq('organization_id', orgId)
       .in('id', [...batch]),
   );
-  if (contactsResult.error) return dispatchOverviewReadFailed('contacts', contactsResult.error);
+  if (contactsResult.error)
+    return dispatchReadFailed('loadDispatchOverview', 'contacts', contactsResult.error);
   const contactNames = new Map(contactsResult.data.map((contact) => [contact.id, contact.name]));
   const commitmentByOccurrence = new Map(commitmentsResult.data.map((row) => [row.occurrence_id, row]));
   return { contactNames, commitmentByOccurrence };
@@ -292,7 +290,8 @@ async function loadOverviewWindow(
         .range(from, to),
     LIST_ROW_CAP,
   );
-  if (occurrenceError) return dispatchOverviewReadFailed('window occurrences', occurrenceError);
+  if (occurrenceError)
+    return dispatchReadFailed('loadDispatchOverview', 'window occurrences', occurrenceError);
 
   const jobIds = occurrenceRows.flatMap((row) => (row.job_id ? [row.job_id] : []));
   const jobsResult = await readInBatches(jobIds, (batch) =>
@@ -302,7 +301,7 @@ async function loadOverviewWindow(
       .eq('organization_id', input.orgId)
       .in('id', [...batch]),
   );
-  if (jobsResult.error) return dispatchOverviewReadFailed('jobs', jobsResult.error);
+  if (jobsResult.error) return dispatchReadFailed('loadDispatchOverview', 'jobs', jobsResult.error);
   const jobs = new Map(jobsResult.data.map((job) => [job.id, job]));
 
   // Occurrences of parked jobs are hidden from the calendar; hide them here
@@ -367,7 +366,7 @@ async function loadOverviewDispatchFacts(
   const dispatchReadError =
     assignmentsResult.error ?? dispatchResult.error ?? unscheduledDispatchResult.error;
   if (dispatchReadError) {
-    return dispatchOverviewReadFailed('assignments or dispatches', dispatchReadError);
+    return dispatchReadFailed('loadDispatchOverview', 'assignments or dispatches', dispatchReadError);
   }
 
   const assignmentsByOccurrence = new Map<string, string[]>();
@@ -411,7 +410,7 @@ async function loadOverviewCustomers(
     ),
   ]);
   const customerError = clientsResult.error ?? sitesResult.error;
-  if (customerError) return dispatchOverviewReadFailed('clients or sites', customerError);
+  if (customerError) return dispatchReadFailed('loadDispatchOverview', 'clients or sites', customerError);
   return {
     clients: new Map(clientsResult.data.map((client) => [client.id, client])),
     sites: new Map(sitesResult.data.map((site) => [site.id, site])),
