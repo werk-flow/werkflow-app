@@ -100,16 +100,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
   },
-  'golden:p1-14': {
-    tests: ['an assigned field worker reports and resolves an own blocker and starts work by clocking in'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-15': {
-    tests: [
-      'a field worker submits a work report, a second person approves it, and a measurement is recorded',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
   'golden:p1-16': {
     tests: ['an assigned field worker works through the pack and completes the job'],
     movesIn: 'werk-flow/werkflow-planning#37',
@@ -131,10 +121,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
   'golden:p1-24a': {
     tests: ['the employee sees the week as their own row only'],
     movesIn: 'werk-flow/werkflow-planning#38',
-  },
-  'audit:wave-1:a1-auftraege': {
-    tests: ['A1-12/A1-13: Zuweisung entfernen, bearbeiten und Auftrag löschen'],
-    movesIn: 'werk-flow/werkflow-planning#37',
   },
   'audit:wave-1:a1-kalender': {
     tests: ['A1-21/A1-24: Kalenderansichten und getrennte Plan-/Arbeitszeitfilter'],

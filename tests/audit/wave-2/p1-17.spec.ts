@@ -147,13 +147,11 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
   test('establishes job/project scope, exact routes, warning facts, and role boundaries', async ({
     adminPage,
     bueroPage,
-    employeePage,
-    outsiderPage,
     world,
   }) => {
-    // Job/project ownership,
-    // confirmed routes, side-effect-free empty state, office responsibility,
-    // assigned-field minimalism and outsider route denial.
+    // Job/project ownership, confirmed routes, side-effect-free empty state and
+    // office responsibility. The field worker's and another organization's
+    // route denial is lib/org/work-page-access.test.ts.
     const scope = await seedProjectWithChildren(world, 'SCOPE', 1);
     const childJobNumber = expectDefined(scope.jobNumbers[0], 'the child job number');
     const childRoute = `/auftraege/projekt/${scope.projectNumber}/${childJobNumber}/uebergabe`;
@@ -165,11 +163,6 @@ test.describe('P1-17 exhaustive office handover flows @AUDIT-W2-P1-17 @AUDIT-W2'
     await expect(workHandoverSection(adminPage)).toContainText(HANDOVER_TEXT.executionMustBeComplete);
     await expect(workHandoverSection(bueroPage)).toBeVisible();
     expect(await getWorkHandoverState(world.orgId, { jobNumber: childJobNumber })).toEqual(before);
-
-    await employeePage.goto(childRoute);
-    await employeePage.waitForURL(/\/auftraege\/?$/);
-    await outsiderPage.goto(projectRoute);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/);
   });
 
   test('composes a project package from immutable child releases and keeps it through a successor', async ({

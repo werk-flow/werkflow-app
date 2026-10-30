@@ -197,6 +197,14 @@
           "titles": [
             "Kunde und Aufträge: Mitarbeiter sieht nur Zugewiesenes, fremde Organisation nichts"
           ]
+        },
+        {
+          "file": "supabase/tests/operational_list_pages.sql",
+          "kind": "sql",
+          "description": "the job list of a field worker counts and lists only assigned jobs, so a removed assignment hides the job",
+          "titles": [
+            "employee scope leaked hidden jobs"
+          ]
         }
       ],
       "clauses": "Auftrag anlegen/zuweisen; Handwerker sieht nur Zugewiesenes\nBearbeitungsdialog gegen Realtime-Resets stabilisiert; Zuweisungsgrenze in `A1-12/A1-13`.",
@@ -2204,6 +2212,14 @@
             "another organization can read work templates or applied items",
             "the office manager cannot read the organization templates"
           ]
+        },
+        {
+          "file": "lib/org/work-page-access.test.ts",
+          "kind": "unit",
+          "description": "the real page sends a field worker to the dashboard and lists no template of another organization",
+          "titles": [
+            "work and service pages refuse a field worker and never show another organization’s work, equipment or cases"
+          ]
         }
       ],
       "clauses": "Real Admin/Büro/employee/outsider sessions prove zero seeded templates, manager creation and validation, description/target/status filters, employee redirect and outsider isolation. A Büro dialog stays open across an Admin mutation and receives the queued refresh only after close.",
@@ -2424,6 +2440,14 @@
           "titles": [
             "The field worker reports an own blocker without manager controls",
             "The field worker resolves the blocker with a note"
+          ]
+        },
+        {
+          "file": "supabase/tests/work_execution_boundaries.sql",
+          "kind": "sql",
+          "description": "parking stays a manager control: the assigned employee's park is refused",
+          "titles": [
+            "an employee parked the job"
           ]
         }
       ],
