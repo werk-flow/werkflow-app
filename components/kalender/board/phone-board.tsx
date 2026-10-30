@@ -8,7 +8,7 @@ import { absenceItems, type BoardAbsenceItem, type BoardRowModel } from '@/lib/c
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
 import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 import { BarSegment } from '../surface/bar-segment';
 import { CalendarCard, dispatchChip, readinessChips } from '../surface/calendar-card';
 import type { CalendarSurfaceActions } from './types';

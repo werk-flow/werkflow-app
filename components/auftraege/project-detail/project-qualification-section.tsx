@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
 import { readInBackground } from '@/lib/data/background-read-client';
-import { setProjectCapabilityRequirements } from '@/lib/qualifications/actions';
+import { setProjectCapabilityRequirements } from '@/lib/qualifications/requirement-actions';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 

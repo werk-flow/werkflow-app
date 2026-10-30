@@ -1,6 +1,6 @@
 import 'server-only';
 import { logReadFailure } from '@/lib/data/read-request-cache';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { getCachedOrganizationCalendar } from '@/lib/data/cached';
 import { toEmploymentCondition } from '@/lib/personnel/types';
@@ -101,7 +101,7 @@ function balanceYears(
   return { from: Math.min(...years), to: Math.max(...years) };
 }
 
-type RecordVacationCounting = {
+export type RecordVacationCounting = {
   context: VacationCountingContext;
   /** The request's consumed days, counted once per request. */
   totalDaysOf: (request: VacationRequest) => number;
@@ -318,4 +318,51 @@ export async function hasApprovedFullDayVacationOn(
     return false;
   }
   return (data ?? []).length > 0;
+}
+
+/**
+ * Display names per employee record for the vacation calendar, profile names
+ * first; null when a read fails. The caller has resolved the organization.
+ */
+export async function loadCalendarPersonNames(
+  admin: AdminClient,
+  orgId: string,
+  recordIds: string[],
+): Promise<Map<string, string> | null> {
+  const { data: records, error: recordsError } = await readInBatches(recordIds, (ids) =>
+    admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name')
+      .eq('organization_id', orgId)
+      .in('id', [...ids]),
+  );
+  if (recordsError) {
+    logError('Failed to load calendar records:', recordsError);
+    return null;
+  }
+  const userIds = [
+    ...new Set((records ?? []).map((row) => row.user_id).filter((id): id is string => Boolean(id))),
+  ];
+  const profilesResult =
+    userIds.length > 0
+      ? await readInBatches(userIds, (ids) =>
+          admin
+            .from('profiles')
+            .select('id, first_name, last_name')
+            .in('id', [...ids]),
+        )
+      : { data: [], error: null };
+  if (profilesResult.error) {
+    logError('Failed to load calendar profiles:', profilesResult.error);
+    return null;
+  }
+  const profileByUserId = new Map((profilesResult.data ?? []).map((row) => [row.id, row]));
+  return new Map(
+    (records ?? []).map((record) => {
+      const profile = record.user_id ? profileByUserId.get(record.user_id) : undefined;
+      const firstName = profile?.first_name ?? record.first_name ?? '';
+      const lastName = profile?.last_name ?? record.last_name ?? '';
+      return [record.id, `${firstName} ${lastName}`.trim() || 'Unbekannt'];
+    }),
+  );
 }

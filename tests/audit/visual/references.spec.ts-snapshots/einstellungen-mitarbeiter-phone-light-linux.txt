@@ -1,7 +1,8 @@
 Menü öffnen
 Einstellungen
+Organisation
+Kalender
 Zeiterfassung
-Aufträge & Projekte
 Mitarbeiter
 Mitarbeiter
 Zeigt, wer Freigaben verantwortet und wer diese Verantwortung zeitlich begrenzt vertritt.
