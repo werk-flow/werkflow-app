@@ -94,125 +94,115 @@ const workArtifactContentSchema = z
     }
   });
 
-export const saveWorkArtifactSchema = z
-  .object({
-    artifactId: uuidSchema,
-    revisionId: uuidSchema,
-    expectedVersion: z.number().int().nonnegative().nullable(),
-    targetType: z.enum(['job', 'project']),
-    targetId: uuidSchema,
-    kind: z.enum(WORK_ARTIFACT_KINDS),
-    visibility: z.enum(['internal_only', 'customer_facing']),
-    capturedAt: z.string().datetime({ offset: true }),
-    title: z.string().trim().min(3).max(160),
-    content: workArtifactContentSchema,
-    correctsRevisionId: optionalUuid,
-    correctionReason: z.string().trim().min(3).max(1000).optional(),
-    submit: z.boolean(),
-    submitActionId: optionalUuid,
-  })
-  .superRefine((value, context) => {
-    const content = value.content;
-    const meaningful =
-      value.kind === 'site_diary'
-        ? content.progress
-        : value.kind === 'work_report'
-          ? content.performedWork
-          : value.kind === 'measurement'
-            ? content.measurementLocation || content.measurementLines?.length
-            : value.kind === 'defect'
-              ? content.defectDescription
-              : content.changeDescription;
-    if (!meaningful)
-      context.addIssue({ code: 'custom', path: ['content'], message: 'meaningful_content_required' });
-    if (value.kind === 'defect') {
-      if (!content.defectSeverity)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'defectSeverity'],
-          message: 'defect_severity_required',
-        });
-      if (!content.defectLocation)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'defectLocation'],
-          message: 'defect_location_required',
-        });
-    }
-    if (value.kind === 'change_work') {
-      if (!content.changeReason)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'changeReason'],
-          message: 'change_reason_required',
-        });
-      if (!content.requestedByContext)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'requestedByContext'],
-          message: 'requested_by_context_required',
-        });
-    }
-    if (
-      value.visibility === 'internal_only' &&
-      (content.requiresCustomerResponse || content.requiresSignature)
-    ) {
-      context.addIssue({ code: 'custom', path: ['visibility'], message: 'customer_visibility_required' });
-    }
-    if (value.submit && !value.submitActionId) {
-      context.addIssue({ code: 'custom', path: ['submitActionId'], message: 'submit_action_required' });
-    }
-    if (value.submit && value.kind === 'site_diary') {
-      if (!content.workDate)
-        context.addIssue({ code: 'custom', path: ['content', 'workDate'], message: 'work_date_required' });
-      if (!content.progress)
-        context.addIssue({ code: 'custom', path: ['content', 'progress'], message: 'progress_required' });
-    }
-    if (value.submit && value.kind === 'work_report') {
-      if (!content.visitStartedAt)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'visitStartedAt'],
-          message: 'visit_start_required',
-        });
-      if (!content.visitEndedAt)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'visitEndedAt'],
-          message: 'visit_end_required',
-        });
-      if (!content.performedWork)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'performedWork'],
-          message: 'performed_work_required',
-        });
-    }
-    if (value.submit && value.kind === 'measurement') {
-      if (!content.measurementDate)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'measurementDate'],
-          message: 'measurement_date_required',
-        });
-      if (!content.measurementLocation)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'measurementLocation'],
-          message: 'measurement_location_required',
-        });
-      if (!content.measurementLines?.length)
-        context.addIssue({
-          code: 'custom',
-          path: ['content', 'measurementLines'],
-          message: 'measurement_lines_required',
-        });
-    }
-    if (Boolean(value.correctsRevisionId) !== Boolean(value.correctionReason)) {
-      context.addIssue({ code: 'custom', path: ['correctsRevisionId'], message: 'correction_pair_required' });
-      context.addIssue({ code: 'custom', path: ['correctionReason'], message: 'correction_pair_required' });
-    }
-  });
+const saveWorkArtifactFields = z.object({
+  artifactId: uuidSchema,
+  revisionId: uuidSchema,
+  expectedVersion: z.number().int().nonnegative().nullable(),
+  targetType: z.enum(['job', 'project']),
+  targetId: uuidSchema,
+  kind: z.enum(WORK_ARTIFACT_KINDS),
+  visibility: z.enum(['internal_only', 'customer_facing']),
+  capturedAt: z.string().datetime({ offset: true }),
+  title: z.string().trim().min(3).max(160),
+  content: workArtifactContentSchema,
+  correctsRevisionId: optionalUuid,
+  correctionReason: z.string().trim().min(3).max(1000).optional(),
+  submit: z.boolean(),
+  submitActionId: optionalUuid,
+});
+
+type SaveWorkArtifactFields = z.output<typeof saveWorkArtifactFields>;
+type ArtifactContent = SaveWorkArtifactFields['content'];
+
+function requireContentField(
+  context: z.RefinementCtx,
+  present: unknown,
+  field: keyof ArtifactContent,
+  message: string,
+): void {
+  if (!present) context.addIssue({ code: 'custom', path: ['content', field], message });
+}
+
+function requireMeaningfulContent(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
+  const content = value.content;
+  const meaningful =
+    value.kind === 'site_diary'
+      ? content.progress
+      : value.kind === 'work_report'
+        ? content.performedWork
+        : value.kind === 'measurement'
+          ? content.measurementLocation || content.measurementLines?.length
+          : value.kind === 'defect'
+            ? content.defectDescription
+            : content.changeDescription;
+  if (!meaningful)
+    context.addIssue({ code: 'custom', path: ['content'], message: 'meaningful_content_required' });
+}
+
+function requireKindFields(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
+  const content = value.content;
+  if (value.kind === 'defect') {
+    requireContentField(context, content.defectSeverity, 'defectSeverity', 'defect_severity_required');
+    requireContentField(context, content.defectLocation, 'defectLocation', 'defect_location_required');
+  }
+  if (value.kind === 'change_work') {
+    requireContentField(context, content.changeReason, 'changeReason', 'change_reason_required');
+    requireContentField(
+      context,
+      content.requestedByContext,
+      'requestedByContext',
+      'requested_by_context_required',
+    );
+  }
+}
+
+function requireSubmittedFields(value: SaveWorkArtifactFields, context: z.RefinementCtx): void {
+  const content = value.content;
+  if (value.submit && value.kind === 'site_diary') {
+    requireContentField(context, content.workDate, 'workDate', 'work_date_required');
+    requireContentField(context, content.progress, 'progress', 'progress_required');
+  }
+  if (value.submit && value.kind === 'work_report') {
+    requireContentField(context, content.visitStartedAt, 'visitStartedAt', 'visit_start_required');
+    requireContentField(context, content.visitEndedAt, 'visitEndedAt', 'visit_end_required');
+    requireContentField(context, content.performedWork, 'performedWork', 'performed_work_required');
+  }
+  if (value.submit && value.kind === 'measurement') {
+    requireContentField(context, content.measurementDate, 'measurementDate', 'measurement_date_required');
+    requireContentField(
+      context,
+      content.measurementLocation,
+      'measurementLocation',
+      'measurement_location_required',
+    );
+    requireContentField(
+      context,
+      content.measurementLines?.length,
+      'measurementLines',
+      'measurement_lines_required',
+    );
+  }
+}
+
+export const saveWorkArtifactSchema = saveWorkArtifactFields.superRefine((value, context) => {
+  const content = value.content;
+  requireMeaningfulContent(value, context);
+  requireKindFields(value, context);
+  if (
+    value.visibility === 'internal_only' &&
+    (content.requiresCustomerResponse || content.requiresSignature)
+  ) {
+    context.addIssue({ code: 'custom', path: ['visibility'], message: 'customer_visibility_required' });
+  }
+  if (value.submit && !value.submitActionId) {
+    context.addIssue({ code: 'custom', path: ['submitActionId'], message: 'submit_action_required' });
+  }
+  requireSubmittedFields(value, context);
+  if (Boolean(value.correctsRevisionId) !== Boolean(value.correctionReason)) {
+    context.addIssue({ code: 'custom', path: ['correctsRevisionId'], message: 'correction_pair_required' });
+    context.addIssue({ code: 'custom', path: ['correctionReason'], message: 'correction_pair_required' });
+  }
+});
 
 export const voidWorkArtifactSchema = z.object({
   artifactId: uuidSchema,

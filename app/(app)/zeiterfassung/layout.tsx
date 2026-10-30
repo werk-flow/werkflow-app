@@ -24,13 +24,9 @@ export default async function ZeiterfassungLayout({ children }: { children: Reac
   if (canManage || managementReadFailed) {
     items.push({ href: '/zeiterfassung/perioden', label: 'Perioden' });
   }
-  if (isAdmin) {
-    items.push({
-      href: '/zeiterfassung/einstellungen',
-      label: 'Regeln & Export',
-    });
-  } else if (canProposeAdjustments) {
-    items.push({ href: '/zeiterfassung/einstellungen', label: 'Korrekturen' });
+  // The tab carries its page's name for every role that opens it.
+  if (isAdmin || canProposeAdjustments) {
+    items.push({ href: '/zeiterfassung/einstellungen', label: 'Regeln & Export' });
   }
 
   return (

@@ -1,9 +1,15 @@
 import type { ActionFailure } from '@/lib/action-result';
 import type { Json } from '@/lib/supabase/database.types';
 
-export type WorkTemplateTargetType = 'job' | 'project';
-type WorkTemplateItemKind = 'task' | 'checklist';
-type WorkTemplateRequirementState = 'required' | 'optional';
+// The values the work-template tables' check constraints allow.
+export const WORK_TEMPLATE_TARGET_TYPES = ['job', 'project'] as const;
+export const WORK_TEMPLATE_VERSION_STATUSES = ['draft', 'published'] as const;
+export const WORK_TEMPLATE_ITEM_KINDS = ['task', 'checklist'] as const;
+export const WORK_TEMPLATE_REQUIREMENT_STATES = ['required', 'optional'] as const;
+
+export type WorkTemplateTargetType = (typeof WORK_TEMPLATE_TARGET_TYPES)[number];
+type WorkTemplateItemKind = (typeof WORK_TEMPLATE_ITEM_KINDS)[number];
+type WorkTemplateRequirementState = (typeof WORK_TEMPLATE_REQUIREMENT_STATES)[number];
 type WorkTemplateDocumentCategory = 'photo' | 'contract' | 'invoice' | 'offer' | 'report' | 'other';
 
 type WorkTemplateItemDraft = {
@@ -66,7 +72,7 @@ export type WorkTemplateSummary = {
   name: string;
   description: string | null;
   versionNumber: number;
-  status: 'draft' | 'published';
+  status: (typeof WORK_TEMPLATE_VERSION_STATUSES)[number];
   updatedAt: string;
 };
 
