@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 
+import { type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import {
   buildUnifiedList,
   splitEntries,
@@ -9,11 +10,9 @@ import {
   sortUnifiedEntries,
   getEntryUnifiedStatus,
   EMPTY_FILTER_STATE,
-  type Job,
-  type ProjectWithDetails,
   type FilterState,
   type SortColumn,
-} from '@/lib/jobs/types';
+} from '@/lib/jobs/unified-list';
 import { resolveAuftraegeSortColumn, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import { applyDropdownFilters } from '@/lib/jobs/dropdown-filters';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';

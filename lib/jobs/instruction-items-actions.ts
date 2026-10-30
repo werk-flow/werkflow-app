@@ -5,16 +5,14 @@ import { loggedRead, logReadFailure } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { toProfileReference, type ProfileReferenceRow } from '@/lib/profile-reference';
-import type { Json } from '@/lib/supabase/database.types';
 
 import { authenticateAndAuthorize } from './auth';
 import { readJobAssignmentOfUser, readOrganizationJob } from './job-access-reads';
 import { workWriteFailure } from './write-refusals';
+import { hydrateInstructionItems } from './instruction-item-hydration';
 import {
-  toJobInstructionItem,
   type CreateJobInstructionItemResult,
   type DeleteJobInstructionItemResult,
   type GetJobInstructionItemsResult,
@@ -190,121 +188,6 @@ async function getAuthorizedItemContext(itemId: string): Promise<AuthorizedItemC
     userId,
     isManagerOrAbove,
   };
-}
-
-/**
- * Adds provenance, evidence and predecessors to the rows. Returns null when any
- * of these reads fails, so no caller shows an item without its requirements.
- */
-async function hydrateInstructionItems(
-  admin: AdminClient,
-  orgId: string,
-  rows: JobInstructionItemRow[],
-): Promise<JobInstructionItemWithDetails[] | null> {
-  const profileIds = Array.from(
-    new Set(
-      rows.flatMap((row) =>
-        [row.created_by, row.last_status_changed_by].filter((value): value is string => Boolean(value)),
-      ),
-    ),
-  );
-
-  const profileMap = new Map<string, ProfileReferenceRow>();
-  const itemIds = rows.map((row) => row.id);
-
-  // Each batch holds whole items, so the per-item `sort_order` survives batching.
-  const [profilesResult, evidenceResult, dependencyResult] = await Promise.all([
-    readInBatches(profileIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', [...batch]),
-    ),
-    readInBatches(itemIds, (batch) =>
-      admin
-        .from('job_instruction_item_evidence_requirements')
-        .select('id, instruction_item_id, description, document_category')
-        .eq('organization_id', orgId)
-        .in('instruction_item_id', [...batch])
-        .order('sort_order'),
-    ),
-    readInBatches(itemIds, (batch) =>
-      admin
-        .from('job_instruction_item_dependencies')
-        .select('dependent_item_id, predecessor_item_id')
-        .eq('organization_id', orgId)
-        .in('dependent_item_id', [...batch]),
-    ),
-  ]);
-  const metadataError = profilesResult.error ?? evidenceResult.error ?? dependencyResult.error;
-  if (metadataError) {
-    logReadFailure('hydrateInstructionItems: metadata read failed', { code: metadataError.code });
-    return null;
-  }
-  for (const profile of profilesResult.data) profileMap.set(profile.id, profile);
-  const requirementIds = evidenceResult.data.map((requirement) => requirement.id);
-  const contentById = new Map(rows.map((row) => [row.id, row.content]));
-  // A single saved item is hydrated alone; its predecessors still need their labels.
-  const missingPredecessorIds = dependencyResult.data
-    .map((dependency) => dependency.predecessor_item_id)
-    .filter((predecessorId) => !contentById.has(predecessorId));
-  const [fulfillmentResult, predecessorResult] = await Promise.all([
-    readInBatches(requirementIds, (batch) =>
-      admin
-        .from('job_instruction_item_evidence_fulfillments')
-        .select('id, evidence_requirement_id, document_id, artifact_revision_id, version')
-        .eq('organization_id', orgId)
-        .in('evidence_requirement_id', [...batch])
-        .is('removed_at', null),
-    ),
-    readInBatches(missingPredecessorIds, (batch) =>
-      admin
-        .from('job_instruction_items')
-        .select('id, content')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  const detailError = fulfillmentResult.error ?? predecessorResult.error;
-  if (detailError) {
-    logReadFailure('hydrateInstructionItems: fulfillment or predecessor read failed', {
-      code: detailError.code,
-    });
-    return null;
-  }
-  for (const predecessor of predecessorResult.data) contentById.set(predecessor.id, predecessor.content);
-  const fulfillmentByRequirementId = new Map(
-    fulfillmentResult.data.map((fulfillment) => [
-      fulfillment.evidence_requirement_id,
-      {
-        id: fulfillment.id,
-        documentId: fulfillment.document_id,
-        artifactRevisionId: fulfillment.artifact_revision_id,
-        version: fulfillment.version,
-      },
-    ]),
-  );
-  return rows.map((row) => ({
-    ...toJobInstructionItem(row),
-    creator: toProfileReference(profileMap.get(row.created_by)),
-    lastStatusChangedByProfile: toProfileReference(
-      row.last_status_changed_by ? profileMap.get(row.last_status_changed_by) : null,
-    ),
-    evidenceRequirements: evidenceResult.data
-      .filter((item) => item.instruction_item_id === row.id)
-      .map((item) => ({
-        id: item.id,
-        description: item.description,
-        documentCategory: item.document_category,
-        fulfillment: fulfillmentByRequirementId.get(item.id) ?? null,
-      })),
-    predecessors: dependencyResult.data
-      .filter((item) => item.dependent_item_id === row.id)
-      .map((item) => ({
-        id: item.predecessor_item_id,
-        content: contentById.get(item.predecessor_item_id) ?? 'Früherer Eintrag',
-      })),
-  }));
 }
 
 /** The job or the project whose instruction list is read. */
@@ -707,7 +590,7 @@ export async function updateInstructionItemDetails(rawInput: {
         description: item.description.trim(),
         document_category: item.documentCategory,
         sort_order: item.sortOrder,
-      })) as Json,
+      })),
       p_predecessor_item_ids: input.predecessorItemIds,
     }),
   );

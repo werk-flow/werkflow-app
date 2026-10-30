@@ -6,7 +6,7 @@ import { ChevronRight } from 'lucide-react';
 import { PlainButton } from '@/components/ui/plain-button';
 import { FilterBar } from '@/components/auftraege/list/filter-bar';
 import { UnifiedAuftraegeTable } from '@/components/auftraege/list/unified-auftraege-table';
-import { UNIFIED_STATUS_LABELS } from '@/lib/jobs/types';
+import { UNIFIED_STATUS_LABELS } from '@/lib/jobs/unified-list';
 import { resolveAuftraegeSortColumn, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
 import { cn } from '@/lib/utils';
