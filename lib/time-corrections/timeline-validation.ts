@@ -1,5 +1,6 @@
 import type { TimeEntry, TimeEntryType } from '@/lib/time-tracking/types';
 import { formatBerlinLocalDate, getLocalDayStart, getLocalDayEnd } from '@/lib/date-time/berlin';
+import { UNUSUALLY_LONG_SESSION_MS } from '@/lib/time-tracking/segments';
 import { validateDayEntrySequence } from '@/lib/time-tracking/validation';
 import { applyApprovedTimeCorrections } from './projection';
 import type { TimeCorrectionApplicationProjection, TimeCorrectionFact } from './types';
@@ -23,9 +24,6 @@ function continuesOpenTime(open: TimeEntryType, next: TimeEntryType): boolean {
     : next === 'clock_out' || next === 'break_start';
 }
 
-/** Live capture flags a session open this long as unusually long. */
-const LONGEST_OPEN_TIME_MS = 24 * 60 * 60 * 1000;
-
 /**
  * Whether proposed time stays open across Berlin midnight for more than 24
  * hours. Checked before the midnight split, so a span of years never builds a
@@ -39,7 +37,7 @@ export function exceedsLongestOpenTime(facts: readonly TimeCorrectionFact[]): bo
     if (
       start &&
       fact.entryType !== 'clock_in' &&
-      Date.parse(fact.timestamp) - Date.parse(start.timestamp) > LONGEST_OPEN_TIME_MS &&
+      Date.parse(fact.timestamp) - Date.parse(start.timestamp) > UNUSUALLY_LONG_SESSION_MS &&
       formatBerlinLocalDate(correctionDayOwner(start)) !== formatBerlinLocalDate(correctionDayOwner(fact))
     )
       return true;
