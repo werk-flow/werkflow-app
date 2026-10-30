@@ -92,7 +92,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
                   <h2 className="text-lg font-semibold">{currentSection.label}</h2>
                   <p className="max-w-3xl text-sm text-muted-foreground">{currentSection.description}</p>
                 </div>
-                <div className="text-sm text-muted-foreground lg:text-right">
+                <div className="min-w-0 text-sm text-muted-foreground wrap-anywhere lg:text-right">
                   <p>
                     {currentSection.scope === 'user'
                       ? 'Persönliche Einstellungen'

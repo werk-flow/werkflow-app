@@ -376,7 +376,7 @@ function PendingTimeAccountAdjustment({
   });
   return (
     <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-3 last:border-b-0">
-      <div className="text-sm">
+      <div className="min-w-0 text-sm wrap-anywhere">
         <p className="font-medium">
           {request.employeeName} · {formatMinutes(request.minutes)}
         </p>

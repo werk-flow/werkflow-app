@@ -1,5 +1,15 @@
 import { useRef, useState } from 'react';
 import { usePageBodyKeyboardScroll } from '@/components/shared/page-body-keyboard-scroll';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { BannerProvider, useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,6 +59,43 @@ const savedLocation: InventoryLocation = {
   sortOrder: 0,
   isActive: true,
 };
+
+/**
+ * A confirmation longer than a phone screen, built without AlertDialogBody or an extra class. Its
+ * action fails at once and keeps the dialog open, as a refused server answer does.
+ */
+function LongConfirmation(): React.JSX.Element {
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <Button onClick={() => setOpen(true)}>Lange Bestätigung öffnen</Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Organisation „Probe“ löschen?</AlertDialogTitle>
+          {Array.from({ length: 20 }, (_, index) => (
+            <AlertDialogDescription key={index}>
+              Absatz {index + 1}: Aufträge, Projekte, Kunden, Dokumente und Einsätze dieser Organisation
+              werden endgültig gelöscht. Erfasste Zeiten bleiben für die Lohnabrechnung erhalten.
+            </AlertDialogDescription>
+          ))}
+        </AlertDialogHeader>
+        <AlertDialogFooter error={error}>
+          <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+          <AlertDialogAction
+            variant="destructive"
+            onClick={(event) => {
+              event.preventDefault();
+              setError('Die Organisation konnte nicht gelöscht werden.');
+            }}
+          >
+            Endgültig löschen
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 function PresentationControls(): React.JSX.Element {
   const { showBanner, dismissBanner } = useBanner();
@@ -115,6 +162,7 @@ function PresentationControls(): React.JSX.Element {
         <Input />
       </Field>
       <Button onClick={() => setOpen(true)}>Formular öffnen</Button>
+      <LongConfirmation />
       <section aria-label="Seitenkörper">
         <Button onClick={() => setSoleControlDisabled((current) => !current)}>Knopf umschalten</Button>
         <div ref={mainRef} style={{ height: 160, display: 'flex', flexDirection: 'column' }}>
