@@ -246,7 +246,6 @@
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
     "components/kalender/board/board-toolbar.tsx": { "BoardToolbar": 132 },
-    "components/kalender/board/phone-board.tsx": { "PhoneBoard": 85 },
     "components/kalender/board/plantafel.tsx": { "Plantafel": 176 },
     "components/kalender/board/use-board-surface.ts": { "useBoardSurface": 190 },
     "components/kalender/board/use-plantafel-model.ts": { "usePlantafelModel": 83 },
