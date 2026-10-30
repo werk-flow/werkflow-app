@@ -66,4 +66,4 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 ## Storage cleanup
 
-No feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.
+Deleting an organization deletes every object under its prefix before its rows, as the demo seeder reset does; a failed deletion leaves the organization in place. Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.
