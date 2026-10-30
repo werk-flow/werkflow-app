@@ -6,7 +6,7 @@ import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { getJobDisplayTitle, type Job } from '@/lib/jobs/types';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 
 /** Live time entries of every job in the project and their per-job totals. */
 export function useProjectDetailTime(projectId: string, liveJobs: Job[]) {

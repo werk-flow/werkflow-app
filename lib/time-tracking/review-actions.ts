@@ -12,7 +12,6 @@ import {
   reviewChangeRequestInputSchema,
   reviewEntriesInputSchema,
 } from './action-schemas';
-import type { OrgRole } from '@/lib/roles';
 import {
   type ReviewEntryResult,
   type GetPendingSessionsResult,
@@ -37,6 +36,7 @@ import {
   loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
 import { getCurrentOrgId, verifyCurrentMembership } from './action-access';
+import { readPendingEntriesForReview } from './review-entry-reads';
 
 // The approval Server Actions: the pending queues, the review of pending
 // entries and the decision on a change request.
@@ -73,25 +73,9 @@ export async function reviewEntries(
     }
 
     const admin = createSupabaseAdminClient();
-    const { data: entries, error: entriesError } = await readInBatches(ids, (batch) =>
-      // tenant-scope: by-id-then-verified — every entry must share one organization, whose membership and time_approval responsibility are verified before the write.
-      admin
-        .from('time_entries')
-        .select('id, organization_id, user_id, status, timestamp')
-        .in('id', [...batch]),
-    );
-    if (entriesError) {
-      logReadFailure('reviewEntries: entries failed', entriesError);
-      return { success: false, error: 'fetch_failed' };
-    }
-    if (entries.length !== ids.length) return { success: false, error: 'entry_not_found' };
-    if (entries.some((entry) => entry.status !== 'pending')) {
-      return { success: false, error: 'entry_not_pending' };
-    }
-    const organizationId = entries[0]?.organization_id;
-    if (!organizationId || entries.some((entry) => entry.organization_id !== organizationId)) {
-      return { success: false, error: 'invalid_input' };
-    }
+    const loaded = await readPendingEntriesForReview(admin, ids);
+    if (!loaded.success) return loaded;
+    const { entries, organizationId } = loaded;
 
     const callerRole = await verifyCurrentMembership(organizationId);
     if (!callerRole) {
@@ -110,7 +94,7 @@ export async function reviewEntries(
       logReadFailure('reviewEntries: target memberships failed', targetMembersError);
       return { success: false, error: 'fetch_failed' };
     }
-    const roleByUser = new Map(targetMembers.map((member) => [member.user_id, member.role as OrgRole]));
+    const roleByUser = new Map(targetMembers.map((member) => [member.user_id, member.role]));
     // Resolve current stored responsibility at action time. A stale UI can
     // never preserve authority after a delegation expires.
     const authorizations = await Promise.all(
@@ -131,13 +115,8 @@ export async function reviewEntries(
       return { success: false, error: refusal.error };
     }
     // An entry of a closed month keeps its review state until a reopen.
-    if (
-      await touchesClosedTimePeriod(
-        admin,
-        organizationId,
-        entries.map((entry) => entry.timestamp),
-      )
-    ) {
+    const entryTimestamps = entries.map((entry) => entry.timestamp);
+    if (await touchesClosedTimePeriod(admin, organizationId, entryTimestamps)) {
       return { success: false, error: 'period_closed' };
     }
 
@@ -394,7 +373,7 @@ export async function getChangeRequestsForEntries(
       return { success: true, requests: [] };
     }
     const roleByOrganization = new Map(
-      memberships.map((membership) => [membership.orgId, membership.role as OrgRole]),
+      memberships.map((membership) => [membership.orgId, membership.role]),
     );
 
     const admin = createSupabaseAdminClient();

@@ -13,7 +13,7 @@ import { TimeActivityDialog } from '@/components/time-activity-dialog';
 import { SectionError } from '@/components/ui/section-error';
 import { usePendingTask } from '@/hooks/use-server-action';
 import type { TimeEntry } from '@/lib/time-tracking/types';
-import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 import { SectionTitle } from '@/components/shared/section-title';
 
 function formatDurationOrRunning(minutes: number | null): string {

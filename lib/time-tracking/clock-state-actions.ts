@@ -3,7 +3,6 @@ import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { readOrganizationSettings } from './organization-settings-read';
@@ -13,6 +12,7 @@ import {
   type TimeActivitySelection,
   toTimeEntries,
   type ClockJobInfo,
+  type ClockTimelineSegment,
 } from './types';
 import {
   buildClockTimelineSegments,
@@ -26,7 +26,7 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { computeBreakdownForSettings } from './settings';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import { getCanonicalClockState } from './segment-actions';
-import { hashTimeTransitionRequest } from './transition-hash';
+import { endSessionBeforeSignOut } from './sign-out-session-end';
 import { createActivitySelection } from './segments';
 import { collectActiveJobIds } from './active-jobs';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
@@ -93,8 +93,8 @@ async function getClockJobInfo(
       }),
       jobNumber: job.job_number,
       status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-      projectName: (projectData.data as { name: string } | null)?.name ?? null,
-      clientName: (clientData.data as { name: string } | null)?.name ?? null,
+      projectName: projectData.data?.name ?? null,
+      clientName: clientData.data?.name ?? null,
     },
   };
 }
@@ -102,16 +102,6 @@ async function getClockJobInfo(
 // ============================================
 // Real-Time Clock In/Out Actions
 // ============================================
-
-function getTransitionOutcome(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || !('outcome' in value)) return null;
-  return typeof value.outcome === 'string' ? value.outcome : null;
-}
-
-function getTransitionVersion(value: unknown): number | null {
-  if (!value || typeof value !== 'object' || !('version' in value)) return null;
-  return typeof value.version === 'number' ? value.version : null;
-}
 
 /**
  * Best-effort: clock out the current user in any org where they are currently working today.
@@ -151,63 +141,8 @@ export async function clockOutBeforeSignOut(): Promise<
     const failedOrgIds = new Set<string>();
 
     for (const session of canonicalSessions ?? []) {
-      const operationId = crypto.randomUUID();
-      const action = session.status === 'recovery_required' ? 'recover_end' : 'end';
-      const requestHash = hashTimeTransitionRequest({
-        organizationId: session.organization_id,
-        action,
-        expectedSessionId: session.id,
-        expectedVersion: session.version,
-        selection: null,
-        acknowledgeLong: action === 'recover_end',
-      });
-      const transitionArgs = rpcArgs('transition_time_activity', {
-        p_organization_id: session.organization_id,
-        p_actor_id: user.id,
-        p_operation_id: operationId,
-        p_request_hash: requestHash,
-        p_action: action,
-        p_expected_session_id: session.id,
-        p_expected_version: session.version,
-        p_acknowledge_long: action === 'recover_end',
-      });
-      let { data: transitionResult, error } = await admin.rpc('transition_time_activity', transitionArgs);
-      if (error) {
-        logError('Error ending canonical session before sign-out:', error);
-        failedOrgIds.add(session.organization_id);
-        continue;
-      }
-      if (getTransitionOutcome(transitionResult) === 'recovery_required') {
-        const recoveryOperationId = crypto.randomUUID();
-        const recoveryExpectedVersion = getTransitionVersion(transitionResult) ?? session.version;
-        const recoveryRequestHash = hashTimeTransitionRequest({
-          organizationId: session.organization_id,
-          action: 'recover_end',
-          expectedSessionId: session.id,
-          expectedVersion: recoveryExpectedVersion,
-          selection: null,
-          acknowledgeLong: true,
-        });
-        const recoveryResult = await admin.rpc('transition_time_activity', {
-          ...transitionArgs,
-          p_operation_id: recoveryOperationId,
-          p_request_hash: recoveryRequestHash,
-          p_action: 'recover_end',
-          p_expected_version: recoveryExpectedVersion,
-          p_acknowledge_long: true,
-        });
-        transitionResult = recoveryResult.data;
-        error = recoveryResult.error;
-      }
-      if (error || getTransitionOutcome(transitionResult) !== 'ended') {
-        logError(
-          'Canonical session remained open before sign-out:',
-          error ?? getTransitionOutcome(transitionResult),
-        );
-        failedOrgIds.add(session.organization_id);
-        continue;
-      }
-      canonicalClosedOrgIds.add(session.organization_id);
+      if (await endSessionBeforeSignOut(admin, user.id, session)) canonicalClosedOrgIds.add(session.organization_id);
+      else failedOrgIds.add(session.organization_id);
     }
 
     for (const org of openOrgs) {
@@ -248,6 +183,7 @@ export async function clockOutBeforeSignOut(): Promise<
 }
 
 type LegacyClockState = ReturnType<typeof deriveCurrentClockState>;
+type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
 
 /** The activity a legacy event stream is in: a break, work on its job, or unallocated work. */
 function getLegacyCurrentActivity(currentState: LegacyClockState): TimeActivitySelection | null {
@@ -256,6 +192,53 @@ function getLegacyCurrentActivity(currentState: LegacyClockState): TimeActivityS
   return currentState.activeJobId
     ? { kind: 'work', allocationKind: 'job', jobId: currentState.activeJobId }
     : { kind: 'work', allocationKind: 'unallocated', jobId: null };
+}
+
+/** The live clock state of a legacy event stream, from its already derived parts. */
+function legacyLiveClockState(input: {
+  organizationId: string;
+  organizationSettings: OrganizationClockSettings;
+  currentState: LegacyClockState;
+  todayMinutes: number;
+  breakdown: ReturnType<typeof computeBreakdownForSettings>;
+  timelineSegments: ClockTimelineSegment[];
+  activeJobInfo: ClockJobInfo | null;
+  resumeActivity: TimeActivitySelection | null;
+  resumeJobInfo: ClockJobInfo | null;
+}): LiveClockState {
+  const { organizationSettings, currentState, breakdown } = input;
+  return {
+    organizationId: input.organizationId,
+    breakMode: organizationSettings.breakMode,
+    autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
+    status: currentState.status,
+    isClockedIn: currentState.isClockedIn,
+    isOnBreak: currentState.isOnBreak,
+    clockInTime: currentState.clockInTime,
+    statusStartedAt: currentState.statusStartedAt,
+    breakStartTime: currentState.breakStartTime,
+    todayMinutes: input.todayMinutes,
+    workMinutes: breakdown.workMinutes,
+    breakMinutes: breakdown.breakMinutes,
+    timelineSegments: input.timelineSegments,
+    activeJobId: currentState.activeJobId,
+    activeJobInfo: input.activeJobInfo,
+    captureModel: currentState.isClockedIn ? 'legacy' : 'none',
+    sessionId: null,
+    sessionVersion: null,
+    currentSegmentId: null,
+    currentActivity: getLegacyCurrentActivity(currentState),
+    resumeActivity: input.resumeActivity,
+    resumeJobInfo: input.resumeJobInfo,
+    recoveryReason: null,
+    legacyOpen: currentState.isClockedIn,
+    standbyMinutes: 0,
+    travelMinutes: 0,
+    calloutMinutes: 0,
+    internalMinutes: 0,
+    fetchedAt: new Date().toISOString(),
+  };
 }
 
 /**
@@ -321,38 +304,17 @@ export async function getCurrentClockState(
 
     return {
       success: true,
-      state: {
+      state: legacyLiveClockState({
         organizationId,
-        breakMode: organizationSettings.breakMode,
-        autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
-        autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
-        status: currentState.status,
-        isClockedIn: currentState.isClockedIn,
-        isOnBreak: currentState.isOnBreak,
-        clockInTime: currentState.clockInTime,
-        statusStartedAt: currentState.statusStartedAt,
-        breakStartTime: currentState.breakStartTime,
+        organizationSettings,
+        currentState,
         todayMinutes,
-        workMinutes: breakdown.workMinutes,
-        breakMinutes: breakdown.breakMinutes,
+        breakdown,
         timelineSegments,
-        activeJobId: currentState.activeJobId,
         activeJobInfo: activeJob.info,
-        captureModel: currentState.isClockedIn ? 'legacy' : 'none',
-        sessionId: null,
-        sessionVersion: null,
-        currentSegmentId: null,
-        currentActivity: getLegacyCurrentActivity(currentState),
         resumeActivity,
         resumeJobInfo: resumeJob.info,
-        recoveryReason: null,
-        legacyOpen: currentState.isClockedIn,
-        standbyMinutes: 0,
-        travelMinutes: 0,
-        calloutMinutes: 0,
-        internalMinutes: 0,
-        fetchedAt: new Date().toISOString(),
-      },
+      }),
     };
   } catch (error) {
     logError('Unexpected error in getCurrentClockState:', error);

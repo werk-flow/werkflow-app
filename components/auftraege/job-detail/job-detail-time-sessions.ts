@@ -1,4 +1,4 @@
-import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 import type { JobTimeParticipant, TimeEntry, WorkSession } from '@/lib/time-tracking/types';
 import type { JobAssignmentWithProfile } from '@/lib/jobs/types';
 import type { OrgMemberOption } from '../shared/employee-multi-select';

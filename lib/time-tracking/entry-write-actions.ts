@@ -1,13 +1,11 @@
 'use server';
-import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
+import { loggedRead } from '@/lib/data/read-request-cache';
 import { revalidatePath } from 'next/cache';
 import { logError } from '@/lib/logging';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
+import { readInBatches } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
-import type { z } from '@/lib/zod';
-import type { OrgRole } from '@/lib/roles';
 import { readOrganizationSettings } from './organization-settings-read';
 import {
   addManualEntryInputSchema,
@@ -16,8 +14,6 @@ import {
   updateEntryInputSchema,
 } from './action-schemas';
 import {
-  type TimeEntry,
-  type TimeEntryRow,
   type TimeEntryType,
   type AddManualEntryParams,
   type AddManualEntryResult,
@@ -27,154 +23,32 @@ import {
   toTimeEntry,
   toTimeEntries,
 } from './types';
-import { hasOpenSession, determineApprovalStatus, canManageEntries, canAddEntriesFor } from './helpers';
+import { canManageEntries, canAddEntriesFor } from './helpers';
 import {
   entriesTouchClosedTimePeriod,
   timeEntryBatchFailure,
   timeWriteFailure,
   touchesClosedTimePeriod,
 } from './closed-periods';
-import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
-import {
-  validateManualEntries,
-  validateManualEntryJobOwnership,
-  validateTimestampUpdate,
-  validateDayEntrySequence,
-} from './validation';
-import type { TimeValidationFailure } from './validation-messages';
-import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
-import { getDayBounds, getUserEntriesForDay, verifyCurrentMembership } from './action-access';
-import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
+import { refuseEntryEdit } from './entry-edit-checks';
+import { verifyCurrentMembership } from './action-access';
+import { stageManualEntries } from './manual-entry-staging';
 
 // The Server Actions that write time entries: manual entries, edits and deletes.
-
-/** The user's complete entries on the timestamps' local days; null when a read fails or overflows. */
-async function getUserEntriesOnDays(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string,
-  orgId: string,
-  timestamps: readonly Date[],
-): Promise<TimeEntryRow[] | null> {
-  const days = [
-    ...new Map(timestamps.map((timestamp) => [formatBerlinLocalDate(timestamp), timestamp])).values(),
-  ];
-  const results = await Promise.all(
-    days.map((day) => {
-      const { start, end } = getDayBounds(day);
-      return readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_entries')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('organization_id', orgId)
-            .gte('timestamp', start.toISOString())
-            .lte('timestamp', end.toISOString())
-            .order('timestamp', { ascending: false })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      );
-    }),
-  );
-  const failed = results.find((result) => result.error)?.error;
-  if (failed) logReadFailure('Error fetching user entries:', { code: failed.code });
-  return failed ? null : results.flatMap((result) => result.data);
-}
-
-function getManualEntryJobId(entryType: TimeEntry['entryType'], jobId?: string | null): string | null {
-  if (entryType !== 'clock_in') {
-    return null;
-  }
-
-  return jobId ?? null;
-}
-
-type ManualEntryDraft = { entryType: TimeEntryType; timestamp: string; jobId: string | null };
-
-/**
- * Cross-org guard: when the new entries would leave the target clocked in on
- * that day, a session open in another organization refuses them; null when
- * nothing refuses them.
- */
-async function refuseOpenSessionElsewhere(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  target: { userId: string; organizationId: string; day: Date; status: TimeEntry['status'] },
-  timeEntries: readonly TimeEntry[],
-  normalizedEntries: readonly ManualEntryDraft[],
-): Promise<AddManualEntryResult | null> {
-  const simulatedEntries: TimeEntry[] = normalizedEntries.map((e, idx) => ({
-    id: `simulated-${idx}`,
-    userId: target.userId,
-    organizationId: target.organizationId,
-    entryType: e.entryType,
-    timestamp: e.timestamp,
-    isManual: true,
-    jobId: e.jobId ?? null,
-    status: target.status,
-    reviewedBy: null,
-    reviewedAt: null,
-    createdAt: e.timestamp,
-    updatedAt: e.timestamp,
-  }));
-
-  const wouldBeClockedIn = hasOpenSession([...timeEntries, ...simulatedEntries], getLocalDayEnd(target.day));
-  if (!wouldBeClockedIn) return null;
-  const openOrgs = await getOpenSessionOrgsForUserOnDay(admin, target.userId, target.day);
-  if (!openOrgs) return { success: false, error: 'fetch_failed' };
-  const openOther = openOrgs.find((o) => o.organizationId !== target.organizationId);
-  if (!openOther) return null;
-  return {
-    success: false,
-    error: 'working_in_other_org',
-    otherOrgId: openOther.organizationId,
-    otherOrgName: openOther.organizationName,
-  };
-}
-
-/**
- * The entries with the job on their clock-in only, or the refusal of that job:
- * it lies in the organization, and an employee's entry names only a job the
- * employee is assigned to, as the live clock requires.
- */
-async function attachManualEntryJob(
-  params: {
-    organizationId: string;
-    targetUserId: string;
-    entries: ReadonlyArray<{ entryType: TimeEntryType; timestamp: string }>;
-    jobId?: string | null | undefined;
-  },
-  targetRole: OrgRole,
-): Promise<{ entries: ManualEntryDraft[] } | { refusal: AddManualEntryResult }> {
-  const { organizationId, targetUserId, entries, jobId } = params;
-  const drafts = entries.map((entry) => ({
-    entryType: entry.entryType,
-    timestamp: entry.timestamp,
-    jobId: getManualEntryJobId(entry.entryType, jobId),
-  }));
-  const ownership = validateManualEntryJobOwnership(drafts);
-  if (!ownership.valid) return { refusal: { success: false, ...ownership.failure } };
-  const namedJobId = drafts.find((draft) => draft.jobId)?.jobId;
-  if (!namedJobId) return { entries: drafts };
-  const [job, assignment] = await Promise.all([
-    readOrganizationJob(organizationId, namedJobId),
-    targetRole === 'employee' ? readJobAssignmentOfUser(organizationId, namedJobId, targetUserId) : null,
-  ]);
-  if (job.error || assignment?.error) return { refusal: { success: false, error: 'load_failed' } };
-  if (!job.data) return { refusal: { success: false, error: 'job_not_found' } };
-  if (assignment && !assignment.data) return { refusal: { success: false, error: 'job_not_assigned' } };
-  return { entries: drafts };
-}
 
 /**
  * The action failure of a refused manual entry insert. The database refuses
  * an employee's job whose assignment was removed after
- * attachManualEntryJob read it (migration
+ * attachManualEntryJob (manual-entry-staging.ts) read it (migration
  * 20261029212937_recheck_manual_entry_job_assignment.sql).
  */
 function manualEntryInsertFailure(error: { message: string } | null): string {
   if (error?.message === 'manual_entry_job_not_assigned') return 'job_not_assigned';
   return timeWriteFailure('Error inserting manual entries:', error, 'insert_failed');
+}
+
+function isManualBreakEntry(entry: { entryType: TimeEntryType }): boolean {
+  return entry.entryType === 'break_start' || entry.entryType === 'break_end';
 }
 
 // ============================================
@@ -208,11 +82,7 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     }
     if (!organizationSettings) return { success: false, error: 'fetch_failed' };
 
-    const containsManualBreakEntries = entries.some(
-      (entry) => entry.entryType === 'break_start' || entry.entryType === 'break_end',
-    );
-
-    if (organizationSettings.breakMode === 'automatic' && containsManualBreakEntries) {
+    if (organizationSettings.breakMode === 'automatic' && entries.some(isManualBreakEntry)) {
       return { success: false, error: 'break_mode_automatic' };
     }
 
@@ -231,48 +101,27 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
     if (targetMemberError) return { success: false, error: 'load_failed' };
     if (!targetMember) return { success: false, error: 'target_not_a_member' };
 
-    const targetRole = targetMember.role as OrgRole;
+    const targetRole = targetMember.role;
 
     // Check if caller can add entries for target
     if (!canAddEntriesFor(callerRole, targetRole, user.id, targetUserId)) {
       return { success: false, error: 'not_authorized' };
     }
     // A closed month gains no entries; the database refuses them as well.
-    if (
-      await touchesClosedTimePeriod(
-        admin,
-        organizationId,
-        entries.map((entry) => entry.timestamp),
-      )
-    ) {
+    const entryTimestamps = entries.map((entry) => entry.timestamp);
+    if (await touchesClosedTimePeriod(admin, organizationId, entryTimestamps)) {
       return { success: false, error: 'period_closed' };
     }
 
-    const targetDay = new Date(firstEntry.timestamp);
-    const existingEntries = await getUserEntriesForDay(admin, targetUserId, organizationId, targetDay);
-    if (!existingEntries) return { success: false, error: 'fetch_failed' };
-    const timeEntries = toTimeEntries(existingEntries);
-
-    // Validate the new entries
-    const validationResult = validateManualEntries(timeEntries, entries, {
-      allowFutureTimestamps: callerRole === 'admin',
+    const staged = await stageManualEntries(admin, {
+      params,
+      day: new Date(firstEntry.timestamp),
+      callerRole,
+      callerId: user.id,
+      targetRole,
     });
-    if (!validationResult.valid) return { success: false, ...validationResult.failure };
-
-    const withJob = await attachManualEntryJob(params, targetRole);
-    if ('refusal' in withJob) return withJob.refusal;
-    const normalizedEntries = withJob.entries;
-
-    // Determine approval status
-    const status = determineApprovalStatus(callerRole, targetUserId, user.id);
-
-    const otherOrgRefusal = await refuseOpenSessionElsewhere(
-      admin,
-      { userId: targetUserId, organizationId, day: targetDay, status },
-      timeEntries,
-      normalizedEntries,
-    );
-    if (otherOrgRefusal) return otherOrgRefusal;
+    if ('refusal' in staged) return staged.refusal;
+    const { entries: normalizedEntries, status } = staged;
 
     const insertData = normalizedEntries.map((entry) => ({
       user_id: targetUserId,
@@ -305,58 +154,6 @@ export async function addManualEntry(rawParams: AddManualEntryParams): Promise<A
 // ============================================
 // Update/Delete Actions
 // ============================================
-
-type EntryEditFields = z.infer<typeof updateEntryInputSchema>['fields'];
-
-/** Whether an edit changes the entry's place in its day's sequence. */
-function changesEntrySequence(fields: EntryEditFields): boolean {
-  return fields.entryType !== undefined || Object.hasOwn(fields, 'jobId');
-}
-
-/**
- * The day rules an edit keeps against the entries of its recorded and its
- * new day: a free timestamp and a valid sequence on the target day. Answers
- * the refused rule, or null when the edit keeps them.
- */
-function validateEntryEdit(
-  dayRows: TimeEntryRow[],
-  entry: TimeEntryRow,
-  fields: EntryEditFields,
-  targetTimestamp: Date,
-): TimeValidationFailure | null {
-  const changesSequence = changesEntrySequence(fields);
-  if (fields.timestamp) {
-    const timeEntries = toTimeEntries(dayRows);
-
-    const validationResult = validateTimestampUpdate(timeEntries, entry.id, new Date(fields.timestamp));
-
-    if (!validationResult.valid) return validationResult.failure;
-  }
-
-  if (changesSequence) {
-    const timeEntries = toTimeEntries(dayRows);
-
-    const simulatedEntries = timeEntries.map((existingEntry) =>
-      existingEntry.id === entry.id
-        ? {
-            ...existingEntry,
-            entryType: fields.entryType ?? existingEntry.entryType,
-            jobId: fields.jobId !== undefined ? fields.jobId : existingEntry.jobId,
-            timestamp: fields.timestamp ?? existingEntry.timestamp,
-          }
-        : existingEntry,
-    );
-
-    const dayReference = new Date(targetTimestamp);
-    const dayEntries = simulatedEntries.filter((timeEntry) =>
-      isSameLocalDay(new Date(timeEntry.timestamp), dayReference),
-    );
-    const sequenceResult = validateDayEntrySequence(dayEntries);
-
-    if (!sequenceResult.valid) return sequenceResult.failure;
-  }
-  return null;
-}
 
 /** Edits a time entry directly: Admin any entry, Büro an employee's entry. */
 export async function updateEntry(
@@ -402,7 +199,7 @@ export async function updateEntry(
     if (targetMemberError) return { success: false, error: 'load_failed' };
     if (!targetMember) return { success: false, error: 'target_not_found' };
 
-    const targetRole = targetMember.role as OrgRole;
+    const targetRole = targetMember.role;
     const isOwnEntry = entry.user_id === user.id;
 
     // Check if caller can manage this entry
@@ -422,34 +219,8 @@ export async function updateEntry(
       return { success: false, error: 'period_closed' };
     }
 
-    // Validate timestamp update if provided
-    const dayRows =
-      fields.timestamp || changesEntrySequence(fields)
-        ? await getUserEntriesOnDays(admin, entry.user_id, entry.organization_id, [
-            new Date(entry.timestamp),
-            targetTimestamp,
-          ])
-        : [];
-    if (!dayRows) return { success: false, error: 'fetch_failed' };
-    const editRefusal = validateEntryEdit(dayRows, entry, fields, targetTimestamp);
-    if (editRefusal) return { success: false, ...editRefusal };
-
-    // A caller-supplied job must belong to the entry's organization before it is written.
-    if (fields.jobId) {
-      const { data: job, error: jobError } = await loggedRead(
-        'updateEntry: jobs read failed',
-        admin
-          .from('jobs')
-          .select('id')
-          .eq('id', fields.jobId)
-          .eq('organization_id', entry.organization_id)
-          .maybeSingle(),
-      );
-      if (jobError) return { success: false, error: 'load_failed' };
-      if (!job) {
-        return { success: false, error: 'job_not_found' };
-      }
-    }
+    const editRefusal = await refuseEntryEdit(admin, entry, fields, targetTimestamp);
+    if (editRefusal) return editRefusal;
 
     // Only the named fields change. The function refuses an own entry for
     // every caller but an Admin, and records an Admin's own change.
@@ -522,7 +293,7 @@ export async function deleteEntry(
     if (targetMemberError) return { success: false, error: 'load_failed' };
     if (!targetMember) return { success: false, error: 'target_not_found' };
 
-    const targetRole = targetMember.role as OrgRole;
+    const targetRole = targetMember.role;
     const isOwnEntry = entry.user_id === user.id;
 
     // Check if caller can manage this entry
@@ -627,7 +398,7 @@ export async function deleteEntriesBatch(rawEntryIds: string[]): Promise<DeleteE
       return { success: false, error: 'target_not_found' };
     }
 
-    const roleMap = new Map(memberRows.map((member) => [member.user_id, member.role as OrgRole]));
+    const roleMap = new Map(memberRows.map((member) => [member.user_id, member.role]));
 
     for (const entry of entries) {
       const targetRole = roleMap.get(entry.user_id);

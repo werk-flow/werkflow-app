@@ -6,7 +6,7 @@ import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resol
 import type { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { canApproveEntries } from './helpers';
-import { groupPendingEntries } from './pending-sessions';
+import { groupPendingEntries, type PendingEntryGroup } from './pending-sessions';
 import {
   toChangeRequest,
   toTimeEntry,
@@ -74,8 +74,7 @@ export async function readPendingSessionQueue(input: {
   // Personal display data only for targets this approver may see:
   // authorization is resolved before any profile lookup.
   const groups = groupPendingEntries(approvableEntries);
-  const jobIdOf = (group: (typeof groups)[number]) => group.clockIn?.job_id ?? group.clockOut?.job_id ?? null;
-  const jobIds = [...new Set(groups.map(jobIdOf).filter((id): id is string => id !== null))];
+  const jobIds = [...new Set(groups.map(pendingGroupJobId).filter((id): id is string => id !== null))];
   const [profiles, jobs] = await Promise.all([
     readInBatches([...new Set(groups.map((group) => group.userId))], (batch) =>
       admin
@@ -102,23 +101,33 @@ export async function readPendingSessionQueue(input: {
   );
 
   // One session per manual submission; the grouping rule lives in pending-sessions.ts.
-  const sessions: PendingSession[] = groups.map((group) => {
-    const profile = profileById.get(group.userId);
-    const jobId = jobIdOf(group);
-    return {
-      id: group.id,
-      userId: group.userId,
-      firstName: profile?.first_name || null,
-      lastName: profile?.last_name || null,
-      clockIn: group.clockIn ? toTimeEntry(group.clockIn) : null,
-      clockOut: group.clockOut ? toTimeEntry(group.clockOut) : null,
-      entryIds: group.entries.map((entry) => entry.id),
-      date: group.date,
-      createdAt: group.createdAt,
-      jobTitle: jobId ? (jobTitleById.get(jobId) ?? null) : null,
-    };
-  });
+  const sessions = groups.map((group) => toPendingSession(group, profileById, jobTitleById));
   return { success: true, sessions };
+}
+
+function pendingGroupJobId(group: PendingEntryGroup): string | null {
+  return group.clockIn?.job_id ?? group.clockOut?.job_id ?? null;
+}
+
+function toPendingSession(
+  group: PendingEntryGroup,
+  profileById: ReadonlyMap<string, PersonName>,
+  jobTitleById: ReadonlyMap<string, string>,
+): PendingSession {
+  const profile = profileById.get(group.userId);
+  const jobId = pendingGroupJobId(group);
+  return {
+    id: group.id,
+    userId: group.userId,
+    firstName: profile?.first_name || null,
+    lastName: profile?.last_name || null,
+    clockIn: group.clockIn ? toTimeEntry(group.clockIn) : null,
+    clockOut: group.clockOut ? toTimeEntry(group.clockOut) : null,
+    entryIds: group.entries.map((entry) => entry.id),
+    date: group.date,
+    createdAt: group.createdAt,
+    jobTitle: jobId ? (jobTitleById.get(jobId) ?? null) : null,
+  };
 }
 
 export async function readPendingChangeRequestQueue(input: {
