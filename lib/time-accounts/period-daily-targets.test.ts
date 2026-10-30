@@ -1,9 +1,7 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
 import { EMPTY_HOLIDAY_CALENDAR } from '@/lib/personnel/targets';
-
-mock.module('server-only', () => ({}));
-const { resolveEmployeeDailyTargets } = await import('./period-preparation');
+import { resolveEmployeeDailyTargets } from './period-daily-targets';
 
 // werk-flow/werkflow-planning#79: the October period counted Friday 30.10.
 // for a person who left on 29.10., so the closing Zeitkonto balance carried a
