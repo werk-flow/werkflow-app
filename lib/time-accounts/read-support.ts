@@ -6,7 +6,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { logReadFailure } from '@/lib/data/read-request-cache';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readInBatches } from '@/lib/supabase/query-batches';
-import { requirePeriodRows } from './period-preparation';
+import { requirePeriodRows } from './period-sources';
 
 // Steps the time-account page readers in queries.ts share: the region's
 // failure shape and the employee names every list shows.

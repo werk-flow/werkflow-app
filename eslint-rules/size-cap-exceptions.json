@@ -7,8 +7,7 @@
     "lib/attention/actions.ts": 1440,
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/customer-relationships/actions.ts": 1427,
-    "lib/security/server-action-authorization.test.ts": 959,
-    "lib/time-accounts/period-preparation.ts": 1277
+    "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
@@ -557,15 +556,6 @@
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
     "lib/testing/performance-calibration.ts": { "draftPerformanceBaselines": 98 },
     "lib/testing/spec-support/spec-independence.ts": { "specIndependenceProblems": 82 },
-    "lib/time-accounts/period-preparation.ts": {
-      "resolvePoliciesForPeriod": 165,
-      "startPeriodReferenceReads": 89,
-      "indexPeriodSources": 96,
-      "pushEmployeeIntegrityFindings": 95,
-      "pushEmployeeReviewFindings": 82,
-      "pushEmployeeWarningFindings": 102,
-      "pushEmployeeDailyResults": 115
-    },
     "lib/ui/dialog-discovery.ts": { "inspectLayer": 102 }
   }
 }

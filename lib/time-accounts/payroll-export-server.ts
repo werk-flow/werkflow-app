@@ -10,7 +10,7 @@ import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { buildPayrollExportPackage } from './export';
 import { buildPayrollExportRows, type PayrollExportRows } from './payroll-export-rows';
 import { loadPayrollExportSources, type PayrollExportSources } from './payroll-export-sources';
-import { hashPayload } from './period-preparation';
+import { hashPayload } from './period-sources';
 
 // The steps of generatePayrollExport before and around the stored file. The
 // action authorizes the caller and passes the admin client and its trusted
