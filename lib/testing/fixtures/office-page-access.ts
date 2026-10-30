@@ -118,6 +118,7 @@ const { default: KundenDetailPage } = await import('@/app/(app)/kunden/[clientId
 const { default: DokumentePage } = await import('@/app/(app)/dokumente/page');
 const { default: InventoryPage } = await import('@/app/(app)/inventar/page');
 const { default: JobDetailPage } = await import('@/app/(app)/auftraege/[jobNumber]/page');
+const { getJobByNumber } = await import('@/lib/jobs/actions');
 const { navItemsFor } = await import('@/components/sidebar/sidebar-nav-items');
 
 type Render = () => Promise<ReactElement> | ReactElement;
@@ -173,7 +174,9 @@ const employeeNavigation = navItemsFor('employee').map((item) => item.href);
 for (const href of officeNavigation)
   assert.ok(!employeeNavigation.includes(href), `the employee navigation shows ${href}`);
 
-// A field worker does not open a job of the own organization that is not assigned to them.
+// A field worker does not open a job of the own organization that is not assigned to them: the job
+// reader refuses it itself, not only the page's later assignment check.
+assert.deepEqual(await getJobByNumber(unassignedJobNumber), { success: false, error: 'not_authorized' });
 assert.equal(
   await refusal(() => JobDetailPage({ params: Promise.resolve({ jobNumber: unassignedJobNumber }) })),
   'redirect:/auftraege',
