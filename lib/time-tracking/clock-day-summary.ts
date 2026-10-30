@@ -46,21 +46,51 @@ export function describeClockActivity(
 
 type WorkTimePart = { kind: Exclude<TimeSegmentKind, 'break'>; label: string; minutes: number };
 
+const OTHER_WORK_KINDS = ['travel', 'standby', 'callout', 'internal_activity'] as const;
+
+/** Whole numbers that sum to `total`: each value floored, the rest to the largest remainders. */
+function roundToTotal(values: readonly number[], total: number): number[] {
+  const floors = values.map((value) => Math.floor(value));
+  let rest = total - floors.reduce((sum, value) => sum + value, 0);
+  const byRemainder = values
+    .map((value, index) => ({ index, remainder: value - Math.floor(value) }))
+    .sort((left, right) => right.remainder - left.remainder);
+  for (const { index } of byRemainder) {
+    if (rest <= 0) break;
+    floors[index] = (floors[index] ?? 0) + 1;
+    rest -= 1;
+  }
+  return floors;
+}
+
 /**
- * The parts of today's working time, in whole minutes that add up to the
+ * The parts of today's working time in whole minutes that add up to the
  * rounded total: travel, standby, callout and internal time as recorded, work
- * as the rest. Empty while the day holds work only, so the total stands alone.
- * An automatic break comes out of the work part.
+ * as the rest. An automatic break comes out of the work part; one longer than
+ * the work comes out of the other parts evenly. Empty while the day holds work
+ * only, so the total stands alone.
  */
 export function workTimeParts(
   workMinutes: number,
-  minutes: Record<Exclude<TimeSegmentKind, 'work' | 'break'>, number>,
+  minutes: Record<(typeof OTHER_WORK_KINDS)[number], number>,
 ): WorkTimePart[] {
-  const others = (['travel', 'standby', 'callout', 'internal_activity'] as const)
-    .map((kind) => ({ kind, label: TIME_ACTIVITY_LABELS[kind], minutes: Math.round(minutes[kind]) }))
-    .filter((part) => part.minutes > 0);
-  if (others.length === 0) return [];
-  const otherMinutes = others.reduce((total, part) => total + part.minutes, 0);
-  const work = Math.max(0, Math.round(workMinutes) - otherMinutes);
-  return [{ kind: 'work', label: TIME_ACTIVITY_LABELS.work, minutes: work }, ...others];
+  const otherMinutes = OTHER_WORK_KINDS.reduce((total, kind) => total + minutes[kind], 0);
+  if (otherMinutes <= 0 || workMinutes <= 0) return [];
+  const scale = Math.min(1, workMinutes / otherMinutes);
+  const exact = [
+    { kind: 'work' as const, minutes: workMinutes - otherMinutes * scale },
+    ...OTHER_WORK_KINDS.map((kind) => ({ kind, minutes: minutes[kind] * scale })),
+  ];
+  const rounded = roundToTotal(
+    exact.map((part) => part.minutes),
+    Math.round(workMinutes),
+  );
+  const parts = exact
+    .map((part, index) => ({
+      kind: part.kind,
+      label: TIME_ACTIVITY_LABELS[part.kind],
+      minutes: rounded[index] ?? 0,
+    }))
+    .filter((part) => part.kind === 'work' || part.minutes > 0);
+  return parts.length > 1 ? parts : [];
 }

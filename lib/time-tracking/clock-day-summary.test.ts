@@ -52,9 +52,20 @@ describe('the parts of today’s working time', () => {
     expect(parts.reduce((total, part) => total + part.minutes, 0)).toBe(3);
   });
 
-  test('rounded parts still add up to the rounded total', () => {
-    const parts = workTimeParts(10.4, { ...none, travel: 2.4, standby: 3.4 });
-    expect(parts.reduce((total, part) => total + part.minutes, 0)).toBe(10);
+  test('rounded parts add up to the rounded total', () => {
+    const sum = (parts: ReturnType<typeof workTimeParts>) =>
+      parts.reduce((total, part) => total + part.minutes, 0);
+    expect(sum(workTimeParts(10.4, { ...none, travel: 2.4, standby: 3.4 }))).toBe(10);
+    expect(sum(workTimeParts(1.2, { ...none, travel: 0.6, standby: 0.6 }))).toBe(1);
+  });
+
+  test('an automatic break longer than the work comes out of the other parts', () => {
+    // 400 minutes of travel, 30 of them deducted as the automatic break.
+    const parts = workTimeParts(370, { ...none, travel: 400 });
+    expect(parts).toEqual([
+      { kind: 'work', label: 'Arbeit', minutes: 0 },
+      { kind: 'travel', label: 'Fahrt', minutes: 370 },
+    ]);
   });
 
   test('a day of work only shows no parts', () => {

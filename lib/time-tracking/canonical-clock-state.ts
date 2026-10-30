@@ -3,6 +3,7 @@ import type { ActionResult } from '@/lib/action-result';
 import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { getJobDisplayTitle } from '@/lib/jobs/types';
 import type { AdminClient } from '@/lib/supabase/admin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import type { Tables } from '@/lib/supabase/database.types';
 import { combineClockDayTotals, canonicalDayTotals, type ClockDayTotals } from './clock-day-totals';
 import { readResumeActivity } from './resume-activity';
@@ -46,19 +47,24 @@ export async function readCanonicalClockDay(
 ): Promise<CanonicalClockDay | null> {
   const dayStart = input.dayStart.toISOString();
   const dayEnd = input.dayEnd.toISOString();
-  const { data, error } = await admin
-    .from('time_sessions')
-    .select(
-      'id, status, started_at, ended_at, version, recovery_reason, time_segments(id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at)',
-    )
-    .eq('organization_id', input.organizationId)
-    .eq('user_id', input.userId)
-    .lte('started_at', dayEnd)
-    .or(`ended_at.is.null,ended_at.gte.${dayStart}`)
-    .lte('time_segments.started_at', dayEnd)
-    .or(`ended_at.is.null,ended_at.gte.${dayStart}`, { referencedTable: 'time_segments' })
-    .order('started_at', { ascending: true })
-    .order('id');
+  const { data, error } = await readCompleteRows(
+    (from, to) =>
+      admin
+        .from('time_sessions')
+        .select(
+          'id, status, started_at, ended_at, version, recovery_reason, time_segments(id, session_id, organization_id, employee_record_id, kind, allocation_kind, job_id, internal_type, travel_route, travel_role, standby_context, started_at, ended_at)',
+        )
+        .eq('organization_id', input.organizationId)
+        .eq('user_id', input.userId)
+        .lte('started_at', dayEnd)
+        .or(`ended_at.is.null,ended_at.gte.${dayStart}`)
+        .lte('time_segments.started_at', dayEnd)
+        .or(`ended_at.is.null,ended_at.gte.${dayStart}`, { referencedTable: 'time_segments' })
+        .order('started_at', { ascending: true })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
   if (error) {
     logReadErrors('readCanonicalClockDay: read failed', error);
     return null;
