@@ -1,6 +1,7 @@
 import type { ActionResult } from '@/lib/action-result';
 import { logReadErrors } from '@/lib/data/read-request-cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 import { toTimeActivitySelection, toTimeSegmentFact } from './segments';
 import type { TimeActivitySelection } from './types';
 
@@ -12,7 +13,7 @@ export type ResumeActivityRead = ActionResult<{ activity: TimeActivitySelection 
  * job. A failed read is reported, never mistaken for "nothing to resume".
  */
 export async function readResumeActivity(
-  admin: SupabaseClient,
+  admin: SupabaseClient<Database>,
   organizationId: string,
   sessionId: string,
 ): Promise<ResumeActivityRead> {
@@ -31,5 +32,5 @@ export async function readResumeActivity(
     logReadErrors('readResumeActivity: read failed', error);
     return { success: false, error: 'load_failed' };
   }
-  return { success: true, activity: data ? toTimeActivitySelection(toTimeSegmentFact(data as never)) : null };
+  return { success: true, activity: data ? toTimeActivitySelection(toTimeSegmentFact(data)) : null };
 }

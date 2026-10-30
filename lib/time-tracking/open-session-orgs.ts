@@ -42,7 +42,7 @@ export async function getOpenSessionOrgsForUserOnDay(
   const openOrgIds: string[] = [];
 
   for (const row of rows || []) {
-    const orgId = row.organization_id as string;
+    const orgId = row.organization_id;
     if (!orgId || seenOrgs.has(orgId)) continue;
     seenOrgs.add(orgId);
 
