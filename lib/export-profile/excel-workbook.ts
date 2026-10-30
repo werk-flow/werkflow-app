@@ -30,12 +30,11 @@ export function readWorkbook(bytes: Uint8Array): WorkbookSheet[] {
     const attributes = parseXmlAttributes(match[1] ?? '');
     const relationId = [...attributes].find(([key]) => key.endsWith(':id'))?.[1];
     const target = relationId === undefined ? undefined : targets.get(relationId);
-    if (target === undefined) continue;
+    // A declared sheet without its part would pass as an empty table.
+    const sheetXml = target === undefined ? null : readXml(zip, target);
+    if (sheetXml === null) throw new ExportFormatError('xlsx_sheet_missing');
     const name = attributes.get('name') ?? '';
-    sheets.push({
-      name,
-      rows: () => sheetRows(readXml(zip, target) ?? '', { sharedStrings, dateStyles, epoch }),
-    });
+    sheets.push({ name, rows: () => sheetRows(sheetXml, { sharedStrings, dateStyles, epoch }) });
   }
   return sheets;
 }

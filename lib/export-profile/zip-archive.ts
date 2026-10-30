@@ -5,7 +5,9 @@ import { inflateRawSync } from 'node:zlib';
 
 export type ExportFormatCode =
   | 'delimited_quote_unclosed'
+  | 'delimiter_ambiguous'
   | 'not_a_zip_archive'
+  | 'xlsx_sheet_missing'
   | 'xlsx_workbook_missing'
   | 'xml_not_well_formed'
   | 'zip64_unsupported'

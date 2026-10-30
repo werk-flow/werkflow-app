@@ -63,6 +63,9 @@ const RESAVE =
 const UNREADABLE_ADVICE: Record<ExportFormatCode, string> = {
   not_a_zip_archive: RESAVE,
   xlsx_workbook_missing: RESAVE,
+  xlsx_sheet_missing: RESAVE,
+  delimiter_ambiguous:
+    'The separator cannot be told apart: add the line sep=; (or sep=,) at the top of the file, or export it again, then run the profiler again.',
   zip_directory_damaged: RESAVE,
   zip_entry_damaged: RESAVE,
   zip_method_unsupported: RESAVE,
@@ -219,16 +222,26 @@ function addTable(run: Run, source: TableSource, built: BuiltTable): void {
   });
 }
 
+/**
+ * A .csv without a consistent delimiter is one column only when it holds no
+ * delimiter character at all; otherwise the separator is ambiguous. Any
+ * other text file without one is a document.
+ */
+function singleColumnCsv(path: string, text: string): ';' | null {
+  if (extname(path).toLowerCase() !== '.csv') return null;
+  if (/[;,\t|]/.test(text)) throw new ExportFormatError('delimiter_ambiguous');
+  return ';';
+}
+
 function profileDelimited(run: Run, file: ExportFile, label: string, segments: readonly string[]): void {
   const decoded = decodeText(readFileSync(file.path));
-  const delimiter =
-    detectDelimiter(decoded.text) ?? (extname(file.path).toLowerCase() === '.csv' ? ';' : null);
+  const delimiter = detectDelimiter(decoded.text) ?? singleColumnCsv(file.path, decoded.text);
   if (delimiter === null) return countDocument(run, file, 'document', segments);
-  run.counts.tableFiles += 1;
   const rows = (function* () {
     for (const row of delimitedRows(decoded.text, delimiter)) yield row.map((text) => ({ text }));
   })();
   const built = buildRowTable(rows, { salt: run.salt, detectHeader: true });
+  run.counts.tableFiles += 1;
   const shownDelimiter = delimiter === '\t' ? 'tab' : delimiter;
   addTable(
     run,

@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { zipArchive } from '../testing/fixtures/export-profile-world';
 import { delimitedRows, detectDelimiter } from './delimited-text';
 import { readWorkbook } from './excel-workbook';
+import { profileExportFolder } from './profile-export';
 import { xmlRecords } from './xml-records';
 import { decodeXmlEntities } from './xml-text';
 import { ExportFormatError, openZip } from './zip-archive';
@@ -67,5 +71,35 @@ describe('ZIP and Excel', () => {
     });
     const [sheet] = readWorkbook(bytes);
     expect(sheet ? [...sheet.rows()] : null).toEqual([[{ text: '99999999999' }]]);
+  });
+});
+
+describe('incomplete input is unreadable, never a quiet partial profile', () => {
+  test('a declared sheet whose part is missing makes the workbook unreadable', () => {
+    const bytes = zipArchive({
+      'xl/workbook.xml':
+        '<workbook xmlns:r="r"><sheets><sheet name="Tabelle" sheetId="1" r:id="rId1"/></sheets></workbook>',
+      'xl/_rels/workbook.xml.rels':
+        '<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>',
+    });
+    expect(formatErrorCode(() => readWorkbook(bytes))).toBe('xlsx_sheet_missing');
+  });
+
+  test('a .csv whose separator cannot be told apart is reported, and one without any is one column', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'export-profile-csv-'));
+    try {
+      writeFileSync(join(folder, 'mehrdeutig.csv'), 'id,name\n1,"Jane\n');
+      writeFileSync(join(folder, 'einspaltig.csv'), 'Nr\n1\n2\n');
+      const profile = profileExportFolder(folder, { maskLabels: false });
+      expect(profile.unreadable).toEqual([
+        { file: 'mehrdeutig.csv', reason: 'delimiter_ambiguous', advice: expect.stringContaining('sep=;') },
+      ]);
+      expect(profile.tables.map((table) => [table.file, table.columns.length])).toEqual([
+        ['einspaltig.csv', 1],
+      ]);
+      expect(profile.files.tableFiles).toBe(1);
+    } finally {
+      rmSync(folder, { recursive: true, force: true });
+    }
   });
 });
