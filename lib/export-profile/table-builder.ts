@@ -6,10 +6,10 @@ import type { XmlRecord } from './xml-records';
 // Turns rows or named records into column accumulators. A row table decides
 // whether its first row names the columns: it does only when every filled
 // cell reads as a short label, not as a number, date, contact detail, name or
-// a value the column holds again, and when at least one filled cell heads a
-// column of numbers, dates or contact details. An all-text first row can be
-// a data row (free-text notes), so it never becomes column names. Otherwise
-// the columns are column_1, column_2.
+// a value the column holds again, and when a word (not a placeholder such as
+// "-" or "k.A.") heads every column of numbers, dates or contact details. An
+// all-text first row can be a data row (free-text notes), so it never becomes
+// column names. Otherwise the columns are column_1, column_2.
 
 export type HeaderMode = 'first row' | 'none detected' | 'positional' | 'named fields';
 
@@ -90,13 +90,19 @@ function looksLikeHeader(
     if (findPersonalDataLike(label).length > 0) return false;
     return !(columns[index]?.has(label) ?? false);
   });
-  return (
-    labels &&
-    first.some(
-      (cell, index) =>
-        cell.text.trim() !== '' && TYPED_COLUMNS.has(columns[index]?.profile(bodyRows).type ?? 'text'),
-    )
+  if (!labels) return false;
+  // The evidence: every column of numbers, dates or contact details is
+  // headed by a word. A data row would hold a value or a placeholder there.
+  const typed = columns.flatMap((column, index) =>
+    TYPED_COLUMNS.has(column.profile(bodyRows).type) ? [first[index]?.text.trim() ?? ''] : [],
   );
+  return typed.length > 0 && typed.every(isWordLabel);
+}
+
+const PLACEHOLDERS = new Set(['k.a.', 'n/a', 'null', 'none', 'keine', 'kein', 'leer', 'unbekannt', 'offen']);
+
+function isWordLabel(label: string): boolean {
+  return (label.match(/\p{L}/gu)?.length ?? 0) >= 2 && !PLACEHOLDERS.has(label.toLowerCase());
 }
 
 function nameColumns(columns: readonly ColumnAccumulator[], header: readonly Cell[]): void {

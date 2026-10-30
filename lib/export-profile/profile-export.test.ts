@@ -93,6 +93,9 @@ describe('export profile: tables', () => {
     const notes = tableNamed('Notizen.csv');
     expect(notes).toMatchObject({ header: 'none detected', rows: 3 });
     expect(notes.columns.map((entry) => entry.name)).toEqual(['column_1', 'column_2']);
+    const visits = tableNamed('Einsatznotizen.csv');
+    expect(visits).toMatchObject({ header: 'none detected', rows: 3 });
+    expect(visits.columns.map((entry) => entry.name)).toEqual(['column_1', 'column_2']);
   });
 
   test('an Excel sheet reports its rows, its date cells as years and its decimal amounts', () => {
@@ -107,6 +110,7 @@ describe('export profile: tables', () => {
     expect(column(orders, 'Betrag').type).toBe('decimal');
     expect(column(orders, 'KdNr')).toMatchObject({ type: 'integer', distinct: 3, unique: false });
     expect(column(orders, 'Beginn')).toMatchObject({ type: 'time', years: null });
+    expect(column(orders, 'Dauer')).toMatchObject({ type: 'time', years: null });
   });
 
   test('an XML record set becomes one table with its attributes and child elements as columns', () => {
@@ -194,14 +198,14 @@ describe('export profile: relations and other files', () => {
     expect(profile.skippedSystemFiles).toBe(1);
     expect(profile.otherFiles).toEqual([{ extension: '.cfg', files: 1, bytes: expect.any(Number) }]);
     expect(profile.files).toMatchObject({
-      total: 15,
-      tableFiles: 6,
+      total: 16,
+      tableFiles: 7,
       binaries: 1,
       documents: 4,
       photos: 2,
       other: 1,
     });
-    expect(profile.tables).toHaveLength(8);
+    expect(profile.tables).toHaveLength(9);
   });
 });
 

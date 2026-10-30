@@ -77,8 +77,20 @@ function readDateStyles(xml: string): Map<number, TemporalFormat> {
   const customFormats = new Map<number, TemporalFormat>();
   for (const match of xml.matchAll(/<numFmt\b([^>]*?)\/?>/g)) {
     const attributes = parseXmlAttributes(match[1] ?? '');
-    const code = (attributes.get('formatCode') ?? '').replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
-    const kind = /[dy]/i.test(code) ? 'date' : /[hs]/i.test(code) ? 'time' : /m/i.test(code) ? 'date' : null;
+    const rawCode = attributes.get('formatCode') ?? '';
+    // An elapsed-time token ([h]:mm, [mm]:ss) marks a duration; other
+    // brackets ([$-407], [Red]) and quoted text carry no date part.
+    const elapsed = /\[(?:h+|m+|s+)\]/i.test(rawCode);
+    const code = rawCode.replace(/"[^"]*"|\[[^\]]*\]|\\./g, '');
+    const kind = elapsed
+      ? 'time'
+      : /[dy]/i.test(code)
+        ? 'date'
+        : /[hs]/i.test(code)
+          ? 'time'
+          : /m/i.test(code)
+            ? 'date'
+            : null;
     if (kind) customFormats.set(Number(attributes.get('numFmtId')), kind);
   }
   const cellFormats = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)?.[1] ?? '';

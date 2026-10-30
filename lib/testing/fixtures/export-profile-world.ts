@@ -33,6 +33,7 @@ export const SENSITIVE_VALUES = [
   'Heizungswartung Keller',
   'Kessel defekt',
   'Sonderrabatt zugesagt',
+  'Ventil undicht',
   'zeynep',
 ];
 
@@ -68,6 +69,9 @@ const NOTES = [
   'Thermostat tauschen;Kunde ruft zurück',
   'Pumpe läuft laut;Termin verschoben',
 ].join('\n');
+
+// A placeholder above a number column is no header evidence either.
+const VISIT_NOTES = ['-;Ventil undicht', '12;Thermostat tauschen', '24;Pumpe läuft laut'].join('\n');
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?>
 <Zeiterfassung>
@@ -143,22 +147,28 @@ function zip(entries: Readonly<Record<string, string>>): Uint8Array {
   return Buffer.concat([...locals, directoryBytes, end]);
 }
 
+// Style 1 is a date, 2 a time of day, 3 a custom duration ([h]:mm).
+const WORKBOOK_STYLES =
+  '<styleSheet><numFmts count="1"><numFmt numFmtId="164" formatCode="[h]:mm"/></numFmts><cellXfs count="4"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/><xf numFmtId="20" applyNumberFormat="1"/><xf numFmtId="164" applyNumberFormat="1"/></cellXfs></styleSheet>';
+
+const WORKBOOK_STRINGS = [
+  'AuftragNr',
+  'KdNr',
+  'Datum',
+  'Betrag',
+  'Status',
+  'A-5001',
+  'A-5002',
+  'A-5003',
+  'A-5004',
+  'offen',
+  'erledigt',
+  'Beginn',
+  'Dauer',
+];
+
 function workbook(): Uint8Array {
-  const shared = [
-    'AuftragNr',
-    'KdNr',
-    'Datum',
-    'Betrag',
-    'Status',
-    'A-5001',
-    'A-5002',
-    'A-5003',
-    'A-5004',
-    'offen',
-    'erledigt',
-    'Beginn',
-  ];
-  const sharedXml = `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${shared.map((text) => `<si><t>${text}</t></si>`).join('')}</sst>`;
+  const sharedXml = `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${WORKBOOK_STRINGS.map((text) => `<si><t>${text}</t></si>`).join('')}</sst>`;
   const row = (index: number, cells: string): string => `<row r="${index}">${cells}</row>`;
   const text = (reference: string, sharedIndex: number): string =>
     `<c r="${reference}" t="s"><v>${sharedIndex}</v></c>`;
@@ -167,7 +177,9 @@ function workbook(): Uint8Array {
   const rows = [
     row(
       1,
-      [0, 1, 2, 3, 4, 11].map((sharedIndex, column) => text(`${'ABCDEF'[column]}1`, sharedIndex)).join(''),
+      [0, 1, 2, 3, 4, 11, 12]
+        .map((sharedIndex, column) => text(`${'ABCDEFG'[column]}1`, sharedIndex))
+        .join(''),
     ),
     row(
       2,
@@ -176,7 +188,8 @@ function workbook(): Uint8Array {
         number('C2', '43831', 1) +
         number('D2', '1250.5') +
         text('E2', 9) +
-        number('F2', '0.5', 2),
+        number('F2', '0.5', 2) +
+        number('G2', '1.5', 3),
     ),
     row(
       3,
@@ -185,7 +198,8 @@ function workbook(): Uint8Array {
         number('C3', '44197', 1) +
         number('D3', '89.9') +
         text('E3', 10) +
-        number('F3', '0.3125', 2),
+        number('F3', '0.3125', 2) +
+        number('G3', '26.25', 3),
     ),
     row(
       4,
@@ -194,7 +208,8 @@ function workbook(): Uint8Array {
         number('C4', '45292', 1) +
         number('D4', '3200') +
         text('E4', 10) +
-        number('F4', '0.75', 2),
+        number('F4', '0.75', 2) +
+        number('G4', '0.75', 3),
     ),
     row(
       5,
@@ -203,7 +218,8 @@ function workbook(): Uint8Array {
         number('C5', '45658', 1) +
         number('D5', '17.25') +
         text('E5', 9) +
-        number('F5', '0.333', 2),
+        number('F5', '0.333', 2) +
+        number('G5', '3', 3),
     ),
   ].join('');
   return zip({
@@ -213,8 +229,7 @@ function workbook(): Uint8Array {
     'xl/_rels/workbook.xml.rels':
       '<Relationships><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
     'xl/sharedStrings.xml': sharedXml,
-    'xl/styles.xml':
-      '<styleSheet><cellXfs count="3"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/><xf numFmtId="20" applyNumberFormat="1"/></cellXfs></styleSheet>',
+    'xl/styles.xml': WORKBOOK_STYLES,
     'xl/worksheets/sheet1.xml': `<worksheet><sheetData>${rows}</sheetData></worksheet>`,
   });
 }
@@ -232,6 +247,7 @@ export function writeSyntheticExport(root: string): void {
   write('Auftraege.xlsx', workbook());
   write('Zeiten.xml', XML);
   write('Notizen.csv', NOTES);
+  write('Einsatznotizen.csv', VISIT_NOTES);
   write('Kaputt.xml', '<Export><Kunde><Name>x</Kunde>');
   write('Scans/scan.zeynep', pdf(1));
   write('Artikel/DATANORM.001', windows1252(DATANORM));
