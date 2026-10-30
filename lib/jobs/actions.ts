@@ -5,7 +5,6 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { updateTag, revalidatePath } from 'next/cache';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { authenticateAndAuthorize } from './auth';
 import { readJobAssignmentOfUser } from './job-access-reads';
 import {
@@ -17,27 +16,27 @@ import {
 import { CACHE_TAGS } from '@/lib/data/cached';
 import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import {
-  type Job,
-  type JobStatus,
   type JobPriority,
   type JobRow,
   type JobWithDetails,
-  type JobAssignmentWithProfile,
-  type ProjectWithDetails,
   type CalendarJob,
   type CreateJobResult,
   type UpdateJobResult,
   type DeleteJobResult,
   type UpdateJobAssignmentsResult,
-  normalizeJobPlannedTime,
-  getJobDisplayTitle,
   toJob,
   toClient,
-  toProject,
   toJobAssignment,
 } from './types';
 import type { AssignmentApproval } from '@/lib/qualifications/types';
-import { loadJobDetailRelations, readJobVisitPlan, refuseScheduleOfSeveralVisits } from './job-detail-reads';
+import {
+  loadJobDetailRelations,
+  readJobAssigneeProfiles,
+  readJobVisitPlan,
+  refuseScheduleOfSeveralVisits,
+} from './job-detail-reads';
+import { readParkedCalendarJobs } from './parked-job-reads';
+import { readJobsOfClient, readJobsOfMember, type RelatedJobs } from './related-job-reads';
 import { projectFieldJobDetails } from './field-work-pack';
 import type { JobVisitPlan } from './visit-schedule';
 import { logError } from '@/lib/logging';
@@ -331,18 +330,6 @@ export async function updateJobAssignments(
   }
 }
 
-type JobPlanOrderRow = Pick<JobRow, 'planned_date' | 'created_at' | 'id'>;
-
-/** The job list order (planned date, newest first, id), restored after a batched read. */
-function compareJobRowsByPlan(left: JobPlanOrderRow, right: JobPlanOrderRow): number {
-  if (left.planned_date !== right.planned_date) {
-    if (left.planned_date === null) return 1;
-    if (right.planned_date === null) return -1;
-    return left.planned_date < right.planned_date ? -1 : 1;
-  }
-  return right.created_at.localeCompare(left.created_at) || left.id.localeCompare(right.id);
-}
-
 /**
  * The shared tail of the job detail readers: an employee reads only a job they
  * are assigned to; the job comes back with its assignees, customer, project,
@@ -388,34 +375,8 @@ async function readJobDetails(input: {
     logReadFailure(`${input.operation}: job_assignments failed`, { code: assignmentRowsResult.error.code });
     return { success: false, error: 'fetch_failed' };
   }
-  const assignmentRows = assignmentRowsResult.data;
-  const assignments: JobAssignmentWithProfile[] = [];
-  if (assignmentRows.length > 0) {
-    const userIds = assignmentRows.map((a) => a.user_id);
-    const { data: profiles, error: profilesError } = await readInBatches(userIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email, avatar_path')
-        .in('id', [...batch]),
-    );
-    if (profilesError) {
-      logReadFailure(`${input.operation}: assignee profiles failed`, profilesError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const profileMap = new Map(profiles.map((p) => [p.id, p]));
-
-    for (const row of assignmentRows) {
-      const profile = profileMap.get(row.user_id);
-      assignments.push({
-        ...toJobAssignment(row),
-        firstName: profile?.first_name ?? null,
-        lastName: profile?.last_name ?? null,
-        email: profile?.email ?? null,
-        avatarPath: profile?.avatar_path ?? null,
-      });
-    }
-  }
+  const assignments = await readJobAssigneeProfiles(admin, assignmentRowsResult.data, input.operation);
+  if (!assignments) return { success: false, error: 'fetch_failed' };
 
   const { data: projectData } = projectResult;
   const effectiveClientId = projectData ? projectData.client_id : jobData.client_id;
@@ -539,24 +500,12 @@ export async function getNextJobNumber(): Promise<ActionResult<{ jobNumber: stri
       return { success: false, error: 'generation_failed' };
     }
 
-    return { success: true, jobNumber: data as string };
+    return { success: true, jobNumber: data };
   } catch (error) {
     logError('Unexpected error in getNextJobNumber:', error);
     return { success: false, error: 'unexpected_error' };
   }
 }
-
-// ============================================
-// Client-scoped queries
-// ============================================
-
-/** The jobs related to one client or one member, with their projects, client names and assignments. */
-type RelatedJobs = {
-  jobs: Job[];
-  projects: ProjectWithDetails[];
-  clientMap: Record<string, string>;
-  jobAssignmentMap: Record<string, string[]>;
-};
 
 /**
  * Fetch all jobs and projects associated with a specific client.
@@ -572,131 +521,8 @@ export async function getJobsForClient(rawClientId: string): Promise<ActionResul
   if (!parsedClientId.success) return { success: false, error: 'invalid_client' };
   const clientId = parsedClientId.data;
   const admin = createSupabaseAdminClient();
-  const [directJobs, clientProjects] = await Promise.all([
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('jobs')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('client_id', clientId)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('projects')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('client_id', clientId)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-  ]);
-  if (directJobs.error || clientProjects.error) {
-    logReadErrors('getJobsForClient: read failed', directJobs.error, clientProjects.error);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const projectIds = [
-    ...new Set([
-      ...clientProjects.data.map((project) => project.id),
-      ...directJobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])),
-    ]),
-  ];
-  const [allProjects, projectJobs] = await Promise.all([
-    readInBatches(projectIds, (ids) =>
-      admin
-        .from('projects')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...ids]),
-    ),
-    readInBatches(projectIds, (ids) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('jobs')
-            .select('*')
-            .eq('organization_id', orgId)
-            .in('project_id', [...ids])
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ),
-  ]);
-  if (allProjects.error || projectJobs.error || projectJobs.data.length > LIST_ROW_CAP) {
-    logReadErrors('getJobsForClient: read failed', allProjects.error, projectJobs.error);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const directProjectIds = new Set(clientProjects.data.map((project) => project.id));
-  const jobRows = new Map(directJobs.data.map((job) => [job.id, job]));
-  for (const job of projectJobs.data)
-    if (job.project_id && directProjectIds.has(job.project_id)) jobRows.set(job.id, job);
-  const jobs = [...jobRows.values()].map(toJob);
-  if (jobs.length > LIST_ROW_CAP) return { success: false, error: 'fetch_failed' };
-  const clientIds = [
-    ...new Set(
-      [...allProjects.data, ...jobRows.values()].flatMap((row) => (row.client_id ? [row.client_id] : [])),
-    ),
-  ];
-  const [clients, assignments] = await Promise.all([
-    readInBatches(clientIds, (ids) =>
-      admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...ids]),
-    ),
-    readInBatches(
-      jobs.map((job) => job.id),
-      (ids) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('job_assignments')
-              .select('job_id,user_id')
-              .eq('organization_id', orgId)
-              .in('job_id', [...ids])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-    ),
-  ]);
-  if (clients.error || assignments.error || assignments.data.length > LIST_ROW_CAP * 4) {
-    logReadErrors('getJobsForClient: read failed', clients.error, assignments.error);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const clientLookup = new Map(clients.data.map((client) => [client.id, toClient(client)]));
-  const projects: ProjectWithDetails[] = allProjects.data.map((project) => {
-    const children = projectJobs.data.filter((job) => job.project_id === project.id);
-    return {
-      ...toProject(project),
-      client: project.client_id ? (clientLookup.get(project.client_id) ?? null) : null,
-      jobCount: children.length,
-      completedJobCount: children.filter((job) => job.status === 'fertig').length,
-      inProgressJobCount: children.filter((job) => job.status === 'in_bearbeitung').length,
-      parkedJobCount: children.filter((job) => job.status === 'geparkt').length,
-    };
-  });
-  const jobAssignmentMap: Record<string, string[]> = {};
-  for (const assignment of assignments.data)
-    (jobAssignmentMap[assignment.job_id] ??= []).push(assignment.user_id);
-  return {
-    success: true,
-    jobs,
-    projects,
-    clientMap: Object.fromEntries(clients.data.map((client) => [client.id, client.name])),
-    jobAssignmentMap,
-  };
+  return readJobsOfClient(admin, orgId, clientId);
 }
-// ============================================
-// Member-scoped queries
-// ============================================
 
 /**
  * Fetch all jobs assigned to a specific member, along with their parent
@@ -717,146 +543,7 @@ export async function getJobsForMember(rawMemberId: string): Promise<ActionResul
     }
 
     const admin = createSupabaseAdminClient();
-
-    const { data: assignments, error: assignError } = await readCompleteRows(
-      (from, to) =>
-        admin
-          .from('job_assignments')
-          .select('job_id')
-          .eq('organization_id', orgId)
-          .eq('user_id', memberId)
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    );
-
-    if (assignError) {
-      logError('Error fetching member assignments:', assignError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const assignedJobIds = [...new Set(assignments.map((a) => a.job_id))];
-
-    if (assignedJobIds.length === 0) {
-      return {
-        success: true,
-        jobs: [],
-        projects: [],
-        clientMap: {},
-        jobAssignmentMap: {},
-      };
-    }
-
-    const { data: jobRows, error: jobError } = await readInBatches(assignedJobIds, (batch) =>
-      admin
-        .from('jobs')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    );
-
-    if (jobError) {
-      logError('Error fetching member jobs:', jobError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const jobs = jobRows.sort(compareJobRowsByPlan).map(toJob);
-    const projectIds = jobs.flatMap((job) => (job.projectId ? [job.projectId] : []));
-    const [projectRows, projectJobs, allAssignments] = await Promise.all([
-      readInBatches(projectIds, (batch) =>
-        admin
-          .from('projects')
-          .select('*')
-          .eq('organization_id', orgId)
-          .in('id', [...batch]),
-      ),
-      readInBatches(projectIds, (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('jobs')
-              .select('id, project_id, status')
-              .eq('organization_id', orgId)
-              .in('project_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-      ),
-      readInBatches(assignedJobIds, (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('job_assignments')
-              .select('job_id, user_id')
-              .eq('organization_id', orgId)
-              .in('job_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-      ),
-    ]);
-    const clientIds = [...projectRows.data, ...jobRows].flatMap((row) =>
-      row.client_id ? [row.client_id] : [],
-    );
-    const clientRows = await readInBatches(clientIds, (batch) =>
-      admin
-        .from('clients')
-        .select('*')
-        .eq('organization_id', orgId)
-        .in('id', [...batch]),
-    );
-    const relatedError = projectRows.error ?? projectJobs.error ?? allAssignments.error ?? clientRows.error;
-    if (relatedError) {
-      logError('Error fetching member job details:', relatedError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const jobsByProject = new Map<
-      string,
-      { total: number; completed: number; inProgress: number; parked: number }
-    >();
-    for (const projectJob of projectJobs.data) {
-      if (!projectJob.project_id) continue;
-      const entry = jobsByProject.get(projectJob.project_id) ?? {
-        total: 0,
-        completed: 0,
-        inProgress: 0,
-        parked: 0,
-      };
-      entry.total++;
-      if (projectJob.status === 'fertig') entry.completed++;
-      if (projectJob.status === 'in_bearbeitung') entry.inProgress++;
-      if (projectJob.status === 'geparkt') entry.parked++;
-      jobsByProject.set(projectJob.project_id, entry);
-    }
-    const clientLookup = new Map(clientRows.data.map((client) => [client.id, client]));
-    const projects: ProjectWithDetails[] = projectRows.data.map((row) => {
-      const counts = jobsByProject.get(row.id) ?? { total: 0, completed: 0, inProgress: 0, parked: 0 };
-      const client = row.client_id ? clientLookup.get(row.client_id) : undefined;
-      return {
-        ...toProject(row),
-        client: client ? toClient(client) : null,
-        jobCount: counts.total,
-        completedJobCount: counts.completed,
-        inProgressJobCount: counts.inProgress,
-        parkedJobCount: counts.parked,
-      };
-    });
-
-    const jobAssignmentMap: Record<string, string[]> = {};
-    for (const a of allAssignments.data) {
-      (jobAssignmentMap[a.job_id] ??= []).push(a.user_id);
-    }
-
-    return {
-      success: true,
-      jobs,
-      projects,
-      clientMap: Object.fromEntries(clientRows.data.map((client) => [client.id, client.name])),
-      jobAssignmentMap,
-    };
+    return await readJobsOfMember(admin, orgId, memberId);
   } catch (error) {
     logError('Unexpected error in getJobsForMember:', error);
     return { success: false, error: 'unexpected_error' };
@@ -874,146 +561,7 @@ export async function getParkedJobs(): Promise<ActionResult<{ jobs: CalendarJob[
     const { orgId, userId, isManagerOrAbove } = auth.context;
 
     const admin = createSupabaseAdminClient();
-
-    const parkedJobColumns =
-      'id, title, description, job_number, status, priority, planned_date, planned_time, estimated_duration_minutes, planned_working_minutes, location, client_id, project_id, updated_at, execution_version, execution_state';
-    let parkedJobs;
-    if (isManagerOrAbove) {
-      parkedJobs = await readCompleteRows(
-        (from, to) =>
-          admin
-            .from('jobs')
-            .select(parkedJobColumns)
-            .eq('organization_id', orgId)
-            .eq('status', 'geparkt')
-            .order('updated_at', { ascending: true })
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      );
-    } else {
-      const assignments = await readCompleteRows(
-        (from, to) =>
-          admin
-            .from('job_assignments')
-            .select('job_id')
-            .eq('organization_id', orgId)
-            .eq('user_id', userId)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      );
-      if (assignments.error) {
-        logError('Error fetching parked job assignments:', assignments.error);
-        return { success: false, error: 'fetch_failed' };
-      }
-      parkedJobs = await readInBatches(
-        assignments.data.map((a) => a.job_id),
-        (batch) =>
-          admin
-            .from('jobs')
-            .select(parkedJobColumns)
-            .eq('organization_id', orgId)
-            .eq('status', 'geparkt')
-            .in('id', [...batch]),
-      );
-      parkedJobs.data.sort(
-        (left, right) => left.updated_at.localeCompare(right.updated_at) || left.id.localeCompare(right.id),
-      );
-    }
-
-    const { data: jobs, error: jobsError } = parkedJobs;
-
-    if (jobsError) {
-      logError('Error fetching parked jobs:', jobsError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    if (jobs.length === 0) {
-      return { success: true, jobs: [] };
-    }
-
-    const jobIds = jobs.map((j) => j.id);
-    const clientIds = jobs.map((j) => j.client_id).filter((id): id is string => id !== null);
-    const projectIds = jobs.map((j) => j.project_id).filter((id): id is string => id !== null);
-
-    const [assignmentsResult, clientsResult, projectsResult] = await Promise.all([
-      readInBatches(jobIds, (batch) =>
-        readCompleteRows(
-          (from, to) =>
-            admin
-              .from('job_assignments')
-              .select('job_id, user_id')
-              .eq('organization_id', orgId)
-              .in('job_id', [...batch])
-              .order('id')
-              .range(from, to),
-          LIST_ROW_CAP,
-        ),
-      ),
-      readInBatches(clientIds, (batch) =>
-        admin
-          .from('clients')
-          .select('id, name, address')
-          .eq('organization_id', orgId)
-          .in('id', [...batch]),
-      ),
-      readInBatches(projectIds, (batch) =>
-        admin
-          .from('projects')
-          .select('id, name, project_number')
-          .eq('organization_id', orgId)
-          .in('id', [...batch]),
-      ),
-    ]);
-    const relatedError = assignmentsResult.error ?? clientsResult.error ?? projectsResult.error;
-    if (relatedError) {
-      logError('Error fetching parked job details:', relatedError);
-      return { success: false, error: 'fetch_failed' };
-    }
-
-    const assignmentMap: Record<string, string[]> = {};
-    for (const a of assignmentsResult.data || []) {
-      (assignmentMap[a.job_id] ??= []).push(a.user_id);
-    }
-
-    const clientMap: Record<string, { name: string; address: string | null }> = {};
-    for (const c of clientsResult.data || []) {
-      clientMap[c.id] = {
-        name: c.name,
-        address: c.address,
-      };
-    }
-
-    const projectMap: Record<string, { name: string; number: string | null }> = {};
-    for (const p of projectsResult.data || []) {
-      projectMap[p.id] = { name: p.name, number: p.project_number };
-    }
-
-    const calendarJobs: CalendarJob[] = jobs.map((j) => ({
-      id: j.id,
-      jobNumber: j.job_number,
-      title: getJobDisplayTitle({
-        title: j.title,
-        description: j.description,
-      }),
-      status: j.status as JobStatus,
-      executionVersion: j.execution_version ?? 0,
-      executionState: j.execution_state,
-      priority: j.priority as JobPriority,
-      plannedDate: j.planned_date,
-      plannedTime: normalizeJobPlannedTime(j.planned_time),
-      estimatedDurationMinutes: j.estimated_duration_minutes,
-      plannedWorkingMinutes: j.planned_working_minutes,
-      location: j.location,
-      clientName: j.client_id ? (clientMap[j.client_id]?.name ?? null) : null,
-      clientAddress: j.client_id ? (clientMap[j.client_id]?.address ?? null) : null,
-      projectName: j.project_id ? (projectMap[j.project_id]?.name ?? null) : null,
-      projectNumber: j.project_id ? (projectMap[j.project_id]?.number ?? null) : null,
-      assignedUserIds: assignmentMap[j.id] || [],
-    }));
-
-    return { success: true, jobs: calendarJobs };
+    return await readParkedCalendarJobs(admin, { orgId, userId, isManagerOrAbove });
   } catch (error) {
     logError('Unexpected error in getParkedJobs:', error);
     return { success: false, error: 'unexpected_error' };
