@@ -115,3 +115,7 @@ The owner removed the need for one coordinator thread to stay alive. A watcher i
 The owner decided on 2026-10-29 that releases follow a fixed weekday rhythm instead of waiting for a request:
 
 1. Rule 7 now reads: the `release` workflow runs every weekday at 07:00 Berlin and releases only when `main` moved since `production` and is green: its newest full run passed, or it has none yet and the release's own full run passes. Otherwise it changes nothing. A red full run is repaired on `main`, never rerun by the schedule. The owner or the coordinator thread may still start a release by hand ("release main"). More release times a weekday are one schedule line each.
+
+## Amendment 2026-10-30: the rhythm's conditions bind scheduled runs
+
+The conditions of the amendment above bind the scheduled run only. A release started by hand goes on as before: it ships `main`'s head after a green full run, its own when the newest is not green, also when `main` has not moved since `production`.
