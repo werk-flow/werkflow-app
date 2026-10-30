@@ -3,7 +3,7 @@
 import { describeFailure } from '@/lib/action-messages';
 import { useState } from 'react';
 
-import { NOTHING_TO_SAVE } from '@/components/settings/nothing-to-save';
+import { NOTHING_TO_SAVE } from '@/lib/settings/save-answers';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';

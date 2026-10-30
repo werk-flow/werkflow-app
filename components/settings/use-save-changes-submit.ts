@@ -2,17 +2,8 @@
 
 import type { FieldValues, UseFormReturn } from 'react-hook-form';
 
-import { type BannerVariant, useBanner } from '@/components/ui/banner';
-
-/**
- * The answer to a settings save pressed without a change. The save button
- * stays enabled (werkflow-design: Forms and Enter), so the press says why
- * nothing happened instead of sending an empty write.
- */
-export const NOTHING_TO_SAVE: { variant: BannerVariant; message: string } = {
-  variant: 'info',
-  message: 'Es gibt keine Änderungen zu speichern.',
-};
+import { useBanner } from '@/components/ui/banner';
+import { NOTHING_TO_SAVE } from '@/lib/settings/save-answers';
 
 /**
  * The submit handler of a settings form: it validates, then saves only a

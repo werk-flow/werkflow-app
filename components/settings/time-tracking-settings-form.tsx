@@ -1,12 +1,12 @@
 'use client';
 
-import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
-import { useSaveChangesSubmit } from '@/components/settings/nothing-to-save';
+import { useSaveChangesSubmit } from '@/components/settings/use-save-changes-submit';
+import { saveFailureBanner } from '@/lib/settings/save-answers';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,7 +27,6 @@ const ERROR_MESSAGES = {
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Regeln ändern.',
   invalid_input: 'Bitte prüfe die Pausenregeln.',
-  no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Zeiterfassungsregeln konnten nicht gespeichert werden.',
 } satisfies Record<string, string>;
 
@@ -74,10 +73,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
       const result = await runSave(values);
 
       if (!result.success) {
-        showBanner({
-          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
-          variant: 'error',
-        });
+        showBanner(saveFailureBanner(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed));
         return;
       }
 

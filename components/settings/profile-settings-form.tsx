@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 
 import { updateProfileSettings } from '@/lib/settings/actions';
 import { type ProfileSettingsValues, profileSettingsSchema } from '@/lib/settings/schemas';
-import { useSaveChangesSubmit } from '@/components/settings/nothing-to-save';
+import { useSaveChangesSubmit } from '@/components/settings/use-save-changes-submit';
 import { ProfileAvatarSection } from '@/components/settings/profile-avatar-section';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
