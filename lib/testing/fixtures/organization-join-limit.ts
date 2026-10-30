@@ -49,8 +49,7 @@ mock.module('@/lib/data/cached', () => ({
 }));
 const { requestOrganizationJoin } = await import('@/lib/org/join-request-actions');
 const { generateUniqueOrgCode } = await import('@/lib/org/generate-code');
-const { ORGANIZATION_CODE_CHARSET, ORGANIZATION_CODE_LENGTH } = await import('@/lib/org/schemas');
-const codePattern = new RegExp(`^[${ORGANIZATION_CODE_CHARSET}]{${ORGANIZATION_CODE_LENGTH}}$`);
+const { getOrganizationCodeValidationError, normalizeOrganizationCode } = await import('@/lib/org/schemas');
 
 // An empty code is refused before anything is counted or looked up.
 assert.deepEqual(await requestOrganizationJoin('  '), { success: false, error: 'code_required' });
@@ -97,7 +96,11 @@ assert.equal(joinRequests().length, 1);
 Math.random = (): number => {
   throw new Error('organization codes must not use Math.random');
 };
-for (let index = 0; index < 200; index += 1) assert.match(await generateUniqueOrgCode(), codePattern);
+for (let index = 0; index < 200; index += 1) {
+  const code = await generateUniqueOrgCode();
+  assert.equal(normalizeOrganizationCode(code), code);
+  assert.equal(getOrganizationCodeValidationError(code), null);
+}
 const originalGetRandomValues = crypto.getRandomValues.bind(crypto);
 let draws = 0;
 crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
