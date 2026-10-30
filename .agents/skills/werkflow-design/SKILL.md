@@ -103,7 +103,7 @@ Trap: a reference rewritten because the comparison failed. A reference records w
 - A submit stays enabled. Disable it only while its request is pending. An action button that needs a choice or typed text works the same way.
 - A nested dialog form calls `event.stopPropagation()` in its `onSubmit`. React submit events bubble through portals and would submit the outer form too.
 - New forms use plain `<form onSubmit>`. The react-hook-form consumers of `components/ui/form.tsx` stay as they are.
-- A long dialog puts its content in `DialogBody`: the header and footer stay, the body scrolls. Draw a selected row inside its box (`border-primary` + tint), because the scroll body clips an outer ring.
+- A long dialog puts its content in `DialogBody`, a long confirmation in `AlertDialogBody`: the header and footer stay, the body scrolls. Draw a selected row inside its box (`border-primary` + tint), because the scroll body clips an outer ring.
 - A form with more than about eight fields groups them into titled sections. Optional blocks go behind `FormDisclosure`.
 - A client-only button waits for hydration (`useHydrated`).
 

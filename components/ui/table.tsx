@@ -8,7 +8,7 @@ const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableE
   ({ className, ...props }, ref) => (
     // A table scrolls sideways inside its own region from the tablet breakpoint; phones render ListRow cards.
     <div {...scrollRegion('table')} className="relative w-full overflow-x-auto">
-      <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
+      <table ref={ref} className={cn('w-full caption-bottom text-sm wrap-normal', className)} {...props} />
     </div>
   ),
 );

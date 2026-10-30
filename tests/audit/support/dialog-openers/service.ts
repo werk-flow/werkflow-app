@@ -40,19 +40,20 @@ import {
 import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 /** The rows these openers seed beside the layout fixtures; the run id keeps them unique. */
 function serviceAuditNames(world: TestWorld) {
   return {
     site: 'Heizzentrale im Keller',
-    maintenanceClient: `Layout Wartungskunde ${world.runId}`,
-    maintenanceEquipment: `Layout Gasbrennwertkessel ${world.runId}`,
-    maintenanceTemplate: `Layout Jahreswartung ${world.runId}`,
+    maintenanceClient: worldName('Layout Wartungskunde', world.runId),
+    maintenanceEquipment: worldName('Layout Gasbrennwertkessel', world.runId),
+    maintenanceTemplate: worldName('Layout Jahreswartung', world.runId),
     coverageReference: `LAYOUT-WARTUNG-${world.runId}`,
-    replacementClient: `Layout Anlagentausch Kunde ${world.runId}`,
-    replacedEquipment: `Layout Ersetzter Wärmeerzeuger ${world.runId}`,
-    evidenceClient: `Layout Servicenachweis Kunde ${world.runId}`,
-    evidenceCase: `Layout Servicefall mit Arbeitsnachweis ${world.runId}`,
+    replacementClient: worldName('Layout Anlagentausch Kunde', world.runId),
+    replacedEquipment: worldName('Layout Ersetzter Wärmeerzeuger', world.runId),
+    evidenceClient: worldName('Layout Servicenachweis Kunde', world.runId),
+    evidenceCase: worldName('Layout Servicefall mit Arbeitsnachweis', world.runId),
   };
 }
 
@@ -169,7 +170,7 @@ function prepareEvidenceCase(world: TestWorld): Promise<string> {
       clientId,
       siteId,
       jobNumber: `AUF-${world.runId}-SERVICE`,
-      title: `Layout Störungseinsatz ${world.runId}`,
+      title: worldName('Layout Störungseinsatz', world.runId),
     });
     await seedWorkReportDraft({
       ...actor,

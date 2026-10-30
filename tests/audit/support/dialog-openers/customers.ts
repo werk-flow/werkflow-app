@@ -39,6 +39,7 @@ import type { DialogOpener } from '../dialog-opener';
 import { layoutNames, prepareLayoutDetails } from '../layout-fixtures';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { openSurface } from '../surface-routes';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 /** The phone number of the contact whose call conflicts with the customer's do-not-contact instruction. */
 const GUARDED_CONTACT_PHONE = '030 5550123';
@@ -104,7 +105,7 @@ export const CUSTOMERS_OPENERS = {
           orgId: world.orgId,
           actorId: world.users.admin.id,
           clientId,
-          contact: { name: `Layout Ansprechpartner ${world.runId}`, phone: GUARDED_CONTACT_PHONE },
+          contact: { name: worldName('Layout Ansprechpartner', world.runId), phone: GUARDED_CONTACT_PHONE },
           instruction: 'Bitte nur nach schriftlicher Terminabsprache anrufen.',
         }),
       );
@@ -134,7 +135,7 @@ export const CUSTOMERS_OPENERS = {
   // opens that job's page.
   'shared.metadata-confirm': {
     trigger: async ({ page, world, businessDate }) => {
-      const title = `Layout Wartung mit geplantem Datum ${world.runId}`;
+      const title = worldName('Layout Wartung mit geplantem Datum', world.runId);
       const jobNumber = await surfaceFixture(world, 'shared.planned-job', async () => {
         const number = `AUF-${world.runId}-LAYOUT-DATUM`;
         await seedJob({
