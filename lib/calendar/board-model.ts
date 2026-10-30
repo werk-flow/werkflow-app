@@ -6,7 +6,7 @@ import type { SicknessCalendarEntry } from '@/lib/sickness/actions';
 import { calculateCalendarWorkBlocks } from '@/lib/time-tracking/calendar-blocks';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 import { toLocalDateString } from '@/lib/utils';
-import type { VacationCalendarEntry } from '@/lib/vacation/actions';
+import type { VacationCalendarEntry } from '@/lib/vacation/calendar-actions';
 
 /**
  * Pure model of the Plantafel (P1-24a): which rows exist, which cards each

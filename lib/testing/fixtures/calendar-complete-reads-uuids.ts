@@ -132,7 +132,7 @@ mock.module('@/lib/time-corrections/actions', () => ({
   },
 }));
 const { getTimeEntries } = await import('@/lib/time-tracking/entry-read-actions');
-const { getVacationCalendarEntries } = await import('@/lib/vacation/actions');
+const { getVacationCalendarEntries } = await import('@/lib/vacation/calendar-actions');
 const { getSicknessCalendarEntries } = await import('@/lib/sickness/actions');
 const window = { from: '2026-06-15', to: '2026-06-15' };
 const timeWindow = { organizationId, from: '2026-06-15T00:00:00.000Z', to: '2026-06-15T23:59:59.999Z' };

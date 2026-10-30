@@ -10,7 +10,7 @@ import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { setJobCapabilityRequirements } from '@/lib/qualifications/actions';
+import { setJobCapabilityRequirements } from '@/lib/qualifications/requirement-actions';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobQualificationDetail } from '@/lib/qualifications/types';
 import { ADD_BUSY_ID, JobQualificationAddForm } from './job-qualification-add-form';
