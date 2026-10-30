@@ -142,8 +142,6 @@
   "lib/testing/spec-support/confirmed-locators.test.ts": 4,
   "lib/testing/spec-support/pre-submit-callbacks.test.ts": 2,
   "lib/testing/spec-support/spec-independence.ts": 1,
-  "lib/time-accounts/actions.ts": 1,
-  "lib/time-accounts/calculation.ts": 1,
   "lib/time-accounts/export.test.ts": 1,
   "lib/time-accounts/period-preparation.ts": 6,
   "lib/time-tracking/pending-sessions.test.ts": 1,

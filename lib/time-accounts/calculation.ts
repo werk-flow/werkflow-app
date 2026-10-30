@@ -215,7 +215,10 @@ function buildSupplementBuckets(
   publicHolidayDates: ReadonlySet<string>,
   policyByDate?: ReadonlyMap<string, TimeAccountPolicy>,
 ): SupplementBucket[] {
-  const grouped = new Map<string, { seconds: number; sourceIds: Set<string> }>();
+  const grouped = new Map<
+    string,
+    { localDate: string; supplementKind: TimeSupplementKind; seconds: number; sourceIds: Set<string> }
+  >();
   for (const interval of intervals) {
     const start = new Date(interval.startedAt);
     const end = new Date(interval.endedAt);
@@ -233,6 +236,8 @@ function buildSupplementBuckets(
         if (seconds === 0) continue;
         const key = `${localDate}|${rule.supplementKind}`;
         const current = grouped.get(key) ?? {
+          localDate,
+          supplementKind: rule.supplementKind,
           seconds: 0,
           sourceIds: new Set<string>(),
         };
@@ -243,13 +248,12 @@ function buildSupplementBuckets(
     }
   }
 
-  return [...grouped.entries()]
-    .map(([key, value]) => {
-      const [localDate, supplementKind] = key.split('|') as [string, TimeSupplementKind];
+  return [...grouped.values()]
+    .map((value) => {
       const rounded = roundSecondsToMinutes(value.seconds);
       return {
-        localDate,
-        supplementKind,
+        localDate: value.localDate,
+        supplementKind: value.supplementKind,
         sourceSeconds: value.seconds,
         minutes: rounded.minutes,
         roundingDeltaSeconds: rounded.roundingDeltaSeconds,
