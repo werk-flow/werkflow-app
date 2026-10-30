@@ -7,7 +7,7 @@ import {
   calculateTotalMinutes,
 } from '@/lib/time-tracking/helpers';
 import { logError } from '@/lib/logging';
-import { calculateWorkSessions } from '@/lib/time-tracking/validation';
+import { calculateWorkSessions } from '@/lib/time-tracking/work-sessions';
 import { readInBackground, type BackgroundReadFailure } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { computeBreakdownForSettings, type OrgBreakMode } from '@/lib/time-tracking/settings';

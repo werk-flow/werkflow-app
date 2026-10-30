@@ -8,6 +8,7 @@ import { logError } from '@/lib/logging';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
+import type { Tables } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { getLocalDayEnd, getLocalDayStart } from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from '@/lib/time-tracking/effective-entries';
@@ -19,6 +20,7 @@ import {
   normalizeTimeTrackingSettings,
   parseBreakPolicyHistory,
   timeTrackingSettingsSchema,
+  type OrganizationTimeTrackingSettings,
   type TimeTrackingSettingsValues,
 } from '@/lib/time-tracking/settings';
 import { toTimeEntries, type TimeEntry } from '@/lib/time-tracking/types';
@@ -139,6 +141,38 @@ function settingsWriteFailure(error: { message: string }): UpdateTimeTrackingSet
   }
 }
 
+type StoredSettingsRow = Pick<
+  Tables<'organization_settings'>,
+  'break_mode' | 'auto_break_threshold_minutes' | 'auto_break_duration_minutes' | 'break_policy_history'
+>;
+
+/** The organization's stored settings, or the defaults when it has no settings row yet. */
+function storedTimeTrackingSettings(
+  organizationId: string,
+  row: StoredSettingsRow | null,
+): OrganizationTimeTrackingSettings {
+  return row
+    ? normalizeTimeTrackingSettings({
+        organizationId,
+        breakMode: row.break_mode,
+        autoBreakThresholdMinutes: row.auto_break_threshold_minutes,
+        autoBreakDurationMinutes: row.auto_break_duration_minutes,
+        breakPolicyHistory: parseBreakPolicyHistory(row.break_policy_history),
+      })
+    : getDefaultTimeTrackingSettings(organizationId);
+}
+
+function changesBreakPolicy(
+  current: OrganizationTimeTrackingSettings,
+  next: TimeTrackingSettingsValues,
+): boolean {
+  return (
+    current.breakMode !== next.breakMode ||
+    current.autoBreakThresholdMinutes !== next.autoBreakThresholdMinutes ||
+    current.autoBreakDurationMinutes !== next.autoBreakDurationMinutes
+  );
+}
+
 export async function updateTimeTrackingSettings(
   input: TimeTrackingSettingsValues,
 ): Promise<UpdateTimeTrackingSettingsResult> {
@@ -180,23 +214,10 @@ export async function updateTimeTrackingSettings(
     logError('Error reading time tracking settings', currentError);
     return { success: false, error: 'update_failed' };
   }
-  const currentSettings = currentRow
-    ? normalizeTimeTrackingSettings({
-        organizationId: activeOrgId,
-        breakMode: currentRow.break_mode,
-        autoBreakThresholdMinutes: currentRow.auto_break_threshold_minutes,
-        autoBreakDurationMinutes: currentRow.auto_break_duration_minutes,
-        breakPolicyHistory: parseBreakPolicyHistory(currentRow.break_policy_history),
-      })
-    : getDefaultTimeTrackingSettings(activeOrgId);
+  const currentSettings = storedTimeTrackingSettings(activeOrgId, currentRow);
   const nextValues = parsed.data;
 
-  const hasChanges =
-    currentSettings.breakMode !== nextValues.breakMode ||
-    currentSettings.autoBreakThresholdMinutes !== nextValues.autoBreakThresholdMinutes ||
-    currentSettings.autoBreakDurationMinutes !== nextValues.autoBreakDurationMinutes;
-
-  if (!hasChanges) {
+  if (!changesBreakPolicy(currentSettings, nextValues)) {
     return { success: false, error: 'no_changes' };
   }
 
