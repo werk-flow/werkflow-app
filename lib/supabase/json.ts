@@ -12,7 +12,12 @@ export function jsonRecordOrEmpty(value: unknown): Record<string, unknown> {
 
 /** A value of the JSON data model: what `JSON.parse` returns. */
 function isJsonValue(value: unknown): value is Json {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
     return true;
   }
   if (Array.isArray(value)) return value.every(isJsonValue);
