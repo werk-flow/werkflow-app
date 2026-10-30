@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { createDocumentFolder } from '@/lib/documents/actions';
+import { createDocumentFolder } from '@/lib/documents/folder-actions';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { uploadDocumentDirect } from '@/lib/documents/upload-client';
 import {

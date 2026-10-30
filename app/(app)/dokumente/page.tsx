@@ -12,7 +12,9 @@ import {
 import { PageHeaderSlot, PageHeaderSlotProvider } from '@/components/shared/page-action';
 import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
-import { getDocumentFolderOptions, getDocumentDetails, getDocumentLibrary } from '@/lib/documents/actions';
+import { getDocumentDetails } from '@/lib/documents/actions';
+import { getDocumentFolderOptions } from '@/lib/documents/folder-actions';
+import { getDocumentLibrary } from '@/lib/documents/library-actions';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { isManagerRole } from '@/lib/roles';
 import type {

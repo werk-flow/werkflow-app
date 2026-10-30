@@ -67,7 +67,6 @@ const world = installActionWorld({
   organization_members: [{ user_id: foreignMemberId, organization_id: ORGANIZATION_B, role: 'employee' }],
 });
 const {
-  getDocumentFolderOptions,
   getAttachableDocuments,
   getRequestDocuments,
   getDocumentLinkEmployees,
@@ -76,15 +75,14 @@ const {
   getServiceCaseDocuments,
   getMaintenanceCoverageDocuments,
   getEmployeeDocuments,
-  createDocumentFolder,
-  moveDocumentFolder,
-  copyDocumentFolder,
-  copyDocument,
-  restoreDocument,
   permanentlyDeleteDocument,
-  createDocumentVersionUploadTicket,
-  finalizeDocumentVersionUpload,
 } = await import('@/lib/documents/actions');
+const { getDocumentFolderOptions, createDocumentFolder, moveDocumentFolder, copyDocumentFolder } =
+  await import('@/lib/documents/folder-actions');
+const { copyDocument, restoreDocument } = await import('@/lib/documents/library-actions');
+const { createDocumentVersionUploadTicket, finalizeDocumentVersionUpload } = await import(
+  '@/lib/documents/upload-actions'
+);
 
 const recordReads = [
   [

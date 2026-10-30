@@ -99,7 +99,6 @@
   "lib/data/background-read-client.ts": 1,
   "lib/dispatch/complete-reads.test.ts": 2,
   "lib/documents/action-input-boundaries.test.ts": 4,
-  "lib/documents/types.ts": 2,
   "lib/installed-equipment/list-scale.test.ts": 2,
   "lib/installed-equipment/validation.ts": 1,
   "lib/jobs/field-work-pack.test.ts": 8,

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 
-import { renameDocument, renameDocumentFolder } from '@/lib/documents/actions';
+import { renameDocumentFolder } from '@/lib/documents/folder-actions';
+import { renameDocument } from '@/lib/documents/library-actions';
 import type { DocumentFolder, OrganizationDocument } from '@/lib/documents/types';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
 
