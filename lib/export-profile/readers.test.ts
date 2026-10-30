@@ -46,7 +46,11 @@ describe('XML', () => {
 
   test('repeated text-only children keep every value', () => {
     const [record] = [...xmlRecords('<tags><tag>rot</tag><tag>blau</tag><tag>grün</tag></tags>')];
-    expect(record ? [...record.fields.keys()] : null).toEqual(['tag', 'tag #2', 'tag #3']);
+    expect(record ? [...record.fields] : null).toEqual([
+      ['tag', 'rot'],
+      ['tag #2', 'blau'],
+      ['tag #3', 'grün'],
+    ]);
   });
 
   test('a character reference beyond Unicode stays literal text', () => {

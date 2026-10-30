@@ -11,6 +11,8 @@ type OpenElement = {
   name: string;
   path: string;
   fields: Map<string, string>;
+  /** How often each text-only child name occurred, for tag, tag #2, tag #3. */
+  childCounts: Map<string, number>;
   hasChildElements: boolean;
   text: string;
 };
@@ -45,6 +47,7 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
         fields: new Map(
           [...parseXmlAttributes(attributeText ?? '')].map(([name, value]) => [`@${name}`, value]),
         ),
+        childCounts: new Map(),
         hasChildElements: false,
         text: '',
       };
@@ -63,16 +66,15 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
 
 function* closeElement(element: OpenElement, parent: OpenElement | undefined): Generator<XmlRecord> {
   if (!element.hasChildElements) {
-    if (parent) parent.fields.set(repeatedFieldName(parent.fields, element.name), element.text.trim());
+    if (parent) parent.fields.set(repeatedFieldName(parent, element.name), element.text.trim());
     if (element.fields.size === 0) return;
   }
   if (element.fields.size > 0) yield { path: element.path, fields: element.fields };
 }
 
 /** A repeated text-only child keeps every value: tag, tag #2, tag #3, as with repeated header names. */
-function repeatedFieldName(fields: ReadonlyMap<string, string>, name: string): string {
-  if (!fields.has(name)) return name;
-  let occurrence = 2;
-  while (fields.has(`${name} #${occurrence}`)) occurrence += 1;
-  return `${name} #${occurrence}`;
+function repeatedFieldName(parent: OpenElement, name: string): string {
+  const occurrence = (parent.childCounts.get(name) ?? 0) + 1;
+  parent.childCounts.set(name, occurrence);
+  return occurrence === 1 ? name : `${name} #${occurrence}`;
 }
