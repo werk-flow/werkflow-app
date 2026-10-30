@@ -76,7 +76,10 @@ export async function endSessionBeforeSignOut(
     error = recoveryResult.error;
   }
   if (error || getTransitionOutcome(transitionResult) !== 'ended') {
-    logError('Canonical session remained open before sign-out:', error ?? getTransitionOutcome(transitionResult));
+    logError(
+      'Canonical session remained open before sign-out:',
+      error ?? getTransitionOutcome(transitionResult),
+    );
     return false;
   }
   return true;

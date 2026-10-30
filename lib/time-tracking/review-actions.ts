@@ -372,9 +372,7 @@ export async function getChangeRequestsForEntries(
     if (memberships.length === 0) {
       return { success: true, requests: [] };
     }
-    const roleByOrganization = new Map(
-      memberships.map((membership) => [membership.orgId, membership.role]),
-    );
+    const roleByOrganization = new Map(memberships.map((membership) => [membership.orgId, membership.role]));
 
     const admin = createSupabaseAdminClient();
 

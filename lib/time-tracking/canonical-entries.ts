@@ -44,7 +44,9 @@ export async function getCanonicalTimeEntries(
   }
   if (!employees.length) return { success: true, entries: [] };
   const userByEmployee = new Map(
-    employees.flatMap((employee) => (employee.user_id === null ? [] : [[employee.id, employee.user_id] as const])),
+    employees.flatMap((employee) =>
+      employee.user_id === null ? [] : [[employee.id, employee.user_id] as const],
+    ),
   );
   const { data: rows, error } = await readCanonicalSegments(admin, params, [...userByEmployee.keys()]);
   if (error) {
@@ -91,7 +93,11 @@ function readCanonicalEmployees(admin: AdminClient, params: CanonicalEntryParams
     : readCompleteRows((from, to) => employeeQuery().order('id').range(from, to), LIST_ROW_CAP);
 }
 
-function readCanonicalSegments(admin: AdminClient, params: CanonicalEntryParams, employeeRecordIds: string[]) {
+function readCanonicalSegments(
+  admin: AdminClient,
+  params: CanonicalEntryParams,
+  employeeRecordIds: string[],
+) {
   return readInBatches(employeeRecordIds, (employeeIds) => {
     let segmentQuery = admin
       .from('time_segments')

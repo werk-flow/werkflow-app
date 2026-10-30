@@ -141,8 +141,11 @@ export async function clockOutBeforeSignOut(): Promise<
     const failedOrgIds = new Set<string>();
 
     for (const session of canonicalSessions ?? []) {
-      if (await endSessionBeforeSignOut(admin, user.id, session)) canonicalClosedOrgIds.add(session.organization_id);
-      else failedOrgIds.add(session.organization_id);
+      if (await endSessionBeforeSignOut(admin, user.id, session)) {
+        canonicalClosedOrgIds.add(session.organization_id);
+      } else {
+        failedOrgIds.add(session.organization_id);
+      }
     }
 
     for (const org of openOrgs) {

@@ -10,7 +10,10 @@ import type { Tables } from '@/lib/supabase/database.types';
 // time_approval responsibility for each person before it writes.
 
 type AdminClient = ReturnType<typeof createSupabaseAdminClient>;
-type ReviewEntry = Pick<Tables<'time_entries'>, 'id' | 'organization_id' | 'user_id' | 'status' | 'timestamp'>;
+type ReviewEntry = Pick<
+  Tables<'time_entries'>,
+  'id' | 'organization_id' | 'user_id' | 'status' | 'timestamp'
+>;
 
 /** Every requested entry, all pending and of one organization; otherwise the refusal. */
 export async function readPendingEntriesForReview(

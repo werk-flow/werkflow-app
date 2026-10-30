@@ -95,7 +95,9 @@ function visibleWindowEntries(input: {
   status: TimeEntryStatus | undefined;
 }): TimeEntry[] {
   const { callerRole, callerId, fromTimestamp, toTimestamp, userId, status } = input;
-  const visibleEntries = input.legacyRows.filter((entry) => canViewEntries(callerRole, entry.user_id, callerId));
+  const visibleEntries = input.legacyRows.filter((entry) =>
+    canViewEntries(callerRole, entry.user_id, callerId),
+  );
   const visibleCanonicalEntries = input.canonicalEntries.filter((entry) =>
     canViewEntries(callerRole, entry.userId, callerId),
   );
