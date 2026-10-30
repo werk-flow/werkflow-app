@@ -16,7 +16,12 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { hasApprovedFullDayVacationOn } from '@/lib/vacation/server';
 import { isPeriodClosedError } from './closed-periods';
-import { calculateTimeActivityTotals, toTimeActivitySelection, toTimeSegmentFact } from './segments';
+import {
+  calculateTimeActivityTotals,
+  toTimeActivitySelection,
+  toTimeSegmentFact,
+  UNUSUALLY_LONG_SESSION_MS,
+} from './segments';
 import { readResumeActivity } from './resume-activity';
 import { computeBreakdownForSettings } from './settings';
 import { hashTimeTransitionRequest } from './transition-hash';
@@ -250,7 +255,7 @@ export async function getCanonicalClockState(
   const derivedRecovery =
     session.status === 'recovery_required'
       ? session.recovery_reason
-      : now.getTime() - new Date(session.started_at).getTime() > 24 * 60 * 60 * 1000
+      : now.getTime() - new Date(session.started_at).getTime() > UNUSUALLY_LONG_SESSION_MS
         ? 'unusually_long'
         : null;
 

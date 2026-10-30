@@ -39,6 +39,44 @@ export type ReadinessFacts = {
   material: MaterialReadinessFacts;
 };
 
+function materialDimension(facts: MaterialReadinessFacts): ReadinessDimension {
+  if (facts.state === 'no_demand') {
+    return {
+      key: 'material',
+      state: 'ok',
+      label: 'Material',
+      details: ['Kein Materialbedarf geplant.'],
+    };
+  }
+  if (facts.state === 'demand') {
+    const shortLines = facts.lines.filter(
+      (line) => line.availableQuantity < Math.max(0, line.plannedQuantity - line.takenQuantity),
+    );
+    return {
+      key: 'material',
+      state: shortLines.length > 0 ? 'warning' : 'ok',
+      label: 'Material (nicht reserviert)',
+      details: [
+        // The open quantity (geplant − entnommen) is the number the warning
+        // decision compares against the current stock.
+        ...facts.lines.map(
+          (line) =>
+            `${line.itemName}: ${Math.max(0, line.plannedQuantity - line.takenQuantity)} offen von ${line.plannedQuantity} geplant, ${line.availableQuantity} aktuell verfügbar – nicht reserviert.`,
+        ),
+        ...(shortLines.length > 0
+          ? ['Der aktuelle Bestand deckt den offenen Bedarf möglicherweise nicht.']
+          : []),
+      ],
+    };
+  }
+  return {
+    key: 'material',
+    state: 'unknown',
+    label: 'Material',
+    details: ['Materialdaten konnten nicht geladen werden.'],
+  };
+}
+
 export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
   const capacityConflicts = facts.planningConflicts.filter((conflict) => conflict.kind !== 'qualification');
   const qualificationConflicts = facts.planningConflicts.filter(
@@ -90,42 +128,7 @@ export function composeReadiness(facts: ReadinessFacts): ReadinessResult {
         : ['Fahrzeit nicht bewertet.'],
   };
 
-  let material: ReadinessDimension;
-  if (facts.material.state === 'no_demand') {
-    material = {
-      key: 'material',
-      state: 'ok',
-      label: 'Material',
-      details: ['Kein Materialbedarf geplant.'],
-    };
-  } else if (facts.material.state === 'demand') {
-    const shortLines = facts.material.lines.filter(
-      (line) => line.availableQuantity < Math.max(0, line.plannedQuantity - line.takenQuantity),
-    );
-    material = {
-      key: 'material',
-      state: shortLines.length > 0 ? 'warning' : 'ok',
-      label: 'Material (nicht reserviert)',
-      details: [
-        // The open quantity (geplant − entnommen) is the number the warning
-        // decision compares against the current stock.
-        ...facts.material.lines.map(
-          (line) =>
-            `${line.itemName}: ${Math.max(0, line.plannedQuantity - line.takenQuantity)} offen von ${line.plannedQuantity} geplant, ${line.availableQuantity} aktuell verfügbar – nicht reserviert.`,
-        ),
-        ...(shortLines.length > 0
-          ? ['Der aktuelle Bestand deckt den offenen Bedarf möglicherweise nicht.']
-          : []),
-      ],
-    };
-  } else {
-    material = {
-      key: 'material',
-      state: 'unknown',
-      label: 'Material',
-      details: ['Materialdaten konnten nicht geladen werden.'],
-    };
-  }
+  const material = materialDimension(facts.material);
 
   const tools: ReadinessDimension = {
     key: 'tools',

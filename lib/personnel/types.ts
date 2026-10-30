@@ -221,3 +221,12 @@ export function formatEmployeeRecordName(
   if (profileName) return profileName;
   return [record.firstName, record.lastName].filter(Boolean).join(' ') || 'Unbekannt';
 }
+
+/**
+ * Whether a record's embedded invite is pending. supabase-js types an embedded to-one relation
+ * inconsistently, so both the object and the single-element-array shape are read.
+ */
+export function hasPendingInviteEmbed(embed: unknown): boolean {
+  const invite: unknown = Array.isArray(embed) ? embed[0] : embed;
+  return typeof invite === 'object' && invite !== null && 'status' in invite && invite.status === 'pending';
+}

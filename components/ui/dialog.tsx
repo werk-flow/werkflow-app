@@ -156,7 +156,7 @@ const DialogContent = React.forwardRef<
           data-slot="dialog-content"
           className={cn(
             // Mobile: full width at bottom like a sheet
-            'fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-4 border-t bg-background p-4 shadow-lg duration-200',
+            'fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-4 border-t bg-background p-4 shadow-lg duration-200 wrap-anywhere',
             // Never grow past the viewport. Plain dialogs scroll as a whole;
             // a DialogBody child takes over scrolling (fixed header/footer).
             'max-h-[calc(100dvh-3rem)] overflow-y-auto has-[[data-slot=dialog-body]]:overflow-hidden',

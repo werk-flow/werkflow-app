@@ -23,6 +23,9 @@ const TOOLING = [
   'lib/conventions/**',
   'lib/ui/{action-prechecks,dialog-discovery}.ts',
   'lib/security/supabase-project-checks.ts',
+  // The demo seeder's own helper. CI's SQL job runs the seeder, so the GitHub
+  // Actions plugin turns it into an entry without the production mark.
+  'lib/security/demo-member-password.ts',
   'eslint-rules/**',
   'scripts/**',
   'tests/**',
@@ -70,6 +73,8 @@ const config: KnipConfig = {
   // The pinned Supabase CLI runs through bunx inside scripts/generate-supabase-types.ts;
   // tailwindcss is imported by app/globals.css, which knip does not compile.
   ignoreDependencies: ['supabase', 'tailwindcss'],
+  // util-linux's flock holds the machine-wide heavy slots (lib/testing/runner/heavy-slot.ts).
+  ignoreBinaries: ['flock'],
 };
 
 export default config;

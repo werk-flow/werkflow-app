@@ -5,9 +5,10 @@ import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } fr
 import { usePendingTask } from '@/hooks/use-server-action';
 import { REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 import type { useBanner } from '@/components/ui/banner';
-import { batchReschedule, previewBatchReschedule, type BatchPreviewItem } from '@/lib/dispatch/actions';
+import { batchReschedule, previewBatchReschedule } from '@/lib/dispatch/actions';
 import {
   dispatchErrorMessage,
+  type BatchPreviewItem,
   type DispatchOverview,
   type DispatchOverviewOccurrence,
 } from '@/lib/dispatch/types';
