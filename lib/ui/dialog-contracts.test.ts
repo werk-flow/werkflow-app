@@ -395,3 +395,13 @@ test('the alternate branch of an explicit delete command is the non-delete submi
   );
   expect(editingViolations(dialog, { formId: 'edit', condition: 'kind !== "delete"' })).toEqual([]);
 });
+
+// Rule test: a confirmation shows a failed confirm in its sticky footer (`AlertDialogFooter error`):
+// as content right before the footer, a long confirmation on a phone scrolls the message out of view.
+test('no confirmation renders its error as content right before AlertDialogFooter', () => {
+  const beforeFooter = /<ErrorText\b[^]*?<\/ErrorText>\s*(?:\{\/\*[^]*?\*\/\}\s*)?<AlertDialogFooter\b/;
+  const offenders = [...readProductSources(resolve(import.meta.dir, '../..'))]
+    .filter(([, source]) => beforeFooter.test(source))
+    .map(([file]) => file);
+  expect(offenders).toEqual([]);
+});

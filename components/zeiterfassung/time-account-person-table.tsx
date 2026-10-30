@@ -33,7 +33,7 @@ export function PersonRow({
   if (layout === 'card') {
     return (
       <ListRow className="block space-y-3">
-        <div className="font-medium">{name}</div>
+        <div className="font-medium wrap-anywhere">{name}</div>
         {form}
         {cells.map((cell) => (
           <div key={cell.key}>{cell.content}</div>

@@ -12,7 +12,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { useServerAction } from '@/hooks/use-server-action';
 
 const CONFIRM_FAILED_MESSAGE = 'Die Änderung konnte nicht gespeichert werden. Bitte versuche es erneut.';
@@ -110,8 +109,7 @@ export function ParkConfirmationDialog({
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{error}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={error}>
           <AlertDialogCancel disabled={isLoading}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {

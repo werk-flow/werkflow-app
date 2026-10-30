@@ -110,7 +110,7 @@ export function AuftraegeColumnSettingsForm({
                 render={({ field, fieldState }) => (
                   <fieldset className="space-y-2">
                     <legend className="text-sm font-medium">Tabellenspalten</legend>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-sm text-muted-foreground wrap-anywhere">
                       Diese Auswahl gilt nur für dich innerhalb von {organizationName}.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
