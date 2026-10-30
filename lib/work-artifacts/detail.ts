@@ -4,17 +4,20 @@ import type { ActionFailure } from '@/lib/action-result';
 import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import type { AuthContext } from '@/lib/jobs/auth';
 import type { AdminClient } from '@/lib/supabase/admin';
-import type { Database } from '@/lib/supabase/database.types';
 
 import { redactWorkArtifactActionForField } from './field-visibility';
-import type { WorkArtifactActionRow, WorkArtifactActionType, WorkArtifactDetail } from './types';
+import type {
+  WorkArtifactActionRow,
+  WorkArtifactActionType,
+  WorkArtifactDetail,
+  WorkArtifactRevisionRow,
+  WorkArtifactRow,
+  WorkArtifactTarget,
+} from './types';
 
 // The steps of getWorkArtifactDetail in actions.ts, which authenticates the
 // caller and authorizes the target before it reads the detail rows.
 
-type ArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
-type RevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
-type DetailTarget = { targetType: 'job' | 'project'; targetId: string };
 type RevisionJoin = { work_artifact_revisions: unknown; revision_id: string };
 
 const FIELD_DISCLOSING_ARTIFACT_ACTIONS = new Set<WorkArtifactActionType>([
@@ -34,7 +37,7 @@ export async function readArtifactForDetail(
   admin: AdminClient,
   organizationId: string,
   artifactId: string,
-): Promise<{ success: true; artifact: ArtifactRow; target: DetailTarget } | ActionFailure> {
+): Promise<{ success: true; artifact: WorkArtifactRow; target: WorkArtifactTarget } | ActionFailure> {
   const { data: artifact, error: artifactError } = await loggedRead(
     'getWorkArtifactDetail: work_artifacts read failed',
     admin
@@ -46,7 +49,7 @@ export async function readArtifactForDetail(
   );
   if (artifactError) return { success: false, error: 'work_artifact_load_failed' };
   if (!artifact) return { success: false, error: 'work_artifact_not_found' };
-  const target: DetailTarget | null = artifact.job_id
+  const target: WorkArtifactTarget | null = artifact.job_id
     ? { targetType: 'job', targetId: artifact.job_id }
     : artifact.project_id
       ? { targetType: 'project', targetId: artifact.project_id }
@@ -59,7 +62,7 @@ export async function readArtifactForDetail(
 export async function refuseHiddenCoworkerDraft(
   admin: AdminClient,
   context: AuthContext,
-  artifact: ArtifactRow,
+  artifact: WorkArtifactRow,
 ): Promise<ActionFailure | null> {
   if (context.isManagerOrAbove || artifact.status !== 'draft' || !artifact.current_revision_id) return null;
   const { data: currentRevision, error: currentRevisionError } = await admin
@@ -89,9 +92,9 @@ function withoutRevisionJoin<Row extends RevisionJoin>(rows: Row[]): Omit<Row, '
 /** The detail a caller may see: a field worker sees own, disclosed and customer-facing revisions. */
 export function toVisibleArtifactDetail(
   context: AuthContext,
-  artifact: ArtifactRow,
+  artifact: WorkArtifactRow,
   rows: {
-    revisions: RevisionRow[];
+    revisions: WorkArtifactRevisionRow[];
     actions: WorkArtifactActionRow[];
     lines: Array<WorkArtifactDetail['measurementLines'][number] & RevisionJoin>;
     defects: Array<WorkArtifactDetail['defectDetails'][number] & RevisionJoin>;

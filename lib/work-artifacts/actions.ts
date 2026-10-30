@@ -39,22 +39,21 @@ import {
   type WorkArtifactSaveResult,
   type WorkArtifactStatus,
   type WorkArtifactSummary,
+  type WorkArtifactTarget,
 } from './types';
-
-type Target = { targetType: 'job' | 'project'; targetId: string };
 
 const workArtifactStatusSchema = z.enum(WORK_ARTIFACT_STATUSES);
 
 /** The status a write function returns, or null when its result is not an object with a known status. */
 function mutationStatus(data: Json | null): WorkArtifactStatus | null {
   if (!isJsonRecord(data)) return null;
-  const status = workArtifactStatusSchema.safeParse(String(data.status));
+  const status = workArtifactStatusSchema.safeParse(data.status);
   return status.success ? status.data : null;
 }
 
 async function authorizeTarget(
   context: Awaited<ReturnType<typeof authenticateAndAuthorize>> & { success: true },
-  target: Target,
+  target: WorkArtifactTarget,
 ): Promise<ActionResult> {
   const admin = createSupabaseAdminClient();
   const allowed: ActionResult = { success: true };
@@ -102,7 +101,7 @@ async function authorizeTarget(
 }
 
 export async function getWorkArtifacts(
-  rawTarget: Target,
+  rawTarget: WorkArtifactTarget,
 ): Promise<{ success: true; artifacts: WorkArtifactSummary[] } | ActionFailure> {
   const parsedTarget = workArtifactTargetSchema.safeParse(rawTarget);
   if (!parsedTarget.success) return { success: false, error: 'invalid_input' };
