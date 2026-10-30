@@ -217,6 +217,12 @@ export async function captureAcceptance(
           await expect(tab).toHaveAttribute('data-state', 'active');
         }
       }
+      if (capture.reveal) {
+        await scope
+          .getByText(capture.reveal, { exact: true })
+          .first()
+          .evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      }
       const identity = { id: capture.id, role: capture.role, view: capture.view.kind };
       for (const scheme of capture.schemes) {
         await page.emulateMedia({ colorScheme: scheme });

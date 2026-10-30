@@ -30,6 +30,8 @@ export type CaptureSpec = {
   schemes: readonly ('light' | 'dark')[];
   /** A loading or error state instead of the settled screen; the id ends in it (`stateCaptureId`). */
   state?: CaptureState;
+  /** Visible text scrolled to the middle of its scroll area before the image, for a change below the fold. */
+  reveal?: string;
 };
 
 /** A screen outside the app shell, opened with the session its inventory entry names. */
@@ -187,10 +189,22 @@ function organizationDeletionCaptures(): AcceptanceSet {
   };
 }
 
+/** werk-flow/werkflow-planning#133 of 2026-10-30: the conversion dialog says where an undated job stays. */
+function requestConversionCaptures(): AcceptanceSet {
+  return {
+    id: 'request-convert-2026-10-30',
+    captures: inventoryCaptures()
+      .filter((capture) => capture.view.kind === 'dialog' && capture.view.opener === 'requests.convert')
+      .map((capture) => ({ ...capture, reveal: 'Geplantes Datum' })),
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
   stateCaptures(),
   employeeProjectionCaptures(),
   organizationDeletionCaptures(),
+  requestConversionCaptures(),
 ];
