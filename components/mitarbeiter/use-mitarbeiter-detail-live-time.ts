@@ -44,6 +44,11 @@ function computeLiveBreakMinutesForMember(
   );
 }
 
+/** Worked minutes as a share of the target, capped at 100; 0 without a target. */
+function progressPercent(workMinutes: number, targetMinutes: number): number {
+  return targetMinutes > 0 ? Math.min(100, Math.round((workMinutes / targetMinutes) * 100)) : 0;
+}
+
 /** The server's week as the week view's initial data; none when its read failed. */
 function initialWeekOptions(initialWeek: MemberInitialWeek | null) {
   if (!initialWeek) return {};
@@ -97,7 +102,9 @@ export function useMitarbeiterDetailLiveTime({
     weekTargets,
     todayIndex,
     weekLabel,
+    isLoading: weekLoading,
     isStale: weekStale,
+    error: weekError,
     refetch: refetchWeek,
   } = useWeeklyTimeData({
     organizationId,
@@ -132,10 +139,7 @@ export function useMitarbeiterDetailLiveTime({
     autoBreakDurationMinutes,
     todayTarget?.targetMinutes,
   );
-  const dailyPercentage =
-    todayTargetMinutes > 0
-      ? Math.min(100, Math.round((memberBreakdown.workMinutes / todayTargetMinutes) * 100))
-      : 0;
+  const dailyPercentage = progressPercent(memberBreakdown.workMinutes, todayTargetMinutes);
 
   return {
     status,
@@ -143,7 +147,9 @@ export function useMitarbeiterDetailLiveTime({
     statusStale,
     refetchStatus,
     weekData,
+    weekLoading,
     weekStale,
+    weekError,
     refetchWeek,
     weekTargets,
     todayIndex,

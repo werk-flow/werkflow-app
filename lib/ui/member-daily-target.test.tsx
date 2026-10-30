@@ -34,15 +34,17 @@ const weekTargets = resolveDailyTargets(getBusinessWeekDates(), {
 });
 const todayTarget = weekTargets[getTodayIndex()];
 
-/** The hook's result for a member who has not worked yet today. */
-function liveTimeWith(target: DailyTarget | undefined): MitarbeiterDetailLiveTime {
+/** The hook's result for a member who has not worked yet today, after the week's read settled. */
+function liveTimeWith(target: DailyTarget | undefined, weekLoading = false): MitarbeiterDetailLiveTime {
   return {
     status: undefined,
     statusError: null,
     statusStale: false,
     refetchStatus: async () => {},
     weekData: [],
+    weekLoading,
     weekStale: false,
+    weekError: null,
     refetchWeek: async () => {},
     weekTargets: target ? weekTargets : undefined,
     todayIndex: getTodayIndex(),
@@ -56,10 +58,10 @@ function liveTimeWith(target: DailyTarget | undefined): MitarbeiterDetailLiveTim
   };
 }
 
-function renderCard(target: DailyTarget | undefined): string {
+function renderCard(target: DailyTarget | undefined, weekLoading = false): string {
   return renderToStaticMarkup(
     <MitarbeiterDetailTimeCards
-      liveTime={liveTimeWith(target)}
+      liveTime={liveTimeWith(target, weekLoading)}
       breakMode="automatic"
       autoBreakThresholdMinutes={360}
       autoBreakDurationMinutes={30}
@@ -71,13 +73,20 @@ describe('the personnel detail status card', () => {
   test('measures the day against the Wochenplan target, not 8 h', () => {
     const markup = renderCard(todayTarget);
     expect(markup).toContain('0 Min. / 8 Std. 30 Min. (0%)');
-    expect(markup).not.toContain('Tagesziel nicht geladen');
+    expect(markup).not.toContain('Das Tagesziel konnte nicht geladen werden.');
   });
 
-  test('without a known target it shows the worked time only and says why', () => {
+  test('while the week loads it shows the worked time only', () => {
+    const markup = renderCard(undefined, true);
+    expect(markup).not.toContain('/ 8 Std.');
+    expect(markup).not.toContain('Das Tagesziel konnte nicht geladen werden.');
+  });
+
+  test('a failed target read shows the worked time only and offers a retry', () => {
     const markup = renderCard(undefined);
     expect(markup).not.toContain('/ 8 Std.');
-    expect(markup).toContain('Tagesziel nicht geladen.');
+    expect(markup).toContain('Das Tagesziel konnte nicht geladen werden.');
+    expect(markup).toContain('Erneut laden');
   });
 });
 

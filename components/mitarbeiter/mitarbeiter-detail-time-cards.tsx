@@ -35,32 +35,12 @@ export function MitarbeiterDetailTimeCards({
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
 }: MitarbeiterDetailTimeCardsProps) {
-  const {
-    status,
-    statusError,
-    statusStale,
-    refetchStatus,
-    weekData,
-    weekStale,
-    refetchWeek,
-    weekTargets,
-    todayIndex,
-    weekLabel,
-    liveTotalMinutes,
-    todayTarget,
-    todayTargetMinutes,
-    todayTargetHint,
-    memberBreakdown,
-    dailyPercentage,
-  } = liveTime;
-  const liveBreakMinutes = memberBreakdown.breakMinutes;
-  // A target that is not known yet is said so, never measured against 8h.
+  const { status, statusError, statusStale, refetchStatus, weekLoading, refetchWeek } = liveTime;
+  const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
+  // An unknown target is never measured against 8h: while the week loads the
+  // card shows the worked time only, and a failed read offers a retry.
   const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
-  const noTargetText = !todayTarget
-    ? 'Tagesziel nicht geladen.'
-    : noTargetReason
-      ? `${noTargetReason} – heute keine Sollarbeitszeit.`
-      : null;
+  const targetReadFailed = !todayTarget && !weekLoading;
 
   return (
     <>
@@ -113,7 +93,16 @@ export function MitarbeiterDetailTimeCards({
                 className="h-2"
                 indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
               />
-              {noTargetText && <p className="text-xs text-muted-foreground">{noTargetText}</p>}
+              {noTargetReason && (
+                <p className="text-xs text-muted-foreground">
+                  {noTargetReason} – heute keine Sollarbeitszeit.
+                </p>
+              )}
+              {targetReadFailed && (
+                <SectionError onRetry={() => void refetchWeek()}>
+                  Das Tagesziel konnte nicht geladen werden.
+                </SectionError>
+              )}
               {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
             </div>
 
@@ -149,30 +138,55 @@ export function MitarbeiterDetailTimeCards({
         )}
       </div>
 
-      {/* Anwesenheit & Stunden */}
-      <div className="rounded-lg border bg-card p-3 sm:p-4">
-        <SectionTitle className="mb-3">
-          <BarChart3 className="size-4" />
-          Anwesenheit & Stunden
-        </SectionTitle>
-        {weekData.length > 0 ? (
-          <StaleRegion stale={weekStale} onRetry={refetchWeek}>
-            <WeeklyHoursChart
-              weekData={weekData}
-              todayIndex={todayIndex}
-              liveTodayMinutes={liveTotalMinutes}
-              liveTodayBreakMinutes={liveBreakMinutes}
-              liveTodayBreakMode={status?.breakMode ?? breakMode}
-              liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
-              liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
-              weekLabel={weekLabel}
-              weekTargets={weekTargets}
-            />
-          </StaleRegion>
-        ) : (
-          <NoWeekData />
-        )}
-      </div>
+      <MitarbeiterDetailWeekCard
+        liveTime={liveTime}
+        breakMode={breakMode}
+        autoBreakThresholdMinutes={autoBreakThresholdMinutes}
+        autoBreakDurationMinutes={autoBreakDurationMinutes}
+      />
     </>
+  );
+}
+
+/** The week's attendance and hours, or the failure of its read with a retry. */
+function MitarbeiterDetailWeekCard({
+  liveTime,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
+}: MitarbeiterDetailTimeCardsProps) {
+  const { status, weekData, weekStale, weekError, refetchWeek, weekTargets, todayIndex, weekLabel } =
+    liveTime;
+  const { liveTotalMinutes, memberBreakdown } = liveTime;
+  const liveBreakMinutes = memberBreakdown.breakMinutes;
+
+  return (
+    <div className="rounded-lg border bg-card p-3 sm:p-4">
+      <SectionTitle className="mb-3">
+        <BarChart3 className="size-4" />
+        Anwesenheit & Stunden
+      </SectionTitle>
+      {weekError && !weekStale ? (
+        <SectionError onRetry={() => void refetchWeek()}>
+          Die Stunden dieser Woche konnten nicht geladen werden.
+        </SectionError>
+      ) : weekData.length > 0 ? (
+        <StaleRegion stale={weekStale} onRetry={refetchWeek}>
+          <WeeklyHoursChart
+            weekData={weekData}
+            todayIndex={todayIndex}
+            liveTodayMinutes={liveTotalMinutes}
+            liveTodayBreakMinutes={liveBreakMinutes}
+            liveTodayBreakMode={status?.breakMode ?? breakMode}
+            liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
+            liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
+            weekLabel={weekLabel}
+            weekTargets={weekTargets}
+          />
+        </StaleRegion>
+      ) : (
+        <NoWeekData />
+      )}
+    </div>
   );
 }

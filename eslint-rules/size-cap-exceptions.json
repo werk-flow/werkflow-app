@@ -324,8 +324,8 @@
       "MemberTableRow": 91,
       "MembersTable": 93
     },
-    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 134 },
-    "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
+    "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 129 },
+    "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 111 },
     "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
     "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 99 },
     "components/mitarbeiter/personalien-section.tsx": { "PersonalienSection": 97 },

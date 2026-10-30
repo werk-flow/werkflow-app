@@ -41,6 +41,19 @@ const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
   'employee_capabilities',
 ];
 
+/** The live status and week cards of one member. */
+function MitarbeiterDetailLiveTimeCards(input: Parameters<typeof useMitarbeiterDetailLiveTime>[0]) {
+  const liveTime = useMitarbeiterDetailLiveTime(input);
+  return (
+    <MitarbeiterDetailTimeCards
+      liveTime={liveTime}
+      breakMode={input.breakMode}
+      autoBreakThresholdMinutes={input.autoBreakThresholdMinutes}
+      autoBreakDurationMinutes={input.autoBreakDurationMinutes}
+    />
+  );
+}
+
 interface MitarbeiterDetailContentProps {
   member: MemberDetail;
   personnel: PersonnelDetail | null;
@@ -111,15 +124,6 @@ export function MitarbeiterDetailContent({
 
   useRealtimeRouterRefresh({ tables: DETAIL_REFRESH_TABLES });
 
-  const liveTime = useMitarbeiterDetailLiveTime({
-    organizationId,
-    userId: member.userId,
-    breakMode,
-    autoBreakThresholdMinutes,
-    autoBreakDurationMinutes,
-    initialWeek,
-  });
-
   const {
     canManage,
     roleOptions,
@@ -182,11 +186,16 @@ export function MitarbeiterDetailContent({
               )}
             </div>
 
-            <MitarbeiterDetailTimeCards
-              liveTime={liveTime}
+            <MitarbeiterDetailLiveTimeCards
+              // The week view keeps its first data after mount; new entry or exit
+              // dates from the refreshed server props remount it with the new targets.
+              key={`${personnel?.record.entryDate ?? ''}:${personnel?.record.exitDate ?? ''}`}
+              organizationId={organizationId}
+              userId={member.userId}
               breakMode={breakMode}
               autoBreakThresholdMinutes={autoBreakThresholdMinutes}
               autoBreakDurationMinutes={autoBreakDurationMinutes}
+              initialWeek={initialWeek}
             />
           </div>
 
