@@ -18,12 +18,15 @@
 --
 -- Invariants in the database:
 -- - Every account has exactly one current opening event, and its date is the
---   account's `opened_on` (deferred constraint trigger, checked at commit).
---   It replaces the unique index that allowed one opening event per account.
+--   account's `opened_on` (deferred constraint trigger, checked at commit
+--   after an opening event, a correction, a new account or a changed
+--   `opened_on`). It replaces the unique index that allowed one opening event
+--   per account.
 -- - A correction row matches its events: the reversal undoes the reversed
 --   opening on its date, the new opening carries the same minutes on the
 --   corrected date.
--- - Corrections are history: no update, no client access.
+-- - Corrections are history: no update, no delete except the cascade of an
+--   organization deletion, no client access.
 
 create table public.time_account_opening_corrections (
   id uuid primary key default gen_random_uuid(),
@@ -70,6 +73,23 @@ create trigger guard_time_account_opening_corrections_immutable
 before update on public.time_account_opening_corrections
 for each row execute function app_private.guard_p1_23_immutable();
 
+-- The one legitimate delete is the cascade of an organization deletion,
+-- recognised by the organization row being gone (the rule of
+-- app_private.guard_closed_period_time_write).
+create function app_private.guard_time_account_opening_corrections_delete()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if exists (select 1 from public.organizations where id = old.organization_id) then
+    raise exception 'p1_23_history_immutable';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger guard_time_account_opening_corrections_delete
+before delete on public.time_account_opening_corrections
+for each row execute function app_private.guard_time_account_opening_corrections_delete();
+
 -- A correction row must describe its events exactly.
 create function app_private.guard_time_account_opening_correction_events()
 returns trigger language plpgsql security definer set search_path = '' as $$
@@ -109,19 +129,23 @@ for each row execute function app_private.guard_time_account_opening_correction_
 create function app_private.guard_time_account_current_opening()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
+  v_account_id uuid := case tg_table_name
+    when 'time_accounts' then (to_jsonb(new) ->> 'id')::uuid
+    else (to_jsonb(new) ->> 'account_id')::uuid
+  end;
   current_openings integer;
   current_date_value date;
 begin
   select count(*), max(event.effective_date) into current_openings, current_date_value
   from public.time_account_events event
-  where event.account_id = new.account_id
+  where event.account_id = v_account_id
     and event.event_kind = 'opening_balance'
     and not exists (
       select 1 from public.time_account_opening_corrections correction
       where correction.reversed_event_id = event.id or correction.reversal_event_id = event.id
     );
   if current_openings <> 1 or current_date_value is distinct from (
-    select account.opened_on from public.time_accounts account where account.id = new.account_id
+    select account.opened_on from public.time_accounts account where account.id = v_account_id
   ) then
     raise exception 'opening_event_conflict';
   end if;
@@ -137,6 +161,11 @@ execute function app_private.guard_time_account_current_opening();
 
 create constraint trigger guard_time_account_current_opening
 after insert on public.time_account_opening_corrections
+deferrable initially deferred
+for each row execute function app_private.guard_time_account_current_opening();
+
+create constraint trigger guard_time_account_current_opening
+after insert or update of opened_on on public.time_accounts
 deferrable initially deferred
 for each row execute function app_private.guard_time_account_current_opening();
 
@@ -177,20 +206,24 @@ begin
   select * into account_record from public.time_accounts
   where id = p_account_id and organization_id = p_organization_id;
   if not found then raise exception 'account_not_found'; end if;
-  -- The lock of open_time_account for this person, then the current row.
+  -- The lock of open_time_account for this person: only a correction under
+  -- it changes `opened_on`, so the date read next stays current.
   perform pg_advisory_xact_lock(hashtextextended(
     p_organization_id::text || ':time_account:' || account_record.employee_record_id::text, 0
   ));
-  select * into account_record from public.time_accounts where id = p_account_id for update;
+  select * into account_record from public.time_accounts where id = p_account_id;
   if account_record.opened_on = p_opened_on then raise exception 'opening_date_unchanged'; end if;
   earliest_date := least(account_record.opened_on, p_opened_on);
-  -- FOR SHARE conflicts with the FOR UPDATE of close_time_period: a close that
-  -- holds the row first makes this read see 'closed'; a close that waits for
-  -- this commit finds a changed fingerprint and refuses with stale_calculation.
+  -- Periods first, then the account row: the order of close_time_period, so
+  -- the two never deadlock. FOR SHARE conflicts with the close's FOR UPDATE:
+  -- a close that holds the row first makes this read see 'closed'; a close
+  -- that waits for this commit finds a changed fingerprint and refuses with
+  -- stale_calculation.
   perform 1 from public.time_periods period
   where period.organization_id = p_organization_id and period.period_end_date >= earliest_date
   order by period.period_start_date
   for share;
+  perform 1 from public.time_accounts where id = p_account_id for update;
   if exists (
     select 1 from public.time_periods period
     where period.organization_id = p_organization_id
@@ -247,6 +280,7 @@ $$;
 
 revoke all on function app_private.guard_time_account_opening_correction_events() from public, anon, authenticated;
 revoke all on function app_private.guard_time_account_current_opening() from public, anon, authenticated;
+revoke all on function app_private.guard_time_account_opening_corrections_delete() from public, anon, authenticated;
 revoke all on function public.correct_time_account_opening_date(uuid, uuid, date, text, uuid, uuid, text)
   from public, anon, authenticated;
 grant execute on function public.correct_time_account_opening_date(uuid, uuid, date, text, uuid, uuid, text)

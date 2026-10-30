@@ -279,6 +279,47 @@ begin
     format($sql$update public.time_account_opening_corrections set reason = 'Anders' where id = %L$sql$,
       v_correction),
     'p1_23_history_immutable');
+  perform pg_temp.expect_refusal('a correction row was deleted',
+    format($sql$delete from public.time_account_opening_corrections where id = %L$sql$, v_correction),
+    'p1_23_history_immutable');
+end;
+$$;
+
+-- The opening date changes only together with its ledger: a bare change of
+-- `opened_on`, or an account without an opening event, fails at commit.
+do $$
+declare
+  v_org constant uuid := '16700000-0000-0000-0000-000000000010';
+begin
+  perform pg_temp.expect_refusal('opened_on moved without a correction',
+    format($sql$
+      update public.time_accounts set opened_on = '2026-07-01' where id = (
+        select account_id from public.time_account_opening_corrections
+        where operation_id = '16700000-0000-0000-0000-000000000022');
+      set constraints all immediate;
+    $sql$),
+    'opening_event_conflict');
+  set constraints all deferred;
+  perform pg_temp.expect_refusal('an account was opened without an opening event',
+    format($sql$
+      insert into public.time_accounts (organization_id, employee_record_id, opened_on, opened_by)
+      select organization_id, id, '2026-09-01', '16700000-0000-0000-0000-000000000003'
+      from public.employee_records where organization_id = %L;
+      set constraints all immediate;
+    $sql$, '16700000-0000-0000-0000-000000000011'),
+    'opening_event_conflict');
+  set constraints all deferred;
+end;
+$$;
+
+-- An organization deletion still removes the history with its accounts.
+do $$
+begin
+  delete from public.organizations where id = '16700000-0000-0000-0000-000000000010';
+  if exists (
+    select 1 from public.time_account_opening_corrections
+    where organization_id = '16700000-0000-0000-0000-000000000010'
+  ) then raise exception 'the organization deletion left opening corrections'; end if;
 end;
 $$;
 
