@@ -1,11 +1,21 @@
 import { expect, test } from 'bun:test';
-import { correctionTimelineWindow, validateCorrectionTimeline } from './timeline-validation';
-import { correctionFactToEntry, type TimeCorrectionApplicationProjection } from './types';
+import {
+  correctionTimelineWindow,
+  exceedsLongestOpenTime,
+  splitCorrectionFactsAtMidnight,
+  validateCorrectionTimeline,
+} from './timeline-validation';
+import {
+  correctionFactToEntry,
+  type TimeCorrectionApplicationProjection,
+  type TimeCorrectionFact,
+} from './types';
 import {
   createActivitySelection,
   projectTimeSegmentsToLegacyTransitions,
   type TimeSegmentFact,
 } from '@/lib/time-tracking/segments';
+import type { TimeEntryType } from '@/lib/time-tracking/types';
 
 function interval(
   applicationId: string,
@@ -51,7 +61,7 @@ test('a single midnight closing correction reads and validates the preceding Ber
   const window = correctionTimelineWindow([end, midnight]);
   if (!window) throw new Error('Missing window.');
   expect([...window.affectedDays].sort()).toEqual(['person:2026-09-07', 'person:2026-09-08']);
-  expect(window.from).toBe('2026-09-06T22:00:00.000Z');
+  expect(window.from).toBe('2026-09-05T22:00:00.000Z');
   expect(window.to).toBe('2026-09-08T22:00:00.000Z');
   const candidate = {
     ...original,
@@ -67,7 +77,7 @@ test('a single midnight closing correction reads and validates the preceding Ber
       applications: [],
       candidates: [candidate],
     }),
-  ).toBe(false);
+  ).toBe('correction_timeline_conflict');
   const validOpening = {
     ...entries[0],
     ...correctionFactToEntry({ ...start, timestamp: '2026-09-07T20:00:00.000Z' }, original),
@@ -80,7 +90,7 @@ test('a single midnight closing correction reads and validates the preceding Ber
       applications: [],
       candidates: [candidate],
     }),
-  ).toBe(true);
+  ).toBeNull();
   const reassigned = { ...midnight, userId: 'other', employeeRecordId: 'other' };
   const reassignmentWindow = correctionTimelineWindow([end, reassigned]);
   if (!reassignmentWindow) throw new Error('Missing reassignment window.');
@@ -92,14 +102,14 @@ test('a single midnight closing correction reads and validates the preceding Ber
       applications: [],
       candidates: [{ ...candidate, snapshot: { schemaVersion: 1, facts: [reassigned] } }],
     }),
-  ).toBe(false);
+  ).toBe('correction_timeline_conflict');
 });
 
 test('a timeline window includes the next midnight across a Berlin DST day', () => {
   const fact = interval('window', 'person', 6, 8).snapshot.facts[0];
   if (!fact) throw new Error('Missing fact.');
   const window = correctionTimelineWindow([{ ...fact, timestamp: '2026-03-29T12:00:00.000Z' }]);
-  expect(window?.from).toBe('2026-03-28T23:00:00.000Z');
+  expect(window?.from).toBe('2026-03-27T23:00:00.000Z');
   expect(window?.to).toBe('2026-03-29T22:00:00.000Z');
 });
 
@@ -111,13 +121,15 @@ test('a resize is checked against surrounding effective time, after replacing it
     sources: [{ kind: 'correction_application' as const, id: 'original', version: 'version' }],
   };
   const input = { organizationId: 'org', affectedDays, entries: [], applications: [original, neighbor] };
-  expect(validateCorrectionTimeline({ ...input, candidates: [candidate] })).toBe(false);
+  expect(validateCorrectionTimeline({ ...input, candidates: [candidate] })).toBe(
+    'correction_timeline_conflict',
+  );
   expect(
     validateCorrectionTimeline({
       ...input,
       candidates: [{ ...candidate, snapshot: interval('candidate', 'person', 6, 8).snapshot }],
     }),
-  ).toBe(true);
+  ).toBeNull();
 });
 
 test('reassignment checks the destination and a batch composes candidates before acceptance', () => {
@@ -127,10 +139,10 @@ test('reassignment checks the destination and a batch composes candidates before
     sources: [{ kind: 'correction_application' as const, id: 'original', version: 'version' }],
   };
   const input = { organizationId: 'org', affectedDays, entries: [], applications: [original] };
-  expect(validateCorrectionTimeline({ ...input, candidates: [candidate] })).toBe(true);
+  expect(validateCorrectionTimeline({ ...input, candidates: [candidate] })).toBeNull();
   expect(
     validateCorrectionTimeline({ ...input, candidates: [candidate, interval('second', 'other', 7, 9)] }),
-  ).toBe(false);
+  ).toBe('correction_timeline_conflict');
 });
 
 test('changing one legacy boundary validates the remaining legacy sequence', () => {
@@ -149,7 +161,7 @@ test('changing one legacy boundary validates the remaining legacy sequence', () 
       applications: [],
       candidates: [proposed],
     }),
-  ).toBe(false);
+  ).toBe('correction_timeline_conflict');
 });
 
 test('touching blocks close before opening even when their approval times differ', () => {
@@ -163,7 +175,7 @@ test('touching blocks close before opening even when their approval times differ
       applications: [neighbor],
       candidates: [candidate],
     }),
-  ).toBe(true);
+  ).toBeNull();
 });
 
 test('an overnight canonical slice closing at Berlin midnight belongs to the previous day', () => {
@@ -185,7 +197,7 @@ test('an overnight canonical slice closing at Berlin midnight belongs to the pre
       applications: [],
       candidates: [interval('candidate', 'person', 6, 8)],
     }),
-  ).toBe(true);
+  ).toBeNull();
 });
 
 test('real canonical break switches at midnight preserve valid sequences on both days', () => {
@@ -234,6 +246,166 @@ test('real canonical break switches at midnight preserve valid sequences on both
         applications: [],
         candidates: [interval('candidate', 'person', 6, 8)],
       }),
-    ).toBe(true);
+    ).toBeNull();
   }
+});
+
+// 20 and 21 October 2026 are summer time: Berlin midnight is 22:00 UTC.
+const BERLIN_MIDNIGHT = '2026-10-20T22:00:00.000Z';
+
+function fact(factId: string, entryType: TimeEntryType, timestamp: string): TimeCorrectionFact {
+  return {
+    factId,
+    userId: 'person',
+    employeeRecordId: 'person',
+    entryType,
+    timestamp,
+    jobId: null,
+    activityKind: 'work',
+    isManual: true,
+  };
+}
+
+function applied(applicationId: string, facts: TimeCorrectionFact[]): TimeCorrectionApplicationProjection {
+  return { ...interval(applicationId, 'person', 6, 8), snapshot: { schemaVersion: 1, facts } };
+}
+
+function validateOvernight(
+  facts: TimeCorrectionFact[],
+  applications: TimeCorrectionApplicationProjection[] = [],
+): ReturnType<typeof validateCorrectionTimeline> {
+  const window = correctionTimelineWindow(facts);
+  if (!window) throw new Error('Missing window.');
+  return validateCorrectionTimeline({
+    organizationId: 'org',
+    affectedDays: window.affectedDays,
+    entries: [],
+    applications,
+    candidates: [applied('candidate', facts)],
+  });
+}
+
+const overnightShift = [
+  fact('start', 'clock_in', '2026-10-20T20:00:00.000Z'),
+  fact('end', 'clock_out', '2026-10-20T23:30:00.000Z'),
+];
+
+test('a missed overnight shift from 22:00 to 01:30 is split at Berlin midnight and accepted', () => {
+  expect(validateOvernight(overnightShift)).toBe('correction_crosses_midnight');
+  const split = splitCorrectionFactsAtMidnight(overnightShift);
+  expect(split.map((boundary) => [boundary.entryType, boundary.timestamp])).toEqual([
+    ['clock_in', '2026-10-20T20:00:00.000Z'],
+    ['clock_out', BERLIN_MIDNIGHT],
+    ['clock_in', BERLIN_MIDNIGHT],
+    ['clock_out', '2026-10-20T23:30:00.000Z'],
+  ]);
+  expect(new Set(split.map((boundary) => boundary.factId)).size).toBe(split.length);
+  expect([...(correctionTimelineWindow(split)?.affectedDays ?? [])].sort()).toEqual([
+    'person:2026-10-20',
+    'person:2026-10-21',
+  ]);
+  expect(validateOvernight(split)).toBeNull();
+});
+
+test('an overnight correction that overlaps recorded time on either day is still refused as an overlap', () => {
+  const split = splitCorrectionFactsAtMidnight(overnightShift);
+  for (const [start, end] of [
+    ['2026-10-20T22:30:00.000Z', '2026-10-20T23:00:00.000Z'],
+    ['2026-10-20T21:00:00.000Z', '2026-10-20T21:30:00.000Z'],
+  ] as const) {
+    const recorded = applied('recorded', [fact('a', 'clock_in', start), fact('b', 'clock_out', end)]);
+    expect(validateOvernight(split, [recorded])).toBe('correction_timeline_conflict');
+  }
+});
+
+test('a break across midnight closes and reopens at 00:00 like live capture', () => {
+  const split = splitCorrectionFactsAtMidnight([
+    fact('start', 'clock_in', '2026-10-20T19:00:00.000Z'),
+    fact('pause', 'break_start', '2026-10-20T21:45:00.000Z'),
+    fact('resume', 'break_end', '2026-10-20T22:15:00.000Z'),
+    fact('end', 'clock_out', '2026-10-20T23:30:00.000Z'),
+  ]);
+  expect(split.filter((boundary) => boundary.timestamp === BERLIN_MIDNIGHT).map((b) => b.entryType)).toEqual([
+    'break_end',
+    'clock_out',
+    'clock_in',
+    'break_start',
+  ]);
+  expect(validateOvernight(split)).toBeNull();
+});
+
+test('the midnight split leaves day-bound and already split time unchanged and covers every midnight', () => {
+  const toMidnight = [
+    fact('start', 'clock_in', '2026-10-20T20:00:00.000Z'),
+    fact('end', 'clock_out', BERLIN_MIDNIGHT),
+  ];
+  expect(splitCorrectionFactsAtMidnight(toMidnight)).toEqual(toMidnight);
+  const split = splitCorrectionFactsAtMidnight(overnightShift);
+  expect(splitCorrectionFactsAtMidnight(split)).toEqual(split);
+  const twoNights = splitCorrectionFactsAtMidnight([
+    fact('start', 'clock_in', '2026-10-20T20:00:00.000Z'),
+    fact('end', 'clock_out', '2026-10-21T23:30:00.000Z'),
+  ]);
+  expect(twoNights.filter((boundary) => boundary.entryType === 'clock_out').map((b) => b.timestamp)).toEqual([
+    BERLIN_MIDNIGHT,
+    '2026-10-21T22:00:00.000Z',
+    '2026-10-21T23:30:00.000Z',
+  ]);
+  expect(validateOvernight(twoNights)).toBeNull();
+});
+
+test('a lone clock-out that closes the previous day is refused with the midnight rule, not an overlap', () => {
+  const opened = applied('opened', [fact('start', 'clock_in', '2026-10-20T20:00:00.000Z')]);
+  const lateEnd = [fact('end', 'clock_out', '2026-10-20T23:30:00.000Z')];
+  expect(splitCorrectionFactsAtMidnight(lateEnd)).toEqual(lateEnd);
+  expect(validateOvernight(lateEnd, [opened])).toBe('correction_crosses_midnight');
+});
+
+test('open time over midnight may last at most 24 hours', () => {
+  const shift = (start: string, end: string) => [
+    fact('start', 'clock_in', start),
+    fact('end', 'clock_out', end),
+  ];
+  expect(exceedsLongestOpenTime(overnightShift)).toBe(false);
+  expect(exceedsLongestOpenTime(shift('2026-10-20T20:00:00.000Z', '2026-10-21T20:00:00.000Z'))).toBe(false);
+  expect(exceedsLongestOpenTime(shift('2026-10-20T20:00:00.000Z', '2026-10-21T20:01:00.000Z'))).toBe(true);
+  expect(exceedsLongestOpenTime(shift('2020-01-01T08:00:00.000Z', '2026-10-20T23:30:00.000Z'))).toBe(true);
+  // A break does not restart the clock, and an open end still counts.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T18:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
+  // A clock_in that resumes work after a break keeps the original start.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T12:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-20T12:30:00.000Z'),
+      fact('switch', 'clock_in', '2026-10-20T12:30:00.000Z'),
+      fact('end', 'clock_out', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
+  // A resumed clock_in without a later clock_out still counts from the original start.
+  expect(
+    exceedsLongestOpenTime([
+      fact('start', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('pause', 'break_start', '2026-10-20T12:00:00.000Z'),
+      fact('resume', 'break_end', '2026-10-20T12:30:00.000Z'),
+      fact('switch', 'clock_in', '2026-10-21T06:01:00.000Z'),
+    ]),
+  ).toBe(true);
+  // A clock_in after a clock_out starts new time.
+  expect(
+    exceedsLongestOpenTime([
+      fact('first', 'clock_in', '2026-10-20T06:00:00.000Z'),
+      fact('first-end', 'clock_out', '2026-10-20T14:00:00.000Z'),
+      fact('second', 'clock_in', '2026-10-20T20:00:00.000Z'),
+      fact('second-end', 'clock_out', '2026-10-21T06:00:00.000Z'),
+    ]),
+  ).toBe(false);
+  // The whole 25-hour day of the autumn clock change, as a recorded session's day piece.
+  expect(exceedsLongestOpenTime(shift('2026-10-24T22:00:00.000Z', '2026-10-25T23:00:00.000Z'))).toBe(false);
 });

@@ -39,6 +39,22 @@ test('the dialog measure fails on a wide, a too tall and a clipped dialog, and p
   await expectDialogFits(dialog, 'fitting');
 });
 
+test('the dialog measure fails a confirmation whose footer scrolls away and passes one with a scroll body', async ({
+  page,
+}) => {
+  const dialog = page.getByRole('alertdialog');
+  await show(
+    page,
+    '<div role="alertdialog" aria-label="Probe" style="max-height:700px;overflow-y:auto"><p style="margin-top:1200px">Lang</p><div data-slot="alert-dialog-footer"><button>Abbrechen</button></div></div>',
+  );
+  await expect(expectDialogFits(dialog, 'scrolling footer')).rejects.toThrow(/footer action is out of reach/);
+  await show(
+    page,
+    '<div role="alertdialog" aria-label="Probe" style="max-height:700px;display:flex;flex-direction:column"><div data-slot="alert-dialog-body" style="min-height:0;flex:1;overflow-y:auto"><p style="margin-top:1200px">Lang</p></div><div data-slot="alert-dialog-footer"><button>Abbrechen</button></div></div>',
+  );
+  await expectDialogFits(dialog, 'scroll body');
+});
+
 test('the page measure fails on an unnamed sideways scroller and passes a named region', async ({ page }) => {
   await show(page, '<div style="overflow-x:auto"><div style="width:900px">Breite Tabelle</div></div>');
   // An unnamed scroller no longer excuses what it hides, so its content counts as past the edge too.

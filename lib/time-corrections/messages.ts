@@ -9,6 +9,10 @@ export const TIME_CORRECTION_FAILURE_MESSAGES: Readonly<Partial<Record<string, s
     'Die Zeiten wurden während der Prüfung geändert. Bitte prüfe den Vorschlag und sende ihn erneut.',
   correction_timeline_conflict:
     'Die Änderung überschneidet sich mit einer anderen Buchung oder unterbricht eine bestehende Arbeitszeit. Bitte prüfe die Zeiten erneut.',
+  correction_crosses_midnight:
+    'Eine Zeit über Mitternacht braucht Beginn und Ende in derselben Korrektur. Bitte korrigiere die ganze Arbeitszeit von Beginn bis Ende.',
+  correction_open_time_too_long:
+    'Eine Arbeitszeit darf höchstens 24 Stunden dauern. Bitte prüfe Beginn und Ende.',
   correction_timeline_unavailable:
     'Die vorhandenen Zeiten konnten nicht vollständig geprüft werden. Bitte versuche es erneut.',
   invalid_shape: 'Die gewählte Korrektur ist unvollständig.',

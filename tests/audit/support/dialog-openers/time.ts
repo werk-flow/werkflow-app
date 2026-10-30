@@ -47,6 +47,7 @@ import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { prepareLayoutDetails } from '../layout-fixtures';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 // Zeiterfassung for the office and the field worker's own dialogs. Every row
 // these dialogs need belongs to the world's employee and lies away from the
@@ -205,8 +206,8 @@ export const TIME_OPENERS = {
           organizationId: world.orgId,
           employeeRecordId: await employeeRecordId(world),
           actorUserId: world.users.admin.id,
-          planName: `Einarbeitung ${world.runId}`,
-          requirementTitle: `Gesundheitsnachweis vorlegen ${world.runId}`,
+          planName: worldName('Einarbeitung', world.runId),
+          requirementTitle: worldName('Gesundheitsnachweis vorlegen', world.runId),
         }),
       );
       await page.reload();

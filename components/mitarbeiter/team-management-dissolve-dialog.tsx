@@ -10,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 import { InlinePending } from '@/components/ui/inline-pending';
 import type { TeamManagementController } from './use-team-management';
 
@@ -48,8 +47,7 @@ export function TeamManagementDissolveDialog({ management }: TeamManagementDisso
             Planungen zur Auswahl.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{dissolveError}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={dissolveError}>
           <AlertDialogCancel disabled={isDissolving}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={anyBusy} onClick={handleDissolve}>
             Team auflösen

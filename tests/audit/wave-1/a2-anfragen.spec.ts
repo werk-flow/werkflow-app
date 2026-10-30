@@ -20,7 +20,6 @@ import {
   visibleDocumentName,
 } from '../../golden/support/steps/documents';
 import { dismissDialog } from '../../golden/support/steps/interaction';
-import { expectRedirectedAway } from '../../golden/support/steps/organization';
 import {
   closeRequestViaDialog,
   convertedJobLink,
@@ -39,6 +38,7 @@ import {
   requestConvertButton,
   requestDocumentTrashedMessage,
   requestField,
+  renderedMainNavigation,
   requestsNavLink,
   searchRequests,
   setRequestStatusFromDetail,
@@ -536,28 +536,13 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
     }
   });
 
-  test('A2-D02: Handwerker und fremde Organisation erreichen keine Anfrage', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const summary = `A2 Geschützte Anfrage ${world.runId}`;
-    const requestNumber = `A2-ANF-${world.runId}-D02`;
-    const requestId = await seedRequest({
-      orgId: world.orgId,
-      actorId: world.users.buero.id,
-      summary,
-      requestNumber,
-    });
-
-    await expectRedirectedAway(employeePage, '/anfragen');
-    await expectRedirectedAway(employeePage, `/anfragen/${requestId}`);
-    await expect(textInDom(employeePage, summary)).toHaveCount(0);
+  // The server refuses the pages (lib/org/office-page-access.test.ts); this checks the rendered sidebar.
+  test('A2-D02: Handwerker findet Anfragen nicht in der Navigation', async ({ bueroPage, employeePage }) => {
+    await bueroPage.goto('/dashboard');
+    await expect(requestsNavLink(bueroPage)).toBeVisible();
     await employeePage.goto('/dashboard');
+    // The absence counts only once the employee's sidebar rendered its links, not on its loading shell.
+    await expect(renderedMainNavigation(employeePage)).toBeVisible();
     await expect(requestsNavLink(employeePage)).toHaveCount(0);
-
-    await outsiderPage.goto(`/anfragen/${requestId}`);
-    await expect(textInDom(outsiderPage, summary)).toHaveCount(0);
-    await expect(textInDom(outsiderPage, requestNumber)).toHaveCount(0);
   });
 });
