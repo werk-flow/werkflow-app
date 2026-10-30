@@ -73,6 +73,11 @@ export function DocumentSearchFixture(): React.JSX.Element {
         onCategoryChange={(nextCategory) => navigation.updateSearch({ nextCategory })}
         onLinkFilterChange={(nextLinkFilter) => navigation.updateSearch({ nextLinkFilter })}
       />
+      {/* The shown result list: it renders in the URL commit itself. */}
+      <output aria-label="Angezeigte Suche">{searchParams.get('q') ?? ''}</output>
+      <output aria-label="Bibliotheksstatus">
+        {navigation.pendingView === null ? 'Bereit' : 'Wird geladen'}
+      </output>
     </main>
   );
 }

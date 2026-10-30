@@ -4,6 +4,9 @@ import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { writeRefusalFor } from '@/lib/supabase/write-refusal';
+import { deleteStorageObjects, listStorageObjectPaths } from '@/lib/storage/r2';
+import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { resolveActionContext } from '@/lib/org/action-context';
 import { CACHE_TAGS } from '@/lib/data/cached';
@@ -15,14 +18,22 @@ export type DeleteOrgResult = ActionResult<{ nextOrgId: string | null }>;
 
 const confirmationNameSchema = z.string();
 
+const deleteRefusal = writeRefusalFor(new Set(['org_not_found', 'not_authorized', 'name_mismatch']));
+
 /**
  * Delete an organization and all its associated data.
  *
  * Rules:
  * - Only the admin can delete the organization
  * - The confirmation name must match the organization name exactly
- * - Deletes the organization row; the foreign key cascade removes its
- *   memberships, invites and all other organization data in the same statement
+ * - Recorded working time or a closed period refuses the deletion, here and
+ *   again in delete_organization under its lock
+ * - Deletes every stored file of the organization first, as the demo seeder
+ *   reset does: a failed file deletion leaves the organization in place, so
+ *   the owner can try again
+ * - delete_organization deletes the organization row; the foreign key cascade
+ *   removes its memberships, invites and all other organization data in the
+ *   same statement
  * - Users who lose their only org will be redirected to onboarding on next login
  */
 export async function deleteOrganization(confirmationName: string): Promise<DeleteOrgResult> {
@@ -57,14 +68,40 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       return { success: false, error: 'name_mismatch' };
     }
 
+    // Checked before any file goes: the database repeats it, but only after
+    // the files are deleted.
+    const scope = await readOrganizationDeletionScope(activeOrgId);
+    if (!scope.success) return scope;
+    if (scope.scope.retainsTimeRecords) return { success: false, error: 'has_time_records' };
+
+    try {
+      const paths = await listStorageObjectPaths({ organizationId: activeOrgId, prefix: `${activeOrgId}/` });
+      await deleteStorageObjects({ organizationId: activeOrgId, paths });
+    } catch (error) {
+      logError('deleteOrganization: stored file deletion failed', error);
+      return { success: false, error: 'files_delete_failed' };
+    }
+
     // One statement: the cascade removes the memberships, invites and every
     // other organization row with it, or nothing. Deleting the memberships
     // first was refused by the owner-membership guard.
-    const { error: orgDeleteError } = await admin.from('organizations').delete().eq('id', activeOrgId);
+    const { error: orgDeleteError } = await admin.rpc('delete_organization', {
+      p_organization_id: activeOrgId,
+      p_actor_id: userId,
+      p_confirmation_name: parsedConfirmation.data.trim(),
+    });
 
+    // The files are gone by now: a refusal says so, and a retry finishes the
+    // deletion once nothing retains the organization.
+    if (orgDeleteError?.message === 'has_time_records') {
+      return { success: false, error: 'time_recorded_during_deletion' };
+    }
     if (orgDeleteError) {
-      logError('deleteOrganization: organization delete failed', orgDeleteError);
-      return { success: false, error: 'delete_org_failed' };
+      return deleteRefusal(
+        orgDeleteError,
+        'delete_org_failed',
+        'deleteOrganization: organization delete failed',
+      );
     }
 
     // Get the user's remaining organizations using admin client

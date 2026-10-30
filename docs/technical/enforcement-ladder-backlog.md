@@ -23,6 +23,7 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 | --- | --- | --- |
 | R2 bucket CORS | Runtime R2 tokens get `AccessDenied` on `GetBucketCors`. | Tier 2: a script like `auth:check` with an Admin Read R2 token, once the owner provides one. |
 | Vercel environment scopes | No workstation credential reads the project's variables. | Tier 2: a script that reads the scopes through the Vercel API, once the owner provides a token. |
+| PROD rows outside MCP | The owner's `SUPABASE_ACCESS_TOKEN` in the env backups reaches PROD's query endpoint, and `bun run env:prod` points a local app at PROD. Only the rule stops an agent's own `curl`, script or browser session there. | Tier 2: the shell hooks refuse a command that names the production ref or host, or switches to PROD, outside `prod:inspect`. |
 | Bounded client collections | Every array and record in an action input schema has a bound, but only review keeps the next one bounded. | Tier 2: a unit test that walks each parsed action schema and fails on an array without a maximum or an open record. |
 
 ## Code quality and maintainability

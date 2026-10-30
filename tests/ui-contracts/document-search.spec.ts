@@ -67,3 +67,39 @@ test('a changed query in the URL replaces the field text', async ({ page }) => {
   await page.evaluate(() => window.listNavigationContract.commit('/dokumente?view=all&q=extern', true));
   await expect(searchField(page)).toHaveValue('extern');
 });
+
+test('a search cleared between a URL commit and its passive effects stays requested', async ({ page }) => {
+  await searchField(page).fill('neu');
+  await searchField(page).press('Enter');
+  // Clearing the field lands right after the commit renders, before React
+  // flushes that commit's passive effects.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const shownSearch = document.querySelector('output[aria-label="Angezeigte Suche"]');
+        const input = document.querySelector('input[aria-label="Dokumente suchen"]');
+        const [firstRequest] = window.listNavigationContract.requests;
+        const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+        if (!shownSearch || !(input instanceof HTMLInputElement) || !firstRequest || !setValue) {
+          reject(new Error('expected the search field, the shown search and a recorded request'));
+          return;
+        }
+        new MutationObserver((_, observer) => {
+          if (shownSearch.textContent !== 'neu') return;
+          observer.disconnect();
+          setValue.call(input, '');
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          resolve();
+        }).observe(shownSearch, { childList: true, characterData: true, subtree: true });
+        window.listNavigationContract.commit(firstRequest);
+      }),
+  );
+  await expect(page.getByLabel('Bibliotheksstatus')).toHaveText('Wird geladen');
+  await searchField(page).fill('neu');
+  await searchField(page).press('Enter');
+  expect(await page.evaluate(() => window.listNavigationContract.requests)).toEqual([
+    '/dokumente?view=all&q=neu&link=employees',
+    '/dokumente?view=all&link=employees',
+    '/dokumente?view=all&q=neu&link=employees',
+  ]);
+});
