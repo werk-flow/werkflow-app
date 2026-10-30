@@ -284,7 +284,7 @@ export async function resolveSummaryEmployeeRecord(
 }
 
 /** The members a team expands to on a date, and the names it skips. */
-export type TeamExpansion = { userIds: string[]; skippedNames: string[] };
+type TeamExpansion = { userIds: string[]; skippedNames: string[] };
 
 // The team's members on the date: active members become user ids, the rest
 // skipped names. Null after a logged read failure.
@@ -382,7 +382,7 @@ function readJobQualificationRows(admin: AdminClient, orgId: string, jobId: stri
 }
 
 /** The rows behind a job's qualification detail. */
-export type JobQualificationRows = {
+type JobQualificationRows = {
   definitions: CapabilityRow[];
   requirements: Pick<
     Tables['job_capability_requirements']['Row'],
