@@ -10,7 +10,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ErrorText } from '@/components/ui/error-text';
 
 interface DeleteClientDialogProps {
   clientName: string;
@@ -39,8 +38,7 @@ export function DeleteClientDialog({
             Bestehende Aufträge und Projekte verlieren die Zuordnung zu diesem Kunden.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <ErrorText>{deleteError}</ErrorText>
-        <AlertDialogFooter>
+        <AlertDialogFooter error={deleteError}>
           <AlertDialogCancel disabled={isDeleting}>Abbrechen</AlertDialogCancel>
           <AlertDialogAction
             onClick={(event) => {

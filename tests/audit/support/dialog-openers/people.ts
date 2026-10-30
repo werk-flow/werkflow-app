@@ -41,6 +41,7 @@ import type { TestWorld } from '../../../golden/support/world';
 import type { DialogOpener } from '../dialog-opener';
 import { surfaceFixture, type SurfaceContext } from '../surface-fixtures';
 import { openSurface } from '../surface-routes';
+import { worldName } from '../../../../lib/testing/seed-world-plan';
 
 // The seeded versions and reports lie years ahead of the business date, so
 // they change no current target, entitlement or absence of the employee.
@@ -58,7 +59,7 @@ function inviteEmail(world: TestWorld, state: 'pending' | 'cancelled'): string {
 }
 
 function teamName(world: TestWorld): string {
-  return `Layout Team ${world.runId}`;
+  return worldName('Layout Team', world.runId);
 }
 
 /** The sickness report of the employee that the manager dialogs act on. */
@@ -140,7 +141,7 @@ async function openNoLoginRecord(
       organizationId: world.orgId,
       actorUserId: world.users.admin.id,
       firstName: 'Layout',
-      lastName: `${lastName} ${world.runId}`,
+      lastName: worldName(lastName, world.runId),
       entryDate: businessDate,
     });
     await prepare?.(id);
@@ -325,7 +326,7 @@ export const PEOPLE_OPENERS = {
           organizationId: world.orgId,
           employeeRecordId: recordId,
           actorUserId: world.users.admin.id,
-          name: `Layout Onboarding ${world.runId}`,
+          name: worldName('Layout Onboarding', world.runId),
           templateVersionId: null,
           targetStartDate: null,
         });

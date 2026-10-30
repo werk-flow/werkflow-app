@@ -37,30 +37,18 @@ export type CalendarRangeState<TData extends DatasetMap> = {
   datasets: { [K in keyof TData]: DatasetState<TData[K]> };
 };
 
-type PerDataset<TData extends DatasetMap, TAction> = {
-  [K in keyof TData]: TAction & { dataset: K };
-}[keyof TData];
+/** The actions on one dataset whose data has type `TValue`. */
+type DatasetAction<TValue> =
+  | { type: 'read-started'; generation: number; range: CalendarFetchRange }
+  | { type: 'read-committed'; generation: number; range: CalendarFetchRange; data: TValue }
+  | { type: 'read-failed'; generation: number; range: CalendarFetchRange }
+  | { type: 'reads-invalidated'; generation: number }
+  | { type: 'data-updated'; update: (previous: TValue) => TValue };
 
-type CalendarDatasetAction<TData extends DatasetMap> =
-  | PerDataset<TData, { type: 'read-started'; generation: number; range: CalendarFetchRange }>
-  | {
-      [K in keyof TData]: {
-        type: 'read-committed';
-        dataset: K;
-        generation: number;
-        range: CalendarFetchRange;
-        data: TData[K];
-      };
-    }[keyof TData]
-  | PerDataset<TData, { type: 'read-failed'; generation: number; range: CalendarFetchRange }>
-  | PerDataset<TData, { type: 'reads-invalidated'; generation: number }>
-  | {
-      [K in keyof TData]: {
-        type: 'data-updated';
-        dataset: K;
-        update: (previous: TData[K]) => TData[K];
-      };
-    }[keyof TData];
+/** One action per dataset key in `Keys`; the key ties `dataset` to the type of its data. */
+type CalendarDatasetAction<TData extends DatasetMap, Keys extends keyof TData = keyof TData> = {
+  [K in Keys]: DatasetAction<TData[K]> & { dataset: K };
+}[Keys];
 
 export type CalendarRangeAction<TData extends DatasetMap> =
   | (CalendarDatasetAction<TData> & { scopeKey: string })
@@ -73,10 +61,7 @@ export function createDatasetState<TData>(
   return { data, coverage, generation: 0, read: { kind: 'idle' }, unconfirmed: false };
 }
 
-function reduceDataset<TData>(
-  state: DatasetState<TData>,
-  action: Exclude<CalendarRangeAction<Record<string, TData>>, { type: 'scope-reset' }>,
-): DatasetState<TData> {
+function reduceDataset<TData>(state: DatasetState<TData>, action: DatasetAction<TData>): DatasetState<TData> {
   switch (action.type) {
     case 'read-started':
       if (action.generation <= state.generation) return state;
@@ -120,8 +105,8 @@ export function reduceCalendarRange<TData extends DatasetMap>(
   action: CalendarRangeAction<TData>,
 ): CalendarRangeState<TData> {
   if (action.type === 'scope-reset') {
-    const datasets = {} as { [K in keyof TData]: DatasetState<TData[K]> };
-    for (const key of Object.keys(state.datasets) as (keyof TData)[]) {
+    const datasets = { ...state.datasets };
+    for (const key in datasets) {
       datasets[key] = {
         data: action.empty[key],
         coverage: null,
@@ -136,10 +121,7 @@ export function reduceCalendarRange<TData extends DatasetMap>(
   if (action.scopeKey !== state.scopeKey) return state;
   const key = action.dataset;
   const current = state.datasets[key];
-  const next = reduceDataset(
-    current,
-    action as Exclude<CalendarRangeAction<Record<string, TData[typeof key]>>, { type: 'scope-reset' }>,
-  );
+  const next = reduceDataset(current, action);
   if (next === current) return state;
   return { ...state, datasets: { ...state.datasets, [key]: next } };
 }
@@ -210,8 +192,7 @@ export function composeCalendarReadiness(presentations: readonly DatasetPresenta
 
 /**
  * Builds the committed-read action for one dataset. The parameter types tie
- * `data` to `dataset`; the single cast below is the one place the
- * distributive action union is assembled from a generic key.
+ * `data` to `dataset`, and the action type keyed by `K` keeps that tie.
  */
 export function readCommitted<TData extends DatasetMap, K extends keyof TData>(input: {
   scopeKey: string;
@@ -219,6 +200,6 @@ export function readCommitted<TData extends DatasetMap, K extends keyof TData>(i
   generation: number;
   range: CalendarFetchRange;
   data: TData[K];
-}): CalendarRangeAction<TData> {
-  return { type: 'read-committed', ...input } as CalendarRangeAction<TData>;
+}): CalendarDatasetAction<TData, K> & { scopeKey: string } {
+  return { type: 'read-committed', ...input };
 }
