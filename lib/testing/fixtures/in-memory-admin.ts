@@ -28,13 +28,20 @@ function comparable(value: unknown, filterValue: string): [number | string, numb
     : [String(value ?? ''), filterValue];
 }
 
-/** One `column.operator.value` term of a PostgREST `or` filter. */
+/** One `column.operator.value` term of a PostgREST `or` filter; `is` takes `null` only. */
 function orTerm(term: string): (row: Row) => boolean {
   const [column = '', operator = '', ...rest] = term.split('.');
+  const value = rest.join('.');
+  if (operator === 'is' && value === 'null') return (row) => (row[column] ?? null) === null;
   const compare = comparators[operator];
   if (!compare) throw new Error(`The in-memory admin does not implement the "${operator}" or-filter.`);
-  const value = rest.join('.');
   return (row) => compare(...comparable(row[column], value));
+}
+
+/** A dotted column on a seeded embedded array filters that embed, never its parent row (PostgREST). */
+function filtersEmbed(row: Row, column: string): boolean {
+  const dot = column.indexOf('.');
+  return dot !== -1 && Array.isArray(row[column.slice(0, dot)]);
 }
 
 class InMemoryQuery implements PromiseLike<QueryResult> {
@@ -75,9 +82,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   eq(column: string, value: unknown): this {
-    // A dotted column on a seeded embedded array filters that embed, never its parent row (PostgREST).
-    const embedded = column.includes('.') ? column.slice(0, column.indexOf('.')) : null;
-    return this.where((row) => (embedded !== null && Array.isArray(row[embedded])) || row[column] === value);
+    return this.where((row) => filtersEmbed(row, column) || row[column] === value);
   }
   neq(column: string, value: unknown): this {
     return this.where((row) => row[column] !== value);
@@ -89,10 +94,10 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this.where((row) => values.includes(row[column]));
   }
   gte(column: string, value: string): this {
-    return this.where((row) => String(row[column]) >= value);
+    return this.where((row) => filtersEmbed(row, column) || String(row[column]) >= value);
   }
   lte(column: string, value: string): this {
-    return this.where((row) => String(row[column]) <= value);
+    return this.where((row) => filtersEmbed(row, column) || String(row[column]) <= value);
   }
   lt(column: string, value: string): this {
     return this.where((row) => String(row[column]) < value);
@@ -128,8 +133,12 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   not(): this {
     return this;
   }
-  /** Comparison terms only (`taken_quantity.gt.0,returned_quantity.gt.0`); anything else throws. */
-  or(filter: string): this {
+  /**
+   * Comparison terms and `is.null` only (`taken_quantity.gt.0,ended_at.is.null`); anything else
+   * throws. A filter on a referenced table filters that embed, never the parent row.
+   */
+  or(filter: string, options?: { referencedTable?: string }): this {
+    if (options?.referencedTable) return this;
     const terms = filter.split(',').map(orTerm);
     return this.where((row) => terms.some((term) => term(row)));
   }

@@ -511,9 +511,6 @@
     "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
     "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
     "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
-    "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {
-      "ZeiterfassungDashboardStatusCard": 82
-    },
     "hooks/use-job-entity-options.ts": { "useJobEntityOptions": 121 },
     "hooks/use-live-view.ts": { "useLiveView": 192 },
     "hooks/use-member-status.ts": { "useMemberStatus": 97 },

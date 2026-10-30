@@ -16,7 +16,8 @@ import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { correctionHistoryVisibility } from './history-visibility';
 import { hydrateCorrectionRequests, readCorrectionRequestList } from './request-list';
-import type { TimeCorrectionHistoryResult, TimeCorrectionListResult, TimeCorrectionSnapshot } from './types';
+import { summarizePendingCorrections, type ProvisionalTimeSummary } from './provisional-summary';
+import type { TimeCorrectionHistoryResult, TimeCorrectionListResult } from './types';
 
 // The Server Actions that read time corrections: the approval queue, the
 // history, the form options and the provisional summary. The provisional
@@ -233,29 +234,10 @@ export async function getTimeCorrectionFormOptions(
   };
 }
 
-function snapshotMinutes(snapshot: TimeCorrectionSnapshot): number {
-  let activeStart: number | null = null;
-  let minutes = 0;
-  for (const fact of [...snapshot.facts].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp),
-  )) {
-    const timestamp = Date.parse(fact.timestamp);
-    if (fact.entryType === 'clock_in' || fact.entryType === 'break_end') {
-      activeStart = timestamp;
-    } else if (activeStart !== null) {
-      minutes += Math.max(0, Math.round((timestamp - activeStart) / 60_000));
-      activeStart = null;
-    }
-  }
-  return minutes;
-}
-
 export async function getProvisionalTimeSummary(rawInput: {
   organizationId: string;
   userId: string;
-}): Promise<
-  { success: true; count: number; beforeMinutes: number; proposedMinutes: number } | ActionFailure
-> {
+}): Promise<({ success: true } & ProvisionalTimeSummary) | ActionFailure> {
   const parsedInput = correctionSummarySchema.safeParse(rawInput);
   if (!parsedInput.success) return { success: false, error: 'invalid_input' };
   const input = parsedInput.data;
@@ -274,17 +256,5 @@ export async function getProvisionalTimeSummary(rawInput: {
     filter: { status: 'open', subjectUserId: input.userId },
   });
   if (!result.success) return result;
-  const pending = result.requests;
-  return {
-    success: true,
-    count: pending.length,
-    beforeMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.beforeSnapshot),
-      0,
-    ),
-    proposedMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.proposedSnapshot),
-      0,
-    ),
-  };
+  return { success: true, ...summarizePendingCorrections(result.requests) };
 }
