@@ -165,7 +165,6 @@
   "lib/time-accounts/period-preparation.ts": 6,
   "lib/time-tracking/pending-sessions.test.ts": 1,
   "lib/time-tracking/resume-activity.test.ts": 2,
-  "lib/time-tracking/segment-actions.ts": 1,
   "lib/time-tracking/settings-write-path.test.ts": 1,
   "lib/ui/card-padding.test.ts": 1,
   "lib/ui/select-registry.test.ts": 1,

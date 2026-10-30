@@ -646,7 +646,6 @@
       "getTimeAccountSettings": 130,
       "getTimeAccountSettings > readRegion#1": 125
     },
-    "lib/time-tracking/segment-actions.ts": { "getCanonicalClockState": 124 },
     "lib/ui/dialog-discovery.ts": { "inspectLayer": 102 },
     "lib/vacation/actions.ts": {
       "getPendingVacationRequestsForApprover": 116,
