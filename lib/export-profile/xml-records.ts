@@ -36,6 +36,9 @@ export function* xmlRecords(xml: string): Generator<XmlRecord> {
     const [, cdata, closingName, openingName, attributeText, selfClosing, text] = token;
     const top = stack.at(-1);
     if (cdata !== undefined || text !== undefined) {
+      // Outside the root element only whitespace is allowed.
+      if (!top && (cdata !== undefined || /[^\t\n\r ]/.test(text ?? '')))
+        throw new ExportFormatError('xml_not_well_formed');
       if (top) top.text += cdata ?? decodeXmlEntities(text ?? '');
       continue;
     }
