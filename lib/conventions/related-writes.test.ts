@@ -37,7 +37,7 @@ const EMAIL_CHANGE_STATE_RECOVERY =
   'Independent recovery: the wizard state the action returns (getInitialEmailChangeWizardState) completes a claim whose Auth update succeeded but whose response was lost; the action’s own transition is refused while such a completion is pending, so the two never change the same rows together.';
 
 // Reviewed actions, keyed `file::function`, with the reason their writes stay
-// separate by design. A stale entry fails the test.
+// separate by design. Shrink only; a stale entry fails the test.
 const ALLOWED_SEPARATE_WRITES: Readonly<Record<string, string>> = {
   'lib/time-tracking/clock-state-actions.ts::clockOutBeforeSignOut':
     'Independent by design: each organization’s open session is clocked out on its own, best effort before sign-out; one refusal must not keep the others running.',

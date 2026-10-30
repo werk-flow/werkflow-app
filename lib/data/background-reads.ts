@@ -31,7 +31,7 @@ import { jobOptionRequestSchema } from '@/lib/jobs/option-types';
 import { getJobParkingContexts, getParkingResponsibleOptions } from '@/lib/parking/actions';
 import { getPlanningOptions } from '@/lib/planning/actions';
 import { planningOptionRequestSchema } from '@/lib/planning/option-types';
-import { suggestPersonnelNumber } from '@/lib/personnel/actions';
+import { suggestPersonnelNumber } from '@/lib/personnel/record-read-actions';
 import { getOwnPersonnelActions, getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { getNextProjectNumber, getProjectDetails } from '@/lib/projects/actions';
@@ -52,7 +52,7 @@ import {
   getTimeCorrectionFormOptions,
   getTimeCorrectionHistoryPage,
   getTimeCorrectionRequests,
-} from '@/lib/time-corrections/actions';
+} from '@/lib/time-corrections/read-actions';
 import {
   getTimeEntries,
   getTimeEntriesForJob,

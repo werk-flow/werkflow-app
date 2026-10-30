@@ -186,21 +186,14 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
     }
     if (!vacationSpans || !sicknessSpans) return { success: false, error: 'load_failed' };
 
-    const schedulesByRecord = new Map<string, ReturnType<typeof toWorkSchedule>[]>();
-    for (const row of schedulesResult.data) {
-      const schedule = toWorkSchedule(row);
-      const list = schedulesByRecord.get(schedule.employeeRecordId) ?? [];
-      list.push(schedule);
-      schedulesByRecord.set(schedule.employeeRecordId, list);
-    }
-
-    const conditionsByRecord = new Map<string, ReturnType<typeof toEmploymentCondition>[]>();
-    for (const row of conditionsResult.data) {
-      const condition = toEmploymentCondition(row);
-      const list = conditionsByRecord.get(condition.employeeRecordId) ?? [];
-      list.push(condition);
-      conditionsByRecord.set(condition.employeeRecordId, list);
-    }
+    const schedulesByRecord = Map.groupBy(
+      schedulesResult.data.map(toWorkSchedule),
+      (schedule) => schedule.employeeRecordId,
+    );
+    const conditionsByRecord = Map.groupBy(
+      conditionsResult.data.map(toEmploymentCondition),
+      (condition) => condition.employeeRecordId,
+    );
 
     const targetsByUserId: Record<string, DailyTarget> = {};
     for (const record of recordsResult.data) {

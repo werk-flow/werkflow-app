@@ -126,7 +126,9 @@ mock.module('@/lib/projects/actions', () => ({
   getProjectDetails: seam('project-details'),
 }));
 mock.module('@/lib/requests/actions', () => ({ getNextRequestNumber: seam('next-request-number') }));
-mock.module('@/lib/personnel/actions', () => ({ suggestPersonnelNumber: seam('next-personnel-number') }));
+mock.module('@/lib/personnel/record-read-actions', () => ({
+  suggestPersonnelNumber: seam('next-personnel-number'),
+}));
 mock.module('@/lib/sickness/actions', () => ({
   getOwnSicknessReports: seam('own-sickness-reports'),
   getSicknessReportsForRecord: seam('sickness-reports-for-record'),
@@ -140,7 +142,7 @@ mock.module('@/lib/personnel/lifecycle-actions', () => ({
   getOwnPersonnelActions: selfSeam('own-personnel-actions'),
   getPersonnelLifecycle: seam('personnel-lifecycle'),
 }));
-mock.module('@/lib/time-corrections/actions', () => ({
+mock.module('@/lib/time-corrections/read-actions', () => ({
   getProvisionalTimeSummary: seam('provisional-time-summary'),
   getTimeCorrectionRequests: seam('time-correction-requests'),
   getTimeCorrectionHistoryPage: seam('time-correction-history'),
