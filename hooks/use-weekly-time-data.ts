@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, type RefObject } from 'react';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import type { WeeklyTimeDataPoint, WeeklyTimeLabel } from '@/lib/time-tracking/types';
@@ -21,6 +21,78 @@ type WeekSnapshot = {
   todayIndex: number;
   weekLabel: WeeklyTimeLabel;
 };
+
+type WeekReadInput = Pick<
+  UseWeeklyTimeDataOptions,
+  'organizationId' | 'userId' | 'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
+>;
+
+/**
+ * The current week of one person. A failed targets read keeps the last
+ * resolved targets, which `lastKnownTargetsRef` carries between reads.
+ */
+async function readWeekSnapshot(
+  input: WeekReadInput,
+  lastKnownTargetsRef: RefObject<DailyTarget[] | undefined>,
+  signal: AbortSignal,
+): Promise<LiveViewResult<WeekSnapshot>> {
+  const { organizationId, userId, breakMode, autoBreakThresholdMinutes, autoBreakDurationMinutes } = input;
+  // Recompute week bounds fresh on every read so we never use stale dates
+  const { monday, sunday } = getWeekBounds();
+
+  if (!organizationId || !userId) {
+    return {
+      ok: true,
+      data: {
+        weekData: [],
+        weekTargets: lastKnownTargetsRef.current,
+        todayIndex: getTodayIndex(),
+        weekLabel: computeWeekLabel(monday),
+      },
+    };
+  }
+
+  const [result, targetsResult] = await Promise.all([
+    readInBackground(
+      'time-entries',
+      {
+        organizationId,
+        from: monday.toISOString(),
+        to: sunday.toISOString(),
+        userId,
+      },
+      signal,
+    ),
+    readInBackground('weekly-targets', { userId }, signal),
+  ]);
+
+  if (!result.success) {
+    return { ok: false, error: result.error };
+  }
+
+  const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
+  lastKnownTargetsRef.current = nextTargets;
+
+  return {
+    ok: true,
+    data: {
+      weekData: buildWeeklyTimeData(
+        result.entries || [],
+        monday,
+        normalizeTimeTrackingSettings({
+          organizationId,
+          breakMode,
+          autoBreakThresholdMinutes,
+          autoBreakDurationMinutes,
+        }),
+        nextTargets,
+      ),
+      weekTargets: nextTargets,
+      todayIndex: getTodayIndex(),
+      weekLabel: computeWeekLabel(monday),
+    },
+  };
+}
 
 interface UseWeeklyTimeDataOptions {
   organizationId: string;
@@ -64,63 +136,12 @@ export function useWeeklyTimeData({
       'organization_closure_days',
       'organization_settings',
     ],
-    read: async ({ signal }): Promise<LiveViewResult<WeekSnapshot>> => {
-      // Recompute week bounds fresh on every read so we never use stale dates
-      const { monday, sunday } = getWeekBounds();
-
-      if (!organizationId || !userId) {
-        return {
-          ok: true,
-          data: {
-            weekData: [],
-            weekTargets: lastKnownTargetsRef.current,
-            todayIndex: getTodayIndex(),
-            weekLabel: computeWeekLabel(monday),
-          },
-        };
-      }
-
-      const [result, targetsResult] = await Promise.all([
-        readInBackground(
-          'time-entries',
-          {
-            organizationId,
-            from: monday.toISOString(),
-            to: sunday.toISOString(),
-            userId,
-          },
-          signal,
-        ),
-        readInBackground('weekly-targets', { userId }, signal),
-      ]);
-
-      if (!result.success) {
-        return { ok: false, error: result.error };
-      }
-
-      const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
-      lastKnownTargetsRef.current = nextTargets;
-
-      return {
-        ok: true,
-        data: {
-          weekData: buildWeeklyTimeData(
-            result.entries || [],
-            monday,
-            normalizeTimeTrackingSettings({
-              organizationId,
-              breakMode,
-              autoBreakThresholdMinutes,
-              autoBreakDurationMinutes,
-            }),
-            nextTargets,
-          ),
-          weekTargets: nextTargets,
-          todayIndex: getTodayIndex(),
-          weekLabel: computeWeekLabel(monday),
-        },
-      };
-    },
+    read: ({ signal }) =>
+      readWeekSnapshot(
+        { organizationId, userId, breakMode, autoBreakThresholdMinutes, autoBreakDurationMinutes },
+        lastKnownTargetsRef,
+        signal,
+      ),
     initialData: initialWeekData
       ? {
           weekData: initialWeekData,
