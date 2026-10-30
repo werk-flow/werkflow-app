@@ -14,9 +14,7 @@
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
-    "lib/vacation/actions.ts": 984,
-    "lib/work-handover/actions.ts": 1100,
-    "lib/work-lifecycle/actions.ts": 907
+    "lib/vacation/actions.ts": 984
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
@@ -433,8 +431,8 @@
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
-    "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 86 },
-    "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 172 },
+    "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 83 },
+    "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 169 },
     "components/settings/password-change-card.tsx": { "PasswordChangeCard": 96 },
     "components/settings/personnel-onboarding-template-settings.tsx": {
       "PersonnelOnboardingTemplateSettings": 178
@@ -446,7 +444,7 @@
       "ResponsibilityCard": 93,
       "ConfigurationDialog": 85
     },
-    "components/settings/time-tracking-settings-form.tsx": { "TimeTrackingSettingsForm": 163 },
+    "components/settings/time-tracking-settings-form.tsx": { "TimeTrackingSettingsForm": 160 },
     "components/settings/use-email-change-wizard.ts": { "useEmailChangeWizard": 151 },
     "components/settings/use-password-change-flow.ts": { "usePasswordChangeFlow": 152 },
     "components/settings/use-profile-avatar-upload.ts": { "useProfileAvatarUpload": 168 },
@@ -626,19 +624,6 @@
     "lib/vacation/actions.ts": {
       "getPendingVacationRequestsForApprover": 116,
       "getVacationCalendarEntries": 98
-    },
-    "lib/work-artifacts/actions.ts": { "getWorkArtifactDetail": 136, "exportWorkArtifact": 97 },
-    "lib/work-artifacts/export.ts": { "buildWorkArtifactExport": 170 },
-    "lib/work-artifacts/validation.ts": { "saveWorkArtifactSchema": 102 },
-    "lib/work-handover/actions.ts": {
-      "loadTargetSnapshot": 158,
-      "loadAvailableSources": 161,
-      "loadWorkspace": 110,
-      "loadFrozenSummaries": 115,
-      "releaseWorkHandover": 84
-    },
-    "lib/work-lifecycle/actions.ts": { "loadEntityOptions": 86 },
-    "lib/work-templates/actions.ts": { "saveWorkTemplateDraft": 82, "applyWorkTemplate": 93 },
-    "lib/work-templates/server.ts": { "loadWorkTemplateDetail": 181 }
+    }
   }
 }

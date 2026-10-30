@@ -1,16 +1,13 @@
 import { SettingsPlaceholder } from '@/components/settings/settings-placeholder';
-import { getSettingsSectionBySlug } from '@/lib/settings/sections';
+import { readSettingsSectionMembership } from '@/lib/settings/section-access';
+import type { SettingsSectionSlug } from '@/lib/settings/sections';
 
 type SettingsPlaceholderPageProps = {
-  slug: string;
+  slug: SettingsSectionSlug;
 };
 
-export function SettingsPlaceholderPage({ slug }: SettingsPlaceholderPageProps) {
-  const section = getSettingsSectionBySlug(slug);
-
-  if (!section) {
-    return null;
-  }
-
+/** A settings section without options yet, opened only by the roles that see it. */
+export async function SettingsPlaceholderPage({ slug }: SettingsPlaceholderPageProps) {
+  await readSettingsSectionMembership(slug);
   return <SettingsPlaceholder />;
 }

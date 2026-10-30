@@ -6,8 +6,10 @@ export type WorkArtifactStatus = Database['public']['Enums']['work_artifact_stat
 export type WorkArtifactVisibility = Database['public']['Enums']['work_artifact_visibility'];
 export type WorkArtifactActionType = Database['public']['Enums']['work_artifact_action_type'];
 export type WorkArtifactMeasurementUnit = Database['public']['Enums']['work_artifact_measurement_unit'];
-type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
-type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+export type WorkArtifactRow = Database['public']['Tables']['work_artifacts']['Row'];
+export type WorkArtifactRevisionRow = Database['public']['Tables']['work_artifact_revisions']['Row'];
+/** The job or project an artifact belongs to. */
+export type WorkArtifactTarget = { targetType: 'job' | 'project'; targetId: string };
 export type WorkArtifactActionRow = Database['public']['Tables']['work_artifact_actions']['Row'];
 type WorkArtifactMeasurementLineRow = Database['public']['Tables']['work_artifact_measurement_lines']['Row'];
 type WorkArtifactDefectDetailRow = Database['public']['Tables']['work_artifact_defect_details']['Row'];
