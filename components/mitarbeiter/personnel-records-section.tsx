@@ -14,7 +14,7 @@ import {
   getAccessState,
   getEmploymentState,
 } from '@/lib/personnel/types';
-import type { PersonnelListEntry } from '@/lib/personnel/actions';
+import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import { formatGermanDate } from '@/lib/utils';
 import { SectionTitle } from '@/components/shared/section-title';
 
