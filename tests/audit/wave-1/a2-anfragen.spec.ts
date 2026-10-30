@@ -38,6 +38,7 @@ import {
   requestConvertButton,
   requestDocumentTrashedMessage,
   requestField,
+  requestsNavLink,
   searchRequests,
   setRequestStatusFromDetail,
   showRequestStatus,
@@ -532,5 +533,13 @@ test.describe('A2 Anfragen @AUDIT-W1-A2', () => {
       await searchRequests(bueroPage, query);
       await expect(visibleText(bueroPage, expected)).toBeVisible();
     }
+  });
+
+  // The server refuses the pages (lib/org/office-page-access.test.ts); this checks the rendered sidebar.
+  test('A2-D02: Handwerker findet Anfragen nicht in der Navigation', async ({ bueroPage, employeePage }) => {
+    await bueroPage.goto('/dashboard');
+    await expect(requestsNavLink(bueroPage)).toBeVisible();
+    await employeePage.goto('/dashboard');
+    await expect(requestsNavLink(employeePage)).toHaveCount(0);
   });
 });
