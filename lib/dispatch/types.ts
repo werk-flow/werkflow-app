@@ -148,6 +148,17 @@ export type EmployeeDispatchCard = {
   myOpenChallengeReason: string | null;
 };
 
+// One preview row per selected occurrence: the catalog promises the manager
+// sees each visit's old and new schedule BEFORE committing the batch.
+export type BatchPreviewItem = {
+  occurrenceId: string;
+  title: string;
+  oldStartAt: string | null;
+  oldStartDate: string | null;
+  newStartAt: string | null;
+  newStartDate: string | null;
+};
+
 /** Dispatch-owned sentences; the shared codes come from `describeFailure`. */
 const DISPATCH_ERROR_MESSAGES: Record<string, string> = {
   load_failed: 'Die Einsatzdaten konnten nicht geladen werden.',

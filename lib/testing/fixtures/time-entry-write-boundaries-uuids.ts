@@ -148,12 +148,25 @@ const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
 let rpcRefusal: string | null = null;
 /** A table whose reads fail as a dropped connection would. */
 let failingReadTable: string | null = null;
+/** The message a time_entries insert is refused with, as a database trigger would. */
+let entryInsertRefusal: string | null = null;
 const createAdmin = () => {
   const admin = createInMemoryAdmin(tables);
   return {
     ...admin,
     from: (table: string) => {
       const query = admin.from(table);
+      const refusal = entryInsertRefusal;
+      if (table === 'time_entries' && refusal) {
+        query.insert = () => {
+          query.then = (onFulfilled, onRejected) =>
+            Promise.resolve({ data: null, error: { code: 'P0001', message: refusal }, count: null }).then(
+              onFulfilled,
+              onRejected,
+            );
+          return query;
+        };
+      }
       if (table === failingReadTable) {
         query.then = (onFulfilled, onRejected) =>
           Promise.resolve({ data: null, error: { code: '08006', message: 'read failed' }, count: null }).then(
@@ -456,6 +469,13 @@ assert.equal(adminEntry.success, true);
 tables.job_assignments = [
   { id: crypto.randomUUID(), organization_id: ownOrganization, job_id: ownJob, user_id: employeeUser },
 ];
+// An assignment removed after the action read it: the database refuses the
+// insert, and the employee reads the same refusal.
+entryInsertRefusal = 'manual_entry_job_not_assigned';
+const beforeRefusedInsert = entryIds();
+assert.deepEqual(await employeeClockIn(ownJob), { success: false, error: 'job_not_assigned' });
+assert.deepEqual(entryIds(), beforeRefusedInsert);
+entryInsertRefusal = null;
 const assigned = await employeeClockIn(ownJob);
 assert.ok(assigned.success);
 assert.deepEqual(

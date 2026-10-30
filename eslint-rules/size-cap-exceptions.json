@@ -7,8 +7,6 @@
     "lib/attention/actions.ts": 1440,
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/customer-relationships/actions.ts": 1427,
-    "lib/dispatch/actions.ts": 895,
-    "lib/dispatch/server.ts": 853,
     "lib/documents/actions.ts": 1584,
     "lib/inventory/actions.ts": 1567,
     "lib/jobs/actions.ts": 1021,
@@ -550,14 +548,6 @@
       "addTimelineWorkAndEventItems": 127,
       "loadFollowUpSourceReferences": 156
     },
-    "lib/dispatch/actions.ts": { "prepareBatchReschedule": 144 },
-    "lib/dispatch/readiness-target.ts": { "loadTravelNotesForOccurrence": 104 },
-    "lib/dispatch/readiness.ts": { "composeReadiness": 96 },
-    "lib/dispatch/server.ts": {
-      "loadDispatchViews": 113,
-      "loadDispatchOverview": 153,
-      "loadEmployeeDispatchCards": 166
-    },
     "lib/documents/access.ts": { "getAuthorizedDocument": 129 },
     "lib/documents/actions.ts": { "getDocumentLibrary": 87 },
     "lib/documents/folder-copy.ts": { "copyFolderTree": 109 },
@@ -664,7 +654,7 @@
     "lib/time-tracking/clock-actions.ts": { "deriveClockActions": 128 },
     "lib/time-tracking/clock-state-actions.ts": { "clockOutBeforeSignOut": 118, "getCurrentClockState": 90 },
     "lib/time-tracking/entry-read-actions.ts": { "getTimeEntries": 106 },
-    "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 98, "updateEntry": 92 },
+    "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 93, "updateEntry": 92 },
     "lib/time-tracking/review-actions.ts": { "reviewEntries": 94 },
     "lib/time-tracking/segment-actions.ts": { "getCanonicalClockState": 124 },
     "lib/time-tracking/settings-actions.ts": { "updateTimeTrackingSettings": 88 },
