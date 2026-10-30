@@ -113,6 +113,13 @@ for (const width of [375, 1280]) {
     expect(await confirmation.evaluate((layer) => layer.scrollHeight > layer.clientHeight)).toBe(true);
     await expect(confirmation.getByRole('button', { name: 'Abbrechen' })).toBeFocused();
     await expectDialogFits(confirmation, `long confirmation at ${width}`);
+    // Focusing the action scrolls the footer into view by itself; the sticky footer must also hold at the top and midway.
+    for (const position of [0, 0.5]) {
+      await confirmation.evaluate((layer, ratio) => {
+        layer.scrollTop = (layer.scrollHeight - layer.clientHeight) * ratio;
+      }, position);
+      await expectDialogFits(confirmation, `long confirmation at ${width}, scrolled to ${position * 100} %`);
+    }
   });
 }
 

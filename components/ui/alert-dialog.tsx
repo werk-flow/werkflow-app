@@ -9,6 +9,7 @@ import { buttonVariants } from '@/components/ui/button';
 import { RegisterOpenDialog } from '@/components/ui/open-dialog-context';
 import { useReturnFocus } from '@/components/ui/return-focus';
 import { Spinner } from '@/components/ui/spinner';
+import { ErrorText } from '@/components/ui/error-text';
 
 /** True while the confirmation's request runs; see `AlertDialog`'s `pending`. */
 const AlertDialogPendingContext = React.createContext(false);
@@ -131,22 +132,33 @@ function AlertDialogBody({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
+const FOOTER_ACTIONS = 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end';
+
 /**
  * Sticks to the bottom of a confirmation that scrolls as a whole, so its
  * actions stay in reach without an AlertDialogBody. The negative margins with
  * matching padding cover the content's padding, so text scrolls under the
- * footer instead of showing below it.
+ * footer instead of showing below it. A failed confirm shows its `error` here,
+ * above the actions: as content before the footer it could sit out of view.
  */
-function AlertDialogFooter({ className, ...props }: React.ComponentProps<'div'>) {
+function AlertDialogFooter({
+  className,
+  error,
+  children,
+  ...props
+}: React.ComponentProps<'div'> & { error?: React.ReactNode }) {
+  const sticky = 'bg-background sticky -bottom-6 -mx-6 -mb-6 px-6 pb-6';
+  if (!error)
+    return (
+      <div data-slot="alert-dialog-footer" className={cn(sticky, FOOTER_ACTIONS, className)} {...props}>
+        {children}
+      </div>
+    );
   return (
-    <div
-      data-slot="alert-dialog-footer"
-      className={cn(
-        'bg-background sticky -bottom-6 -mx-6 -mb-6 flex flex-col-reverse gap-2 px-6 pb-6 sm:flex-row sm:justify-end',
-        className,
-      )}
-      {...props}
-    />
+    <div data-slot="alert-dialog-footer" className={cn(sticky, 'flex flex-col gap-2')} {...props}>
+      <ErrorText>{error}</ErrorText>
+      <div className={cn(FOOTER_ACTIONS, className)}>{children}</div>
+    </div>
   );
 }
 
