@@ -274,11 +274,13 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
   test('Handwerker erreicht keine Verwaltung des Feiertagskalenders und der Betriebsruhe', async ({
     employeePage,
   }) => {
-    // The settings surface is read-only for employees: no region editing, no
-    // closure-day form.
+    // The time settings are an Admin and Büro section: the server sends an
+    // employee to their profile, so neither the region nor the closure-day
+    // form renders (werk-flow/werkflow-planning#74).
     await employeePage.goto('/einstellungen/zeiterfassung');
-    await expect(holidayRegionSelect(employeePage)).toBeDisabled();
-    await expect(saveHolidayRegionButton(employeePage)).toBeDisabled();
+    await expect(employeePage).toHaveURL(/\/einstellungen\/profil$/);
+    await expect(holidayRegionSelect(employeePage)).toHaveCount(0);
+    await expect(saveHolidayRegionButton(employeePage)).toHaveCount(0);
     await expect(closureDaySubmitButton(employeePage)).toHaveCount(0);
     // Which schedule rows each role can read is a database rule:
     // supabase/tests/people_boundaries.sql.

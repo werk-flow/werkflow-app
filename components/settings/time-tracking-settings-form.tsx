@@ -1,11 +1,12 @@
 'use client';
 
-import { describeFailure } from '@/lib/action-messages';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
+import { useSaveChangesSubmit } from '@/components/settings/use-save-changes-submit';
+import { saveFailureBanner } from '@/lib/settings/save-answers';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +27,6 @@ const ERROR_MESSAGES = {
   org_not_found: 'Die aktive Organisation konnte nicht gefunden werden.',
   not_authorized: 'Nur Admins können diese Regeln ändern.',
   invalid_input: 'Bitte prüfe die Pausenregeln.',
-  no_changes: 'Es wurden keine Änderungen vorgenommen.',
   update_failed: 'Die Zeiterfassungsregeln konnten nicht gespeichert werden.',
 } satisfies Record<string, string>;
 
@@ -64,7 +64,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
     });
   }, [initialAutoBreakDurationMinutes, initialAutoBreakThresholdMinutes, initialBreakMode, reset]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
       return;
     }
@@ -73,10 +73,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
       const result = await runSave(values);
 
       if (!result.success) {
-        showBanner({
-          message: describeFailure(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed),
-          variant: 'error',
-        });
+        showBanner(saveFailureBanner(result.error, ERROR_MESSAGES, ERROR_MESSAGES.update_failed));
         return;
       }
 
@@ -202,7 +199,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
                   ? 'Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.'
                   : 'Du kannst diese Regeln einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={!canEdit || isSaving}>
                 {isSaving ? 'Speichert…' : 'Zeiterfassung speichern'}
               </Button>
             </CardFooter>

@@ -198,10 +198,14 @@ function staticAttributeValue(attribute) {
 // pending flag names the running request (isSaving, isPending, submitting,
 // busy.isBusy("x"), anyBusy, isLoading). An availability flag names an action
 // that does not exist right now, not a field the user still has to fill
-// (formDisabled, readOnly, !hydrated, !canEdit, !isDirty: nothing to save).
+// (formDisabled, readOnly, !hydrated, !canEdit). A `*Dirty` flag keeps its
+// name in a local condition, but a submit never waits on it: a save without a
+// change stays pressable and says there is nothing to save (the settings
+// saves, walkthrough of 2026-10).
 const PENDING_FLAG =
   /pending|busy|saving|submitting|loading|sending|deleting|uploading|working|resetting|redirecting|starting|previewing|adding|challenging|resolving|refreshing|extending|creating|importing/i;
 const AVAILABILITY_FLAG = /disabled$|^readOnly$|^hydrated$|^canEdit$|dirty$/i;
+const SUBMIT_AVAILABILITY_FLAG = /disabled$|^readOnly$|^hydrated$|^canEdit$/i;
 
 const CONDITION_TYPES = new Set([
   'LogicalExpression',
@@ -344,13 +348,13 @@ const submitDisabledOnlyWhilePendingRule = {
     schema: [],
     messages: {
       validationHint:
-        "A submit button is disabled only while its request is pending. `{{name}}` is not a pending or availability flag (PENDING_FLAG / AVAILABILITY_FLAG in eslint-rules/ui-rules.mjs): keep the button enabled, show the missing field through Field's `error` and focus it on submit (werkflow-design skill: Forms and Enter).",
+        "A submit button is disabled only while its request is pending. `{{name}}` is not a pending or availability flag (PENDING_FLAG / SUBMIT_AVAILABILITY_FLAG in eslint-rules/ui-rules.mjs): keep the button enabled; on submit, show the missing field through Field's `error` and focus it, or say that there is nothing to save (werkflow-design skill: Forms and Enter).",
     },
   },
   create(context) {
     const report = (expression, node) => {
       const offending = referencedFlagNames(expression, conditionResolver(context)).find(
-        (name) => !PENDING_FLAG.test(name) && !AVAILABILITY_FLAG.test(name),
+        (name) => !PENDING_FLAG.test(name) && !SUBMIT_AVAILABILITY_FLAG.test(name),
       );
       if (offending) context.report({ node, messageId: 'validationHint', data: { name: offending } });
     };

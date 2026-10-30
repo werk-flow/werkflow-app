@@ -6,7 +6,8 @@ import { useBanner } from '@/components/ui/banner';
 import { focusFirstInvalidField, REASON_MIN_3_MESSAGE } from '@/lib/ui/field-validation';
 import { saveWorkArtifact } from '@/lib/work-artifacts/actions';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
-import { compact, iso, type WorkArtifactTarget } from './work-artifact-content';
+import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
+import { compact, iso } from './work-artifact-content';
 
 /** Saves the draft as a new revision, optionally submitting it for review. */
 export function useWorkArtifactSave({
