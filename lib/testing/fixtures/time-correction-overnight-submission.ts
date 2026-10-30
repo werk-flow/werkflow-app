@@ -1,0 +1,100 @@
+// The actual submitTimeCorrection over the in-memory database: a forgotten
+// overnight shift from 22:00 to 01:30 goes in as one request whose proposal
+// closes and reopens at Berlin midnight, and recorded time after midnight
+// still refuses it as an overlap before any request is written. Only legacy
+// entries are recorded here, so canonical segments and approved corrections read empty.
+import assert from 'node:assert/strict';
+import { mock } from 'bun:test';
+import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs, tableRows } from './action-boundary-world';
+
+const ownRecordId = '86000000-0000-4000-8000-000000000001';
+const firstOperationId = '86000000-0000-4000-8000-000000000002';
+const secondOperationId = '86000000-0000-4000-8000-000000000003';
+
+const world = installActionWorld({
+  employee_records: [{ id: ownRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID }],
+  organization_members: [{ organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' }],
+  time_entries: [],
+});
+mock.module('@/lib/time-tracking/canonical-entries', () => ({
+  getCanonicalTimeEntries: async () => ({ success: true, entries: [] }),
+}));
+mock.module('@/lib/time-corrections/approved-projection', () => ({
+  loadApprovedCorrectionProjection: async () => [],
+}));
+world.rpc = ({ name }) => {
+  assert.equal(name, 'create_time_correction_request');
+  return { data: { requestId: 'request', status: 'submitted', replayed: false }, error: null };
+};
+const { submitTimeCorrection } = await import('@/lib/time-corrections/actions');
+
+const overnightShift = (operationId: string) =>
+  submitTimeCorrection({
+    organizationId: ORGANIZATION_A,
+    subjectEmployeeRecordId: ownRecordId,
+    kind: 'missed_clock',
+    reason: 'Notdienst, Ausstempeln vergessen',
+    source: null,
+    proposedFacts: [
+      {
+        factId: 'start',
+        employeeRecordId: ownRecordId,
+        entryType: 'clock_in',
+        timestamp: '2026-10-20T22:00:00+02:00',
+      },
+      {
+        factId: 'end',
+        employeeRecordId: ownRecordId,
+        entryType: 'clock_out',
+        timestamp: '2026-10-21T01:30:00+02:00',
+      },
+    ],
+    operationId,
+  });
+
+signInAs(world, 'employee');
+assert.deepEqual(await overnightShift(firstOperationId), {
+  success: true,
+  requestId: 'request',
+  status: 'submitted',
+  replayed: false,
+});
+const [created] = world.rpcCalls;
+assert.ok(created, 'the request is written');
+const proposed = created.args.p_proposed_snapshot;
+assert.ok(proposed && typeof proposed === 'object' && 'facts' in proposed && Array.isArray(proposed.facts));
+assert.deepEqual(
+  proposed.facts.map((fact: { entryType: string; timestamp: string }) => [fact.entryType, fact.timestamp]),
+  [
+    ['clock_in', '2026-10-20T20:00:00.000Z'],
+    ['clock_out', '2026-10-20T22:00:00.000Z'],
+    ['clock_in', '2026-10-20T22:00:00.000Z'],
+    ['clock_out', '2026-10-20T23:30:00.000Z'],
+  ],
+);
+
+// Recorded time after midnight is a real overlap: refused before any request is written.
+tableRows(world, 'time_entries').push(
+  ...[
+    ['clock_in', '2026-10-20T22:30:00.000Z'],
+    ['clock_out', '2026-10-20T23:00:00.000Z'],
+  ].map(([entryType, timestamp], index) => ({
+    id: `86000000-0000-4000-8000-00000000001${index}`,
+    organization_id: ORGANIZATION_A,
+    user_id: CALLER_ID,
+    entry_type: entryType,
+    timestamp,
+    is_manual: false,
+    job_id: null,
+    status: 'approved',
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+  })),
+);
+assert.deepEqual(await overnightShift(secondOperationId), {
+  success: false,
+  error: 'correction_timeline_conflict',
+});
+assert.equal(world.rpcCalls.length, 1, 'a refused overnight correction writes nothing');

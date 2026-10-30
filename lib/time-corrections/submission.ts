@@ -7,6 +7,7 @@ import type { Json } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import { proposeCalendarCorrection } from './calendar-proposal';
 import { mergeCorrectionProposal } from './merge-proposal';
+import { splitCorrectionFactsAtMidnight } from './timeline-validation';
 import {
   loadEmployeeIdentities,
   loadSourceContext,
@@ -257,13 +258,17 @@ export async function proposeSubmission(input: {
   });
   if (!proposedSnapshot) return { success: false, error: 'source_not_found' };
   const sources = contexts.flatMap((context) => (context.source ? [context.source] : []));
-  const proposed = submission.calendarAdjustment
+  const merged = submission.calendarAdjustment
     ? proposedSnapshot
     : mergeCorrectionProposal(submission.kind, before, proposedSnapshot);
-  if (!proposed) return { success: false, error: 'activity_context_required' };
-  if (!hasValidChronology(proposed)) {
+  if (!merged) return { success: false, error: 'activity_context_required' };
+  if (!hasValidChronology(merged)) {
     return { success: false, error: 'invalid_time_order' };
   }
+  const proposed: TimeCorrectionSnapshot = {
+    ...merged,
+    facts: splitCorrectionFactsAtMidnight(merged.facts),
+  };
   if (
     submission.calendarAdjustment &&
     proposed.facts.some((fact) => Date.parse(fact.timestamp) > Date.now())
