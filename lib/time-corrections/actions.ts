@@ -8,60 +8,64 @@ import { revalidatePath } from 'next/cache';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { resolveActionContextFor } from '@/lib/org/action-context';
 import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
-import { logError } from '@/lib/logging';
-import { canHolderApproveTarget } from '@/lib/responsibilities/resolution';
 import {
   authorizeResponsibilityForTarget,
   getEffectiveResponsibilityHolderForActor,
-  loadResponsibilityRuntimeState,
 } from '@/lib/responsibilities/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { isJsonRecord } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
-import { proposeCalendarCorrection } from './calendar-proposal';
-import { mergeCorrectionProposal } from './merge-proposal';
 import {
   checkCorrectionTimeline,
   checkCorrectionReviewTimeline,
   correctionOperationExists,
   readCorrectionTimelineRevision,
 } from './timeline-server';
-import { toTimeSegmentFact, type TimeSegmentFact } from '@/lib/time-tracking/segments';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { createSegmentCorrectionSnapshot } from './segment-snapshot';
-import type { Json, Tables } from '@/lib/supabase/database.types';
-import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
-import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
-import { correctionHistoryVisibility } from './history-visibility';
-import type { OrgRole } from '@/lib/roles';
-import type { TimeEntryType } from '@/lib/time-tracking/types';
-
-import {
-  isTimeCorrectionSnapshot,
-  type TimeCorrectionFact,
-  type TimeCorrectionHistoryResult,
-  type TimeCorrectionListResult,
-  type TimeCorrectionRequest,
-  type TimeCorrectionResult,
-  type TimeCorrectionSnapshot,
-  type TimeCorrectionSource,
-} from './types';
+import { readInBatches } from '@/lib/supabase/query-batches';
+import { Constants, type Json, type Tables } from '@/lib/supabase/database.types';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import {
   createPendingProjectionPort,
   loadPendingCorrectionProjection,
-  PENDING_CORRECTION_STATUSES,
+  type PendingCorrectionRequest,
 } from './pending-projection';
+import { loadEmployeeIdentities } from './source-context';
+import {
+  loadSubmissionContexts,
+  proposeSubmission,
+  submissionResponsibility,
+  submissionShapeError,
+  submissionSourceInputs,
+} from './submission';
+
+import {
+  correctionSourceId,
+  type TimeCorrectionRequest,
+  type TimeCorrectionResult,
+  type TimeCorrectionSource,
+} from './types';
 import {
   reviewTimeCorrectionSchema,
   submitTimeCorrectionSchema,
-  validateCorrectionShape,
   type ReviewTimeCorrectionInput,
   type SubmitTimeCorrectionInput,
 } from './validation';
 import { z } from '@/lib/zod';
 import { uuidSchema } from '@/lib/validation/uuid';
 
+// The Server Actions that write time corrections: submit, review, withdraw
+// and resubmit a request, and review several at once. Beside them the
+// provisional projection the time-tracking entry reads merge in; its
+// reviewed result-shape exception names this module. The other reads live
+// in read-actions.ts.
+
 const correctionDateSchema = z.string().max(40);
+const correctionProjectionSchema = z.object({
+  organizationId: uuidSchema,
+  from: correctionDateSchema,
+  to: correctionDateSchema,
+  userId: uuidSchema.optional(),
+});
 const withdrawCorrectionSchema = z.object({ requestId: uuidSchema, operationId: uuidSchema });
 const resubmitCorrectionSchema = z.object({
   requestId: uuidSchema,
@@ -74,40 +78,6 @@ const reviewCorrectionsBatchSchema = z.object({
   decision: z.enum(['approve', 'reject']),
   comment: z.string().max(4000).nullable(),
 });
-const correctionProjectionSchema = z.object({
-  organizationId: uuidSchema,
-  from: correctionDateSchema,
-  to: correctionDateSchema,
-  userId: uuidSchema.optional(),
-});
-const correctionSummarySchema = z.object({ organizationId: uuidSchema, userId: uuidSchema });
-const correctionListSchema = z.object({
-  organizationId: uuidSchema,
-  scope: z.literal('approvals'),
-});
-const correctionHistorySchema = z.object({
-  organizationId: uuidSchema,
-  page: z.number().int().min(1).max(1_000_000),
-});
-const historySelectionSchema = z.object({
-  total: z.number().int().nonnegative(),
-  ids: z.array(uuidSchema).max(LIST_PAGE_SIZE),
-});
-
-type EmployeeIdentity = {
-  id: string;
-  userId: string;
-  role: OrgRole;
-};
-
-type SourceContext = {
-  source: TimeCorrectionSource | null;
-  snapshot: TimeCorrectionSnapshot;
-  segment?: TimeSegmentFact;
-};
-
-/** Why a source has no context: it is gone or foreign, or a read of it failed. */
-type SourceRefusal = 'source_not_found' | 'correction_timeline_unavailable';
 
 function digest(value: unknown): string {
   return createHash('sha256')
@@ -115,254 +85,20 @@ function digest(value: unknown): string {
     .digest('hex');
 }
 
-function normalizeTimestampSourceVersion(value: string): string {
-  return value
-    .replace('T', ' ')
-    .replace(/Z$/, '+00')
-    .replace(/\+00:00$/, '+00');
-}
-
-async function getMembershipRole(
-  organizationId: string,
-): Promise<{ success: true; role: OrgRole } | ActionFailure<'not_authenticated' | 'not_a_member'>> {
-  const caller = await resolveActionContextFor(organizationId);
-  return caller.success ? { success: true, role: caller.context.role } : caller;
-}
-
-async function loadEmployeeIdentities(
-  organizationId: string,
-  employeeRecordIds: readonly string[],
-): Promise<Map<string, EmployeeIdentity> | null> {
-  const uniqueIds = [...new Set(employeeRecordIds)];
-  if (uniqueIds.length === 0) return new Map();
-  const admin = createSupabaseAdminClient();
-  const { data: employees, error: employeeError } = await readInBatches(uniqueIds, (batch) =>
-    admin
-      .from('employee_records')
-      .select('id, user_id')
-      .eq('organization_id', organizationId)
-      .in('id', [...batch])
-      .not('user_id', 'is', null),
-  );
-  if (employeeError) logReadFailure('loadEmployeeIdentities: employee records failed', employeeError);
-  if (employeeError || employees.length !== uniqueIds.length) return null;
-  const userIds = employees.map((employee) => employee.user_id as string);
-  const { data: memberships, error: membershipError } = await readInBatches(userIds, (batch) =>
-    admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', organizationId)
-      .in('user_id', [...batch]),
-  );
-  if (membershipError) logReadFailure('loadEmployeeIdentities: memberships failed', membershipError);
-  if (membershipError || memberships.length !== uniqueIds.length) return null;
-  const roleByUser = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
-  return new Map(
-    employees.map((employee) => [
-      employee.id,
-      {
-        id: employee.id,
-        userId: employee.user_id as string,
-        role: roleByUser.get(employee.user_id as string) as OrgRole,
-      },
-    ]),
-  );
-}
-
-async function loadSourceContext(input: {
-  organizationId: string;
-  subject: EmployeeIdentity;
-  source: SubmitTimeCorrectionInput['source'];
-}): Promise<SourceContext | SourceRefusal> {
-  if (!input.source) return { source: null, snapshot: { schemaVersion: 1, facts: [] } };
-  const admin = createSupabaseAdminClient();
-
-  if (input.source.kind === 'legacy_entry') {
-    const { data: entry, error } = await admin
-      .from('time_entries')
-      .select('id, user_id, entry_type, timestamp, job_id, is_manual, updated_at')
-      .eq('id', input.source.id)
-      .eq('organization_id', input.organizationId)
-      .maybeSingle();
-    if (error) {
-      logReadFailure('loadSourceContext: legacy entry failed', error);
-      return 'correction_timeline_unavailable';
-    }
-    if (!entry || entry.user_id !== input.subject.userId) return 'source_not_found';
-    return {
-      source: {
-        kind: 'legacy_entry',
-        id: entry.id,
-        version: normalizeTimestampSourceVersion(entry.updated_at),
-      },
-      snapshot: {
-        schemaVersion: 1,
-        facts: [
-          {
-            factId: entry.id,
-            employeeRecordId: input.subject.id,
-            userId: input.subject.userId,
-            entryType: entry.entry_type as TimeEntryType,
-            timestamp: entry.timestamp,
-            jobId: entry.job_id,
-            activityKind: null,
-            isManual: entry.is_manual,
-          },
-        ],
-      },
-    };
-  }
-
-  if (input.source.kind === 'canonical_segment') {
-    const { data: segment, error } = await admin
-      .from('time_segments')
-      .select('*')
-      .eq('id', input.source.id)
-      .eq('organization_id', input.organizationId)
-      .maybeSingle();
-    if (error) {
-      logReadFailure('loadSourceContext: segment failed', error);
-      return 'correction_timeline_unavailable';
-    }
-    if (!segment || segment.employee_record_id !== input.subject.id) return 'source_not_found';
-    const session = await readCompleteRows(
-      (from, to) =>
-        admin
-          .from('time_segments')
-          .select('*')
-          .eq('organization_id', input.organizationId)
-          .eq('employee_record_id', input.subject.id)
-          .eq('session_id', segment.session_id)
-          .order('started_at')
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    );
-    if (session.error) {
-      logReadFailure('loadSourceContext: session segments failed', session.error);
-      return 'correction_timeline_unavailable';
-    }
-    if (!session.data.length) return 'source_not_found';
-    const segmentFact = toTimeSegmentFact(segment);
-    return {
-      source: {
-        kind: 'canonical_segment',
-        id: segment.id,
-        version: normalizeTimestampSourceVersion(segment.updated_at),
-      },
-      snapshot: createSegmentCorrectionSnapshot(
-        segmentFact,
-        session.data.map(toTimeSegmentFact),
-        input.subject.userId,
-      ),
-      segment: segmentFact,
-    };
-  }
-
-  if (input.source.kind === 'correction_application') {
-    const { data: application, error } = await admin
-      .from('time_correction_applications')
-      .select('id, source_fingerprint, applied_snapshot, request_id')
-      .eq('id', input.source.id)
-      .eq('organization_id', input.organizationId)
-      .maybeSingle();
-    if (error) {
-      logReadFailure('loadSourceContext: correction application failed', error);
-      return 'correction_timeline_unavailable';
-    }
-    if (!application || !isTimeCorrectionSnapshot(application.applied_snapshot)) {
-      return 'source_not_found';
-    }
-    const { data: request, error: requestError } = await admin
-      .from('time_correction_requests')
-      .select('subject_employee_record_id')
-      .eq('id', application.request_id)
-      .eq('organization_id', input.organizationId)
-      .maybeSingle();
-    if (requestError) {
-      logReadFailure('loadSourceContext: correction request failed', requestError);
-      return 'correction_timeline_unavailable';
-    }
-    const effectiveOwners = new Set(application.applied_snapshot.facts.map((fact) => fact.employeeRecordId));
-    const effectiveOwner =
-      effectiveOwners.size === 1
-        ? effectiveOwners.values().next().value
-        : request?.subject_employee_record_id;
-    if (effectiveOwner !== input.subject.id) return 'source_not_found';
-    return {
-      source: {
-        kind: 'correction_application',
-        id: application.id,
-        version: application.source_fingerprint,
-      },
-      snapshot: application.applied_snapshot,
-    };
-  }
-
-  return 'source_not_found';
-}
-
-async function buildProposedSnapshot(input: {
-  organizationId: string;
-  proposedFacts: Array<
-    SubmitTimeCorrectionInput['proposedFacts'][number] & Pick<TimeCorrectionFact, 'activity'>
-  >;
-}): Promise<TimeCorrectionSnapshot | null> {
-  const identities = await loadEmployeeIdentities(
-    input.organizationId,
-    input.proposedFacts.map((fact) => fact.employeeRecordId),
-  );
-  if (!identities) return null;
-  const jobIds = [...new Set(input.proposedFacts.flatMap((fact) => (fact.jobId ? [fact.jobId] : [])))];
-  const { data: jobs, error: jobError } = await readInBatches(jobIds, (batch) =>
-    createSupabaseAdminClient()
-      .from('jobs')
-      .select('id')
-      .eq('organization_id', input.organizationId)
-      .in('id', [...batch]),
-  );
-  if (jobError) logReadFailure('buildProposedSnapshot: jobs failed', jobError);
-  if (jobError || jobs.length !== jobIds.length) return null;
-  const facts = input.proposedFacts.map((fact): TimeCorrectionFact => {
-    const identity = identities.get(fact.employeeRecordId);
-    if (!identity) throw new Error('time_correction_employee_missing');
-    return {
-      factId: fact.factId,
-      employeeRecordId: identity.id,
-      userId: identity.userId,
-      entryType: fact.entryType,
-      timestamp: new Date(fact.timestamp).toISOString(),
-      jobId: fact.jobId ?? null,
-      activityKind: fact.activityKind ?? null,
-      ...(fact.activity ? { activity: fact.activity } : {}),
-      isManual: true,
-    };
-  });
-  return { schemaVersion: 1, facts };
-}
-
 function toCorrectionResult(data: Json | null): TimeCorrectionResult {
   if (!isJsonRecord(data)) return { success: false, error: 'request_failed' };
-  const { requestId, applicationId, status, replayed } = data;
-  if (typeof requestId !== 'string' || typeof status !== 'string') {
+  const { requestId, applicationId, status: statusValue, replayed } = data;
+  const status = Constants.public.Enums.time_correction_status.find((value) => value === statusValue);
+  if (typeof requestId !== 'string' || status === undefined) {
     return { success: false, error: 'request_failed' };
   }
   return {
     success: true,
     requestId,
     ...(typeof applicationId === 'string' || applicationId === null ? { applicationId } : {}),
-    status: status as TimeCorrectionRequest['status'],
+    status,
     replayed: replayed === true,
   };
-}
-
-function hasValidChronology(snapshot: TimeCorrectionSnapshot): boolean {
-  return snapshot.facts.every((fact, index) => {
-    const timestamp = Date.parse(fact.timestamp);
-    if (!Number.isFinite(timestamp)) return false;
-    const previous = snapshot.facts[index - 1];
-    return !previous || timestamp >= Date.parse(previous.timestamp);
-  });
 }
 
 function timeCorrectionFailureCode(message: string): string {
@@ -389,148 +125,6 @@ function revalidateCorrectionSurfaces(): void {
   revalidatePath('/auftraege');
 }
 
-/** The refusal of a submission's shape, decided before any read; null when the shape fits. */
-function submissionShapeError(input: SubmitTimeCorrectionInput): string | null {
-  if (
-    input.calendarAdjustment &&
-    (input.source !== null || input.proposedFacts.length !== 0 || !['edit', 'reassign'].includes(input.kind))
-  ) {
-    return 'invalid_shape';
-  }
-  if (input.calendarAdjustment) {
-    const targets = new Set(input.calendarAdjustment.map((boundary) => boundary.employeeRecordId));
-    if (targets.size !== 1 || (input.kind === 'edit') !== targets.has(input.subjectEmployeeRecordId)) {
-      return 'invalid_shape';
-    }
-  }
-  return validateCorrectionShape({
-    kind: input.kind,
-    hasSource: Boolean(input.source || input.calendarAdjustment),
-    proposedFactCount: input.calendarAdjustment?.length ?? input.proposedFacts.length,
-  });
-}
-
-/**
- * The responsibility a submission for another person rests on, recorded with
- * the request; an own submission records none.
- */
-async function submissionResponsibility(
-  organizationId: string,
-  actorUserId: string,
-  subject: EmployeeIdentity,
-): Promise<{ success: true; snapshot: { [key: string]: Json | undefined } } | ActionFailure> {
-  if (subject.userId === actorUserId) return { success: true, snapshot: {} };
-  const authorization = await authorizeResponsibilityForTarget({
-    organizationId,
-    responsibility: 'time_approval',
-    actorUserId,
-    targetUserId: subject.userId,
-    targetRole: subject.role,
-  });
-  if (!authorization.success) {
-    return { success: false, error: authorization.error };
-  }
-  return {
-    success: true,
-    snapshot: {
-      holderEmployeeRecordId: authorization.holder.employeeRecordId,
-      source: authorization.holder.source,
-      configurationId: authorization.effective.configurationId,
-      resolvedAt: new Date().toISOString(),
-    },
-  };
-}
-
-/** The sources a submission names: each calendar boundary's source once, in a stable order. */
-function submissionSourceInputs(input: SubmitTimeCorrectionInput) {
-  return input.calendarAdjustment
-    ? [
-        ...new Map(
-          input.calendarAdjustment.map((boundary) => [
-            `${boundary.source.kind}:${boundary.source.id}`,
-            boundary.source,
-          ]),
-        ).entries(),
-      ]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, source]) => source)
-    : [input.source];
-}
-
-/** The context of every source, or the refusal of the first that has none. */
-async function loadSubmissionContexts(
-  organizationId: string,
-  subject: EmployeeIdentity,
-  sourceInputs: ReturnType<typeof submissionSourceInputs>,
-): Promise<{ success: true; contexts: SourceContext[] } | ActionFailure<SourceRefusal>> {
-  const contexts = await Promise.all(
-    sourceInputs.map((source) => loadSourceContext({ organizationId, subject, source })),
-  );
-  const refusals = contexts.filter((context) => typeof context === 'string');
-  if (refusals.length) {
-    // A failed read outranks a missing source: the source may well exist.
-    const error = refusals.includes('correction_timeline_unavailable')
-      ? 'correction_timeline_unavailable'
-      : 'source_not_found';
-    return { success: false, error };
-  }
-  return { success: true, contexts: contexts.filter((context) => typeof context !== 'string') };
-}
-
-/**
- * A calendar adjustment of legacy entries covers one whole approved session:
- * it runs from a clock-in to a clock-out, every entry inside it is a source,
- * and no session before it is still open. False when it does not, or when a
- * read fails; true when no legacy entry is a source.
- */
-async function coversWholeLegacySession(input: {
-  organizationId: string;
-  userId: string;
-  sourceInputs: ReturnType<typeof submissionSourceInputs>;
-  before: TimeCorrectionSnapshot;
-}): Promise<boolean> {
-  const legacySources = input.sourceInputs.filter((source) => source?.kind === 'legacy_entry');
-  if (!legacySources.length) return true;
-  const first = input.before.facts[0];
-  const last = input.before.facts.at(-1);
-  if (
-    legacySources.length !== input.sourceInputs.length ||
-    !first ||
-    !last ||
-    first.entryType !== 'clock_in' ||
-    last.entryType !== 'clock_out'
-  ) {
-    return false;
-  }
-  const admin = createSupabaseAdminClient();
-  const [inside, preceding] = await Promise.all([
-    admin
-      .from('time_entries')
-      .select('id, status')
-      .eq('organization_id', input.organizationId)
-      .eq('user_id', input.userId)
-      .gte('timestamp', first.timestamp)
-      .lte('timestamp', last.timestamp)
-      .limit(legacySources.length + 1),
-    admin
-      .from('time_entries')
-      .select('entry_type')
-      .eq('organization_id', input.organizationId)
-      .eq('user_id', input.userId)
-      .lt('timestamp', first.timestamp)
-      .order('timestamp', { ascending: false })
-      .limit(1),
-  ]);
-  const sourceIds = new Set(legacySources.map((source) => source?.id));
-  return !(
-    inside.error ||
-    preceding.error ||
-    inside.data?.length !== sourceIds.size ||
-    inside.data.some((entry) => !sourceIds.has(entry.id) || entry.status !== 'approved') ||
-    (preceding.data?.[0] && preceding.data[0].entry_type !== 'clock_out')
-  );
-}
-
 export async function submitTimeCorrection(
   rawInput: SubmitTimeCorrectionInput,
 ): Promise<TimeCorrectionResult> {
@@ -541,7 +135,7 @@ export async function submitTimeCorrection(
   if (shapeError) return { success: false, error: shapeError };
   const user = await getAuthenticatedUser();
   if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(input.organizationId);
+  const caller = await resolveActionContextFor(input.organizationId);
   if (!caller.success) return caller;
   const identities = await loadEmployeeIdentities(input.organizationId, [input.subjectEmployeeRecordId]);
   const subject = identities?.get(input.subjectEmployeeRecordId);
@@ -563,47 +157,14 @@ export async function submitTimeCorrection(
   }
   const loaded = await loadSubmissionContexts(input.organizationId, subject, sourceInputs);
   if (!loaded.success) return loaded;
-  const loadedContexts = loaded.contexts;
-  let beforeSnapshot: TimeCorrectionSnapshot = {
-    schemaVersion: 1,
-    facts: loadedContexts.flatMap((context) => context.snapshot.facts),
-  };
-  let proposedFacts: Parameters<typeof buildProposedSnapshot>[0]['proposedFacts'] = input.proposedFacts;
-  if (input.calendarAdjustment) {
-    const proposal = proposeCalendarCorrection({
-      contexts: loadedContexts,
-      boundaries: input.calendarAdjustment,
-    });
-    if (!proposal.success) return proposal;
-    proposedFacts = proposal.snapshot.facts;
-    beforeSnapshot = proposal.before;
-    const wholeSession = await coversWholeLegacySession({
-      organizationId: input.organizationId,
-      userId: subject.userId,
-      sourceInputs,
-      before: beforeSnapshot,
-    });
-    if (!wholeSession) return { success: false, error: 'calendar_incomplete_source' };
-  }
-  const proposedSnapshot = await buildProposedSnapshot({
-    organizationId: input.organizationId,
-    proposedFacts,
+  const proposal = await proposeSubmission({
+    submission: input,
+    subject,
+    sourceInputs,
+    contexts: loaded.contexts,
   });
-  if (!proposedSnapshot) return { success: false, error: 'source_not_found' };
-  const sources = loadedContexts.flatMap((context) => (context.source ? [context.source] : []));
-  const effectiveProposedSnapshot = input.calendarAdjustment
-    ? proposedSnapshot
-    : mergeCorrectionProposal(input.kind, beforeSnapshot, proposedSnapshot);
-  if (!effectiveProposedSnapshot) return { success: false, error: 'activity_context_required' };
-  if (!hasValidChronology(effectiveProposedSnapshot)) {
-    return { success: false, error: 'invalid_time_order' };
-  }
-  if (
-    input.calendarAdjustment &&
-    effectiveProposedSnapshot.facts.some((fact) => Date.parse(fact.timestamp) > Date.now())
-  ) {
-    return { success: false, error: 'future_timestamp' };
-  }
+  if (!proposal.success) return proposal;
+  const { before: beforeSnapshot, proposed: effectiveProposedSnapshot, sources } = proposal;
   if (!replaying) {
     const timelineError = await checkCorrectionTimeline(
       input.organizationId,
@@ -797,20 +358,8 @@ export async function resubmitTimeCorrection(rawInput: {
   if (revisionError || sourcesError || !sources) return { success: false, error: 'load_failed' };
   if (!revision) return { success: false, error: 'request_not_found' };
   const sourcePayload = sources.flatMap((source) => {
-    const sourceId =
-      source.time_entry_id ??
-      source.time_session_id ??
-      source.time_segment_id ??
-      source.correction_application_id;
-    return sourceId
-      ? [
-          {
-            kind: source.source_kind,
-            id: sourceId,
-            version: source.source_version,
-          },
-        ]
-      : [];
+    const sourceId = correctionSourceId(source);
+    return sourceId ? [{ kind: source.source_kind, id: sourceId, version: source.source_version }] : [];
   });
   const { data, error } = await admin.rpc('revise_time_correction_request', {
     p_request_id: input.requestId,
@@ -827,6 +376,43 @@ export async function resubmitTimeCorrection(rawInput: {
   if (error) return { success: false, error: timeCorrectionFailureCode(error.message) };
   revalidateCorrectionSurfaces();
   return toCorrectionResult(data);
+}
+
+/**
+ * The caller's time-approval responsibility for the subject of every request
+ * of a batch, in one organization; the first refusal stops the batch.
+ */
+async function authorizeBatchTargets(
+  organizationId: string,
+  actorUserId: string,
+  roots: Pick<Tables<'time_correction_requests'>, 'subject_user_id'>[],
+): Promise<{ success: true } | ActionFailure> {
+  const userIds = [...new Set(roots.map((request) => request.subject_user_id))];
+  const { data: memberships, error: membershipError } = await readInBatches(userIds, (batch) =>
+    createSupabaseAdminClient()
+      .from('organization_members')
+      .select('user_id, role')
+      .eq('organization_id', organizationId)
+      .in('user_id', [...batch]),
+  );
+  if (membershipError) {
+    logReadFailure('reviewTimeCorrectionsBatch: memberships failed', membershipError);
+    return { success: false, error: 'fetch_failed' };
+  }
+  const roleByUser = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
+  for (const request of roots) {
+    const targetRole = roleByUser.get(request.subject_user_id);
+    if (!targetRole) return { success: false, error: 'subject_not_found' };
+    const authorization = await authorizeResponsibilityForTarget({
+      organizationId,
+      responsibility: 'time_approval',
+      actorUserId,
+      targetUserId: request.subject_user_id,
+      targetRole,
+    });
+    if (!authorization.success) return { success: false, error: authorization.error };
+  }
+  return { success: true };
 }
 
 export async function reviewTimeCorrectionsBatch(rawInput: {
@@ -865,31 +451,8 @@ export async function reviewTimeCorrectionsBatch(rawInput: {
   if (!organizationId) return { success: false, error: 'invalid_input' };
   const caller = await resolveActionContextFor(organizationId);
   if (!caller.success) return caller;
-  const userIds = [...new Set(roots.map((request) => request.subject_user_id))];
-  const { data: memberships, error: membershipError } = await readInBatches(userIds, (batch) =>
-    admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', organizationId)
-      .in('user_id', [...batch]),
-  );
-  if (membershipError) {
-    logReadFailure('reviewTimeCorrectionsBatch: memberships failed', membershipError);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const roleByUser = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
-  for (const request of roots) {
-    const targetRole = roleByUser.get(request.subject_user_id);
-    if (!targetRole) return { success: false, error: 'subject_not_found' };
-    const authorization = await authorizeResponsibilityForTarget({
-      organizationId,
-      responsibility: 'time_approval',
-      actorUserId: user.id,
-      targetUserId: request.subject_user_id,
-      targetRole,
-    });
-    if (!authorization.success) return { success: false, error: authorization.error };
-  }
+  const targets = await authorizeBatchTargets(organizationId, user.id, roots);
+  if (!targets.success) return targets;
   let timelineRevision: number | undefined;
   if (input.decision === 'approve') {
     const timelineError = await checkCorrectionReviewTimeline(organizationId, input.requests);
@@ -918,371 +481,8 @@ export async function reviewTimeCorrectionsBatch(rawInput: {
   return { success: true };
 }
 
-/** Which requests a list read selects in the database, before the page boundary. */
-type CorrectionListFilter = {
-  status: 'submitted' | 'open';
-  subjectUserId?: string;
-};
-
-async function readCorrectionRequestList(input: {
-  organizationId: string;
-  callerUserId: string;
-  callerRole: OrgRole;
-  filter: CorrectionListFilter;
-}): Promise<TimeCorrectionListResult> {
-  const { organizationId, callerUserId, callerRole, filter } = input;
-  const admin = createSupabaseAdminClient();
-  // The holder lookup answers null for "not responsible" and for a failed
-  // read alike; a failed read must not hide the requests the caller reviews.
-  if (!(await loadResponsibilityRuntimeState(organizationId))) {
-    return { success: false, error: 'responsibility_load_failed' };
-  }
-  const holder = await getEffectiveResponsibilityHolderForActor({
-    organizationId,
-    responsibility: 'time_approval',
-    actorUserId: callerUserId,
-  });
-  // Complete on purpose: a newest-300 window hid older open requests from the
-  // reviewer and from the provisional summary that counts them. An overflow
-  // fails like a query error instead of showing a partial list.
-  // An employee who reviews nobody sees only their own requests, so the
-  // database selects them and the organization's history never reaches the bound.
-  const ownRequestsOnly = callerRole === 'employee' && !holder;
-  const { data: roots, error } = await readCompleteRows((from, to) => {
-    let query = admin.from('time_correction_requests').select('*').eq('organization_id', organizationId);
-    if (filter.status === 'submitted') query = query.eq('status', 'submitted');
-    if (filter.status === 'open') query = query.in('status', [...PENDING_CORRECTION_STATUSES]);
-    if (filter.subjectUserId) query = query.eq('subject_user_id', filter.subjectUserId);
-    if (ownRequestsOnly) {
-      query = query.or(`requested_by.eq.${callerUserId},subject_user_id.eq.${callerUserId}`);
-    }
-    return query.order('created_at', { ascending: false }).order('id').range(from, to);
-  }, LIST_ROW_CAP);
-  if (error) {
-    logReadFailure('getTimeCorrectionRequests: requests failed', error);
-    return { success: false, error: 'fetch_failed' };
-  }
-  return hydrateCorrectionRequests({ admin, organizationId, callerUserId, callerRole, holder, roots });
-}
-
-/**
- * The selected requests with names, the current revision and the caller's
- * review and withdraw rights, in the selection order, limited to the ones
- * the caller may see. A missing or unreadable revision fails the read.
- */
-async function hydrateCorrectionRequests(input: {
-  admin: ReturnType<typeof createSupabaseAdminClient>;
-  organizationId: string;
-  callerUserId: string;
-  callerRole: OrgRole;
-  holder: EffectiveResponsibilityHolder | null;
-  roots: Tables<'time_correction_requests'>[];
-}): Promise<TimeCorrectionListResult> {
-  const { admin, organizationId, callerUserId, callerRole, holder, roots } = input;
-  if (!roots.length) return { success: true, requests: [] };
-  const requestIds = roots.map((request) => request.id);
-  const userIds = [...new Set(roots.flatMap((request) => [request.requested_by, request.subject_user_id]))];
-  const [memberships, profiles, revisions] = await Promise.all([
-    readInBatches(userIds, (batch) =>
-      admin
-        .from('organization_members')
-        .select('user_id, role')
-        .eq('organization_id', organizationId)
-        .in('user_id', [...batch]),
-    ),
-    readInBatches(userIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .in('id', [...batch]),
-    ),
-    readInBatches(requestIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('time_correction_request_revisions')
-            .select('*')
-            .eq('organization_id', organizationId)
-            .in('request_id', [...batch])
-            .order('request_id')
-            .order('revision')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ),
-  ]);
-  const detailError = memberships.error ?? profiles.error ?? revisions.error;
-  if (detailError) {
-    // Without roles or revisions the filter below would drop requests silently.
-    logReadFailure('getTimeCorrectionRequests: request details failed', detailError);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const roleByUser = new Map(memberships.data.map((membership) => [membership.user_id, membership.role]));
-  const nameByUser = new Map(
-    profiles.data.map((profile) => [
-      profile.id,
-      [profile.first_name, profile.last_name].filter(Boolean).join(' ') || profile.email,
-    ]),
-  );
-  const revisionByKey = new Map(
-    revisions.data.map((revision) => [`${revision.request_id}:${revision.revision}`, revision]),
-  );
-  const visible = roots.filter((request) => {
-    const targetRole = roleByUser.get(request.subject_user_id);
-    const canReview = Boolean(
-      holder && targetRole && canHolderApproveTarget(holder, request.subject_user_id, targetRole),
-    );
-    return (
-      callerRole !== 'employee' ||
-      request.requested_by === callerUserId ||
-      request.subject_user_id === callerUserId ||
-      canReview
-    );
-  });
-  const requests: TimeCorrectionRequest[] = [];
-  for (const request of visible) {
-    const revision = revisionByKey.get(`${request.id}:${request.current_revision}`);
-    // The submit RPC writes a request and its current revision together. A
-    // missing or unreadable revision is a broken read, never a shorter list.
-    if (
-      !revision ||
-      !isTimeCorrectionSnapshot(revision.before_snapshot) ||
-      !isTimeCorrectionSnapshot(revision.proposed_snapshot)
-    ) {
-      logError('getTimeCorrectionRequests: current revision missing or unreadable');
-      return { success: false, error: 'fetch_failed' };
-    }
-    const targetRole = roleByUser.get(request.subject_user_id);
-    const canReview = Boolean(
-      request.status === 'submitted' &&
-        holder &&
-        targetRole &&
-        canHolderApproveTarget(holder, request.subject_user_id, targetRole),
-    );
-    requests.push({
-      id: request.id,
-      organizationId: request.organization_id,
-      subjectEmployeeRecordId: request.subject_employee_record_id,
-      subjectUserId: request.subject_user_id,
-      requestedBy: request.requested_by,
-      kind: request.kind,
-      status: request.status,
-      currentRevision: request.current_revision,
-      reviewedBy: request.reviewed_by,
-      reviewedAt: request.reviewed_at,
-      decisionComment: request.decision_comment,
-      createdAt: request.created_at,
-      updatedAt: request.updated_at,
-      requesterName: nameByUser.get(request.requested_by) ?? 'Unbekannt',
-      subjectName: nameByUser.get(request.subject_user_id) ?? 'Unbekannt',
-      canReview,
-      canWithdraw:
-        request.requested_by === callerUserId &&
-        (request.status === 'submitted' || request.status === 'clarification_required'),
-      revision: {
-        revision: revision.revision,
-        reason: revision.reason,
-        beforeSnapshot: revision.before_snapshot,
-        proposedSnapshot: revision.proposed_snapshot,
-        createdBy: revision.created_by,
-        createdAt: revision.created_at,
-      },
-    });
-  }
-  return { success: true, requests };
-}
-
-/**
- * The approval queue of the active organization: the submitted requests,
- * selected in the database, so the queue never depends on the size of the
- * organization's history. The history pages through
- * `getTimeCorrectionHistoryPage`.
- */
-export async function getTimeCorrectionRequests(
-  organizationIdInput: string,
-  scopeInput: 'approvals' = 'approvals',
-): Promise<TimeCorrectionListResult> {
-  const parsedInput = correctionListSchema.safeParse({
-    organizationId: organizationIdInput,
-    scope: scopeInput,
-  });
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const { organizationId } = parsedInput.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(organizationId);
-  if (!caller.success) return caller;
-  const callerRole = caller.role;
-  return readCorrectionRequestList({
-    organizationId,
-    callerUserId: user.id,
-    callerRole,
-    filter: { status: 'submitted' },
-  });
-}
-
-/**
- * One page of the correction history, newest first. The database applies
- * the caller's visibility (`correctionHistoryVisibility`), the count and
- * the page boundary; this reader hydrates the page rows only.
- */
-export async function getTimeCorrectionHistoryPage(
-  organizationIdInput: string,
-  pageInput: number,
-): Promise<TimeCorrectionHistoryResult> {
-  const parsedInput = correctionHistorySchema.safeParse({
-    organizationId: organizationIdInput,
-    page: pageInput,
-  });
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const { organizationId, page } = parsedInput.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(organizationId);
-  if (!caller.success) return caller;
-  const callerRole = caller.role;
-  // The holder lookup answers null for "not responsible" and for a failed
-  // read alike; a failed read must not narrow the history silently.
-  if (!(await loadResponsibilityRuntimeState(organizationId))) {
-    return { success: false, error: 'responsibility_load_failed' };
-  }
-  const holder = await getEffectiveResponsibilityHolderForActor({
-    organizationId,
-    responsibility: 'time_approval',
-    actorUserId: user.id,
-  });
-  const admin = createSupabaseAdminClient();
-  const selected = await admin.rpc('list_time_correction_history_page', {
-    p_organization_id: organizationId,
-    p_caller_user_id: user.id,
-    p_visibility: correctionHistoryVisibility(callerRole, holder),
-    p_page: page,
-    p_page_size: LIST_PAGE_SIZE,
-  });
-  const selection = historySelectionSchema.safeParse(selected.data);
-  if (selected.error || !selection.success) {
-    logReadFailure('getTimeCorrectionHistoryPage: page selection failed', {
-      code: selected.error?.code ?? 'malformed_page',
-    });
-    return { success: false, error: 'fetch_failed' };
-  }
-  const { data: rows, error } = await readInBatches(selection.data.ids, (batch) =>
-    admin
-      .from('time_correction_requests')
-      .select('*')
-      .eq('organization_id', organizationId)
-      .in('id', [...batch]),
-  );
-  if (error) {
-    logReadFailure('getTimeCorrectionHistoryPage: page rows failed', error);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const rowById = new Map(rows.map((row) => [row.id, row]));
-  const hydrated = await hydrateCorrectionRequests({
-    admin,
-    organizationId,
-    callerUserId: user.id,
-    callerRole,
-    holder,
-    roots: selection.data.ids.flatMap((id) => {
-      const row = rowById.get(id);
-      return row ? [row] : [];
-    }),
-  });
-  if (!hydrated.success) return hydrated;
-  return { success: true, page: { requests: hydrated.requests, total: selection.data.total } };
-}
-
-export type TimeCorrectionFormOptions = {
-  people: Array<{
-    employeeRecordId: string;
-    userId: string;
-    name: string;
-    role: OrgRole;
-  }>;
-  currentEmployeeRecordId: string;
-};
-
-export async function getTimeCorrectionFormOptions(
-  organizationIdInput: string,
-): Promise<{ success: true; options: TimeCorrectionFormOptions } | ActionFailure> {
-  const parsedOrganizationId = uuidSchema.safeParse(organizationIdInput);
-  if (!parsedOrganizationId.success) return { success: false, error: 'invalid_input' };
-  const organizationId = parsedOrganizationId.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(organizationId);
-  if (!caller.success) return caller;
-  const admin = createSupabaseAdminClient();
-  // The job picker searches open jobs on the server (`'entity-options'`, purpose `time-correction`).
-  const [{ data: employees, error: employeeError }, { data: memberships, error: membershipError }] =
-    await Promise.all([
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('employee_records')
-            .select('id, user_id')
-            .eq('organization_id', organizationId)
-            .not('user_id', 'is', null)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('organization_members')
-            .select('user_id, role')
-            .eq('organization_id', organizationId)
-            .order('id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ]);
-  const userIds = employees.map((employee) => employee.user_id as string);
-  const { data: profiles, error: profileError } = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', [...batch]),
-  );
-  const optionsError = employeeError ?? membershipError ?? profileError;
-  if (optionsError) {
-    logReadFailure('getTimeCorrectionFormOptions: options failed', optionsError);
-    return { success: false, error: 'fetch_failed' };
-  }
-  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
-  const roleById = new Map(memberships.map((membership) => [membership.user_id, membership.role]));
-  const people = employees.flatMap((employee) => {
-    const userId = employee.user_id as string;
-    const role = roleById.get(userId);
-    if (!role) return [];
-    const profile = profileById.get(userId);
-    return [
-      {
-        employeeRecordId: employee.id,
-        userId,
-        name:
-          [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
-          profile?.email ||
-          'Unbekannt',
-        role,
-      },
-    ];
-  });
-  const current = people.find((person) => person.userId === user.id);
-  if (!current) return { success: false, error: 'subject_not_found' };
-  return {
-    success: true,
-    options: {
-      people,
-      currentEmployeeRecordId: current.employeeRecordId,
-    },
-  };
-}
-
 export type ProvisionalTimeCorrectionProjection = {
-  entries: import('@/lib/time-tracking/types').TimeEntry[];
+  entries: TimeEntry[];
   sources: Array<{
     requestId: string;
     kind: TimeCorrectionRequest['kind'];
@@ -1290,6 +490,43 @@ export type ProvisionalTimeCorrectionProjection = {
     sourceId: string;
   }>;
 };
+
+/** The proposed facts of the pending requests as provisional entries inside the window. */
+function provisionalEntries(
+  pending: PendingCorrectionRequest[],
+  window: { organizationId: string; from: string; to: string; userId?: string | undefined },
+): TimeEntry[] {
+  const from = Date.parse(window.from);
+  const to = Date.parse(window.to);
+  return pending.flatMap((request) =>
+    request.proposedSnapshot.facts.flatMap((fact) => {
+      const timestamp = Date.parse(fact.timestamp);
+      if (timestamp < from || timestamp > to || (window.userId && fact.userId !== window.userId)) {
+        return [];
+      }
+      return [
+        {
+          id: `proposal:${request.id}:${request.currentRevision}:${fact.factId}`,
+          userId: fact.userId,
+          organizationId: window.organizationId,
+          entryType: fact.entryType,
+          timestamp: fact.timestamp,
+          isManual: true,
+          jobId: fact.jobId,
+          status: 'pending' as const,
+          reviewedBy: null,
+          reviewedAt: null,
+          createdAt: request.updatedAt,
+          updatedAt: request.updatedAt,
+          activityKind: fact.activityKind ?? undefined,
+          pendingCorrectionRequestId: request.id,
+          pendingCorrectionKind: request.kind,
+          isProvisionalCorrection: true,
+        },
+      ];
+    }),
+  );
+}
 
 export async function getProvisionalTimeCorrectionProjection(rawInput: {
   organizationId: string;
@@ -1304,9 +541,9 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
   // visibility rules as the list reader, without its names and memberships.
   const user = await getAuthenticatedUser();
   if (!user) return { entries: [], sources: [] };
-  const caller = await getMembershipRole(input.organizationId);
+  const caller = await resolveActionContextFor(input.organizationId);
   if (!caller.success) return { entries: [], sources: [] };
-  const callerRole = caller.role;
+  const callerRole = caller.context.role;
   // Managers can view every pending request; an employee's own-subject
   // projection needs no delegated approval scope. Resolve it only for the
   // unfiltered employee view that may include another person's requests.
@@ -1329,14 +566,9 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
   if (!projection) throw new Error('Pending time corrections could not be read completely.');
   if (projection.requests.length === 0) return { entries: [], sources: [] };
   const pending = projection.requests;
-  const rows = projection.sources;
   const requestById = new Map(pending.map((request) => [request.id, request]));
-  const sources = rows.flatMap((source) => {
-    const sourceId =
-      source.time_entry_id ??
-      source.time_session_id ??
-      source.time_segment_id ??
-      source.correction_application_id;
+  const sources = projection.sources.flatMap((source) => {
+    const sourceId = correctionSourceId(source);
     const request = requestById.get(source.request_id);
     return sourceId && request && source.revision === request.currentRevision
       ? [
@@ -1349,91 +581,5 @@ export async function getProvisionalTimeCorrectionProjection(rawInput: {
         ]
       : [];
   });
-  const from = Date.parse(input.from);
-  const to = Date.parse(input.to);
-  const entries = pending.flatMap((request) =>
-    request.proposedSnapshot.facts.flatMap((fact) => {
-      const timestamp = Date.parse(fact.timestamp);
-      if (timestamp < from || timestamp > to || (input.userId && fact.userId !== input.userId)) {
-        return [];
-      }
-      return [
-        {
-          id: `proposal:${request.id}:${request.currentRevision}:${fact.factId}`,
-          userId: fact.userId,
-          organizationId: input.organizationId,
-          entryType: fact.entryType,
-          timestamp: fact.timestamp,
-          isManual: true,
-          jobId: fact.jobId,
-          status: 'pending' as const,
-          reviewedBy: null,
-          reviewedAt: null,
-          createdAt: request.updatedAt,
-          updatedAt: request.updatedAt,
-          activityKind: fact.activityKind ?? undefined,
-          pendingCorrectionRequestId: request.id,
-          pendingCorrectionKind: request.kind,
-          isProvisionalCorrection: true,
-        },
-      ];
-    }),
-  );
-  return { entries, sources };
-}
-
-function snapshotMinutes(snapshot: TimeCorrectionSnapshot): number {
-  let activeStart: number | null = null;
-  let minutes = 0;
-  for (const fact of [...snapshot.facts].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp),
-  )) {
-    const timestamp = Date.parse(fact.timestamp);
-    if (fact.entryType === 'clock_in' || fact.entryType === 'break_end') {
-      activeStart = timestamp;
-    } else if (activeStart !== null) {
-      minutes += Math.max(0, Math.round((timestamp - activeStart) / 60_000));
-      activeStart = null;
-    }
-  }
-  return minutes;
-}
-
-export async function getProvisionalTimeSummary(rawInput: {
-  organizationId: string;
-  userId: string;
-}): Promise<
-  { success: true; count: number; beforeMinutes: number; proposedMinutes: number } | ActionFailure
-> {
-  const parsedInput = correctionSummarySchema.safeParse(rawInput);
-  if (!parsedInput.success) return { success: false, error: 'invalid_input' };
-  const input = parsedInput.data;
-  const user = await getAuthenticatedUser();
-  if (!user) return { success: false, error: 'not_authenticated' };
-  const caller = await getMembershipRole(input.organizationId);
-  if (!caller.success) return caller;
-  const role = caller.role;
-  if (role === 'employee' && input.userId !== user.id) {
-    return { success: false, error: 'not_authorized' };
-  }
-  const result = await readCorrectionRequestList({
-    organizationId: input.organizationId,
-    callerUserId: user.id,
-    callerRole: role,
-    filter: { status: 'open', subjectUserId: input.userId },
-  });
-  if (!result.success) return result;
-  const pending = result.requests;
-  return {
-    success: true,
-    count: pending.length,
-    beforeMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.beforeSnapshot),
-      0,
-    ),
-    proposedMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.proposedSnapshot),
-      0,
-    ),
-  };
+  return { entries: provisionalEntries(pending, input), sources };
 }
