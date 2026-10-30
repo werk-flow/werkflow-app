@@ -119,3 +119,10 @@ The owner decided on 2026-10-29 that releases follow a fixed weekday rhythm inst
 ## Amendment 2026-10-30: the rhythm's conditions bind scheduled runs
 
 The conditions of the amendment above bind the scheduled run only. A release started by hand goes on as before: it ships `main`'s head after a green full run, its own when the newest is not green, also when `main` has not moved since `production`.
+
+## Amendment 2026-10-30: no Vercel deployments of pull-request branches
+
+On 2026-10-30 the Vercel account reached the Hobby plan's 100 deployments a day, almost all of them previews of pull-request branches, and the limit blocked the owner's other projects. The owner decided:
+
+1. Vercel deploys from Git only the `production` branch (`git.deploymentEnabled` in `vercel.json`). Pull-request branches never deploy, also after a Vercel Pro upgrade. `main` deploys only through `.github/workflows/staging.yml`, after DEV's migrations, as before.
+2. The owner tries a user-visible change on staging after its merge, not on a preview of its branch.

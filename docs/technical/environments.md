@@ -22,7 +22,7 @@ Both run Micro compute, whose latency rises steeply with concurrency. The owner 
 - Every variable exists twice: one row for Production (PROD project, production bucket, production domain), one for all pre-production environments (DEV project, dev bucket, staging URL as `NEXT_PUBLIC_SITE_URL`).
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
 - `vercel.json` installs from the frozen `bun.lock`. The app runtime and `next build` stay on Node.
-- The production branch is `production`. `vercel.json` turns off Git deployments of `main`, so `.github/workflows/staging.yml` deploys staging after DEV's migrations. PR previews stay automatic.
+- `production` is the only branch Vercel deploys from Git (`vercel.json`): PR branches never deploy, and `.github/workflows/staging.yml` deploys staging after DEV's migrations.
 - `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck the scopes when deployment configuration changes.
 
 ### Provider configuration
