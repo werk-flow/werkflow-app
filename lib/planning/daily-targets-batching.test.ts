@@ -107,7 +107,7 @@ test('a failed absence span read fails the daily targets instead of reading as n
 
 // werk-flow/werkflow-planning#79: the Plantafel showed a target on the day
 // after the exit date.
-test('daily targets end at each record\'s exit date', async () => {
+test("daily targets end at each record's exit date", async () => {
   // 2026-10-29 is a Thursday, 2026-10-30 a Friday.
   const targets = await loadDailyTargetsByRecord({
     admin: rowlessAdmin(),

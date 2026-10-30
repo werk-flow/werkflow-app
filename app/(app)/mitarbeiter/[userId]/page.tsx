@@ -18,7 +18,12 @@ import { getPersonnelQualificationSummary } from '@/lib/qualifications/workspace
 import { getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
 import { getWeeklyTargets } from '@/lib/personnel/target-actions';
 import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
-import { buildWeeklyTimeData, computeWeekLabel, getTodayIndex, getWeekBounds } from '@/lib/time-tracking/weekly';
+import {
+  buildWeeklyTimeData,
+  computeWeekLabel,
+  getTodayIndex,
+  getWeekBounds,
+} from '@/lib/time-tracking/weekly';
 import type { MemberInitialWeek } from '@/components/mitarbeiter/use-mitarbeiter-detail-live-time';
 import { logError } from '@/lib/logging';
 import MitarbeiterDetailLoading from './loading';
@@ -40,7 +45,12 @@ async function resolveActorNames(detail: PersonnelDetail | null): Promise<Record
 }
 
 function toMemberOption(member: OrgMemberInfo): OrgMemberOption {
-  return { userId: member.user_id, firstName: member.first_name, lastName: member.last_name, role: member.role };
+  return {
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  };
 }
 
 /**
@@ -54,7 +64,12 @@ async function loadMemberInitialWeek(
 ): Promise<MemberInitialWeek | null> {
   const { monday, sunday } = getWeekBounds();
   const [entriesResult, targetsResult, organizationSettings] = await Promise.all([
-    getTimeEntries({ organizationId, from: monday.toISOString(), to: sunday.toISOString(), userId: targetUserId }),
+    getTimeEntries({
+      organizationId,
+      from: monday.toISOString(),
+      to: sunday.toISOString(),
+      userId: targetUserId,
+    }),
     getWeeklyTargets({ userId: targetUserId }),
     getCachedOrganizationSettings(organizationId),
   ]);

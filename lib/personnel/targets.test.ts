@@ -252,7 +252,9 @@ describe('getNoTargetReason', () => {
       'Noch nicht eingetreten',
     );
     expect(
-      getNoTargetReason(resolveDailyTarget({ dateIso: '2026-08-07', ...base, calendar: closure, employment })),
+      getNoTargetReason(
+        resolveDailyTarget({ dateIso: '2026-08-07', ...base, calendar: closure, employment }),
+      ),
     ).toBe('Ausgeschieden');
   });
 

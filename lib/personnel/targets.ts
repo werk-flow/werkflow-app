@@ -336,7 +336,8 @@ export function getNoTargetReason(target: DailyTarget): string | null {
   if (target.outsideEmployment === 'before_entry') return 'Noch nicht eingetreten';
   if (target.outsideEmployment === 'after_exit') return 'Ausgeschieden';
   if (target.isHoliday) return `Feiertag: ${target.holidayName}`;
-  if (target.isClosureDay) return target.closureLabel ? `Betriebsruhe (${target.closureLabel})` : 'Betriebsruhe';
+  if (target.isClosureDay)
+    return target.closureLabel ? `Betriebsruhe (${target.closureLabel})` : 'Betriebsruhe';
   if (target.absence?.type === 'vacation') return 'Urlaub';
   if (target.absence?.type === 'sickness') return 'Krankmeldung';
   if (target.source === 'schedule') return 'Kein Arbeitstag laut Wochenplan';
