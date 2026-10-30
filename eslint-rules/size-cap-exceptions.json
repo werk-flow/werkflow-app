@@ -13,7 +13,6 @@
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/actions.ts": 1332,
     "lib/time-accounts/period-preparation.ts": 1277,
-    "lib/time-tracking/validation.ts": 806,
     "lib/vacation/actions.ts": 984,
     "lib/work-handover/actions.ts": 1100,
     "lib/work-lifecycle/actions.ts": 907
@@ -616,17 +615,6 @@
       "getTimeAccountSettings": 130,
       "getTimeAccountSettings > readRegion#1": 125
     },
-    "lib/time-tracking/approval-queue.ts": { "readPendingSessionQueue": 86 },
-    "lib/time-tracking/calendar-blocks.ts": { "calculateCalendarWorkBlocks": 84 },
-    "lib/time-tracking/canonical-entries.ts": { "getCanonicalTimeEntries": 151 },
-    "lib/time-tracking/clock-actions.ts": { "deriveClockActions": 128 },
-    "lib/time-tracking/clock-state-actions.ts": { "clockOutBeforeSignOut": 118, "getCurrentClockState": 90 },
-    "lib/time-tracking/entry-read-actions.ts": { "getTimeEntries": 106 },
-    "lib/time-tracking/entry-write-actions.ts": { "addManualEntry": 93, "updateEntry": 92 },
-    "lib/time-tracking/review-actions.ts": { "reviewEntries": 94 },
-    "lib/time-tracking/segment-actions.ts": { "getCanonicalClockState": 124 },
-    "lib/time-tracking/settings-actions.ts": { "updateTimeTrackingSettings": 88 },
-    "lib/time-tracking/validation.ts": { "calculateWorkSessions": 88 },
     "lib/ui/dialog-discovery.ts": { "inspectLayer": 102 },
     "lib/vacation/actions.ts": {
       "getPendingVacationRequestsForApprover": 116,
