@@ -5,9 +5,10 @@ import { logReadFailure, loggedRead } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { readJobAssignmentOfUser, readOrganizationJob } from '@/lib/jobs/job-access-reads';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/database.types';
 import { readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
-import { toDocumentCategory, type DocumentFolderRow, type DocumentRow } from './types';
+import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
 
 // The authorization layer of the document Server Actions: the caller's
 // context, the per-target access checks and the per-document check that also
@@ -313,6 +314,119 @@ export async function ensureEmployeeManagerAccess(
   return { success: true };
 }
 
+type Tables = Database['public']['Tables'];
+
+/** The protection record of a personnel document with the versions released to its employee. */
+type ProtectedDocumentRecord = Pick<
+  Tables['personnel_documents']['Row'],
+  'id' | 'access_class' | 'employee_record_id'
+> & {
+  personnel_document_releases: Array<
+    Pick<Tables['personnel_document_releases']['Row'], 'document_version_number' | 'revoked_at'>
+  >;
+};
+
+/**
+ * Who reaches a protected personnel document: an Admin always, the office for
+ * a standard file, and otherwise only its own employee, for a released version.
+ */
+async function authorizeProtectedDocument(
+  context: AuthorizedDocumentContext,
+  row: DocumentRow,
+  protectedDocument: ProtectedDocumentRecord,
+  options: { protectedVersionNumber?: number },
+): Promise<AuthorizedDocument> {
+  if (context.role === 'admin') {
+    return {
+      success: true,
+      document: row,
+      protectedAccess: {
+        personnelDocumentId: protectedDocument.id,
+        releasedVersionNumbers: null,
+        canInspectHistory: true,
+      },
+    };
+  }
+  if (context.role === 'buero' && protectedDocument.access_class === 'personnel_standard') {
+    return {
+      success: true,
+      document: row,
+      protectedAccess: {
+        personnelDocumentId: protectedDocument.id,
+        releasedVersionNumbers: null,
+        canInspectHistory: true,
+      },
+    };
+  }
+  const { data: employee, error: employeeError } = await loggedRead(
+    'getAuthorizedDocument: employee_records read failed',
+    context.admin
+      .from('employee_records')
+      .select('user_id')
+      .eq('id', protectedDocument.employee_record_id)
+      .eq('organization_id', context.orgId)
+      .maybeSingle(),
+  );
+  if (employeeError) return { success: false, error: 'load_failed' };
+  const releases = protectedDocument.personnel_document_releases;
+  const releasedVersionNumbers = releases
+    .filter((release) => release.revoked_at === null)
+    .map((release) => release.document_version_number);
+  if (
+    employee?.user_id !== context.userId ||
+    !releasedVersionNumbers.includes(options.protectedVersionNumber ?? row.current_version_number)
+  ) {
+    return { success: false, error: 'not_authorized' };
+  }
+  return {
+    success: true,
+    document: row,
+    protectedAccess: {
+      personnelDocumentId: protectedDocument.id,
+      releasedVersionNumbers,
+      canInspectHistory: false,
+    },
+  };
+}
+
+/** The caller's assignments to the linked jobs and projects, at most one per batch, with the first read error. */
+async function readLinkedAssignments(
+  context: AuthorizedDocumentContext,
+  linkedRows: Array<Pick<DocumentLinkRow, 'job_id' | 'project_id'>>,
+) {
+  const jobIds = linkedRows.map((link) => link.job_id).filter((jobId): jobId is string => Boolean(jobId));
+  const projectIds = linkedRows
+    .map((link) => link.project_id)
+    .filter((projectId): projectId is string => Boolean(projectId));
+
+  // One matching assignment per batch proves access; a project's job list is never materialized.
+  const [jobAssignments, projectAssignments] = await Promise.all([
+    readInBatches(jobIds, (batch) =>
+      context.admin
+        .from('job_assignments')
+        .select('id')
+        .eq('organization_id', context.orgId)
+        .in('job_id', [...batch])
+        .eq('user_id', context.userId)
+        .limit(1),
+    ),
+    readInBatches(projectIds, (batch) =>
+      context.admin
+        .from('job_assignments')
+        .select('id, jobs!inner(project_id)')
+        .eq('organization_id', context.orgId)
+        .eq('jobs.organization_id', context.orgId)
+        .in('jobs.project_id', [...batch])
+        .eq('user_id', context.userId)
+        .limit(1),
+    ),
+  ]);
+  return {
+    count: jobAssignments.data.length + projectAssignments.data.length,
+    error: jobAssignments.error ?? projectAssignments.error,
+  };
+}
+
 export async function getAuthorizedDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
@@ -349,57 +463,7 @@ export async function getAuthorizedDocument(
   // Fail closed: an unknown protection state would open a personnel document to every manager.
   if (protectedError) return { success: false, error: 'load_failed' };
   if (protectedDocument) {
-    if (context.role === 'admin') {
-      return {
-        success: true,
-        document: row,
-        protectedAccess: {
-          personnelDocumentId: protectedDocument.id,
-          releasedVersionNumbers: null,
-          canInspectHistory: true,
-        },
-      };
-    }
-    if (context.role === 'buero' && protectedDocument.access_class === 'personnel_standard') {
-      return {
-        success: true,
-        document: row,
-        protectedAccess: {
-          personnelDocumentId: protectedDocument.id,
-          releasedVersionNumbers: null,
-          canInspectHistory: true,
-        },
-      };
-    }
-    const { data: employee, error: employeeError } = await loggedRead(
-      'getAuthorizedDocument: employee_records read failed',
-      context.admin
-        .from('employee_records')
-        .select('user_id')
-        .eq('id', protectedDocument.employee_record_id)
-        .eq('organization_id', context.orgId)
-        .maybeSingle(),
-    );
-    if (employeeError) return { success: false, error: 'load_failed' };
-    const releases = protectedDocument.personnel_document_releases;
-    const releasedVersionNumbers = releases
-      .filter((release) => release.revoked_at === null)
-      .map((release) => release.document_version_number);
-    if (
-      employee?.user_id !== context.userId ||
-      !releasedVersionNumbers.includes(options.protectedVersionNumber ?? row.current_version_number)
-    ) {
-      return { success: false, error: 'not_authorized' };
-    }
-    return {
-      success: true,
-      document: row,
-      protectedAccess: {
-        personnelDocumentId: protectedDocument.id,
-        releasedVersionNumbers,
-        canInspectHistory: false,
-      },
-    };
+    return authorizeProtectedDocument(context, row, protectedDocument, options);
   }
   if (context.isManagerOrAbove) {
     return { success: true, document: row, protectedAccess: null };
@@ -411,41 +475,14 @@ export async function getAuthorizedDocument(
     .eq('document_id', row.id)
     .eq('organization_id', context.orgId);
 
-  const linkedRows = links ?? [];
-  const jobIds = linkedRows.map((link) => link.job_id).filter((jobId): jobId is string => Boolean(jobId));
-  const projectIds = linkedRows
-    .map((link) => link.project_id)
-    .filter((projectId): projectId is string => Boolean(projectId));
-
-  // One matching assignment per batch proves access; a project's job list is never materialized.
-  const [jobAssignments, projectAssignments] = await Promise.all([
-    readInBatches(jobIds, (batch) =>
-      context.admin
-        .from('job_assignments')
-        .select('id')
-        .eq('organization_id', context.orgId)
-        .in('job_id', [...batch])
-        .eq('user_id', context.userId)
-        .limit(1),
-    ),
-    readInBatches(projectIds, (batch) =>
-      context.admin
-        .from('job_assignments')
-        .select('id, jobs!inner(project_id)')
-        .eq('organization_id', context.orgId)
-        .eq('jobs.organization_id', context.orgId)
-        .in('jobs.project_id', [...batch])
-        .eq('user_id', context.userId)
-        .limit(1),
-    ),
-  ]);
-  const accessError = linksError ?? jobAssignments.error ?? projectAssignments.error;
+  const assignments = await readLinkedAssignments(context, links ?? []);
+  const accessError = linksError ?? assignments.error;
   if (accessError) {
     logReadFailure('getAuthorizedDocument: assignment access check failed', accessError);
     return { success: false, error: 'load_failed' };
   }
 
-  if (jobAssignments.data.length + projectAssignments.data.length === 0) {
+  if (assignments.count === 0) {
     return { success: false, error: 'not_authorized' };
   }
 

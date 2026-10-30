@@ -4,12 +4,12 @@ import { useState, type Dispatch, type SetStateAction } from 'react';
 import { Undo2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
+import { unlinkDocument } from '@/lib/documents/actions';
 import {
   deleteDocument,
   renameDocument as renameDocumentAction,
   restoreDocument,
-  unlinkDocument,
-} from '@/lib/documents/actions';
+} from '@/lib/documents/library-actions';
 import type { OrganizationDocument } from '@/lib/documents/types';
 
 type ContextualDocumentRowActionsOptions = {

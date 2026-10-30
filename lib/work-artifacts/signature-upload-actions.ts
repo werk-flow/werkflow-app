@@ -1,6 +1,6 @@
 'use server';
 
-import { createDocumentUploadTicket } from '@/lib/documents/actions';
+import { createDocumentUploadTicket } from '@/lib/documents/upload-actions';
 import { uploadFileSchema } from '@/lib/documents/action-schemas';
 import type { DocumentUploadTicketResult } from '@/lib/documents/types';
 import { loggedRead } from '@/lib/data/read-request-cache';
