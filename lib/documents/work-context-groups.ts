@@ -50,23 +50,27 @@ function addDocument(
   map.set(targetId, documents);
 }
 
-export function buildWorkContextGroups({
+type DocumentsByLinkTarget = {
+  documentsByJobId: Map<string, OrganizationDocument[]>;
+  documentsByProjectId: Map<string, OrganizationDocument[]>;
+  documentsByClientId: Map<string, OrganizationDocument[]>;
+  documentsByEmployeeId: Map<string, OrganizationDocument[]>;
+};
+
+/** Each document under every listed job, project, client and employee it links to. */
+function indexDocumentsByLinkTarget({
   documents,
-  jobs,
-  projects,
-  clients,
-  employees,
+  jobsById,
+  projectsById,
+  clientsById,
+  employeesById,
 }: {
   documents: OrganizationDocument[];
-  jobs: Job[];
-  projects: ProjectWithDetails[];
-  clients: Client[];
-  employees: DocumentEmployee[];
-}): WorkContextGroups {
-  const jobsById = new Map(jobs.map((job) => [job.id, job]));
-  const projectsById = new Map(projects.map((project) => [project.id, project]));
-  const clientsById = new Map(clients.map((client) => [client.id, client]));
-  const employeesById = new Map(employees.map((employee) => [employee.userId, employee]));
+  jobsById: Map<string, Job>;
+  projectsById: Map<string, ProjectWithDetails>;
+  clientsById: Map<string, Client>;
+  employeesById: Map<string, DocumentEmployee>;
+}): DocumentsByLinkTarget {
   const documentsByJobId = new Map<string, OrganizationDocument[]>();
   const documentsByProjectId = new Map<string, OrganizationDocument[]>();
   const documentsByClientId = new Map<string, OrganizationDocument[]>();
@@ -89,6 +93,22 @@ export function buildWorkContextGroups({
     }
   }
 
+  return { documentsByJobId, documentsByProjectId, documentsByClientId, documentsByEmployeeId };
+}
+
+function buildProjectGroups({
+  jobs,
+  projects,
+  projectsById,
+  documentsByJobId,
+  documentsByProjectId,
+}: {
+  jobs: Job[];
+  projects: ProjectWithDetails[];
+  projectsById: Map<string, ProjectWithDetails>;
+  documentsByJobId: Map<string, OrganizationDocument[]>;
+  documentsByProjectId: Map<string, OrganizationDocument[]>;
+}): ProjectDocumentGroup[] {
   const jobsByProjectId = new Map<string, Job[]>();
   for (const job of jobs) {
     if (!job.projectId || !projectsById.has(job.projectId)) continue;
@@ -98,7 +118,7 @@ export function buildWorkContextGroups({
     jobsByProjectId.set(job.projectId, projectJobs);
   }
 
-  const projectGroups = projects
+  return projects
     .map((project): ProjectDocumentGroup => {
       const directDocuments = documentsByProjectId.get(project.id) ?? [];
       const childJobGroups = (jobsByProjectId.get(project.id) ?? [])
@@ -117,6 +137,35 @@ export function buildWorkContextGroups({
       };
     })
     .filter((group) => group.totalDocumentCount > 0);
+}
+
+export function buildWorkContextGroups({
+  documents,
+  jobs,
+  projects,
+  clients,
+  employees,
+}: {
+  documents: OrganizationDocument[];
+  jobs: Job[];
+  projects: ProjectWithDetails[];
+  clients: Client[];
+  employees: DocumentEmployee[];
+}): WorkContextGroups {
+  const jobsById = new Map(jobs.map((job) => [job.id, job]));
+  const projectsById = new Map(projects.map((project) => [project.id, project]));
+  const clientsById = new Map(clients.map((client) => [client.id, client]));
+  const employeesById = new Map(employees.map((employee) => [employee.userId, employee]));
+  const { documentsByJobId, documentsByProjectId, documentsByClientId, documentsByEmployeeId } =
+    indexDocumentsByLinkTarget({ documents, jobsById, projectsById, clientsById, employeesById });
+
+  const projectGroups = buildProjectGroups({
+    jobs,
+    projects,
+    projectsById,
+    documentsByJobId,
+    documentsByProjectId,
+  });
 
   const standaloneJobGroups = jobs
     .filter((job) => !job.projectId || !projectsById.has(job.projectId))

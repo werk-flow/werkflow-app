@@ -6,7 +6,6 @@
   "modules": {
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/customer-relationships/actions.ts": 1427,
-    "lib/documents/actions.ts": 1584,
     "lib/security/server-action-authorization.test.ts": 959,
     "lib/time-accounts/period-preparation.ts": 1277
   },
@@ -519,11 +518,6 @@
       "addTimelineWorkAndEventItems": 127,
       "loadFollowUpSourceReferences": 156
     },
-    "lib/documents/access.ts": { "getAuthorizedDocument": 129 },
-    "lib/documents/actions.ts": { "getDocumentLibrary": 87 },
-    "lib/documents/folder-copy.ts": { "copyFolderTree": 109 },
-    "lib/documents/hydration.ts": { "readDocumentLinkTargets": 121 },
-    "lib/documents/work-context-groups.ts": { "buildWorkContextGroups": 94 },
     "lib/installed-equipment/actions.ts": { "loadEquipmentDetail": 126 },
     "lib/installed-equipment/source-options-server.ts": { "readWorkSources": 97 },
     "lib/invites/send-invite.ts": { "createAndMailOrganizationInvite": 120 },
