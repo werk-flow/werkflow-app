@@ -106,3 +106,41 @@ describe('the member list progress', () => {
     expect(markup).toContain('Tagesfortschritt: 50%');
   });
 });
+
+describe('the member list marker for a person without Wochenplan', () => {
+  const unconfigured = (dateIso: string, exitDate: string | null) =>
+    resolveDailyTargets([dateIso], {
+      schedules: [],
+      conditions: [],
+      calendar: EMPTY_HOLIDAY_CALENDAR,
+      employment: { entryDate: null, exitDate },
+    })[0];
+
+  // The audit run at 00:43 on Saturday 31.10.2026 found no marker: the
+  // weekend row took the no-target branch, which did not render it.
+  test('stays on the weekend, when the default owes no target', () => {
+    const markup = renderToStaticMarkup(
+      <HoursDisplay
+        isClockedIn={false}
+        statusStartedAt={null}
+        workMinutes={0}
+        target={unconfigured('2026-10-31', null)}
+      />,
+    );
+    expect(markup).toContain('Tagesfortschritt: Wochenende');
+    expect(markup).toContain('aria-label="Kein Arbeitszeitmodell hinterlegt"');
+  });
+
+  test('is gone after the exit date', () => {
+    const markup = renderToStaticMarkup(
+      <HoursDisplay
+        isClockedIn={false}
+        statusStartedAt={null}
+        workMinutes={0}
+        target={unconfigured('2026-10-30', '2026-10-29')}
+      />,
+    );
+    expect(markup).toContain('Tagesfortschritt: Ausgeschieden');
+    expect(markup).not.toContain('Kein Arbeitszeitmodell hinterlegt');
+  });
+});

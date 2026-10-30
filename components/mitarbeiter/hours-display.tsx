@@ -96,6 +96,7 @@ export function HoursDisplay({
           indicatorClassName="bg-muted-foreground/30"
         />
         <span className="truncate text-xs font-medium text-muted-foreground">{noTargetReason}</span>
+        {target && <UnconfiguredMarker target={target} />}
       </div>
     );
   }
@@ -116,13 +117,23 @@ export function HoursDisplay({
       >
         {formatPercentage(percentage)}
       </span>
-      {target?.source === 'default' && (
-        <span
-          role="img"
-          aria-label="Kein Arbeitszeitmodell hinterlegt"
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-        />
-      )}
+      {target && <UnconfiguredMarker target={target} />}
     </div>
+  );
+}
+
+/**
+ * Marks a member on the labeled default target, on days without a target
+ * too (the weekend), so missing configuration is never silent. Outside
+ * employment no configuration applies.
+ */
+function UnconfiguredMarker({ target }: { target: DailyTarget }) {
+  if (target.source !== 'default' || target.outsideEmployment) return null;
+  return (
+    <span
+      role="img"
+      aria-label="Kein Arbeitszeitmodell hinterlegt"
+      className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+    />
   );
 }
