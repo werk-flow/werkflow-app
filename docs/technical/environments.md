@@ -71,7 +71,7 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
 - `bun run test:server local` waits for a healthy stack before it builds. Keep it running while you verify.
-- `supabase db reset` can leave the edge-runtime container stopped. The preflight prints the remedy.
+- A reset or crash stops the edge runtime; the test server and CI wait start it.
 - An edge function imports only relative modules. The runtime fetches a remote one (`jsr:`, `npm:`, `https:`) on its first request, so a stalled registry hangs a fresh stack.
 - A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime and verify the capture endpoint before an email browser group.
 
@@ -122,7 +122,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 - Wait for `.t3/setup-done` before you run any command. On `.t3/setup-failed`, read the file, repair the cause, and run `bun scripts/setup-worktree.ts` again.
 - A checkout keeps its own `.next`, workspace lock and `.agent-logs/`. The main checkout serves on port 3000. A linked worktree derives its test-server and dev ports from its path (`lib/testing/runner/app-port.ts`).
-- Every worktree uses the one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
+- Every worktree shares one local stack. Ordinary browser groups of several worktrees run side by side. A group that measures or restarts a stack service holds the stack alone (`lib/testing/runner/stack-lock.ts`).
 - `bun run check:changed`, `bun run test:verify` and a local test server's build each take one of three machine-wide slots and print that they wait while all are busy (`lib/testing/runner/heavy-slot.ts`). Serving holds no slot. CI takes no slot.
 - `supabase db reset` and `supabase stop` affect every worktree. The edit guard refuses them while any worktree holds the stack.
 - Another worktree's unmerged migration may sit in the shared stack ([recurring traps](testing.md#recurring-traps)).

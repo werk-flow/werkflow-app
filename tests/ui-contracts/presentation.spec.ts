@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { expectDialogFits } from '../audit/support/layout-measure';
 
 test.beforeEach(async ({ page }) => {
   assertWorkspaceTestLock();
@@ -99,6 +100,48 @@ test('tabbed dialogs keep their frame and footer while long content scrolls', as
   await expect(page.getByLabel('Zeile 20', { exact: true })).toBeAttached();
   await page.getByLabel('Zeile 20', { exact: true }).focus();
   await expect(page.getByLabel('Zeile 20', { exact: true })).toBeInViewport();
+});
+
+for (const width of [375, 1280]) {
+  test(`a long confirmation without a scroll body keeps its footer actions in reach at width ${width}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 812 });
+    await page.getByRole('button', { name: 'Lange Bestätigung öffnen' }).click();
+    const confirmation = page.getByRole('alertdialog', { name: 'Organisation „Probe“ löschen?' });
+    // The content is taller than the layer, so the layer itself scrolls.
+    expect(await confirmation.evaluate((layer) => layer.scrollHeight > layer.clientHeight)).toBe(true);
+    await expect(confirmation.getByRole('button', { name: 'Abbrechen' })).toBeFocused();
+    await expectDialogFits(confirmation, `long confirmation at ${width}`);
+    // Focusing the action scrolls the footer into view by itself; the sticky footer must also hold at the top and midway.
+    for (const position of [0, 0.5]) {
+      await confirmation.evaluate((layer, ratio) => {
+        layer.scrollTop = (layer.scrollHeight - layer.clientHeight) * ratio;
+      }, position);
+      await expectDialogFits(confirmation, `long confirmation at ${width}, scrolled to ${position * 100} %`);
+    }
+  });
+}
+
+test('a failed keyboard confirmation keeps focus on its action and shows the error in reach', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.getByRole('button', { name: 'Lange Bestätigung öffnen' }).click();
+  const confirmation = page.getByRole('alertdialog', { name: 'Organisation „Probe“ löschen?' });
+  const cancel = confirmation.getByRole('button', { name: 'Abbrechen' });
+  const confirm = confirmation.getByRole('button', { name: 'Endgültig löschen' });
+  await expect(cancel).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Enter');
+  // The error appears inside the sticky footer without replacing the actions under the keyboard focus.
+  await expect(confirmation.getByRole('alert')).toHaveText('Die Organisation konnte nicht gelöscht werden.');
+  await expect(confirmation.getByRole('alert')).toBeInViewport();
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(cancel).toBeFocused();
+  await expectDialogFits(confirmation, 'failed long confirmation at 375');
 });
 
 test('focus remains visible without adding an orange border or shifting the field', async ({ page }) => {

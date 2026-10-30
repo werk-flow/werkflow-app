@@ -6,7 +6,9 @@ type PlanningInternalType = Database['public']['Enums']['planning_internal_type'
 type PlanningTimeKind = Database['public']['Enums']['planning_time_kind'];
 export type PlanningOccurrenceStatus = Database['public']['Enums']['planning_occurrence_status'];
 
-type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
+/** The values the `recurrence_frequency` check constraint allows. */
+export const RECURRENCE_FREQUENCIES = ['daily', 'weekly', 'monthly'] as const;
+type RecurrenceFrequency = (typeof RECURRENCE_FREQUENCIES)[number];
 export type DstResolution = 'exact' | 'shifted_forward' | 'first_ambiguous';
 
 type PlanningRecurrenceRule = {

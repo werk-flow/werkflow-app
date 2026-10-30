@@ -134,7 +134,7 @@ function ResponsibilityCard({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5 wrap-anywhere">
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
           <ul className="grid gap-2">

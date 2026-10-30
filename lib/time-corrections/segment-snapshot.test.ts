@@ -61,7 +61,7 @@ test('editing resumed work preserves the real break-end transition and the surro
       applications: [],
       candidates: [application],
     }),
-  ).toBe(true);
+  ).toBeNull();
   const wrongOpening = {
     ...proposed,
     facts: proposed.facts.map((fact) =>
@@ -76,5 +76,5 @@ test('editing resumed work preserves the real break-end transition and the surro
       applications: [],
       candidates: [{ ...application, snapshot: wrongOpening }],
     }),
-  ).toBe(false);
+  ).toBe('correction_timeline_conflict');
 });

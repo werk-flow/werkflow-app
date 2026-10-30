@@ -4,7 +4,7 @@ import { requireEnv } from './env';
 import { testSupabaseClientOptions } from './client-options';
 import type { TestUser, TestWorld } from './world';
 import { registerTestUserEmail } from './world';
-import { planTestWorld, seedOwnedWorld } from '../../../lib/testing/seed-world-plan';
+import { planTestWorld, seedOwnedWorld, worldName } from '../../../lib/testing/seed-world-plan';
 import { ownedTestEmails } from '../../../lib/testing/test-email-ownership';
 import { deleteOwnedMailpitMessages, localMailpitUrl } from '../../../lib/testing/local-mailpit';
 import { deleteStorageObjects, listStorageObjectPaths } from '../../../lib/storage/r2';
@@ -17,7 +17,7 @@ export function goldenTestEmail(label: string, runId: string): string {
 }
 
 export function goldenTestOrganizationName(label: string, runId: string): string {
-  return `Golden Test SHK ${label} ${runId}`;
+  return worldName(`Golden Test SHK ${label}`, runId);
 }
 
 function createAdminClient(): SupabaseClient {

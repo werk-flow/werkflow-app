@@ -3,6 +3,19 @@ import type { TestUser, TestWorld } from '../../tests/golden/support/world';
 
 export type PlannedTestWorld = TestWorld & { seedStatus: 'seeding' | 'ready' };
 
+/**
+ * Geist's widest glyph at the run id's full length. A run id alone renders
+ * between 32 narrow `f` and 32 wide `0`, so a name that does not wrap used to
+ * overflow only on runs whose id rendered wide. This part is wider than any run
+ * id and the same on every run, so a missing wrap fails every run.
+ */
+const WORST_CASE_UNBROKEN_PART = 'W'.repeat(32);
+
+/** A world name: its label, the fixed worst-case unbroken part, and the run id that keeps it unique per run. */
+export function worldName(label: string, runId: string): string {
+  return `${label} ${WORST_CASE_UNBROKEN_PART} ${runId}`;
+}
+
 /** Reserve every cleanup identity before the first external write, including requests with uncertain responses. */
 export function planTestWorld(): PlannedTestWorld {
   const runId = randomUUID().replaceAll('-', '');
@@ -12,14 +25,14 @@ export function planTestWorld(): PlannedTestWorld {
       email: emailOverride ?? `gg-${role}-${runId}@werkflow-golden.test`,
       password: `GgTest!${runId}#2026`,
       firstName,
-      lastName: `${surnamePrefix}-${runId}`,
+      lastName: worldName(surnamePrefix, runId),
     };
   }
   return {
     runId,
     seedStatus: 'seeding',
     orgId: randomUUID(),
-    orgName: `Golden Test SHK ${runId}`,
+    orgName: worldName('Golden Test SHK', runId),
     users: {
       admin: user('admin', 'Greta'),
       buero: user('buero', 'Bruno'),
@@ -30,12 +43,12 @@ export function planTestWorld(): PlannedTestWorld {
     personnelInvitee: user('personnel-invitee', 'Nora', 'Neuling', `delivered+gg-p103-${runId}@resend.dev`),
     outsider: {
       orgId: randomUUID(),
-      orgName: `Fremde Firma ${runId}`,
+      orgName: worldName('Fremde Firma', runId),
       admin: user('outsider', 'Otto', 'Fremd'),
     },
     inventory: {
       itemId: randomUUID(),
-      itemName: `Kupferrohr 15 mm ${runId}`,
+      itemName: worldName('Kupferrohr 15 mm', runId),
       locationId: randomUUID(),
       locationName: 'Hauptlager (Golden)',
       initialQuantity: 20,
