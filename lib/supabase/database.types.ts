@@ -14307,6 +14307,14 @@ export type Database = {
         Args: { p_item_id: string; p_organization_id: string };
         Returns: undefined;
       };
+      delete_organization: {
+        Args: {
+          p_actor_id: string;
+          p_confirmation_name: string;
+          p_organization_id: string;
+        };
+        Returns: undefined;
+      };
       delete_time_entries: {
         Args: {
           p_actor_id: string;
@@ -14709,6 +14717,10 @@ export type Database = {
           role: Database["public"]["Enums"]["org_role"];
           user_id: string;
         }[];
+      };
+      get_organization_deletion_scope: {
+        Args: { p_organization_id: string };
+        Returns: Json;
       };
       get_time_period_source_fingerprint: {
         Args: {

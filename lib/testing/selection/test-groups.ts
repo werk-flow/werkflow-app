@@ -352,6 +352,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['job-plan-bridge', ['job_plan_bridge.sql'], ['work', 'planning']],
   ['user-preference-writes', ['user_preference_writes.sql'], ['work', 'planning']],
   ['rate-limits', ['rate_limits.sql'], ['*']],
+  ['organization-deletion', ['organization_deletion.sql'], ['*']],
   ['record-numbers', ['record_numbers.sql'], ['work', 'customers', 'personnel', 'service']],
   [
     'list-pagination',
