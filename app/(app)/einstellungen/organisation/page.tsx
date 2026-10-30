@@ -1,34 +1,14 @@
-import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 
 import { OrganizationSettingsForm } from '@/components/settings/organization-settings-form';
 import { RegionLoadError } from '@/components/shared/region-load-error';
-import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
-import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
+import { readSettingsSectionMembership } from '@/lib/settings/section-access';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { formatBerlin } from '@/lib/utils';
 
 export default async function OrganizationSettingsPage() {
-  const [
-    {
-      data: { user },
-    },
-    cookieStore,
-  ] = await Promise.all([getCachedUser(), cookies()]);
-
-  if (!user) {
-    redirect('/login');
-  }
-
-  const memberships = await getCachedMemberships(user.id);
-  const activeOrgId = await resolveActiveOrgId(cookieStore, user.id);
-  const activeMembership =
-    memberships.find((membership) => membership.orgId === activeOrgId) ?? memberships[0] ?? null;
-
-  if (!activeMembership) {
-    redirect('/dashboard');
-  }
+  const { membership: activeMembership } = await readSettingsSectionMembership('organisation');
 
   const supabase = await createSupabaseServerClient();
   // Only an Admin may delete, so only an Admin reads what a deletion removes.

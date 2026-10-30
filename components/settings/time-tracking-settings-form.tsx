@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { z } from '@/lib/zod';
 
+import { useSaveChangesSubmit } from '@/components/settings/nothing-to-save';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,7 +65,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
     });
   }, [initialAutoBreakDurationMinutes, initialAutoBreakThresholdMinutes, initialBreakMode, reset]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
       return;
     }
@@ -202,7 +203,7 @@ export function TimeTrackingSettingsForm({ initialSettings, role }: TimeTracking
                   ? 'Neue Regeln gelten sofort für offene und kommende Zeiterfassungen. Bereits abgeschlossene Historie wird nicht rückwirkend umgeschrieben.'
                   : 'Du kannst diese Regeln einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={!canEdit || isSaving}>
                 {isSaving ? 'Speichert…' : 'Zeiterfassung speichern'}
               </Button>
             </CardFooter>

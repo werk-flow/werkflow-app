@@ -33,17 +33,22 @@ export function SettingsShell({ children }: SettingsShellProps) {
     getSettingsSectionBySlug(pathname.split('/').filter(Boolean)[1] ?? '') ??
     getSettingsSectionBySlug(DEFAULT_SETTINGS_SECTION_SLUG);
 
-  const accountSections = getSettingsSectionsByGroup('account');
-  const organizationSections = getSettingsSectionsByGroup('organization');
-  const isAdmin = activeOrg?.role === 'admin';
+  // Without an active membership the layout redirects; until then the nav
+  // shows only what every role sees.
+  const role = activeOrg?.role ?? 'employee';
+  const accountSections = getSettingsSectionsByGroup('account', role);
+  const organizationSections = getSettingsSectionsByGroup('organization', role);
   const isOrganizationSection = currentSection?.scope === 'organization';
-  const isReadOnlyForCurrentSection = isOrganizationSection && currentSection.adminOnlyWrites && !isAdmin;
+  // Büro reads the organization settings Admin changes. An employee's
+  // sections show only their own data, so no notice applies.
+  const isReadOnlyForCurrentSection =
+    isOrganizationSection && currentSection.adminOnlyWrites && role === 'buero';
 
   return (
     <PageShell className="bg-background">
       {/* Phones and upright tablets: the section list is route navigation,
           so it is an AreaNav strip that scrolls within itself, not a select
-          (thirteen sections exceed the raw-Select cap and a select hides the
+          (ten sections exceed the raw-Select cap and a select hides the
           current place). From lg the sidebar below takes over and the slot
           keeps the header's bottom padding; below lg the app sidebar and a
           second one would leave the content less than a phone's width. */}
@@ -100,7 +105,7 @@ export function SettingsShell({ children }: SettingsShellProps) {
                   </p>
                   {isReadOnlyForCurrentSection ? (
                     <p className="text-warning-text">
-                      Du kannst diesen Bereich einsehen, aber nur Admins können ihn später bearbeiten.
+                      Du kannst diesen Bereich einsehen, aber nur Admins können ihn bearbeiten.
                     </p>
                   ) : null}
                 </div>

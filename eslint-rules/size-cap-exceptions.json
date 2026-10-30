@@ -438,7 +438,7 @@
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
-    "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 86 },
+    "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 83 },
     "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 172 },
     "components/settings/password-change-card.tsx": { "PasswordChangeCard": 96 },
     "components/settings/personnel-onboarding-template-settings.tsx": {

@@ -14,11 +14,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { TextLink } from '@/components/ui/text-link';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages';
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createOrganization } from '@/lib/org/actions';
+import { getSettingsHref } from '@/lib/settings/sections';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
@@ -85,6 +87,7 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <SubscriptionRequirement onNavigate={() => handleOpenChange(false)} />
           <Field label="Name der Organisation" htmlFor="dialog-org-name" required error={nameError}>
             <Input
               id="dialog-org-name"
@@ -118,5 +121,18 @@ export function CreateOrgDialog({ open, onOpenChange }: CreateOrgDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The requirement comes before the name, so nobody fills in a form the server refuses. */
+function SubscriptionRequirement({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      Für eine neue Organisation brauchst du ein aktives Abonnement. Du findest es in den Einstellungen unter{' '}
+      <TextLink href={getSettingsHref('abonnement-abrechnung')} onClick={onNavigate}>
+        Abonnement & Abrechnung
+      </TextLink>
+      .
+    </p>
   );
 }

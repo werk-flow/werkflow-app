@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 
 import { DeleteOrgDialog } from '@/components/org/delete-org-dialog';
+import { useSaveChangesSubmit } from '@/components/settings/nothing-to-save';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
@@ -75,7 +76,7 @@ export function OrganizationSettingsForm({
     });
   }, [form, initialOrganization.name, initialOrganization.uniqueCode]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     if (!canEdit) {
       return;
     }
@@ -225,7 +226,7 @@ export function OrganizationSettingsForm({
                   ? 'Änderungen wirken sich direkt auf alle Mitglieder dieser Organisation aus.'
                   : 'Du kannst diese Daten einsehen, aber nur der Admin kann sie ändern.'}
               </p>
-              <Button type="submit" disabled={!canEdit || isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={!canEdit || isSaving}>
                 {isSaving ? 'Speichert…' : 'Organisation speichern'}
               </Button>
             </CardFooter>

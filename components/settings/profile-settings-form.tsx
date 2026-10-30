@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 
 import { updateProfileSettings } from '@/lib/settings/actions';
 import { type ProfileSettingsValues, profileSettingsSchema } from '@/lib/settings/schemas';
+import { useSaveChangesSubmit } from '@/components/settings/nothing-to-save';
 import { ProfileAvatarSection } from '@/components/settings/profile-avatar-section';
 import { useBanner } from '@/components/ui/banner';
 import { useUserProfile } from '@/components/user/user-profile-context';
@@ -37,7 +38,7 @@ export function ProfileSettingsForm() {
     });
   }, [form, profile?.firstName, profile?.lastName]);
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  const onSubmit = useSaveChangesSubmit(form, async (values) => {
     await runSave(async () => {
       try {
         const result = await updateProfileSettings(values);
@@ -103,7 +104,7 @@ export function ProfileSettingsForm() {
               />
             </CardContent>
             <CardFooter className="justify-end border-t">
-              <Button type="submit" disabled={isSaving || !form.formState.isDirty}>
+              <Button type="submit" disabled={isSaving}>
                 {isSaving ? 'Speichert…' : 'Profil speichern'}
               </Button>
             </CardFooter>
