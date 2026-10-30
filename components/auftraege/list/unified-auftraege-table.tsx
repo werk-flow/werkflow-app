@@ -5,7 +5,8 @@ import { useCallback, useState, useMemo } from 'react';
 import { Table, TableBody, TableHeader } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
-import { type Job, type Project, type UnifiedListEntry, type SortColumn } from '@/lib/jobs/types';
+import { type Job, type Project } from '@/lib/jobs/types';
+import { type UnifiedListEntry, type SortColumn } from '@/lib/jobs/unified-list';
 import { sameRecords } from '@/lib/ui/memo-equality';
 import {
   DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS,

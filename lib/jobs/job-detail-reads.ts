@@ -6,6 +6,8 @@ import { logReadFailure } from '@/lib/data/read-request-cache';
 import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { formatEmployeeRecordName } from '@/lib/personnel/types';
 import type { AdminClient } from '@/lib/supabase/admin';
+import { readInBatches } from '@/lib/supabase/query-batches';
+import { toJobAssignment, type JobAssignmentRow, type JobAssignmentWithProfile } from './types';
 import {
   JOB_FORM_VISIT_LIMIT,
   jobFormEditsSchedule,
@@ -54,6 +56,45 @@ export async function loadJobDetailRelations(
 
 const VISIT_SELECT =
   'id, start_at, end_at, start_date, people:planning_occurrence_assignments(employee_records(first_name, last_name))';
+
+/**
+ * The job's assignees with their names, for the detail readers. A missing name
+ * would show the assignee as "Mitarbeiter", so a failed read returns null.
+ */
+export async function readJobAssigneeProfiles(
+  admin: AdminClient,
+  assignmentRows: JobAssignmentRow[],
+  operation: string,
+): Promise<JobAssignmentWithProfile[] | null> {
+  const assignments: JobAssignmentWithProfile[] = [];
+  if (assignmentRows.length > 0) {
+    const userIds = assignmentRows.map((a) => a.user_id);
+    const { data: profiles, error: profilesError } = await readInBatches(userIds, (batch) =>
+      admin
+        .from('profiles')
+        .select('id, first_name, last_name, email, avatar_path')
+        .in('id', [...batch]),
+    );
+    if (profilesError) {
+      logReadFailure(`${operation}: assignee profiles failed`, profilesError);
+      return null;
+    }
+
+    const profileMap = new Map(profiles.map((p) => [p.id, p]));
+
+    for (const row of assignmentRows) {
+      const profile = profileMap.get(row.user_id);
+      assignments.push({
+        ...toJobAssignment(row),
+        firstName: profile?.first_name ?? null,
+        lastName: profile?.last_name ?? null,
+        email: profile?.email ?? null,
+        avatarPath: profile?.avatar_path ?? null,
+      });
+    }
+  }
+  return assignments;
+}
 
 function countScheduledVisits(admin: AdminClient, orgId: string, jobId: string) {
   return admin

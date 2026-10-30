@@ -1,4 +1,4 @@
-import type { FilterState, UnifiedListEntry } from '@/lib/jobs/types';
+import type { FilterState, UnifiedListEntry } from '@/lib/jobs/unified-list';
 
 /**
  * Applies the filter-bar dropdowns (entry type, clients, employees, date range)
