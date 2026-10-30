@@ -1,7 +1,8 @@
 import { z } from '@/lib/zod';
 
 import type { Json } from '@/lib/supabase/database.types';
-import type { SortColumn } from '@/lib/jobs/types';
+import { isJsonRecord } from '@/lib/supabase/json';
+import type { SortColumn } from '@/lib/jobs/unified-list';
 
 const AUFTRAEGE_COLUMN_IDS = [
   'nr',
@@ -48,31 +49,25 @@ export type AuftraegeColumnPreferencesValues = z.infer<typeof visibleColumnsSche
 
 export const auftraegeColumnPreferencesSchema = visibleColumnsSchema;
 
-type RawPreferenceShape = {
-  auftraege?: {
-    visibleColumns?: unknown;
-  };
-};
-
 function parseVisibleAuftraegeColumns(value: unknown): AuftraegeColumnId[] {
   if (!Array.isArray(value)) {
     return [...DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS];
   }
 
   const parsed = value.filter((entry): entry is AuftraegeColumnId =>
-    AUFTRAEGE_COLUMN_IDS.includes(entry as AuftraegeColumnId),
+    AUFTRAEGE_COLUMN_IDS.some((id) => id === entry),
   );
 
   return parsed.length > 0 ? Array.from(new Set(parsed)) : [...DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS];
 }
 
 export function getAuftraegePreferencesFromJson(preferences: Json | null | undefined): AuftraegeColumnId[] {
-  if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)) {
+  if (!isJsonRecord(preferences)) {
     return [...DEFAULT_VISIBLE_AUFTRAEGE_COLUMNS];
   }
 
-  const typedPreferences = preferences as RawPreferenceShape;
-  return parseVisibleAuftraegeColumns(typedPreferences.auftraege?.visibleColumns);
+  const auftraege = preferences.auftraege;
+  return parseVisibleAuftraegeColumns(isJsonRecord(auftraege) ? auftraege.visibleColumns : undefined);
 }
 
 /** Where the column choice lives in the preference document; the save sets only this key. */
