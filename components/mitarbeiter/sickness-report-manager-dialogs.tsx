@@ -165,31 +165,13 @@ export function EvidenceDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="evidence-required"
-                checked={evidenceRequired}
-                onCheckedChange={(checked) => setEvidenceRequired(checked === true)}
-                disabled={isSaving}
-              />
-              <Label htmlFor="evidence-required" className="text-sm font-normal">
-                Nachweis erforderlich
-              </Label>
-            </div>
-
-            {evidenceRequired && (
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  id="evidence-received"
-                  checked={received}
-                  onCheckedChange={(checked) => setReceived(checked === true)}
-                  disabled={isSaving}
-                />
-                <Label htmlFor="evidence-received" className="text-sm font-normal">
-                  Nachweis erhalten
-                </Label>
-              </div>
-            )}
+            <EvidenceDialogFields
+              evidenceRequired={evidenceRequired}
+              setEvidenceRequired={setEvidenceRequired}
+              received={received}
+              setReceived={setReceived}
+              isSaving={isSaving}
+            />
 
             <ErrorText>{error}</ErrorText>
           </DialogBody>
@@ -265,19 +247,12 @@ export function ManagerCancelDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <Field
-              label="Grund"
-              htmlFor="cancel-sickness-reason"
-              required
+            <ManagerCancelReasonField
+              reason={reason}
+              setReason={setReason}
               error={attempted ? reasonError : undefined}
-            >
-              <Textarea
-                placeholder="z. B. versehentlich erfasst"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                disabled={isSaving}
-              />
-            </Field>
+              isSaving={isSaving}
+            />
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -291,5 +266,71 @@ export function ManagerCancelDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type EvidenceDialogFieldsProps = {
+  evidenceRequired: boolean;
+  setEvidenceRequired: (required: boolean) => void;
+  received: boolean;
+  setReceived: (received: boolean) => void;
+  isSaving: boolean;
+};
+
+function EvidenceDialogFields({
+  evidenceRequired,
+  setEvidenceRequired,
+  received,
+  setReceived,
+  isSaving,
+}: EvidenceDialogFieldsProps) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="evidence-required"
+          checked={evidenceRequired}
+          onCheckedChange={(checked) => setEvidenceRequired(checked === true)}
+          disabled={isSaving}
+        />
+        <Label htmlFor="evidence-required" className="text-sm font-normal">
+          Nachweis erforderlich
+        </Label>
+      </div>
+
+      {evidenceRequired && (
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="evidence-received"
+            checked={received}
+            onCheckedChange={(checked) => setReceived(checked === true)}
+            disabled={isSaving}
+          />
+          <Label htmlFor="evidence-received" className="text-sm font-normal">
+            Nachweis erhalten
+          </Label>
+        </div>
+      )}
+    </>
+  );
+}
+
+type ManagerCancelReasonFieldProps = {
+  reason: string;
+  setReason: (reason: string) => void;
+  error: string | undefined;
+  isSaving: boolean;
+};
+
+function ManagerCancelReasonField({ reason, setReason, error, isSaving }: ManagerCancelReasonFieldProps) {
+  return (
+    <Field label="Grund" htmlFor="cancel-sickness-reason" required error={error}>
+      <Textarea
+        placeholder="z. B. versehentlich erfasst"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        disabled={isSaving}
+      />
+    </Field>
   );
 }

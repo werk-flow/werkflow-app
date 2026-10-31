@@ -86,6 +86,133 @@ function useQualificationManagementGrantFields() {
   };
 }
 
+type QualificationManagementGrantFields = ReturnType<typeof useQualificationManagementGrantFields>;
+
+/** Marks the missing or contradictory grant fields and focuses the first; true when one is invalid. */
+function grantFieldsInvalid({
+  employeeRecordId,
+  capabilityId,
+  validFrom,
+  validUntil,
+  setGrantFieldErrors,
+}: QualificationManagementGrantFields): boolean {
+  const nextFieldErrors = {
+    employee: employeeRecordId ? undefined : 'Bitte wähle einen Mitarbeiter aus.',
+    capability: capabilityId ? undefined : 'Bitte wähle einen Begriff aus.',
+    validFrom: validFrom ? undefined : 'Bitte gib ein Datum an.',
+    validUntil:
+      validUntil && validUntil < validFrom ? '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.' : undefined,
+  };
+  setGrantFieldErrors(nextFieldErrors);
+  return focusFirstInvalidField({
+    'qualification-employee': nextFieldErrors.employee,
+    'qualification-capability': nextFieldErrors.capability,
+    'qualification-valid-from': nextFieldErrors.validFrom,
+    'qualification-valid-until': nextFieldErrors.validUntil,
+  });
+}
+
+/** The action input shared by add and update, and the entry the list shows until the server answers. */
+function grantDraftFor(
+  {
+    employeeRecordId,
+    capabilityId,
+    validFrom,
+    validUntil,
+    issuer,
+    renewalDueDate,
+    operationalNote,
+    confirmed,
+    evidenceState,
+    supersedesId,
+    editingRecordId,
+  }: QualificationManagementGrantFields,
+  selectedDefinition: QualificationWorkspace['capabilities'][number] | null,
+) {
+  const sharedInput = {
+    validFrom,
+    validUntil: validUntil || null,
+    issuer,
+    renewalDueDate: renewalDueDate || null,
+    confirmationStatus: confirmed ? ('confirmed' as const) : ('unconfirmed' as const),
+    evidenceState,
+    operationalNote,
+  };
+  const draft: EmployeeCapabilityRecord = {
+    id: editingRecordId ?? crypto.randomUUID(),
+    employeeRecordId,
+    capabilityId,
+    capabilityKind: selectedDefinition?.kind ?? 'skill',
+    validFrom,
+    validUntil: validUntil || null,
+    issuer: issuer.trim() || null,
+    renewalDueDate: renewalDueDate || null,
+    confirmationStatus: sharedInput.confirmationStatus,
+    evidenceState,
+    operationalNote: operationalNote.trim() || null,
+    supersedesId,
+    supersededAt: null,
+  };
+  return { sharedInput, draft };
+}
+
+type GrantPersistence = {
+  fields: QualificationManagementGrantFields;
+  sharedInput: ReturnType<typeof grantDraftFor>['sharedInput'];
+  draft: EmployeeCapabilityRecord;
+  recordList: QualificationManagementRecordListState;
+  settleRecord: (recordId: string) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+/** Saves the drafted entry, then commits it under its saved id or rolls the echo back. */
+async function persistGrant({
+  fields,
+  sharedInput,
+  draft,
+  recordList,
+  settleRecord,
+  showBanner,
+}: GrantPersistence) {
+  const { employeeRecordId, capabilityId, supersedesId, editingRecordId, setGrantError, resetGrantForm } =
+    fields;
+  try {
+    const result = editingRecordId
+      ? await updateEmployeeCapability({
+          recordId: editingRecordId,
+          ...sharedInput,
+        })
+      : await addEmployeeCapability({
+          employeeRecordId,
+          capabilityId,
+          ...sharedInput,
+          supersedesId,
+        });
+    if (!result.success) {
+      recordList.rollback(draft.id);
+      setGrantError(
+        describeFailure(
+          result.error,
+          { overlap: 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.' },
+          'Der Eintrag konnte nicht gespeichert werden.',
+        ),
+      );
+      return;
+    }
+    const savedId = 'recordId' in result && typeof result.recordId === 'string' ? result.recordId : draft.id;
+    if (savedId !== draft.id) recordList.commit(draft.id, { ...draft, id: savedId });
+    resetGrantForm();
+    showBanner({
+      variant: 'success',
+      message: 'Der Eintrag wurde gespeichert.',
+    });
+    settleRecord(savedId);
+  } catch {
+    recordList.rollback(draft.id);
+    setGrantError('Der Eintrag konnte nicht gespeichert werden.');
+  }
+}
+
 type QualificationManagementGrantFormOptions = {
   definitionById: Map<string, QualificationWorkspace['capabilities'][number]>;
   recordList: QualificationManagementRecordListState;
@@ -105,106 +232,19 @@ export function useQualificationManagementGrantForm({
 }: QualificationManagementGrantFormOptions) {
   const { showBanner } = useBanner();
   const fields = useQualificationManagementGrantFields();
-  const {
-    employeeRecordId,
-    capabilityId,
-    validFrom,
-    validUntil,
-    issuer,
-    renewalDueDate,
-    operationalNote,
-    confirmed,
-    evidenceState,
-    supersedesId,
-    editingRecordId,
-    setGrantError,
-    setGrantFieldErrors,
-    resetGrantForm,
-  } = fields;
+  const { capabilityId, supersedesId, editingRecordId, setGrantError } = fields;
   const selectedDefinition = definitionById.get(capabilityId) ?? null;
   const isRecordIdentityLocked = Boolean(editingRecordId || supersedesId);
 
   const saveGrant = async () => {
     setGrantError(null);
-    const nextFieldErrors = {
-      employee: employeeRecordId ? undefined : 'Bitte wähle einen Mitarbeiter aus.',
-      capability: capabilityId ? undefined : 'Bitte wähle einen Begriff aus.',
-      validFrom: validFrom ? undefined : 'Bitte gib ein Datum an.',
-      validUntil:
-        validUntil && validUntil < validFrom ? '„Gültig bis“ darf nicht vor „Gültig ab“ liegen.' : undefined,
-    };
-    setGrantFieldErrors(nextFieldErrors);
-    const invalid = focusFirstInvalidField({
-      'qualification-employee': nextFieldErrors.employee,
-      'qualification-capability': nextFieldErrors.capability,
-      'qualification-valid-from': nextFieldErrors.validFrom,
-      'qualification-valid-until': nextFieldErrors.validUntil,
-    });
-    if (invalid) return;
-    const sharedInput = {
-      validFrom,
-      validUntil: validUntil || null,
-      issuer,
-      renewalDueDate: renewalDueDate || null,
-      confirmationStatus: confirmed ? ('confirmed' as const) : ('unconfirmed' as const),
-      evidenceState,
-      operationalNote,
-    };
-    const draft: EmployeeCapabilityRecord = {
-      id: editingRecordId ?? crypto.randomUUID(),
-      employeeRecordId,
-      capabilityId,
-      capabilityKind: selectedDefinition?.kind ?? 'skill',
-      validFrom,
-      validUntil: validUntil || null,
-      issuer: issuer.trim() || null,
-      renewalDueDate: renewalDueDate || null,
-      confirmationStatus: sharedInput.confirmationStatus,
-      evidenceState,
-      operationalNote: operationalNote.trim() || null,
-      supersedesId,
-      supersededAt: null,
-    };
+    if (grantFieldsInvalid(fields)) return;
+    const { sharedInput, draft } = grantDraftFor(fields, selectedDefinition);
     if (editingRecordId) recordList.update(draft.id, draft);
     else recordList.insert(draft.id, draft);
-    await runAction('save-record', async () => {
-      try {
-        const result = editingRecordId
-          ? await updateEmployeeCapability({
-              recordId: editingRecordId,
-              ...sharedInput,
-            })
-          : await addEmployeeCapability({
-              employeeRecordId,
-              capabilityId,
-              ...sharedInput,
-              supersedesId,
-            });
-        if (!result.success) {
-          recordList.rollback(draft.id);
-          setGrantError(
-            describeFailure(
-              result.error,
-              { overlap: 'Der Zeitraum überschneidet sich mit einem bestehenden Eintrag.' },
-              'Der Eintrag konnte nicht gespeichert werden.',
-            ),
-          );
-          return;
-        }
-        const savedId =
-          'recordId' in result && typeof result.recordId === 'string' ? result.recordId : draft.id;
-        if (savedId !== draft.id) recordList.commit(draft.id, { ...draft, id: savedId });
-        resetGrantForm();
-        showBanner({
-          variant: 'success',
-          message: 'Der Eintrag wurde gespeichert.',
-        });
-        settleRecord(savedId);
-      } catch {
-        recordList.rollback(draft.id);
-        setGrantError('Der Eintrag konnte nicht gespeichert werden.');
-      }
-    });
+    await runAction('save-record', () =>
+      persistGrant({ fields, sharedInput, draft, recordList, settleRecord, showBanner }),
+    );
   };
 
   return { ...fields, selectedDefinition, isRecordIdentityLocked, saveGrant };
