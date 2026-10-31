@@ -1,103 +1,37 @@
 'use server';
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
-import { logReadFailure, loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
+import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { resolveActionContextFor } from '@/lib/org/action-context';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
-import { readOrganizationSettings } from './organization-settings-read';
-import {
-  type TimeEntryRow,
-  type LiveClockState,
-  type TimeActivitySelection,
-  toTimeEntries,
-  type ClockJobInfo,
-  type ClockTimelineSegment,
-} from './types';
-import {
-  buildClockTimelineSegments,
-  calculateBreakMinutes,
-  deriveCurrentClockState,
-  calculateTotalMinutes,
-  calculateBreakSessions,
-  calculateWorkSessions,
-} from './helpers';
 import { uuidSchema } from '@/lib/validation/uuid';
-import { computeBreakdownForSettings } from './settings';
-import { getJobDisplayTitle } from '@/lib/jobs/types';
-import { getCanonicalClockState } from './segment-actions';
+import { readOrganizationSettings } from './organization-settings-read';
+import { type LiveClockState, type TimeActivitySelection, type TimeEntry, toTimeEntries } from './types';
+import { deriveCurrentClockState } from './helpers';
+import {
+  buildCanonicalClockState,
+  clockTotalsState,
+  readCanonicalClockDay,
+  readClockJobs,
+} from './canonical-clock-state';
+import {
+  canonicalDayTotals,
+  combineClockDayTotals,
+  legacyDayTotals,
+  type ClockDayTotals,
+} from './clock-day-totals';
 import { endSessionBeforeSignOut } from './sign-out-session-end';
 import { createActivitySelection } from './segments';
 import { collectActiveJobIds } from './active-jobs';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
 import { getDayBounds, getUserEntriesForDay, verifyCurrentMembership } from './action-access';
 
+type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
+
 // The clock Server Actions: the caller's live clock state, the jobs someone
 // works on right now, and the clock-out before sign-out.
-
-/**
- * Get only today's entries for the user in an org.
- * Much faster than getUserEntries for clock status checks.
- */
-async function getUserTodayEntries(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  userId: string,
-  orgId: string,
-): Promise<TimeEntryRow[] | null> {
-  return getUserEntriesForDay(admin, userId, orgId, new Date());
-}
-
-async function getClockJobInfo(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  organizationId: string,
-  jobId: string,
-): Promise<ActionResult<{ info: ClockJobInfo | null }>> {
-  const { data: job, error: jobError } = await loggedRead(
-    'getClockJobInfo: jobs read failed',
-    admin
-      .from('jobs')
-      .select('id, title, description, job_number, status, project_id, client_id')
-      .eq('id', jobId)
-      .eq('organization_id', organizationId)
-      .maybeSingle(),
-  );
-  if (jobError) return { success: false, error: 'fetch_failed' };
-  if (!job) return { success: true, info: null };
-
-  const [projectData, clientData] = await Promise.all([
-    job.project_id
-      ? admin
-          .from('projects')
-          .select('name')
-          .eq('id', job.project_id)
-          .eq('organization_id', organizationId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    job.client_id
-      ? admin
-          .from('clients')
-          .select('name')
-          .eq('id', job.client_id)
-          .eq('organization_id', organizationId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-
-  return {
-    success: true,
-    info: {
-      id: job.id,
-      title: getJobDisplayTitle({
-        title: job.title,
-        description: job.description,
-      }),
-      jobNumber: job.job_number,
-      status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-      projectName: projectData.data?.name ?? null,
-      clientName: clientData.data?.name ?? null,
-    },
-  };
-}
 
 // ============================================
 // Real-Time Clock In/Out Actions
@@ -186,7 +120,6 @@ export async function clockOutBeforeSignOut(): Promise<
 }
 
 type LegacyClockState = ReturnType<typeof deriveCurrentClockState>;
-type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
 
 /** The activity a legacy event stream is in: a break, work on its job, or unallocated work. */
 function getLegacyCurrentActivity(currentState: LegacyClockState): TimeActivitySelection | null {
@@ -197,50 +130,54 @@ function getLegacyCurrentActivity(currentState: LegacyClockState): TimeActivityS
     : { kind: 'work', allocationKind: 'unallocated', jobId: null };
 }
 
-/** The live clock state of a legacy event stream, from its already derived parts. */
-function legacyLiveClockState(input: {
-  organizationId: string;
-  organizationSettings: OrganizationClockSettings;
-  currentState: LegacyClockState;
-  todayMinutes: number;
-  breakdown: ReturnType<typeof computeBreakdownForSettings>;
-  timelineSegments: ClockTimelineSegment[];
-  activeJobInfo: ClockJobInfo | null;
-  resumeActivity: TimeActivitySelection | null;
-  resumeJobInfo: ClockJobInfo | null;
-}): LiveClockState {
-  const { organizationSettings, currentState, breakdown } = input;
+/**
+ * The clock state without an open canonical session: a running legacy event
+ * stream, or nothing running. Today's totals keep the minutes of both capture
+ * models, so a clock-out never resets the day to zero.
+ */
+async function buildLegacyClockState(
+  admin: AdminClient,
+  input: {
+    organizationId: string;
+    settings: OrganizationClockSettings;
+    entries: TimeEntry[];
+    totals: ClockDayTotals;
+    now: Date;
+  },
+): Promise<ActionResult<{ state: LiveClockState }>> {
+  const { organizationId } = input;
+  const currentState = deriveCurrentClockState(input.entries);
+  // Legacy events know only work and breaks, so the resumable activity is
+  // work on the job the break interrupted (or unallocated work).
+  const resumeActivity: TimeActivitySelection | null = currentState.isClockedIn
+    ? createActivitySelection('work', currentState.resumeJobId)
+    : null;
+  const jobs = await readClockJobs(admin, organizationId, currentState.activeJobId, currentState.resumeJobId);
+  if (!jobs.success) return jobs;
   return {
-    organizationId: input.organizationId,
-    breakMode: organizationSettings.breakMode,
-    autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
-    autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
-    status: currentState.status,
-    isClockedIn: currentState.isClockedIn,
-    isOnBreak: currentState.isOnBreak,
-    clockInTime: currentState.clockInTime,
-    statusStartedAt: currentState.statusStartedAt,
-    breakStartTime: currentState.breakStartTime,
-    todayMinutes: input.todayMinutes,
-    workMinutes: breakdown.workMinutes,
-    breakMinutes: breakdown.breakMinutes,
-    timelineSegments: input.timelineSegments,
-    activeJobId: currentState.activeJobId,
-    activeJobInfo: input.activeJobInfo,
-    captureModel: currentState.isClockedIn ? 'legacy' : 'none',
-    sessionId: null,
-    sessionVersion: null,
-    currentSegmentId: null,
-    currentActivity: getLegacyCurrentActivity(currentState),
-    resumeActivity: input.resumeActivity,
-    resumeJobInfo: input.resumeJobInfo,
-    recoveryReason: null,
-    legacyOpen: currentState.isClockedIn,
-    standbyMinutes: 0,
-    travelMinutes: 0,
-    calloutMinutes: 0,
-    internalMinutes: 0,
-    fetchedAt: new Date().toISOString(),
+    success: true,
+    state: {
+      ...clockTotalsState(input.totals, input.settings),
+      organizationId,
+      status: currentState.status,
+      isClockedIn: currentState.isClockedIn,
+      isOnBreak: currentState.isOnBreak,
+      clockInTime: currentState.clockInTime,
+      statusStartedAt: currentState.statusStartedAt,
+      breakStartTime: currentState.breakStartTime,
+      activeJobId: currentState.activeJobId,
+      activeJobInfo: jobs.activeJobInfo,
+      captureModel: currentState.isClockedIn ? 'legacy' : 'none',
+      sessionId: null,
+      sessionVersion: null,
+      currentSegmentId: null,
+      currentActivity: getLegacyCurrentActivity(currentState),
+      resumeActivity,
+      resumeJobInfo: jobs.resumeJobInfo,
+      recoveryReason: null,
+      legacyOpen: currentState.isClockedIn,
+      fetchedAt: input.now.toISOString(),
+    },
   };
 }
 
@@ -255,70 +192,44 @@ export async function getCurrentClockState(
     const parsed = uuidSchema.safeParse(rawOrganizationId);
     if (!parsed.success) return { success: false, error: 'invalid_input' };
     const organizationId = parsed.data;
-    const canonical = await getCanonicalClockState(organizationId);
-    if (!canonical.success) return canonical;
-    if (canonical.state) return { success: true, state: canonical.state };
-
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
+    const caller = await resolveActionContextFor(organizationId);
+    if (!caller.success) return caller;
+    const userId = caller.context.userId;
 
     const admin = createSupabaseAdminClient();
-    const [userRole, todayRows, organizationSettings] = await Promise.all([
-      verifyCurrentMembership(organizationId),
-      getUserTodayEntries(admin, user.id, organizationId),
+    const now = new Date();
+    const { start: dayStart, end: dayEnd } = getDayBounds(now);
+    const [canonicalDay, todayRows, settings] = await Promise.all([
+      readCanonicalClockDay(admin, { organizationId, userId, dayStart, dayEnd }),
+      getUserEntriesForDay(admin, userId, organizationId, now),
       readOrganizationSettings(organizationId),
     ]);
+    if (!canonicalDay || !todayRows || !settings) return { success: false, error: 'fetch_failed' };
 
-    if (!userRole) {
-      return { success: false, error: 'not_a_member' };
-    }
-    if (!organizationSettings || !todayRows) return { success: false, error: 'fetch_failed' };
-
-    const timeEntries = toTimeEntries(todayRows);
-    const currentState = deriveCurrentClockState(timeEntries);
-    const workSessions = calculateWorkSessions(timeEntries);
-    const breakSessions = calculateBreakSessions(timeEntries);
-    const timelineSegments = buildClockTimelineSegments(timeEntries, new Date(), {
-      sameLocalDayOnly: true,
-      includeOpenSegment: false,
-    });
-    const trackedWorkMinutes = calculateTotalMinutes(workSessions);
-    const trackedBreakMinutes = calculateBreakMinutes(breakSessions);
-    const todayMinutes = trackedWorkMinutes + trackedBreakMinutes;
-    const breakdown = computeBreakdownForSettings(todayMinutes, trackedBreakMinutes, organizationSettings);
-    const noJob = { success: true as const, info: null };
-    const activeJob = currentState.activeJobId
-      ? await getClockJobInfo(admin, organizationId, currentState.activeJobId)
-      : noJob;
-    if (!activeJob.success) return activeJob;
-    // Legacy events know only work and breaks, so the resumable activity is
-    // work on the job the break interrupted (or unallocated work).
-    const resumeActivity: TimeActivitySelection | null = currentState.isClockedIn
-      ? createActivitySelection('work', currentState.resumeJobId)
-      : null;
-    const resumeJob = !currentState.resumeJobId
-      ? noJob
-      : currentState.resumeJobId === currentState.activeJobId
-        ? activeJob
-        : await getClockJobInfo(admin, organizationId, currentState.resumeJobId);
-    if (!resumeJob.success) return resumeJob;
-
-    return {
-      success: true,
-      state: legacyLiveClockState({
-        organizationId,
-        organizationSettings,
-        currentState,
-        todayMinutes,
-        breakdown,
-        timelineSegments,
-        activeJobInfo: activeJob.info,
-        resumeActivity,
-        resumeJobInfo: resumeJob.info,
-      }),
-    };
+    const entries = toTimeEntries(todayRows);
+    const legacyTotals = legacyDayTotals(entries, now);
+    const result = canonicalDay.openSession
+      ? await buildCanonicalClockState(admin, {
+          organizationId,
+          settings,
+          session: canonicalDay.openSession,
+          day: canonicalDay,
+          legacyTotals,
+          now,
+          dayStart,
+          dayEnd,
+        })
+      : await buildLegacyClockState(admin, {
+          organizationId,
+          settings,
+          entries,
+          totals: combineClockDayTotals(
+            legacyTotals,
+            canonicalDayTotals(canonicalDay.segments, dayStart, dayEnd),
+          ),
+          now,
+        });
+    return result.success ? { success: true, state: result.state } : result;
   } catch (error) {
     logError('Unexpected error in getCurrentClockState:', error);
     return { success: false, error: 'unexpected_error' };

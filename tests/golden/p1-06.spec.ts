@@ -33,6 +33,7 @@ import {
   rejectVacationRequestFor,
   vacationCalendarLabel,
   vacationRemainingText,
+  vacationTakenAndPlannedText,
   vacationTakenRatio,
   vacationTakenText,
   withdrawOwnPendingVacationRequest,
@@ -272,7 +273,8 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
       expect(state.approvedDaysByYear).toEqual({ [halfDayIso.slice(0, 4)]: 0.5 });
 
       await openOwnVacationSection(employeePage);
-      await expectVisibleAfterSave(employeePage, vacationTakenText('0,5', 30));
+      // The half day lies ahead: planned, not taken.
+      await expectVisibleAfterSave(employeePage, vacationTakenAndPlannedText(0, 30, '0,5'));
       await expectVisibleAfterSave(employeePage, vacationRemainingText('29,5'));
       await expect(visibleText(employeePage, VACATION_PORTION_LABELS.half_day)).toBeVisible();
     });
