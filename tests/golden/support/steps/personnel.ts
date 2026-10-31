@@ -621,7 +621,7 @@ export async function setHolidayRegionViaSettings(page: Page, regionLabel: strin
 const CLOSURE_DATE_FIELD = 'Datum der Betriebsruhe';
 
 /** The submit button of the closure-day form on the time settings. */
-export function closureDaySubmitButton(page: Page): Locator {
+function closureDaySubmitButton(page: Page): Locator {
   return page.getByRole('button', { name: 'Eintragen' });
 }
 

@@ -335,6 +335,8 @@ test.describe('A1 Zeiterfassung @AUDIT-W1-A1', () => {
     await expect(breakModeSelect(bueroPage)).toBeDisabled();
     await expect(visibleText(bueroPage, TIME_SETTINGS_COPY.readOnly)).toBeVisible();
     // The save action reconciles open breaks in the application; completed rows stay untouched.
+    // The refused Büro write and the untouched completed day are proven in
+    // supabase/tests/time_settings_atomic_writes.sql.
     expect(await getOrganizationTimeEntrySnapshot(world.orgId)).toEqual(entriesBefore);
   });
 });
