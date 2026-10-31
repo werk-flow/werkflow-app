@@ -90,8 +90,6 @@ function QualificationWarningDialogContent({
     }
   };
 
-  const uncovered = evaluation.requirementCoverage.filter((coverage) => coverage.status !== 'covered');
-
   return (
     <Dialog open onOpenChange={(open) => !open && onCancel()} pending={isSubmitting}>
       <DialogContent>
@@ -107,46 +105,7 @@ function QualificationWarningDialogContent({
         </DialogHeader>
 
         <div className="space-y-3 text-sm">
-          {/* Own wrapper so only the gap rows form the list; the same
-              space-y-3 keeps the spacing identical, and no empty wrapper
-              renders without gaps. */}
-          {uncovered.length > 0 && (
-            <div className="space-y-3" role="list" aria-label="Offene Qualifikationshinweise">
-              {uncovered.map((coverage) => (
-                <div
-                  key={coverage.requirement.id}
-                  role="listitem"
-                  aria-label={coverage.requirement.capabilityName}
-                  className="rounded-md border bg-muted/30 px-3 py-2"
-                >
-                  <p className="font-medium">{coverage.requirement.capabilityName}</p>
-                  <p className="text-muted-foreground">
-                    {getCoverageStatusLabel(coverage.status)}
-                    {coverage.contributor ? ` – stärkster Eintrag: ${coverage.contributor.displayName}` : ''}
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {evaluation.apprenticeWarning.status === 'apprentices_only' && (
-            <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <p className="font-medium">Ausbildungs-Hinweis</p>
-              <p className="text-muted-foreground">
-                Die Auswahl besteht ausschließlich aus Personen mit der hinterlegten Beschäftigungsart
-                „Ausbildung“.
-              </p>
-            </div>
-          )}
-          {evaluation.apprenticeWarning.status === 'incomplete' && (
-            <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <p className="font-medium">Ausbildungs-Hinweis unvollständig</p>
-              <p className="text-muted-foreground">
-                Für {evaluation.apprenticeWarning.missingConditionNames.join(', ')} ist keine wirksame
-                Beschäftigungsart hinterlegt.
-              </p>
-            </div>
-          )}
+          <QualificationWarningNotes evaluation={evaluation} />
 
           <Field
             label="Kurze Begründung"
@@ -181,6 +140,56 @@ function QualificationWarningDialogContent({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The uncovered requirements and the apprentice hints the dialog asks a reason for. */
+function QualificationWarningNotes({ evaluation }: { evaluation: AssignmentEvaluation }) {
+  const uncovered = evaluation.requirementCoverage.filter((coverage) => coverage.status !== 'covered');
+
+  return (
+    <>
+      {/* Own wrapper so only the gap rows form the list; the same
+        space-y-3 keeps the spacing identical, and no empty wrapper
+        renders without gaps. */}
+      {uncovered.length > 0 && (
+        <div className="space-y-3" role="list" aria-label="Offene Qualifikationshinweise">
+          {uncovered.map((coverage) => (
+            <div
+              key={coverage.requirement.id}
+              role="listitem"
+              aria-label={coverage.requirement.capabilityName}
+              className="rounded-md border bg-muted/30 px-3 py-2"
+            >
+              <p className="font-medium">{coverage.requirement.capabilityName}</p>
+              <p className="text-muted-foreground">
+                {getCoverageStatusLabel(coverage.status)}
+                {coverage.contributor ? ` – stärkster Eintrag: ${coverage.contributor.displayName}` : ''}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {evaluation.apprenticeWarning.status === 'apprentices_only' && (
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="font-medium">Ausbildungs-Hinweis</p>
+          <p className="text-muted-foreground">
+            Die Auswahl besteht ausschließlich aus Personen mit der hinterlegten Beschäftigungsart
+            „Ausbildung“.
+          </p>
+        </div>
+      )}
+      {evaluation.apprenticeWarning.status === 'incomplete' && (
+        <div className="rounded-md border bg-muted/30 px-3 py-2">
+          <p className="font-medium">Ausbildungs-Hinweis unvollständig</p>
+          <p className="text-muted-foreground">
+            Für {evaluation.apprenticeWarning.missingConditionNames.join(', ')} ist keine wirksame
+            Beschäftigungsart hinterlegt.
+          </p>
+        </div>
+      )}
+    </>
   );
 }
 

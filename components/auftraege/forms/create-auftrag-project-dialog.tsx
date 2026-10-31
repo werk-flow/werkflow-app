@@ -39,19 +39,11 @@ interface CreateAuftragProjectDialogProps {
   onProjectSubmit?: (submission: CreateProjectSubmission) => void;
 }
 
-export function CreateAuftragProjectDialog({
-  members,
-  jobs,
-  defaultClient,
-  defaultEmployeeIds,
-  readOnlyClient,
-  open: controlledOpen,
-  onOpenChange: controlledOnOpenChange,
-  onJobCreated,
-  onProjectCreated,
-  onJobSubmit,
-  onProjectSubmit,
-}: CreateAuftragProjectDialogProps) {
+/** The open state, controlled or internal, and the active tab that every opening resets. */
+function useCreateAuftragProjectDialogState(
+  controlledOpen: boolean | undefined,
+  controlledOnOpenChange: ((open: boolean) => void) | undefined,
+) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('job');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
@@ -68,16 +60,168 @@ export function CreateAuftragProjectDialog({
     if (open) setActiveTab('job');
   }
 
+  return {
+    activeTab,
+    setActiveTab,
+    isCreatingJob,
+    setIsCreatingJob,
+    isCreatingProject,
+    setIsCreatingProject,
+    isControlled,
+    open,
+    setOpen,
+  };
+}
+
+function CreateAuftragProjectTrigger() {
+  return (
+    <DialogTrigger asChild>
+      <Button size="default" className="gap-2">
+        <Plus className="size-4" />
+        <span className="sr-only sm:not-sr-only">Erstellen</span>
+      </Button>
+    </DialogTrigger>
+  );
+}
+
+function CreateAuftragProjectTabsList() {
+  return (
+    <TabsList className="w-full">
+      <TabsTrigger value="job" className="flex-1 gap-1.5">
+        <Briefcase className="h-3.5 w-3.5" />
+        Auftrag erstellen
+      </TabsTrigger>
+      <TabsTrigger value="project" className="flex-1 gap-1.5">
+        <FolderKanban className="h-3.5 w-3.5" />
+        Projekt erstellen
+      </TabsTrigger>
+    </TabsList>
+  );
+}
+
+interface CreateAuftragTabProps {
+  isActive: boolean;
+  onPendingChange: (pending: boolean) => void;
+  setOpen: (open: boolean) => void;
+  defaultClient: ClientSelectItem | undefined;
+  readOnlyClient: boolean | undefined;
+}
+
+interface CreateAuftragJobTabProps extends CreateAuftragTabProps {
+  members: OrgMemberOption[];
+  defaultEmployeeIds: string[] | undefined;
+  onJobSubmit: CreateAuftragProjectDialogProps['onJobSubmit'];
+  onJobCreated: CreateAuftragProjectDialogProps['onJobCreated'];
+}
+
+interface CreateAuftragProjectTabProps extends CreateAuftragTabProps {
+  jobs: Job[];
+  onProjectSubmit: CreateAuftragProjectDialogProps['onProjectSubmit'];
+  onProjectCreated: CreateAuftragProjectDialogProps['onProjectCreated'];
+}
+
+function CreateAuftragJobTab({
+  members,
+  defaultClient,
+  defaultEmployeeIds,
+  readOnlyClient,
+  isActive,
+  onPendingChange,
+  setOpen,
+  onJobSubmit,
+  onJobCreated,
+}: CreateAuftragJobTabProps) {
+  return (
+    <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
+      <CreateJobFormContent
+        members={members}
+        defaultClient={defaultClient}
+        defaultEmployeeIds={defaultEmployeeIds}
+        readOnlyClient={readOnlyClient}
+        isActive={isActive}
+        onPendingChange={onPendingChange}
+        onSubmitDeferred={
+          onJobSubmit
+            ? (submission) => {
+                setOpen(false);
+                onJobSubmit(submission);
+              }
+            : undefined
+        }
+        // createJob's response renders the route, so no refresh follows.
+        onSuccess={async (payload) => {
+          setOpen(false);
+          await onJobCreated?.(payload);
+        }}
+      />
+    </TabsContent>
+  );
+}
+
+function CreateAuftragProjectTab({
+  jobs,
+  defaultClient,
+  readOnlyClient,
+  isActive,
+  onPendingChange,
+  setOpen,
+  onProjectSubmit,
+  onProjectCreated,
+}: CreateAuftragProjectTabProps) {
+  return (
+    <TabsContent value="project" className="flex min-h-0 flex-1 flex-col">
+      <CreateProjectFormContent
+        jobs={jobs}
+        defaultClient={defaultClient}
+        readOnlyClient={readOnlyClient}
+        isActive={isActive}
+        onPendingChange={onPendingChange}
+        onSubmitDeferred={
+          onProjectSubmit
+            ? (submission) => {
+                setOpen(false);
+                onProjectSubmit(submission);
+              }
+            : undefined
+        }
+        // createProject's response renders the route, so no refresh follows.
+        onSuccess={async (payload) => {
+          setOpen(false);
+          await onProjectCreated?.(payload);
+        }}
+      />
+    </TabsContent>
+  );
+}
+
+export function CreateAuftragProjectDialog({
+  members,
+  jobs,
+  defaultClient,
+  defaultEmployeeIds,
+  readOnlyClient,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  onJobCreated,
+  onProjectCreated,
+  onJobSubmit,
+  onProjectSubmit,
+}: CreateAuftragProjectDialogProps) {
+  const {
+    activeTab,
+    setActiveTab,
+    isCreatingJob,
+    setIsCreatingJob,
+    isCreatingProject,
+    setIsCreatingProject,
+    isControlled,
+    open,
+    setOpen,
+  } = useCreateAuftragProjectDialogState(controlledOpen, controlledOnOpenChange);
+
   return (
     <Dialog open={open} onOpenChange={setOpen} pending={isCreatingJob || isCreatingProject}>
-      {!isControlled && (
-        <DialogTrigger asChild>
-          <Button size="default" className="gap-2">
-            <Plus className="size-4" />
-            <span className="sr-only sm:not-sr-only">Erstellen</span>
-          </Button>
-        </DialogTrigger>
-      )}
+      {!isControlled && <CreateAuftragProjectTrigger />}
       <DialogContent workspace>
         <DialogHeader>
           <DialogTitle>Neuen Auftrag oder Projekt erstellen</DialogTitle>
@@ -94,63 +238,30 @@ export function CreateAuftragProjectDialog({
           }}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <TabsList className="w-full">
-            <TabsTrigger value="job" className="flex-1 gap-1.5">
-              <Briefcase className="h-3.5 w-3.5" />
-              Auftrag erstellen
-            </TabsTrigger>
-            <TabsTrigger value="project" className="flex-1 gap-1.5">
-              <FolderKanban className="h-3.5 w-3.5" />
-              Projekt erstellen
-            </TabsTrigger>
-          </TabsList>
+          <CreateAuftragProjectTabsList />
 
-          <TabsContent value="job" className="flex min-h-0 flex-1 flex-col">
-            <CreateJobFormContent
-              members={members}
-              defaultClient={defaultClient}
-              defaultEmployeeIds={defaultEmployeeIds}
-              readOnlyClient={readOnlyClient}
-              isActive={activeTab === 'job'}
-              onPendingChange={setIsCreatingJob}
-              onSubmitDeferred={
-                onJobSubmit
-                  ? (submission) => {
-                      setOpen(false);
-                      onJobSubmit(submission);
-                    }
-                  : undefined
-              }
-              // createJob's response renders the route, so no refresh follows.
-              onSuccess={async (payload) => {
-                setOpen(false);
-                await onJobCreated?.(payload);
-              }}
-            />
-          </TabsContent>
+          <CreateAuftragJobTab
+            members={members}
+            defaultClient={defaultClient}
+            defaultEmployeeIds={defaultEmployeeIds}
+            readOnlyClient={readOnlyClient}
+            isActive={activeTab === 'job'}
+            onPendingChange={setIsCreatingJob}
+            setOpen={setOpen}
+            onJobSubmit={onJobSubmit}
+            onJobCreated={onJobCreated}
+          />
 
-          <TabsContent value="project" className="flex min-h-0 flex-1 flex-col">
-            <CreateProjectFormContent
-              jobs={jobs}
-              defaultClient={defaultClient}
-              readOnlyClient={readOnlyClient}
-              isActive={activeTab === 'project'}
-              onPendingChange={setIsCreatingProject}
-              onSubmitDeferred={
-                onProjectSubmit
-                  ? (submission) => {
-                      setOpen(false);
-                      onProjectSubmit(submission);
-                    }
-                  : undefined
-              }
-              // createProject's response renders the route, so no refresh follows.
-              onSuccess={async (payload) => {
-                setOpen(false);
-                await onProjectCreated?.(payload);
-              }}
-            />
-          </TabsContent>
+          <CreateAuftragProjectTab
+            jobs={jobs}
+            defaultClient={defaultClient}
+            readOnlyClient={readOnlyClient}
+            isActive={activeTab === 'project'}
+            onPendingChange={setIsCreatingProject}
+            setOpen={setOpen}
+            onProjectSubmit={onProjectSubmit}
+            onProjectCreated={onProjectCreated}
+          />
         </Tabs>
       </DialogContent>
     </Dialog>
