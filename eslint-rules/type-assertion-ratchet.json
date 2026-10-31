@@ -24,7 +24,6 @@
   "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": 1,
   "components/auftraege/lifecycle/work-lifecycle-dependency-dialog.tsx": 2,
   "components/auftraege/list/filter-bar-fields.tsx": 1,
-  "components/dokumente/document-details-dialog.tsx": 1,
   "components/inventar/inventory-item-form-fields.tsx": 1,
   "components/inventar/inventory-location-dialog.tsx": 1,
   "components/inventar/location-select-with-create.tsx": 1,
