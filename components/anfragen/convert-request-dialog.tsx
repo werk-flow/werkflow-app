@@ -23,7 +23,11 @@ import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-p
 import { QualificationWarningDialog } from '@/components/auftraege/shared/qualification-warning-dialog';
 import { ConvertRequestCustomerFields } from './convert-request-customer-fields';
 import { ConvertRequestJobFields } from './convert-request-job-fields';
-import { useConvertRequestForm, type ConversionTarget } from './use-convert-request-form';
+import {
+  CONVERSION_TARGETS,
+  useConvertRequestForm,
+  type ConvertRequestForm,
+} from './use-convert-request-form';
 
 interface ConvertRequestDialogProps {
   request: ClientRequest;
@@ -33,6 +37,70 @@ interface ConvertRequestDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Fires after the server confirmed; the page marks itself until refreshed props land. */
   onSaved?: () => void;
+}
+
+/** The target kind, its template, and the title and number fields that change label with it. */
+function ConvertRequestTargetFields({ form }: { form: ConvertRequestForm }) {
+  const {
+    target,
+    setTarget,
+    title,
+    setTitle,
+    number,
+    setNumber,
+    templateVersionId,
+    setTemplateVersionId,
+    isLoading,
+    titleError,
+    numberError,
+  } = form;
+
+  return (
+    <>
+      <Tabs
+        panels={false}
+        value={target}
+        onValueChange={(value) => {
+          const nextTarget = CONVERSION_TARGETS.find((candidate) => candidate === value);
+          if (nextTarget) setTarget(nextTarget);
+        }}
+      >
+        <TabsList className="h-9 w-full">
+          <TabsTrigger value="job" className="flex-1">
+            Auftrag
+          </TabsTrigger>
+          <TabsTrigger value="project" className="flex-1">
+            Projekt
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <WorkTemplatePicker
+        targetType={target}
+        value={templateVersionId}
+        onChange={setTemplateVersionId}
+        disabled={isLoading}
+      />
+
+      <Field
+        label={target === 'job' ? 'Titel' : 'Projektname'}
+        htmlFor="convert-title"
+        required
+        error={titleError}
+      >
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isLoading} />
+      </Field>
+
+      <Field
+        label={target === 'job' ? 'Auftragsnummer' : 'Projektnummer'}
+        htmlFor="convert-number"
+        required={target === 'job'}
+        error={numberError}
+      >
+        <Input value={number} onChange={(e) => setNumber(e.target.value)} disabled={isLoading} />
+      </Field>
+    </>
+  );
 }
 
 // Deliberate once-only conversion: everything the request captured is
@@ -47,20 +115,11 @@ export function ConvertRequestDialog({
   const form = useConvertRequestForm({ request, open, onOpenChange, onSaved });
   const {
     target,
-    setTarget,
-    title,
-    setTitle,
-    number,
-    setNumber,
     description,
     setDescription,
-    templateVersionId,
-    setTemplateVersionId,
     qualificationWarning,
     setQualificationWarning,
     isLoading,
-    titleError,
-    numberError,
     formError,
     submitConversion,
     handleSubmit,
@@ -79,45 +138,7 @@ export function ConvertRequestDialog({
           </DialogHeader>
           <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
             <DialogBody className="grid gap-4 py-2">
-              <Tabs
-                panels={false}
-                value={target}
-                onValueChange={(value) => setTarget(value as ConversionTarget)}
-              >
-                <TabsList className="h-9 w-full">
-                  <TabsTrigger value="job" className="flex-1">
-                    Auftrag
-                  </TabsTrigger>
-                  <TabsTrigger value="project" className="flex-1">
-                    Projekt
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-
-              <WorkTemplatePicker
-                targetType={target}
-                value={templateVersionId}
-                onChange={setTemplateVersionId}
-                disabled={isLoading}
-              />
-
-              <Field
-                label={target === 'job' ? 'Titel' : 'Projektname'}
-                htmlFor="convert-title"
-                required
-                error={titleError}
-              >
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} disabled={isLoading} />
-              </Field>
-
-              <Field
-                label={target === 'job' ? 'Auftragsnummer' : 'Projektnummer'}
-                htmlFor="convert-number"
-                required={target === 'job'}
-                error={numberError}
-              >
-                <Input value={number} onChange={(e) => setNumber(e.target.value)} disabled={isLoading} />
-              </Field>
+              <ConvertRequestTargetFields form={form} />
 
               <ConvertRequestCustomerFields request={request} requestClient={requestClient} form={form} />
 

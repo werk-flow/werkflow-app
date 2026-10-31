@@ -77,6 +77,42 @@ export interface CreateProjectFormContentProps {
   onPendingChange?: ((pending: boolean) => void) | undefined;
 }
 
+/** The required-field errors of the create form, keyed by field id. */
+function createProjectFieldErrors({ projectNumber, name, description }: CreateProjectForm) {
+  return {
+    'create-project-number': projectNumber.trim() ? undefined : 'Bitte gib eine Projektnummer ein.',
+    'create-project-name':
+      name.trim() || description.trim()
+        ? undefined
+        : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
+  };
+}
+
+/** The create request of the form's trimmed values; an empty value is left out. */
+function buildCreateProjectInput({
+  name,
+  description,
+  templateVersionId,
+  clientId,
+  siteId,
+  contactId,
+  projectNumber,
+  plannedStartDate,
+  plannedEndDate,
+}: CreateProjectForm): CreateProjectInput {
+  return {
+    name: name.trim(),
+    ...(description.trim() ? { description: description.trim() } : {}),
+    ...(clientId ? { clientId } : {}),
+    ...(siteId ? { siteId } : {}),
+    ...(contactId ? { contactId } : {}),
+    ...(projectNumber.trim() ? { projectNumber: projectNumber.trim() } : {}),
+    ...(plannedStartDate ? { plannedStartDate: toLocalDateString(plannedStartDate) } : {}),
+    ...(plannedEndDate ? { plannedEndDate: toLocalDateString(plannedEndDate) } : {}),
+    ...(templateVersionId ? { templateVersionId } : {}),
+  };
+}
+
 function useCreateProjectSubmit(
   form: CreateProjectForm,
   onSuccess: CreateProjectFormContentProps['onSuccess'],
@@ -84,15 +120,6 @@ function useCreateProjectSubmit(
 ) {
   const { showBanner } = useBanner();
   const {
-    name,
-    description,
-    templateVersionId,
-    clientId,
-    siteId,
-    contactId,
-    projectNumber,
-    plannedStartDate,
-    plannedEndDate,
     selectedJobIds,
     runSubmit,
     setError,
@@ -109,28 +136,12 @@ function useCreateProjectSubmit(
     setContentError(null);
     setProjectNumberError(null);
 
-    const fieldErrors = {
-      'create-project-number': projectNumber.trim() ? undefined : 'Bitte gib eine Projektnummer ein.',
-      'create-project-name':
-        name.trim() || description.trim()
-          ? undefined
-          : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
-    };
+    const fieldErrors = createProjectFieldErrors(form);
     setProjectNumberError(fieldErrors['create-project-number'] ?? null);
     setContentError(fieldErrors['create-project-name'] ?? null);
     if (focusFirstInvalidField(fieldErrors)) return;
 
-    const input: CreateProjectInput = {
-      name: name.trim(),
-      ...(description.trim() ? { description: description.trim() } : {}),
-      ...(clientId ? { clientId } : {}),
-      ...(siteId ? { siteId } : {}),
-      ...(contactId ? { contactId } : {}),
-      ...(projectNumber.trim() ? { projectNumber: projectNumber.trim() } : {}),
-      ...(plannedStartDate ? { plannedStartDate: toLocalDateString(plannedStartDate) } : {}),
-      ...(plannedEndDate ? { plannedEndDate: toLocalDateString(plannedEndDate) } : {}),
-      ...(templateVersionId ? { templateVersionId } : {}),
-    };
+    const input = buildCreateProjectInput(form);
 
     if (onSubmitDeferred) {
       onSubmitDeferred({ input, linkedJobIds: selectedJobIds });

@@ -9,11 +9,7 @@
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
-    "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
     "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
-    "app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page.tsx": { "NestedJobDetailData": 149 },
-    "app/(app)/auftraege/projekt/[projectNumber]/loading.tsx": { "ProjectDetailLoading": 85 },
-    "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 156 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
@@ -21,18 +17,6 @@
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
     "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
     "app/(auth)/signup/signup-form.tsx": { "SignupForm": 146 },
-    "components/anfragen/anfragen-content.tsx": { "AnfragenContent": 163 },
-    "components/anfragen/close-request-dialog.tsx": { "CloseRequestDialog": 92 },
-    "components/anfragen/convert-request-dialog.tsx": { "ConvertRequestDialog": 114 },
-    "components/anfragen/create-request-customer-fields.tsx": { "CreateRequestCustomerFields": 90 },
-    "components/anfragen/create-request-dialog.tsx": { "CreateRequestDialog": 118 },
-    "components/anfragen/edit-request-dialog.tsx": { "EditRequestDialog": 106 },
-    "components/anfragen/request-customer-card.tsx": { "RequestCustomerCard": 91 },
-    "components/anfragen/request-detail-content.tsx": { "RequestDetailContent": 130 },
-    "components/anfragen/use-convert-request-form.ts": { "useConvertRequestForm": 161 },
-    "components/anfragen/use-create-request-form.ts": { "useCreateRequestForm": 146 },
-    "components/anfragen/use-edit-request-form.ts": { "useEditRequestForm": 119 },
-    "components/anfragen/use-request-detail-actions.ts": { "useRequestDetailActions": 148 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
@@ -55,19 +39,6 @@
       "WorkArtifactsSection": 139,
       "WorkArtifactDialog": 197
     },
-    "components/auftraege/forms/create-auftrag-project-dialog.tsx": { "CreateAuftragProjectDialog": 108 },
-    "components/auftraege/forms/create-job-form-sections.tsx": { "CreateJobPlanningFields": 101 },
-    "components/auftraege/forms/create-project-form-content.tsx": { "useCreateProjectSubmit": 83 },
-    "components/auftraege/forms/create-project-form-fields.tsx": { "CreateProjectFormFields": 135 },
-    "components/auftraege/forms/edit-job-form-fields.tsx": { "EditJobPlanningFields": 90 },
-    "components/auftraege/forms/edit-project-form-fields.tsx": { "EditProjectFormFields": 119 },
-    "components/auftraege/forms/park-confirmation-dialog.tsx": { "ParkConfirmationDialog": 90 },
-    "components/auftraege/forms/use-create-job-form.ts": { "useCreateJobForm": 87 },
-    "components/auftraege/forms/use-create-job-submit.ts": { "useCreateJobSubmit": 87 },
-    "components/auftraege/forms/use-create-project-form.ts": { "useCreateProjectForm": 114 },
-    "components/auftraege/forms/use-edit-job-form.ts": { "useEditJobForm": 156 },
-    "components/auftraege/forms/use-edit-project-form.ts": { "useEditProjectForm": 125 },
-    "components/auftraege/forms/use-edit-project-submit.ts": { "useEditProjectSubmit": 94 },
     "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
     "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
     "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },
@@ -110,36 +81,6 @@
       "WorkLifecycleTransitionActions": 95
     },
     "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
-    "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
-    "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
-    "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
-    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 117 },
-    "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 113 },
-    "components/auftraege/list/unified-auftraege-desktop-rows.tsx": { "ProjectRow": 111 },
-    "components/auftraege/list/unified-auftraege-mobile-cards.tsx": { "ProjectCard": 141 },
-    "components/auftraege/list/unified-auftraege-row-cells.tsx": {
-      "UnifiedAuftraegeJobRowCells": 82,
-      "UnifiedAuftraegeProjectRowCells": 110
-    },
-    "components/auftraege/list/unified-auftraege-table.tsx": { "UnifiedAuftraegeTable": 108 },
-    "components/auftraege/list/use-auftraege-create-actions.ts": { "useAuftraegeCreateActions": 111 },
-    "components/auftraege/list/use-auftraege-local-updates.ts": { "useAuftraegeLocalUpdates": 88 },
-    "components/auftraege/list/use-auftraege-optimistic-list.ts": { "useAuftraegeOptimisticList": 93 },
-    "components/auftraege/list/use-auftraege-row-actions.ts": { "useAuftraegeRowActions": 100 },
-    "components/auftraege/project-detail/project-detail-content.tsx": {
-      "useProjectDetailState": 96,
-      "ProjectDetailContent": 150
-    },
-    "components/auftraege/project-detail/project-detail-metadata-fields.tsx": {
-      "buildProjectDetailMetadataFields": 90
-    },
-    "components/auftraege/project-detail/project-qualification-section.tsx": {
-      "ProjectQualificationSection": 165
-    },
-    "components/auftraege/shared/employee-multi-select.tsx": { "EmployeeMultiSelect": 99 },
-    "components/auftraege/shared/qualification-warning-dialog.tsx": {
-      "QualificationWarningDialogContent": 115
-    },
     "components/auftraege/work-pack/field-work-pack-context-sources.tsx": {
       "FieldWorkPackContextSources": 81
     },

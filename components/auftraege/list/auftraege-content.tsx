@@ -2,12 +2,13 @@
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import type { JobListPagination } from '@/lib/jobs/list-page';
 
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 import { RefreshButton } from '@/components/ui/refresh-button';
 
 import { usePageAction } from '@/components/shared/page-action';
 import { UsableContent } from '@/components/shared/usable-content';
 import type { Job, ProjectWithDetails } from '@/lib/jobs/types';
+import type { UnifiedListEntry } from '@/lib/jobs/unified-list';
 import type { AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 import { useLiveAuftraegeData } from '@/hooks/use-live-auftraege-data';
@@ -20,7 +21,7 @@ import {
   AuftraegeStatusFilterPills,
 } from './auftraege-list-sections';
 import { useAuftraegeOptimisticList } from './use-auftraege-optimistic-list';
-import { useAuftraegeSectionQuery } from './use-auftraege-section-query';
+import { useAuftraegeSectionQuery, type AuftraegeSectionQuery } from './use-auftraege-section-query';
 
 interface AuftraegeContentProps {
   jobs: Job[];
@@ -33,25 +34,16 @@ interface AuftraegeContentProps {
   pagination?: JobListPagination;
 }
 
-export function AuftraegeContent({
-  jobs: initialJobs,
-  projects: initialProjects,
-  clientMap,
-  members,
-  jobAssignmentMap: initialJobAssignmentMap,
-  isAdminOrManager,
-  visibleColumns,
-  pagination,
-}: AuftraegeContentProps) {
-  const { jobs, setJobs, setRawProjects, projects, jobAssignmentMap, setJobAssignmentMap } =
-    useLiveAuftraegeData({
-      initialJobs,
-      initialProjects,
-      initialJobAssignmentMap,
-      preserveProjectCounts: Boolean(pagination),
-    });
+type AuftraegeSectionTableSharedProps = Omit<
+  ComponentProps<typeof AuftraegeSectionTable>,
+  'section' | 'paginationLabel' | 'rawEntries' | 'query' | 'statusFilter' | 'isArchive'
+>;
 
-  const navigation = useListNavigation();
+/** The search, filters and sort of the three sections, in the URL for a paged list. */
+function useAuftraegeSectionQueries(
+  pagination: JobListPagination | undefined,
+  navigation: ReturnType<typeof useListNavigation>,
+) {
   const activeQuery = useAuftraegeSectionQuery({
     section: 'active',
     pagination,
@@ -70,6 +62,122 @@ export function AuftraegeContent({
     navigation,
     firstSortDirection: 'desc',
   });
+  return { activeQuery, parkedQuery, archivedQuery };
+}
+
+type AuftraegeActiveSectionProps = {
+  activeStatusFilter: AuftraegeActiveStatusFilter;
+  onStatusFilterChange: (status: AuftraegeActiveStatusFilter) => void;
+  rawActive: UnifiedListEntry[];
+  query: AuftraegeSectionQuery;
+  members: OrgMemberOption[];
+  sectionTableProps: AuftraegeSectionTableSharedProps;
+};
+
+function AuftraegeActiveSection({
+  activeStatusFilter,
+  onStatusFilterChange,
+  rawActive,
+  query,
+  members,
+  sectionTableProps,
+}: AuftraegeActiveSectionProps) {
+  return (
+    <section aria-labelledby="auftraege-active-title">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 id="auftraege-active-title" className="text-base font-semibold sm:text-lg">
+          Aktuelle Aufträge und Projekte
+        </h2>
+        <RefreshButton label="Tabelle aktualisieren" />
+      </div>
+
+      <AuftraegeStatusFilterPills
+        activeStatusFilter={activeStatusFilter}
+        onChange={onStatusFilterChange}
+        rawActive={rawActive}
+        pagination={sectionTableProps.pagination}
+      />
+
+      <AuftraegeSectionFilterBar query={query} members={members} />
+
+      <div className="mt-3">
+        <AuftraegeSectionTable
+          section="active"
+          paginationLabel="Aktuelle Aufträge"
+          rawEntries={rawActive}
+          query={query}
+          statusFilter={activeStatusFilter}
+          {...sectionTableProps}
+        />
+      </div>
+    </section>
+  );
+}
+
+type AuftraegeSecondarySectionProps = {
+  section: 'parked' | 'archived';
+  /** The disclosure heading, also the label of the section's pagination. */
+  title: string;
+  rawEntries: UnifiedListEntry[];
+  query: AuftraegeSectionQuery;
+  members: OrgMemberOption[];
+  expanded: boolean;
+  onToggle: () => void;
+  isArchive?: boolean;
+  sectionTableProps: AuftraegeSectionTableSharedProps;
+};
+
+/** The Parkplatz or Archiv section, shown only while it holds entries. */
+function AuftraegeSecondarySection({
+  section,
+  title,
+  rawEntries,
+  query,
+  members,
+  expanded,
+  onToggle,
+  isArchive,
+  sectionTableProps,
+}: AuftraegeSecondarySectionProps) {
+  const { pagination } = sectionTableProps;
+  if (!(pagination ? pagination.pages[section].sectionTotal > 0 : rawEntries.length > 0)) return null;
+  return (
+    <AuftraegeCollapsibleSection
+      title={title}
+      count={pagination?.pages[section].sectionTotal ?? rawEntries.length}
+      expanded={expanded}
+      onToggle={onToggle}
+    >
+      <AuftraegeSectionFilterBar query={query} members={members} />
+      <AuftraegeSectionTable
+        section={section}
+        paginationLabel={title}
+        rawEntries={rawEntries}
+        query={query}
+        isArchive={isArchive}
+        {...sectionTableProps}
+      />
+    </AuftraegeCollapsibleSection>
+  );
+}
+
+/** The live list, the section queries and the section disclosure state of the Aufträge page. */
+function useAuftraegeContentState({
+  jobs: initialJobs,
+  projects: initialProjects,
+  jobAssignmentMap: initialJobAssignmentMap,
+  pagination,
+}: AuftraegeContentProps) {
+  const { jobs, setJobs, setRawProjects, projects, jobAssignmentMap, setJobAssignmentMap } =
+    useLiveAuftraegeData({
+      initialJobs,
+      initialProjects,
+      initialJobAssignmentMap,
+      preserveProjectCounts: Boolean(pagination),
+    });
+
+  const navigation = useListNavigation();
+  const queries = useAuftraegeSectionQueries(pagination, navigation);
   const [activeStatusFilterState, setActiveStatusFilter] = useState<AuftraegeActiveStatusFilter>(
     pagination?.queries.active.status ?? 'alle',
   );
@@ -91,16 +199,38 @@ export function AuftraegeContent({
     initialJobs,
     initialProjects,
   });
+
+  return {
+    jobs,
+    jobAssignmentMap,
+    navigation,
+    ...queries,
+    activeStatusFilter,
+    setActiveStatusFilter,
+    parkplatzExpanded,
+    setParkplatzExpanded,
+    archiveExpanded,
+    setArchiveExpanded,
+    createDialogOpen,
+    setCreateDialogOpen,
+    list,
+  };
+}
+
+export function AuftraegeContent(props: AuftraegeContentProps) {
+  const { clientMap, members, isAdminOrManager, visibleColumns, pagination } = props;
+  const state = useAuftraegeContentState(props);
+  const { list, navigation, activeQuery, archivedQuery, archiveExpanded } = state;
   const { rawActive, rawParked, rawArchived } = list;
 
-  const sectionTableProps = {
+  const sectionTableProps: AuftraegeSectionTableSharedProps = {
     pagination,
     navigationBusy: navigation.busy,
     initialIds: list.initialIds,
     localPendingIds: list.localPendingIds,
     clientMap,
     isAdminOrManager,
-    jobAssignmentMap,
+    jobAssignmentMap: state.jobAssignmentMap,
     members,
     visibleColumns,
     rowFeedback: list.rowFeedback,
@@ -111,88 +241,51 @@ export function AuftraegeContent({
   };
 
   return (
-    <UsableContent name="auftraege" count={jobs.length}>
+    <UsableContent name="auftraege" count={state.jobs.length}>
       <div className="space-y-6">
-        {/* Active section */}
-        <section aria-labelledby="auftraege-active-title">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 id="auftraege-active-title" className="text-base font-semibold sm:text-lg">
-              Aktuelle Aufträge und Projekte
-            </h2>
-            <RefreshButton label="Tabelle aktualisieren" />
-          </div>
+        <AuftraegeActiveSection
+          activeStatusFilter={state.activeStatusFilter}
+          onStatusFilterChange={(status) => {
+            state.setActiveStatusFilter(status);
+            if (pagination) activeQuery.navigate({ status });
+          }}
+          rawActive={rawActive}
+          query={activeQuery}
+          members={members}
+          sectionTableProps={sectionTableProps}
+        />
 
-          <AuftraegeStatusFilterPills
-            activeStatusFilter={activeStatusFilter}
-            onChange={(status) => {
-              setActiveStatusFilter(status);
-              if (pagination) activeQuery.navigate({ status });
-            }}
-            rawActive={rawActive}
-            pagination={pagination}
-          />
+        <AuftraegeSecondarySection
+          section="parked"
+          title="Parkplatz"
+          rawEntries={rawParked}
+          query={state.parkedQuery}
+          members={members}
+          expanded={state.parkplatzExpanded}
+          onToggle={() => state.setParkplatzExpanded((v) => !v)}
+          sectionTableProps={sectionTableProps}
+        />
 
-          <AuftraegeSectionFilterBar query={activeQuery} members={members} />
-
-          <div className="mt-3">
-            <AuftraegeSectionTable
-              section="active"
-              paginationLabel="Aktuelle Aufträge"
-              rawEntries={rawActive}
-              query={activeQuery}
-              statusFilter={activeStatusFilter}
-              {...sectionTableProps}
-            />
-          </div>
-        </section>
-
-        {/* Parkplatz section */}
-        {(pagination ? pagination.pages.parked.sectionTotal > 0 : rawParked.length > 0) && (
-          <AuftraegeCollapsibleSection
-            title="Parkplatz"
-            count={pagination?.pages.parked.sectionTotal ?? rawParked.length}
-            expanded={parkplatzExpanded}
-            onToggle={() => setParkplatzExpanded((v) => !v)}
-          >
-            <AuftraegeSectionFilterBar query={parkedQuery} members={members} />
-            <AuftraegeSectionTable
-              section="parked"
-              paginationLabel="Parkplatz"
-              rawEntries={rawParked}
-              query={parkedQuery}
-              {...sectionTableProps}
-            />
-          </AuftraegeCollapsibleSection>
-        )}
-
-        {/* Archive section */}
-        {(pagination ? pagination.pages.archived.sectionTotal > 0 : rawArchived.length > 0) && (
-          <AuftraegeCollapsibleSection
-            title="Archiv"
-            count={pagination?.pages.archived.sectionTotal ?? rawArchived.length}
-            expanded={archiveExpanded}
-            onToggle={() => {
-              setArchiveExpanded((value) => !value);
-              if (pagination) archivedQuery.navigate({ open: archiveExpanded ? null : '1' });
-            }}
-          >
-            <AuftraegeSectionFilterBar query={archivedQuery} members={members} />
-            <AuftraegeSectionTable
-              section="archived"
-              paginationLabel="Archiv"
-              rawEntries={rawArchived}
-              query={archivedQuery}
-              isArchive
-              {...sectionTableProps}
-            />
-          </AuftraegeCollapsibleSection>
-        )}
+        <AuftraegeSecondarySection
+          section="archived"
+          title="Archiv"
+          rawEntries={rawArchived}
+          query={archivedQuery}
+          members={members}
+          expanded={archiveExpanded}
+          onToggle={() => {
+            state.setArchiveExpanded((value) => !value);
+            if (pagination) archivedQuery.navigate({ open: archiveExpanded ? null : '1' });
+          }}
+          isArchive
+          sectionTableProps={sectionTableProps}
+        />
 
         {isAdminOrManager && (
           <AuftraegeCreateDialogs
             members={members}
-            open={createDialogOpen}
-            onOpenChange={setCreateDialogOpen}
+            open={state.createDialogOpen}
+            onOpenChange={state.setCreateDialogOpen}
             list={list}
           />
         )}
