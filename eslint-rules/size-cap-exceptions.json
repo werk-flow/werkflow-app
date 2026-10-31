@@ -56,12 +56,6 @@
       "WorkArtifactsSection": 139,
       "WorkArtifactDialog": 197
     },
-    "components/auftraege/forms/edit-job-form-fields.tsx": { "EditJobPlanningFields": 90 },
-    "components/auftraege/forms/edit-project-form-fields.tsx": { "EditProjectFormFields": 119 },
-    "components/auftraege/forms/park-confirmation-dialog.tsx": { "ParkConfirmationDialog": 90 },
-    "components/auftraege/forms/use-edit-job-form.ts": { "useEditJobForm": 156 },
-    "components/auftraege/forms/use-edit-project-form.ts": { "useEditProjectForm": 125 },
-    "components/auftraege/forms/use-edit-project-submit.ts": { "useEditProjectSubmit": 94 },
     "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
     "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
     "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },

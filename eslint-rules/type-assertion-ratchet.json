@@ -11,7 +11,6 @@
   "components/auftraege/artifacts/work-artifact-content.ts": 1,
   "components/auftraege/artifacts/work-artifact-form.tsx": 2,
   "components/auftraege/artifacts/work-artifact-kind-fields.tsx": 4,
-  "components/auftraege/forms/edit-job-form-fields.tsx": 1,
   "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": 2,
   "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": 1,
   "components/auftraege/lifecycle/use-work-lifecycle-dependency-form.ts": 1,
