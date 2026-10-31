@@ -169,7 +169,7 @@ jobs:
     name: Check production
     needs: [candidate, release]
     # After a release, its build; in a dry run that found a candidate, the build that serves now.
-    if: ${{ !cancelled() && ((inputs.dry_run && needs.candidate.result == 'success') || needs.release.result == 'success') }}
+    if: ${{ !cancelled() && ((inputs.dry_run && needs.candidate.outputs.release == 'true') || needs.release.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
