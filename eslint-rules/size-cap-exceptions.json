@@ -171,24 +171,11 @@
     "components/dokumente/attach-document-dialog.tsx": { "AttachDocumentDialog": 168 },
     "components/dokumente/contextual-documents-section.tsx": { "ContextualDocumentsSection": 177 },
     "components/dokumente/document-details-dialog.tsx": { "DocumentDetailsVersions": 103 },
-    "components/dokumente/document-library-body.tsx": { "DocumentLibraryBody": 110 },
-    "components/dokumente/document-library-content.tsx": { "DocumentLibraryContent": 175 },
-    "components/dokumente/document-library-table-rows.tsx": {
-      "DocumentLibraryTableFolderRow": 94,
-      "DocumentLibraryTableDocumentRow": 120
-    },
-    "components/dokumente/document-library-table.tsx": { "DocumentLibraryTable": 135 },
-    "components/dokumente/document-library-view-switch.tsx": { "DocumentLibraryViewSwitch": 95 },
     "components/dokumente/document-link-dialog.tsx": { "DocumentLinkDialog": 169 },
     "components/dokumente/document-link-target-list.tsx": { "DocumentLinkTargetList": 85 },
     "components/dokumente/document-move-destination-dialog.tsx": { "MoveDestinationDialog": 124 },
     "components/dokumente/document-upload-dialog.tsx": { "DocumentUploadDialog": 170 },
     "components/dokumente/document-viewer-dialog.tsx": { "DocumentViewerDialog": 187 },
-    "components/dokumente/document-work-context-project-group.tsx": {
-      "WorkContextProjectGroupRows": 120,
-      "WorkContextProjectGroupCard": 95
-    },
-    "components/dokumente/document-work-context-view.tsx": { "DocumentWorkContextView": 121 },
     "components/dokumente/use-document-library-drop-targets.ts": { "useDocumentLibraryDropTargets": 127 },
     "components/dokumente/use-document-library-navigation.ts": { "useDocumentLibraryNavigation": 115 },
     "components/dokumente/use-document-library-selection.ts": { "useDocumentLibrarySelection": 136 },

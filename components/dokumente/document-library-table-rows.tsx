@@ -8,6 +8,7 @@ import {
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactElement,
+  type ReactNode,
 } from 'react';
 import { Folder } from 'lucide-react';
 
@@ -40,10 +41,6 @@ import { SelectionCircle } from './document-library-table-selection-circle';
 const SELECTED_ROW_CLASS = 'bg-primary/10 hover:bg-primary/15';
 const DRAGGED_ROW_CLASS = 'cursor-not-allowed opacity-45 saturate-50 hover:bg-transparent';
 
-function handleRowContextMenu(event: MouseEvent<HTMLTableRowElement>): void {
-  event.stopPropagation();
-}
-
 /** What a folder row and a document row share: selection, pending and drag wiring. */
 export type DocumentLibraryTableRowProps = {
   isSelected: boolean;
@@ -63,28 +60,49 @@ export type DocumentLibraryTableRowProps = {
   onBatchDeleteSelection: () => void;
 };
 
-export function DocumentLibraryTableFolderRow({
-  folder,
-  isDropTarget,
-  handlers,
+function handleRowContextMenu(event: MouseEvent<HTMLTableRowElement>): void {
+  event.stopPropagation();
+}
+
+type DocumentLibraryTableRowShellProps = DocumentLibraryTableRowProps & {
+  /** A folder row's id: the row is a drop target for that folder. */
+  folderDropId?: string;
+  className: string;
+  selectionLabel: string;
+  icon: ReactNode;
+  name: string;
+  onOpen: () => void;
+  /** The row's actions menu in the last cell. */
+  actionsMenu: ReactNode;
+  /** The context menu of this one row, shown unless it is part of a multi-selection. */
+  singleItemMenu: ReactNode;
+  /** The cells between the name cell and the actions cell. */
+  children: ReactNode;
+};
+
+/** A folder or document table row: selection, name, context menu and drag wiring around the type's own cells. */
+function DocumentLibraryTableRowShell({
+  folderDropId,
+  className,
+  selectionLabel,
+  icon,
+  name,
+  onOpen,
+  actionsMenu,
+  singleItemMenu,
+  children,
   isSelected,
   hasMultiSelection,
-  isPending,
   isItemPending,
   rowRef,
   onPointerDown,
   onSelectionClick,
   onToggleSelection,
   onClearSelection,
-  onActionsMenuOpenChange,
   onBatchMoveSelection,
   onBatchCopySelection,
   onBatchDeleteSelection,
-}: DocumentLibraryTableRowProps & {
-  folder: DocumentFolder;
-  isDropTarget: boolean;
-  handlers: FolderActionHandlers;
-}): ReactElement {
+}: DocumentLibraryTableRowShellProps): ReactElement {
   return (
     <ContextMenu modal={false}>
       <ContextMenuTrigger asChild>
@@ -92,23 +110,16 @@ export function DocumentLibraryTableFolderRow({
           ref={rowRef}
           data-state={isSelected ? 'selected' : undefined}
           data-document-selection-preserve="true"
-          data-document-table-folder-drop-id={folder.id}
+          data-document-table-folder-drop-id={folderDropId}
           interactive="select"
-          className={cn(
-            isSelected && SELECTED_ROW_CLASS,
-            isDropTarget && 'bg-primary/20 outline outline-1 outline-primary/60',
-          )}
+          className={className}
           onPointerDown={onPointerDown}
           onClick={onSelectionClick}
-          onDoubleClick={() => handlers.onOpen()}
+          onDoubleClick={() => onOpen()}
           onContextMenu={handleRowContextMenu}
         >
           <TableCell>
-            <SelectionCircle
-              checked={isSelected}
-              label={`Ordner ${folder.name} auswählen`}
-              onClick={onToggleSelection}
-            />
+            <SelectionCircle checked={isSelected} label={selectionLabel} onClick={onToggleSelection} />
           </TableCell>
           <TableCell>
             <PlainButton
@@ -118,31 +129,16 @@ export function DocumentLibraryTableFolderRow({
               onClick={(event) => {
                 event.stopPropagation();
                 onClearSelection();
-                handlers.onOpen();
+                onOpen();
               }}
             >
-              <Folder className="size-4 shrink-0 text-muted-foreground" />
-              <span className="truncate">{folder.name}</span>
+              {icon}
+              <span className="truncate">{name}</span>
               <InlinePending active={isItemPending} />
             </PlainButton>
           </TableCell>
-          <TableCell className="hidden text-muted-foreground md:table-cell">
-            {getUserDisplayName(folder.creator)}
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground sm:table-cell">
-            {formatDate(folder.createdAt)}
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground sm:table-cell">-</TableCell>
-          <TableCell className="hidden text-muted-foreground lg:table-cell">Ordner</TableCell>
-          <TableCell className="hidden text-muted-foreground xl:table-cell">-</TableCell>
-          <TableCell data-table-interactive="true">
-            <FolderActionsMenu
-              folder={folder}
-              disabled={isPending || isItemPending}
-              handlers={handlers}
-              onOpenChange={onActionsMenuOpenChange}
-            />
-          </TableCell>
+          {children}
+          <TableCell data-table-interactive="true">{actionsMenu}</TableCell>
         </TableRow>
       </ContextMenuTrigger>
       {hasMultiSelection && isSelected ? (
@@ -152,9 +148,87 @@ export function DocumentLibraryTableFolderRow({
           onDelete={onBatchDeleteSelection}
         />
       ) : (
-        <FolderContextMenuContent folder={folder} handlers={handlers} />
+        singleItemMenu
       )}
     </ContextMenu>
+  );
+}
+
+export function DocumentLibraryTableFolderRow({
+  folder,
+  isDropTarget,
+  handlers,
+  ...rowProps
+}: DocumentLibraryTableRowProps & {
+  folder: DocumentFolder;
+  isDropTarget: boolean;
+  handlers: FolderActionHandlers;
+}): ReactElement {
+  return (
+    <DocumentLibraryTableRowShell
+      {...rowProps}
+      folderDropId={folder.id}
+      className={cn(
+        rowProps.isSelected && SELECTED_ROW_CLASS,
+        isDropTarget && 'bg-primary/20 outline outline-1 outline-primary/60',
+      )}
+      selectionLabel={`Ordner ${folder.name} auswählen`}
+      icon={<Folder className="size-4 shrink-0 text-muted-foreground" />}
+      name={folder.name}
+      onOpen={handlers.onOpen}
+      actionsMenu={
+        <FolderActionsMenu
+          folder={folder}
+          disabled={rowProps.isPending || rowProps.isItemPending}
+          handlers={handlers}
+          onOpenChange={rowProps.onActionsMenuOpenChange}
+        />
+      }
+      singleItemMenu={<FolderContextMenuContent folder={folder} handlers={handlers} />}
+    >
+      <TableCell className="hidden text-muted-foreground md:table-cell">
+        {getUserDisplayName(folder.creator)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground sm:table-cell">
+        {formatDate(folder.createdAt)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground sm:table-cell">-</TableCell>
+      <TableCell className="hidden text-muted-foreground lg:table-cell">Ordner</TableCell>
+      <TableCell className="hidden text-muted-foreground xl:table-cell">-</TableCell>
+    </DocumentLibraryTableRowShell>
+  );
+}
+
+type DocumentLinkBadgesCellProps = {
+  document: OrganizationDocument;
+};
+
+/** The first two link badges of a document plus the count of the rest. */
+function DocumentLinkBadgesCell({ document }: DocumentLinkBadgesCellProps): ReactElement {
+  const linkBadges = getLinkBadges(document);
+
+  return (
+    <TableCell className="hidden xl:table-cell">
+      {linkBadges.length === 0 ? (
+        <span className="text-muted-foreground">-</span>
+      ) : (
+        <div className="flex max-w-64 flex-wrap gap-1">
+          {linkBadges.slice(0, 2).map((badge) => (
+            <span
+              key={badge}
+              className="rounded-full bg-secondary/10 px-2 py-0.5 text-xs text-secondary-foreground"
+            >
+              {badge}
+            </span>
+          ))}
+          {linkBadges.length > 2 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+              +{linkBadges.length - 2}
+            </span>
+          )}
+        </div>
+      )}
+    </TableCell>
   );
 }
 
@@ -163,19 +237,7 @@ export function DocumentLibraryTableDocumentRow({
   isTrashView,
   isDragActive,
   handlers,
-  isSelected,
-  hasMultiSelection,
-  isPending,
-  isItemPending,
-  rowRef,
-  onPointerDown,
-  onSelectionClick,
-  onToggleSelection,
-  onClearSelection,
-  onActionsMenuOpenChange,
-  onBatchMoveSelection,
-  onBatchCopySelection,
-  onBatchDeleteSelection,
+  ...rowProps
 }: DocumentLibraryTableRowProps & {
   document: OrganizationDocument;
   isTrashView: boolean;
@@ -183,100 +245,42 @@ export function DocumentLibraryTableDocumentRow({
   isDragActive: boolean;
   handlers: DocumentActionHandlers;
 }): ReactElement {
-  const linkBadges = getLinkBadges(document);
-
   return (
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>
-        <TableRow
-          ref={rowRef}
-          data-state={isSelected ? 'selected' : undefined}
-          data-document-selection-preserve="true"
-          interactive="select"
-          className={cn(isSelected && SELECTED_ROW_CLASS, isDragActive && DRAGGED_ROW_CLASS)}
-          onPointerDown={onPointerDown}
-          onClick={onSelectionClick}
-          onDoubleClick={() => handlers.onOpen()}
-          onContextMenu={handleRowContextMenu}
-        >
-          <TableCell>
-            <SelectionCircle
-              checked={isSelected}
-              label={`Datei ${document.displayName} auswählen`}
-              onClick={onToggleSelection}
-            />
-          </TableCell>
-          <TableCell>
-            <PlainButton
-              type="button"
-              data-table-interactive="true"
-              className="flex min-w-0 items-center gap-2 font-medium text-left hover:underline"
-              onClick={(event) => {
-                event.stopPropagation();
-                onClearSelection();
-                handlers.onOpen();
-              }}
-            >
-              {createElement(getFileIcon(document), {
-                className: 'size-4 shrink-0 text-muted-foreground',
-              })}
-              <span className="truncate">{document.displayName}</span>
-              <InlinePending active={isItemPending} />
-            </PlainButton>
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground md:table-cell">
-            {getUploaderName(document)}
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground sm:table-cell">
-            {formatDate(document.updatedAt)}
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground sm:table-cell">
-            {formatFileSize(document.sizeBytes)}
-          </TableCell>
-          <TableCell className="hidden text-muted-foreground lg:table-cell">
-            {getFileTypeLabel(document)}
-          </TableCell>
-          <TableCell className="hidden xl:table-cell">
-            {linkBadges.length === 0 ? (
-              <span className="text-muted-foreground">-</span>
-            ) : (
-              <div className="flex max-w-64 flex-wrap gap-1">
-                {linkBadges.slice(0, 2).map((badge) => (
-                  <span
-                    key={badge}
-                    className="rounded-full bg-secondary/10 px-2 py-0.5 text-xs text-secondary-foreground"
-                  >
-                    {badge}
-                  </span>
-                ))}
-                {linkBadges.length > 2 && (
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                    +{linkBadges.length - 2}
-                  </span>
-                )}
-              </div>
-            )}
-          </TableCell>
-          <TableCell data-table-interactive="true">
-            <DocumentActionsMenu
-              document={document}
-              isTrashView={isTrashView}
-              disabled={isPending || isItemPending}
-              handlers={handlers}
-              onOpenChange={onActionsMenuOpenChange}
-            />
-          </TableCell>
-        </TableRow>
-      </ContextMenuTrigger>
-      {hasMultiSelection && isSelected ? (
-        <MultiSelectionContextMenuContent
-          onMove={onBatchMoveSelection}
-          onCopy={onBatchCopySelection}
-          onDelete={onBatchDeleteSelection}
+    <DocumentLibraryTableRowShell
+      {...rowProps}
+      className={cn(rowProps.isSelected && SELECTED_ROW_CLASS, isDragActive && DRAGGED_ROW_CLASS)}
+      selectionLabel={`Datei ${document.displayName} auswählen`}
+      icon={createElement(getFileIcon(document), {
+        className: 'size-4 shrink-0 text-muted-foreground',
+      })}
+      name={document.displayName}
+      onOpen={handlers.onOpen}
+      actionsMenu={
+        <DocumentActionsMenu
+          document={document}
+          isTrashView={isTrashView}
+          disabled={rowProps.isPending || rowProps.isItemPending}
+          handlers={handlers}
+          onOpenChange={rowProps.onActionsMenuOpenChange}
         />
-      ) : (
+      }
+      singleItemMenu={
         <DocumentContextMenuContent document={document} isTrashView={isTrashView} handlers={handlers} />
-      )}
-    </ContextMenu>
+      }
+    >
+      <TableCell className="hidden text-muted-foreground md:table-cell">
+        {getUploaderName(document)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground sm:table-cell">
+        {formatDate(document.updatedAt)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground sm:table-cell">
+        {formatFileSize(document.sizeBytes)}
+      </TableCell>
+      <TableCell className="hidden text-muted-foreground lg:table-cell">
+        {getFileTypeLabel(document)}
+      </TableCell>
+      <DocumentLinkBadgesCell document={document} />
+    </DocumentLibraryTableRowShell>
   );
 }
