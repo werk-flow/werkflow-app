@@ -23,6 +23,89 @@ interface DatePickerProps {
   ariaLabel?: string;
 }
 
+type DateSegment = (typeof DATE_SEGMENTS)[number];
+
+const segmentBaseClass = 'px-1 py-0.5 rounded-sm cursor-pointer transition-colors select-none tabular-nums';
+const segmentActiveClass = 'bg-primary text-primary-foreground';
+const segmentInactiveClass = 'hover:bg-accent';
+
+function DatePickerCalendarPopover({
+  open,
+  setOpen,
+  disabled,
+  value,
+  onSelect,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  disabled: boolean;
+  value: Date | undefined;
+  onSelect: (date: Date | undefined) => void;
+}) {
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Kalender öffnen"
+          tabIndex={-1}
+          disabled={disabled}
+          className="mr-1.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen(true);
+          }}
+        >
+          <CalendarIcon className="size-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <Calendar mode="single" selected={value} onSelect={onSelect} locale={de} />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function DatePickerSegments({
+  activeSegment,
+  displayDay,
+  displayMonth,
+  displayYear,
+}: {
+  activeSegment: DateSegment | null;
+  displayDay: string;
+  displayMonth: string;
+  displayYear: string;
+}) {
+  return (
+    <>
+      <span
+        data-segment="day"
+        className={cn(segmentBaseClass, activeSegment === 'day' ? segmentActiveClass : segmentInactiveClass)}
+      >
+        {displayDay}
+      </span>
+      <span className="text-muted-foreground select-none">.</span>
+      <span
+        data-segment="month"
+        className={cn(
+          segmentBaseClass,
+          activeSegment === 'month' ? segmentActiveClass : segmentInactiveClass,
+        )}
+      >
+        {displayMonth}
+      </span>
+      <span className="text-muted-foreground select-none">.</span>
+      <span
+        data-segment="year"
+        className={cn(segmentBaseClass, activeSegment === 'year' ? segmentActiveClass : segmentInactiveClass)}
+      >
+        {displayYear}
+      </span>
+    </>
+  );
+}
+
 export function DatePicker({
   value,
   onChange,
@@ -51,10 +134,6 @@ export function DatePicker({
 
   const pad = (n: number | undefined, len: number) =>
     n !== undefined ? String(n).padStart(len, '0') : '–'.repeat(len);
-
-  const segmentBaseClass = 'px-1 py-0.5 rounded-sm cursor-pointer transition-colors select-none tabular-nums';
-  const segmentActiveClass = 'bg-primary text-primary-foreground';
-  const segmentInactiveClass = 'hover:bg-accent';
 
   const hasValue = value !== undefined;
   const displayDay = hasValue ? pad(day, 2) : '––';
@@ -90,61 +169,23 @@ export function DatePicker({
         disabled && 'pointer-events-none cursor-not-allowed opacity-50',
       )}
     >
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Kalender öffnen"
-            tabIndex={-1}
-            disabled={disabled}
-            className="mr-1.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(true);
-            }}
-          >
-            <CalendarIcon className="size-4" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar mode="single" selected={value} onSelect={handleCalendarSelect} locale={de} />
-        </PopoverContent>
-      </Popover>
+      <DatePickerCalendarPopover
+        open={open}
+        setOpen={setOpen}
+        disabled={disabled}
+        value={value}
+        onSelect={handleCalendarSelect}
+      />
 
       {!hasValue && !isFocused ? (
         <span className="text-muted-foreground select-none">{placeholder}</span>
       ) : (
-        <>
-          <span
-            data-segment="day"
-            className={cn(
-              segmentBaseClass,
-              activeSegment === 'day' ? segmentActiveClass : segmentInactiveClass,
-            )}
-          >
-            {displayDay}
-          </span>
-          <span className="text-muted-foreground select-none">.</span>
-          <span
-            data-segment="month"
-            className={cn(
-              segmentBaseClass,
-              activeSegment === 'month' ? segmentActiveClass : segmentInactiveClass,
-            )}
-          >
-            {displayMonth}
-          </span>
-          <span className="text-muted-foreground select-none">.</span>
-          <span
-            data-segment="year"
-            className={cn(
-              segmentBaseClass,
-              activeSegment === 'year' ? segmentActiveClass : segmentInactiveClass,
-            )}
-          >
-            {displayYear}
-          </span>
-        </>
+        <DatePickerSegments
+          activeSegment={activeSegment}
+          displayDay={displayDay}
+          displayMonth={displayMonth}
+          displayYear={displayYear}
+        />
       )}
     </div>
   );

@@ -14,6 +14,37 @@ interface DurationHoursInputProps
   onChange: (value: string) => void;
 }
 
+function DurationStepButtons({
+  disabled,
+  adjustByMinutes,
+}: {
+  disabled: boolean | undefined;
+  adjustByMinutes: (deltaMinutes: number) => void;
+}) {
+  return (
+    <div className="flex h-full shrink-0 border-l">
+      <button
+        type="button"
+        onClick={() => adjustByMinutes(-30)}
+        disabled={disabled}
+        aria-label="Dauer um 30 Minuten verringern"
+        className="flex h-full w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none"
+      >
+        <Minus className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => adjustByMinutes(30)}
+        disabled={disabled}
+        aria-label="Dauer um 30 Minuten erhöhen"
+        className="flex h-full w-8 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none"
+      >
+        <Plus className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
 export const DurationHoursInput = React.forwardRef<HTMLInputElement, DurationHoursInputProps>(
   function DurationHoursInput(
     {
@@ -84,26 +115,7 @@ export const DurationHoursInput = React.forwardRef<HTMLInputElement, DurationHou
 
         <span className="border-l px-2 text-xs font-medium text-muted-foreground">Std.</span>
 
-        <div className="flex h-full shrink-0 border-l">
-          <button
-            type="button"
-            onClick={() => adjustByMinutes(-30)}
-            disabled={disabled}
-            aria-label="Dauer um 30 Minuten verringern"
-            className="flex h-full w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none"
-          >
-            <Minus className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => adjustByMinutes(30)}
-            disabled={disabled}
-            aria-label="Dauer um 30 Minuten erhöhen"
-            className="flex h-full w-8 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none"
-          >
-            <Plus className="size-3.5" />
-          </button>
-        </div>
+        <DurationStepButtons disabled={disabled} adjustByMinutes={adjustByMinutes} />
       </div>
     );
   },
