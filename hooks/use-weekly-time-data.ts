@@ -22,6 +22,15 @@ type WeekSnapshot = {
   weekLabel: WeeklyTimeLabel;
 };
 
+/** The week as the surface shows it: the day data under its targets, today's index and the week's label. */
+function weekSnapshotOf(
+  weekData: WeeklyTimeDataPoint[],
+  weekTargets: DailyTarget[] | undefined,
+  monday: Date,
+): WeekSnapshot {
+  return { weekData, weekTargets, todayIndex: getTodayIndex(), weekLabel: computeWeekLabel(monday) };
+}
+
 interface UseWeeklyTimeDataOptions {
   organizationId: string;
   userId: string;
@@ -69,15 +78,7 @@ export function useWeeklyTimeData({
       const { monday, sunday } = getWeekBounds();
 
       if (!organizationId || !userId) {
-        return {
-          ok: true,
-          data: {
-            weekData: [],
-            weekTargets: lastKnownTargetsRef.current,
-            todayIndex: getTodayIndex(),
-            weekLabel: computeWeekLabel(monday),
-          },
-        };
+        return { ok: true, data: weekSnapshotOf([], lastKnownTargetsRef.current, monday) };
       }
 
       const [result, targetsResult] = await Promise.all([
@@ -101,25 +102,14 @@ export function useWeeklyTimeData({
       const nextTargets = targetsResult.success ? targetsResult.targets : lastKnownTargetsRef.current;
       lastKnownTargetsRef.current = nextTargets;
 
-      return {
-        ok: true,
-        data: {
-          weekData: buildWeeklyTimeData(
-            result.entries || [],
-            monday,
-            normalizeTimeTrackingSettings({
-              organizationId,
-              breakMode,
-              autoBreakThresholdMinutes,
-              autoBreakDurationMinutes,
-            }),
-            nextTargets,
-          ),
-          weekTargets: nextTargets,
-          todayIndex: getTodayIndex(),
-          weekLabel: computeWeekLabel(monday),
-        },
-      };
+      const settings = normalizeTimeTrackingSettings({
+        organizationId,
+        breakMode,
+        autoBreakThresholdMinutes,
+        autoBreakDurationMinutes,
+      });
+      const weekData = buildWeeklyTimeData(result.entries || [], monday, settings, nextTargets);
+      return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday) };
     },
     initialData: initialWeekData
       ? {

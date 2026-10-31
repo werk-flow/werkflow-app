@@ -12,6 +12,6 @@ export function jsonRecordOrEmpty(value: unknown): Record<string, unknown> {
 
 /** The value as it is stored in a `jsonb` column: `undefined` properties dropped, dates as ISO strings. */
 export function toJson(value: unknown): Json {
-  // JSON.parse returns `any`; its output is by construction a Json value.
-  return JSON.parse(JSON.stringify(value)) as Json;
+  // JSON.parse is typed `any`; a JSON round trip yields a JSON value by construction.
+  return JSON.parse(JSON.stringify(value));
 }

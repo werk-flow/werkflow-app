@@ -39,13 +39,13 @@ const world = installActionWorld({
     },
   ],
 });
+const { getInventoryOverview, getInventoryLocationOptions, upsertInventoryItem } = await import(
+  '@/lib/inventory/catalog-actions'
+);
 const {
-  getInventoryOverview,
-  getInventoryLocationOptions,
   getInventoryPickerPage,
   getInventoryPickerOptionsForJob,
   createInventoryLocation,
-  upsertInventoryItem,
   adjustInventoryStock,
   createJobMaterialLine,
   createProjectMaterialLine,

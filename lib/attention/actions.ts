@@ -13,40 +13,42 @@ import type { ActionResult } from '@/lib/action-result';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { resolveActionContext, type ActionContext } from '@/lib/org/action-context';
-import { formatBerlinLocalDate, getBusinessTodayIso } from '@/lib/date-time/berlin';
-import { formatProfileName } from '@/lib/members/profile-name';
-import { getPendingChangeRequests, getPendingSessions } from '@/lib/time-tracking/review-actions';
-import { getTimeCorrectionRequests } from '@/lib/time-corrections/read-actions';
-import { TIME_CORRECTION_KIND_LABELS } from '@/lib/time-corrections/types';
-import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
-import { readPendingDispatchRecipients } from '@/lib/attention/pending-sets';
-import { logReadFailure } from '@/lib/data/read-request-cache';
+import { getBusinessTodayIso } from '@/lib/date-time/berlin';
+import { LIST_ROW_CAP, readCompleteRows } from '@/lib/supabase/query-batches';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
-import { getOwnVacationOverview, getPendingVacationRequestsForApprover } from '@/lib/vacation/actions';
+import { getOwnVacationOverview } from '@/lib/vacation/actions';
 import { toVacationDayPortion, toVacationRequestStatus } from '@/lib/vacation/types';
-import { loadCertificationExpiryNotifications } from '@/lib/qualifications/server';
-import { readPendingJoinRequests } from '@/lib/org/join-requests';
 import { deriveWorkArtifactTasks, deriveWorkHandoverTasks } from './work-tasks';
 import {
-  deriveRecipientState,
-  isAcknowledgementPending,
-  latestAcknowledgementByRecipient,
-  type AcknowledgementFact as DispatchAcknowledgementFact,
-} from '@/lib/dispatch/derivation';
+  deriveApprovalTasks,
+  deriveFollowUpTasks,
+  deriveJoinRequestTasks,
+  deriveOpenRequestTasks,
+} from './office-tasks';
+import { deriveDispatchAcknowledgementTasks, deriveDispatchChallengeTasks } from './dispatch-tasks';
+import { deriveParkingReviewTasks } from './parking-tasks';
 import {
-  computeOpenSinceDays,
+  deriveCertificationExpiryNotifications,
+  readNotificationReadVersions,
+  readSicknessNoticeNames,
+  refuseCertificationMarker,
+  refuseSicknessReportMarker,
+  refuseVacationDecisionMarker,
+  splitSicknessAudiences,
+  type SicknessNoticeRow,
+} from './notifications';
+import { readOwnEmployeeRecord, type OwnEmployeeRecordRead } from './own-record';
+import {
   countAttentionItems,
   dedupeAttentionItems,
-  FOLLOW_UP_ATTENTION_CAPACITY,
   isNotificationUnread,
   isWithinNotificationWindow,
   notificationWindowStartIso,
   resolveSicknessReportFacts,
   resolveVacationDecisionFacts,
   sortNotificationsNewestFirst,
-  selectFollowUpAttentionRows,
 } from './resolution';
 import type {
   AttentionCounts,
@@ -59,756 +61,6 @@ import type {
 // ============================================
 // Derivation building blocks
 // ============================================
-
-// The viewer's own employee record. The dispatch, decision and sickness
-// derivations each need it, so one derivation starts the read once and hands
-// the same promise to all three.
-async function readOwnEmployeeRecord(context: ActionContext) {
-  return await createSupabaseAdminClient()
-    .from('employee_records')
-    .select('id')
-    .eq('organization_id', context.orgId)
-    .eq('user_id', context.userId)
-    .maybeSingle();
-}
-
-type OwnEmployeeRecordRead = ReturnType<typeof readOwnEmployeeRecord>;
-
-async function deriveApprovalTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  const tasks: AttentionTask[] = [];
-  let failed = false;
-  // Independent authorized readers share no intermediate result. Run them
-  // together so badges do not queue four database round trips before counting.
-  const [sessionsResult, changeRequestsResult, correctionsResult, vacationResult] = await Promise.all([
-    getPendingSessions(context.orgId),
-    context.role === 'admin'
-      ? getPendingChangeRequests(context.orgId)
-      : Promise.resolve({ success: true as const, requests: [] }),
-    getTimeCorrectionRequests(context.orgId, 'approvals'),
-    getPendingVacationRequestsForApprover(),
-  ]);
-
-  // Pending time sessions: getPendingSessions resolves the caller's
-  // time_approval responsibility itself and returns [] for non-holders.
-  if (sessionsResult.success) {
-    for (const session of sessionsResult.sessions) {
-      tasks.push({
-        sourceType: 'time_session_approval',
-        sourceId: session.id,
-        personName: [session.firstName, session.lastName].filter(Boolean).join(' ') || 'Unbekannt',
-        date: session.date,
-        jobTitle: session.jobTitle,
-      });
-    }
-  } else {
-    failed = true;
-  }
-
-  // Pending change requests remain the admin recovery surface (P1-05).
-  if (context.role === 'admin') {
-    if (changeRequestsResult.success) {
-      for (const request of changeRequestsResult.requests) {
-        tasks.push({
-          sourceType: 'time_change_request_approval',
-          sourceId: request.id,
-          personName:
-            [request.requesterFirstName, request.requesterLastName].filter(Boolean).join(' ') || 'Unbekannt',
-          requestType: request.changeType === 'delete' ? 'delete' : 'edit',
-        });
-      }
-    } else {
-      failed = true;
-    }
-  }
-
-  if (correctionsResult.success) {
-    for (const request of correctionsResult.requests) {
-      if (!request.canReview || request.status !== 'submitted') continue;
-      tasks.push({
-        sourceType: 'time_correction_approval',
-        sourceId: request.id,
-        personName: request.subjectName,
-        correctionLabel: TIME_CORRECTION_KIND_LABELS[request.kind],
-        stateVersion: String(request.currentRevision),
-      });
-    }
-  } else {
-    failed = true;
-  }
-
-  // Pending vacation requests: the approver loader filters per target through
-  // leave_approval at derivation time (four eyes included).
-  if (vacationResult.success) {
-    for (const item of vacationResult.requests) {
-      tasks.push({
-        sourceType: 'vacation_request_approval',
-        sourceId: item.request.id,
-        personName: item.personName,
-        startDate: item.request.startDate,
-        endDate: item.request.endDate,
-        dayPortion: item.request.dayPortion,
-        totalDays: item.totalDays,
-      });
-    }
-  } else {
-    failed = true;
-  }
-
-  return { tasks, failed };
-}
-
-async function deriveOpenRequestTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  // Open client requests are an office surface; employees never see them.
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { tasks: [], failed: false };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const { data: rows, error } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('client_requests')
-        .select('id, request_number, summary, status, urgency, assigned_to, received_at')
-        .eq('organization_id', context.orgId)
-        .in('status', ['offen', 'in_klaerung'])
-        .order('received_at', { ascending: true })
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (error) {
-    logError('Failed to load open client requests', error);
-    return { tasks: [], failed: true };
-  }
-
-  const assigneeIds = [
-    ...new Set((rows ?? []).map((row) => row.assigned_to).filter((id): id is string => Boolean(id))),
-  ];
-  const profilesResult = await readInBatches(assigneeIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logError('Failed to load request assignee profiles', profilesResult.error);
-    return { tasks: [], failed: true };
-  }
-  const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-
-  const businessToday = getBusinessTodayIso();
-  const tasks: AttentionTask[] = (rows ?? []).map((row) => {
-    const assignee = row.assigned_to ? (profileById.get(row.assigned_to) ?? null) : null;
-    return {
-      sourceType: 'client_request_open',
-      sourceId: row.id,
-      requestNumber: row.request_number,
-      summary: row.summary,
-      status: row.status,
-      urgency: row.urgency,
-      receivedAt: row.received_at,
-      openSinceDays: computeOpenSinceDays(formatBerlinLocalDate(row.received_at), businessToday),
-      assigneeName: assignee ? formatProfileName(assignee) : null,
-      assignedToMe: row.assigned_to === context.userId,
-    };
-  });
-
-  return { tasks, failed: false };
-}
-
-async function deriveFollowUpTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { tasks: [], failed: false };
-  }
-
-  const admin = createSupabaseAdminClient();
-  const dueWindowEnd = new Date();
-  dueWindowEnd.setUTCDate(dueWindowEnd.getUTCDate() + 90);
-
-  const membershipsResult = await admin
-    .from('organization_members')
-    .select('user_id,role')
-    .eq('organization_id', context.orgId)
-    .in('role', ['admin', 'buero']);
-  if (membershipsResult.error) {
-    logError('Failed to load follow-up attention tasks', membershipsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const activeManagerIds = new Set((membershipsResult.data ?? []).map((membership) => membership.user_id));
-  // The visibility rule (own follow-ups plus those of owners who are no longer
-  // managers) runs in memory in selectFollowUpAttentionRows: a `not.in` string
-  // of every manager id would grow with the organization past the URL limit.
-  const followUpsResult = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('client_follow_ups')
-        .select('id,client_id,title,due_at,owner_user_id')
-        .eq('organization_id', context.orgId)
-        .eq('status', 'open')
-        .lte('due_at', dueWindowEnd.toISOString())
-        .order('due_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (followUpsResult.error) {
-    logError('Failed to load follow-up attention tasks', followUpsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const selection = selectFollowUpAttentionRows(
-    context.role,
-    context.userId,
-    followUpsResult.data,
-    activeManagerIds,
-    FOLLOW_UP_ATTENTION_CAPACITY,
-  );
-  if (selection.capacityExceeded) {
-    logReadFailure('deriveFollowUpTasks: follow-up window exceeded its capacity', {
-      code: 'follow_up_capacity_exceeded',
-    });
-    return { tasks: [], failed: true };
-  }
-  const visibleRows = selection.rows;
-  if (visibleRows.length === 0) return { tasks: [], failed: false };
-
-  const clientIds = [...new Set(visibleRows.map((row) => row.client_id))];
-  const ownerIds = [...new Set(visibleRows.map((row) => row.owner_user_id))];
-  const [clientsResult, profilesResult] = await Promise.all([
-    readInBatches(clientIds, (batch) =>
-      admin
-        .from('clients')
-        .select('id,name')
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(ownerIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id,first_name,last_name,email')
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (clientsResult.error || profilesResult.error) {
-    logError('Failed to resolve follow-up attention references', clientsResult.error ?? profilesResult.error);
-    return { tasks: [], failed: true };
-  }
-
-  const clientNameById = new Map((clientsResult.data ?? []).map((client) => [client.id, client.name]));
-  const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-  const tasks: AttentionTask[] = [];
-  for (const row of visibleRows) {
-    const clientName = clientNameById.get(row.client_id);
-    if (!clientName) {
-      logError('Follow-up attention task has no accessible customer');
-      return { tasks: [], failed: true };
-    }
-    const owner = profileById.get(row.owner_user_id) ?? null;
-    tasks.push({
-      sourceType: 'client_follow_up',
-      sourceId: row.id,
-      clientId: row.client_id,
-      clientName,
-      title: row.title,
-      dueAt: row.due_at,
-      ownerName: owner ? formatProfileName(owner) : 'Nicht verfügbar',
-      ownerUnavailable: row.ownerUnavailable,
-    });
-  }
-
-  return { tasks, failed: false };
-}
-
-// Open join requests are decided by Admin and Büro in the Mitarbeiter area.
-async function deriveJoinRequestTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { tasks: [], failed: false };
-  }
-  const result = await readPendingJoinRequests(context.orgId);
-  if (!result.success) return { tasks: [], failed: true };
-  return {
-    tasks: result.requests.map((request) => ({
-      sourceType: 'organization_join_request',
-      sourceId: request.id,
-      personName: request.name,
-      email: request.email,
-    })),
-    failed: false,
-  };
-}
-
-// P1-12: dispatch attention. Items are projections over the owning dispatch
-// rows; deciding happens through the dispatch actions, never here.
-
-async function deriveDispatchAcknowledgementTasks(
-  context: ActionContext,
-  ownRecord: OwnEmployeeRecordRead,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  const admin = createSupabaseAdminClient();
-  const { data: record, error: recordError } = await ownRecord;
-  if (recordError) {
-    logError('Failed to load own record for dispatch tasks', recordError);
-    return { tasks: [], failed: true };
-  }
-  if (!record) return { tasks: [], failed: false };
-
-  // Only the viewer's unacknowledged current-revision rows (never their history), then what they reference.
-  const recipients = await readPendingDispatchRecipients(admin, context.orgId, record.id);
-  if (recipients.error) {
-    logError('Failed to load dispatch recipients for tasks', recipients.error);
-    return { tasks: [], failed: true };
-  }
-  const myRecipients = recipients.data;
-  if (!myRecipients.length) return { tasks: [], failed: false };
-  const myDispatchIds = [...new Set(myRecipients.map((row) => row.dispatch_id))];
-  const myRevisionIds = new Set(myRecipients.map((row) => row.revision_id));
-
-  const { data: dispatches, error: dispatchError } = await readInBatches(myDispatchIds, (batch) =>
-    admin
-      .from('planning_dispatches')
-      .select('id, occurrence_id, job_id, current_revision_id')
-      .eq('organization_id', context.orgId)
-      .eq('status', 'active')
-      .in('id', [...batch]),
-  );
-  if (dispatchError) {
-    logError('Failed to load dispatches for tasks', dispatchError);
-    return { tasks: [], failed: true };
-  }
-  const currentRevisionIds = (dispatches ?? []).flatMap((dispatch) =>
-    dispatch.current_revision_id && myRevisionIds.has(dispatch.current_revision_id)
-      ? [dispatch.current_revision_id]
-      : [],
-  );
-  if (!currentRevisionIds.length) return { tasks: [], failed: false };
-
-  const [acksResult, revisionsResult] = await Promise.all([
-    readInBatches(currentRevisionIds, (batch) =>
-      admin
-        .from('planning_dispatch_acknowledgements')
-        .select('id, revision_id, employee_record_id, state, reason, challenge_resolved_at, created_at')
-        .eq('organization_id', context.orgId)
-        .eq('employee_record_id', record.id)
-        .in('revision_id', [...batch]),
-    ),
-    readInBatches(currentRevisionIds, (batch) =>
-      admin
-        .from('planning_dispatch_revisions')
-        .select(
-          'id, dispatch_id, revision_number, occurrence_id, job_id, planned_start_at, planned_start_date',
-        )
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (acksResult.error || revisionsResult.error) {
-    logError('Failed to load dispatch task facts', acksResult.error ?? revisionsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const revisionById = new Map((revisionsResult.data ?? []).map((row) => [row.id, row]));
-
-  const occurrenceIds = [...revisionById.values()].flatMap((row) =>
-    row.occurrence_id ? [row.occurrence_id] : [],
-  );
-  const occurrencesResult = await readInBatches(occurrenceIds, (batch) =>
-    admin
-      .from('planning_occurrences')
-      .select('id, job_id')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (occurrencesResult.error) {
-    logError('Failed to load dispatch occurrences', occurrencesResult.error);
-    return { tasks: [], failed: true };
-  }
-  const occurrenceJobIds = new Map((occurrencesResult.data ?? []).map((row) => [row.id, row.job_id]));
-  const jobIds = [
-    ...new Set([
-      ...[...revisionById.values()].flatMap((row) => (row.job_id ? [row.job_id] : [])),
-      ...[...occurrenceJobIds.values()].filter((id): id is string => Boolean(id)),
-    ]),
-  ];
-  const jobsResult = await readInBatches(jobIds, (batch) =>
-    admin
-      .from('jobs')
-      .select('id, title, description, job_number')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (jobsResult.error) {
-    logError('Failed to load dispatch jobs', jobsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
-
-  // Shared derivation rules (identical to every dispatch surface).
-  const ackFactsByRevision = new Map<string, DispatchAcknowledgementFact[]>();
-  for (const row of acksResult.data ?? []) {
-    const list = ackFactsByRevision.get(row.revision_id) ?? [];
-    list.push({
-      id: row.id,
-      employeeRecordId: row.employee_record_id,
-      state: row.state,
-      reason: row.reason,
-      challengeResolvedAt: row.challenge_resolved_at,
-      createdAt: row.created_at,
-    });
-    ackFactsByRevision.set(row.revision_id, list);
-  }
-
-  const tasks: AttentionTask[] = [];
-  for (const dispatch of dispatches ?? []) {
-    const revision = dispatch.current_revision_id
-      ? revisionById.get(dispatch.current_revision_id)
-      : undefined;
-    if (!revision) continue;
-    const latest =
-      latestAcknowledgementByRecipient(ackFactsByRevision.get(revision.id) ?? []).get(record.id) ?? null;
-    const state = deriveRecipientState({ hasLogin: true, latest });
-    if (!isAcknowledgementPending(state)) continue;
-    const jobId =
-      revision.job_id ??
-      (revision.occurrence_id ? (occurrenceJobIds.get(revision.occurrence_id) ?? null) : null);
-    if (!jobId) continue;
-    const job = jobs.get(jobId);
-    tasks.push({
-      sourceType: 'dispatch_acknowledgement',
-      sourceId: dispatch.id,
-      jobId,
-      jobNumber: job?.job_number ?? null,
-      jobTitle: job?.title.trim() || job?.description?.trim() || 'Auftrag',
-      revisionNumber: revision.revision_number,
-      startAt: revision.planned_start_at,
-      startDate: revision.planned_start_date,
-      stateVersion: revision.id,
-    });
-  }
-  return { tasks, failed: false };
-}
-
-async function deriveDispatchChallengeTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { tasks: [], failed: false };
-  }
-  const admin = createSupabaseAdminClient();
-  // Open challenges are the scarce signal — load them first, then only their
-  // dispatches; the organization's total dispatch volume never matters here.
-  const { data: openChallenges, error: challengeError } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('planning_dispatch_acknowledgements')
-        .select('id, dispatch_id, revision_id, employee_record_id, reason, created_at')
-        .eq('organization_id', context.orgId)
-        .eq('state', 'challenged')
-        .is('challenge_resolved_at', null)
-        .order('created_at', { ascending: true })
-        .order('id')
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (challengeError) {
-    logError('Failed to load open dispatch challenges', challengeError);
-    return { tasks: [], failed: true };
-  }
-  if (!openChallenges.length) return { tasks: [], failed: false };
-
-  const challengeDispatchIds = [...new Set(openChallenges.map((challenge) => challenge.dispatch_id))];
-  const { data: dispatches, error: dispatchError } = await readInBatches(challengeDispatchIds, (batch) =>
-    admin
-      .from('planning_dispatches')
-      .select('id, occurrence_id, job_id, current_revision_id')
-      .eq('organization_id', context.orgId)
-      .eq('status', 'active')
-      .in('id', [...batch]),
-  );
-  if (dispatchError) {
-    logError('Failed to load dispatches for challenges', dispatchError);
-    return { tasks: [], failed: true };
-  }
-  const currentRevisionByDispatch = new Map(
-    (dispatches ?? []).map((dispatch) => [dispatch.id, dispatch.current_revision_id]),
-  );
-  // Only challenges on the CURRENT revision of an active dispatch are open
-  // manager work; superseded ones were already resolved transactionally.
-  const challenges = openChallenges.filter(
-    (challenge) => currentRevisionByDispatch.get(challenge.dispatch_id) === challenge.revision_id,
-  );
-  if (!challenges.length) return { tasks: [], failed: false };
-
-  const recordIds = [...new Set(challenges.map((challenge) => challenge.employee_record_id))];
-  const recordsResult = await readInBatches(recordIds, (batch) =>
-    admin
-      .from('employee_records')
-      .select('id, user_id, first_name, last_name')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (recordsResult.error) {
-    logError('Failed to load challenge records', recordsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const userIds = (recordsResult.data ?? []).flatMap((row) => (row.user_id ? [row.user_id] : []));
-  const profilesResult = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logError('Failed to load challenge profiles', profilesResult.error);
-    return { tasks: [], failed: true };
-  }
-  const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-  const nameByRecordId = new Map(
-    (recordsResult.data ?? []).map((row) => {
-      const profile = row.user_id ? profileById.get(row.user_id) : undefined;
-      return [
-        row.id,
-        (profile ? formatProfileName(profile) : null) ||
-          [row.first_name, row.last_name].filter(Boolean).join(' ') ||
-          'Unbenannt',
-      ];
-    }),
-  );
-
-  // Resolve the challenged dispatch's job title for context.
-  const dispatchById = new Map((dispatches ?? []).map((dispatch) => [dispatch.id, dispatch]));
-  const occurrenceIds = [
-    ...new Set(
-      challenges.flatMap((challenge) => {
-        const dispatch = dispatchById.get(challenge.dispatch_id);
-        return dispatch?.occurrence_id ? [dispatch.occurrence_id] : [];
-      }),
-    ),
-  ];
-  const occurrencesResult = await readInBatches(occurrenceIds, (batch) =>
-    admin
-      .from('planning_occurrences')
-      .select('id, job_id')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (occurrencesResult.error) {
-    logError('Failed to load challenge occurrences', occurrencesResult.error);
-    return { tasks: [], failed: true };
-  }
-  const occurrenceJobIds = new Map((occurrencesResult.data ?? []).map((row) => [row.id, row.job_id]));
-  const jobIds = [
-    ...new Set(
-      challenges.flatMap((challenge) => {
-        const dispatch = dispatchById.get(challenge.dispatch_id);
-        const jobId =
-          dispatch?.job_id ??
-          (dispatch?.occurrence_id ? (occurrenceJobIds.get(dispatch.occurrence_id) ?? null) : null);
-        return jobId ? [jobId] : [];
-      }),
-    ),
-  ];
-  const jobsResult = await readInBatches(jobIds, (batch) =>
-    admin
-      .from('jobs')
-      .select('id, title, description')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (jobsResult.error) {
-    logError('Failed to load challenge jobs', jobsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
-
-  const tasks: AttentionTask[] = challenges.map((challenge) => {
-    const dispatch = dispatchById.get(challenge.dispatch_id);
-    const jobId =
-      dispatch?.job_id ??
-      (dispatch?.occurrence_id ? (occurrenceJobIds.get(dispatch.occurrence_id) ?? null) : null);
-    const job = jobId ? jobs.get(jobId) : null;
-    return {
-      sourceType: 'dispatch_challenge_open',
-      // The challenge row is the item identity: two concurrent challenges on
-      // one dispatch must stay two distinct manager tasks after deduplication.
-      sourceId: challenge.id,
-      personName: nameByRecordId.get(challenge.employee_record_id) ?? 'Unbenannt',
-      reason: challenge.reason ?? '',
-      jobTitle: job?.title.trim() || job?.description?.trim() || 'Auftrag',
-      acknowledgementId: challenge.id,
-      stateVersion: challenge.id,
-    };
-  });
-  return { tasks, failed: false };
-}
-
-async function deriveParkingReviewTasks(
-  context: ActionContext,
-): Promise<{ tasks: AttentionTask[]; failed: boolean }> {
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { tasks: [], failed: false };
-  }
-  const admin = createSupabaseAdminClient();
-  const businessToday = getBusinessTodayIso();
-  // Complete and deterministically ordered: every due review surfaces.
-  const { data: contexts, error: contextError } = await readCompleteRows(
-    (from, to) =>
-      admin
-        .from('work_blockers')
-        .select(
-          'id, job_id, project_id, instruction_item_id, kind, next_review_date, responsible_employee_record_id, version',
-        )
-        .eq('organization_id', context.orgId)
-        .eq('state', 'open')
-        .lte('next_review_date', businessToday)
-        .order('next_review_date', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, to),
-    LIST_ROW_CAP,
-  );
-  if (contextError) {
-    logError('Failed to load parking review contexts', contextError);
-    return { tasks: [], failed: true };
-  }
-  if (!contexts.length) return { tasks: [], failed: false };
-
-  const instructionIds = contexts.flatMap((row) =>
-    row.instruction_item_id ? [row.instruction_item_id] : [],
-  );
-  const instructionsResult = await readInBatches(instructionIds, (batch) =>
-    admin
-      .from('job_instruction_items')
-      .select('id, content, job_id, project_id')
-      .eq('organization_id', context.orgId)
-      .in('id', [...batch]),
-  );
-  if (instructionsResult.error) {
-    logError('Failed to load blocker review instruction items', instructionsResult.error);
-    return { tasks: [], failed: true };
-  }
-  const instructions = new Map((instructionsResult.data ?? []).map((row) => [row.id, row]));
-  const jobIds = [
-    ...new Set(
-      contexts.flatMap((row) => {
-        const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
-        return row.job_id ? [row.job_id] : instruction?.job_id ? [instruction.job_id] : [];
-      }),
-    ),
-  ];
-  const projectIds = [
-    ...new Set(
-      contexts.flatMap((row) => {
-        const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
-        return row.project_id ? [row.project_id] : instruction?.project_id ? [instruction.project_id] : [];
-      }),
-    ),
-  ];
-  const responsibleIds = [
-    ...new Set(
-      contexts.flatMap((row) =>
-        row.responsible_employee_record_id ? [row.responsible_employee_record_id] : [],
-      ),
-    ),
-  ];
-  const [jobsResult, projectsResult, recordsResult] = await Promise.all([
-    readInBatches(jobIds, (batch) =>
-      admin
-        .from('jobs')
-        .select('id, title, description, job_number')
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(projectIds, (batch) =>
-      admin
-        .from('projects')
-        .select('id, name, description, project_number')
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(responsibleIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (jobsResult.error || projectsResult.error || recordsResult.error) {
-    logError(
-      'Failed to load parking review references',
-      jobsResult.error ?? projectsResult.error ?? recordsResult.error,
-    );
-    return { tasks: [], failed: true };
-  }
-  const userIds = (recordsResult.data ?? []).flatMap((row) => (row.user_id ? [row.user_id] : []));
-  const profilesResult = await readInBatches(userIds, (batch) =>
-    admin
-      .from('profiles')
-      .select('id, first_name, last_name, email')
-      .in('id', [...batch]),
-  );
-  if (profilesResult.error) {
-    logError('Failed to load parking responsible profiles', profilesResult.error);
-    return { tasks: [], failed: true };
-  }
-  const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-  const nameByRecordId = new Map(
-    (recordsResult.data ?? []).map((row) => {
-      const profile = row.user_id ? profileById.get(row.user_id) : undefined;
-      return [
-        row.id,
-        (profile ? formatProfileName(profile) : null) ||
-          [row.first_name, row.last_name].filter(Boolean).join(' ') ||
-          'Unbenannt',
-      ];
-    }),
-  );
-  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
-  const projects = new Map((projectsResult.data ?? []).map((project) => [project.id, project]));
-
-  const tasks: AttentionTask[] = [];
-  for (const row of contexts) {
-    const instruction = row.instruction_item_id ? instructions.get(row.instruction_item_id) : null;
-    const jobId = row.job_id ?? instruction?.job_id ?? null;
-    const projectId = row.project_id ?? instruction?.project_id ?? null;
-    const job = jobId ? jobs.get(jobId) : undefined;
-    const project = projectId ? projects.get(projectId) : undefined;
-    if (!row.next_review_date || (!job && !project)) {
-      logError('Work blocker review has no accessible target');
-      return { tasks: [], failed: true };
-    }
-    const targetLabel = instruction
-      ? instruction.content
-      : job?.title.trim() ||
-        job?.description?.trim() ||
-        project?.name.trim() ||
-        project?.description?.trim() ||
-        'Arbeit';
-    const targetHref = job?.job_number
-      ? `/auftraege/${encodeURIComponent(job.job_number)}`
-      : project?.project_number
-        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}`
-        : '/auftraege';
-    tasks.push({
-      sourceType: 'work_blocker_review',
-      sourceId: row.id,
-      targetLabel,
-      targetHref,
-      blockerKind: row.kind,
-      nextReviewDate: row.next_review_date,
-      responsibleName: row.responsible_employee_record_id
-        ? (nameByRecordId.get(row.responsible_employee_record_id) ?? null)
-        : null,
-      stateVersion: `review:${row.version}:${row.next_review_date}`,
-    });
-  }
-  return { tasks, failed: false };
-}
 
 // The reason belonging to a decision's current status: the cancellation
 // reason for cancelled requests, otherwise the decision comment.
@@ -851,16 +103,11 @@ async function deriveOwnNotifications(
     return { notifications: [], failed: true };
   }
   // Read markers accumulate forever; only the markers of the windowed decisions are read.
-  const readStatesResult = await readInBatches(
+  const readStatesResult = await readNotificationReadVersions(
+    admin,
+    context,
+    'vacation_decision',
     (requestsResult.data ?? []).map((row) => row.id),
-    (batch) =>
-      admin
-        .from('attention_read_states')
-        .select('source_id, state_version')
-        .eq('organization_id', context.orgId)
-        .eq('user_id', context.userId)
-        .eq('source_type', 'vacation_decision')
-        .in('source_id', [...batch]),
   );
   if (readStatesResult.error) {
     logError('Failed to load decision notifications', readStatesResult.error);
@@ -948,16 +195,11 @@ async function deriveSicknessNotifications(
     return { notifications: [], failed: true };
   }
   // Read markers accumulate forever; only the markers of the windowed reports are read.
-  const readStatesResult = await readInBatches(
+  const readStatesResult = await readNotificationReadVersions(
+    admin,
+    context,
+    'sickness_report',
     (reportsResult.data ?? []).map((row) => row.id),
-    (batch) =>
-      admin
-        .from('attention_read_states')
-        .select('source_id, state_version')
-        .eq('organization_id', context.orgId)
-        .eq('user_id', context.userId)
-        .eq('source_type', 'sickness_report')
-        .in('source_id', [...batch]),
   );
   if (readStatesResult.error) {
     logError('Failed to load sickness notifications', readStatesResult.error);
@@ -967,157 +209,71 @@ async function deriveSicknessNotifications(
   const readVersionBySourceId = new Map(
     (readStatesResult.data ?? []).map((row) => [row.source_id, row.state_version]),
   );
-
-  type ReportRow = NonNullable<typeof reportsResult.data>[number];
-  const rows = reportsResult.data ?? [];
-
-  const isOwnAudience = (row: ReportRow): boolean => {
-    if (!ownRecordId || row.employee_record_id !== ownRecordId) return false;
-    // Own self-managed reports are no news; office involvement is.
-    if (row.reported_by !== context.userId) return true;
-    return row.cancelled_by !== null && row.cancelled_by !== context.userId;
-  };
-  const isManagerAudience = (row: ReportRow): boolean => {
-    if (!isManager) return false;
-    // The recording (or cancelling) manager already knows their own action.
-    if (row.reported_by === context.userId && row.status === 'reported') {
-      return false;
-    }
-    if (row.status === 'cancelled' && row.cancelled_by === context.userId) {
-      return false;
-    }
-    return true;
-  };
-
-  const ownRows = rows.filter(isOwnAudience);
-  const managerRows = rows.filter((row) => isManagerAudience(row) && !isOwnAudience(row));
-
-  // Names only for manager-audience items (two-step lookup; no FK path from
-  // employee_records to profiles for PostgREST embeds).
-  const nameRecordIds = [...new Set(managerRows.map((row) => row.employee_record_id))];
-  let nameByRecordId = new Map<string, string>();
-  if (nameRecordIds.length > 0) {
-    const { data: records, error: recordsError } = await readInBatches(nameRecordIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', context.orgId)
-        .in('id', [...batch]),
-    );
-    if (recordsError) {
-      logError('Failed to load records for sickness notices', recordsError);
-      return { notifications: [], failed: true };
-    }
-    const userIds = [
-      ...new Set((records ?? []).map((row) => row.user_id).filter((id): id is string => Boolean(id))),
-    ];
-    const profilesResult = await readInBatches(userIds, (batch) =>
-      admin
-        .from('profiles')
-        .select('id, first_name, last_name, email')
-        .in('id', [...batch]),
-    );
-    if (profilesResult.error) {
-      logError('Failed to load profiles for sickness notices', profilesResult.error);
-      return { notifications: [], failed: true };
-    }
-    const profileById = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile]));
-    nameByRecordId = new Map(
-      (records ?? []).map((record) => {
-        const profile = record.user_id ? profileById.get(record.user_id) : undefined;
-        const name = profile
-          ? formatProfileName(profile)
-          : `${record.first_name ?? ''} ${record.last_name ?? ''}`.trim();
-        return [record.id, name || 'Unbekannt'];
-      }),
-    );
-  }
-
-  const toNotification = (row: ReportRow, isOwn: boolean): AttentionNotification | null => {
-    const facts = resolveSicknessReportFacts({
-      status: row.status as 'reported' | 'cancelled',
-      startDate: row.start_date,
-      endDate: row.end_date,
-      dayPortion: toVacationDayPortion(row.day_portion),
-      updatedAt: row.updated_at,
-      cancelledAt: row.cancelled_at,
-    });
-    if (!isWithinNotificationWindow(facts.occurredAt, businessToday)) {
-      return null;
-    }
-    return {
-      sourceType: 'sickness_report',
-      sourceId: row.id,
-      personName: isOwn ? null : (nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt'),
-      isOwn,
-      status: facts.status,
-      startDate: row.start_date,
-      endDate: row.end_date,
-      dayPortion: toVacationDayPortion(row.day_portion),
-      stateVersion: facts.stateVersion,
-      occurredAt: facts.occurredAt,
-      unread: isNotificationUnread(facts.stateVersion, readVersionBySourceId.get(row.id) ?? null),
-    };
-  };
+  const { ownRows, managerRows } = splitSicknessAudiences(
+    reportsResult.data ?? [],
+    context.userId,
+    isManager,
+    ownRecordId,
+  );
+  const nameByRecordId = await readSicknessNoticeNames(admin, context.orgId, managerRows);
+  if (!nameByRecordId) return { notifications: [], failed: true };
 
   const notifications: AttentionNotification[] = [];
   for (const row of ownRows) {
-    const notification = toNotification(row, true);
+    const notification = toSicknessNotification(
+      row,
+      true,
+      nameByRecordId,
+      readVersionBySourceId,
+      businessToday,
+    );
     if (notification) notifications.push(notification);
   }
   for (const row of managerRows) {
-    const notification = toNotification(row, false);
+    const notification = toSicknessNotification(
+      row,
+      false,
+      nameByRecordId,
+      readVersionBySourceId,
+      businessToday,
+    );
     if (notification) notifications.push(notification);
   }
 
   return { notifications, failed: false };
 }
 
-async function deriveCertificationExpiryNotifications(
-  context: ActionContext,
-): Promise<{ notifications: AttentionNotification[]; failed: boolean }> {
-  if (context.role !== 'admin' && context.role !== 'buero') {
-    return { notifications: [], failed: false };
-  }
-  const admin = createSupabaseAdminClient();
-  const noticesResult = await loadCertificationExpiryNotifications({
-    admin,
-    orgId: context.orgId,
+/** The notice of one report, or null when its latest change lies outside the notification window. */
+function toSicknessNotification(
+  row: SicknessNoticeRow,
+  isOwn: boolean,
+  nameByRecordId: ReadonlyMap<string, string>,
+  readVersionBySourceId: ReadonlyMap<string, string>,
+  businessToday: string,
+): AttentionNotification | null {
+  const facts = resolveSicknessReportFacts({
+    status: row.status as 'reported' | 'cancelled',
+    startDate: row.start_date,
+    endDate: row.end_date,
+    dayPortion: toVacationDayPortion(row.day_portion),
+    updatedAt: row.updated_at,
+    cancelledAt: row.cancelled_at,
   });
-  if (noticesResult.failed || noticesResult.notices.length === 0) {
-    return { notifications: [], failed: noticesResult.failed };
+  if (!isWithinNotificationWindow(facts.occurredAt, businessToday)) {
+    return null;
   }
-  const noticeSourceIds = noticesResult.notices.map((notice) => notice.sourceId);
-  const readStatesResult = await readInBatches(noticeSourceIds, (batch) =>
-    admin
-      .from('attention_read_states')
-      .select('source_id, state_version')
-      .eq('organization_id', context.orgId)
-      .eq('user_id', context.userId)
-      .eq('source_type', 'employee_certification_expiry')
-      .in('source_id', [...batch]),
-  );
-  if (noticesResult.failed || readStatesResult.error) {
-    logError('Failed to load certification attention read states', readStatesResult.error);
-    return { notifications: [], failed: true };
-  }
-  const readVersionBySourceId = new Map(
-    (readStatesResult.data ?? []).map((row) => [row.source_id, row.state_version]),
-  );
   return {
-    notifications: noticesResult.notices.map((notice) => ({
-      sourceType: 'employee_certification_expiry',
-      sourceId: notice.sourceId,
-      employeeRecordId: notice.employeeRecordId,
-      personName: notice.employeeName,
-      capabilityName: notice.capabilityName,
-      validUntil: notice.validUntil,
-      phase: notice.phase,
-      stateVersion: notice.stateVersion,
-      occurredAt: notice.occurredAt,
-      unread: isNotificationUnread(notice.stateVersion, readVersionBySourceId.get(notice.sourceId) ?? null),
-    })),
-    failed: false,
+    sourceType: 'sickness_report',
+    sourceId: row.id,
+    personName: isOwn ? null : (nameByRecordId.get(row.employee_record_id) ?? 'Unbekannt'),
+    isOwn,
+    status: facts.status,
+    startDate: row.start_date,
+    endDate: row.end_date,
+    dayPortion: toVacationDayPortion(row.day_portion),
+    stateVersion: facts.stateVersion,
+    occurredAt: facts.occurredAt,
+    unread: isNotificationUnread(facts.stateVersion, readVersionBySourceId.get(row.id) ?? null),
   };
 }
 
@@ -1263,82 +419,13 @@ async function persistNotificationReadMarker(
   },
 ): Promise<MarkNotificationReadResult> {
   const admin = createSupabaseAdminClient();
-
-  if (input.sourceType === 'vacation_decision') {
-    // Self-only: the notification's request must belong to the caller's own
-    // employee record in the active organization.
-    const { data: request, error: requestError } = await admin
-      .from('vacation_requests')
-      .select('id, employee_record_id, organization_id')
-      .eq('organization_id', context.orgId)
-      .eq('id', input.sourceId)
-      .maybeSingle();
-    if (requestError) {
-      logError('Failed to load request for read marker', requestError);
-      return { success: false, error: 'update_failed' };
-    }
-    if (!request) return { success: false, error: 'request_not_found' };
-
-    const { data: record, error: recordError } = await admin
-      .from('employee_records')
-      .select('id')
-      .eq('organization_id', context.orgId)
-      .eq('user_id', context.userId)
-      .maybeSingle();
-    if (recordError) {
-      logError('Failed to load own record for read marker', recordError);
-      return { success: false, error: 'update_failed' };
-    }
-    if (!record || record.id !== request.employee_record_id) {
-      return { success: false, error: 'not_authorized' };
-    }
-  } else if (input.sourceType === 'sickness_report') {
-    // Sickness notices have two audiences (privacy matrix): the affected
-    // person and admin/büro managers. Either may mark their own copy read.
-    const { data: report, error: reportError } = await admin
-      .from('sickness_reports')
-      .select('id, employee_record_id, organization_id')
-      .eq('organization_id', context.orgId)
-      .eq('id', input.sourceId)
-      .maybeSingle();
-    if (reportError) {
-      logError('Failed to load report for read marker', reportError);
-      return { success: false, error: 'update_failed' };
-    }
-    if (!report) return { success: false, error: 'request_not_found' };
-
-    const isManager = context.role === 'admin' || context.role === 'buero';
-    if (!isManager) {
-      const { data: record, error: recordError } = await admin
-        .from('employee_records')
-        .select('id')
-        .eq('organization_id', context.orgId)
-        .eq('user_id', context.userId)
-        .maybeSingle();
-      if (recordError) {
-        logError('Failed to load own record for read marker', recordError);
-        return { success: false, error: 'update_failed' };
-      }
-      if (!record || record.id !== report.employee_record_id) {
-        return { success: false, error: 'not_authorized' };
-      }
-    }
-  } else {
-    const isManager = context.role === 'admin' || context.role === 'buero';
-    if (!isManager) return { success: false, error: 'not_authorized' };
-    const { data: certification, error: certificationError } = await admin
-      .from('employee_capabilities')
-      .select('id')
-      .eq('organization_id', context.orgId)
-      .eq('id', input.sourceId)
-      .eq('capability_kind', 'certification')
-      .maybeSingle();
-    if (certificationError) {
-      logError('Failed to load certification for read marker', certificationError);
-      return { success: false, error: 'update_failed' };
-    }
-    if (!certification) return { success: false, error: 'request_not_found' };
-  }
+  const refusal =
+    input.sourceType === 'vacation_decision'
+      ? await refuseVacationDecisionMarker(admin, context, input.sourceId)
+      : input.sourceType === 'sickness_report'
+        ? await refuseSicknessReportMarker(admin, context, input.sourceId)
+        : await refuseCertificationMarker(admin, context, input.sourceId);
+  if (refusal) return refusal;
 
   // One call repeats the audience check under lock and stores the marker with
   // its 'marked_read' event, or refuses and changes nothing.
