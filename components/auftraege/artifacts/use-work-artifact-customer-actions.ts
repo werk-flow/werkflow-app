@@ -7,7 +7,7 @@ import type { DocumentUploadTarget } from '@/lib/documents/types';
 import { uploadWorkArtifactSignatureDirect } from '@/lib/documents/upload-client';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { discardUnlinkedWorkArtifactSignature, recordWorkArtifactAction } from '@/lib/work-artifacts/actions';
-import { WORK_ARTIFACT_LEGAL_NOTICE } from '@/lib/work-artifacts/types';
+import { WORK_ARTIFACT_LEGAL_NOTICE, type WorkArtifactActionInput } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEditor } from './use-work-artifact-editor';
 import type { WorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
@@ -24,6 +24,95 @@ function signatureUploadTarget({ targetType, targetId }: WorkArtifactTarget): Do
   return targetType === 'job' ? { kind: 'job', jobId: targetId } : { kind: 'project', projectId: targetId };
 }
 
+type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
+
+type CustomerSigner = { customerName: string; customerRole: string; customerRelationship: string };
+
+/** The signer facts every customer action records, with the wording the customer saw. */
+function signerContext(
+  { customerName, customerRole, customerRelationship }: CustomerSigner,
+  captureMethod: string,
+): NonNullable<WorkArtifactActionInput['customerContext']> {
+  return {
+    signerName: customerName,
+    ...(customerRole ? { signerRole: customerRole } : {}),
+    signerRelationship: customerRelationship,
+    captureMethod,
+    wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE,
+  };
+}
+
+/** Uploads the signature image and returns its document id, or null when the upload failed. */
+async function uploadSignature(
+  file: File,
+  artifactId: string,
+  target: WorkArtifactTarget,
+): Promise<string | null> {
+  const uploaded = await uploadWorkArtifactSignatureDirect({
+    file,
+    artifactId,
+    target: signatureUploadTarget(target),
+  });
+  return uploaded.success ? uploaded.document.id : null;
+}
+
+/** Discards a signature upload no action links; a failure leaves it in the library and says so. */
+async function discardPendingSignature(documentId: string, showBanner: ShowBanner): Promise<void> {
+  const discarded = await discardUnlinkedWorkArtifactSignature(documentId).catch(() => ({
+    success: false as const,
+  }));
+  if (!discarded.success) {
+    // The dialog is closing, so the banner is the only surface left; the
+    // orphaned upload stays reachable in the library.
+    showBanner({
+      variant: 'error',
+      message:
+        'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden. Sie bleibt unter Dokumente sichtbar und kann dort gelöscht werden.',
+    });
+  }
+}
+
+type CustomerDecisionType = 'customer_acknowledged' | 'customer_refused' | 'customer_reserved';
+
+type CustomerDecisionContext = {
+  editor: WorkArtifactEditor;
+  review: WorkArtifactReviewActions;
+  signer: CustomerSigner;
+  showBanner: ShowBanner;
+  checkCustomerName: () => string | undefined;
+};
+
+/** Records the customer's acknowledgement, refusal or reservation of the current revision. */
+function recordCustomerDecision(
+  { editor, review, signer, showBanner, checkCustomerName }: CustomerDecisionContext,
+  actionType: CustomerDecisionType,
+) {
+  const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
+  const { actionReason, setActionReason, checkActionReason } = review;
+  if (!detail || !currentRevision) return;
+  // Refusal and reservation also need the reason, which sits above the name.
+  const reasonError = actionType === 'customer_acknowledged' ? undefined : checkActionReason();
+  const errors = { 'artifact-action-reason': reasonError, 'artifact-customer-name': checkCustomerName() };
+  if (focusFirstInvalidField(errors)) return;
+  setError(null);
+  void runArtifactTask(actionType, async () => {
+    const result = await recordWorkArtifactAction({
+      artifactId: detail.id,
+      revisionId: currentRevision.id,
+      actionId: crypto.randomUUID(),
+      expectedVersion: detail.version,
+      actionType,
+      ...(actionType === 'customer_acknowledged' ? {} : { reason: actionReason }),
+      customerContext: signerContext(signer, 'Persönlich vor Ort'),
+    });
+    if (await handleMutationFailure(result, 'Die Kundenentscheidung konnte nicht gespeichert werden.'))
+      return;
+    await load(detail.id);
+    setActionReason('');
+    showBanner({ variant: 'success', message: 'Kundenentscheidung wurde dokumentiert.' });
+  });
+}
+
 /** Customer decision, signature capture, and the close flow that discards an unlinked signature upload. */
 export function useWorkArtifactCustomerActions({
   targetType,
@@ -33,7 +122,6 @@ export function useWorkArtifactCustomerActions({
   onClose,
 }: WorkArtifactCustomerActionsOptions) {
   const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
-  const { actionReason, setActionReason, checkActionReason } = review;
   const { showBanner } = useBanner();
   const [customerName, setCustomerName] = useState('');
   const [customerRole, setCustomerRole] = useState('');
@@ -41,6 +129,7 @@ export function useWorkArtifactCustomerActions({
   const [signatureFile, setSignatureFile] = useState<File | null>(null);
   const [pendingSignatureDocumentId, setPendingSignatureDocumentId] = useState<string | null>(null);
   const [customerNameError, setCustomerNameError] = useState<string | null>(null);
+  const signer = { customerName, customerRole, customerRelationship };
 
   /** Marks the name field and returns its message, or undefined when the name is valid. */
   function checkCustomerName(): string | undefined {
@@ -49,36 +138,8 @@ export function useWorkArtifactCustomerActions({
     return message;
   }
 
-  function customerAction(actionType: 'customer_acknowledged' | 'customer_refused' | 'customer_reserved') {
-    if (!detail || !currentRevision) return;
-    // Refusal and reservation also need the reason, which sits above the name.
-    const reasonError = actionType === 'customer_acknowledged' ? undefined : checkActionReason();
-    const errors = { 'artifact-action-reason': reasonError, 'artifact-customer-name': checkCustomerName() };
-    if (focusFirstInvalidField(errors)) return;
-    setError(null);
-    void runArtifactTask(actionType, async () => {
-      const result = await recordWorkArtifactAction({
-        artifactId: detail.id,
-        revisionId: currentRevision.id,
-        actionId: crypto.randomUUID(),
-        expectedVersion: detail.version,
-        actionType,
-        ...(actionType === 'customer_acknowledged' ? {} : { reason: actionReason }),
-        customerContext: {
-          signerName: customerName,
-          ...(customerRole ? { signerRole: customerRole } : {}),
-          signerRelationship: customerRelationship,
-          captureMethod: 'Persönlich vor Ort',
-          wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE,
-        },
-      });
-      if (await handleMutationFailure(result, 'Die Kundenentscheidung konnte nicht gespeichert werden.'))
-        return;
-      await load(detail.id);
-      setActionReason('');
-      showBanner({ variant: 'success', message: 'Kundenentscheidung wurde dokumentiert.' });
-    });
-  }
+  const customerAction = (actionType: CustomerDecisionType) =>
+    recordCustomerDecision({ editor, review, signer, showBanner, checkCustomerName }, actionType);
 
   function captureSignature() {
     if (!detail || !currentRevision) return;
@@ -91,16 +152,11 @@ export function useWorkArtifactCustomerActions({
     void runArtifactTask('signature', async () => {
       let signatureDocumentId = pendingSignatureDocumentId;
       if (!signatureDocumentId) {
-        const uploaded = await uploadWorkArtifactSignatureDirect({
-          file: signatureFile,
-          artifactId: detail.id,
-          target: signatureUploadTarget({ targetType, targetId }),
-        });
-        if (!uploaded.success) {
+        signatureDocumentId = await uploadSignature(signatureFile, detail.id, { targetType, targetId });
+        if (signatureDocumentId === null) {
           setError('Die Unterschrift konnte nicht hochgeladen werden.');
           return;
         }
-        signatureDocumentId = uploaded.document.id;
         setPendingSignatureDocumentId(signatureDocumentId);
       }
       const result = await recordWorkArtifactAction({
@@ -109,13 +165,7 @@ export function useWorkArtifactCustomerActions({
         actionId: crypto.randomUUID(),
         expectedVersion: detail.version,
         actionType: 'signature_captured',
-        customerContext: {
-          signerName: customerName,
-          ...(customerRole ? { signerRole: customerRole } : {}),
-          signerRelationship: customerRelationship,
-          captureMethod: 'Unterschrift auf dem Gerät',
-          wordingSnapshot: WORK_ARTIFACT_LEGAL_NOTICE,
-        },
+        customerContext: signerContext(signer, 'Unterschrift auf dem Gerät'),
         signatureDocumentId,
       });
       if (await handleMutationFailure(result, 'Die Unterschrift konnte nicht abgeschlossen werden.')) return;
@@ -128,26 +178,13 @@ export function useWorkArtifactCustomerActions({
 
   async function closeDialog() {
     if (pendingSignatureDocumentId) {
-      const discarded = await discardUnlinkedWorkArtifactSignature(pendingSignatureDocumentId).catch(() => ({
-        success: false as const,
-      }));
-      if (!discarded.success) {
-        // The dialog is closing, so the banner is the only surface left; the
-        // orphaned upload stays reachable in the library.
-        showBanner({
-          variant: 'error',
-          message:
-            'Die nicht gespeicherte Unterschrift konnte nicht verworfen werden. Sie bleibt unter Dokumente sichtbar und kann dort gelöscht werden.',
-        });
-      }
+      await discardPendingSignature(pendingSignatureDocumentId, showBanner);
       setPendingSignatureDocumentId(null);
     }
     onClose();
   }
 
-  function requestClose() {
-    void runArtifactTask('close', closeDialog);
-  }
+  const requestClose = () => void runArtifactTask('close', closeDialog);
 
   return {
     customerName,
