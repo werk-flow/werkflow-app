@@ -39,7 +39,8 @@ export function MitarbeiterDetailTimeCards({
   const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
   // An unknown target is never measured against 8h: while the week loads the
   // card shows the worked time only, and a failed target read offers a retry.
-  // A failed week read is the week card's one failure.
+  // A failed week read is the week card's one failure. A failed target
+  // refresh keeps the last-known target, marked stale.
   const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
   const targetReadFailed = !todayTarget && !weekLoading && !weekError;
 
@@ -72,7 +73,12 @@ export function MitarbeiterDetailTimeCards({
               </p>
             )}
 
-            <div className="space-y-1">
+            <StaleRegion
+              stale={liveTime.targetsStale && todayTarget !== undefined}
+              onRetry={refetchWeek}
+              notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
+              className="space-y-1"
+            >
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Tagesfortschritt</span>
                 <span
@@ -105,7 +111,7 @@ export function MitarbeiterDetailTimeCards({
                 </SectionError>
               )}
               {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
-            </div>
+            </StaleRegion>
 
             {/* Time breakdown indicators */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-xs">

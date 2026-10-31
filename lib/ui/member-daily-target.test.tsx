@@ -37,8 +37,7 @@ const todayTarget = weekTargets[getTodayIndex()];
 /** The hook's result for a member who has not worked yet today, after the week's read settled. */
 function liveTimeWith(
   target: DailyTarget | undefined,
-  weekLoading = false,
-  weekError: string | null = null,
+  overrides: Partial<MitarbeiterDetailLiveTime>,
 ): MitarbeiterDetailLiveTime {
   return {
     status: undefined,
@@ -46,9 +45,10 @@ function liveTimeWith(
     statusStale: false,
     refetchStatus: async () => {},
     weekData: [],
-    weekLoading,
+    weekLoading: false,
     weekStale: false,
-    weekError,
+    weekError: null,
+    targetsStale: false,
     refetchWeek: async () => {},
     weekTargets: target ? weekTargets : undefined,
     todayIndex: getTodayIndex(),
@@ -59,17 +59,17 @@ function liveTimeWith(
     todayTargetHint: null,
     memberBreakdown: { workMinutes: 0, breakMinutes: 0, overtimeMinutes: 0 },
     dailyPercentage: 0,
+    ...overrides,
   };
 }
 
 function renderCard(
   target: DailyTarget | undefined,
-  weekLoading = false,
-  weekError: string | null = null,
+  overrides: Partial<MitarbeiterDetailLiveTime> = {},
 ): string {
   return renderToStaticMarkup(
     <MitarbeiterDetailTimeCards
-      liveTime={liveTimeWith(target, weekLoading, weekError)}
+      liveTime={liveTimeWith(target, overrides)}
       breakMode="automatic"
       autoBreakThresholdMinutes={360}
       autoBreakDurationMinutes={30}
@@ -85,7 +85,7 @@ describe('the personnel detail status card', () => {
   });
 
   test('while the week loads it shows the worked time only', () => {
-    const markup = renderCard(undefined, true);
+    const markup = renderCard(undefined, { weekLoading: true });
     expect(markup).not.toContain('/ 8 Std.');
     expect(markup).not.toContain('Das Tagesziel konnte nicht geladen werden.');
   });
@@ -97,10 +97,21 @@ describe('the personnel detail status card', () => {
     expect(markup).toContain('Erneut laden');
   });
 
+  // CodeRabbit on werk-flow/werkflow-app#112: a failed target refresh kept the
+  // last-known target and reported a successful week, so outdated progress
+  // showed without a stale mark or retry.
+  test('a failed target refresh keeps the last-known target, marked stale with a retry', () => {
+    const markup = renderCard(todayTarget, { targetsStale: true });
+    expect(markup).toContain('0 Min. / 8 Std. 30 Min. (0%)');
+    expect(markup).toContain('Das Tagesziel konnte nicht aktualisiert werden');
+    expect(markup).toContain('data-stale="true"');
+    expect(markup.split('Erneut laden')).toHaveLength(2);
+  });
+
   // CodeRabbit on werk-flow/werkflow-app#112: a failed week read showed its
   // failure twice, in the week card and again as a target error.
   test('a failed week read shows one failure, in the week card', () => {
-    const markup = renderCard(undefined, false, 'load_failed');
+    const markup = renderCard(undefined, { weekError: 'load_failed' });
     expect(markup).toContain('Die Stunden dieser Woche konnten nicht geladen werden.');
     expect(markup).not.toContain('Das Tagesziel konnte nicht geladen werden.');
     expect(markup.split('Erneut laden')).toHaveLength(2);

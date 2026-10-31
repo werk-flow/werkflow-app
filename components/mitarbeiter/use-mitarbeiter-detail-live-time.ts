@@ -100,6 +100,7 @@ export function useMitarbeiterDetailLiveTime({
   const {
     weekData,
     weekTargets,
+    targetsStale,
     todayIndex,
     weekLabel,
     isLoading: weekLoading,
@@ -152,6 +153,7 @@ export function useMitarbeiterDetailLiveTime({
     weekError,
     refetchWeek,
     weekTargets,
+    targetsStale,
     todayIndex,
     weekLabel,
     liveTotalMinutes,

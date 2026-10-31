@@ -286,6 +286,15 @@ export function memberRowActionsButton(row: Locator): Locator {
   return row.getByRole('button', { name: SHARED_COPY.action.openActions });
 }
 
+/**
+ * The daily progress bar of a member row. Its name carries the percentage on
+ * a day with a target and the reason on a day without one (a weekend under
+ * the default target), so it shows on every run day.
+ */
+export function memberRowDailyProgress(row: Locator): Locator {
+  return row.getByRole('progressbar', { name: new RegExp(`^${ORGANIZATION_COPY.memberDetailProgress}: `) });
+}
+
 /** The work schedule indicator of a member row. */
 export function memberRowWorkSchedule(row: Locator): Locator {
   return row.getByLabel(ORGANIZATION_COPY.workSchedule);
