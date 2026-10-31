@@ -871,6 +871,12 @@
           ]
         },
         {
+          "file": "supabase/tests/organization_member_reads.sql",
+          "kind": "sql",
+          "description": "the member list read answers a member with the own organization's members only and refuses a caller who is not a member of the organization it names; no client role executes it",
+          "titles": ["% read the member list", "a client role executes get_org_members_for_user"]
+        },
+        {
           "file": "lib/personnel/lifecycle-actions.test.ts",
           "kind": "unit",
           "description": "Büro lists a person’s standard personnel document but no Admin-only one, the admin lists both",
