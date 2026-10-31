@@ -21,5 +21,5 @@ Pflichtfeld
 2026
 Standardversion bestätigen
 Neue Ausnahmeregel anlegen
+Vorschlag 01.01.2026: der erste Tag des ältesten Monats ohne Abschluss. Ein Monat lässt sich nur abschließen, wenn Regel und Zeitkonto spätestens an seinem ersten Tag beginnen.
 Individuelle Regeln
-Standardmäßig gilt die Organisationsregel. Bei Bedarf kann für einzelne Mitarbeitende eine datumswirksame Ausnahme festgelegt werden. Ein Klick auf eine Regel weist sie zu.
