@@ -10,11 +10,10 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { buildLegacyIntervals } from './legacy-intervals';
 
-import { toEmploymentCondition } from '@/lib/personnel/types';
-import { toWorkSchedule } from '@/lib/personnel/schedule';
-import { resolveDailyTarget, type DailyTarget } from '@/lib/personnel/targets';
+import type { DailyTarget } from '@/lib/personnel/targets';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { calculateEmployeePeriod } from './calculation';
+import { resolveEmployeeDailyTargets } from './period-daily-targets';
 import { pushEmployeeFindings } from './period-findings';
 import { resolvePoliciesForPeriod } from './period-policies';
 import {
@@ -82,56 +81,6 @@ function buildEmployeeActivityIntervals(
     else delete interval.projectNumber;
   }
   return intervals;
-}
-
-function resolveEmployeeDailyTargets(
-  employee: PeriodEmployee,
-  policiesByDate: PeriodPolicies,
-  shared: PeriodShared,
-): { resolvedTargets: DailyTarget[]; dailyTargets: DailyTargetInput[] } {
-  const { schedules, conditions, vacations, sickness, calendar } = shared.sources;
-  const { dates } = shared.index;
-  const employeeSchedules = (schedules ?? [])
-    .filter((schedule) => schedule.employee_record_id === employee.id)
-    .map(toWorkSchedule);
-  const employeeConditions = (conditions ?? [])
-    .filter((condition) => condition.employee_record_id === employee.id)
-    .map(toEmploymentCondition);
-  const absenceSpans = [...(vacations.get(employee.id) ?? []), ...(sickness.get(employee.id) ?? [])];
-  const resolvedTargets = dates.map((date) =>
-    resolveDailyTarget({
-      dateIso: date,
-      schedules: employeeSchedules,
-      conditions: employeeConditions,
-      calendar,
-      absences: absenceSpans,
-    }),
-  );
-  const dailyTargets: DailyTargetInput[] = resolvedTargets.map((target) => {
-    const vacationMinutes =
-      target.absence?.type === 'vacation' ? target.baseTargetMinutes - target.targetMinutes : 0;
-    const sicknessMinutes =
-      target.absence?.type === 'sickness' ? target.baseTargetMinutes - target.targetMinutes : 0;
-    const treatment =
-      target.absence?.type === 'vacation'
-        ? policiesByDate.get(target.date)?.vacationTreatment
-        : policiesByDate.get(target.date)?.sicknessTreatment;
-    const targetMinutes =
-      target.absence && treatment === 'informational' ? target.baseTargetMinutes : target.targetMinutes;
-    return {
-      localDate: target.date,
-      targetMinutes,
-      source:
-        target.source === 'schedule'
-          ? 'schedule'
-          : target.source === 'derived'
-            ? 'employment_condition'
-            : 'default',
-      vacationMinutes,
-      sicknessMinutes,
-    };
-  });
-  return { resolvedTargets, dailyTargets };
 }
 
 function calculateEmployeePeriodResult(input: {

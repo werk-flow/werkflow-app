@@ -34,6 +34,7 @@ import {
   memberMenuItem,
   memberRow,
   memberRowActionsButton,
+  memberRowDailyProgress,
   memberRowWorkSchedule,
   openJoinOrganizationDialog,
   organizationSwitcher,
@@ -370,7 +371,7 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     await expect(bueroOwnRow).toContainText(ROLE_LABELS.buero);
     await expect(employeeRow).toContainText(ROLE_LABELS.employee);
     await expect(employeeRow).toContainText(ANY_MEMBER_CLOCK_STATUS);
-    await expect(employeeRow.getByText('%')).toBeVisible();
+    await expect(memberRowDailyProgress(employeeRow)).toBeVisible();
     await expect(memberRowWorkSchedule(employeeRow)).toBeVisible();
     await memberRowActionsButton(employeeRow).click();
     await expect(memberMenuItem(bueroPage, 'details')).toBeVisible();

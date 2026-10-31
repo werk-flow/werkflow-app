@@ -110,7 +110,7 @@ export async function getCalendarBoardContext(rawInput: CalendarBoardInput): Pro
     loadDailyTargetsByRecord({
       admin,
       orgId,
-      employeeRecordIds: recordIds,
+      employees: records,
       dates: isoDatesBetween(dates.from, dates.to),
     }),
     loadCalendarBoardOccurrenceContext({ admin, orgId, dates, ownRecordId }),

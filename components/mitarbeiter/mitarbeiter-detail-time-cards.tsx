@@ -8,6 +8,7 @@ import { SectionError } from '@/components/ui/section-error';
 import { StatusBadge } from './status-badge';
 import { WeeklyHoursChart } from '@/components/zeiterfassung/weekly-hours-chart';
 import { formatDuration } from '@/lib/time-tracking/helpers';
+import { getNoTargetReason } from '@/lib/personnel/targets';
 import type { OrgBreakMode } from '@/lib/time-tracking/settings';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { MitarbeiterDetailLiveTime } from './use-mitarbeiter-detail-live-time';
@@ -34,25 +35,7 @@ export function MitarbeiterDetailTimeCards({
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
 }: MitarbeiterDetailTimeCardsProps) {
-  const {
-    status,
-    statusError,
-    statusStale,
-    refetchStatus,
-    weekData,
-    weekStale,
-    refetchWeek,
-    weekTargets,
-    todayIndex,
-    weekLabel,
-    liveTotalMinutes,
-    todayTarget,
-    todayTargetMinutes,
-    todayTargetHint,
-    memberBreakdown,
-    dailyPercentage,
-  } = liveTime;
-  const liveBreakMinutes = memberBreakdown.breakMinutes;
+  const { status, statusError, statusStale, refetchStatus, memberBreakdown, todayTarget } = liveTime;
 
   return (
     <>
@@ -83,39 +66,7 @@ export function MitarbeiterDetailTimeCards({
               </p>
             )}
 
-            <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Tagesfortschritt</span>
-                <span
-                  className={cn(
-                    'font-medium tabular-nums',
-                    todayTargetMinutes > 0 && dailyPercentage >= 100
-                      ? 'text-success-text'
-                      : 'text-foreground',
-                  )}
-                >
-                  {todayTargetMinutes > 0
-                    ? `${formatDuration(memberBreakdown.workMinutes)} / ${formatDuration(todayTargetMinutes)} (${dailyPercentage}%)`
-                    : formatDuration(memberBreakdown.workMinutes)}
-                </span>
-              </div>
-              <Progress
-                value={dailyPercentage}
-                label="Tagesfortschritt"
-                className="h-2"
-                indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
-              />
-              {todayTarget && todayTarget.targetMinutes === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {todayTarget.isHoliday
-                    ? `Feiertag: ${todayTarget.holidayName} – keine Sollarbeitszeit.`
-                    : todayTarget.isClosureDay
-                      ? `Betriebsruhe${todayTarget.closureLabel ? ` (${todayTarget.closureLabel})` : ''} – keine Sollarbeitszeit.`
-                      : 'Laut Arbeitszeitmodell heute kein Arbeitstag.'}
-                </p>
-              )}
-              {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
-            </div>
+            <MitarbeiterDetailDailyProgress liveTime={liveTime} />
 
             {/* Time breakdown indicators */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-xs">
@@ -137,9 +88,11 @@ export function MitarbeiterDetailTimeCards({
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-info" />
                 <span className="text-muted-foreground">Überstunden heute</span>
                 <span className="font-medium tabular-nums">
-                  {memberBreakdown.overtimeMinutes > 0
-                    ? formatDuration(memberBreakdown.overtimeMinutes)
-                    : '0 Min.'}
+                  {!todayTarget
+                    ? '–'
+                    : memberBreakdown.overtimeMinutes > 0
+                      ? formatDuration(memberBreakdown.overtimeMinutes)
+                      : '0 Min.'}
                 </span>
               </span>
             </div>
@@ -147,30 +100,108 @@ export function MitarbeiterDetailTimeCards({
         )}
       </div>
 
-      {/* Anwesenheit & Stunden */}
-      <div className="rounded-lg border bg-card p-3 sm:p-4">
-        <SectionTitle className="mb-3">
-          <BarChart3 className="size-4" />
-          Anwesenheit & Stunden
-        </SectionTitle>
-        {weekData.length > 0 ? (
-          <StaleRegion stale={weekStale} onRetry={refetchWeek}>
-            <WeeklyHoursChart
-              weekData={weekData}
-              todayIndex={todayIndex}
-              liveTodayMinutes={liveTotalMinutes}
-              liveTodayBreakMinutes={liveBreakMinutes}
-              liveTodayBreakMode={status?.breakMode ?? breakMode}
-              liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
-              liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
-              weekLabel={weekLabel}
-              weekTargets={weekTargets}
-            />
-          </StaleRegion>
-        ) : (
-          <NoWeekData />
-        )}
-      </div>
+      <MitarbeiterDetailWeekCard
+        liveTime={liveTime}
+        breakMode={breakMode}
+        autoBreakThresholdMinutes={autoBreakThresholdMinutes}
+        autoBreakDurationMinutes={autoBreakDurationMinutes}
+      />
     </>
+  );
+}
+
+/** The week's attendance and hours, or the failure of its read with a retry. */
+function MitarbeiterDetailWeekCard({
+  liveTime,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
+}: MitarbeiterDetailTimeCardsProps) {
+  const { status, weekData, weekStale, weekError, refetchWeek, weekTargets, todayIndex, weekLabel } =
+    liveTime;
+  const { liveTotalMinutes, memberBreakdown } = liveTime;
+  const liveBreakMinutes = memberBreakdown.breakMinutes;
+
+  return (
+    <div className="rounded-lg border bg-card p-3 sm:p-4">
+      <SectionTitle className="mb-3">
+        <BarChart3 className="size-4" />
+        Anwesenheit & Stunden
+      </SectionTitle>
+      {weekError && !weekStale ? (
+        <SectionError onRetry={() => void refetchWeek()}>
+          Die Stunden dieser Woche konnten nicht geladen werden.
+        </SectionError>
+      ) : weekData.length > 0 ? (
+        <StaleRegion stale={weekStale} onRetry={refetchWeek}>
+          <WeeklyHoursChart
+            weekData={weekData}
+            todayIndex={todayIndex}
+            liveTodayMinutes={liveTotalMinutes}
+            liveTodayBreakMinutes={liveBreakMinutes}
+            liveTodayBreakMode={status?.breakMode ?? breakMode}
+            liveAutoBreakThresholdMinutes={status?.autoBreakThresholdMinutes ?? autoBreakThresholdMinutes}
+            liveAutoBreakDurationMinutes={status?.autoBreakDurationMinutes ?? autoBreakDurationMinutes}
+            weekLabel={weekLabel}
+            weekTargets={weekTargets}
+          />
+        </StaleRegion>
+      ) : (
+        <NoWeekData />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Today's progress against the resolved target. An unknown target is never
+ * measured against 8h: while the week loads it shows the worked time only, and
+ * a failed target read offers a retry. A failed target refresh keeps the
+ * last-known target, marked stale. A failed or stale week is the week card's
+ * one failure surface.
+ */
+function MitarbeiterDetailDailyProgress({ liveTime }: { liveTime: MitarbeiterDetailLiveTime }) {
+  const { status, weekLoading, weekError, weekStale, targetsStale, refetchWeek } = liveTime;
+  const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
+  const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
+  const weekFailed = weekError !== null || weekStale;
+  const targetReadFailed = !todayTarget && !weekLoading && !weekFailed;
+
+  return (
+    <StaleRegion
+      stale={targetsStale && todayTarget !== undefined && !weekFailed}
+      onRetry={refetchWeek}
+      notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
+      className="space-y-1"
+    >
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Tagesfortschritt</span>
+        <span
+          className={cn(
+            'font-medium tabular-nums',
+            todayTargetMinutes > 0 && dailyPercentage >= 100 ? 'text-success-text' : 'text-foreground',
+          )}
+        >
+          {todayTargetMinutes > 0
+            ? `${formatDuration(memberBreakdown.workMinutes)} / ${formatDuration(todayTargetMinutes)} (${dailyPercentage}%)`
+            : formatDuration(memberBreakdown.workMinutes)}
+        </span>
+      </div>
+      <Progress
+        value={dailyPercentage}
+        label="Tagesfortschritt"
+        className="h-2"
+        indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
+      />
+      {noTargetReason && (
+        <p className="text-xs text-muted-foreground">{noTargetReason} – heute keine Sollarbeitszeit.</p>
+      )}
+      {targetReadFailed && (
+        <SectionError onRetry={() => void refetchWeek()}>
+          Das Tagesziel konnte nicht geladen werden.
+        </SectionError>
+      )}
+      {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
+    </StaleRegion>
   );
 }

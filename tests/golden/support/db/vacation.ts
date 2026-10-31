@@ -6,6 +6,7 @@ import {
 } from '../../../../lib/personnel/types';
 import {
   parseHolidayRegionHistory,
+  type EmploymentInterval,
   type OrganizationHolidayCalendar,
 } from '../../../../lib/personnel/targets';
 import { createAdminClient } from './shared';
@@ -17,6 +18,7 @@ export type VacationTargetContext = {
   schedules: WorkSchedule[];
   conditions: EmploymentCondition[];
   calendar: OrganizationHolidayCalendar;
+  employment: EmploymentInterval;
 };
 
 export async function getTargetContextForRecord(
@@ -24,7 +26,7 @@ export async function getTargetContextForRecord(
   employeeRecordId: string,
 ): Promise<VacationTargetContext> {
   const admin = createAdminClient();
-  const [schedulesResult, conditionsResult, settingsResult, closureResult] = await Promise.all([
+  const [schedulesResult, conditionsResult, settingsResult, closureResult, recordResult] = await Promise.all([
     admin
       .from('work_schedules')
       .select('*')
@@ -41,13 +43,25 @@ export async function getTargetContextForRecord(
       .eq('organization_id', orgId)
       .maybeSingle(),
     admin.from('organization_closure_days').select('id, closure_date, label').eq('organization_id', orgId),
+    admin
+      .from('employee_records')
+      .select('entry_date, exit_date')
+      .eq('organization_id', orgId)
+      .eq('id', employeeRecordId)
+      .single(),
   ]);
 
   const firstError =
-    schedulesResult.error ?? conditionsResult.error ?? settingsResult.error ?? closureResult.error;
+    schedulesResult.error ??
+    conditionsResult.error ??
+    settingsResult.error ??
+    closureResult.error ??
+    recordResult.error;
   if (firstError) {
     throw new Error(`Target context query failed: ${firstError.message}`);
   }
+  const record = recordResult.data;
+  if (!record) throw new Error(`Employee record ${employeeRecordId} not found`);
 
   return {
     schedules: (schedulesResult.data ?? []).map((row) => toWorkSchedule(row as WorkScheduleRow)),
@@ -62,6 +76,10 @@ export async function getTargetContextForRecord(
         closureDate: row.closure_date as string,
         label: (row.label as string | null) ?? null,
       })),
+    },
+    employment: {
+      entryDate: record.entry_date,
+      exitDate: record.exit_date,
     },
   };
 }
