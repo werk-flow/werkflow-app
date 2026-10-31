@@ -57,7 +57,6 @@
   "components/settings/use-profile-avatar-upload.ts": 1,
   "components/time-activity-fields.tsx": 4,
   "components/ui/form.tsx": 2,
-  "components/ui/row-actions-menu.tsx": 1,
   "components/ui/time-input.tsx": 1,
   "components/ui/use-date-picker-segments.ts": 1,
   "components/zeiterfassung/entry-history.tsx": 1,

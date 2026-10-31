@@ -333,13 +333,8 @@
     "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
     "components/ui/calendar.tsx": { "Calendar": 122 },
     "components/ui/date-picker.tsx": { "DatePicker": 120 },
-    "components/ui/dialog.tsx": { "DialogContent": 84 },
     "components/ui/duration-hours-input.tsx": { "DurationHoursInput": 87 },
     "components/ui/month-picker.tsx": { "MonthPicker": 151 },
-    "components/ui/row-actions-menu.tsx": { "RowActionsMenu": 136 },
-    "components/ui/searchable-multi-select.tsx": { "SearchableMultiSelect": 124 },
-    "components/ui/searchable-select-popup.tsx": { "SearchableSelectPopup": 151 },
-    "components/ui/searchable-single-select.tsx": { "SearchableSelect": 120 },
     "components/ui/time-input.tsx": { "TimeInput": 197 },
     "components/ui/use-date-picker-segments.ts": {
       "handleDateSegmentKeyDown": 93,

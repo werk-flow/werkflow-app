@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreHorizontal } from 'lucide-react';
@@ -52,6 +53,141 @@ function triggerInPlace(trigger: HTMLElement | null, anchor: TriggerAnchor | nul
   const bounds = trigger?.getBoundingClientRect();
   if (!bounds || !anchor) return false;
   return Math.abs(bounds.top - anchor.top) < 1 && Math.abs(bounds.left - anchor.left) < 1;
+}
+
+/** Arrow keys, Home and End move focus between the enabled menu items, wrapping around. */
+function moveMenuItemFocus(event: KeyboardEvent<HTMLDivElement>): void {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const items = Array.from(
+    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
+  );
+  if (items.length === 0) return;
+  const currentIndex = items.findIndex((item) => item === document.activeElement);
+  const nextIndex =
+    event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? items.length - 1
+        : event.key === 'ArrowDown'
+          ? (currentIndex + 1 + items.length) % items.length
+          : (currentIndex - 1 + items.length) % items.length;
+  items[nextIndex]?.focus();
+}
+
+type CloseMenu = (options?: { restoreFocus?: boolean }) => void;
+
+/** Escape closes and refocuses the trigger, Tab leaves through the trigger, arrows move focus. */
+function handleMenuKeyDown(
+  event: KeyboardEvent<HTMLDivElement>,
+  triggerRef: RefObject<HTMLButtonElement | null>,
+  closeMenu: CloseMenu,
+): void {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeMenu({ restoreFocus: true });
+    return;
+  }
+
+  if (event.key === 'Tab') {
+    // Start native traversal from the row trigger, not the body portal.
+    // Do not preventDefault: Tab/Shift+Tab must reach the next/previous control.
+    triggerRef.current?.focus();
+    closeMenu();
+    return;
+  }
+
+  moveMenuItemFocus(event);
+}
+
+type RowActionsMenuTriggerProps = {
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  menuId: string;
+  open: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  onArrowDown: () => void;
+};
+
+function RowActionsMenuTrigger({
+  triggerRef,
+  menuId,
+  open,
+  disabled,
+  onToggle,
+  onArrowDown,
+}: RowActionsMenuTriggerProps) {
+  return (
+    <button
+      ref={triggerRef}
+      type="button"
+      aria-label="Aktionen öffnen"
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-controls={open ? menuId : undefined}
+      className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-8 w-8 p-0')}
+      disabled={disabled}
+      onClick={onToggle}
+      onKeyDown={(event) => {
+        if (event.key !== 'ArrowDown') return;
+        event.preventDefault();
+        onArrowDown();
+      }}
+    >
+      {disabled ? <Spinner /> : <MoreHorizontal className="size-4" />}
+    </button>
+  );
+}
+
+type RowActionsMenuListProps = {
+  menuRef: RefObject<HTMLDivElement | null>;
+  menuId: string;
+  position: MenuPosition;
+  actions: readonly RowActionMenuItem[];
+  onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  onSelectAction: (action: RowActionMenuItem) => void;
+};
+
+function RowActionsMenuList({
+  menuRef,
+  menuId,
+  position,
+  actions,
+  onKeyDown,
+  onSelectAction,
+}: RowActionsMenuListProps) {
+  return (
+    <div
+      ref={menuRef}
+      id={menuId}
+      role="menu"
+      aria-label="Aktionen"
+      // Focusable but not a tab stop, as in the APG menu pattern: focus rests on its items.
+      tabIndex={-1}
+      style={position}
+      className="fixed z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+      onKeyDown={onKeyDown}
+    >
+      {actions.map((action) => (
+        <div key={action.label}>
+          {action.separatorBefore && <div role="separator" className="-mx-1 my-1 h-px bg-border" />}
+          <button
+            type="button"
+            role="menuitem"
+            className={cn(
+              'relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none focus:bg-accent focus:text-accent-foreground',
+              action.variant === 'destructive' &&
+                'text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20',
+            )}
+            onClick={() => onSelectAction(action)}
+          >
+            {action.icon}
+            {action.label}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProps) {
@@ -110,98 +246,35 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     };
   }, [open]);
 
-  function handleMenuKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      closeMenu({ restoreFocus: true });
-      return;
-    }
-
-    if (event.key === 'Tab') {
-      // Start native traversal from the row trigger, not the body portal.
-      // Do not preventDefault: Tab/Shift+Tab must reach the next/previous control.
-      triggerRef.current?.focus();
-      closeMenu();
-      return;
-    }
-
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const items = Array.from(
-      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'),
-    );
-    if (items.length === 0) return;
-    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-    const nextIndex =
-      event.key === 'Home'
-        ? 0
-        : event.key === 'End'
-          ? items.length - 1
-          : event.key === 'ArrowDown'
-            ? (currentIndex + 1 + items.length) % items.length
-            : (currentIndex - 1 + items.length) % items.length;
-    items[nextIndex]?.focus();
-  }
-
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label="Aktionen öffnen"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'h-8 w-8 p-0')}
+      <RowActionsMenuTrigger
+        triggerRef={triggerRef}
+        menuId={menuId}
+        open={open}
         disabled={disabled}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowDown') return;
-          event.preventDefault();
+        onToggle={() => (open ? closeMenu() : openMenu())}
+        onArrowDown={() => {
           if (!open) openMenu();
         }}
-      >
-        {disabled ? <Spinner /> : <MoreHorizontal className="size-4" />}
-      </button>
+      />
 
       {open &&
         createPortal(
-          <div
-            ref={menuRef}
-            id={menuId}
-            role="menu"
-            aria-label="Aktionen"
-            // Focusable but not a tab stop, as in the APG menu pattern: focus rests on its items.
-            tabIndex={-1}
-            style={position}
-            className="fixed z-50 min-w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-            onKeyDown={handleMenuKeyDown}
-          >
-            {actions.map((action) => (
-              <div key={action.label}>
-                {action.separatorBefore && <div role="separator" className="-mx-1 my-1 h-px bg-border" />}
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={cn(
-                    'relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none focus:bg-accent focus:text-accent-foreground',
-                    action.variant === 'destructive' &&
-                      'text-destructive focus:bg-destructive/10 focus:text-destructive dark:focus:bg-destructive/20',
-                  )}
-                  onClick={() => {
-                    // Restore before the action so a newly opened dialog owns
-                    // subsequent autofocus. A delayed restoration would steal it.
-                    triggerRef.current?.focus();
-                    closeMenu();
-                    action.onSelect();
-                  }}
-                >
-                  {action.icon}
-                  {action.label}
-                </button>
-              </div>
-            ))}
-          </div>,
+          <RowActionsMenuList
+            menuRef={menuRef}
+            menuId={menuId}
+            position={position}
+            actions={actions}
+            onKeyDown={(event) => handleMenuKeyDown(event, triggerRef, closeMenu)}
+            onSelectAction={(action) => {
+              // Restore before the action so a newly opened dialog owns
+              // subsequent autofocus. A delayed restoration would steal it.
+              triggerRef.current?.focus();
+              closeMenu();
+              action.onSelect();
+            }}
+          />,
           document.body,
         )}
     </>
