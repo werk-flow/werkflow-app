@@ -189,13 +189,7 @@
       "WorkContextProjectGroupCard": 95
     },
     "components/dokumente/document-work-context-view.tsx": { "DocumentWorkContextView": 121 },
-    "components/dokumente/use-contextual-documents-row-actions.tsx": {
-      "useContextualDocumentRowActions": 126
-    },
-    "components/dokumente/use-document-delete-actions.ts": { "useDocumentDeleteActions": 143 },
-    "components/dokumente/use-document-details-dialog.ts": { "useDocumentDetailsDialog": 82 },
     "components/dokumente/use-document-library-drop-targets.ts": { "useDocumentLibraryDropTargets": 127 },
-    "components/dokumente/use-document-library-mutations.tsx": { "useDocumentLibraryMutations": 115 },
     "components/dokumente/use-document-library-navigation.ts": { "useDocumentLibraryNavigation": 115 },
     "components/dokumente/use-document-library-selection.ts": { "useDocumentLibrarySelection": 136 },
     "components/dokumente/use-document-library-table-rectangle-selection.ts": {
@@ -204,9 +198,6 @@
     "components/dokumente/use-document-library-table-row-drag.ts": { "useDocumentLibraryTableRowDrag": 152 },
     "components/dokumente/use-document-library-upload.ts": { "useDocumentLibraryUpload": 94 },
     "components/dokumente/use-document-library.ts": { "useDocumentLibrary": 135 },
-    "components/dokumente/use-document-move-copy.ts": { "useDocumentMoveCopy": 166 },
-    "components/dokumente/use-document-rename.ts": { "useDocumentRename": 86 },
-    "components/dokumente/use-document-version-actions.ts": { "useDocumentVersionActions": 111 },
     "components/inventar/inventory-content.tsx": {
       "InventoryContent": 148,
       "InventoryTable": 92,
