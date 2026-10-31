@@ -966,8 +966,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 39, "tolerance": 1 },
-          "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 38, "tolerance": 1 },
+          "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1106,6 +1106,24 @@
           "to": { "reference": 10433, "tolerance": 201 },
           "runKeys": ["2026-10-31T174522133Z-e2d261"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127), the shared UI and sidebar split (#125) and the live-view hook split (#113) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 39, "tolerance": 1 },
+            "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 38, "tolerance": 1 },
+            "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
+          "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start, which this step opens. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. This local run measures 652,990; CI's builds measure about 654,800 (runs 41227836236 and 41227929297, Browser 8, on #115 and #131), above the old ceiling. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged."
         }
       ]
     },
@@ -2020,7 +2038,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2136,6 +2154,24 @@
           },
           "runKeys": ["2026-10-30T215330529Z-9e87a6"],
           "reason": "werkflow-app#98 moved the time-entry validation (lib/time-tracking/validation.ts) out of an (app) layout chunk into the /zeiterfassung route chunk: before #98 (fa4faae4) layout chunk 0u25amz-dd_w_.js (5983 B gzip) carried it, after (bda6adb7) no layout chunk does. Every page loads less (lab.office.cold-start script bytes -4061 in this run); this step prefetches /zeiterfassung from the task list, so its four route chunks grew from 24964 to 26624 B gzip in the CI builds. Moved, not added."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
+          "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) adds code to the /zeiterfassung route chunks, which the task list prefetches during this step; it is the only merge between c7328f71, where this step passed, and 58f44164. Same mechanism as the #98 accept. A product feature, not a split: E0 and werk-flow/werkflow-planning#212 may win the bytes back."
         }
       ]
     },

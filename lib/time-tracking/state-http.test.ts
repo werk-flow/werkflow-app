@@ -23,7 +23,7 @@ test('global clock and active-job providers cannot queue background reads as Ser
   }
 });
 
-test('direct canonical and aggregate clock actions deny non-members before protected reads', async () => {
+test('the clock state action denies non-members before protected reads', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/clock-state-authorization.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },

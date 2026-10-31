@@ -9,7 +9,12 @@ import type {
 } from './types';
 import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { MANAGED_ROLES } from './types';
-import { formatBerlinLocalDate, getLocalDayEnd, isSameLocalDay } from '@/lib/date-time/berlin';
+import {
+  formatBerlinLocalDate,
+  getLocalDayEnd,
+  getLocalDayStart,
+  isSameLocalDay,
+} from '@/lib/date-time/berlin';
 import { getEffectiveTimeEntries } from './effective-entries';
 import {
   canHolderApproveTarget,
@@ -73,6 +78,19 @@ export function getNonNegativeElapsedMs(clockInTime: string | null, nowMs: numbe
  * `runningSince` (null when nothing runs): the live counters of the clock,
  * the member list and the dashboard.
  */
+/**
+ * The start of a running activity as today counts it: an activity that began
+ * before today's Berlin midnight counts from midnight. An unreadable start
+ * passes through unchanged.
+ */
+export function todayRunningSince(runningSince: string | null, nowMs: number): string | null {
+  if (!runningSince) return null;
+  const startMs = Date.parse(runningSince);
+  if (Number.isNaN(startMs)) return runningSince;
+  const dayStartMs = getLocalDayStart(new Date(nowMs)).getTime();
+  return startMs < dayStartMs ? new Date(dayStartMs).toISOString() : runningSince;
+}
+
 export function liveMinutes(
   baseMinutes: number,
   runningSince: string | null,

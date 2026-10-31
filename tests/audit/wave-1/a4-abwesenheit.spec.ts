@@ -46,6 +46,7 @@ import {
   openOwnVacationSection,
   rejectVacationRequestFor,
   vacationRemainingText,
+  vacationTakenAndPlannedText,
   vacationTakenText,
 } from '../../golden/support/steps/vacation';
 import { showCalendarMonth } from '../../golden/support/steps/calendar';
@@ -292,8 +293,9 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       eventTypes: ['requested', 'approved'],
     });
 
+    // The approved day lies ahead: planned, not taken.
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
+    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openOwnSicknessSection(employeePage);
@@ -333,7 +335,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
+    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
@@ -367,7 +369,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenText(1, 31))).toBeVisible();
+    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
     await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
