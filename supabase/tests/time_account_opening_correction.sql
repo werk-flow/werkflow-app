@@ -114,6 +114,10 @@ begin
     format($sql$select public.correct_time_account_opening_date(%L, %L, '2026-08-01', '  ', %L, gen_random_uuid(), repeat('b', 64))$sql$,
       v_org, v_account, v_admin),
     'reason_required');
+  perform pg_temp.expect_refusal('a correction reached before 2000 and its month locks',
+    format($sql$select public.correct_time_account_opening_date(%L, %L, '1999-12-31', 'Falsches Datum', %L, gen_random_uuid(), repeat('b', 64))$sql$,
+      v_org, v_account, v_admin),
+    'invalid_input');
   perform pg_temp.expect_refusal('a correction to the same date was accepted',
     format($sql$select public.correct_time_account_opening_date(%L, %L, '2026-10-29', 'Falsches Datum', %L, gen_random_uuid(), repeat('b', 64))$sql$,
       v_org, v_account, v_admin),
@@ -290,6 +294,10 @@ begin
     'p1_23_history_immutable');
   perform pg_temp.expect_refusal('a correction row was deleted',
     format($sql$delete from public.time_account_opening_corrections where id = %L$sql$, v_correction),
+    'p1_23_history_immutable');
+  perform pg_temp.expect_refusal('the current opening event was deleted',
+    format($sql$delete from public.time_account_events where id = (
+      select opening_event_id from public.time_account_opening_corrections where id = %L)$sql$, v_correction),
     'p1_23_history_immutable');
 end;
 $$;

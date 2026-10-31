@@ -25,8 +25,9 @@
 -- - A correction row matches its events: the reversal undoes the reversed
 --   opening on its date, the new opening carries the same minutes on the
 --   corrected date.
--- - Corrections are history: no update, no delete except the cascade of an
---   organization deletion, no client access.
+-- - Corrections and account events are history: no delete except the
+--   cascade of an organization deletion. Corrections also refuse update and
+--   client access; events already refused update.
 
 create table public.time_account_opening_corrections (
   id uuid primary key default gen_random_uuid(),
@@ -76,7 +77,7 @@ for each row execute function app_private.guard_p1_23_immutable();
 -- The one legitimate delete is the cascade of an organization deletion,
 -- recognised by the organization row being gone (the rule of
 -- app_private.guard_closed_period_time_write).
-create function app_private.guard_time_account_opening_corrections_delete()
+create function app_private.guard_time_account_history_delete()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if exists (select 1 from public.organizations where id = old.organization_id) then
@@ -88,7 +89,13 @@ $$;
 
 create trigger guard_time_account_opening_corrections_delete
 before delete on public.time_account_opening_corrections
-for each row execute function app_private.guard_time_account_opening_corrections_delete();
+for each row execute function app_private.guard_time_account_history_delete();
+
+-- A deleted opening event would leave an account without its current
+-- opening; no writer deletes an account event.
+create trigger guard_time_account_events_delete
+before delete on public.time_account_events
+for each row execute function app_private.guard_time_account_history_delete();
 
 -- A correction row must describe its events exactly.
 create function app_private.guard_time_account_opening_correction_events()
@@ -214,6 +221,8 @@ begin
   select * into account_record from public.time_accounts where id = p_account_id;
   if account_record.opened_on = p_opened_on then raise exception 'opening_date_unchanged'; end if;
   earliest_date := least(account_record.opened_on, p_opened_on);
+  -- Bounds the month locks below: no time account starts before 2000.
+  if earliest_date < date '2000-01-01' then raise exception 'invalid_input'; end if;
   -- The month lock that prepare_time_period and close_time_period take before
   -- they compare a fingerprint, for every month from the earlier date to
   -- today, oldest first: a month without a period row yet is prepared or
@@ -292,7 +301,7 @@ $$;
 
 revoke all on function app_private.guard_time_account_opening_correction_events() from public, anon, authenticated;
 revoke all on function app_private.guard_time_account_current_opening() from public, anon, authenticated;
-revoke all on function app_private.guard_time_account_opening_corrections_delete() from public, anon, authenticated;
+revoke all on function app_private.guard_time_account_history_delete() from public, anon, authenticated;
 revoke all on function public.correct_time_account_opening_date(uuid, uuid, date, text, uuid, uuid, text)
   from public, anon, authenticated;
 grant execute on function public.correct_time_account_opening_date(uuid, uuid, date, text, uuid, uuid, text)
