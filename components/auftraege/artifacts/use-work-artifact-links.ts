@@ -24,8 +24,7 @@ type WorkArtifactLinksOptions = {
 
 /** Document, time-entry and evidence links of the current revision, and its export. */
 export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkArtifactLinksOptions) {
-  const { detail, currentRevision, load, handleMutationFailure, runArtifactTask, setError } = editor;
-  const { actionReason, setActionReason, hasActionReason } = review;
+  const { detail, currentRevision, load, handleMutationFailure, runArtifactTask } = editor;
   const { showBanner } = useBanner();
   const [documentId, setDocumentId] = useState('');
   const [documentRelation, setDocumentRelation] = useState<'supporting_evidence' | 'closure_proof'>(
@@ -35,10 +34,7 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
   // "Verknüpfen" stays enabled; a click without a choice marks the select instead.
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [timeSourceError, setTimeSourceError] = useState<string | null>(null);
-  const [localFulfillments, setLocalFulfillments] = useState(
-    () => new Map<string, { id: string; version: number }>(),
-  );
-  const [removedFulfillmentIds, setRemovedFulfillmentIds] = useState(() => new Set<string>());
+  const evidence = useWorkArtifactEvidenceFulfillments({ editor, review, showBanner });
 
   function selectDocument(value: string) {
     setDocumentId(value);
@@ -71,21 +67,7 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
     });
   }
 
-  function exportArtifact() {
-    if (!detail) return;
-    void runArtifactTask('export', async () => {
-      const result = await exportWorkArtifact({
-        artifactId: detail.id,
-        expectedVersion: detail.version,
-        linkId: crypto.randomUUID(),
-        actionId: crypto.randomUUID(),
-        documentId: crypto.randomUUID(),
-      });
-      if (await handleMutationFailure(result, 'Der Export konnte nicht erstellt werden.')) return;
-      await load(detail.id);
-      showBanner({ variant: 'success', message: 'HTML-Export wurde unter Dokumente abgelegt.' });
-    });
-  }
+  const exportArtifact = () => startWorkArtifactExport(editor, showBanner);
 
   function linkTimeEntry() {
     if (!detail || !currentRevision) return;
@@ -111,6 +93,57 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
       showBanner({ variant: 'success', message: 'Zeiteintrag wurde mit dieser Version verknüpft.' });
     });
   }
+
+  return {
+    documentId,
+    selectDocument,
+    documentError,
+    documentRelation,
+    setDocumentRelation,
+    timeSourceId,
+    selectTimeSource,
+    timeSourceError,
+    linkDocument,
+    exportArtifact,
+    linkTimeEntry,
+    ...evidence,
+  };
+}
+
+type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
+
+/** Exports the artifact as an HTML document, then reloads it. */
+function startWorkArtifactExport(editor: WorkArtifactEditor, showBanner: ShowBanner) {
+  const { detail, load, handleMutationFailure, runArtifactTask } = editor;
+  if (!detail) return;
+  void runArtifactTask('export', async () => {
+    const result = await exportWorkArtifact({
+      artifactId: detail.id,
+      expectedVersion: detail.version,
+      linkId: crypto.randomUUID(),
+      actionId: crypto.randomUUID(),
+      documentId: crypto.randomUUID(),
+    });
+    if (await handleMutationFailure(result, 'Der Export konnte nicht erstellt werden.')) return;
+    await load(detail.id);
+    showBanner({ variant: 'success', message: 'HTML-Export wurde unter Dokumente abgelegt.' });
+  });
+}
+
+type WorkArtifactEvidenceOptions = {
+  editor: WorkArtifactEditor;
+  review: WorkArtifactReviewActions;
+  showBanner: ShowBanner;
+};
+
+/** Evidence fulfillments recorded or removed in this dialog, before the instruction list reloads. */
+function useWorkArtifactEvidenceFulfillments({ editor, review, showBanner }: WorkArtifactEvidenceOptions) {
+  const { currentRevision, runArtifactTask, setError } = editor;
+  const { actionReason, setActionReason, hasActionReason } = review;
+  const [localFulfillments, setLocalFulfillments] = useState(
+    () => new Map<string, { id: string; version: number }>(),
+  );
+  const [removedFulfillmentIds, setRemovedFulfillmentIds] = useState(() => new Set<string>());
 
   function fulfill(requirementId: string) {
     if (!currentRevision) return;
@@ -165,23 +198,7 @@ export function useWorkArtifactLinks({ editor, review, timeEntryOptions }: WorkA
     });
   }
 
-  return {
-    documentId,
-    selectDocument,
-    documentError,
-    documentRelation,
-    setDocumentRelation,
-    timeSourceId,
-    selectTimeSource,
-    timeSourceError,
-    localFulfillments,
-    removedFulfillmentIds,
-    linkDocument,
-    exportArtifact,
-    linkTimeEntry,
-    fulfill,
-    removeFulfillment,
-  };
+  return { localFulfillments, removedFulfillmentIds, fulfill, removeFulfillment };
 }
 
 export type WorkArtifactLinks = ReturnType<typeof useWorkArtifactLinks>;

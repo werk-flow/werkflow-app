@@ -27,22 +27,15 @@ type WorkLifecycleTransitionActionsProps = {
 };
 
 /**
- * The state-change buttons of the card, including the field worker's primary
- * next action. Each button names its step; the state itself is the badge in
- * the card header. Cancelling is reversible, so it is an outline action too.
+ * The field worker's primary next step and which steps wait on open items.
+ * Outside field mode no step is blocked here.
  */
-export function WorkLifecycleTransitionActions({
+function fieldTransitionRules({
   snapshot,
   transitions,
-  isManager,
   fieldMode,
-  hasPendingDispatch,
-  readOnly,
   canStart,
-  parking,
-  pendingState,
-  setDialog,
-}: WorkLifecycleTransitionActionsProps) {
+}: Pick<WorkLifecycleTransitionActionsProps, 'snapshot' | 'transitions' | 'fieldMode' | 'canStart'>) {
   const primaryFieldTransition =
     snapshot.executionState === 'not_started' || snapshot.executionState === 'interrupted'
       ? 'in_progress'
@@ -63,7 +56,56 @@ export function WorkLifecycleTransitionActions({
   const hasAvailablePrimaryFieldTransition = transitions.some(
     (state) => state === primaryFieldTransition && !isFieldTransitionBlocked(state),
   );
+  return { primaryFieldTransition, isFieldTransitionBlocked, hasAvailablePrimaryFieldTransition };
+}
 
+/** The manager's project override reset and parking. */
+function ManagerTransitionActions({
+  snapshot,
+  parking,
+  setDialog,
+}: Pick<WorkLifecycleTransitionActionsProps, 'snapshot' | 'parking' | 'setDialog'>) {
+  return (
+    <>
+      {snapshot.targetType === 'project' && !snapshot.isLegacy && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setDialog({ type: 'clear-project-override' })}
+        >
+          Automatisch ableiten
+        </Button>
+      )}
+      {!parking && !isTerminalWorkExecutionState(snapshot.executionState) && (
+        <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ type: 'parking' })}>
+          <ParkingCircle className="size-4" />
+          Parken
+        </Button>
+      )}
+    </>
+  );
+}
+
+/**
+ * The state-change buttons of the card, including the field worker's primary
+ * next action. Each button names its step; the state itself is the badge in
+ * the card header. Cancelling is reversible, so it is an outline action too.
+ */
+export function WorkLifecycleTransitionActions({
+  snapshot,
+  transitions,
+  isManager,
+  fieldMode,
+  hasPendingDispatch,
+  readOnly,
+  canStart,
+  parking,
+  pendingState,
+  setDialog,
+}: WorkLifecycleTransitionActionsProps) {
+  const { primaryFieldTransition, isFieldTransitionBlocked, hasAvailablePrimaryFieldTransition } =
+    fieldTransitionRules({ snapshot, transitions, fieldMode, canStart });
   return (
     <>
       {!readOnly && (
@@ -101,21 +143,8 @@ export function WorkLifecycleTransitionActions({
                 <a href="#offene-punkte">Offene Punkte prüfen</a>
               </Button>
             )}
-          {isManager && snapshot.targetType === 'project' && !snapshot.isLegacy && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setDialog({ type: 'clear-project-override' })}
-            >
-              Automatisch ableiten
-            </Button>
-          )}
-          {isManager && !parking && !isTerminalWorkExecutionState(snapshot.executionState) && (
-            <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ type: 'parking' })}>
-              <ParkingCircle className="size-4" />
-              Parken
-            </Button>
+          {isManager && (
+            <ManagerTransitionActions snapshot={snapshot} parking={parking} setDialog={setDialog} />
           )}
         </div>
       )}

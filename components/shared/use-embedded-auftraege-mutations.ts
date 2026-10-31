@@ -4,8 +4,8 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
 import type { Job, Project } from '@/lib/jobs/types';
 
-/** Applies created, edited and deleted jobs and projects to the live list state. */
-export function useEmbeddedAuftraegeMutations(
+/** Row-level upserts and deletes of jobs, projects and job assignments. */
+function useEmbeddedAuftraegeRowWrites(
   setJobs: Dispatch<SetStateAction<Job[]>>,
   setRawProjects: Dispatch<SetStateAction<Project[]>>,
   setJobAssignmentMap: Dispatch<SetStateAction<Record<string, string[]>>>,
@@ -62,6 +62,29 @@ export function useEmbeddedAuftraegeMutations(
     },
     [setJobAssignmentMap],
   );
+
+  return {
+    handleJobUpsert,
+    handleJobDelete,
+    handleProjectUpsert,
+    handleProjectDelete,
+    handleJobAssignmentsReplace,
+  };
+}
+
+/** Applies created, edited and deleted jobs and projects to the live list state. */
+export function useEmbeddedAuftraegeMutations(
+  setJobs: Dispatch<SetStateAction<Job[]>>,
+  setRawProjects: Dispatch<SetStateAction<Project[]>>,
+  setJobAssignmentMap: Dispatch<SetStateAction<Record<string, string[]>>>,
+) {
+  const {
+    handleJobUpsert,
+    handleJobDelete,
+    handleProjectUpsert,
+    handleProjectDelete,
+    handleJobAssignmentsReplace,
+  } = useEmbeddedAuftraegeRowWrites(setJobs, setRawProjects, setJobAssignmentMap);
 
   const handleJobCreated = useCallback(
     ({ job, assignedUserIds }: { job: Job; assignedUserIds: string[] }) => {

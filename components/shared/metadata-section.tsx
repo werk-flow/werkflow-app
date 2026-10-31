@@ -2,17 +2,9 @@
 
 import { PlainButton } from '@/components/ui/plain-button';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { Pencil, RotateCcw } from 'lucide-react';
 import { useServerAction } from '@/hooks/use-server-action';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Button } from '@/components/ui/button';
+import { Pencil } from 'lucide-react';
 import { ErrorText } from '@/components/ui/error-text';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import { DatePicker } from '@/components/ui/date-picker';
-import { TimeInput } from '@/components/ui/time-input';
-import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,9 +15,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { SectionTitle } from '@/components/shared/section-title';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
+import { DurationHoursInput } from '@/components/ui/duration-hours-input';
 import { toLocalDateString } from '@/lib/utils';
 import { focusOnMount } from '@/lib/ui/focus-on-mount';
-import { SectionTitle } from '@/components/shared/section-title';
+import {
+  MetadataFieldActions,
+  MetadataTimeControl,
+  type MetadataFieldConfig,
+  type MetadataFieldEditorProps,
+} from '@/components/shared/metadata-field-editor';
+import { createFieldNavigationHandlers } from '@/components/shared/metadata-field-navigation';
 
 export class MetadataSaveError extends Error {
   override name = 'MetadataSaveError';
@@ -68,7 +73,8 @@ type PendingSaveConfirmation = {
   onSave: (newValue: string) => Promise<void>;
 };
 
-export function MetadataSection({ title, fields, isEditable }: MetadataSectionProps) {
+/** Edit, discard and save-confirmation state of a metadata section. */
+function useMetadataSectionState(fields: MetadataField[]) {
   const [editingFieldLabel, setEditingFieldLabel] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [pendingFieldLabel, setPendingFieldLabel] = useState<string | null>(null);
@@ -93,47 +99,33 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
   const currentConfig = currentEditingField?.editableConfig;
   const hasUnsavedChanges = currentConfig ? editValue !== currentConfig.currentValue : false;
 
-  const openFieldEditor = (fieldLabel: string) => {
-    const nextField = fields.find((field) => field.label === fieldLabel);
-    if (!nextField?.editableConfig) return;
-
-    setEditingFieldLabel(fieldLabel);
-    setEditValue(nextField.editableConfig.currentValue);
-    setSaveError(null);
+  return {
+    editingFieldLabel,
+    setEditingFieldLabel,
+    editValue,
+    setEditValue,
+    pendingFieldLabel,
+    setPendingFieldLabel,
+    showDiscardDialog,
+    setShowDiscardDialog,
+    pendingSaveConfirmation,
+    setPendingSaveConfirmation,
+    saveError,
+    setSaveError,
+    titleId,
+    runSave,
+    isPending,
+    currentConfig,
+    hasUnsavedChanges,
   };
+}
 
-  const requestStartEditing = (fieldLabel: string) => {
-    if (isPending) return;
-    if (fieldLabel === editingFieldLabel) return;
+export type MetadataSectionState = ReturnType<typeof useMetadataSectionState>;
 
-    if (editingFieldLabel && hasUnsavedChanges) {
-      setPendingFieldLabel(fieldLabel);
-      setShowDiscardDialog(true);
-      return;
-    }
-
-    openFieldEditor(fieldLabel);
-  };
-
-  const handleDiscardAndContinue = () => {
-    if (!pendingFieldLabel) return;
-    openFieldEditor(pendingFieldLabel);
-    setPendingFieldLabel(null);
-    setShowDiscardDialog(false);
-  };
-
-  const handleDiscardDialogChange = (open: boolean) => {
-    setShowDiscardDialog(open);
-    if (!open) {
-      setPendingFieldLabel(null);
-    }
-  };
-
-  const handleCancelEditing = () => {
-    setEditingFieldLabel(null);
-    setEditValue('');
-    setSaveError(null);
-  };
+/** Saving the edited value, behind the field's confirmation question when it asks for one. */
+function createFieldSaveHandlers(state: MetadataSectionState) {
+  const { editValue, currentConfig, pendingSaveConfirmation, runSave } = state;
+  const { setEditingFieldLabel, setEditValue, setPendingSaveConfirmation, setSaveError } = state;
 
   const persistFieldValue = (value: string, onSave: (newValue: string) => Promise<void>) => {
     setSaveError(null);
@@ -178,6 +170,16 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
     persistFieldValue(confirmation.newValue, confirmation.onSave);
   };
 
+  return { handleSave, handleConfirmSave };
+}
+
+export function MetadataSection({ title, fields, isEditable }: MetadataSectionProps) {
+  const state = useMetadataSectionState(fields);
+  const { editingFieldLabel, editValue, saveError, isPending, titleId } = state;
+  const { showDiscardDialog, pendingSaveConfirmation, setPendingSaveConfirmation } = state;
+  const navigation = createFieldNavigationHandlers(fields, state);
+  const { handleSave, handleConfirmSave } = createFieldSaveHandlers(state);
+
   return (
     <>
       <div
@@ -200,18 +202,15 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
               editValue={editingFieldLabel === field.label ? editValue : ''}
               saveError={editingFieldLabel === field.label ? saveError : null}
               isPending={isPending}
-              onStartEditing={() => requestStartEditing(field.label)}
-              onEditValueChange={(value) => {
-                setEditValue(value);
-                setSaveError(null);
-              }}
+              onStartEditing={() => navigation.requestStartEditing(field.label)}
+              onEditValueChange={navigation.handleEditValueChange}
               onSave={handleSave}
-              onCancel={handleCancelEditing}
+              onCancel={navigation.handleCancelEditing}
             />
           ))}
         </div>
       </div>
-      <AlertDialog open={showDiscardDialog} onOpenChange={handleDiscardDialogChange}>
+      <AlertDialog open={showDiscardDialog} onOpenChange={navigation.handleDiscardDialogChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Ungespeicherte Änderungen verwerfen?</AlertDialogTitle>
@@ -222,7 +221,9 @@ export function MetadataSection({ title, fields, isEditable }: MetadataSectionPr
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Zurück</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDiscardAndContinue}>Verwerfen und wechseln</AlertDialogAction>
+            <AlertDialogAction onClick={navigation.handleDiscardAndContinue}>
+              Verwerfen und wechseln
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -282,7 +283,7 @@ function MetadataFieldRow({
     const hasChanges = editValue !== config.currentValue;
     const supportsInlineActions = config.type !== 'textarea';
     const canClear = config.nullable;
-    const clearDisabled = !editValue.trim() || isPending;
+    const editorProps = { hasChanges, isPending, onEditValueChange, onSave, onCancel };
     return (
       <div className="grid gap-1.5" role="group" aria-label={field.label}>
         <span className="text-xs font-medium text-muted-foreground">{field.label}</span>
@@ -290,124 +291,14 @@ function MetadataFieldRow({
           className={supportsInlineActions ? 'flex flex-col gap-2 sm:flex-row sm:items-start' : 'grid gap-2'}
         >
           <div className="min-w-0 flex-1">
-            {config.type === 'text' && (
-              <Input
-                ref={focusOnMount}
-                value={editValue}
-                onChange={(e) => onEditValueChange(e.target.value)}
-                placeholder={config.placeholder}
-                disabled={isPending}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && hasChanges) onSave();
-                  if (e.key === 'Escape') onCancel();
-                }}
-              />
-            )}
-            {config.type === 'duration' && (
-              <DurationHoursInput
-                ref={focusOnMount}
-                value={editValue}
-                onChange={onEditValueChange}
-                placeholder={config.placeholder}
-                disabled={isPending}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && hasChanges) onSave();
-                  if (e.key === 'Escape') onCancel();
-                }}
-              />
-            )}
-            {config.type === 'textarea' && (
-              <Textarea
-                ref={focusOnMount}
-                value={editValue}
-                onChange={(e) => onEditValueChange(e.target.value)}
-                placeholder={config.placeholder}
-                disabled={isPending}
-              />
-            )}
-            {config.type === 'select' &&
-              // Registry rule: entity-sized lists get search; short fixed
-              // enums keep the plain select, which itself throws in
-              // development at ten or more options.
-              ((config.options?.length ?? 0) > 8 ? (
-                <SearchableSelect
-                  options={config.options ?? []}
-                  value={editValue}
-                  onChange={onEditValueChange}
-                  disabled={isPending}
-                />
-              ) : (
-                <Select value={editValue} onValueChange={onEditValueChange} disabled={isPending}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {config.options?.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ))}
-            {config.type === 'date' && (
-              <DatePicker
-                value={editValue ? new Date(editValue) : undefined}
-                onChange={(date) => onEditValueChange(date ? toLocalDateString(date) : '')}
-                disabled={isPending}
-              />
-            )}
-            {config.type === 'time' && (
-              <TimeInput
-                value={editValue}
-                onChange={onEditValueChange}
-                disabled={isPending}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && hasChanges) {
-                    e.preventDefault();
-                    onSave();
-                  }
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    onCancel();
-                  }
-                }}
-              />
-            )}
+            <MetadataFieldControl config={config} editValue={editValue} {...editorProps} />
           </div>
-          <div
-            className={
-              supportsInlineActions
-                ? 'flex shrink-0 flex-wrap items-center gap-2 sm:pt-0.5'
-                : 'flex flex-wrap items-center justify-end gap-2'
-            }
-          >
-            {canClear && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="gap-1.5"
-                onClick={() => onEditValueChange('')}
-                // eslint-disable-next-line ui/action-disabled-only-while-pending -- nothing to clear: the field is already empty
-                disabled={clearDisabled}
-              >
-                <RotateCcw className="size-3.5" />
-                Leeren
-              </Button>
-            )}
-            <Button
-              pending={isPending}
-              type="button"
-              variant="default"
-              onClick={onSave}
-              disabled={isPending || !hasChanges}
-            >
-              Speichern
-            </Button>
-            <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
-              Abbrechen
-            </Button>
-          </div>
+          <MetadataFieldActions
+            supportsInlineActions={supportsInlineActions}
+            canClear={canClear}
+            editValue={editValue}
+            {...editorProps}
+          />
         </div>
         <ErrorText>{saveError}</ErrorText>
       </div>
@@ -432,5 +323,116 @@ function MetadataFieldRow({
         )}
       </div>
     </div>
+  );
+}
+
+function MetadataSelectControl({
+  config,
+  editValue,
+  isPending,
+  onEditValueChange,
+}: { config: MetadataFieldConfig } & Pick<
+  MetadataFieldEditorProps,
+  'editValue' | 'isPending' | 'onEditValueChange'
+>) {
+  // Registry rule: entity-sized lists get search; short fixed
+  // enums keep the plain select, which itself throws in
+  // development at ten or more options.
+  return (config.options?.length ?? 0) > 8 ? (
+    <SearchableSelect
+      options={config.options ?? []}
+      value={editValue}
+      onChange={onEditValueChange}
+      disabled={isPending}
+    />
+  ) : (
+    <Select value={editValue} onValueChange={onEditValueChange} disabled={isPending}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {config.options?.map((opt) => (
+          <SelectItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** The input control of a field in edit mode, chosen by its configured type. */
+function MetadataFieldControl({
+  config,
+  editValue,
+  hasChanges,
+  isPending,
+  onEditValueChange,
+  onSave,
+  onCancel,
+}: { config: MetadataFieldConfig } & MetadataFieldEditorProps) {
+  return (
+    <>
+      {config.type === 'text' && (
+        <Input
+          ref={focusOnMount}
+          value={editValue}
+          onChange={(e) => onEditValueChange(e.target.value)}
+          placeholder={config.placeholder}
+          disabled={isPending}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && hasChanges) onSave();
+            if (e.key === 'Escape') onCancel();
+          }}
+        />
+      )}
+      {config.type === 'duration' && (
+        <DurationHoursInput
+          ref={focusOnMount}
+          value={editValue}
+          onChange={onEditValueChange}
+          placeholder={config.placeholder}
+          disabled={isPending}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && hasChanges) onSave();
+            if (e.key === 'Escape') onCancel();
+          }}
+        />
+      )}
+      {config.type === 'textarea' && (
+        <Textarea
+          ref={focusOnMount}
+          value={editValue}
+          onChange={(e) => onEditValueChange(e.target.value)}
+          placeholder={config.placeholder}
+          disabled={isPending}
+        />
+      )}
+      {config.type === 'select' && (
+        <MetadataSelectControl
+          config={config}
+          editValue={editValue}
+          isPending={isPending}
+          onEditValueChange={onEditValueChange}
+        />
+      )}
+      {config.type === 'date' && (
+        <DatePicker
+          value={editValue ? new Date(editValue) : undefined}
+          onChange={(date) => onEditValueChange(date ? toLocalDateString(date) : '')}
+          disabled={isPending}
+        />
+      )}
+      {config.type === 'time' && (
+        <MetadataTimeControl
+          editValue={editValue}
+          hasChanges={hasChanges}
+          isPending={isPending}
+          onEditValueChange={onEditValueChange}
+          onSave={onSave}
+          onCancel={onCancel}
+        />
+      )}
+    </>
   );
 }

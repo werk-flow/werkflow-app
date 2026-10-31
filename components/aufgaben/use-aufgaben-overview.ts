@@ -19,6 +19,60 @@ function notificationKey(notification: AttentionNotification): string {
   return `${notification.sourceType}:${notification.sourceId}`;
 }
 
+// Every table whose change can move an attention item or its read state.
+const AUFGABEN_OVERVIEW_TABLES = [
+  'time_entries',
+  'entry_change_requests',
+  'vacation_requests',
+  'sickness_reports',
+  'employee_capabilities',
+  'organization_capabilities',
+  'client_requests',
+  'client_follow_ups',
+  'organization_join_requests',
+  'planning_dispatches',
+  'planning_dispatch_recipients',
+  'planning_dispatch_acknowledgements',
+  'work_blockers',
+  'work_artifacts',
+  'jobs',
+  'projects',
+  'work_handover_packages',
+  'attention_read_states',
+  'organization_responsibility_configurations',
+  'organization_responsibility_assignments',
+  'organization_responsibility_delegations',
+] as const;
+
+/** Clears the dot of one notification, or of every one when `sourceId` is null. */
+function withNotificationsRead(previous: AttentionOverview | undefined, sourceId: string | null) {
+  return (
+    previous && {
+      ...previous,
+      notifications: previous.notifications.map((notification) =>
+        sourceId === null || notification.sourceId === sourceId
+          ? { ...notification, unread: false }
+          : notification,
+      ),
+    }
+  );
+}
+
+/** Brings back only the dots one failed mark-as-read cleared. */
+function withClearedNotificationsRestored(
+  previous: AttentionOverview | undefined,
+  clearedKeys: ReadonlySet<string>,
+) {
+  return (
+    previous && {
+      ...previous,
+      notifications: previous.notifications.map((notification) =>
+        clearedKeys.has(notificationKey(notification)) ? { ...notification, unread: true } : notification,
+      ),
+    }
+  );
+}
+
 /** The live attention overview and its optimistic mark-as-read actions. */
 export function useAufgabenOverview() {
   const { showBanner } = useBanner();
@@ -27,29 +81,7 @@ export function useAufgabenOverview() {
   // Keep last-known data on transient failures; only a failed initial
   // load shows the visible failure state.
   const view = useLiveView<AttentionOverview>({
-    tables: [
-      'time_entries',
-      'entry_change_requests',
-      'vacation_requests',
-      'sickness_reports',
-      'employee_capabilities',
-      'organization_capabilities',
-      'client_requests',
-      'client_follow_ups',
-      'organization_join_requests',
-      'planning_dispatches',
-      'planning_dispatch_recipients',
-      'planning_dispatch_acknowledgements',
-      'work_blockers',
-      'work_artifacts',
-      'jobs',
-      'projects',
-      'work_handover_packages',
-      'attention_read_states',
-      'organization_responsibility_configurations',
-      'organization_responsibility_assignments',
-      'organization_responsibility_delegations',
-    ],
+    tables: AUFGABEN_OVERVIEW_TABLES,
     // Reads over GET, so a mark-as-read never waits behind the overview read.
     read: async ({ signal }): Promise<LiveViewResult<AttentionOverview>> => {
       const result = await readInBackground('attention-overview', {}, signal);
@@ -85,17 +117,7 @@ export function useAufgabenOverview() {
         .map(notificationKey),
     );
     view.invalidate();
-    view.setData(
-      (previous) =>
-        previous && {
-          ...previous,
-          notifications: previous.notifications.map((notification) =>
-            sourceId === null || notification.sourceId === sourceId
-              ? { ...notification, unread: false }
-              : notification,
-          ),
-        },
-    );
+    view.setData((previous) => withNotificationsRead(previous, sourceId));
     await busy.run(busyId, async () => {
       let succeeded = false;
       try {
@@ -104,17 +126,7 @@ export function useAufgabenOverview() {
         succeeded = false;
       }
       if (!succeeded) {
-        view.setData(
-          (previous) =>
-            previous && {
-              ...previous,
-              notifications: previous.notifications.map((notification) =>
-                clearedKeys.has(notificationKey(notification))
-                  ? { ...notification, unread: true }
-                  : notification,
-              ),
-            },
-        );
+        view.setData((previous) => withClearedNotificationsRestored(previous, clearedKeys));
         showBanner({ variant: 'error', message: errorMessage });
         await refetch();
         return;

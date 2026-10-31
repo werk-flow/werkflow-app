@@ -43,84 +43,105 @@ export function LocationsView({
   }
   return (
     <div className="grid gap-4 xl:grid-cols-2">
-      {shownLocations.map((location) => {
-        if (!isServerRow(location)) {
-          return (
-            <div
-              key="pending-location"
-              {...unconfirmedMarker(true)}
-              role="status"
-              aria-label="Lager wird angelegt"
-              className="min-w-0 rounded-lg border bg-card p-4 opacity-70"
-            >
-              <div className="flex items-center gap-2">
-                <Spinner className="text-muted-foreground" />
-                <Warehouse className="size-4 text-muted-foreground" />
-                <h2 className="font-semibold">{location.name}</h2>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
-              </p>
-            </div>
-          );
-        }
-        const locationItems = items
-          .filter((item) => item.stockByLocation.some((stock) => stock.locationId === location.id))
-          .sort((left, right) => left.name.localeCompare(right.name, 'de'));
-        const itemCount = itemCounts[location.id] ?? 0;
-        // The server sends a six-item preview per location; the count is complete.
-        const previewItems = locationItems.slice(0, 6);
-        const furtherItemCount = itemCount - previewItems.length;
-        return (
-          <div
+      {shownLocations.map((location) =>
+        isServerRow(location) ? (
+          <LocationCard
             key={location.id}
-            className="min-w-0 rounded-lg border bg-card p-4"
-            role="region"
-            aria-labelledby={`inventory-location-${location.id}`}
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Warehouse className="size-4 text-muted-foreground" />
-                  <h2 id={`inventory-location-${location.id}`} className="font-semibold">
-                    {location.name}
-                  </h2>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
-                </p>
-              </div>
-              <Badge variant="secondary">{itemCount} Artikel</Badge>
-            </div>
-            <div className="mb-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
-              Artikel in diesem Lager:{' '}
-              <span className="font-medium tabular-nums">{itemCount.toLocaleString('de-DE')}</span>
-            </div>
-            {itemCount === 0 ? (
-              <EmptyState size="compact" title="Keine Artikel in diesem Lager." />
-            ) : (
-              <div className="divide-y rounded-md border">
-                {previewItems.map((item) => {
-                  const stock = item.stockByLocation.find((entry) => entry.locationId === location.id);
-                  return (
-                    <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                      <span className="min-w-0 truncate font-medium">{item.name}</span>
-                      <span className="shrink-0 tabular-nums text-muted-foreground">
-                        {formatInventoryQuantity(stock?.quantityOnHand ?? 0, item.unit)}
-                      </span>
-                    </div>
-                  );
-                })}
-                {furtherItemCount > 0 ? (
-                  <p className="px-3 py-2 text-sm text-muted-foreground">
-                    und {furtherItemCount.toLocaleString('de-DE')} weitere Artikel
-                  </p>
-                ) : null}
-              </div>
-            )}
+            location={location}
+            items={items}
+            itemCount={itemCounts[location.id] ?? 0}
+          />
+        ) : (
+          <PendingLocationCard key="pending-location" location={location} />
+        ),
+      )}
+    </div>
+  );
+}
+
+/** The card of a Lager whose create is still in flight. */
+function PendingLocationCard({ location }: { location: PendingLocationDraft }) {
+  return (
+    <div
+      {...unconfirmedMarker(true)}
+      role="status"
+      aria-label="Lager wird angelegt"
+      className="min-w-0 rounded-lg border bg-card p-4 opacity-70"
+    >
+      <div className="flex items-center gap-2">
+        <Spinner className="text-muted-foreground" />
+        <Warehouse className="size-4 text-muted-foreground" />
+        <h2 className="font-semibold">{location.name}</h2>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
+      </p>
+    </div>
+  );
+}
+
+/** One Lager with its item count and a preview of the items stored there. */
+function LocationCard({
+  location,
+  items,
+  itemCount,
+}: {
+  location: InventoryLocation;
+  items: InventoryOverviewItem[];
+  itemCount: number;
+}) {
+  const locationItems = items
+    .filter((item) => item.stockByLocation.some((stock) => stock.locationId === location.id))
+    .sort((left, right) => left.name.localeCompare(right.name, 'de'));
+  // The server sends a six-item preview per location; the count is complete.
+  const previewItems = locationItems.slice(0, 6);
+  const furtherItemCount = itemCount - previewItems.length;
+  return (
+    <div
+      className="min-w-0 rounded-lg border bg-card p-4"
+      role="region"
+      aria-labelledby={`inventory-location-${location.id}`}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Warehouse className="size-4 text-muted-foreground" />
+            <h2 id={`inventory-location-${location.id}`} className="font-semibold">
+              {location.name}
+            </h2>
           </div>
-        );
-      })}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {INVENTORY_LOCATION_TYPE_LABELS[location.locationType]}
+          </p>
+        </div>
+        <Badge variant="secondary">{itemCount} Artikel</Badge>
+      </div>
+      <div className="mb-3 rounded-md bg-muted/40 px-3 py-2 text-sm">
+        Artikel in diesem Lager:{' '}
+        <span className="font-medium tabular-nums">{itemCount.toLocaleString('de-DE')}</span>
+      </div>
+      {itemCount === 0 ? (
+        <EmptyState size="compact" title="Keine Artikel in diesem Lager." />
+      ) : (
+        <div className="divide-y rounded-md border">
+          {previewItems.map((item) => {
+            const stock = item.stockByLocation.find((entry) => entry.locationId === location.id);
+            return (
+              <div key={item.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <span className="min-w-0 truncate font-medium">{item.name}</span>
+                <span className="shrink-0 tabular-nums text-muted-foreground">
+                  {formatInventoryQuantity(stock?.quantityOnHand ?? 0, item.unit)}
+                </span>
+              </div>
+            );
+          })}
+          {furtherItemCount > 0 ? (
+            <p className="px-3 py-2 text-sm text-muted-foreground">
+              und {furtherItemCount.toLocaleString('de-DE')} weitere Artikel
+            </p>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

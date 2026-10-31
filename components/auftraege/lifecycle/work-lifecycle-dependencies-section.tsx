@@ -5,7 +5,11 @@ import { Plus, Unlink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { InlinePending } from '@/components/ui/inline-pending';
-import { WORK_DEPENDENCY_EFFECT_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import {
+  WORK_DEPENDENCY_EFFECT_LABELS,
+  type WorkDependency,
+  type WorkLifecycleSnapshot,
+} from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
 
 type WorkLifecycleDependenciesSectionProps = {
@@ -14,6 +18,64 @@ type WorkLifecycleDependenciesSectionProps = {
   rowBusy: { isBusy: (id: string) => boolean };
   setDialog: (dialog: WorkLifecycleDialogState | null) => void;
 };
+
+/** Link an approval, mark a declared condition met or open, or remove the dependency. */
+function DependencyRowActions({
+  dependency,
+  rowBusy,
+  setDialog,
+}: {
+  dependency: WorkDependency;
+  rowBusy: WorkLifecycleDependenciesSectionProps['rowBusy'];
+  setDialog: WorkLifecycleDependenciesSectionProps['setDialog'];
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <InlinePending active={rowBusy.isBusy(dependency.id)} label="Voraussetzung wird aktualisiert" />
+      {dependency.declared_kind === 'approval' &&
+      !dependency.artifact_approval_action_id &&
+      !dependency.is_satisfied ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={rowBusy.isBusy(dependency.id)}
+          onClick={() => setDialog({ type: 'artifact-approval-dependency', dependency })}
+        >
+          Freigabe verknüpfen
+        </Button>
+      ) : (
+        dependency.declared_kind && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={rowBusy.isBusy(dependency.id)}
+            onClick={() =>
+              setDialog({
+                type: 'dependency-state',
+                dependency,
+                state: dependency.is_satisfied ? 'open' : 'satisfied',
+              })
+            }
+          >
+            {dependency.is_satisfied ? 'Wieder öffnen' : 'Erfüllt'}
+          </Button>
+        )
+      )}
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        aria-label="Voraussetzung entfernen"
+        disabled={rowBusy.isBusy(dependency.id)}
+        onClick={() => setDialog({ type: 'remove-dependency', dependency })}
+      >
+        <Unlink className="size-4" />
+      </Button>
+    </div>
+  );
+}
 
 export function WorkLifecycleDependenciesSection({
   snapshot,
@@ -50,53 +112,7 @@ export function WorkLifecycleDependenciesSection({
                 </p>
               </div>
               {isManager && (
-                <div className="flex items-center gap-1">
-                  <InlinePending
-                    active={rowBusy.isBusy(dependency.id)}
-                    label="Voraussetzung wird aktualisiert"
-                  />
-                  {dependency.declared_kind === 'approval' &&
-                  !dependency.artifact_approval_action_id &&
-                  !dependency.is_satisfied ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={rowBusy.isBusy(dependency.id)}
-                      onClick={() => setDialog({ type: 'artifact-approval-dependency', dependency })}
-                    >
-                      Freigabe verknüpfen
-                    </Button>
-                  ) : (
-                    dependency.declared_kind && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={rowBusy.isBusy(dependency.id)}
-                        onClick={() =>
-                          setDialog({
-                            type: 'dependency-state',
-                            dependency,
-                            state: dependency.is_satisfied ? 'open' : 'satisfied',
-                          })
-                        }
-                      >
-                        {dependency.is_satisfied ? 'Wieder öffnen' : 'Erfüllt'}
-                      </Button>
-                    )
-                  )}
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    aria-label="Voraussetzung entfernen"
-                    disabled={rowBusy.isBusy(dependency.id)}
-                    onClick={() => setDialog({ type: 'remove-dependency', dependency })}
-                  >
-                    <Unlink className="size-4" />
-                  </Button>
-                </div>
+                <DependencyRowActions dependency={dependency} rowBusy={rowBusy} setDialog={setDialog} />
               )}
             </div>
           </div>

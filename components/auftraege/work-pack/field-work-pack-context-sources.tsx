@@ -14,84 +14,99 @@ type FieldWorkPackContextProps = {
 
 /** Service and maintenance context released for this job. */
 export function FieldWorkPackContextSources({ job, data }: FieldWorkPackContextProps) {
-  const { serviceContextResult, maintenanceContextResult } = data;
   return (
     <>
-      <FieldWorkPackSource
-        sourceId={`${job.id}:service-context`}
-        success={serviceContextResult.success}
-        title="Servicekontext nicht verfügbar"
-        description="Die für diesen Auftrag freigegebenen Servicehinweise konnten nicht geladen werden."
-      >
-        {serviceContextResult.success && serviceContextResult.contexts.length > 0 ? (
-          <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <Siren className="size-4" />
-              Serviceeinsatz
-            </h2>
-            <div className="mt-3 space-y-3">
-              {serviceContextResult.contexts.map((context) => (
-                <div key={context.caseNumber} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">{context.summary}</p>
-                    <span className="text-xs text-muted-foreground">
-                      {context.caseNumber} · {SERVICE_CASE_URGENCY_LABELS[context.urgency]}
-                    </span>
-                  </div>
-                  {context.accessInstructions && (
-                    <p className="mt-2 text-sm">
-                      <span className="font-medium">Zugang:</span> {context.accessInstructions}
-                    </p>
-                  )}
-                  {context.equipment.length > 0 && (
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Betroffene Anlagen:{' '}
-                      {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(', ')}
-                    </p>
-                  )}
+      <FieldWorkPackServiceContext job={job} data={data} />
+      <FieldWorkPackMaintenanceContext job={job} data={data} />
+    </>
+  );
+}
+
+/** The service cases released for this job. */
+function FieldWorkPackServiceContext({ job, data }: FieldWorkPackContextProps) {
+  const { serviceContextResult } = data;
+  return (
+    <FieldWorkPackSource
+      sourceId={`${job.id}:service-context`}
+      success={serviceContextResult.success}
+      title="Servicekontext nicht verfügbar"
+      description="Die für diesen Auftrag freigegebenen Servicehinweise konnten nicht geladen werden."
+    >
+      {serviceContextResult.success && serviceContextResult.contexts.length > 0 ? (
+        <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <Siren className="size-4" />
+            Serviceeinsatz
+          </h2>
+          <div className="mt-3 space-y-3">
+            {serviceContextResult.contexts.map((context) => (
+              <div key={context.caseNumber} className="rounded-md border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">{context.summary}</p>
+                  <span className="text-xs text-muted-foreground">
+                    {context.caseNumber} · {SERVICE_CASE_URGENCY_LABELS[context.urgency]}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-      </FieldWorkPackSource>
-      <FieldWorkPackSource
-        sourceId={`${job.id}:maintenance-context`}
-        success={maintenanceContextResult.success}
-        title="Wartungskontext nicht verfügbar"
-        description="Die für diesen Auftrag freigegebenen Wartungshinweise konnten nicht geladen werden."
-      >
-        {maintenanceContextResult.success && maintenanceContextResult.contexts.length > 0 ? (
-          <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
-            <h2 className="flex items-center gap-2 text-base font-semibold">
-              <CalendarClock className="size-4" />
-              Wartung
-            </h2>
-            <div className="mt-3 space-y-3">
-              {maintenanceContextResult.contexts.map((context) => (
-                <div key={`${context.planNumber}:${context.dueDate}`} className="rounded-md border p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-medium">
-                      {context.templateName} · Version {context.templateVersionNumber}
-                    </p>
-                    <span className="text-xs text-muted-foreground">
-                      {context.planNumber} · fällig {formatBerlin(context.dueDate, 'numericDate')}
-                    </span>
-                  </div>
-                  {context.operationalInstructions && (
-                    <p className="mt-2 text-sm">{context.operationalInstructions}</p>
-                  )}
+                {context.accessInstructions && (
+                  <p className="mt-2 text-sm">
+                    <span className="font-medium">Zugang:</span> {context.accessInstructions}
+                  </p>
+                )}
+                {context.equipment.length > 0 && (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Anlagen:{' '}
+                    Betroffene Anlagen:{' '}
                     {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(', ')}
                   </p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </FieldWorkPackSource>
+  );
+}
+
+/** The maintenance plans released for this job. */
+function FieldWorkPackMaintenanceContext({ job, data }: FieldWorkPackContextProps) {
+  const { maintenanceContextResult } = data;
+  return (
+    <FieldWorkPackSource
+      sourceId={`${job.id}:maintenance-context`}
+      success={maintenanceContextResult.success}
+      title="Wartungskontext nicht verfügbar"
+      description="Die für diesen Auftrag freigegebenen Wartungshinweise konnten nicht geladen werden."
+    >
+      {maintenanceContextResult.success && maintenanceContextResult.contexts.length > 0 ? (
+        <section className="rounded-lg border bg-card p-4 shadow-xs sm:p-5">
+          <h2 className="flex items-center gap-2 text-base font-semibold">
+            <CalendarClock className="size-4" />
+            Wartung
+          </h2>
+          <div className="mt-3 space-y-3">
+            {maintenanceContextResult.contexts.map((context) => (
+              <div key={`${context.planNumber}:${context.dueDate}`} className="rounded-md border p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">
+                    {context.templateName} · Version {context.templateVersionNumber}
+                  </p>
+                  <span className="text-xs text-muted-foreground">
+                    {context.planNumber} · fällig {formatBerlin(context.dueDate, 'numericDate')}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-      </FieldWorkPackSource>
-    </>
+                {context.operationalInstructions && (
+                  <p className="mt-2 text-sm">{context.operationalInstructions}</p>
+                )}
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Anlagen:{' '}
+                  {context.equipment.map((item) => `${item.equipmentNumber} · ${item.name}`).join(', ')}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </FieldWorkPackSource>
   );
 }
 

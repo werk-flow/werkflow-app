@@ -27,6 +27,18 @@ type JobQualificationAddFormProps = {
   saveRequirements: SaveJobQualificationRequirements;
 };
 
+/** The organization's capabilities the job does not require yet. */
+function addableCapabilityOptions(detail: JobQualificationDetail) {
+  return detail.capabilities
+    .filter(
+      (capability) => !detail.requirements.some((requirement) => requirement.capabilityId === capability.id),
+    )
+    .map((capability) => ({
+      value: capability.id,
+      label: capability.name,
+    }));
+}
+
 export function JobQualificationAddForm({
   detail,
   selectedCapabilityId,
@@ -49,15 +61,7 @@ export function JobQualificationAddForm({
         error={capabilityError}
       >
         <SearchableSelect
-          options={detail.capabilities
-            .filter(
-              (capability) =>
-                !detail.requirements.some((requirement) => requirement.capabilityId === capability.id),
-            )
-            .map((capability) => ({
-              value: capability.id,
-              label: capability.name,
-            }))}
+          options={addableCapabilityOptions(detail)}
           value={selectedCapabilityId}
           onChange={(value) => {
             setSelectedCapabilityId(value);

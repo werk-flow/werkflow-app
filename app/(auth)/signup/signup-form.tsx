@@ -125,6 +125,125 @@ function SignupNameFields({
   );
 }
 
+function SignupEmailField({
+  control,
+  isInviteSignup,
+  hasAttemptedSubmit,
+}: {
+  control: Control<SignupValues>;
+  isInviteSignup: boolean;
+  hasAttemptedSubmit: boolean;
+}) {
+  return (
+    <FormField
+      control={control}
+      name="email"
+      render={({ field, fieldState }) => (
+        <Field
+          label="E-Mail"
+          required
+          description={isInviteSignup ? 'Die E-Mail-Adresse ist durch die Einladung vorgegeben.' : undefined}
+          error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
+        >
+          <Input
+            {...field}
+            type="text"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="beispiel@firma.de"
+            readOnly={isInviteSignup}
+            className={isInviteSignup ? 'bg-muted cursor-not-allowed' : ''}
+          />
+        </Field>
+      )}
+    />
+  );
+}
+
+/** Creates the account, stores the session when Auth returns one, and opens the verification step. */
+async function submitSignup({
+  supabase,
+  router,
+  form,
+  values,
+  isInviteSignup,
+  inviteCode,
+  setFormError,
+}: {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  router: ReturnType<typeof useRouter>;
+  form: UseFormReturn<SignupValues>;
+  values: SignupValues;
+  isInviteSignup: boolean;
+  inviteCode: string;
+  setFormError: (message: string | null) => void;
+}): Promise<void> {
+  try {
+    // Store invite_code in user metadata if this is an invite-based signup
+    // This allows us to redeem the invite even if the user closes the window
+    // and logs in elsewhere (as long as they signed up via the invite link)
+    const { data, error } = await supabase.auth.signUp({
+      email: values.email,
+      password: values.password,
+      options: {
+        data: {
+          first_name: values.firstName,
+          last_name: values.lastName,
+          // Only store invite_code if this is an invite-based signup
+          ...(isInviteSignup && inviteCode ? { pending_invite_code: inviteCode } : {}),
+        },
+      },
+    });
+
+    if (error) {
+      const normalizedMessage = error.message?.toLowerCase() ?? '';
+      const isPasswordError = normalizedMessage.includes('password');
+
+      if (isPasswordError) {
+        const friendly = translateSupabasePasswordError(error);
+        form.setError('password', { type: 'server', message: friendly });
+        form.resetField('password', {
+          keepDirty: false,
+          keepError: true,
+          defaultValue: '',
+        });
+        setFormError(null);
+      } else {
+        setFormError('Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.');
+      }
+      return;
+    }
+
+    // The profile row, with the names from the metadata above, comes from
+    // the Auth insert trigger (public.handle_new_user); the browser has no
+    // profile INSERT grant.
+    if (data.session) {
+      await fetch('/auth/callback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          event: 'SIGNED_IN',
+          session: data.session,
+        }),
+      });
+      // The action identifies the caller from the server session, so it can
+      // only invalidate the profile once the callback has set the cookies.
+      await invalidateProfileCache();
+    }
+
+    if (await openVerificationStep(router, values.email, inviteCode)) {
+      router.refresh();
+      return untilPageLeaves();
+    }
+    setFormError(VERIFICATION_STEP_FAILED);
+  } catch {
+    // A rejected request (network) must not leave the button spinning.
+    setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');
+  }
+}
+
 interface SignupFormProps {
   inviteCode?: string;
   invitedEmail?: string | null;
@@ -179,72 +298,9 @@ export function SignupForm({ inviteCode = '', invitedEmail = null }: SignupFormP
       return;
     }
 
-    await runSubmit(async () => {
-      try {
-        // Store invite_code in user metadata if this is an invite-based signup
-        // This allows us to redeem the invite even if the user closes the window
-        // and logs in elsewhere (as long as they signed up via the invite link)
-        const { data, error } = await supabase.auth.signUp({
-          email: values.email,
-          password: values.password,
-          options: {
-            data: {
-              first_name: values.firstName,
-              last_name: values.lastName,
-              // Only store invite_code if this is an invite-based signup
-              ...(isInviteSignup && inviteCode ? { pending_invite_code: inviteCode } : {}),
-            },
-          },
-        });
-
-        if (error) {
-          const normalizedMessage = error.message?.toLowerCase() ?? '';
-          const isPasswordError = normalizedMessage.includes('password');
-
-          if (isPasswordError) {
-            const friendly = translateSupabasePasswordError(error);
-            form.setError('password', { type: 'server', message: friendly });
-            form.resetField('password', {
-              keepDirty: false,
-              keepError: true,
-              defaultValue: '',
-            });
-            setFormError(null);
-          } else {
-            setFormError('Registrierung fehlgeschlagen. Bitte überprüfe deine Angaben.');
-          }
-          return;
-        }
-
-        // The profile row, with the names from the metadata above, comes from
-        // the Auth insert trigger (public.handle_new_user); the browser has no
-        // profile INSERT grant.
-        if (data.session) {
-          await fetch('/auth/callback', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              event: 'SIGNED_IN',
-              session: data.session,
-            }),
-          });
-          // The action identifies the caller from the server session, so it can
-          // only invalidate the profile once the callback has set the cookies.
-          await invalidateProfileCache();
-        }
-
-        if (await openVerificationStep(router, values.email, inviteCode)) {
-          router.refresh();
-          return untilPageLeaves();
-        }
-        setFormError(VERIFICATION_STEP_FAILED);
-      } catch {
-        // A rejected request (network) must not leave the button spinning.
-        setFormError('Registrierung fehlgeschlagen. Bitte versuche es erneut.');
-      }
-    });
+    await runSubmit(() =>
+      submitSignup({ supabase, router, form, values, isInviteSignup, inviteCode, setFormError }),
+    );
   };
 
   return (
@@ -252,29 +308,10 @@ export function SignupForm({ inviteCode = '', invitedEmail = null }: SignupFormP
       <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
         <SignupNameFields control={form.control} hasAttemptedSubmit={hasAttemptedSubmit} />
 
-        <FormField
+        <SignupEmailField
           control={form.control}
-          name="email"
-          render={({ field, fieldState }) => (
-            <Field
-              label="E-Mail"
-              required
-              description={
-                isInviteSignup ? 'Die E-Mail-Adresse ist durch die Einladung vorgegeben.' : undefined
-              }
-              error={hasAttemptedSubmit ? fieldState.error?.message : undefined}
-            >
-              <Input
-                {...field}
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="beispiel@firma.de"
-                readOnly={isInviteSignup}
-                className={isInviteSignup ? 'bg-muted cursor-not-allowed' : ''}
-              />
-            </Field>
-          )}
+          isInviteSignup={isInviteSignup}
+          hasAttemptedSubmit={hasAttemptedSubmit}
         />
 
         <FormField

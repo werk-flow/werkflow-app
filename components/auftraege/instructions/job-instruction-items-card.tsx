@@ -14,10 +14,10 @@ import type {
 import { JobInstructionDraftRow } from './job-instruction-draft-row';
 import { InstructionItemDetailsDialog } from './job-instruction-item-details-dialog';
 import { JobInstructionItemRow } from './job-instruction-item-row';
-import { createJobInstructionRowActions } from './job-instruction-row-actions';
+import { createJobInstructionRowActions, type JobInstructionRowActions } from './job-instruction-row-actions';
 import { useJobInstructionDraft } from './use-job-instruction-draft';
 import { useJobInstructionItemEditing } from './use-job-instruction-item-editing';
-import { useJobInstructionItemList } from './use-job-instruction-item-list';
+import { useJobInstructionItemList, type RenderedInstructionItem } from './use-job-instruction-item-list';
 import { SectionTitle } from '@/components/shared/section-title';
 
 type JobInstructionItemsCardProps = InstructionListOwner & {
@@ -78,70 +78,24 @@ export function JobInstructionItemsCard({
     showErrorBanner,
   });
 
-  const displayedItems = useMemo(() => {
-    if (!draft) {
-      return items.map((item) => ({ type: 'item' as const, item }));
-    }
-    return [...items.map((item) => ({ type: 'item' as const, item })), { type: 'draft' as const, draft }];
-  }, [draft, items]);
+  const displayedItems = useMemo(() => displayedInstructionEntries(items, draft), [draft, items]);
 
   return (
     <>
       <div className="min-w-0 w-full overflow-hidden rounded-lg border bg-card p-4 sm:p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <SectionTitle icon={<ClipboardList className="size-4" />}>
-              Arbeitsanweisungen &amp; Notizen
-            </SectionTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {isAdminOrManager
-                ? 'Erfasse Anweisungen direkt als Checkliste. Mit Enter entsteht der nächste Punkt.'
-                : readOnly
-                  ? 'Die Arbeit ist abgeschlossen. Die Aufgaben bleiben als Verlauf sichtbar.'
-                  : 'Du kannst die Punkte lesen und als erledigt oder offen markieren.'}
-            </p>
-          </div>
-        </div>
+        <JobInstructionItemsCardHeader isAdminOrManager={isAdminOrManager} readOnly={readOnly} />
 
-        {!isAdminOrManager && items.length === 0 ? (
-          <EmptyState
-            size="compact"
-            title="Noch keine Arbeitsanweisungen vorhanden."
-            description="Sobald im Büro oder von einem Admin Punkte angelegt werden, erscheinen sie hier."
-          />
-        ) : (
-          <div className="space-y-3">
-            {displayedItems.map((entry) => {
-              if (entry.type === 'draft') {
-                return (
-                  <JobInstructionDraftRow
-                    key={entry.draft.draftId}
-                    draft={entry.draft}
-                    items={items}
-                    setDraft={draftState.setDraft}
-                    draftTextareaRef={draftState.draftTextareaRef}
-                    handleCreateDraft={draftState.handleCreateDraft}
-                  />
-                );
-              }
-
-              return (
-                <JobInstructionItemRow
-                  key={entry.item.id}
-                  item={entry.item}
-                  items={items}
-                  isAdminOrManager={isAdminOrManager}
-                  readOnly={readOnly}
-                  isBusy={busy.isBusy}
-                  editing={editing}
-                  rowActions={rowActions}
-                  focusDraft={draftState.focusDraft}
-                  setDetailsItem={setDetailsItem}
-                />
-              );
-            })}
-          </div>
-        )}
+        <JobInstructionItemsCardRows
+          displayedItems={displayedItems}
+          items={items}
+          isAdminOrManager={isAdminOrManager}
+          readOnly={readOnly}
+          isBusy={busy.isBusy}
+          draftState={draftState}
+          editing={editing}
+          rowActions={rowActions}
+          setDetailsItem={setDetailsItem}
+        />
       </div>
       <InstructionItemDetailsDialog
         key={detailsItem?.id ?? 'closed'}
@@ -155,5 +109,114 @@ export function JobInstructionItemsCard({
         }}
       />
     </>
+  );
+}
+
+function JobInstructionItemsCardHeader({
+  isAdminOrManager,
+  readOnly,
+}: {
+  isAdminOrManager: boolean;
+  readOnly: boolean;
+}): ReactElement {
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <div>
+        <SectionTitle icon={<ClipboardList className="size-4" />}>
+          Arbeitsanweisungen &amp; Notizen
+        </SectionTitle>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {isAdminOrManager
+            ? 'Erfasse Anweisungen direkt als Checkliste. Mit Enter entsteht der nächste Punkt.'
+            : readOnly
+              ? 'Die Arbeit ist abgeschlossen. Die Aufgaben bleiben als Verlauf sichtbar.'
+              : 'Du kannst die Punkte lesen und als erledigt oder offen markieren.'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+type JobInstructionDraftState = ReturnType<typeof useJobInstructionDraft>;
+
+type DisplayedInstructionEntry =
+  | { type: 'item'; item: RenderedInstructionItem }
+  | { type: 'draft'; draft: NonNullable<JobInstructionDraftState['draft']> };
+
+type JobInstructionItemsCardRowsProps = {
+  displayedItems: DisplayedInstructionEntry[];
+  items: RenderedInstructionItem[];
+  isAdminOrManager: boolean;
+  readOnly: boolean;
+  isBusy: (id: string) => boolean;
+  draftState: JobInstructionDraftState;
+  editing: ReturnType<typeof useJobInstructionItemEditing>;
+  rowActions: JobInstructionRowActions;
+  setDetailsItem: (item: JobInstructionItemWithDetails) => void;
+};
+
+function displayedInstructionEntries(
+  items: RenderedInstructionItem[],
+  draft: JobInstructionDraftState['draft'],
+): DisplayedInstructionEntry[] {
+  if (!draft) {
+    return items.map((item) => ({ type: 'item' as const, item }));
+  }
+  return [...items.map((item) => ({ type: 'item' as const, item })), { type: 'draft' as const, draft }];
+}
+
+/** The saved rows in order, followed by a manager's draft row; a viewer without rows sees the empty state. */
+function JobInstructionItemsCardRows({
+  displayedItems,
+  items,
+  isAdminOrManager,
+  readOnly,
+  isBusy,
+  draftState,
+  editing,
+  rowActions,
+  setDetailsItem,
+}: JobInstructionItemsCardRowsProps): ReactElement {
+  if (!isAdminOrManager && items.length === 0) {
+    return (
+      <EmptyState
+        size="compact"
+        title="Noch keine Arbeitsanweisungen vorhanden."
+        description="Sobald im Büro oder von einem Admin Punkte angelegt werden, erscheinen sie hier."
+      />
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {displayedItems.map((entry) => {
+        if (entry.type === 'draft') {
+          return (
+            <JobInstructionDraftRow
+              key={entry.draft.draftId}
+              draft={entry.draft}
+              items={items}
+              setDraft={draftState.setDraft}
+              draftTextareaRef={draftState.draftTextareaRef}
+              handleCreateDraft={draftState.handleCreateDraft}
+            />
+          );
+        }
+
+        return (
+          <JobInstructionItemRow
+            key={entry.item.id}
+            item={entry.item}
+            items={items}
+            isAdminOrManager={isAdminOrManager}
+            readOnly={readOnly}
+            isBusy={isBusy}
+            editing={editing}
+            rowActions={rowActions}
+            focusDraft={draftState.focusDraft}
+            setDetailsItem={setDetailsItem}
+          />
+        );
+      })}
+    </div>
   );
 }

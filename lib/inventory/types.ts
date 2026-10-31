@@ -3,8 +3,8 @@ import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { InventoryPageQuery } from './list-page';
 
 // The values the database check constraints allow for each text column.
-const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
-const INVENTORY_LOCATION_TYPES = ['storage', 'room', 'shelf', 'vehicle', 'other'] as const;
+export const INVENTORY_ITEM_TYPES = ['material', 'consumable', 'tool', 'asset'] as const;
+export const INVENTORY_LOCATION_TYPES = ['storage', 'room', 'shelf', 'vehicle', 'other'] as const;
 const INVENTORY_MOVEMENT_TYPES = [
   'initial_count',
   'stock_in',

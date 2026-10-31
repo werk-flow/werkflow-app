@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 
 import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
@@ -69,6 +70,65 @@ type InventoryEditing = {
   stock: StockAdjuster;
 };
 
+/** What creating an item touches: the dialog, the draft row, the error slot and the banner. */
+type ItemCreateFeedback = Pick<SharedItemFeedback, 'setFormError' | 'waitForItems'> & {
+  locations: InventoryLocation[];
+  setItemDialogOpen: (open: boolean) => void;
+  setItemForm: (form: ItemFormState) => void;
+  setPendingItemDraft: Dispatch<SetStateAction<PendingItemDraft | null>>;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+/**
+ * Create: the dialog closes at once and the table carries the draft as a
+ * pending row until the refreshed list contains the new item. A refusal
+ * reopens the dialog with the submitted values and the error.
+ */
+function createItemWithDraft(
+  itemForm: ItemFormState,
+  initialQuantity: number,
+  input: ReturnType<typeof buildItemSaveInput>,
+  {
+    locations,
+    setItemDialogOpen,
+    setItemForm,
+    setPendingItemDraft,
+    setFormError,
+    showBanner,
+    waitForItems,
+  }: ItemCreateFeedback,
+): void {
+  const submittedForm = itemForm;
+  setItemDialogOpen(false);
+  // Identity checks keep an earlier submission from touching a later draft.
+  const draft: PendingItemDraft = {
+    confirmedId: null,
+    name: itemForm.name.trim(),
+    internalSku: itemForm.internalSku.trim(),
+    itemType: itemForm.itemType,
+    unit: itemForm.unit,
+    quantity: initialQuantity,
+    locationName: locations.find((location) => location.id === itemForm.initialLocationId)?.name ?? null,
+  };
+  setPendingItemDraft(draft);
+  void (async () => {
+    const result = await upsertInventoryItem(input).catch(() => null);
+    if (!result?.success) {
+      setPendingItemDraft((current) => (current === draft ? null : current));
+      setItemForm(submittedForm);
+      setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
+      setItemDialogOpen(true);
+      return;
+    }
+    showBanner({ variant: 'success', message: 'Der Artikel wurde angelegt.' });
+    const confirmedDraft = { ...draft, confirmedId: result.item.id };
+    setPendingItemDraft((current) => (current === draft ? confirmedDraft : current));
+    // The action's response renders the route with the new item.
+    await waitForItems();
+    setPendingItemDraft((current) => (current === confirmedDraft ? null : current));
+  })();
+}
+
 function useInventoryItemEditor(
   overview: InventoryOverview,
   { setFormError, busyItems, waitForItems }: SharedItemFeedback,
@@ -109,39 +169,15 @@ function useInventoryItemEditor(
     const input = buildItemSaveInput(itemForm, initialQuantity);
 
     if (!itemForm.id) {
-      // Create: the dialog closes at once and the table carries the draft as
-      // a pending row until the refreshed list contains the new item. A
-      // refusal reopens the dialog with the submitted values and the error.
-      const submittedForm = itemForm;
-      setItemDialogOpen(false);
-      // Identity checks keep an earlier submission from touching a later draft.
-      const draft: PendingItemDraft = {
-        confirmedId: null,
-        name: itemForm.name.trim(),
-        internalSku: itemForm.internalSku.trim(),
-        itemType: itemForm.itemType,
-        unit: itemForm.unit,
-        quantity: initialQuantity,
-        locationName:
-          overview.locations.find((location) => location.id === itemForm.initialLocationId)?.name ?? null,
-      };
-      setPendingItemDraft(draft);
-      void (async () => {
-        const result = await upsertInventoryItem(input).catch(() => null);
-        if (!result?.success) {
-          setPendingItemDraft((current) => (current === draft ? null : current));
-          setItemForm(submittedForm);
-          setFormError(getInventoryActionErrorMessage(result?.error ?? 'save_failed'));
-          setItemDialogOpen(true);
-          return;
-        }
-        showBanner({ variant: 'success', message: 'Der Artikel wurde angelegt.' });
-        const confirmedDraft = { ...draft, confirmedId: result.item.id };
-        setPendingItemDraft((current) => (current === draft ? confirmedDraft : current));
-        // The action's response renders the route with the new item.
-        await waitForItems();
-        setPendingItemDraft((current) => (current === confirmedDraft ? null : current));
-      })();
+      createItemWithDraft(itemForm, initialQuantity, input, {
+        locations: overview.locations,
+        setItemDialogOpen,
+        setItemForm,
+        setPendingItemDraft,
+        setFormError,
+        showBanner,
+        waitForItems,
+      });
       return;
     }
 

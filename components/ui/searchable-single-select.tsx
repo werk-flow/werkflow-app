@@ -10,6 +10,7 @@ import {
   SearchableSelectReadOnly,
   SearchableSelectTrigger,
   type SearchableSelectBaseProps,
+  type SearchableSelectOption,
 } from '@/components/ui/searchable-select-popup';
 import { useSearchableSelectPopup } from '@/components/ui/use-searchable-select-popup';
 
@@ -22,6 +23,109 @@ interface SearchableSelectProps extends SearchableSelectBaseProps {
   noneLabel?: string | undefined;
   readOnly?: boolean | undefined;
   readOnlyLabel?: string | undefined;
+}
+
+function SingleSelectNoneOption({
+  selected,
+  label,
+  onSelect,
+}: {
+  selected: boolean;
+  label: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      tabIndex={-1}
+      onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
+        selected ? 'bg-primary/10 text-primary-text' : 'hover:bg-accent',
+      )}
+    >
+      <div
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+          selected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30',
+        )}
+      >
+        {selected && <Check className="size-2.5" />}
+      </div>
+      <span className="text-muted-foreground">{label}</span>
+    </button>
+  );
+}
+
+function SingleSelectOption({
+  option,
+  isSelected,
+  renderOption,
+  onSelect,
+}: {
+  option: SearchableSelectOption;
+  isSelected: boolean;
+  renderOption: SearchableSelectBaseProps['renderOption'];
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={isSelected}
+      tabIndex={-1}
+      onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-left transition-colors focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        isSelected ? 'bg-primary/10 text-primary-text' : 'hover:bg-accent',
+      )}
+    >
+      <div
+        className={cn(
+          'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+          isSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30',
+        )}
+      >
+        {isSelected && <Check className="size-2.5" />}
+      </div>
+      {renderOption ? renderOption(option, isSelected) : <SearchableOptionLabel option={option} />}
+    </button>
+  );
+}
+
+/** The empty-choice row when `noneLabel` is set, then one row per option. */
+function SingleSelectOptionList({
+  options,
+  value,
+  noneLabel,
+  renderOption,
+  onSelect,
+}: {
+  options: SearchableSelectOption[];
+  value: string;
+  noneLabel: string | null;
+  renderOption: SearchableSelectBaseProps['renderOption'];
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <>
+      {noneLabel !== null && (
+        <SingleSelectNoneOption selected={!value} label={noneLabel} onSelect={() => onSelect('')} />
+      )}
+
+      {options.map((option) => (
+        <SingleSelectOption
+          key={option.value}
+          option={option}
+          isSelected={option.value === value}
+          renderOption={renderOption}
+          onSelect={() => onSelect(option.value)}
+        />
+      ))}
+    </>
+  );
 }
 
 export function SearchableSelect({
@@ -86,65 +190,16 @@ export function SearchableSelect({
         loadFailure={loadFailure}
         onLoadMore={onLoadMore}
       >
-        {allowNone && (
-          <button
-            type="button"
-            role="option"
-            aria-selected={!value}
-            tabIndex={-1}
-            onClick={() => {
-              onChange('');
-              setOpen(false);
-            }}
-            className={cn(
-              'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition-colors',
-              !value ? 'bg-primary/10 text-primary-text' : 'hover:bg-accent',
-            )}
-          >
-            <div
-              className={cn(
-                'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                !value ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30',
-              )}
-            >
-              {!value && <Check className="size-2.5" />}
-            </div>
-            <span className="text-muted-foreground">{noneLabel}</span>
-          </button>
-        )}
-
-        {popup.filtered.map((option) => {
-          const isSelected = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={isSelected}
-              tabIndex={-1}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className={cn(
-                'flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-left transition-colors focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                isSelected ? 'bg-primary/10 text-primary-text' : 'hover:bg-accent',
-              )}
-            >
-              <div
-                className={cn(
-                  'flex size-4 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                  isSelected
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-muted-foreground/30',
-                )}
-              >
-                {isSelected && <Check className="size-2.5" />}
-              </div>
-              {renderOption ? renderOption(option, isSelected) : <SearchableOptionLabel option={option} />}
-            </button>
-          );
-        })}
+        <SingleSelectOptionList
+          options={popup.filtered}
+          value={value}
+          noneLabel={allowNone ? noneLabel : null}
+          renderOption={renderOption}
+          onSelect={(optionValue) => {
+            onChange(optionValue);
+            setOpen(false);
+          }}
+        />
       </SearchableSelectPopup>
     </PopoverPrimitive.Root>
   );
