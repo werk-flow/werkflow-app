@@ -35,14 +35,7 @@ export function MitarbeiterDetailTimeCards({
   autoBreakThresholdMinutes,
   autoBreakDurationMinutes,
 }: MitarbeiterDetailTimeCardsProps) {
-  const { status, statusError, statusStale, refetchStatus, weekLoading, weekError, refetchWeek } = liveTime;
-  const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
-  // An unknown target is never measured against 8h: while the week loads the
-  // card shows the worked time only, and a failed target read offers a retry.
-  // A failed week read is the week card's one failure. A failed target
-  // refresh keeps the last-known target, marked stale.
-  const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
-  const targetReadFailed = !todayTarget && !weekLoading && !weekError;
+  const { status, statusError, statusStale, refetchStatus, memberBreakdown, todayTarget } = liveTime;
 
   return (
     <>
@@ -73,45 +66,7 @@ export function MitarbeiterDetailTimeCards({
               </p>
             )}
 
-            <StaleRegion
-              stale={liveTime.targetsStale && todayTarget !== undefined}
-              onRetry={refetchWeek}
-              notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
-              className="space-y-1"
-            >
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Tagesfortschritt</span>
-                <span
-                  className={cn(
-                    'font-medium tabular-nums',
-                    todayTargetMinutes > 0 && dailyPercentage >= 100
-                      ? 'text-success-text'
-                      : 'text-foreground',
-                  )}
-                >
-                  {todayTargetMinutes > 0
-                    ? `${formatDuration(memberBreakdown.workMinutes)} / ${formatDuration(todayTargetMinutes)} (${dailyPercentage}%)`
-                    : formatDuration(memberBreakdown.workMinutes)}
-                </span>
-              </div>
-              <Progress
-                value={dailyPercentage}
-                label="Tagesfortschritt"
-                className="h-2"
-                indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
-              />
-              {noTargetReason && (
-                <p className="text-xs text-muted-foreground">
-                  {noTargetReason} – heute keine Sollarbeitszeit.
-                </p>
-              )}
-              {targetReadFailed && (
-                <SectionError onRetry={() => void refetchWeek()}>
-                  Das Tagesziel konnte nicht geladen werden.
-                </SectionError>
-              )}
-              {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
-            </StaleRegion>
+            <MitarbeiterDetailDailyProgress liveTime={liveTime} />
 
             {/* Time breakdown indicators */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1.5 text-xs">
@@ -195,5 +150,58 @@ function MitarbeiterDetailWeekCard({
         <NoWeekData />
       )}
     </div>
+  );
+}
+
+/**
+ * Today's progress against the resolved target. An unknown target is never
+ * measured against 8h: while the week loads it shows the worked time only, and
+ * a failed target read offers a retry. A failed target refresh keeps the
+ * last-known target, marked stale. A failed or stale week is the week card's
+ * one failure surface.
+ */
+function MitarbeiterDetailDailyProgress({ liveTime }: { liveTime: MitarbeiterDetailLiveTime }) {
+  const { status, weekLoading, weekError, weekStale, targetsStale, refetchWeek } = liveTime;
+  const { todayTarget, todayTargetMinutes, todayTargetHint, memberBreakdown, dailyPercentage } = liveTime;
+  const noTargetReason = todayTarget ? getNoTargetReason(todayTarget) : null;
+  const weekFailed = weekError !== null || weekStale;
+  const targetReadFailed = !todayTarget && !weekLoading && !weekFailed;
+
+  return (
+    <StaleRegion
+      stale={targetsStale && todayTarget !== undefined && !weekFailed}
+      onRetry={refetchWeek}
+      notice="Das Tagesziel konnte nicht aktualisiert werden und ist eventuell nicht mehr aktuell."
+      className="space-y-1"
+    >
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-muted-foreground">Tagesfortschritt</span>
+        <span
+          className={cn(
+            'font-medium tabular-nums',
+            todayTargetMinutes > 0 && dailyPercentage >= 100 ? 'text-success-text' : 'text-foreground',
+          )}
+        >
+          {todayTargetMinutes > 0
+            ? `${formatDuration(memberBreakdown.workMinutes)} / ${formatDuration(todayTargetMinutes)} (${dailyPercentage}%)`
+            : formatDuration(memberBreakdown.workMinutes)}
+        </span>
+      </div>
+      <Progress
+        value={dailyPercentage}
+        label="Tagesfortschritt"
+        className="h-2"
+        indicatorClassName={cn('bg-success', status?.status === 'working' && 'opacity-80')}
+      />
+      {noTargetReason && (
+        <p className="text-xs text-muted-foreground">{noTargetReason} – heute keine Sollarbeitszeit.</p>
+      )}
+      {targetReadFailed && (
+        <SectionError onRetry={() => void refetchWeek()}>
+          Das Tagesziel konnte nicht geladen werden.
+        </SectionError>
+      )}
+      {todayTargetHint && <p className="text-xs text-muted-foreground">{todayTargetHint}</p>}
+    </StaleRegion>
   );
 }

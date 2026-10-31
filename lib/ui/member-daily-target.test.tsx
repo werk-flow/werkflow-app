@@ -108,6 +108,15 @@ describe('the personnel detail status card', () => {
     expect(markup.split('Erneut laden')).toHaveLength(2);
   });
 
+  // Sol on werk-flow/werkflow-app#112: after a failed target refresh, a failed
+  // week refresh marked both cards stale.
+  test('a stale week owns the stale notice, also when the targets are stale', () => {
+    const markup = renderCard(todayTarget, { targetsStale: true, weekStale: true });
+    expect(markup).not.toContain('Das Tagesziel konnte nicht aktualisiert werden');
+    const failed = renderCard(todayTarget, { targetsStale: true, weekError: 'load_failed' });
+    expect(failed).not.toContain('Das Tagesziel konnte nicht aktualisiert werden');
+  });
+
   // CodeRabbit on werk-flow/werkflow-app#112: a failed week read showed its
   // failure twice, in the week card and again as a target error.
   test('a failed week read shows one failure, in the week card', () => {
