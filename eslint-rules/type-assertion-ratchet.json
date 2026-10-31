@@ -60,8 +60,6 @@
   "components/ui/row-actions-menu.tsx": 1,
   "components/ui/time-input.tsx": 1,
   "components/ui/use-date-picker-segments.ts": 1,
-  "components/zeiterfassung/entry-history.tsx": 1,
-  "components/zeiterfassung/pending-approvals-list.tsx": 1,
   "components/zeiterfassung/sickness-section-report-dialog.tsx": 1,
   "components/zeiterfassung/time-correction-dialog-fields.tsx": 3,
   "lib/attention/actions.ts": 1,

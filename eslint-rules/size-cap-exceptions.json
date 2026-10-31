@@ -356,13 +356,6 @@
       "useManualEntrySubmit": 138,
       "useManualEntrySubmit > handleSubmit": 98
     },
-    "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
-    "components/zeiterfassung/pending-approvals-cards.tsx": {
-      "SessionRequestCard": 107,
-      "ChangeRequestCard": 102
-    },
-    "components/zeiterfassung/pending-approvals-list.tsx": { "PendingApprovalsList": 86 },
-    "components/zeiterfassung/pending-approvals.tsx": { "PendingApprovals": 125 },
     "components/zeiterfassung/sickness-section-report-dialog.tsx": {
       "OwnSicknessReportFields": 94,
       "OwnSicknessReportDialog": 107
