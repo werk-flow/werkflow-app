@@ -47,12 +47,7 @@ export function InstructionItemDetailsDialog({
   const [groupLabel, setGroupLabel] = useState(item?.groupLabel ?? '');
   const [notes, setNotes] = useState(item?.notes ?? '');
   const [predecessorIds, setPredecessorIds] = useState(item?.predecessors.map((entry) => entry.id) ?? []);
-  const [evidence, setEvidence] = useState(
-    item?.evidenceRequirements.map((entry, index) => ({
-      ...entry,
-      sortOrder: index,
-    })) ?? [],
-  );
+  const [evidence, setEvidence] = useState(evidenceDraftsOf(item));
   const [error, setError] = useState<string | null>(null);
   const { run: runSaveDetails, isPending } = useServerAction(updateInstructionItemDetails);
   if (!item) return null;
@@ -71,11 +66,7 @@ export function InstructionItemDetailsDialog({
         predecessorItemIds: predecessorIds,
       });
       if (!result.success) {
-        setError(
-          result.error === 'instruction_dependency_cycle'
-            ? 'Abhängigkeiten dürfen keinen Kreis bilden.'
-            : 'Die Eintragsdetails konnten nicht gespeichert werden.',
-        );
+        setError(saveDetailsFailureMessage(result.error));
         return;
       }
       onSaved(result.item);
@@ -100,39 +91,93 @@ export function InstructionItemDetailsDialog({
               requirementState={requirementState}
               setRequirementState={setRequirementState}
             />
-            <Field label="Gruppe" htmlFor="instruction-group">
-              <Input value={groupLabel} onChange={(event) => setGroupLabel(event.target.value)} />
-            </Field>
-            <Field label="Voraussetzungen">
-              <SearchableMultiSelect
-                ariaLabel="Voraussetzungen"
-                options={allItems
-                  .filter((entry) => entry.id !== item.id)
-                  .map((entry) => ({ value: entry.id, label: entry.content }))}
-                selectedIds={predecessorIds}
-                onSelectionChange={setPredecessorIds}
-                placeholder="Keine Voraussetzungen"
-                searchPlaceholder="Eintrag suchen…"
-                emptyMessage="Kein anderer Eintrag"
-              />
-            </Field>
+            <InstructionItemGroupField groupLabel={groupLabel} setGroupLabel={setGroupLabel} />
+            <InstructionItemPredecessorsField
+              itemId={item.id}
+              allItems={allItems}
+              predecessorIds={predecessorIds}
+              setPredecessorIds={setPredecessorIds}
+            />
             <Field label="Hinweise" htmlFor="instruction-notes">
               <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
             </Field>
             <InstructionItemEvidenceFields evidence={evidence} setEvidence={setEvidence} />
             <ErrorText>{error}</ErrorText>
           </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
-              Abbrechen
-            </Button>
-            <Button pending={isPending} type="submit" disabled={isPending}>
-              Speichern
-            </Button>
-          </DialogFooter>
+          <InstructionItemDetailsFooter onClose={onClose} isPending={isPending} />
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function evidenceDraftsOf(item: JobInstructionItemWithDetails | null): InstructionEvidenceDraft[] {
+  return (
+    item?.evidenceRequirements.map((entry, index) => ({
+      ...entry,
+      sortOrder: index,
+    })) ?? []
+  );
+}
+
+function saveDetailsFailureMessage(code: string): string {
+  return code === 'instruction_dependency_cycle'
+    ? 'Abhängigkeiten dürfen keinen Kreis bilden.'
+    : 'Die Eintragsdetails konnten nicht gespeichert werden.';
+}
+
+function InstructionItemGroupField({
+  groupLabel,
+  setGroupLabel,
+}: {
+  groupLabel: string;
+  setGroupLabel: (value: string) => void;
+}) {
+  return (
+    <Field label="Gruppe" htmlFor="instruction-group">
+      <Input value={groupLabel} onChange={(event) => setGroupLabel(event.target.value)} />
+    </Field>
+  );
+}
+
+function InstructionItemPredecessorsField({
+  itemId,
+  allItems,
+  predecessorIds,
+  setPredecessorIds,
+}: {
+  itemId: string;
+  allItems: JobInstructionItemWithDetails[];
+  predecessorIds: string[];
+  setPredecessorIds: (ids: string[]) => void;
+}) {
+  return (
+    <Field label="Voraussetzungen">
+      <SearchableMultiSelect
+        ariaLabel="Voraussetzungen"
+        options={allItems
+          .filter((entry) => entry.id !== itemId)
+          .map((entry) => ({ value: entry.id, label: entry.content }))}
+        selectedIds={predecessorIds}
+        onSelectionChange={setPredecessorIds}
+        placeholder="Keine Voraussetzungen"
+        searchPlaceholder="Eintrag suchen…"
+        emptyMessage="Kein anderer Eintrag"
+      />
+    </Field>
+  );
+}
+
+function InstructionItemDetailsFooter({ onClose, isPending }: { onClose: () => void; isPending: boolean }) {
+  return (
+    <DialogFooter>
+      <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+        Abbrechen
+      </Button>
+      <Button pending={isPending} type="submit" disabled={isPending}>
+        Speichern
+      </Button>
+    </DialogFooter>
   );
 }
 
@@ -150,7 +195,12 @@ function InstructionItemKindFields({
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Art" htmlFor="instruction-kind">
-        <Select value={itemKind} onValueChange={(value) => setItemKind(value as typeof itemKind)}>
+        <Select
+          value={itemKind}
+          onValueChange={(value) => {
+            if (value === 'task' || value === 'checklist') setItemKind(value);
+          }}
+        >
           <SelectTrigger id="instruction-kind">
             <SelectValue />
           </SelectTrigger>
@@ -163,7 +213,9 @@ function InstructionItemKindFields({
       <Field label="Verbindlichkeit" htmlFor="instruction-requirement">
         <Select
           value={requirementState}
-          onValueChange={(value) => setRequirementState(value as typeof requirementState)}
+          onValueChange={(value) => {
+            if (value === 'required' || value === 'optional') setRequirementState(value);
+          }}
         >
           <SelectTrigger id="instruction-requirement">
             <SelectValue />
