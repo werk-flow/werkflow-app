@@ -1,5 +1,6 @@
 -- P1-14, P1-15 and P1-17 database rules behind the work execution journeys:
--- lifecycle mutations stay inside their own ledger, and lifecycle, evidence
+-- lifecycle mutations stay inside their own ledger, the assigned employee
+-- neither cancels nor parks the job and never approves the own report, and lifecycle, evidence
 -- and handover rows are invisible to another organization while the owning
 -- managers read them.
 -- An employee assigned to a job of a project reads the project's work state
@@ -109,6 +110,16 @@ begin
   exception when others then
     if sqlerrm not like '%work_transition_not_authorized%' then raise; end if;
   end;
+  -- The lifecycle card offers parking to managers only; the function refuses the assigned employee.
+  begin
+    perform public.park_work_target(
+      v_org, v_employee, 'job', v_job, 1, 'material', null, v_employee_record,
+      (now() at time zone 'Europe/Berlin')::date
+    );
+    raise exception 'an employee parked the job';
+  exception when others then
+    if sqlerrm not like '%work_parking_not_authorized%' then raise; end if;
+  end;
 
   select * into v_blocker from public.upsert_work_blocker(
     p_organization_id => v_org, p_blocker_id => null, p_expected_version => null,
@@ -174,6 +185,21 @@ begin
       if v_actor = v_employee or sqlerrm <> 'work_artifact_not_authorized' then raise; end if;
     end;
   end loop;
+
+  -- Four eyes: the author never approves the own report, so a second person must.
+  begin
+    perform public.record_work_artifact_action(
+      p_organization_id => v_org, p_actor_id => v_employee,
+      p_artifact_id => '14170000-0000-0000-0000-000000000030',
+      p_revision_id => '14170000-0000-0000-0000-000000000031',
+      p_action_id => '14170000-0000-0000-0000-000000000033', p_expected_version => 1,
+      p_action_type => 'internal_approved', p_reason => null, p_comment => null,
+      p_responsibility_snapshot => null, p_customer_context => null, p_signature_document_id => null
+    );
+    raise exception 'the author approved the own work report';
+  exception when others then
+    if sqlerrm <> 'work_artifact_self_approval_not_allowed' then raise; end if;
+  end;
 
   -- P1-17: completed work (with a reasoned manager exception for the open blocker)
   -- receives a handover draft.
