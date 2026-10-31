@@ -144,6 +144,185 @@ type ProjectCardProps = UnifiedAuftraegeJobMenuProps &
     jobAssignmentMap: Record<string, string[]>;
   };
 
+type ProjectCardToggleProps = {
+  expanded: boolean;
+  onToggle: () => void;
+};
+
+/** The expand toggle of a project card; a click on it never opens the project. */
+function ProjectCardToggle({ expanded, onToggle }: ProjectCardToggleProps) {
+  return (
+    <PlainButton
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
+      aria-label={expanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
+      aria-expanded={expanded}
+    >
+      <ChevronRight
+        className={cn(
+          'size-3.5 text-muted-foreground transition-transform duration-200',
+          expanded && 'rotate-90',
+        )}
+      />
+    </PlainButton>
+  );
+}
+
+type ProjectEntry = ReturnType<typeof useUnifiedAuftraegeProjectEntry>;
+
+type ProjectCardBodyProps = Pick<ProjectCardProps, 'project' | 'clientName' | 'memberLookup'> & {
+  entry: ProjectEntry;
+  projectHref: string;
+  isPending: boolean;
+  isSettling: boolean;
+  expanded: boolean;
+};
+
+/** A project card's number, linked title and summary. */
+function ProjectCardBody({
+  project,
+  clientName,
+  memberLookup,
+  entry,
+  projectHref,
+  isPending,
+  isSettling,
+  expanded,
+}: ProjectCardBodyProps) {
+  return (
+    <div className="min-w-0 flex-1 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <SettlingIndicator active={isSettling} />
+        {project.projectNumber && (
+          <span className="max-w-[55%] shrink-0 truncate font-mono text-xs text-muted-foreground">
+            {project.projectNumber}
+          </span>
+        )}
+        <MarqueeText className="flex-1 text-sm font-medium">
+          {isPending ? (
+            <span>{getProjectDisplayTitle(project)}</span>
+          ) : (
+            <Link
+              href={projectHref}
+              className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {getProjectDisplayTitle(project)}
+              {entry.hasActiveWork && <ActiveWorkIndicator />}
+            </Link>
+          )}
+        </MarqueeText>
+      </div>
+      <UnifiedAuftraegeProjectCardSummary
+        project={project}
+        clientName={clientName}
+        effectiveStatus={entry.effectiveStatus}
+        progress={entry.progress}
+        trafficLight={entry.trafficLight}
+        expanded={expanded}
+        allProjectUserIds={entry.allProjectUserIds}
+        memberLookup={memberLookup}
+      />
+    </div>
+  );
+}
+
+type ProjectCardHeaderProps = UnifiedAuftraegeProjectMenuProps &
+  ProjectCardBodyProps &
+  Pick<ProjectCardProps, 'isAdminOrManager'> & {
+    onToggle: () => void;
+    onOpen: (() => void) | undefined;
+  };
+
+/** The project's own card row, above its child job cards. */
+function ProjectCardHeader({
+  isAdminOrManager,
+  onToggle,
+  onOpen,
+  jobs,
+  onProjectUpdated,
+  onProjectDeleted,
+  onProjectDeleteRequested,
+  ...bodyProps
+}: ProjectCardHeaderProps) {
+  const { project, projectHref, clientName, isPending, isSettling, expanded } = bodyProps;
+  return (
+    <ListRow
+      interactive={!isPending}
+      unconfirmed={isPending || isSettling}
+      role={isPending ? 'status' : undefined}
+      aria-label={isPending ? 'Wird gespeichert' : undefined}
+      className={cn('items-start gap-2 bg-muted/30', isPending && 'opacity-70')}
+      onClick={onOpen}
+    >
+      {isPending ? (
+        <InlinePending active className="mt-0.5" />
+      ) : (
+        <ProjectCardToggle expanded={expanded} onToggle={onToggle} />
+      )}
+      <ProjectCardBody {...bodyProps} />
+      {isAdminOrManager && !isPending && (
+        <ListRowActions>
+          <ProjectActionsMenu
+            project={project}
+            detailHref={projectHref}
+            clientName={clientName}
+            jobs={jobs}
+            onProjectUpdated={onProjectUpdated}
+            onProjectDeleted={onProjectDeleted}
+            onDeleteRequested={onProjectDeleteRequested}
+          />
+        </ListRowActions>
+      )}
+    </ListRow>
+  );
+}
+
+type ProjectCardChildJobsProps = UnifiedAuftraegeJobMenuProps &
+  Pick<
+    ProjectCardProps,
+    'project' | 'clientName' | 'isAdminOrManager' | 'activeJobIds' | 'rowFeedback' | 'memberLookup'
+  > & {
+    entry: ProjectEntry;
+  };
+
+/** The indented child job cards of an expanded project card. */
+function ProjectCardChildJobs({
+  project,
+  entry,
+  clientName,
+  isAdminOrManager,
+  activeJobIds,
+  rowFeedback,
+  memberLookup,
+  ...jobMenuProps
+}: ProjectCardChildJobsProps) {
+  const { childJobs, clientMap, jobAssignmentMap } = entry;
+  return (
+    <div className="mt-1 space-y-1">
+      {childJobs.map((job) => (
+        <JobCard
+          key={job.id}
+          job={job}
+          clientName={job.clientId ? clientMap[job.clientId] || '—' : clientName}
+          isAdminOrManager={isAdminOrManager}
+          indented
+          project={project}
+          isActive={activeJobIds.has(job.id)}
+          isPending={rowFeedback.pendingIds.has(job.id)}
+          isSettling={rowFeedback.settlingIds.has(job.id)}
+          memberLookup={memberLookup}
+          assignedUserIds={jobAssignmentMap[job.id] ?? []}
+          {...jobMenuProps}
+        />
+      ))}
+    </div>
+  );
+}
+
 const ProjectCard = memo(function ProjectCard({
   project,
   childJobs: initialChildJobs,
@@ -157,13 +336,10 @@ const ProjectCard = memo(function ProjectCard({
   memberLookup,
   jobAssignmentMap: initialAssignmentMap,
   jobs,
-  members,
-  onJobUpdated,
-  onJobDeleted,
-  onJobDeleteRequested,
   onProjectUpdated,
   onProjectDeleted,
   onProjectDeleteRequested,
+  ...jobMenuProps
 }: ProjectCardProps) {
   const router = useRouter();
   const [expanded, setExpanded] = useState(false);
@@ -177,112 +353,41 @@ const ProjectCard = memo(function ProjectCard({
     initialAssignmentMap,
     activeJobIds,
   });
-  const { childPage, childJobs, clientMap, jobAssignmentMap } = entry;
   const isPending = rowFeedback.pendingIds.has(project.id);
   const projectHref = projectDetailHref(project);
 
   return (
     <div>
-      <ListRow
-        interactive={!isPending}
-        unconfirmed={isPending || rowFeedback.settlingIds.has(project.id)}
-        role={isPending ? 'status' : undefined}
-        aria-label={isPending ? 'Wird gespeichert' : undefined}
-        className={cn('items-start gap-2 bg-muted/30', isPending && 'opacity-70')}
-        onClick={isPending ? undefined : () => router.push(projectHref)}
-      >
-        {isPending ? (
-          <InlinePending active className="mt-0.5" />
-        ) : (
-          <PlainButton
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded(!expanded);
-            }}
-            className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent"
-            aria-label={expanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
-            aria-expanded={expanded}
-          >
-            <ChevronRight
-              className={cn(
-                'size-3.5 text-muted-foreground transition-transform duration-200',
-                expanded && 'rotate-90',
-              )}
-            />
-          </PlainButton>
-        )}
-        <div className="min-w-0 flex-1 space-y-1.5">
-          <div className="flex items-center gap-2">
-            <SettlingIndicator active={rowFeedback.settlingIds.has(project.id)} />
-            {project.projectNumber && (
-              <span className="max-w-[55%] shrink-0 truncate font-mono text-xs text-muted-foreground">
-                {project.projectNumber}
-              </span>
-            )}
-            <MarqueeText className="flex-1 text-sm font-medium">
-              {isPending ? (
-                <span>{getProjectDisplayTitle(project)}</span>
-              ) : (
-                <Link
-                  href={projectHref}
-                  className="inline-flex items-center rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {getProjectDisplayTitle(project)}
-                  {entry.hasActiveWork && <ActiveWorkIndicator />}
-                </Link>
-              )}
-            </MarqueeText>
-          </div>
-          <UnifiedAuftraegeProjectCardSummary
-            project={project}
-            clientName={clientName}
-            effectiveStatus={entry.effectiveStatus}
-            progress={entry.progress}
-            trafficLight={entry.trafficLight}
-            expanded={expanded}
-            allProjectUserIds={entry.allProjectUserIds}
-            memberLookup={memberLookup}
-          />
-        </div>
-        {isAdminOrManager && !isPending && (
-          <ListRowActions>
-            <ProjectActionsMenu
-              project={project}
-              detailHref={projectHref}
-              clientName={clientName}
-              jobs={jobs}
-              onProjectUpdated={onProjectUpdated}
-              onProjectDeleted={onProjectDeleted}
-              onDeleteRequested={onProjectDeleteRequested}
-            />
-          </ListRowActions>
-        )}
-      </ListRow>
+      <ProjectCardHeader
+        project={project}
+        entry={entry}
+        projectHref={projectHref}
+        clientName={clientName}
+        memberLookup={memberLookup}
+        isAdminOrManager={isAdminOrManager}
+        isPending={isPending}
+        isSettling={rowFeedback.settlingIds.has(project.id)}
+        expanded={expanded}
+        onToggle={() => setExpanded(!expanded)}
+        onOpen={isPending ? undefined : () => router.push(projectHref)}
+        jobs={jobs}
+        onProjectUpdated={onProjectUpdated}
+        onProjectDeleted={onProjectDeleted}
+        onProjectDeleteRequested={onProjectDeleteRequested}
+      />
 
-      {expanded && pagedChildren && <UnifiedAuftraegeChildPagination childPage={childPage} />}
-      {expanded && childJobs.length > 0 && (
-        <div className="mt-1 space-y-1">
-          {childJobs.map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              clientName={job.clientId ? clientMap[job.clientId] || '—' : clientName}
-              isAdminOrManager={isAdminOrManager}
-              indented
-              project={project}
-              isActive={activeJobIds.has(job.id)}
-              isPending={rowFeedback.pendingIds.has(job.id)}
-              isSettling={rowFeedback.settlingIds.has(job.id)}
-              memberLookup={memberLookup}
-              assignedUserIds={jobAssignmentMap[job.id] ?? []}
-              members={members}
-              onJobUpdated={onJobUpdated}
-              onJobDeleted={onJobDeleted}
-              onJobDeleteRequested={onJobDeleteRequested}
-            />
-          ))}
-        </div>
+      {expanded && pagedChildren && <UnifiedAuftraegeChildPagination childPage={entry.childPage} />}
+      {expanded && entry.childJobs.length > 0 && (
+        <ProjectCardChildJobs
+          project={project}
+          entry={entry}
+          clientName={clientName}
+          isAdminOrManager={isAdminOrManager}
+          activeJobIds={activeJobIds}
+          rowFeedback={rowFeedback}
+          memberLookup={memberLookup}
+          {...jobMenuProps}
+        />
       )}
     </div>
   );

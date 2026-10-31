@@ -1,7 +1,7 @@
 'use client';
 
 import { formatBerlinDateTime as formatDateTime } from '@/lib/utils';
-import { useState } from 'react';
+import { useState, type ComponentProps } from 'react';
 
 import { DetailPageHeader } from '@/components/shared/detail-page-header';
 import { DetailColumns } from '@/components/shared/detail-columns';
@@ -47,6 +47,119 @@ export type RequestDetailData = {
   assignees: Array<{ userId: string; name: string }>;
 };
 
+/** Breadcrumbs, title, badges and the header actions of one request. */
+function RequestDetailHeader(props: ComponentProps<typeof RequestHeaderActions>) {
+  const { request, shownStatus } = props;
+  return (
+    <DetailPageHeader
+      breadcrumbs={[{ label: 'Anfragen', href: '/anfragen' }, { label: request.requestNumber || 'Anfrage' }]}
+      title={request.summary}
+      subtitle={`${REQUEST_CATEGORY_LABELS[request.category]} · ${REQUEST_SOURCE_LABELS[request.source]} · Eingegangen am ${formatDateTime(request.receivedAt)}`}
+      badges={
+        <>
+          <RequestStatusBadge status={shownStatus} />
+          <RequestUrgencyBadge urgency={request.urgency} />
+        </>
+      }
+      actions={<RequestHeaderActions {...props} />}
+    />
+  );
+}
+
+type RequestDetailSectionsProps = Omit<ComponentProps<typeof RequestCustomerCard>, 'request' | 'data'> & {
+  data: RequestDetailData;
+};
+
+/** Customer and facts side by side, then the documents and the history, each failing on its own. */
+function RequestDetailSections({ data, isEditable, ...customerProps }: RequestDetailSectionsProps) {
+  const { request } = data;
+  return (
+    <>
+      <DetailColumns layout="pair">
+        {/* Customer / caller context */}
+        <RequestCustomerCard request={request} data={data} isEditable={isEditable} {...customerProps} />
+
+        {/* Request facts */}
+        <RequestFactsCard request={request} assigneeName={data.assigneeName} />
+      </DetailColumns>
+
+      {data.documents ? (
+        <ContextualDocumentsSection
+          title="Dokumente & Bilder"
+          description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
+          documents={data.documents}
+          documentTarget={{ kind: 'request', requestId: request.id }}
+          canUpload={isEditable}
+          canManage
+        />
+      ) : (
+        <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+      )}
+
+      {/* History */}
+      {data.events ? (
+        <RequestHistoryCard events={data.events} />
+      ) : (
+        <RegionLoadError>Der Verlauf der Anfrage konnte nicht geladen werden.</RegionLoadError>
+      )}
+    </>
+  );
+}
+
+interface RequestDetailDialogsProps {
+  data: RequestDetailData;
+  convertOpen: boolean;
+  onConvertOpenChange: (open: boolean) => void;
+  closeOpen: boolean;
+  onCloseOpenChange: (open: boolean) => void;
+  editOpen: boolean;
+  onEditOpenChange: (open: boolean) => void;
+  /** Fires after the server confirmed a dialog's change. */
+  onSaved: () => void;
+}
+
+/** The convert, close and edit dialogs the header actions open. */
+function RequestDetailDialogs({
+  data,
+  convertOpen,
+  onConvertOpenChange,
+  closeOpen,
+  onCloseOpenChange,
+  editOpen,
+  onEditOpenChange,
+  onSaved,
+}: RequestDetailDialogsProps) {
+  const { request } = data;
+  return (
+    <>
+      <ConvertRequestDialog
+        request={request}
+        requestClient={
+          request.clientId && data.clientName ? { id: request.clientId, name: data.clientName } : null
+        }
+        open={convertOpen}
+        onOpenChange={onConvertOpenChange}
+        onSaved={onSaved}
+      />
+
+      <CloseRequestDialog
+        requestId={request.id}
+        open={closeOpen}
+        onOpenChange={onCloseOpenChange}
+        onSaved={onSaved}
+      />
+
+      <EditRequestDialog
+        request={request}
+        assignees={data.assignees}
+        open={editOpen}
+        onOpenChange={onEditOpenChange}
+        onSaved={onSaved}
+      />
+    </>
+  );
+}
+
 export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const { request } = data;
   const actions = useRequestDetailActions(request);
@@ -63,33 +176,17 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
 
   return (
     <PageShell>
-      <DetailPageHeader
-        breadcrumbs={[
-          { label: 'Anfragen', href: '/anfragen' },
-          { label: request.requestNumber || 'Anfrage' },
-        ]}
-        title={request.summary}
-        subtitle={`${REQUEST_CATEGORY_LABELS[request.category]} · ${REQUEST_SOURCE_LABELS[request.source]} · Eingegangen am ${formatDateTime(request.receivedAt)}`}
-        badges={
-          <>
-            <RequestStatusBadge status={shownStatus} />
-            <RequestUrgencyBadge urgency={request.urgency} />
-          </>
-        }
-        actions={
-          <RequestHeaderActions
-            request={request}
-            shownStatus={shownStatus}
-            isEditable={isEditable}
-            isPending={isPending}
-            isSettling={actions.isSettling}
-            onConvert={() => setConvertOpen(true)}
-            onEdit={() => setEditOpen(true)}
-            onStatusToggle={actions.handleStatusToggle}
-            onClose={() => setCloseOpen(true)}
-            onReopen={actions.handleReopen}
-          />
-        }
+      <RequestDetailHeader
+        request={request}
+        shownStatus={shownStatus}
+        isEditable={isEditable}
+        isPending={isPending}
+        isSettling={actions.isSettling}
+        onConvert={() => setConvertOpen(true)}
+        onEdit={() => setEditOpen(true)}
+        onStatusToggle={actions.handleStatusToggle}
+        onClose={() => setCloseOpen(true)}
+        onReopen={actions.handleReopen}
       />
       {actions.headerError ? (
         <ErrorText className="mx-4 mt-4 sm:mx-6">{actions.headerError}</ErrorText>
@@ -99,66 +196,25 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
         <div className="space-y-4">
           <RequestOutcomeNotices request={request} convertedLink={data.convertedLink} />
 
-          <DetailColumns layout="pair">
-            {/* Customer / caller context */}
-            <RequestCustomerCard
-              request={request}
-              data={data}
-              isEditable={isEditable}
-              isPending={isPending}
-              promoteError={actions.promoteError}
-              onMatch={() => actions.setMatchOpen(true)}
-              onPromote={actions.handlePromote}
-            />
-
-            {/* Request facts */}
-            <RequestFactsCard request={request} assigneeName={data.assigneeName} />
-          </DetailColumns>
-
-          {data.documents ? (
-            <ContextualDocumentsSection
-              title="Dokumente & Bilder"
-              description="Fotos, Nachrichten oder Unterlagen zur Anfrage. Bei einer Umwandlung werden sie automatisch mit dem Auftrag oder Projekt verknüpft."
-              documents={data.documents}
-              documentTarget={{ kind: 'request', requestId: request.id }}
-              canUpload={isEditable}
-              canManage
-            />
-          ) : (
-            <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-          )}
-
-          {/* History */}
-          {data.events ? (
-            <RequestHistoryCard events={data.events} />
-          ) : (
-            <RegionLoadError>Der Verlauf der Anfrage konnte nicht geladen werden.</RegionLoadError>
-          )}
+          <RequestDetailSections
+            data={data}
+            isEditable={isEditable}
+            isPending={isPending}
+            promoteError={actions.promoteError}
+            onMatch={() => actions.setMatchOpen(true)}
+            onPromote={actions.handlePromote}
+          />
         </div>
       </PageBody>
 
-      <ConvertRequestDialog
-        request={request}
-        requestClient={
-          request.clientId && data.clientName ? { id: request.clientId, name: data.clientName } : null
-        }
-        open={convertOpen}
-        onOpenChange={setConvertOpen}
-        onSaved={markSettling}
-      />
-
-      <CloseRequestDialog
-        requestId={request.id}
-        open={closeOpen}
-        onOpenChange={setCloseOpen}
-        onSaved={markSettling}
-      />
-
-      <EditRequestDialog
-        request={request}
-        assignees={data.assignees}
-        open={editOpen}
-        onOpenChange={setEditOpen}
+      <RequestDetailDialogs
+        data={data}
+        convertOpen={convertOpen}
+        onConvertOpenChange={setConvertOpen}
+        closeOpen={closeOpen}
+        onCloseOpenChange={setCloseOpen}
+        editOpen={editOpen}
+        onEditOpenChange={setEditOpen}
         onSaved={markSettling}
       />
 

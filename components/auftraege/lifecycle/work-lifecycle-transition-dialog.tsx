@@ -36,14 +36,14 @@ type WorkTransitionDialogProps = {
   onTransition: (input: WorkTransitionInput) => Promise<string | null>;
 };
 
-export function WorkTransitionDialog({
+/** State, validation and submit of the transition dialog. */
+function useWorkTransitionForm({
   snapshot,
-  targetLabel,
   transition,
   isManager,
   onClose,
   onTransition,
-}: WorkTransitionDialogProps) {
+}: Omit<WorkTransitionDialogProps, 'targetLabel'>) {
   const [reason, setReason] = useState('');
   const [override, setOverride] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +87,32 @@ export function WorkTransitionDialog({
     });
   };
 
+  return {
+    reason,
+    setReason,
+    override,
+    setOverride,
+    error,
+    pending,
+    needsReason,
+    attempted,
+    reasonError,
+    submit,
+  };
+}
+
+export function WorkTransitionDialog({
+  snapshot,
+  targetLabel,
+  transition,
+  isManager,
+  onClose,
+  onTransition,
+}: WorkTransitionDialogProps) {
+  const form = useWorkTransitionForm({ snapshot, transition, isManager, onClose, onTransition });
+  const { reason, setReason, override, setOverride, error, pending, needsReason, attempted, reasonError } =
+    form;
+
   return (
     <Dialog
       open
@@ -96,7 +122,7 @@ export function WorkTransitionDialog({
       pending={pending}
     >
       <DialogContent>
-        <form onSubmit={submit} className="contents" noValidate>
+        <form onSubmit={form.submit} className="contents" noValidate>
           <DialogHeader>
             <DialogTitle>{workTransitionActionLabel(snapshot.executionState, transition)}</DialogTitle>
             <DialogDescription>{`Arbeitsstand für „${targetLabel}“ ändern. Die Änderung wird mit Prüfstand und Version protokolliert.`}</DialogDescription>

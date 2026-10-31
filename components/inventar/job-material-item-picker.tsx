@@ -16,6 +16,48 @@ function NoMatchingItems() {
   );
 }
 
+/** One catalog item with its stock per Lager; a take needs stock somewhere. */
+function PickableItem({
+  item,
+  mode,
+  onAdd,
+}: {
+  item: InventoryPickerOption;
+  mode: MaterialDialogMode;
+  onAdd: (item: InventoryPickerOption) => void;
+}) {
+  const hasStockForTake = mode !== 'take' || item.stockByLocation.some((stock) => stock.quantityOnHand > 0);
+  return (
+    <PlainButton
+      type="button"
+      className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+      onClick={() => onAdd(item)}
+      disabled={!hasStockForTake}
+    >
+      <span className="min-w-0 wrap-anywhere">
+        <span className="block truncate text-sm font-medium">{item.name}</span>
+        <span className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+          {item.internalSku && <span>SKU {item.internalSku}</span>}
+          {item.primaryBarcode && <span>Barcode {item.primaryBarcode}</span>}
+          {item.categoryName && <span>{item.categoryName}</span>}
+          {item.supplierName && <span>{item.supplierName}</span>}
+        </span>
+        <span className="mt-1 block text-xs text-muted-foreground">
+          {item.stockByLocation.length > 0
+            ? item.stockByLocation
+                .map(
+                  (stock) =>
+                    `${stock.locationName}: ${formatInventoryQuantity(stock.quantityOnHand, item.unit)}`,
+                )
+                .join(' · ')
+            : 'Noch keinem Lager zugeordnet'}
+        </span>
+      </span>
+      <Plus className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+    </PlainButton>
+  );
+}
+
 /** The left column of the material dialog: catalog search and the pickable items. */
 export function MaterialItemPicker({
   mode,
@@ -66,43 +108,9 @@ export function MaterialItemPicker({
           <NoMatchingItems />
         ) : (
           <div className="divide-y">
-            {filteredItems.map((item) => {
-              const hasStockForTake =
-                mode !== 'take' || item.stockByLocation.some((stock) => stock.quantityOnHand > 0);
-              return (
-                <PlainButton
-                  key={item.id}
-                  type="button"
-                  className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => onAdd(item)}
-                  disabled={!hasStockForTake}
-                >
-                  <span className="min-w-0 wrap-anywhere">
-                    <span className="block truncate text-sm font-medium">{item.name}</span>
-                    <span className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      {item.internalSku && <span>SKU {item.internalSku}</span>}
-                      {item.primaryBarcode && <span>Barcode {item.primaryBarcode}</span>}
-                      {item.categoryName && <span>{item.categoryName}</span>}
-                      {item.supplierName && <span>{item.supplierName}</span>}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {item.stockByLocation.length > 0
-                        ? item.stockByLocation
-                            .map(
-                              (stock) =>
-                                `${stock.locationName}: ${formatInventoryQuantity(
-                                  stock.quantityOnHand,
-                                  item.unit,
-                                )}`,
-                            )
-                            .join(' · ')
-                        : 'Noch keinem Lager zugeordnet'}
-                    </span>
-                  </span>
-                  <Plus className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                </PlainButton>
-              );
-            })}
+            {filteredItems.map((item) => (
+              <PickableItem key={item.id} item={item} mode={mode} onAdd={onAdd} />
+            ))}
           </div>
         )}
       </div>

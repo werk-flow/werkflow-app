@@ -4,7 +4,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { REQUEST_SOURCE_LABELS, REQUEST_SOURCE_ORDER, type RequestSource } from '@/lib/requests/types';
+import { REQUEST_SOURCE_LABELS, REQUEST_SOURCE_ORDER } from '@/lib/requests/types';
 import type { EditRequestForm } from './use-edit-request-form';
 
 interface EditRequestRoutingFieldsProps {
@@ -22,7 +22,10 @@ export function EditRequestRoutingFields({ assignees, form }: EditRequestRouting
         <Field label="Eingang über" htmlFor="edit-request-source">
           <Select
             value={source}
-            onValueChange={(value) => setSource(value as RequestSource)}
+            onValueChange={(value) => {
+              const nextSource = REQUEST_SOURCE_ORDER.find((candidate) => candidate === value);
+              if (nextSource) setSource(nextSource);
+            }}
             disabled={isLoading}
           >
             <SelectTrigger>

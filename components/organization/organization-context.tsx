@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useBanner } from '@/components/ui/banner';
@@ -86,6 +87,81 @@ async function readOwnMemberships(): Promise<MembershipRead> {
   return { kind: 'rows', rows };
 }
 
+/** The memberships whose organization row is readable, in the shape of the context. */
+function toUserOrgs(rows: MembershipRow[]): UserOrg[] {
+  return rows.flatMap((m) => {
+    const org = m.organizations;
+    return org
+      ? [
+          {
+            orgId: m.organization_id,
+            name: org.name,
+            uniqueCode: org.unique_code,
+            role: m.role,
+            joinedAt: m.joined_at,
+          },
+        ]
+      : [];
+  });
+}
+
+/** Reloads the memberships; a call commits only while `refreshGenerationRef` still holds its generation. */
+async function refreshOwnMemberships({
+  refreshGenerationRef,
+  activeOrgId,
+  showBanner,
+  setMemberships,
+  setActiveOrgId,
+}: {
+  refreshGenerationRef: RefObject<number>;
+  activeOrgId: string | null;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  setMemberships: (memberships: UserOrg[]) => void;
+  setActiveOrgId: (orgId: string | null) => void;
+}): Promise<void> {
+  const generation = ++refreshGenerationRef.current;
+  try {
+    const read = await readOwnMemberships();
+    if (generation !== refreshGenerationRef.current) return;
+
+    if (read.kind === 'failed') {
+      logError(read.label, read.error);
+      showBanner({
+        variant: 'error',
+        message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
+      });
+      return;
+    }
+    if (read.kind === 'signed-out') {
+      setMemberships([]);
+      setActiveOrgId(null);
+      return;
+    }
+
+    const newMemberships = toUserOrgs(read.rows);
+
+    setMemberships(newMemberships);
+
+    if (activeOrgId && !newMemberships.some((m) => m.orgId === activeOrgId)) {
+      // A selection the user makes meanwhile invalidates this fallback (see setActiveOrg).
+      if (generation !== refreshGenerationRef.current) return;
+      const newActiveId = newMemberships[0]?.orgId ?? null;
+      if (newActiveId) {
+        await setActiveOrgCookie(newActiveId).then(rejectRefusal);
+      }
+      if (generation !== refreshGenerationRef.current) return;
+      setActiveOrgId(newActiveId);
+    }
+  } catch (error) {
+    if (generation !== refreshGenerationRef.current) return;
+    logError('OrganizationProvider: membership refresh failed', error);
+    showBanner({
+      variant: 'error',
+      message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
+    });
+  }
+}
+
 function getParentListPath(pathname: string): string | null {
   const detailRoutePatterns = [
     { pattern: /^\/auftraege\/[^/]+$/, parent: '/auftraege' },
@@ -102,6 +178,63 @@ function getParentListPath(pathname: string): string | null {
   }
 
   return null;
+}
+
+/** Adopts new server props into the provider's state; the setters are the provider's own. */
+function useAdoptedServerProps({
+  initialMemberships,
+  initialActiveOrgId,
+  setMemberships,
+  setActiveOrgId,
+}: {
+  initialMemberships: UserOrg[];
+  initialActiveOrgId: string | null;
+  setMemberships: (memberships: UserOrg[]) => void;
+  setActiveOrgId: (orgId: string | null) => void;
+}): void {
+  // New server props (e.g. after router.refresh()) are adopted during render,
+  // never in an effect (realtime-and-caching checklist).
+  const [adoptedProps, setAdoptedProps] = useState({
+    initialMemberships,
+    initialActiveOrgId,
+  });
+  if (
+    initialMemberships !== adoptedProps.initialMemberships ||
+    initialActiveOrgId !== adoptedProps.initialActiveOrgId
+  ) {
+    setAdoptedProps({ initialMemberships, initialActiveOrgId });
+    if (initialMemberships !== adoptedProps.initialMemberships) setMemberships(initialMemberships);
+    if (initialActiveOrgId !== adoptedProps.initialActiveOrgId) setActiveOrgId(initialActiveOrgId);
+  }
+}
+
+/** Writes the organization the server resolved from a fallback into the cookie, once per mount. */
+function useFallbackOrgCookieSync({
+  initialActiveOrgCookieNeedsSync,
+  initialActiveOrgId,
+  showBanner,
+}: {
+  initialActiveOrgCookieNeedsSync: boolean;
+  initialActiveOrgId: string | null;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+}): void {
+  // Proactively set the cookie when the active org is resolved from fallback
+  // so that subsequent server-side renders can read it immediately.
+  const hasSetCookieRef = useRef(false);
+  useEffect(() => {
+    if (initialActiveOrgCookieNeedsSync && initialActiveOrgId && !hasSetCookieRef.current) {
+      hasSetCookieRef.current = true;
+      setActiveOrgCookie(initialActiveOrgId)
+        .then(rejectRefusal)
+        .catch((error: unknown) => {
+          logError('OrganizationProvider: active organization sync failed', error);
+          showBanner({
+            variant: 'error',
+            message: 'Die aktive Organisation konnte nicht synchronisiert werden.',
+          });
+        });
+    }
+  }, [initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner]);
 }
 
 // Context
@@ -133,105 +266,29 @@ export function OrganizationProvider({
   // picker; actual organization switches have their own explicit lock.
   const isLoading = false;
 
-  // New server props (e.g. after router.refresh()) are adopted during render,
-  // never in an effect (realtime-and-caching checklist).
-  const [adoptedProps, setAdoptedProps] = useState({
-    initialMemberships,
-    initialActiveOrgId,
-  });
-  if (
-    initialMemberships !== adoptedProps.initialMemberships ||
-    initialActiveOrgId !== adoptedProps.initialActiveOrgId
-  ) {
-    setAdoptedProps({ initialMemberships, initialActiveOrgId });
-    if (initialMemberships !== adoptedProps.initialMemberships) setMemberships(initialMemberships);
-    if (initialActiveOrgId !== adoptedProps.initialActiveOrgId) setActiveOrgId(initialActiveOrgId);
-  }
+  useAdoptedServerProps({ initialMemberships, initialActiveOrgId, setMemberships, setActiveOrgId });
 
-  // Proactively set the cookie when the active org is resolved from fallback
-  // so that subsequent server-side renders can read it immediately.
-  const hasSetCookieRef = useRef(false);
-  useEffect(() => {
-    if (initialActiveOrgCookieNeedsSync && initialActiveOrgId && !hasSetCookieRef.current) {
-      hasSetCookieRef.current = true;
-      setActiveOrgCookie(initialActiveOrgId)
-        .then(rejectRefusal)
-        .catch((error: unknown) => {
-          logError('OrganizationProvider: active organization sync failed', error);
-          showBanner({
-            variant: 'error',
-            message: 'Die aktive Organisation konnte nicht synchronisiert werden.',
-          });
-        });
-    }
-  }, [initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner]);
+  useFallbackOrgCookieSync({ initialActiveOrgCookieNeedsSync, initialActiveOrgId, showBanner });
 
   const activeOrg = memberships.find((m) => m.orgId === activeOrgId) ?? null;
 
   // Overlapping refreshes must not interleave: only the newest call commits.
   const refreshGenerationRef = useRef(0);
-  const refreshMemberships = useCallback(async () => {
-    const generation = ++refreshGenerationRef.current;
-    try {
-      const read = await readOwnMemberships();
-      if (generation !== refreshGenerationRef.current) return;
-
-      if (read.kind === 'failed') {
-        logError(read.label, read.error);
-        showBanner({
-          variant: 'error',
-          message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
-        });
-        return;
-      }
-      if (read.kind === 'signed-out') {
-        setMemberships([]);
-        setActiveOrgId(null);
-        return;
-      }
-
-      const newMemberships: UserOrg[] = read.rows.flatMap((m) => {
-        const org = m.organizations;
-        return org
-          ? [
-              {
-                orgId: m.organization_id,
-                name: org.name,
-                uniqueCode: org.unique_code,
-                role: m.role,
-                joinedAt: m.joined_at,
-              },
-            ]
-          : [];
-      });
-
-      setMemberships(newMemberships);
-
-      if (activeOrgId && !newMemberships.some((m) => m.orgId === activeOrgId)) {
-        // A selection the user makes meanwhile invalidates this fallback (see setActiveOrg).
-        if (generation !== refreshGenerationRef.current) return;
-        const newActiveId = newMemberships[0]?.orgId ?? null;
-        if (newActiveId) {
-          await setActiveOrgCookie(newActiveId).then(rejectRefusal);
-        }
-        if (generation !== refreshGenerationRef.current) return;
-        setActiveOrgId(newActiveId);
-      }
-    } catch (error) {
-      if (generation !== refreshGenerationRef.current) return;
-      logError('OrganizationProvider: membership refresh failed', error);
-      showBanner({
-        variant: 'error',
-        message: 'Die Organisationsdaten konnten nicht aktualisiert werden.',
-      });
-    }
-  }, [activeOrgId, showBanner]);
+  const refreshMemberships = useCallback(
+    () =>
+      refreshOwnMemberships({
+        refreshGenerationRef,
+        activeOrgId,
+        showBanner,
+        setMemberships,
+        setActiveOrgId,
+      }),
+    [activeOrgId, showBanner],
+  );
 
   const setActiveOrg = useCallback(
     async (orgId: string) => {
-      if (orgId === activeOrgId || pendingOrgIdRef.current) {
-        return;
-      }
+      if (orgId === activeOrgId || pendingOrgIdRef.current) return;
 
       pendingOrgIdRef.current = orgId;
       setIsSwitchingOrg(true);

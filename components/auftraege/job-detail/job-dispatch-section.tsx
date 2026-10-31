@@ -81,6 +81,69 @@ function useJobDispatchCards({
   return { cards, loadError, refresh, isRefreshing: view.isRefreshing, isStale: view.isStale };
 }
 
+type DispatchActionError = { dispatchId: string; message: string };
+
+/** Acknowledges the card's revision; a failure stays on that card, and the cards re-read either way. */
+async function acknowledgeDispatchCard({
+  card,
+  runOnCard,
+  setActionError,
+  refresh,
+}: {
+  card: EmployeeDispatchCard;
+  runOnCard: ReturnType<typeof useBusyIds>['run'];
+  setActionError: (error: DispatchActionError | null) => void;
+  refresh: () => Promise<void>;
+}) {
+  setActionError(null);
+  try {
+    const result = await runOnCard(card.dispatchId, () =>
+      acknowledgeDispatch(card.dispatchId, card.revisionNumber),
+    );
+    // A success renders the route in acknowledgeDispatch's response.
+    if (!result.success) {
+      setActionError({
+        dispatchId: card.dispatchId,
+        message: dispatchErrorMessage(result.error),
+      });
+    }
+  } catch {
+    setActionError({
+      dispatchId: card.dispatchId,
+      message: dispatchErrorMessage('unexpected_error'),
+    });
+  }
+  // Re-read either way: a rejected acknowledgement usually means the
+  // card itself changed (new revision, withdrawn dispatch).
+  await refresh();
+}
+
+/** The section with only its load failure and a retry. */
+function JobDispatchLoadError({
+  loadError,
+  refresh,
+  isRefreshing,
+}: {
+  loadError: string;
+  refresh: () => Promise<void>;
+  isRefreshing: boolean;
+}) {
+  return (
+    <section
+      className="rounded-lg border bg-card p-4 sm:p-5"
+      aria-labelledby="job-dispatch-heading"
+      data-testid="job-dispatch-section"
+    >
+      <SectionTitle id="job-dispatch-heading" icon={<Send className="size-4" />} className="mb-2">
+        Mein Einsatz
+      </SectionTitle>
+      <SectionError onRetry={() => void refresh()} retryPending={isRefreshing}>
+        {loadError}
+      </SectionError>
+    </section>
+  );
+}
+
 export function JobDispatchSection({
   jobId,
   initialCards,
@@ -103,29 +166,7 @@ export function JobDispatchSection({
   });
 
   const handleAcknowledge = useCallback(
-    async (card: EmployeeDispatchCard) => {
-      setActionError(null);
-      try {
-        const result = await runOnCard(card.dispatchId, () =>
-          acknowledgeDispatch(card.dispatchId, card.revisionNumber),
-        );
-        // A success renders the route in acknowledgeDispatch's response.
-        if (!result.success) {
-          setActionError({
-            dispatchId: card.dispatchId,
-            message: dispatchErrorMessage(result.error),
-          });
-        }
-      } catch {
-        setActionError({
-          dispatchId: card.dispatchId,
-          message: dispatchErrorMessage('unexpected_error'),
-        });
-      }
-      // Re-read either way: a rejected acknowledgement usually means the
-      // card itself changed (new revision, withdrawn dispatch).
-      await refresh();
-    },
+    (card: EmployeeDispatchCard) => acknowledgeDispatchCard({ card, runOnCard, setActionError, refresh }),
     [refresh, runOnCard],
   );
 
@@ -138,20 +179,7 @@ export function JobDispatchSection({
   // An initial load failure must stay visible instead of silently reading as
   // "kein Einsatz".
   if (loadError) {
-    return (
-      <section
-        className="rounded-lg border bg-card p-4 sm:p-5"
-        aria-labelledby="job-dispatch-heading"
-        data-testid="job-dispatch-section"
-      >
-        <SectionTitle id="job-dispatch-heading" icon={<Send className="size-4" />} className="mb-2">
-          Mein Einsatz
-        </SectionTitle>
-        <SectionError onRetry={() => void refresh()} retryPending={isRefreshing}>
-          {loadError}
-        </SectionError>
-      </section>
-    );
+    return <JobDispatchLoadError loadError={loadError} refresh={refresh} isRefreshing={isRefreshing} />;
   }
   if (!cards || cards.length === 0) return null;
   const primaryPendingDispatchId = cards.find((card) => card.myState === 'ausstehend')?.dispatchId;

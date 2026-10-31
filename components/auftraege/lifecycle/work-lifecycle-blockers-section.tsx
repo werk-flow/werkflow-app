@@ -7,7 +7,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { FormDisclosure } from '@/components/ui/form-disclosure';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { formatBerlin } from '@/lib/utils';
-import { WORK_BLOCKER_REASON_LABELS, type WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
+import {
+  WORK_BLOCKER_REASON_LABELS,
+  type WorkBlocker,
+  type WorkLifecycleSnapshot,
+} from '@/lib/work-lifecycle/types';
 import type { WorkLifecycleDialogState } from './work-lifecycle-dialog-state';
 
 function formatReviewDate(value: string | null): string {
@@ -23,6 +27,55 @@ type WorkLifecycleBlockersSectionProps = {
   rowBusy: { isBusy: (id: string) => boolean };
   setDialog: (dialog: WorkLifecycleDialogState | null) => void;
 };
+
+/** Continue a parked target, or edit and resolve a blocker. */
+function BlockerRowActions({
+  blocker,
+  rowBusy,
+  setDialog,
+}: {
+  blocker: WorkBlocker;
+  rowBusy: WorkLifecycleBlockersSectionProps['rowBusy'];
+  setDialog: WorkLifecycleBlockersSectionProps['setDialog'];
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <InlinePending active={rowBusy.isBusy(blocker.id)} label="Blocker wird aktualisiert" />
+      {blocker.kind === 'parking' ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={rowBusy.isBusy(blocker.id)}
+          onClick={() => setDialog({ type: 'unpark', blocker })}
+        >
+          Weiterplanen
+        </Button>
+      ) : (
+        <>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={rowBusy.isBusy(blocker.id)}
+            onClick={() => setDialog({ type: 'blocker', blocker })}
+          >
+            Bearbeiten
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={rowBusy.isBusy(blocker.id)}
+            onClick={() => setDialog({ type: 'resolve-blocker', blocker })}
+          >
+            Lösen
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
 
 export function WorkLifecycleBlockersSection({
   snapshot,
@@ -74,41 +127,7 @@ export function WorkLifecycleBlockersSection({
                   (blocker.kind === 'blocker' &&
                     ownOwnerId !== null &&
                     blocker.responsible_employee_record_id === ownOwnerId)) && (
-                  <div className="flex items-center gap-1">
-                    <InlinePending active={rowBusy.isBusy(blocker.id)} label="Blocker wird aktualisiert" />
-                    {blocker.kind === 'parking' ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={rowBusy.isBusy(blocker.id)}
-                        onClick={() => setDialog({ type: 'unpark', blocker })}
-                      >
-                        Weiterplanen
-                      </Button>
-                    ) : (
-                      <>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          disabled={rowBusy.isBusy(blocker.id)}
-                          onClick={() => setDialog({ type: 'blocker', blocker })}
-                        >
-                          Bearbeiten
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={rowBusy.isBusy(blocker.id)}
-                          onClick={() => setDialog({ type: 'resolve-blocker', blocker })}
-                        >
-                          Lösen
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                  <BlockerRowActions blocker={blocker} rowBusy={rowBusy} setDialog={setDialog} />
                 )}
             </div>
           </div>
