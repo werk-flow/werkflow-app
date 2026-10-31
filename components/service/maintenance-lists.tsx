@@ -212,7 +212,7 @@ export function MaintenanceDueList({
   );
 }
 
-type MaintenanceCoverage = MaintenanceWorkspace['coverages'][number];
+export type MaintenanceCoverage = MaintenanceWorkspace['coverages'][number];
 
 function MaintenancePendingCoverageRow({ draft }: { draft: MaintenanceCoveragePendingDraft }): ReactElement {
   return (

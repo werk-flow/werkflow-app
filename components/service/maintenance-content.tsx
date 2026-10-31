@@ -20,7 +20,12 @@ import { MaintenanceCoverageDialog } from './maintenance-coverage-dialog';
 import { MaintenanceCoverageDocumentsDialog } from './maintenance-coverage-documents-dialog';
 import { MaintenanceCoverageFollowUpDialog } from './maintenance-coverage-follow-up-dialog';
 import { MaintenanceDueActionDialog } from './maintenance-due-action-dialog';
-import { MaintenanceCoverageList, MaintenanceDueList, type DueAction } from './maintenance-lists';
+import {
+  MaintenanceCoverageList,
+  MaintenanceDueList,
+  type DueAction,
+  type MaintenanceCoverage,
+} from './maintenance-lists';
 import { MaintenancePlanActionDialog } from './maintenance-plan-action-dialog';
 import { MaintenancePlanCards, type PlanAction } from './maintenance-plan-cards';
 import { MaintenancePlanDialog } from './maintenance-plan-dialog';
@@ -87,8 +92,6 @@ export function MaintenanceContent({
 function isMaintenanceList(value: string): value is MaintenanceList {
   return Object.hasOwn(MAINTENANCE_PAGE_PARAMS, value);
 }
-
-type MaintenanceCoverage = MaintenanceWorkspace['coverages'][number];
 
 /** The record each workspace dialog is open for, or null while it is closed. */
 function useMaintenanceDialogTargets() {
