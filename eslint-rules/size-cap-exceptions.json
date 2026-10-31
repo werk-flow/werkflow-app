@@ -85,9 +85,6 @@
     "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
     "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
     "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
-    "components/clock-action-list.tsx": { "ClockActionList": 172 },
-    "components/clock-fab.tsx": { "ClockFAB": 133 },
-    "components/clock-state-provider.tsx": { "ClockStateProvider": 125 },
     "components/inventar/inventory-content.tsx": {
       "InventoryContent": 148,
       "InventoryTable": 92,
@@ -110,8 +107,6 @@
     "components/inventar/use-inventory-editing.ts": { "useInventoryItemEditor": 86 },
     "components/inventar/use-job-material-dialog.ts": { "useJobMaterialDialog": 159 },
     "components/inventar/use-job-material-mutations.ts": { "useJobMaterialMutations": 117 },
-    "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 96 },
-    "components/job-picker-modal.tsx": { "JobPickerModal": 168 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
@@ -166,7 +161,6 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/manual-entry-form-content.tsx": { "ManualEntryFormContent": 121 },
     "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
     "components/mitarbeiter/invitations-table.tsx": { "InvitationsTable": 104 },
     "components/mitarbeiter/invite-actions-menu.tsx": { "InviteActionsMenu": 108 },
@@ -245,8 +239,6 @@
     "components/shared/use-embedded-auftraege-mutations.ts": { "useEmbeddedAuftraegeMutations": 121 },
     "components/shared/use-embedded-auftraege-state.ts": { "useEmbeddedAuftraegeEntries": 126 },
     "components/sidebar/app-shell.tsx": { "SidebarContent": 94 },
-    "components/time-activity-dialog.tsx": { "TimeActivityDialogForm": 178 },
-    "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
     "components/ui/calendar.tsx": { "Calendar": 122 },
     "components/ui/date-picker.tsx": { "DatePicker": 120 },
     "components/ui/dialog.tsx": { "DialogContent": 84 },
@@ -260,10 +252,6 @@
     "components/ui/use-date-picker-segments.ts": {
       "handleDateSegmentKeyDown": 93,
       "useDatePickerSegments": 141
-    },
-    "components/use-manual-entry-form-submit.ts": {
-      "useManualEntrySubmit": 138,
-      "useManualEntrySubmit > handleSubmit": 98
     },
     "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
     "components/zeiterfassung/pending-approvals-cards.tsx": {
