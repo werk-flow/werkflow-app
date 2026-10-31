@@ -93,18 +93,37 @@ export function CustomerRelationshipWorkspace({
         onFollowUp={followUps.openNewFollowUp}
       />
 
-      <CustomerFollowUpDialog
-        followUpDraft={followUps.followUpDraft}
+      <WorkspaceFollowUpDialog
+        followUps={followUps}
         followUpOwners={bundle.followUpOwners}
-        followUpError={followUps.followUpError}
-        followUpTitleError={followUps.followUpTitleError}
-        followUpOwnerError={followUps.followUpOwnerError}
-        followUpDueError={followUps.followUpDueError}
         isPending={isPending}
-        onDraftChange={followUps.setFollowUpDraft}
-        onSave={followUps.saveFollowUp}
-        onClose={followUps.closeFollowUpDialog}
       />
     </div>
+  );
+}
+
+/** The follow-up dialog, bound to the workspace's follow-up editor. */
+function WorkspaceFollowUpDialog({
+  followUps,
+  followUpOwners,
+  isPending,
+}: {
+  followUps: ReturnType<typeof useFollowUpEditor>;
+  followUpOwners: CustomerRelationshipBundle['followUpOwners'];
+  isPending: boolean;
+}) {
+  return (
+    <CustomerFollowUpDialog
+      followUpDraft={followUps.followUpDraft}
+      followUpOwners={followUpOwners}
+      followUpError={followUps.followUpError}
+      followUpTitleError={followUps.followUpTitleError}
+      followUpOwnerError={followUps.followUpOwnerError}
+      followUpDueError={followUps.followUpDueError}
+      isPending={isPending}
+      onDraftChange={followUps.setFollowUpDraft}
+      onSave={followUps.saveFollowUp}
+      onClose={followUps.closeFollowUpDialog}
+    />
   );
 }

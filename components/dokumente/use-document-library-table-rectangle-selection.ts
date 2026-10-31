@@ -42,7 +42,7 @@ function intersects(first: Rectangle, second: Rectangle): boolean {
 }
 
 function shouldIgnorePointerDown(event: ReactPointerEvent<HTMLDivElement>): boolean {
-  const target = event.target as HTMLElement | null;
+  const target = event.target instanceof Element ? event.target : null;
   return (
     event.button !== 0 ||
     !target ||
@@ -51,6 +51,56 @@ function shouldIgnorePointerDown(event: ReactPointerEvent<HTMLDivElement>): bool
     Boolean(target.closest('tr')) ||
     Boolean(target.closest('button, a, input, textarea, select, [role="menuitem"]'))
   );
+}
+
+/** The rows the box crosses, measured in the container's scrolled coordinates. */
+function getRowsInSelectionBox({
+  container,
+  rows,
+  sortedItems,
+  selectionBox,
+}: {
+  container: HTMLDivElement;
+  rows: Map<string, HTMLTableRowElement>;
+  sortedItems: DocumentLibraryTableItem[];
+  selectionBox: NonNullable<SelectionBox>;
+}): DocumentTableItemSelection {
+  const selectionRect = {
+    left: Math.min(selectionBox.startX, selectionBox.currentX),
+    top: Math.min(selectionBox.startY, selectionBox.currentY),
+    right: Math.max(selectionBox.startX, selectionBox.currentX),
+    bottom: Math.max(selectionBox.startY, selectionBox.currentY),
+  };
+
+  const nextFolderIds = new Set<string>();
+  const nextDocumentIds = new Set<string>();
+  const containerRect = container.getBoundingClientRect();
+
+  for (const item of sortedItems) {
+    const row = rows.get(item.key);
+    if (!row) continue;
+
+    const rowRect = row.getBoundingClientRect();
+    const relativeRowRect = {
+      left: 0,
+      top: rowRect.top - containerRect.top + container.scrollTop,
+      right: container.scrollWidth,
+      bottom: rowRect.bottom - containerRect.top + container.scrollTop,
+    };
+
+    if (!intersects(selectionRect, relativeRowRect)) continue;
+
+    if (item.kind === 'folder') {
+      nextFolderIds.add(item.folder.id);
+    } else {
+      nextDocumentIds.add(item.document.id);
+    }
+  }
+
+  return {
+    folderIds: nextFolderIds,
+    documentIds: nextDocumentIds,
+  };
 }
 
 type RectangleSelectionOptions = {
@@ -85,42 +135,9 @@ export function useDocumentLibraryTableRectangleSelection({
     const container = tableContainerRef.current;
     if (!container || !nextBox) return;
 
-    const selectionRect = {
-      left: Math.min(nextBox.startX, nextBox.currentX),
-      top: Math.min(nextBox.startY, nextBox.currentY),
-      right: Math.max(nextBox.startX, nextBox.currentX),
-      bottom: Math.max(nextBox.startY, nextBox.currentY),
-    };
-
-    const nextFolderIds = new Set<string>();
-    const nextDocumentIds = new Set<string>();
-    const containerRect = container.getBoundingClientRect();
-
-    for (const item of sortedItems) {
-      const row = rowRefs.current.get(item.key);
-      if (!row) continue;
-
-      const rowRect = row.getBoundingClientRect();
-      const relativeRowRect = {
-        left: 0,
-        top: rowRect.top - containerRect.top + container.scrollTop,
-        right: container.scrollWidth,
-        bottom: rowRect.bottom - containerRect.top + container.scrollTop,
-      };
-
-      if (!intersects(selectionRect, relativeRowRect)) continue;
-
-      if (item.kind === 'folder') {
-        nextFolderIds.add(item.folder.id);
-      } else {
-        nextDocumentIds.add(item.document.id);
-      }
-    }
-
-    onRectangleSelectionChange({
-      folderIds: nextFolderIds,
-      documentIds: nextDocumentIds,
-    });
+    onRectangleSelectionChange(
+      getRowsInSelectionBox({ container, rows: rowRefs.current, sortedItems, selectionBox: nextBox }),
+    );
   }
 
   function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -136,13 +153,7 @@ export function useDocumentLibraryTableRectangleSelection({
     suppressClickRef.current = false;
     event.preventDefault();
     container.setPointerCapture(event.pointerId);
-    setSelectionBox({
-      startX,
-      startY,
-      currentX: startX,
-      currentY: startY,
-      isDragging: false,
-    });
+    setSelectionBox({ startX, startY, currentX: startX, currentY: startY, isDragging: false });
   }
 
   function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>): void {
@@ -158,12 +169,7 @@ export function useDocumentLibraryTableRectangleSelection({
       selectionBox.isDragging ||
       Math.abs(currentX - selectionBox.startX) > 4 ||
       Math.abs(currentY - selectionBox.startY) > 4;
-    const nextBox = {
-      ...selectionBox,
-      currentX,
-      currentY,
-      isDragging,
-    };
+    const nextBox = { ...selectionBox, currentX, currentY, isDragging };
 
     if (isDragging) {
       suppressClickRef.current = true;

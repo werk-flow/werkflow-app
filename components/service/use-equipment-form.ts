@@ -64,6 +64,124 @@ export type EquipmentFormController = {
   handleSubmit: () => Promise<void>;
 };
 
+type EquipmentActionRunners = {
+  runCreate: typeof createInstalledEquipment;
+  runUpdate: typeof updateInstalledEquipment;
+  runReplace: typeof replaceInstalledEquipment;
+};
+
+/** The list row a created record shows until the server confirms it. */
+function pendingEquipmentDraft(
+  equipmentId: string,
+  form: EquipmentFormState,
+  clientOptions: JobEntityOptionsState['options'],
+  siteOptions: EquipmentSiteOption[],
+): EquipmentPendingDraft {
+  return {
+    id: equipmentId,
+    name: form.name.trim(),
+    category: form.category,
+    state: form.state,
+    clientName: clientOptions.find((client) => client.value === form.clientId)?.label ?? '',
+    siteName: siteOptions.find((site) => site.value === form.siteId)?.label ?? '',
+    manufacturer: form.manufacturer || null,
+    model: form.model || null,
+  };
+}
+
+/** The create's outcome for the caller's banner; it never rejects. */
+function equipmentSubmissionResult(
+  created: ReturnType<typeof createInstalledEquipment>,
+): EquipmentCreateSubmission['result'] {
+  return created.then(
+    (outcome) =>
+      outcome.success
+        ? { success: true as const }
+        : {
+            success: false as const,
+            error: outcome.error,
+            message: equipmentErrorMessage(outcome.error),
+          },
+    () => ({
+      success: false as const,
+      error: 'unexpected_error',
+      message: GENERIC_EQUIPMENT_FORM_ERROR,
+    }),
+  );
+}
+
+/** The awaited create, edit or replace of the dialog's mode. */
+async function saveEquipment({
+  mode,
+  initial,
+  form,
+  payload,
+  idempotencyKey,
+  effectiveAt,
+  runners: { runCreate, runUpdate, runReplace },
+}: {
+  mode: EquipmentFormMode;
+  initial: EquipmentDetail | null | undefined;
+  form: EquipmentFormState;
+  payload: EquipmentFormInput;
+  idempotencyKey: string;
+  effectiveAt: string;
+  runners: EquipmentActionRunners;
+}) {
+  if (mode === 'create') {
+    return runCreate({
+      ...payload,
+      equipmentId: crypto.randomUUID(),
+      idempotencyKey,
+      effectiveAt,
+    });
+  }
+  if (mode === 'edit' && initial) {
+    return runUpdate({
+      ...payload,
+      equipmentId: initial.id,
+      expectedVersion: initial.version,
+      reason: form.reason ?? '',
+      idempotencyKey,
+    });
+  }
+  if (initial) {
+    return runReplace({
+      ...payload,
+      predecessorId: initial.id,
+      successorId: crypto.randomUUID(),
+      expectedVersion: initial.version,
+      effectiveAt,
+      reason: form.reason ?? '',
+      idempotencyKey,
+    });
+  }
+  return {
+    success: false as const,
+    error: 'installed_equipment_action_failed',
+  };
+}
+
+/**
+ * The customer is searched on the server; its sites and equipment load
+ * when it is chosen. A record under edit keeps its own labels meanwhile.
+ */
+function useEquipmentFormOptions(
+  form: EquipmentFormState,
+  initial: EquipmentDetail | null | undefined,
+): Pick<EquipmentFormController, 'clientSearch' | 'clientOption' | 'siteOptions' | 'parentOptions'> {
+  const clientSearch = useJobEntityOptions(
+    { kind: 'clients' },
+    form.clientId ? [form.clientId] : [],
+    initial ? [{ value: initial.clientId, label: initial.clientName }] : [],
+  );
+  const clientOption = useClientOption(form.clientId);
+  const sites = clientOption.client?.sites ?? [];
+  const siteOptions = equipmentSiteOptions(sites, form, initial);
+  const parentOptions = equipmentParentOptions(sites, form, initial);
+  return { clientSearch, clientOption, siteOptions, parentOptions };
+}
+
 /** Form state, dependent option lists and the create/edit/replace submit of the equipment dialog. */
 export function useEquipmentForm({
   onOpenChange,
@@ -80,17 +198,7 @@ export function useEquipmentForm({
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
 
-  // The customer is searched on the server; its sites and equipment load
-  // when it is chosen. A record under edit keeps its own labels meanwhile.
-  const clientSearch = useJobEntityOptions(
-    { kind: 'clients' },
-    form.clientId ? [form.clientId] : [],
-    initial ? [{ value: initial.clientId, label: initial.clientName }] : [],
-  );
-  const clientOption = useClientOption(form.clientId);
-  const sites = clientOption.client?.sites ?? [];
-  const siteOptions = equipmentSiteOptions(sites, form, initial);
-  const parentOptions = equipmentParentOptions(sites, form, initial);
+  const { clientSearch, clientOption, siteOptions, parentOptions } = useEquipmentFormOptions(form, initial);
   const isPending = isCreating || isUpdating || isReplacing;
   const missingFields = missingEquipmentFields(form, mode);
   const fieldErrors = attempted ? missingFields : {};
@@ -113,70 +221,23 @@ export function useEquipmentForm({
     if (mode === 'create' && onSubmitted) {
       const equipmentId = crypto.randomUUID();
       onSubmitted({
-        draft: {
-          id: equipmentId,
-          name: form.name.trim(),
-          category: form.category,
-          state: form.state,
-          clientName: clientSearch.options.find((client) => client.value === form.clientId)?.label ?? '',
-          siteName: siteOptions.find((site) => site.value === form.siteId)?.label ?? '',
-          manufacturer: form.manufacturer || null,
-          model: form.model || null,
-        },
-        result: runCreate({
-          ...payload,
-          equipmentId,
-          idempotencyKey,
-          effectiveAt,
-        }).then(
-          (created) =>
-            created.success
-              ? { success: true as const }
-              : {
-                  success: false as const,
-                  error: created.error,
-                  message: equipmentErrorMessage(created.error),
-                },
-          () => ({
-            success: false as const,
-            error: 'unexpected_error',
-            message: GENERIC_EQUIPMENT_FORM_ERROR,
-          }),
+        draft: pendingEquipmentDraft(equipmentId, form, clientSearch.options, siteOptions),
+        result: equipmentSubmissionResult(
+          runCreate({ ...payload, equipmentId, idempotencyKey, effectiveAt }),
         ),
       });
       onOpenChange(false);
       return;
     }
-    const result =
-      mode === 'create'
-        ? await runCreate({
-            ...payload,
-            equipmentId: crypto.randomUUID(),
-            idempotencyKey,
-            effectiveAt,
-          })
-        : mode === 'edit' && initial
-          ? await runUpdate({
-              ...payload,
-              equipmentId: initial.id,
-              expectedVersion: initial.version,
-              reason: form.reason ?? '',
-              idempotencyKey,
-            })
-          : initial
-            ? await runReplace({
-                ...payload,
-                predecessorId: initial.id,
-                successorId: crypto.randomUUID(),
-                expectedVersion: initial.version,
-                effectiveAt,
-                reason: form.reason ?? '',
-                idempotencyKey,
-              })
-            : {
-                success: false as const,
-                error: 'installed_equipment_action_failed',
-              };
+    const result = await saveEquipment({
+      mode,
+      initial,
+      form,
+      payload,
+      idempotencyKey,
+      effectiveAt,
+      runners: { runCreate, runUpdate, runReplace },
+    });
     if (!result.success) {
       setError(equipmentErrorMessage(result.error));
       return;

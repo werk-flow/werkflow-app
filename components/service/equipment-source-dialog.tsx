@@ -17,7 +17,7 @@ import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import { linkInstalledEquipmentSource } from '@/lib/installed-equipment/actions';
 import type { EquipmentActionDialogProps } from './use-equipment-detail-actions';
 import { useEquipmentSourceOptions } from './use-equipment-source-options';
@@ -61,18 +61,30 @@ function SourceKindField({
   );
 }
 
-/**
- * Links an exact source to the equipment. A job or project is searched on the
- * server first; its Arbeitsnachweis revisions and handover releases are read
- * only once it is chosen. Documents are the equipment's own. Mount it per
- * opening, so every opening starts empty.
- */
-export function EquipmentSourceDialog({
-  open,
-  onOpenChange,
+type SourceWork = { type: 'job' | 'project'; id: string };
+type SourceOptions = ReturnType<typeof useEquipmentSourceOptions>;
+
+/** The exact option when one is chosen, otherwise the job or project itself. */
+function sourceTarget(exactOption: SourceOptions['options'][number] | undefined, work: SourceWork | null) {
+  return exactOption
+    ? {
+        targetType: exactOption.targetType,
+        targetId: exactOption.targetId,
+        ...(exactOption.documentVersionNumber !== undefined
+          ? { documentVersionNumber: exactOption.documentVersionNumber }
+          : {}),
+      }
+    : work
+      ? { targetType: work.type, targetId: work.id }
+      : null;
+}
+
+/** The chosen kind, work and exact source, their searches and the link submit. */
+function useEquipmentSourceForm({
   actions,
-}: EquipmentActionDialogProps): ReactElement {
-  const { busy, item, reason, setReason, reasonError, attempted, errorFor, perform, rejectInvalid } = actions;
+  onOpenChange,
+}: Pick<EquipmentActionDialogProps, 'actions' | 'onOpenChange'>) {
+  const { busy, item, reason, reasonError, perform, rejectInvalid } = actions;
   const [kind, setKind] = useState<SourceKind>('job');
   const [workId, setWorkId] = useState('');
   const [exactValue, setExactValue] = useState('');
@@ -89,23 +101,12 @@ export function EquipmentSourceDialog({
   const exact = useEquipmentSourceOptions(item.id, work, kind === 'document' || work !== null);
   const exactOption = exact.options.find((option) => option.value === exactValue);
   const sourceError = (kind === 'document' ? exactOption : workId) ? undefined : MISSING_SOURCE[kind];
-  const ownWorkLabel = kind === 'project' ? 'Das Projekt selbst' : 'Der Auftrag selbst';
 
   function submitSource(): void {
     if (busy.isBusy('source')) return;
     if (rejectInvalid('source', { 'equipment-source': sourceError, 'equipment-source-reason': reasonError }))
       return;
-    const target = exactOption
-      ? {
-          targetType: exactOption.targetType,
-          targetId: exactOption.targetId,
-          ...(exactOption.documentVersionNumber !== undefined
-            ? { documentVersionNumber: exactOption.documentVersionNumber }
-            : {}),
-        }
-      : work
-        ? { targetType: work.type, targetId: work.id }
-        : null;
+    const target = sourceTarget(exactOption, work);
     if (!target) return;
     perform(
       'source',
@@ -121,6 +122,148 @@ export function EquipmentSourceDialog({
     );
   }
 
+  function changeKind(value: SourceKind): void {
+    setKind(value);
+    setWorkId('');
+    setExactValue('');
+  }
+
+  function changeWork(value: string): void {
+    setWorkId(value);
+    setExactValue('');
+  }
+
+  return {
+    kind,
+    changeKind,
+    workId,
+    changeWork,
+    exactValue,
+    setExactValue,
+    workSearch,
+    work,
+    exact,
+    sourceError,
+    submitSource,
+  };
+}
+
+type SourceWorkFieldsProps = {
+  kind: 'job' | 'project';
+  workId: string;
+  onWorkChange: (value: string) => void;
+  workSearch: JobEntityOptionsState;
+  work: SourceWork | null;
+  exact: SourceOptions;
+  exactValue: string;
+  onExactChange: (value: string) => void;
+  error: string | undefined;
+};
+
+/** The job or project, then optionally its exact Arbeitsnachweis or handover release. */
+function SourceWorkFields({
+  kind,
+  workId,
+  onWorkChange,
+  workSearch,
+  work,
+  exact,
+  exactValue,
+  onExactChange,
+  error,
+}: SourceWorkFieldsProps): ReactElement {
+  const ownWorkLabel = kind === 'project' ? 'Das Projekt selbst' : 'Der Auftrag selbst';
+  return (
+    <>
+      <Field label={KIND_LABELS[kind]} htmlFor="equipment-source" required error={error}>
+        <SearchableSelect
+          value={workId}
+          onChange={onWorkChange}
+          options={workSearch.options}
+          onSearchChange={workSearch.onSearchChange}
+          loading={workSearch.loading}
+          loadFailure={workSearch.loadFailure}
+          onLoadMore={workSearch.onLoadMore}
+          placeholder={kind === 'job' ? 'Auftrag auswählen' : 'Projekt auswählen'}
+          searchPlaceholder={kind === 'job' ? 'Auftrag suchen…' : 'Projekt suchen…'}
+          emptyMessage={
+            kind === 'job'
+              ? 'Kein Auftrag an diesem Einsatzort gefunden'
+              : 'Kein Projekt an diesem Einsatzort gefunden'
+          }
+        />
+      </Field>
+      {work && (
+        <Field label="Genauer Stand" htmlFor="equipment-source-detail">
+          <SearchableSelect
+            value={exactValue}
+            onChange={onExactChange}
+            options={exact.options}
+            loading={exact.loading}
+            loadFailure={exact.loadFailure}
+            allowNone
+            noneLabel={ownWorkLabel}
+            placeholder={ownWorkLabel}
+            searchPlaceholder="Nachweis suchen…"
+            emptyMessage="Keine Arbeitsnachweise oder Übergaben vorhanden"
+          />
+        </Field>
+      )}
+    </>
+  );
+}
+
+/** The equipment's document, or the job or project with its exact source. */
+function SourceTargetFields({
+  source,
+  error,
+}: {
+  source: ReturnType<typeof useEquipmentSourceForm>;
+  error: string | undefined;
+}): ReactElement {
+  const { kind, exact, exactValue, setExactValue } = source;
+  return kind === 'document' ? (
+    <Field label="Dokument" htmlFor="equipment-source" required error={error}>
+      <SearchableSelect
+        value={exactValue}
+        onChange={setExactValue}
+        options={exact.options}
+        loading={exact.loading}
+        loadFailure={exact.loadFailure}
+        placeholder="Dokument auswählen"
+        searchPlaceholder="Dokument suchen…"
+        emptyMessage="Noch keine Dokumente verknüpft"
+      />
+    </Field>
+  ) : (
+    <SourceWorkFields
+      kind={kind}
+      workId={source.workId}
+      onWorkChange={source.changeWork}
+      workSearch={source.workSearch}
+      work={source.work}
+      exact={exact}
+      exactValue={exactValue}
+      onExactChange={setExactValue}
+      error={error}
+    />
+  );
+}
+
+/**
+ * Links an exact source to the equipment. A job or project is searched on the
+ * server first; its Arbeitsnachweis revisions and handover releases are read
+ * only once it is chosen. Documents are the equipment's own. Mount it per
+ * opening, so every opening starts empty.
+ */
+export function EquipmentSourceDialog({
+  open,
+  onOpenChange,
+  actions,
+}: EquipmentActionDialogProps): ReactElement {
+  const { busy, reason, setReason, reasonError, attempted, errorFor } = actions;
+  const source = useEquipmentSourceForm({ actions, onOpenChange });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={busy.isBusy('source')}>
       <DialogContent>
@@ -135,85 +278,18 @@ export function EquipmentSourceDialog({
           onSubmit={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            submitSource();
+            source.submitSource();
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col gap-4"
         >
           <DialogBody>
             <div className="space-y-4">
-              <SourceKindField
-                kind={kind}
-                onKindChange={(value) => {
-                  setKind(value);
-                  setWorkId('');
-                  setExactValue('');
-                }}
+              <SourceKindField kind={source.kind} onKindChange={source.changeKind} />
+              <SourceTargetFields
+                source={source}
+                error={attempted === 'source' ? source.sourceError : undefined}
               />
-              {kind === 'document' ? (
-                <Field
-                  label="Dokument"
-                  htmlFor="equipment-source"
-                  required
-                  error={attempted === 'source' ? sourceError : undefined}
-                >
-                  <SearchableSelect
-                    value={exactValue}
-                    onChange={setExactValue}
-                    options={exact.options}
-                    loading={exact.loading}
-                    loadFailure={exact.loadFailure}
-                    placeholder="Dokument auswählen"
-                    searchPlaceholder="Dokument suchen…"
-                    emptyMessage="Noch keine Dokumente verknüpft"
-                  />
-                </Field>
-              ) : (
-                <>
-                  <Field
-                    label={KIND_LABELS[kind]}
-                    htmlFor="equipment-source"
-                    required
-                    error={attempted === 'source' ? sourceError : undefined}
-                  >
-                    <SearchableSelect
-                      value={workId}
-                      onChange={(value) => {
-                        setWorkId(value);
-                        setExactValue('');
-                      }}
-                      options={workSearch.options}
-                      onSearchChange={workSearch.onSearchChange}
-                      loading={workSearch.loading}
-                      loadFailure={workSearch.loadFailure}
-                      onLoadMore={workSearch.onLoadMore}
-                      placeholder={kind === 'job' ? 'Auftrag auswählen' : 'Projekt auswählen'}
-                      searchPlaceholder={kind === 'job' ? 'Auftrag suchen…' : 'Projekt suchen…'}
-                      emptyMessage={
-                        kind === 'job'
-                          ? 'Kein Auftrag an diesem Einsatzort gefunden'
-                          : 'Kein Projekt an diesem Einsatzort gefunden'
-                      }
-                    />
-                  </Field>
-                  {work && (
-                    <Field label="Genauer Stand" htmlFor="equipment-source-detail">
-                      <SearchableSelect
-                        value={exactValue}
-                        onChange={setExactValue}
-                        options={exact.options}
-                        loading={exact.loading}
-                        loadFailure={exact.loadFailure}
-                        allowNone
-                        noneLabel={ownWorkLabel}
-                        placeholder={ownWorkLabel}
-                        searchPlaceholder="Nachweis suchen…"
-                        emptyMessage="Keine Arbeitsnachweise oder Übergaben vorhanden"
-                      />
-                    </Field>
-                  )}
-                </>
-              )}
               <Field
                 label="Bedeutung des Nachweises"
                 htmlFor="equipment-source-reason"

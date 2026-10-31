@@ -9,11 +9,8 @@ import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  WORK_ARTIFACT_UNIT_LABELS,
-  type MeasurementLineInput,
-  type WorkArtifactContentInput,
-} from '@/lib/work-artifacts/types';
+import { Constants } from '@/lib/supabase/database.types';
+import { WORK_ARTIFACT_UNIT_LABELS, type MeasurementLineInput } from '@/lib/work-artifacts/types';
 import {
   AUTHORIZATION_STATE_LABELS,
   DEFECT_SEVERITY_LABELS,
@@ -175,84 +172,86 @@ export function WorkArtifactMeasurementFields({
           </Button>
         </div>
         {measurementLines.map((line, index) => (
-          <div
+          <MeasurementLineFields
             key={line.id ?? index}
-            className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_180px_auto]"
-          >
-            <TextField
-              id={`artifact-measurement-description-${index}`}
-              label="Bezeichnung"
-              value={line.description}
-              onChange={(value) =>
-                setMeasurementLines(
-                  measurementLines.map((entry, current) =>
-                    current === index ? { ...entry, description: value } : entry,
-                  ),
-                )
-              }
-            />
-            <Field label="Menge" htmlFor={`artifact-measurement-quantity-${index}`}>
-              <QuantityStepper
-                id={`artifact-measurement-quantity-${index}`}
-                value={line.quantity}
-                onChange={(value) =>
-                  setMeasurementLines(
-                    measurementLines.map((entry, current) =>
-                      current === index ? { ...entry, quantity: value } : entry,
-                    ),
-                  )
-                }
-                min={0.001}
-                step={1}
-                unitLabel={WORK_ARTIFACT_UNIT_LABELS[line.unit]}
-              />
-            </Field>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="self-end"
-              onClick={() => setMeasurementLines(measurementLines.filter((_, current) => current !== index))}
-              aria-label="Aufmaßposition entfernen"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-            <Select
-              value={line.unit}
-              onValueChange={(value) =>
-                setMeasurementLines(
-                  measurementLines.map((entry, current) =>
-                    current === index ? { ...entry, unit: value as MeasurementLineInput['unit'] } : entry,
-                  ),
-                )
-              }
-            >
-              <SelectTrigger aria-label="Aufmaßeinheit">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(WORK_ARTIFACT_UNIT_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <TextField
-              id={`artifact-measurement-location-${index}`}
-              label="Ort"
-              value={line.location}
-              onChange={(value) =>
-                setMeasurementLines(
-                  measurementLines.map((entry, current) =>
-                    current === index ? { ...entry, location: value } : entry,
-                  ),
-                )
-              }
-            />
-          </div>
+            line={line}
+            index={index}
+            measurementLines={measurementLines}
+            setMeasurementLines={setMeasurementLines}
+          />
         ))}
       </div>
+    </div>
+  );
+}
+
+function MeasurementLineFields({
+  line,
+  index,
+  measurementLines,
+  setMeasurementLines,
+}: Pick<WorkArtifactMeasurementFieldsProps, 'measurementLines' | 'setMeasurementLines'> & {
+  line: MeasurementLineInput;
+  index: number;
+}) {
+  const patchLine = (patch: Partial<MeasurementLineInput>) =>
+    setMeasurementLines(
+      measurementLines.map((entry, current) => (current === index ? { ...entry, ...patch } : entry)),
+    );
+  return (
+    <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-[1fr_180px_auto]">
+      <TextField
+        id={`artifact-measurement-description-${index}`}
+        label="Bezeichnung"
+        value={line.description}
+        onChange={(value) => patchLine({ description: value })}
+      />
+      <Field label="Menge" htmlFor={`artifact-measurement-quantity-${index}`}>
+        <QuantityStepper
+          id={`artifact-measurement-quantity-${index}`}
+          value={line.quantity}
+          onChange={(value) => patchLine({ quantity: value })}
+          min={0.001}
+          step={1}
+          unitLabel={WORK_ARTIFACT_UNIT_LABELS[line.unit]}
+        />
+      </Field>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="self-end"
+        onClick={() => setMeasurementLines(measurementLines.filter((_, current) => current !== index))}
+        aria-label="Aufmaßposition entfernen"
+      >
+        <Trash2 className="size-4" />
+      </Button>
+      <Select
+        value={line.unit}
+        onValueChange={(value) => {
+          const unit = Constants.public.Enums.work_artifact_measurement_unit.find(
+            (candidate) => candidate === value,
+          );
+          if (unit) patchLine({ unit });
+        }}
+      >
+        <SelectTrigger aria-label="Aufmaßeinheit">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(WORK_ARTIFACT_UNIT_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <TextField
+        id={`artifact-measurement-location-${index}`}
+        label="Ort"
+        value={line.location}
+        onChange={(value) => patchLine({ location: value })}
+      />
     </div>
   );
 }
@@ -273,50 +272,14 @@ export function WorkArtifactDefectFields({ content, patchContent }: WorkArtifact
           value={content.defectLocation}
           onChange={(value) => patchContent({ defectLocation: value })}
         />
-        <Field label="Schweregrad" htmlFor="artifact-defect-severity">
-          <Select
-            value={content.defectSeverity ?? 'medium'}
-            onValueChange={(value) =>
-              patchContent({ defectSeverity: value as WorkArtifactContentInput['defectSeverity'] })
-            }
-          >
-            <SelectTrigger aria-label="Schweregrad">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(DEFECT_SEVERITY_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <DefectSeverityField content={content} patchContent={patchContent} />
         <DateField
           id="artifact-due-date"
           label="Fällig am"
           value={content.dueDate}
           onChange={(value) => patchContent({ dueDate: value })}
         />
-        <Field label="Status" htmlFor="artifact-defect-state">
-          <Select
-            value={content.defectState ?? 'open'}
-            onValueChange={(value) =>
-              patchContent({ defectState: value as WorkArtifactContentInput['defectState'] })
-            }
-          >
-            <SelectTrigger aria-label="Mangelstatus">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(DEFECT_STATE_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <DefectStateField content={content} patchContent={patchContent} />
       </div>
       <TextField
         label="Zuständigkeit"
@@ -338,6 +301,60 @@ export function WorkArtifactDefectFields({ content, patchContent }: WorkArtifact
         />
       )}
     </div>
+  );
+}
+
+function DefectSeverityField({ content, patchContent }: WorkArtifactContentFieldsProps) {
+  return (
+    <Field label="Schweregrad" htmlFor="artifact-defect-severity">
+      <Select
+        value={content.defectSeverity ?? 'medium'}
+        onValueChange={(value) => {
+          const defectSeverity = Constants.public.Enums.work_artifact_defect_severity.find(
+            (candidate) => candidate === value,
+          );
+          if (defectSeverity) patchContent({ defectSeverity });
+        }}
+      >
+        <SelectTrigger aria-label="Schweregrad">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(DEFECT_SEVERITY_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function DefectStateField({ content, patchContent }: WorkArtifactContentFieldsProps) {
+  return (
+    <Field label="Status" htmlFor="artifact-defect-state">
+      <Select
+        value={content.defectState ?? 'open'}
+        onValueChange={(value) => {
+          const defectState = Constants.public.Enums.work_artifact_defect_state.find(
+            (candidate) => candidate === value,
+          );
+          if (defectState) patchContent({ defectState });
+        }}
+      >
+        <SelectTrigger aria-label="Mangelstatus">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(DEFECT_STATE_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 
@@ -388,9 +405,12 @@ export function WorkArtifactChangeWorkFields({ content, patchContent }: WorkArti
       <Field label="Autorisierungsstand" htmlFor="artifact-authorization-state">
         <Select
           value={content.authorizationState ?? 'not_requested'}
-          onValueChange={(value) =>
-            patchContent({ authorizationState: value as WorkArtifactContentInput['authorizationState'] })
-          }
+          onValueChange={(value) => {
+            const authorizationState = Constants.public.Enums.work_artifact_change_authorization_state.find(
+              (candidate) => candidate === value,
+            );
+            if (authorizationState) patchContent({ authorizationState });
+          }}
         >
           <SelectTrigger aria-label="Autorisierungsstand">
             <SelectValue />

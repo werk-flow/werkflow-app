@@ -40,19 +40,16 @@ export interface ManualEntryFormContentProps {
   onPendingChange?: ((pending: boolean) => void) | undefined;
 }
 
-export function ManualEntryFormContent({
-  onSuccess,
+/** The form's fields and who may fill them, seeded from the preselection. */
+function useManualEntryFormState({
   preselectedUserId,
   preselectedDate,
   preselectedClockInTime,
   preselectedClockOutTime,
-  prefetchedMembers,
-  prefetchedJobs,
-  lockEntryMode,
-  onDraftChange,
-  isActive = true,
-  onPendingChange,
-}: ManualEntryFormContentProps) {
+}: Pick<
+  ManualEntryFormContentProps,
+  'preselectedUserId' | 'preselectedDate' | 'preselectedClockInTime' | 'preselectedClockOutTime'
+>) {
   const { activeOrgId, activeOrg } = useOrganization();
   const { profile } = useUserProfile();
 
@@ -68,30 +65,6 @@ export function ManualEntryFormContent({
   );
   const [selectedJobId, setSelectedJobId] = useState<string>('');
   const canAssignJob = entryMode === 'clock_in' || entryMode === 'both';
-  const closedPeriods = useClosedTimePeriods(activeOrgId, isActive);
-
-  const { handleSubmit, isPending, error, fieldErrors } = useManualEntrySubmit({
-    activeOrgId,
-    isAdmin,
-    isAdminOrManager,
-    currentUserId,
-    entryMode,
-    selectedDate,
-    clockInTime,
-    clockOutTime,
-    selectedUserId,
-    canAssignJob,
-    selectedJobId,
-    closedPeriods,
-    onSuccess,
-  });
-  useReportPending(isPending, onPendingChange);
-  const { memberOptions, isLoadingMembers, membersFailure } = useManualEntryMembers({
-    isActive,
-    isAdminOrManager,
-    activeOrgId,
-    prefetchedMembers,
-  });
 
   function changeEntryMode(mode: ManualEntryMode) {
     setEntryMode(mode);
@@ -99,74 +72,168 @@ export function ManualEntryFormContent({
     if (mode !== 'clock_in' && mode !== 'both') setSelectedJobId('');
   }
 
+  return {
+    activeOrgId,
+    activeOrg,
+    isAdmin,
+    isAdminOrManager,
+    currentUserId,
+    entryMode,
+    changeEntryMode,
+    selectedDate,
+    setSelectedDate,
+    clockInTime,
+    setClockInTime,
+    clockOutTime,
+    setClockOutTime,
+    selectedUserId,
+    setSelectedUserId,
+    selectedJobId,
+    setSelectedJobId,
+    canAssignJob,
+  };
+}
+
+/** The form state, its save, the member and job options and the draft it reports to the calendar. */
+function useManualEntryForm({
+  onSuccess,
+  preselectedUserId,
+  preselectedDate,
+  preselectedClockInTime,
+  preselectedClockOutTime,
+  prefetchedMembers,
+  prefetchedJobs,
+  onDraftChange,
+  isActive,
+  onPendingChange,
+}: Omit<ManualEntryFormContentProps, 'lockEntryMode' | 'isActive'> & { isActive: boolean }) {
+  const form = useManualEntryFormState({
+    preselectedUserId,
+    preselectedDate,
+    preselectedClockInTime,
+    preselectedClockOutTime,
+  });
+  const closedPeriods = useClosedTimePeriods(form.activeOrgId, isActive);
+
+  const submit = useManualEntrySubmit({
+    activeOrgId: form.activeOrgId,
+    isAdmin: form.isAdmin,
+    isAdminOrManager: form.isAdminOrManager,
+    currentUserId: form.currentUserId,
+    entryMode: form.entryMode,
+    selectedDate: form.selectedDate,
+    clockInTime: form.clockInTime,
+    clockOutTime: form.clockOutTime,
+    selectedUserId: form.selectedUserId,
+    canAssignJob: form.canAssignJob,
+    selectedJobId: form.selectedJobId,
+    closedPeriods,
+    onSuccess,
+  });
+  useReportPending(submit.isPending, onPendingChange);
+  const members = useManualEntryMembers({
+    isActive,
+    isAdminOrManager: form.isAdminOrManager,
+    activeOrgId: form.activeOrgId,
+    prefetchedMembers,
+  });
+
   useManualEntryDraftReport({
     isActive,
     onDraftChange,
-    isAdminOrManager,
-    selectedUserId,
-    currentUserId,
-    entryMode,
-    selectedDate,
-    clockInTime,
-    clockOutTime,
+    isAdminOrManager: form.isAdminOrManager,
+    selectedUserId: form.selectedUserId,
+    currentUserId: form.currentUserId,
+    entryMode: form.entryMode,
+    selectedDate: form.selectedDate,
+    clockInTime: form.clockInTime,
+    clockOutTime: form.clockOutTime,
   });
 
   const jobSearch = useJobEntityOptions(
     { kind: 'jobs', purpose: 'manual-entry' },
-    selectedJobId ? [selectedJobId] : [],
+    form.selectedJobId ? [form.selectedJobId] : [],
     (prefetchedJobs ?? []).map((job) => ({
       value: job.id,
       label: job.title,
       description: job.jobNumber ?? undefined,
     })),
   );
-  const isOwnBueroEntry = activeOrg?.role === 'buero' && selectedUserId === currentUserId;
+  const isOwnBueroEntry = form.activeOrg?.role === 'buero' && form.selectedUserId === form.currentUserId;
+  return { ...form, ...submit, ...members, jobSearch, isOwnBueroEntry };
+}
 
-  if (!activeOrgId || !activeOrg) return null;
+export function ManualEntryFormContent({
+  onSuccess,
+  preselectedUserId,
+  preselectedDate,
+  preselectedClockInTime,
+  preselectedClockOutTime,
+  prefetchedMembers,
+  prefetchedJobs,
+  lockEntryMode,
+  onDraftChange,
+  isActive = true,
+  onPendingChange,
+}: ManualEntryFormContentProps) {
+  const form = useManualEntryForm({
+    onSuccess,
+    preselectedUserId,
+    preselectedDate,
+    preselectedClockInTime,
+    preselectedClockOutTime,
+    prefetchedMembers,
+    prefetchedJobs,
+    onDraftChange,
+    isActive,
+    onPendingChange,
+  });
+
+  if (!form.activeOrgId || !form.activeOrg) return null;
 
   return (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+    <form onSubmit={form.handleSubmit} className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="space-y-4">
-        {membersFailure && <SectionError failure={membersFailure} />}
+        {form.membersFailure && <SectionError failure={form.membersFailure} />}
         <ManualEntryAssignmentFields
           lockEntryMode={lockEntryMode}
-          entryMode={entryMode}
-          setEntryMode={changeEntryMode}
-          isAdminOrManager={isAdminOrManager}
-          memberError={fieldErrors.member}
-          memberOptions={memberOptions}
-          selectedUserId={selectedUserId}
-          setSelectedUserId={setSelectedUserId}
-          isLoadingMembers={isLoadingMembers}
-          canAssignJob={canAssignJob}
-          jobSearch={jobSearch}
-          selectedJobId={selectedJobId}
-          setSelectedJobId={setSelectedJobId}
-          isPending={isPending}
+          entryMode={form.entryMode}
+          setEntryMode={form.changeEntryMode}
+          isAdminOrManager={form.isAdminOrManager}
+          memberError={form.fieldErrors.member}
+          memberOptions={form.memberOptions}
+          selectedUserId={form.selectedUserId}
+          setSelectedUserId={form.setSelectedUserId}
+          isLoadingMembers={form.isLoadingMembers}
+          canAssignJob={form.canAssignJob}
+          jobSearch={form.jobSearch}
+          selectedJobId={form.selectedJobId}
+          setSelectedJobId={form.setSelectedJobId}
+          isPending={form.isPending}
         />
 
         <ManualEntryTimeFields
-          entryMode={entryMode}
-          dateError={fieldErrors.date}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-          clockInTime={clockInTime}
-          setClockInTime={setClockInTime}
-          clockOutTime={clockOutTime}
-          setClockOutTime={setClockOutTime}
+          entryMode={form.entryMode}
+          dateError={form.fieldErrors.date}
+          selectedDate={form.selectedDate}
+          setSelectedDate={form.setSelectedDate}
+          clockInTime={form.clockInTime}
+          setClockInTime={form.setClockInTime}
+          clockOutTime={form.clockOutTime}
+          setClockOutTime={form.setClockOutTime}
         />
 
-        <ErrorText>{error}</ErrorText>
+        <ErrorText>{form.error}</ErrorText>
 
-        {isOwnBueroEntry ? (
+        {form.isOwnBueroEntry ? (
           <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             Eigene Nachträge werden zur Freigabe eingereicht. Du kannst sie nicht selbst freigeben.
           </p>
         ) : null}
       </DialogBody>
       <DialogFooter>
-        <Button type="submit" className="h-11 sm:h-9" pending={isPending}>
-          {isPending ? 'Speichern…' : 'Speichern'}
+        <Button type="submit" className="h-11 sm:h-9" pending={form.isPending}>
+          {form.isPending ? 'Speichern…' : 'Speichern'}
         </Button>
       </DialogFooter>
     </form>

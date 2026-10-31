@@ -1,3 +1,5 @@
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
+
 import { DOCUMENT_ROW_DRAG_MIME, type DocumentTableDragSelection } from './document-library-table';
 
 /**
@@ -22,10 +24,6 @@ type BrowserFileSystemDirectoryEntry = BrowserFileSystemEntry & {
       errorCallback: (error: DOMException) => void,
     ) => void;
   };
-};
-
-type DataTransferItemWithEntry = DataTransferItem & {
-  webkitGetAsEntry?: () => BrowserFileSystemEntry | null;
 };
 
 export type DroppedFile = { file: File; relativePath?: string };
@@ -84,10 +82,7 @@ async function collectFilesFromEntry(
 /** The dropped entries, read synchronously: a DataTransfer is only readable during its event. */
 export function readDroppedEntries(dataTransfer: DataTransfer): BrowserFileSystemEntry[] {
   return Array.from(dataTransfer.items)
-    .map((item) => {
-      const entry = (item as DataTransferItemWithEntry).webkitGetAsEntry?.() ?? null;
-      return entry as BrowserFileSystemEntry | null;
-    })
+    .map((item): BrowserFileSystemEntry | null => item.webkitGetAsEntry?.() ?? null)
     .filter((entry): entry is BrowserFileSystemEntry => Boolean(entry));
 }
 
@@ -109,6 +104,10 @@ export function hasInternalRowDrag(dataTransfer: DataTransfer): boolean {
   return Array.from(dataTransfer.types).includes(DOCUMENT_ROW_DRAG_MIME);
 }
 
+function stringIds(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
+}
+
 /** The dragged library rows; an empty or unreadable payload yields the fallback selection. */
 export function readInternalRowDragSelection(
   dataTransfer: DataTransfer,
@@ -118,10 +117,13 @@ export function readInternalRowDragSelection(
   if (!raw) return fallbackSelection;
 
   try {
-    const parsed = JSON.parse(raw) as Partial<DocumentTableDragSelection>;
+    const parsed: unknown = JSON.parse(raw);
+    // A `null` payload is unreadable; any other value without the id lists yields none.
+    if (parsed === null) return fallbackSelection;
+    const payload = jsonRecordOrEmpty(parsed);
     return {
-      folderIds: Array.isArray(parsed.folderIds) ? parsed.folderIds : [],
-      documentIds: Array.isArray(parsed.documentIds) ? parsed.documentIds : [],
+      folderIds: stringIds(payload.folderIds),
+      documentIds: stringIds(payload.documentIds),
     };
   } catch {
     return fallbackSelection;

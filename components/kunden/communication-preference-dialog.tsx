@@ -15,13 +15,15 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { ClientContact } from '@/lib/clients/types';
-import type {
-  CommunicationChannel,
-  CommunicationPreferenceInput,
-  CommunicationPreferenceState,
-  CommunicationPurpose,
-} from '@/lib/customer-relationships/types';
-import { CHANNEL_LABELS, PURPOSE_LABELS, STATE_LABELS } from './communication-preference-labels';
+import type { CommunicationPreferenceInput } from '@/lib/customer-relationships/types';
+import {
+  CHANNEL_LABELS,
+  PURPOSE_LABELS,
+  STATE_LABELS,
+  isCommunicationChannel,
+  isCommunicationPreferenceState,
+  isCommunicationPurpose,
+} from './communication-preference-labels';
 
 interface CommunicationPreferenceDialogProps {
   open: boolean;
@@ -62,82 +64,19 @@ export function CommunicationPreferenceDialog({
           noValidate
           className="space-y-4"
         >
-          <Field label="Gilt für" htmlFor="preference-contact">
-            <SearchableSelect
-              options={contacts
-                .filter((contact) => contact.isActive || contact.id === preferenceDraft.contactId)
-                .map((contact) => ({
-                  value: contact.id,
-                  label: `${contact.name}${contact.isActive ? '' : ' · archiviert'}`,
-                }))}
-              value={preferenceDraft.contactId ?? ''}
-              onChange={(value) => onDraftChange({ ...preferenceDraft, contactId: value || undefined })}
-              placeholder="Kunde (Standard)"
-              searchPlaceholder="Ansprechpartner suchen…"
-              emptyMessage="Kein Ansprechpartner gefunden"
-              allowNone
-              noneLabel="Kunde (Standard)"
-            />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Kanal" htmlFor="preference-channel">
-              <Select
-                value={preferenceDraft.channel}
-                onValueChange={(value) =>
-                  onDraftChange({ ...preferenceDraft, channel: value as CommunicationChannel })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CHANNEL_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Status" htmlFor="preference-state">
-              <Select
-                value={preferenceDraft.state}
-                onValueChange={(value) =>
-                  onDraftChange({ ...preferenceDraft, state: value as CommunicationPreferenceState })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(STATE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-          <Field label="Zweck" htmlFor="preference-purpose">
-            <Select
-              value={preferenceDraft.purpose}
-              onValueChange={(value) =>
-                onDraftChange({ ...preferenceDraft, purpose: value as CommunicationPurpose })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(PURPOSE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          <CommunicationPreferenceContactField
+            contacts={contacts}
+            preferenceDraft={preferenceDraft}
+            onDraftChange={onDraftChange}
+          />
+          <CommunicationPreferenceChannelStateFields
+            preferenceDraft={preferenceDraft}
+            onDraftChange={onDraftChange}
+          />
+          <CommunicationPreferencePurposeField
+            preferenceDraft={preferenceDraft}
+            onDraftChange={onDraftChange}
+          />
           <Field label="Quelle der Angabe" htmlFor="preference-source">
             <Input
               value={preferenceDraft.sourceNote ?? ''}
@@ -157,5 +96,111 @@ export function CommunicationPreferenceDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+interface CommunicationPreferenceFieldProps {
+  preferenceDraft: CommunicationPreferenceInput;
+  onDraftChange: (draft: CommunicationPreferenceInput) => void;
+}
+
+function CommunicationPreferenceContactField({
+  contacts,
+  preferenceDraft,
+  onDraftChange,
+}: CommunicationPreferenceFieldProps & { contacts: ClientContact[] }) {
+  return (
+    <Field label="Gilt für" htmlFor="preference-contact">
+      <SearchableSelect
+        options={contacts
+          .filter((contact) => contact.isActive || contact.id === preferenceDraft.contactId)
+          .map((contact) => ({
+            value: contact.id,
+            label: `${contact.name}${contact.isActive ? '' : ' · archiviert'}`,
+          }))}
+        value={preferenceDraft.contactId ?? ''}
+        onChange={(value) => onDraftChange({ ...preferenceDraft, contactId: value || undefined })}
+        placeholder="Kunde (Standard)"
+        searchPlaceholder="Ansprechpartner suchen…"
+        emptyMessage="Kein Ansprechpartner gefunden"
+        allowNone
+        noneLabel="Kunde (Standard)"
+      />
+    </Field>
+  );
+}
+
+function CommunicationPreferenceChannelStateFields({
+  preferenceDraft,
+  onDraftChange,
+}: CommunicationPreferenceFieldProps) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Kanal" htmlFor="preference-channel">
+        <Select
+          value={preferenceDraft.channel}
+          onValueChange={(value) => {
+            if (isCommunicationChannel(value)) onDraftChange({ ...preferenceDraft, channel: value });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(CHANNEL_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Status" htmlFor="preference-state">
+        <Select
+          value={preferenceDraft.state}
+          onValueChange={(value) => {
+            if (isCommunicationPreferenceState(value)) onDraftChange({ ...preferenceDraft, state: value });
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(STATE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </div>
+  );
+}
+
+function CommunicationPreferencePurposeField({
+  preferenceDraft,
+  onDraftChange,
+}: CommunicationPreferenceFieldProps) {
+  return (
+    <Field label="Zweck" htmlFor="preference-purpose">
+      <Select
+        value={preferenceDraft.purpose}
+        onValueChange={(value) => {
+          if (isCommunicationPurpose(value)) onDraftChange({ ...preferenceDraft, purpose: value });
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(PURPOSE_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }

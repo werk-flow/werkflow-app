@@ -12,6 +12,7 @@ import {
   EMPTY_FILTER_STATE,
   type FilterState,
   type SortColumn,
+  type UnifiedListEntry,
 } from '@/lib/jobs/unified-list';
 import { resolveAuftraegeSortColumn, type AuftraegeColumnId } from '@/lib/jobs/auftraege-table-columns';
 import { applyDropdownFilters } from '@/lib/jobs/dropdown-filters';
@@ -84,64 +85,32 @@ export function useEmbeddedAuftraegeListState() {
 
 export type EmbeddedAuftraegeListState = ReturnType<typeof useEmbeddedAuftraegeListState>;
 
-/** Live entries filtered and sorted per section. */
-export function useEmbeddedAuftraegeEntries(
-  listState: EmbeddedAuftraegeListState,
+interface EmbeddedAuftraegeSectionsInput {
+  rawActive: UnifiedListEntry[];
+  rawParked: UnifiedListEntry[];
+  rawArchived: UnifiedListEntry[];
+  clientMap: Record<string, string>;
+  jobAssignmentMap: Record<string, string[]>;
+  visibleColumns: AuftraegeColumnId[];
+}
+
+/** The active section's entries after its status chip, search and dropdown filters, in its sort order. */
+function useEmbeddedAuftraegeFilteredActive(
   {
-    initialJobs,
-    initialProjects,
-    clientMap,
-    initialJobAssignmentMap,
-    hideEmptyProjects,
-    visibleColumns,
-  }: EmbeddedAuftraegeEntriesInput,
-) {
-  const {
     activeStatusFilter,
     activeSearch,
     activeFilters,
     activeSortCol,
     activeSortDir,
-    parkplatzSearch,
-    parkplatzFilters,
-    parkplatzSortCol,
-    parkplatzSortDir,
-    archiveSearch,
-    archiveFilters,
-    archiveSortCol,
-    archiveSortDir,
-  } = listState;
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const { jobs, setJobs, setRawProjects, projects, jobAssignmentMap, setJobAssignmentMap } =
-    useLiveAuftraegeData({
-      initialJobs,
-      initialProjects,
-      initialJobAssignmentMap,
-    });
-
-  const unifiedEntries = useMemo(() => {
-    const entries = buildUnifiedList(jobs, projects);
-    if (!hideEmptyProjects) return entries;
-
-    return entries.filter((entry) => entry.type !== 'project' || entry.childJobs.length > 0);
-  }, [hideEmptyProjects, jobs, projects]);
-
-  const {
-    active: rawActive,
-    parked: rawParked,
-    archived: rawArchived,
-  } = useMemo(() => splitEntries(unifiedEntries), [unifiedEntries]);
-
-  const activeStatusCounts = useMemo(() => {
-    const counts: Record<string, number> = { alle: rawActive.length };
-    for (const entry of rawActive) {
-      const status = getEntryUnifiedStatus(entry);
-      counts[status] = (counts[status] || 0) + 1;
-    }
-    return counts;
-  }, [rawActive]);
-
-  const filteredActive = useMemo(() => {
+  }: EmbeddedAuftraegeListState,
+  {
+    rawActive,
+    clientMap,
+    jobAssignmentMap,
+    visibleColumns,
+  }: Omit<EmbeddedAuftraegeSectionsInput, 'rawParked' | 'rawArchived'>,
+) {
+  return useMemo(() => {
     const effectiveSortColumn = resolveAuftraegeSortColumn(activeSortCol, visibleColumns);
     let result = rawActive;
     if (activeStatusFilter !== 'alle') {
@@ -163,6 +132,37 @@ export function useEmbeddedAuftraegeEntries(
     jobAssignmentMap,
     visibleColumns,
   ]);
+}
+
+/** Each section's entries after its status chip, search and dropdown filters, in its sort order. */
+function useEmbeddedAuftraegeFilteredSections(
+  listState: EmbeddedAuftraegeListState,
+  {
+    rawActive,
+    rawParked,
+    rawArchived,
+    clientMap,
+    jobAssignmentMap,
+    visibleColumns,
+  }: EmbeddedAuftraegeSectionsInput,
+) {
+  const {
+    parkplatzSearch,
+    parkplatzFilters,
+    parkplatzSortCol,
+    parkplatzSortDir,
+    archiveSearch,
+    archiveFilters,
+    archiveSortCol,
+    archiveSortDir,
+  } = listState;
+
+  const filteredActive = useEmbeddedAuftraegeFilteredActive(listState, {
+    rawActive,
+    clientMap,
+    jobAssignmentMap,
+    visibleColumns,
+  });
 
   const filteredParked = useMemo(() => {
     const effectiveSortColumn = resolveAuftraegeSortColumn(parkplatzSortCol, visibleColumns);
@@ -201,6 +201,63 @@ export function useEmbeddedAuftraegeEntries(
     jobAssignmentMap,
     visibleColumns,
   ]);
+
+  return { filteredActive, filteredParked, filteredArchived };
+}
+
+/** Live entries filtered and sorted per section. */
+export function useEmbeddedAuftraegeEntries(
+  listState: EmbeddedAuftraegeListState,
+  {
+    initialJobs,
+    initialProjects,
+    clientMap,
+    initialJobAssignmentMap,
+    hideEmptyProjects,
+    visibleColumns,
+  }: EmbeddedAuftraegeEntriesInput,
+) {
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const { jobs, setJobs, setRawProjects, projects, jobAssignmentMap, setJobAssignmentMap } =
+    useLiveAuftraegeData({
+      initialJobs,
+      initialProjects,
+      initialJobAssignmentMap,
+    });
+
+  const unifiedEntries = useMemo(() => {
+    const entries = buildUnifiedList(jobs, projects);
+    if (!hideEmptyProjects) return entries;
+
+    return entries.filter((entry) => entry.type !== 'project' || entry.childJobs.length > 0);
+  }, [hideEmptyProjects, jobs, projects]);
+
+  const {
+    active: rawActive,
+    parked: rawParked,
+    archived: rawArchived,
+  } = useMemo(() => splitEntries(unifiedEntries), [unifiedEntries]);
+
+  const activeStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = { alle: rawActive.length };
+    for (const entry of rawActive) {
+      const status = getEntryUnifiedStatus(entry);
+      counts[status] = (counts[status] || 0) + 1;
+    }
+    return counts;
+  }, [rawActive]);
+
+  const { filteredActive, filteredParked, filteredArchived } = useEmbeddedAuftraegeFilteredSections(
+    listState,
+    {
+      rawActive,
+      rawParked,
+      rawArchived,
+      clientMap,
+      jobAssignmentMap,
+      visibleColumns,
+    },
+  );
 
   return {
     createDialogOpen,

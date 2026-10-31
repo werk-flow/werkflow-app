@@ -24,10 +24,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useListNavigation } from '@/hooks/use-list-navigation';
 import { useLiveView } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
-import type {
-  ServiceCaseListQuery,
-  ServiceCasePage,
-  ServiceCaseStatusFilter,
+import {
+  serviceCaseListQuerySchema,
+  type ServiceCaseListQuery,
+  type ServiceCasePage,
+  type ServiceCaseStatusFilter,
 } from '@/lib/service-cases/list-page';
 import {
   SERVICE_CASE_STATUSES,
@@ -115,6 +116,33 @@ function ServiceCaseMobileList({
   );
 }
 
+function ServiceCasePendingTableRow({ draft }: { draft: ServiceCasePendingDraft }): ReactElement {
+  return (
+    <PendingRow
+      columns={SERVICE_CASE_COLUMNS}
+      cells={{
+        case: (
+          <span>
+            <span className="block font-medium">{draft.summary}</span>
+            <Skeleton className="mt-1 h-3 w-24" />
+          </span>
+        ),
+        site: (
+          <span>
+            <span className="block">{draft.clientName}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="size-3 shrink-0" />
+              {draft.siteName}
+            </span>
+          </span>
+        ),
+        urgency: SERVICE_CASE_URGENCY_LABELS[draft.urgency],
+        status: <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[draft.status]}</Badge>,
+      }}
+    />
+  );
+}
+
 function ServiceCaseTable({
   visiblePending,
   filtered,
@@ -138,29 +166,7 @@ function ServiceCaseTable({
         </TableHeader>
         <TableBody>
           {visiblePending.map((draft) => (
-            <PendingRow
-              key={draft.id}
-              columns={SERVICE_CASE_COLUMNS}
-              cells={{
-                case: (
-                  <span>
-                    <span className="block font-medium">{draft.summary}</span>
-                    <Skeleton className="mt-1 h-3 w-24" />
-                  </span>
-                ),
-                site: (
-                  <span>
-                    <span className="block">{draft.clientName}</span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin className="size-3 shrink-0" />
-                      {draft.siteName}
-                    </span>
-                  </span>
-                ),
-                urgency: SERVICE_CASE_URGENCY_LABELS[draft.urgency],
-                status: <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[draft.status]}</Badge>,
-              }}
-            />
+            <ServiceCasePendingTableRow key={draft.id} draft={draft} />
           ))}
           {filtered.map((item) => {
             const href = serviceCaseHref(item.caseNumber);
@@ -248,9 +254,11 @@ export function ServiceCaseListContent({
             ariaLabel="Servicefälle nach Status filtern"
             value={shownStatus}
             onChange={(value) => {
+              const parsed = serviceCaseListQuerySchema.shape.status.safeParse(value);
+              if (!parsed.success) return;
               setSearch(shownSearch);
-              setStatus(value as ServiceCaseStatusFilter);
-              navigation.navigate({ status: value === 'open' ? null : value, page: 1 });
+              setStatus(parsed.data);
+              navigation.navigate({ status: parsed.data === 'open' ? null : parsed.data, page: 1 });
             }}
             options={STATUS_OPTIONS}
             searchPlaceholder="Status suchen"
@@ -266,6 +274,22 @@ export function ServiceCaseListContent({
         onPageChange={(page) => navigation.navigate({ page })}
       />
     </>
+  );
+}
+
+function ServiceCaseEmptyState({ hasAnyCase }: { hasAnyCase: boolean }): ReactElement {
+  return hasAnyCase ? (
+    <EmptyState
+      icon={Siren}
+      title="Keine Servicefälle gefunden"
+      description="Zu Suche und Filter gibt es keinen Servicefall. Ändere die Suche oder den Filter."
+    />
+  ) : (
+    <EmptyState
+      icon={Siren}
+      title="Noch keine Servicefälle"
+      description="Erfasse den ersten Servicefall, sobald eine Störung oder Reparatur gemeldet wird."
+    />
   );
 }
 
@@ -331,19 +355,7 @@ function ServiceCaseListResults({
         </SectionError>
       )}
       {page.cases.length === 0 && visiblePending.length === 0 ? (
-        page.hasAnyCase ? (
-          <EmptyState
-            icon={Siren}
-            title="Keine Servicefälle gefunden"
-            description="Zu Suche und Filter gibt es keinen Servicefall. Ändere die Suche oder den Filter."
-          />
-        ) : (
-          <EmptyState
-            icon={Siren}
-            title="Noch keine Servicefälle"
-            description="Erfasse den ersten Servicefall, sobald eine Störung oder Reparatur gemeldet wird."
-          />
-        )
+        <ServiceCaseEmptyState hasAnyCase={page.hasAnyCase} />
       ) : (
         <>
           <ServiceCaseMobileList visiblePending={visiblePending} filtered={page.cases} />

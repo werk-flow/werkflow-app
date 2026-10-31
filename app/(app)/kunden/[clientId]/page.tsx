@@ -19,6 +19,20 @@ interface KundenDetailPageProps {
   params: Promise<{ clientId: string }>;
 }
 
+/** Every read of the customer detail page, started together. */
+function readKundenDetail(clientId: string, activeOrgId: string, userId: string) {
+  return Promise.all([
+    getClientDetail(clientId),
+    getClientRelations(clientId, { includeInactive: true }),
+    getJobsForClient(clientId),
+    getClientDocuments(clientId),
+    getOrgMembersForUser(activeOrgId, userId),
+    getCustomerRelationshipBundle(clientId),
+    getInstalledEquipmentForClient(clientId),
+    getOrganizationUserPreferencesForView(activeOrgId, userId),
+  ]);
+}
+
 async function KundenDetailData({ clientId }: { clientId: string }) {
   const { user, membership } = await resolvePageMembership();
   if (!membership) redirect('/kunden');
@@ -39,16 +53,7 @@ async function KundenDetailData({ clientId }: { clientId: string }) {
     relationshipResult,
     equipmentResult,
     { visibleColumns },
-  ] = await Promise.all([
-    getClientDetail(clientId),
-    getClientRelations(clientId, { includeInactive: true }),
-    getJobsForClient(clientId),
-    getClientDocuments(clientId),
-    getOrgMembersForUser(activeOrgId, user.id),
-    getCustomerRelationshipBundle(clientId),
-    getInstalledEquipmentForClient(clientId),
-    getOrganizationUserPreferencesForView(activeOrgId, user.id),
-  ]);
+  ] = await readKundenDetail(clientId, activeOrgId, user.id);
 
   // A missing or forbidden client leaves the page; a failed read must not look like one.
   if (

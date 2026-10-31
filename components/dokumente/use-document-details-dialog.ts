@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 
 import { getDocumentDetails } from '@/lib/documents/actions';
 import { updateDocumentCategory } from '@/lib/documents/library-actions';
@@ -10,6 +10,40 @@ import type { DocumentLibraryMutations } from './use-document-library-mutations'
 export type LoadedDocumentDetails = Extract<DocumentDetailsResult, { success: true }>;
 
 export type DocumentDetailsDialogState = ReturnType<typeof useDocumentDetailsDialog>;
+
+/** Loads the dialog's details; a response for a document the dialog no longer shows is dropped. */
+function loadDocumentDetails({
+  document,
+  detailsDialogIdRef,
+  setDetailsDialog,
+  setDetailsData,
+  setIsDetailsLoading,
+}: {
+  document: OrganizationDocument;
+  detailsDialogIdRef: RefObject<string | null>;
+  setDetailsDialog: Dispatch<SetStateAction<OrganizationDocument | null>>;
+  setDetailsData: Dispatch<SetStateAction<LoadedDocumentDetails | null>>;
+  setIsDetailsLoading: Dispatch<SetStateAction<boolean>>;
+}): void {
+  void getDocumentDetails(document.id)
+    .then((result) => {
+      // The dialog may have moved on to another document meanwhile.
+      if (detailsDialogIdRef.current !== document.id) return;
+      setIsDetailsLoading(false);
+      // A failed read leaves `detailsData` empty; the dialog shows it with a retry.
+      if (!result.success) return;
+      // The table row that seeded this dialog is mount-time data; the fetch
+      // is the authority (freshness contract rule 3). Reopening right after
+      // a mutation must not show the pre-mutation row while the route
+      // refresh is still rendering.
+      setDetailsDialog(result.document);
+      setDetailsData(result);
+    })
+    .catch(() => {
+      if (detailsDialogIdRef.current !== document.id) return;
+      setIsDetailsLoading(false);
+    });
+}
 
 /**
  * State of the „Dateidetails" dialog: the document it shows, its loaded
@@ -39,24 +73,13 @@ export function useDocumentDetailsDialog({
     setDetailsError(null);
     setIsDetailsLoading(true);
 
-    void getDocumentDetails(document.id)
-      .then((result) => {
-        // The dialog may have moved on to another document meanwhile.
-        if (detailsDialogIdRef.current !== document.id) return;
-        setIsDetailsLoading(false);
-        // A failed read leaves `detailsData` empty; the dialog shows it with a retry.
-        if (!result.success) return;
-        // The table row that seeded this dialog is mount-time data; the fetch
-        // is the authority (freshness contract rule 3). Reopening right after
-        // a mutation must not show the pre-mutation row while the route
-        // refresh is still rendering.
-        setDetailsDialog(result.document);
-        setDetailsData(result);
-      })
-      .catch(() => {
-        if (detailsDialogIdRef.current !== document.id) return;
-        setIsDetailsLoading(false);
-      });
+    loadDocumentDetails({
+      document,
+      detailsDialogIdRef,
+      setDetailsDialog,
+      setDetailsData,
+      setIsDetailsLoading,
+    });
   }
 
   function closeDetailsDialog() {
