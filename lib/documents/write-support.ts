@@ -12,7 +12,7 @@ import { DOCUMENT_MAX_FILE_SIZE_BYTES } from './types';
 
 // Server helpers that the document writes share: the free sibling name, the
 // uploaded-object check, the failure of a write function and the cache
-// revalidation. They take the context of an authorized caller in actions.ts.
+// revalidation. They take the context of an authorized caller in the action modules.
 
 type SupabaseAdmin = AuthorizedDocumentContext['admin'];
 

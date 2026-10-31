@@ -340,7 +340,7 @@ export function toDocumentLink(
 }
 
 export function toDocumentCategory(value: string | null | undefined): DocumentCategory {
-  return DOCUMENT_CATEGORIES.includes(value as DocumentCategory) ? (value as DocumentCategory) : 'other';
+  return DOCUMENT_CATEGORIES.find((category) => category === value) ?? 'other';
 }
 
 export function toOrganizationDocument({

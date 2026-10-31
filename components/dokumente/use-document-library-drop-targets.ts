@@ -2,7 +2,8 @@
 
 import { useState, type DragEvent } from 'react';
 
-import { moveDocument, moveDocumentFolder } from '@/lib/documents/actions';
+import { moveDocumentFolder } from '@/lib/documents/folder-actions';
+import { moveDocument } from '@/lib/documents/library-actions';
 import type { DocumentFolder, DocumentLibraryView, OrganizationDocument } from '@/lib/documents/types';
 import { hasInternalRowDrag, readInternalRowDragSelection } from './document-drop-entries';
 import { canDropFolderIdsIntoFolder } from '@/lib/documents/folder-tree';
