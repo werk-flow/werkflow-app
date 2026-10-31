@@ -33,21 +33,12 @@ import { ServiceCaseEvidenceLink } from './service-case-evidence-link';
 import { ServiceCaseFormDialog } from './service-case-form-dialog';
 import { formatBerlinDateTime } from '@/lib/utils';
 
-export function ServiceCaseDetailContent({
-  initial,
-  documents,
-  documentsLoadFailed,
-}: {
-  initial: ServiceCaseDetailWorkspace;
-  documents: OrganizationDocument[];
-  documentsLoadFailed: boolean;
-}): ReactElement {
-  const [editOpen, setEditOpen] = useState(false);
-  const [relationOpen, setRelationOpen] = useState(false);
-  const [followUpOpen, setFollowUpOpen] = useState(false);
+type ServiceCaseItem = ServiceCaseDetailWorkspace['serviceCase'];
+
+/** The case's live read over GET, outside the Server Action queue the dialogs' saves use. */
+function useServiceCaseDetailLive(initial: ServiceCaseDetailWorkspace) {
   const { activeOrgId } = useOrganization();
-  // Reads over GET, outside the Server Action queue the dialogs' saves use.
-  const live = useLiveView({
+  return useLiveView({
     tables: ['service_cases'],
     initialData: initial,
     resetKey: initial.serviceCase.id,
@@ -67,6 +58,91 @@ export function ServiceCaseDetailContent({
         : { ok: false as const, error: result.error };
     },
   });
+}
+
+function ServiceCaseDetailHeader({
+  item,
+  busy,
+  isStale,
+  onEdit,
+}: {
+  item: ServiceCaseItem;
+  busy: boolean;
+  isStale: boolean;
+  onEdit: () => void;
+}): ReactElement {
+  return (
+    <div>
+      <Link
+        href="/service/faelle"
+        className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="size-4" />
+        Servicefälle
+      </Link>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span>
+            <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[item.status]}</Badge>
+            <span className="text-sm text-muted-foreground">{SERVICE_CASE_URGENCY_LABELS[item.urgency]}</span>
+          </div>
+          <h2 className="mt-1 break-words text-xl font-semibold">{item.summary}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {item.intakeType === 'request' ? 'Aus Anfrage übernommen' : 'Direkt erfasst'} · Aktualisiert{' '}
+            {formatBerlinDateTime(item.updatedAt)}
+          </p>
+        </div>
+        <span className="flex items-center gap-2">
+          <InlinePending active={busy} label="Änderungen werden übernommen" />
+          <Button type="button" onClick={onEdit} disabled={isStale}>
+            <Pencil className="size-4" />
+            Bearbeiten
+          </Button>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ServiceCaseDocuments({
+  item,
+  documents,
+  documentsLoadFailed,
+}: {
+  item: ServiceCaseItem;
+  documents: OrganizationDocument[];
+  documentsLoadFailed: boolean;
+}): ReactElement {
+  return documentsLoadFailed ? (
+    <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+  ) : (
+    <ContextualDocumentsSection
+      title="Dokumente & Bilder"
+      description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie."
+      documents={documents}
+      documentTarget={{ kind: 'service_case', serviceCaseId: item.id }}
+      contextLabel={item.caseNumber}
+      canUpload
+      canManage
+      keepUploadedDocumentsVisible
+    />
+  );
+}
+
+export function ServiceCaseDetailContent({
+  initial,
+  documents,
+  documentsLoadFailed,
+}: {
+  initial: ServiceCaseDetailWorkspace;
+  documents: OrganizationDocument[];
+  documentsLoadFailed: boolean;
+}): ReactElement {
+  const [editOpen, setEditOpen] = useState(false);
+  const [relationOpen, setRelationOpen] = useState(false);
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const live = useServiceCaseDetailLive(initial);
   const workspace = live.data ?? initial;
   const item = workspace.serviceCase;
   // Section-scoped settle window after a dialog action: the touched section
@@ -80,56 +156,17 @@ export function ServiceCaseDetailContent({
           Der Servicefall konnte nicht aktualisiert werden. Angezeigt wird der letzte bekannte Stand.
         </SectionError>
       )}
-      <div>
-        <Link
-          href="/service/faelle"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Servicefälle
-        </Link>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-sm text-muted-foreground">{item.caseNumber}</span>
-              <Badge variant="secondary">{SERVICE_CASE_STATUS_LABELS[item.status]}</Badge>
-              <span className="text-sm text-muted-foreground">
-                {SERVICE_CASE_URGENCY_LABELS[item.urgency]}
-              </span>
-            </div>
-            <h2 className="mt-1 break-words text-xl font-semibold">{item.summary}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {item.intakeType === 'request' ? 'Aus Anfrage übernommen' : 'Direkt erfasst'} · Aktualisiert{' '}
-              {formatBerlinDateTime(item.updatedAt)}
-            </p>
-          </div>
-          <span className="flex items-center gap-2">
-            <InlinePending active={settling.isBusy('case')} label="Änderungen werden übernommen" />
-            <Button type="button" onClick={() => setEditOpen(true)} disabled={live.isStale}>
-              <Pencil className="size-4" />
-              Bearbeiten
-            </Button>
-          </span>
-        </div>
-      </div>
+      <ServiceCaseDetailHeader
+        item={item}
+        busy={settling.isBusy('case')}
+        isStale={live.isStale}
+        onEdit={() => setEditOpen(true)}
+      />
       <DetailColumns layout="main-and-aside">
         <div className="min-w-0 space-y-6">
           <ServiceCaseOriginSection item={item} />
           <ServiceCaseTriageSection item={item} />
-          {documentsLoadFailed ? (
-            <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-          ) : (
-            <ContextualDocumentsSection
-              title="Dokumente & Bilder"
-              description="Dokumente werden aus der zentralen Ablage verknüpft. Es entsteht keine Dateikopie."
-              documents={documents}
-              documentTarget={{ kind: 'service_case', serviceCaseId: item.id }}
-              contextLabel={item.caseNumber}
-              canUpload
-              canManage
-              keepUploadedDocumentsVisible
-            />
-          )}
+          <ServiceCaseDocuments item={item} documents={documents} documentsLoadFailed={documentsLoadFailed} />
           <ServiceCaseEvidenceLink
             serviceCase={item}
             options={workspace.evidenceOptions}
