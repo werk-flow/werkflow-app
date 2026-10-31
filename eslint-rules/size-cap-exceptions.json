@@ -326,15 +326,6 @@
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
     "components/time-activity-dialog.tsx": { "TimeActivityDialogForm": 178 },
     "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
-    "components/ui/calendar.tsx": { "Calendar": 122 },
-    "components/ui/date-picker.tsx": { "DatePicker": 120 },
-    "components/ui/duration-hours-input.tsx": { "DurationHoursInput": 87 },
-    "components/ui/month-picker.tsx": { "MonthPicker": 151 },
-    "components/ui/time-input.tsx": { "TimeInput": 197 },
-    "components/ui/use-date-picker-segments.ts": {
-      "handleDateSegmentKeyDown": 93,
-      "useDatePickerSegments": 141
-    },
     "components/use-manual-entry-form-submit.ts": {
       "useManualEntrySubmit": 138,
       "useManualEntrySubmit > handleSubmit": 98
