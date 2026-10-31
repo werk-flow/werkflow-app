@@ -16,6 +16,24 @@ import type {
   TimeTravelRoute,
 } from '@/lib/time-tracking/types';
 
+// The values the qualifier selects offer, in their order; a picked value is narrowed against them.
+const INTERNAL_ACTIVITIES: readonly TimeInternalActivity[] = [
+  'internal_work',
+  'meeting',
+  'training',
+  'other',
+];
+const TRAVEL_ROUTE_VALUES: readonly TimeTravelRoute[] = [
+  'company_to_site',
+  'home_to_site',
+  'site_to_site',
+  'site_to_company',
+  'other',
+  'unspecified',
+];
+const TRAVEL_ROLE_VALUES: readonly TimeTravelRole[] = ['driver', 'passenger', 'unspecified'];
+const STANDBY_CONTEXT_VALUES: readonly TimeStandbyContext[] = ['on_site', 'remote', 'unspecified'];
+
 type TimeActivityOption = {
   kind: TimeSegmentKind;
   label: string;
@@ -126,77 +144,140 @@ export function TimeActivityQualifierFields({
   return (
     <>
       {kind === 'internal_activity' && (
-        <Field label="Interne Tätigkeit" htmlFor="time-internal-type">
-          <Select
-            value={internalType}
-            onValueChange={(value) => onInternalTypeChange(value as TimeInternalActivity)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="internal_work">Betriebsarbeit</SelectItem>
-              <SelectItem value="meeting">Besprechung</SelectItem>
-              <SelectItem value="training">Schulung</SelectItem>
-              <SelectItem value="other">Sonstiges</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <TimeInternalActivityField internalType={internalType} onInternalTypeChange={onInternalTypeChange} />
       )}
 
       {kind === 'travel' && (
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Strecke" htmlFor="time-travel-route">
-            <Select
-              value={travelRoute}
-              onValueChange={(value) => onTravelRouteChange(value as TimeTravelRoute)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="company_to_site">Betrieb → Einsatzort</SelectItem>
-                <SelectItem value="home_to_site">Zuhause → Einsatzort</SelectItem>
-                <SelectItem value="site_to_site">Einsatzort → Einsatzort</SelectItem>
-                <SelectItem value="site_to_company">Einsatzort → Betrieb</SelectItem>
-                <SelectItem value="other">Andere Strecke</SelectItem>
-                <SelectItem value="unspecified">Nicht angegeben</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Rolle" htmlFor="time-travel-role">
-            <Select value={travelRole} onValueChange={(value) => onTravelRoleChange(value as TimeTravelRole)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="driver">Selbst gefahren</SelectItem>
-                <SelectItem value="passenger">Mitgefahren</SelectItem>
-                <SelectItem value="unspecified">Nicht angegeben</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+        <TimeTravelFields
+          travelRoute={travelRoute}
+          onTravelRouteChange={onTravelRouteChange}
+          travelRole={travelRole}
+          onTravelRoleChange={onTravelRoleChange}
+        />
       )}
 
       {kind === 'standby' && (
-        <Field label="Bereitschaft" htmlFor="time-standby-context">
-          <Select
-            value={standbyContext}
-            onValueChange={(value) => onStandbyContextChange(value as TimeStandbyContext)}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="on_site">Vor Ort</SelectItem>
-              <SelectItem value="remote">Extern</SelectItem>
-              <SelectItem value="unspecified">Nicht angegeben</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
+        <TimeStandbyContextField
+          standbyContext={standbyContext}
+          onStandbyContextChange={onStandbyContextChange}
+        />
       )}
     </>
+  );
+}
+
+function TimeInternalActivityField({
+  internalType,
+  onInternalTypeChange,
+}: {
+  internalType: TimeInternalActivity;
+  onInternalTypeChange: (internalType: TimeInternalActivity) => void;
+}): ReactElement {
+  return (
+    <Field label="Interne Tätigkeit" htmlFor="time-internal-type">
+      <Select
+        value={internalType}
+        onValueChange={(value) => {
+          const match = INTERNAL_ACTIVITIES.find((candidate) => candidate === value);
+          if (match) onInternalTypeChange(match);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="internal_work">Betriebsarbeit</SelectItem>
+          <SelectItem value="meeting">Besprechung</SelectItem>
+          <SelectItem value="training">Schulung</SelectItem>
+          <SelectItem value="other">Sonstiges</SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function TimeTravelFields({
+  travelRoute,
+  onTravelRouteChange,
+  travelRole,
+  onTravelRoleChange,
+}: {
+  travelRoute: TimeTravelRoute;
+  onTravelRouteChange: (travelRoute: TimeTravelRoute) => void;
+  travelRole: TimeTravelRole;
+  onTravelRoleChange: (travelRole: TimeTravelRole) => void;
+}): ReactElement {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Strecke" htmlFor="time-travel-route">
+        <Select
+          value={travelRoute}
+          onValueChange={(value) => {
+            const match = TRAVEL_ROUTE_VALUES.find((candidate) => candidate === value);
+            if (match) onTravelRouteChange(match);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="company_to_site">Betrieb → Einsatzort</SelectItem>
+            <SelectItem value="home_to_site">Zuhause → Einsatzort</SelectItem>
+            <SelectItem value="site_to_site">Einsatzort → Einsatzort</SelectItem>
+            <SelectItem value="site_to_company">Einsatzort → Betrieb</SelectItem>
+            <SelectItem value="other">Andere Strecke</SelectItem>
+            <SelectItem value="unspecified">Nicht angegeben</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Rolle" htmlFor="time-travel-role">
+        <Select
+          value={travelRole}
+          onValueChange={(value) => {
+            const match = TRAVEL_ROLE_VALUES.find((candidate) => candidate === value);
+            if (match) onTravelRoleChange(match);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="driver">Selbst gefahren</SelectItem>
+            <SelectItem value="passenger">Mitgefahren</SelectItem>
+            <SelectItem value="unspecified">Nicht angegeben</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </div>
+  );
+}
+
+function TimeStandbyContextField({
+  standbyContext,
+  onStandbyContextChange,
+}: {
+  standbyContext: TimeStandbyContext;
+  onStandbyContextChange: (standbyContext: TimeStandbyContext) => void;
+}): ReactElement {
+  return (
+    <Field label="Bereitschaft" htmlFor="time-standby-context">
+      <Select
+        value={standbyContext}
+        onValueChange={(value) => {
+          const match = STANDBY_CONTEXT_VALUES.find((candidate) => candidate === value);
+          if (match) onStandbyContextChange(match);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="on_site">Vor Ort</SelectItem>
+          <SelectItem value="remote">Extern</SelectItem>
+          <SelectItem value="unspecified">Nicht angegeben</SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
   );
 }
 

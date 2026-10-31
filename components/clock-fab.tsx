@@ -22,29 +22,14 @@ import {
 import { useBanner } from '@/components/ui/banner';
 import { cn, formatBerlinTime } from '@/lib/utils';
 
-export function ClockFAB() {
-  const { activeOrgId, activeOrg } = useOrganization();
-  const { state, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = useClockState();
+/** The sheet's open state and the hot keys, which act directly or open the sheet at their picker. */
+function useClockFabControls(transitionActivity: ReturnType<typeof useClockState>['transitionActivity']) {
   const { showBanner } = useBanner();
   const { run, isPending: isHotKeyRunning } = usePendingTask();
   const [open, setOpen] = useState(false);
   const [isListRunning, setIsListRunning] = useState(false);
   const [sheetPickerMode, setSheetPickerMode] = useState<ClockPickerMode | null>(null);
   const [pendingHotKey, setPendingHotKey] = useState<string | null>(null);
-
-  if (!activeOrgId || !activeOrg) return null;
-  const isClockedIn = state?.isClockedIn ?? false;
-  const isOnBreak = state?.isOnBreak ?? false;
-  const recovery = Boolean(state?.recoveryReason);
-  const currentLabel = state?.currentActivity
-    ? describeActivity(state.currentActivity, state.activeJobInfo)
-    : state?.legacyOpen
-      ? 'Laufende Erfassung'
-      : null;
-  // Hot keys act directly; a job-choice hot key opens the sheet with its picker
-  // already open. Recovery hides the hot keys, so they never bypass its review.
-  const hotKeys = isClockedIn && !recovery ? selectClockHotKeys(deriveClockActions(state)) : [];
-  const busy = !isReady || isPending || isHotKeyRunning;
 
   function openSheet(pickerMode: ClockPickerMode | null = null): void {
     setSheetPickerMode(pickerMode);
@@ -78,9 +63,45 @@ export function ClockFAB() {
     });
   }
 
+  return {
+    isHotKeyRunning,
+    open,
+    setOpen,
+    isListRunning,
+    setIsListRunning,
+    sheetPickerMode,
+    pendingHotKey,
+    openSheet,
+    activateHotKey,
+  };
+}
+
+export function ClockFAB() {
+  const { activeOrgId, activeOrg } = useOrganization();
+  const { state, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = useClockState();
+  const controls = useClockFabControls(transitionActivity);
+
+  if (!activeOrgId || !activeOrg) return null;
+  const isClockedIn = state?.isClockedIn ?? false;
+  const isOnBreak = state?.isOnBreak ?? false;
+  const recovery = Boolean(state?.recoveryReason);
+  const currentLabel = state?.currentActivity
+    ? describeActivity(state.currentActivity, state.activeJobInfo)
+    : state?.legacyOpen
+      ? 'Laufende Erfassung'
+      : null;
+  // Hot keys act directly; a job-choice hot key opens the sheet with its picker
+  // already open. Recovery hides the hot keys, so they never bypass its review.
+  const hotKeys = isClockedIn && !recovery ? selectClockHotKeys(deriveClockActions(state)) : [];
+  const busy = !isReady || isPending || controls.isHotKeyRunning;
+
   return (
     <>
-      <Dialog open={open} onOpenChange={setOpen} pending={isPending || isListRunning}>
+      <Dialog
+        open={controls.open}
+        onOpenChange={controls.setOpen}
+        pending={isPending || controls.isListRunning}
+      >
         <DialogContent placement="anchored">
           <DialogHeader>
             <DialogTitle>{isClockedIn ? 'Laufende Zeiterfassung' : 'Zeiterfassung starten'}</DialogTitle>
@@ -92,9 +113,9 @@ export function ClockFAB() {
           </DialogHeader>
           <ClockActionList
             organizationId={activeOrgId}
-            initialPickerMode={sheetPickerMode}
-            onSettled={() => setOpen(false)}
-            onPendingChange={setIsListRunning}
+            initialPickerMode={controls.sheetPickerMode}
+            onSettled={() => controls.setOpen(false)}
+            onPendingChange={controls.setIsListRunning}
           />
         </DialogContent>
       </Dialog>
@@ -111,49 +132,26 @@ export function ClockFAB() {
         {isClockedIn && currentLabel && (
           <PlainButton
             type="button"
-            onClick={() => openSheet()}
+            onClick={() => controls.openSheet()}
             title="Laufende Zeiterfassung öffnen"
             className="flex min-h-11 max-w-64 items-center rounded-md border bg-background/95 px-3 py-2 text-sm font-medium shadow-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <span className="min-w-0 truncate">{currentLabel}</span>
           </PlainButton>
         )}
-        {hotKeys.map((action) => (
-          <Button
-            pending={pendingHotKey === action.id}
-            key={action.id}
-            type="button"
-            variant="outline"
-            className="min-h-11 max-w-64 rounded-full bg-background/95 px-4 shadow-md"
-            disabled={busy}
-            onClick={() => activateHotKey(action)}
-          >
-            <span className="min-w-0 truncate">{action.label}</span>
-          </Button>
-        ))}
-        <Button
-          size="icon"
-          className={cn(
-            'size-14 rounded-full shadow-lg [&>[data-slot=spinner]]:size-6',
-            isClockedIn &&
-              !isOnBreak &&
-              'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
-            isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow',
-          )}
-          onClick={() => openSheet()}
+        <ClockHotKeys
+          hotKeys={hotKeys}
+          pendingHotKey={controls.pendingHotKey}
+          busy={busy}
+          onActivate={controls.activateHotKey}
+        />
+        <ClockFabButton
+          isClockedIn={isClockedIn}
+          isOnBreak={isOnBreak}
           pending={isLoading || isPending}
-          disabled={!isReady}
-          aria-label={isClockedIn ? 'Laufende Zeiterfassung öffnen' : 'Zeiterfassung starten'}
-          title={isClockedIn ? 'Zeiterfassung öffnen' : 'Zeiterfassung starten'}
-        >
-          {isOnBreak ? (
-            <Coffee className="size-6" />
-          ) : isClockedIn ? (
-            <Clock3 className="size-6" />
-          ) : (
-            <Play className="size-6" />
-          )}
-        </Button>
+          isReady={isReady}
+          onOpen={() => controls.openSheet()}
+        />
         {statusError && (
           <SectionError className="max-w-64 shadow-lg" onRetry={() => void refresh()}>
             Der Zeitstatus konnte nicht sicher geladen werden.
@@ -161,5 +159,73 @@ export function ClockFAB() {
         )}
       </div>
     </>
+  );
+}
+
+/** The direct actions beside the clock button while a session runs. */
+function ClockHotKeys({
+  hotKeys,
+  pendingHotKey,
+  busy,
+  onActivate,
+}: {
+  hotKeys: ClockAction[];
+  pendingHotKey: string | null;
+  busy: boolean;
+  onActivate: (action: ClockAction) => void;
+}) {
+  return hotKeys.map((action) => (
+    <Button
+      pending={pendingHotKey === action.id}
+      key={action.id}
+      type="button"
+      variant="outline"
+      className="min-h-11 max-w-64 rounded-full bg-background/95 px-4 shadow-md"
+      disabled={busy}
+      onClick={() => onActivate(action)}
+    >
+      <span className="min-w-0 truncate">{action.label}</span>
+    </Button>
+  ));
+}
+
+/** The round clock button: green while working, yellow on a break, a play icon while clocked out. */
+function ClockFabButton({
+  isClockedIn,
+  isOnBreak,
+  pending,
+  isReady,
+  onOpen,
+}: {
+  isClockedIn: boolean;
+  isOnBreak: boolean;
+  pending: boolean;
+  isReady: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <Button
+      size="icon"
+      className={cn(
+        'size-14 rounded-full shadow-lg [&>[data-slot=spinner]]:size-6',
+        isClockedIn &&
+          !isOnBreak &&
+          'bg-success/90 text-success-foreground hover:bg-success animate-green-glow',
+        isOnBreak && 'bg-warning/90 text-warning-foreground hover:bg-warning animate-yellow-glow',
+      )}
+      onClick={onOpen}
+      pending={pending}
+      disabled={!isReady}
+      aria-label={isClockedIn ? 'Laufende Zeiterfassung öffnen' : 'Zeiterfassung starten'}
+      title={isClockedIn ? 'Zeiterfassung öffnen' : 'Zeiterfassung starten'}
+    >
+      {isOnBreak ? (
+        <Coffee className="size-6" />
+      ) : isClockedIn ? (
+        <Clock3 className="size-6" />
+      ) : (
+        <Play className="size-6" />
+      )}
+    </Button>
   );
 }
