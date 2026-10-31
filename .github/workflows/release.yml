@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Decide like a scheduled run and stop before the full run and PROD
+        description: Decide like a scheduled run, then stop before the full run and any change to PROD
         type: boolean
         default: false
 
@@ -168,8 +168,8 @@ jobs:
   smoke:
     name: Check production
     needs: [candidate, release]
-    # After a release, its build; in a dry run, the build that serves now, whatever the decision.
-    if: ${{ !cancelled() && (inputs.dry_run || needs.release.result == 'success') }}
+    # After a release, its build; in a dry run that found a candidate, the build that serves now.
+    if: ${{ !cancelled() && ((inputs.dry_run && needs.candidate.result == 'success') || needs.release.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
