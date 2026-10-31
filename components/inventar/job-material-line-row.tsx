@@ -67,7 +67,7 @@ export function MaterialLineRow({
         />
 
         {!readOnly && (
-          <MaterialLineActions
+          <JobMaterialLineActions
             isAdminOrManager={isAdminOrManager}
             isBusy={isBusy}
             locations={locations}
@@ -143,7 +143,7 @@ function MaterialLineSummary({
 }
 
 /** Take, return, and for the office edit and remove; a busy line keeps them disabled. */
-function MaterialLineActions({
+function JobMaterialLineActions({
   isAdminOrManager,
   isBusy,
   locations,
