@@ -82,17 +82,7 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   eq(column: string, value: unknown): this {
-    // A dotted column on a seeded embedded array filters that embed, never its parent row,
-    // unless the select joins the embed with `!inner`: then it keeps only parents with a match (PostgREST).
-    const dot = column.indexOf('.');
-    const embedded = dot === -1 ? null : column.slice(0, dot);
-    return this.where((row) => {
-      const embed = embedded === null ? undefined : row[embedded];
-      if (embedded === null || !Array.isArray(embed)) return row[column] === value;
-      return (
-        !this.innerEmbeds.has(embedded) || embed.some((item: Row) => item[column.slice(dot + 1)] === value)
-      );
-    });
+    return this.compare(column, (field) => field === value);
   }
   neq(column: string, value: unknown): this {
     return this.where((row) => row[column] !== value);
@@ -195,8 +185,10 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
       if (this.operation === 'delete')
         this.tables[this.table] = rows.filter((row) => !affected.includes(row));
     }
-    if (this.operation === 'select' && this.embedFilters.size > 0)
-      affected = affected.map((row) => this.withFilteredEmbeds(row));
+    if (this.operation === 'select' && (this.embedFilters.size > 0 || this.innerEmbeds.size > 0))
+      affected = affected
+        .map((row) => this.withFilteredEmbeds(row))
+        .filter((row) => this.keepsInnerEmbeds(row));
     if (this.headOnly) return { data: null, error: null, count: affected.length };
     if (this.cardinality === 'many') return { data: affected, error: null, count: affected.length };
     if (this.cardinality === 'single' && affected.length !== 1)
@@ -207,6 +199,14 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
         count: null,
       };
     return { data: affected[0] ?? null, error: null, count: null };
+  }
+
+  /** A `!inner` embed keeps its parent only while one embedded row passes every filter on it (PostgREST). */
+  private keepsInnerEmbeds(row: Row): boolean {
+    return [...this.innerEmbeds].every((embedded) => {
+      const items = row[embedded];
+      return !Array.isArray(items) || items.length > 0;
+    });
   }
 
   /** A copy of a selected row whose embedded arrays keep only the items every embed filter keeps. */

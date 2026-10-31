@@ -49,3 +49,22 @@ test('an embedded filter leaves the seeded rows untouched', async () => {
   const seeded = tables.time_sessions?.[0]?.time_segments;
   expect(Array.isArray(seeded) ? seeded.length : seeded).toBe(5);
 });
+
+test('a !inner embed keeps its parent only while an embedded row passes every filter', async () => {
+  const admin = createInMemoryAdmin(sessions());
+  const cutoff = await admin
+    .from('time_sessions')
+    .select('id, time_segments!inner(*)')
+    .gte('time_segments.started_at', '2026-10-29T00:00:00.000Z')
+    .or('ended_at.is.null', { referencedTable: 'time_segments' });
+  expect(cutoff.data).toEqual([]);
+
+  const matching = await admin
+    .from('time_sessions')
+    .select('id, time_segments!inner(*)')
+    .eq('time_segments.id', 'today');
+  const segments = Array.isArray(matching.data) ? matching.data[0]?.time_segments : undefined;
+  expect(Array.isArray(segments) ? segments.map((segment: { id: string }) => segment.id) : segments).toEqual([
+    'today',
+  ]);
+});
