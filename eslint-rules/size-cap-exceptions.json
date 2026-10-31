@@ -207,25 +207,11 @@
     "components/dokumente/use-document-move-copy.ts": { "useDocumentMoveCopy": 166 },
     "components/dokumente/use-document-rename.ts": { "useDocumentRename": 86 },
     "components/dokumente/use-document-version-actions.ts": { "useDocumentVersionActions": 111 },
-    "components/inventar/inventory-content.tsx": {
-      "InventoryContent": 148,
-      "InventoryTable": 92,
-      "MovementsTable": 107
-    },
-    "components/inventar/inventory-import-dialog.tsx": { "ImportDialog": 106 },
-    "components/inventar/inventory-item-dialog.tsx": { "ItemDialog": 97 },
-    "components/inventar/inventory-item-form-fields.tsx": {
-      "ItemStockFields": 83,
-      "ItemSupplierFields": 102
-    },
-    "components/inventar/inventory-locations-view.tsx": { "LocationsView": 103 },
-    "components/inventar/inventory-stock-adjustment-dialog.tsx": { "StockAdjustmentDialog": 135 },
     "components/inventar/job-material-dialog-row.tsx": { "MaterialDialogRowCard": 88 },
     "components/inventar/job-material-item-picker.tsx": { "MaterialItemPicker": 95 },
     "components/inventar/job-material-line-row.tsx": { "MaterialLineRow": 127 },
     "components/inventar/job-material-selection-dialog.tsx": { "MaterialSelectionDialog": 132 },
     "components/inventar/job-materials-section.tsx": { "JobMaterialsSection": 128 },
-    "components/inventar/use-inventory-editing.ts": { "useInventoryItemEditor": 86 },
     "components/inventar/use-job-material-dialog.ts": { "useJobMaterialDialog": 159 },
     "components/inventar/use-job-material-mutations.ts": { "useJobMaterialMutations": 117 },
     "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 96 },
