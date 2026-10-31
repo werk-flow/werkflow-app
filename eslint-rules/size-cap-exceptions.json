@@ -36,26 +36,6 @@
     "components/anfragen/use-request-detail-actions.ts": { "useRequestDetailActions": 148 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
-    "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
-    "components/auftraege/artifacts/use-work-artifact-customer-actions.ts": {
-      "useWorkArtifactCustomerActions": 129
-    },
-    "components/auftraege/artifacts/use-work-artifact-editor.ts": { "useWorkArtifactEditor": 132 },
-    "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 151 },
-    "components/auftraege/artifacts/work-artifact-action-panel.tsx": {
-      "WorkArtifactLinkDisclosures": 144,
-      "WorkArtifactActionPanel": 138
-    },
-    "components/auftraege/artifacts/work-artifact-detail.tsx": { "ArtifactDetail": 142 },
-    "components/auftraege/artifacts/work-artifact-form.tsx": { "ArtifactForm": 118 },
-    "components/auftraege/artifacts/work-artifact-kind-fields.tsx": {
-      "WorkArtifactMeasurementFields": 123,
-      "WorkArtifactDefectFields": 83
-    },
-    "components/auftraege/artifacts/work-artifacts-section.tsx": {
-      "WorkArtifactsSection": 139,
-      "WorkArtifactDialog": 197
-    },
     "components/auftraege/forms/create-auftrag-project-dialog.tsx": { "CreateAuftragProjectDialog": 108 },
     "components/auftraege/forms/create-job-form-sections.tsx": { "CreateJobPlanningFields": 101 },
     "components/auftraege/forms/create-project-form-content.tsx": { "useCreateProjectSubmit": 83 },

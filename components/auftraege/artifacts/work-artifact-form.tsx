@@ -4,6 +4,7 @@ import { DateTimeField } from '@/components/ui/date-time-field';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Constants } from '@/lib/supabase/database.types';
 import {
   WORK_ARTIFACT_KIND_LABELS,
   WORK_ARTIFACT_KINDS,
@@ -65,40 +66,13 @@ export function ArtifactForm({
 }: ArtifactFormProps) {
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Art" htmlFor="artifact-kind">
-          <Select
-            value={kind}
-            disabled={lockedKind}
-            onValueChange={(value) => setKind(value as WorkArtifactKind)}
-          >
-            <SelectTrigger aria-label="Art des Arbeitsnachweises">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {WORK_ARTIFACT_KINDS.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {WORK_ARTIFACT_KIND_LABELS[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-        <Field label="Sichtbarkeit" htmlFor="artifact-visibility">
-          <Select
-            value={visibility}
-            onValueChange={(value) => setVisibility(value as WorkArtifactVisibility)}
-          >
-            <SelectTrigger aria-label="Sichtbarkeit des Arbeitsnachweises">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="internal_only">Nur intern</SelectItem>
-              <SelectItem value="customer_facing">Für Kundendokumentation</SelectItem>
-            </SelectContent>
-          </Select>
-        </Field>
-      </div>
+      <ArtifactKindAndVisibilityFields
+        kind={kind}
+        setKind={setKind}
+        lockedKind={lockedKind}
+        visibility={visibility}
+        setVisibility={setVisibility}
+      />
       <TextField label="Titel" value={title} onChange={setTitle} />
       <Field label="Erfasst am" htmlFor="artifact-captured-date">
         <DateTimeField
@@ -115,20 +89,122 @@ export function ArtifactForm({
         textarea
       />
       {instructionOptions.length > 0 && (
-        <Field label="Zugehörige Aufgabe/Checkliste" htmlFor="artifact-instruction-item">
-          <SearchableSelect
-            ariaLabel="Zugehörige Aufgabe oder Checkliste"
-            options={instructionOptions.map((option) => ({ value: option.id, label: option.label }))}
-            value={content.instructionItemId ?? ''}
-            onChange={(value) => patchContent({ instructionItemId: value || undefined })}
-            allowNone
-            noneLabel="Keine direkte Zuordnung"
-            placeholder="Keine direkte Zuordnung"
-            searchPlaceholder="Eintrag suchen…"
-            emptyMessage="Kein Eintrag gefunden"
-          />
-        </Field>
+        <ArtifactInstructionItemField
+          content={content}
+          patchContent={patchContent}
+          instructionOptions={instructionOptions}
+        />
       )}
+      <ArtifactKindSpecificFields
+        kind={kind}
+        visibility={visibility}
+        content={content}
+        patchContent={patchContent}
+        measurementLines={measurementLines}
+        setMeasurementLines={setMeasurementLines}
+      />
+      {requiresCorrectionReason && (
+        <TextField
+          id="artifact-correction-reason"
+          label="Grund der neuen Version"
+          value={correctionReason}
+          onChange={setCorrectionReason}
+          error={correctionReasonError}
+          textarea
+        />
+      )}
+    </div>
+  );
+}
+
+function ArtifactKindAndVisibilityFields({
+  kind,
+  setKind,
+  lockedKind,
+  visibility,
+  setVisibility,
+}: Pick<ArtifactFormProps, 'kind' | 'setKind' | 'lockedKind' | 'visibility' | 'setVisibility'>) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Field label="Art" htmlFor="artifact-kind">
+        <Select
+          value={kind}
+          disabled={lockedKind}
+          onValueChange={(value) => {
+            const nextKind = WORK_ARTIFACT_KINDS.find((candidate) => candidate === value);
+            if (nextKind) setKind(nextKind);
+          }}
+        >
+          <SelectTrigger aria-label="Art des Arbeitsnachweises">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {WORK_ARTIFACT_KINDS.map((value) => (
+              <SelectItem key={value} value={value}>
+                {WORK_ARTIFACT_KIND_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Sichtbarkeit" htmlFor="artifact-visibility">
+        <Select
+          value={visibility}
+          onValueChange={(value) => {
+            const nextVisibility = Constants.public.Enums.work_artifact_visibility.find(
+              (candidate) => candidate === value,
+            );
+            if (nextVisibility) setVisibility(nextVisibility);
+          }}
+        >
+          <SelectTrigger aria-label="Sichtbarkeit des Arbeitsnachweises">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="internal_only">Nur intern</SelectItem>
+            <SelectItem value="customer_facing">Für Kundendokumentation</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </div>
+  );
+}
+
+function ArtifactInstructionItemField({
+  content,
+  patchContent,
+  instructionOptions,
+}: Pick<ArtifactFormProps, 'content' | 'patchContent' | 'instructionOptions'>) {
+  return (
+    <Field label="Zugehörige Aufgabe/Checkliste" htmlFor="artifact-instruction-item">
+      <SearchableSelect
+        ariaLabel="Zugehörige Aufgabe oder Checkliste"
+        options={instructionOptions.map((option) => ({ value: option.id, label: option.label }))}
+        value={content.instructionItemId ?? ''}
+        onChange={(value) => patchContent({ instructionItemId: value || undefined })}
+        allowNone
+        noneLabel="Keine direkte Zuordnung"
+        placeholder="Keine direkte Zuordnung"
+        searchPlaceholder="Eintrag suchen…"
+        emptyMessage="Kein Eintrag gefunden"
+      />
+    </Field>
+  );
+}
+
+function ArtifactKindSpecificFields({
+  kind,
+  visibility,
+  content,
+  patchContent,
+  measurementLines,
+  setMeasurementLines,
+}: Pick<
+  ArtifactFormProps,
+  'kind' | 'visibility' | 'content' | 'patchContent' | 'measurementLines' | 'setMeasurementLines'
+>) {
+  return (
+    <>
       {kind === 'site_diary' && <WorkArtifactSiteDiaryFields content={content} patchContent={patchContent} />}
       {kind === 'work_report' && (
         <WorkArtifactWorkReportFields content={content} patchContent={patchContent} />
@@ -148,16 +224,6 @@ export function ArtifactForm({
       {visibility === 'customer_facing' && (
         <WorkArtifactCustomerFacingFields content={content} patchContent={patchContent} />
       )}
-      {requiresCorrectionReason && (
-        <TextField
-          id="artifact-correction-reason"
-          label="Grund der neuen Version"
-          value={correctionReason}
-          onChange={setCorrectionReason}
-          error={correctionReasonError}
-          textarea
-        />
-      )}
-    </div>
+    </>
   );
 }

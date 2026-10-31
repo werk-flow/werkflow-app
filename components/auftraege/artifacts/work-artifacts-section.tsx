@@ -3,7 +3,7 @@
 import { StaleRegion } from '@/components/shared/stale-region';
 import { EmptyState } from '@/components/ui/empty-state';
 import { PlainButton } from '@/components/ui/plain-button';
-import { useId, useState, type ReactElement } from 'react';
+import { useId, useState, type Dispatch, type ReactElement, type SetStateAction } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ClipboardList, Plus } from 'lucide-react';
 
@@ -18,9 +18,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { ErrorText } from '@/components/ui/error-text';
-import { SectionError } from '@/components/ui/section-error';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useLiveView } from '@/hooks/use-live-view';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { readInBackground } from '@/lib/data/background-read-client';
@@ -31,16 +28,33 @@ import {
   type WorkArtifactTimeSourceOption,
 } from '@/lib/work-artifacts/types';
 import { useWorkArtifactCustomerActions } from './use-work-artifact-customer-actions';
-import { useWorkArtifactEditor } from './use-work-artifact-editor';
+import { useWorkArtifactEditor, type WorkArtifactEditor } from './use-work-artifact-editor';
 import { useWorkArtifactLinks } from './use-work-artifact-links';
 import { useWorkArtifactReviewActions } from './use-work-artifact-review-actions';
 import { useWorkArtifactSave } from './use-work-artifact-save';
-import { WorkArtifactActionPanel } from './work-artifact-action-panel';
 import type { WorkArtifactTarget } from '@/lib/work-artifacts/types';
 import type { WorkArtifactEvidenceRequirement } from './work-artifact-content';
 import { ArtifactDetail } from './work-artifact-detail';
-import { ArtifactForm } from './work-artifact-form';
+import {
+  WorkArtifactDialogActions,
+  WorkArtifactDialogSkeleton,
+  WorkArtifactDraftForm,
+  WorkArtifactRemoteUpdateHint,
+} from './work-artifacts-section-dialog-parts';
 import { SectionTitle } from '@/components/shared/section-title';
+
+type WorkArtifactsSectionProps = WorkArtifactTarget & {
+  initialArtifacts: WorkArtifactSummary[];
+  isManager: boolean;
+  canApprove: boolean;
+  currentUserId: string;
+  documents: OrganizationDocument[];
+  evidenceRequirements?: WorkArtifactEvidenceRequirement[];
+  timeEntryOptions?: WorkArtifactTimeSourceOption[];
+  instructionOptions?: Array<{ id: string; label: string }>;
+  defaultSiteId?: string | undefined;
+  readOnly?: boolean;
+};
 
 export function WorkArtifactsSection({
   targetType,
@@ -55,18 +69,7 @@ export function WorkArtifactsSection({
   instructionOptions = [],
   defaultSiteId,
   readOnly = false,
-}: WorkArtifactTarget & {
-  initialArtifacts: WorkArtifactSummary[];
-  isManager: boolean;
-  canApprove: boolean;
-  currentUserId: string;
-  documents: OrganizationDocument[];
-  evidenceRequirements?: WorkArtifactEvidenceRequirement[];
-  timeEntryOptions?: WorkArtifactTimeSourceOption[];
-  instructionOptions?: Array<{ id: string; label: string }>;
-  defaultSiteId?: string | undefined;
-  readOnly?: boolean;
-}): ReactElement {
+}: WorkArtifactsSectionProps): ReactElement {
   const searchParams = useSearchParams();
   const [selectedId, setSelectedId] = useState<string | null>(() => {
     const requestedId = searchParams.get('arbeitsnachweis');
@@ -79,31 +82,12 @@ export function WorkArtifactsSection({
   const [remoteVersions, setRemoteVersions] = useState<Record<string, number>>({});
 
   const editing = Boolean(selectedId || creating);
-  const view = useLiveView<WorkArtifactSummary[]>({
-    tables: ['work_artifacts'],
-    read: async ({ signal }) => {
-      const result = await readInBackground('work-artifacts', { targetType, targetId }, signal);
-      return result.success ? { ok: true, data: result.artifacts } : { ok: false };
-    },
-    initialData: initialArtifacts,
-    resetKey: `${targetType}:${targetId}`,
-    // While the artifact dialog is open, reads queue (one catch-up after
-    // close); the in-dialog hint tells the editor a newer version exists.
-    suspend: editing,
-    eventFilter: (event) => {
-      const row = event.new ?? event.old;
-      const targetColumn = targetType === 'job' ? 'job_id' : 'project_id';
-      const rowTarget = row?.[targetColumn];
-      // DELETE payloads carry only id/organization_id — a missing column is relevant.
-      if (row && rowTarget !== undefined && rowTarget !== targetId) return false;
-      const rowId = row?.id;
-      if (editing && typeof rowId === 'string') {
-        // A DELETE carries no version, so it always counts as newer.
-        const version = typeof row?.version === 'number' ? row.version : Number.MAX_SAFE_INTEGER;
-        setRemoteVersions((current) => ({ ...current, [rowId]: Math.max(current[rowId] ?? 0, version) }));
-      }
-      return true;
-    },
+  const view = useWorkArtifactsLiveView({
+    targetType,
+    targetId,
+    initialArtifacts,
+    editing,
+    setRemoteVersions,
   });
   const artifacts = view.data ?? initialArtifacts;
   const refresh = view.refresh;
@@ -114,50 +98,13 @@ export function WorkArtifactsSection({
       data-testid="work-artifacts-section"
       className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <SectionTitle icon={<ClipboardList className="size-4" />}>Arbeitsnachweise</SectionTitle>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Bautagebuch, Arbeitsbericht, Aufmaß, Mangel und Regiearbeit versionssicher erfassen.
-          </p>
-        </div>
-        {!readOnly && (
-          <Button
-            size="sm"
-            variant={isManager ? 'default' : 'outline'}
-            className="min-h-11"
-            onClick={() => setCreating(true)}
-          >
-            <Plus className="size-4" />
-            Neu
-          </Button>
-        )}
-      </div>
+      <WorkArtifactsSectionHeader
+        readOnly={readOnly}
+        isManager={isManager}
+        onCreate={() => setCreating(true)}
+      />
       <StaleRegion stale={view.isStale} onRetry={refresh}>
-        {artifacts.length === 0 ? (
-          <EmptyState size="compact" className="mt-4" title="Noch keine Arbeitsnachweise erfasst." />
-        ) : (
-          <div className="mt-4 divide-y rounded-md border">
-            {artifacts.map((artifact) => (
-              <PlainButton
-                key={artifact.id}
-                type="button"
-                data-artifact-id={artifact.id}
-                onClick={() => setSelectedId(artifact.id)}
-                className="flex min-h-14 w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{artifact.currentRevision.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {WORK_ARTIFACT_KIND_LABELS[artifact.kind]} · Version{' '}
-                    {artifact.currentRevision.revision_number}
-                  </p>
-                </div>
-                <Badge variant="outline">{WORK_ARTIFACT_STATUS_LABELS[artifact.status]}</Badge>
-              </PlainButton>
-            ))}
-          </div>
-        )}
+        <WorkArtifactList artifacts={artifacts} onSelect={setSelectedId} />
       </StaleRegion>
       {view.isRefreshing && (
         <p className="mt-2 text-xs text-muted-foreground">Arbeitsnachweise werden aktualisiert…</p>
@@ -191,24 +138,108 @@ export function WorkArtifactsSection({
   );
 }
 
-function WorkArtifactDialog({
+type WorkArtifactsLiveViewOptions = WorkArtifactTarget & {
+  initialArtifacts: WorkArtifactSummary[];
+  editing: boolean;
+  setRemoteVersions: Dispatch<SetStateAction<Record<string, number>>>;
+};
+
+/** The section's live artifact list; while the dialog is open it records the newest remote versions instead. */
+function useWorkArtifactsLiveView({
   targetType,
   targetId,
-  artifactId,
-  initialSummary,
-  isManager,
-  canApprove,
-  currentUserId,
-  documents,
-  evidenceRequirements,
-  onClose,
-  timeEntryOptions,
-  instructionOptions,
-  defaultSiteId,
-  remoteVersions,
-  onRemoteUpdateHandled,
+  initialArtifacts,
+  editing,
+  setRemoteVersions,
+}: WorkArtifactsLiveViewOptions) {
+  return useLiveView<WorkArtifactSummary[]>({
+    tables: ['work_artifacts'],
+    read: async ({ signal }) => {
+      const result = await readInBackground('work-artifacts', { targetType, targetId }, signal);
+      return result.success ? { ok: true, data: result.artifacts } : { ok: false };
+    },
+    initialData: initialArtifacts,
+    resetKey: `${targetType}:${targetId}`,
+    // While the artifact dialog is open, reads queue (one catch-up after
+    // close); the in-dialog hint tells the editor a newer version exists.
+    suspend: editing,
+    eventFilter: (event) => {
+      const row = event.new ?? event.old;
+      const targetColumn = targetType === 'job' ? 'job_id' : 'project_id';
+      const rowTarget = row?.[targetColumn];
+      // DELETE payloads carry only id/organization_id — a missing column is relevant.
+      if (row && rowTarget !== undefined && rowTarget !== targetId) return false;
+      const rowId = row?.id;
+      if (editing && typeof rowId === 'string') {
+        // A DELETE carries no version, so it always counts as newer.
+        const version = typeof row?.version === 'number' ? row.version : Number.MAX_SAFE_INTEGER;
+        setRemoteVersions((current) => ({ ...current, [rowId]: Math.max(current[rowId] ?? 0, version) }));
+      }
+      return true;
+    },
+  });
+}
+
+function WorkArtifactsSectionHeader({
   readOnly,
-}: WorkArtifactTarget & {
+  isManager,
+  onCreate,
+}: {
+  readOnly: boolean;
+  isManager: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <SectionTitle icon={<ClipboardList className="size-4" />}>Arbeitsnachweise</SectionTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Bautagebuch, Arbeitsbericht, Aufmaß, Mangel und Regiearbeit versionssicher erfassen.
+        </p>
+      </div>
+      {!readOnly && (
+        <Button size="sm" variant={isManager ? 'default' : 'outline'} className="min-h-11" onClick={onCreate}>
+          <Plus className="size-4" />
+          Neu
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function WorkArtifactList({
+  artifacts,
+  onSelect,
+}: {
+  artifacts: WorkArtifactSummary[];
+  onSelect: (artifactId: string) => void;
+}) {
+  return artifacts.length === 0 ? (
+    <EmptyState size="compact" className="mt-4" title="Noch keine Arbeitsnachweise erfasst." />
+  ) : (
+    <div className="mt-4 divide-y rounded-md border">
+      {artifacts.map((artifact) => (
+        <PlainButton
+          key={artifact.id}
+          type="button"
+          data-artifact-id={artifact.id}
+          onClick={() => onSelect(artifact.id)}
+          className="flex min-h-14 w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-muted/40"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{artifact.currentRevision.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {WORK_ARTIFACT_KIND_LABELS[artifact.kind]} · Version {artifact.currentRevision.revision_number}
+            </p>
+          </div>
+          <Badge variant="outline">{WORK_ARTIFACT_STATUS_LABELS[artifact.status]}</Badge>
+        </PlainButton>
+      ))}
+    </div>
+  );
+}
+
+type WorkArtifactDialogProps = WorkArtifactTarget & {
   artifactId: string | null;
   initialSummary: WorkArtifactSummary | null;
   isManager: boolean;
@@ -223,41 +254,14 @@ function WorkArtifactDialog({
   onRemoteUpdateHandled: () => void;
   onClose: () => void;
   readOnly: boolean;
-}) {
+};
+
+function WorkArtifactDialog(props: WorkArtifactDialogProps) {
+  const { readOnly } = props;
   const artifactFormId = useId();
-  const editor = useWorkArtifactEditor({ artifactId, initialSummary, defaultSiteId, readOnly });
-  const save = useWorkArtifactSave({ targetType, targetId, editor });
-  const review = useWorkArtifactReviewActions(editor);
-  const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, review, onClose });
-  const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
-  const {
-    detail,
-    loading,
-    editing,
-    kind,
-    setKind,
-    visibility,
-    setVisibility,
-    title,
-    setTitle,
-    capturedAt,
-    setCapturedAt,
-    content,
-    correctionReason,
-    setCorrectionReason,
-    correctionReasonError,
-    error,
-    isBusy,
-    anyBusy,
-    load,
-    currentRevision,
-    requiresCorrectionReason,
-    measurementLines,
-    patchContent,
-  } = editor;
+  const { editor, save, review, customer, links } = useWorkArtifactDialogActions(props);
+  const { detail, loading, editing, isBusy, anyBusy, currentRevision } = editor;
   const { requestClose } = customer;
-  const remoteVersion = detail ? remoteVersions[detail.id] : undefined;
-  const hasRemoteUpdate = detail !== null && remoteVersion !== undefined && remoteVersion > detail.version;
 
   return (
     <Dialog
@@ -272,41 +276,12 @@ function WorkArtifactDialog({
           <DialogTitle>
             {detail ? (currentRevision?.title ?? 'Arbeitsnachweis') : 'Arbeitsnachweis erstellen'}
           </DialogTitle>
-          <DialogDescription>
-            {detail
-              ? `${WORK_ARTIFACT_KIND_LABELS[detail.kind]} · ${WORK_ARTIFACT_STATUS_LABELS[detail.status]} · Version ${currentRevision?.revision_number ?? 1}`
-              : 'Strukturierte Dokumentation direkt dem aktuellen Auftrag oder Projekt zuordnen.'}
-          </DialogDescription>
+          <DialogDescription>{workArtifactDialogDescription(detail, currentRevision)}</DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-5 py-1">
-          {hasRemoteUpdate && detail && (
-            <div className="flex items-center justify-between gap-3 rounded-md border bg-muted/30 p-3 text-sm">
-              <p>Dieser Arbeitsnachweis wurde zwischenzeitlich geändert.</p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={anyBusy}
-                onClick={() => {
-                  // The editor shows the reload until the current version arrives.
-                  void load(detail.id);
-                  onRemoteUpdateHandled();
-                }}
-              >
-                Aktualisieren
-              </Button>
-            </div>
-          )}
+          <WorkArtifactRemoteUpdateHint {...props} editor={editor} />
           {loading ? (
-            <div className="min-h-48 space-y-4" role="status" aria-busy="true">
-              <span className="sr-only">Arbeitsnachweis wird geladen.</span>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Skeleton className="h-9 w-full" />
-                <Skeleton className="h-9 w-full" />
-              </div>
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-24 w-full" />
-            </div>
+            <WorkArtifactDialogSkeleton />
           ) : !readOnly && editing ? (
             <form
               id={artifactFormId}
@@ -318,55 +293,24 @@ function WorkArtifactDialog({
               }}
               noValidate
             >
-              <ArtifactForm
-                kind={kind}
-                setKind={setKind}
-                lockedKind={Boolean(detail)}
-                visibility={visibility}
-                setVisibility={setVisibility}
-                title={title}
-                setTitle={setTitle}
-                capturedAt={capturedAt}
-                setCapturedAt={setCapturedAt}
-                content={content}
-                patchContent={patchContent}
-                measurementLines={measurementLines}
-                setMeasurementLines={(lines) => patchContent({ measurementLines: lines })}
-                instructionOptions={instructionOptions}
-                requiresCorrectionReason={requiresCorrectionReason}
-                correctionReason={correctionReason}
-                correctionReasonError={correctionReasonError}
-                setCorrectionReason={setCorrectionReason}
-              />
+              <WorkArtifactDraftForm editor={editor} instructionOptions={props.instructionOptions} />
             </form>
           ) : detail && currentRevision ? (
             <ArtifactDetail
               detail={detail}
               currentRevision={currentRevision}
-              currentUserId={currentUserId}
-              documents={documents}
+              currentUserId={props.currentUserId}
+              documents={props.documents}
             />
           ) : null}
 
-          {!readOnly && !editing && detail && currentRevision && detail.status !== 'voided' && (
-            <WorkArtifactActionPanel
-              detail={detail}
-              currentRevision={currentRevision}
-              editor={editor}
-              review={review}
-              customer={customer}
-              links={links}
-              isManager={isManager}
-              canApprove={canApprove}
-              currentUserId={currentUserId}
-              documents={documents}
-              timeEntryOptions={timeEntryOptions}
-              evidenceRequirements={evidenceRequirements}
-            />
-          )}
-          {/* A failed read offers its retry in place; the last-known detail stays visible. */}
-          {editor.loadFailure && <SectionError failure={editor.loadFailure} />}
-          <ErrorText>{error}</ErrorText>
+          <WorkArtifactDialogActions
+            {...props}
+            editor={editor}
+            review={review}
+            customer={customer}
+            links={links}
+          />
         </DialogBody>
         <DialogFooter>
           <WorkArtifactSecondaryActions
@@ -390,6 +334,34 @@ function WorkArtifactDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The editor and the action hooks of one open artifact dialog. */
+function useWorkArtifactDialogActions({
+  targetType,
+  targetId,
+  artifactId,
+  initialSummary,
+  defaultSiteId,
+  readOnly,
+  timeEntryOptions,
+  onClose,
+}: WorkArtifactDialogProps) {
+  const editor = useWorkArtifactEditor({ artifactId, initialSummary, defaultSiteId, readOnly });
+  const save = useWorkArtifactSave({ targetType, targetId, editor });
+  const review = useWorkArtifactReviewActions(editor);
+  const customer = useWorkArtifactCustomerActions({ targetType, targetId, editor, review, onClose });
+  const links = useWorkArtifactLinks({ editor, review, timeEntryOptions });
+  return { editor, save, review, customer, links };
+}
+
+function workArtifactDialogDescription(
+  detail: WorkArtifactEditor['detail'],
+  currentRevision: WorkArtifactEditor['currentRevision'],
+): string {
+  return detail
+    ? `${WORK_ARTIFACT_KIND_LABELS[detail.kind]} · ${WORK_ARTIFACT_STATUS_LABELS[detail.status]} · Version ${currentRevision?.revision_number ?? 1}`
+    : 'Strukturierte Dokumentation direkt dem aktuellen Auftrag oder Projekt zuordnen.';
 }
 
 /** The footer's close and draft actions; the dialog keeps its submit beside its form. */
