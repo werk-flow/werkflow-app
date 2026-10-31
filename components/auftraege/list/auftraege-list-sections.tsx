@@ -165,32 +165,37 @@ type AuftraegeSectionTableProps = Pick<
   localPendingIds: Set<string>;
 };
 
-/** One section's table: status pills -> search -> dropdown filters -> sort, then paging. */
-export function AuftraegeSectionTable({
+type AuftraegeSectionEntriesInput = Pick<
+  AuftraegeSectionTableProps,
+  | 'section'
+  | 'rawEntries'
+  | 'query'
+  | 'jobAssignmentMap'
+  | 'pagination'
+  | 'initialIds'
+  | 'localPendingIds'
+  | 'clientMap'
+  | 'visibleColumns'
+> & {
+  statusFilter: AuftraegeActiveStatusFilter;
+};
+
+/** The section's shown entries: the server page, or status pills -> search -> dropdown filters -> sort. */
+function useAuftraegeSectionEntries({
   section,
-  paginationLabel,
   rawEntries,
   query,
-  statusFilter = 'alle',
-  isArchive = false,
+  statusFilter,
   jobAssignmentMap,
   pagination,
-  navigationBusy,
   initialIds,
   localPendingIds,
   clientMap,
-  isAdminOrManager,
-  members,
   visibleColumns,
-  rowFeedback,
-  onJobUpdated,
-  onJobDeleteRequested,
-  onProjectUpdated,
-  onProjectDeleteRequested,
-}: AuftraegeSectionTableProps) {
+}: AuftraegeSectionEntriesInput) {
   const { search, filters, sortColumn, sortDirection } = query;
 
-  const filteredEntries = useMemo(() => {
+  return useMemo(() => {
     if (pagination) {
       return retainPageEntries(
         rawEntries,
@@ -225,20 +230,64 @@ export function AuftraegeSectionTable({
     initialIds,
     localPendingIds,
   ]);
+}
+
+/** The assigned users of every project on the server pages; empty for a list held in the client. */
+function pagedProjectAssignmentMap(pagination: JobListPagination | undefined) {
+  return Object.fromEntries(
+    pagination
+      ? Object.values(pagination.pages).flatMap((page) =>
+          page.entries
+            .filter((entry) => entry.type === 'project')
+            .map((entry) => [entry.id, entry.assignedUserIds]),
+        )
+      : [],
+  );
+}
+
+/** One section's table: status pills -> search -> dropdown filters -> sort, then paging. */
+export function AuftraegeSectionTable({
+  section,
+  paginationLabel,
+  rawEntries,
+  query,
+  statusFilter = 'alle',
+  isArchive = false,
+  jobAssignmentMap,
+  pagination,
+  navigationBusy,
+  initialIds,
+  localPendingIds,
+  clientMap,
+  isAdminOrManager,
+  members,
+  visibleColumns,
+  rowFeedback,
+  onJobUpdated,
+  onJobDeleteRequested,
+  onProjectUpdated,
+  onProjectDeleteRequested,
+}: AuftraegeSectionTableProps) {
+  const { search, filters, sortColumn, sortDirection } = query;
+
+  const filteredEntries = useAuftraegeSectionEntries({
+    section,
+    rawEntries,
+    query,
+    statusFilter,
+    jobAssignmentMap,
+    pagination,
+    initialIds,
+    localPendingIds,
+    clientMap,
+    visibleColumns,
+  });
 
   return (
     <>
       <UnifiedAuftraegeTable
         pagedChildren={Boolean(pagination)}
-        projectAssignmentMap={Object.fromEntries(
-          pagination
-            ? Object.values(pagination.pages).flatMap((page) =>
-                page.entries
-                  .filter((entry) => entry.type === 'project')
-                  .map((entry) => [entry.id, entry.assignedUserIds]),
-              )
-            : [],
-        )}
+        projectAssignmentMap={pagedProjectAssignmentMap(pagination)}
         entries={filteredEntries}
         isFiltered={statusFilter !== 'alle' || Boolean(search) || countActiveFilters(filters) > 0}
         clientMap={clientMap}

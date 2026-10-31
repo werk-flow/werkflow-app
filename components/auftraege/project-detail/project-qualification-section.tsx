@@ -29,32 +29,32 @@ const CAPABILITY_REQUIRED_MESSAGE = 'Bitte wähle eine Qualifikation aus.';
 const NO_CAPABILITIES: CapabilityDefinition[] = [];
 const NO_REQUIREMENTS: Requirement[] = [];
 
-function toRequirementInput(item: Requirement): { capabilityId: string; requireConfirmation: boolean } {
+function toRequirementInput(item: Requirement): RequirementInput {
   return { capabilityId: item.capability_id, requireConfirmation: item.require_confirmation };
 }
 
-export function ProjectQualificationSection({ projectId }: { projectId: string }): ReactElement {
-  const [selectedId, setSelectedId] = useState('');
-  const [attempted, setAttempted] = useState(false);
-  const [requireConfirmation, setRequireConfirmation] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const { run: runSave, isBusy, anyBusy: saving } = useBusyIds();
-  const planned = useClientRead({
-    read: (signal) => readInBackground('project-capability-requirements', { projectId }, signal),
-    deps: [projectId],
-    failureMessage: 'Die Qualifikationen konnten nicht geladen werden.',
-  });
-  // The next save sends the shown list as its expectation, so the controls wait for the reload too.
-  const anyBusy = saving || planned.loading;
-  const capabilities = planned.data?.data.capabilities ?? NO_CAPABILITIES;
-  const requirements = planned.data?.data.requirements ?? NO_REQUIREMENTS;
-  // Every save replaces the whole requirement list, so saves stay mutually
-  // exclusive (`anyBusy` disables the controls); `busyId` only chooses where
-  // the spinner shows. Never rejects: every failure lands in `saveError`.
-  async function save(
-    busyId: string,
-    next: Array<{ capabilityId: string; requireConfirmation: boolean }>,
-  ): Promise<boolean> {
+type RequirementInput = { capabilityId: string; requireConfirmation: boolean };
+type SaveRequirements = (busyId: string, next: Array<RequirementInput>) => Promise<boolean>;
+
+type RequirementSaveOptions = {
+  projectId: string;
+  requirements: Requirement[];
+  runSave: ReturnType<typeof useBusyIds>['run'];
+  setSaveError: (message: string | null) => void;
+  reload: () => void;
+};
+
+// Every save replaces the whole requirement list, so saves stay mutually
+// exclusive (`anyBusy` disables the controls); `busyId` only chooses where
+// the spinner shows. Never rejects: every failure lands in `saveError`.
+function requirementSaver({
+  projectId,
+  requirements,
+  runSave,
+  setSaveError,
+  reload,
+}: RequirementSaveOptions): SaveRequirements {
+  return async function save(busyId, next) {
     setSaveError(null);
     try {
       const result = await runSave(busyId, () =>
@@ -73,28 +73,36 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
         return false;
       }
       // The section keeps the saved list on screen while the reload runs.
-      planned.reload();
+      reload();
       return true;
     } catch {
       setSaveError('Die Qualifikationsanforderungen konnten nicht gespeichert werden.');
       return false;
     }
-  }
+  };
+}
+
+export function ProjectQualificationSection({ projectId }: { projectId: string }): ReactElement {
+  const [selectedId, setSelectedId] = useState('');
+  const [attempted, setAttempted] = useState(false);
+  const [requireConfirmation, setRequireConfirmation] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { run: runSave, isBusy, anyBusy: saving } = useBusyIds();
+  const planned = useClientRead({
+    read: (signal) => readInBackground('project-capability-requirements', { projectId }, signal),
+    deps: [projectId],
+    failureMessage: 'Die Qualifikationen konnten nicht geladen werden.',
+  });
+  // The next save sends the shown list as its expectation, so the controls wait for the reload too.
+  const anyBusy = saving || planned.loading;
+  const capabilities = planned.data?.data.capabilities ?? NO_CAPABILITIES;
+  const requirements = planned.data?.data.requirements ?? NO_REQUIREMENTS;
+  const save = requirementSaver({ projectId, requirements, runSave, setSaveError, reload: planned.reload });
   if (planned.failure) {
     return <SectionError title="Geplante Qualifikationen" failure={planned.failure} />;
   }
   if (!planned.data) {
-    return (
-      <Card className="gap-4 p-4" role="status" aria-busy="true">
-        <span className="sr-only">Qualifikationen werden geladen.</span>
-        <div className="flex items-center gap-2">
-          <Skeleton className="size-4" />
-          <Skeleton className="h-4 w-44" />
-        </div>
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-10 w-full rounded-md" />
-      </Card>
-    );
+    return <ProjectQualificationSkeleton />;
   }
   const byId = new Map(capabilities.map((capability) => [capability.id, capability]));
   return (
@@ -110,96 +118,175 @@ export function ProjectQualificationSection({ projectId }: { projectId: string }
         </p>
       </div>
       <ErrorText>{saveError}</ErrorText>
-      <div className="flex flex-wrap items-end gap-2">
-        <Field
-          label="Qualifikation hinzufügen"
-          htmlFor={CAPABILITY_FIELD_ID}
-          className="min-w-56 flex-1"
-          error={attempted && !selectedId ? CAPABILITY_REQUIRED_MESSAGE : undefined}
-        >
-          <SearchableSelect
-            id={CAPABILITY_FIELD_ID}
-            options={capabilities
-              .filter((capability) => !requirements.some((item) => item.capability_id === capability.id))
-              .map((capability) => ({ value: capability.id, label: capability.name }))}
-            value={selectedId}
-            onChange={setSelectedId}
-            searchPlaceholder="Qualifikation suchen…"
-            emptyMessage="Keine weitere Qualifikation"
-            disabled={anyBusy}
-          />
-        </Field>
-        <label className="flex h-9 items-center gap-2">
-          <Checkbox
-            checked={requireConfirmation}
-            disabled={anyBusy}
-            onCheckedChange={(checked) => setRequireConfirmation(checked === true)}
-          />
-          Bestätigung nötig
-        </label>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label="Qualifikation hinzufügen"
-          disabled={anyBusy}
-          onClick={async () => {
-            if (!selectedId) {
-              setAttempted(true);
-              focusFirstInvalidField({ [CAPABILITY_FIELD_ID]: CAPABILITY_REQUIRED_MESSAGE });
-              return;
-            }
-            const saved = await save(ADD_BUSY_ID, [
-              ...requirements.map(toRequirementInput),
-              { capabilityId: selectedId, requireConfirmation },
-            ]);
-            if (saved) {
-              setAttempted(false);
-              setSelectedId('');
-              setRequireConfirmation(false);
-            }
-          }}
-        >
-          Hinzufügen
-        </Button>
-      </div>
+      <ProjectQualificationAddRow
+        capabilities={capabilities}
+        requirements={requirements}
+        selectedId={selectedId}
+        setSelectedId={setSelectedId}
+        attempted={attempted}
+        setAttempted={setAttempted}
+        requireConfirmation={requireConfirmation}
+        setRequireConfirmation={setRequireConfirmation}
+        anyBusy={anyBusy}
+        save={save}
+      />
       {requirements.length === 0 ? (
         <EmptyState size="compact" title="Keine Qualifikationen geplant." />
       ) : (
-        requirements.map((requirement) => {
-          const capabilityName = byId.get(requirement.capability_id)?.name ?? 'Unbekannte Qualifikation';
-          return (
-            <div
-              key={requirement.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2"
-            >
-              <div>
-                <p className="text-sm font-medium">{capabilityName}</p>
-                {requirement.require_confirmation && (
-                  <p className="text-xs text-muted-foreground">Bestätigung erforderlich</p>
-                )}
-              </div>
-              <div className="flex items-center gap-1">
-                <InlinePending active={isBusy(requirement.id)} label="Qualifikation wird entfernt" />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={anyBusy}
-                  aria-label={`${capabilityName} entfernen`}
-                  onClick={() =>
-                    void save(
-                      requirement.id,
-                      requirements.filter((item) => item.id !== requirement.id).map(toRequirementInput),
-                    )
-                  }
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            </div>
-          );
-        })
+        requirements.map((requirement) => (
+          <ProjectRequirementRow
+            key={requirement.id}
+            requirement={requirement}
+            requirements={requirements}
+            capabilityName={byId.get(requirement.capability_id)?.name ?? 'Unbekannte Qualifikation'}
+            busy={isBusy(requirement.id)}
+            anyBusy={anyBusy}
+            save={save}
+          />
+        ))
       )}
     </Card>
+  );
+}
+
+function ProjectQualificationSkeleton(): ReactElement {
+  return (
+    <Card className="gap-4 p-4" role="status" aria-busy="true">
+      <span className="sr-only">Qualifikationen werden geladen.</span>
+      <div className="flex items-center gap-2">
+        <Skeleton className="size-4" />
+        <Skeleton className="h-4 w-44" />
+      </div>
+      <Skeleton className="h-9 w-full" />
+      <Skeleton className="h-10 w-full rounded-md" />
+    </Card>
+  );
+}
+
+type ProjectQualificationAddRowProps = {
+  capabilities: CapabilityDefinition[];
+  requirements: Requirement[];
+  selectedId: string;
+  setSelectedId: (value: string) => void;
+  attempted: boolean;
+  setAttempted: (value: boolean) => void;
+  requireConfirmation: boolean;
+  setRequireConfirmation: (value: boolean) => void;
+  anyBusy: boolean;
+  save: SaveRequirements;
+};
+
+function ProjectQualificationAddRow({
+  capabilities,
+  requirements,
+  selectedId,
+  setSelectedId,
+  attempted,
+  setAttempted,
+  requireConfirmation,
+  setRequireConfirmation,
+  anyBusy,
+  save,
+}: ProjectQualificationAddRowProps): ReactElement {
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <Field
+        label="Qualifikation hinzufügen"
+        htmlFor={CAPABILITY_FIELD_ID}
+        className="min-w-56 flex-1"
+        error={attempted && !selectedId ? CAPABILITY_REQUIRED_MESSAGE : undefined}
+      >
+        <SearchableSelect
+          id={CAPABILITY_FIELD_ID}
+          options={capabilities
+            .filter((capability) => !requirements.some((item) => item.capability_id === capability.id))
+            .map((capability) => ({ value: capability.id, label: capability.name }))}
+          value={selectedId}
+          onChange={setSelectedId}
+          searchPlaceholder="Qualifikation suchen…"
+          emptyMessage="Keine weitere Qualifikation"
+          disabled={anyBusy}
+        />
+      </Field>
+      <label className="flex h-9 items-center gap-2">
+        <Checkbox
+          checked={requireConfirmation}
+          disabled={anyBusy}
+          onCheckedChange={(checked) => setRequireConfirmation(checked === true)}
+        />
+        Bestätigung nötig
+      </label>
+      <Button
+        type="button"
+        variant="outline"
+        aria-label="Qualifikation hinzufügen"
+        disabled={anyBusy}
+        onClick={async () => {
+          if (!selectedId) {
+            setAttempted(true);
+            focusFirstInvalidField({ [CAPABILITY_FIELD_ID]: CAPABILITY_REQUIRED_MESSAGE });
+            return;
+          }
+          const saved = await save(ADD_BUSY_ID, [
+            ...requirements.map(toRequirementInput),
+            { capabilityId: selectedId, requireConfirmation },
+          ]);
+          if (saved) {
+            setAttempted(false);
+            setSelectedId('');
+            setRequireConfirmation(false);
+          }
+        }}
+      >
+        Hinzufügen
+      </Button>
+    </div>
+  );
+}
+
+type ProjectRequirementRowProps = {
+  requirement: Requirement;
+  requirements: Requirement[];
+  capabilityName: string;
+  busy: boolean;
+  anyBusy: boolean;
+  save: SaveRequirements;
+};
+
+function ProjectRequirementRow({
+  requirement,
+  requirements,
+  capabilityName,
+  busy,
+  anyBusy,
+  save,
+}: ProjectRequirementRowProps): ReactElement {
+  return (
+    <div className="flex items-center justify-between rounded-md border px-3 py-2">
+      <div>
+        <p className="text-sm font-medium">{capabilityName}</p>
+        {requirement.require_confirmation && (
+          <p className="text-xs text-muted-foreground">Bestätigung erforderlich</p>
+        )}
+      </div>
+      <div className="flex items-center gap-1">
+        <InlinePending active={busy} label="Qualifikation wird entfernt" />
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={anyBusy}
+          aria-label={`${capabilityName} entfernen`}
+          onClick={() =>
+            void save(
+              requirement.id,
+              requirements.filter((item) => item.id !== requirement.id).map(toRequirementInput),
+            )
+          }
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+    </div>
   );
 }

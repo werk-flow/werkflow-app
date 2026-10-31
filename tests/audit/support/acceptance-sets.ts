@@ -231,6 +231,28 @@ function settingsRoleCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#167 of 2026-10-30: the proposed start date with
+ * its reason, and the opening date correction of opened time accounts.
+ */
+function timeAccountOpeningCaptures(): AcceptanceSet {
+  return {
+    id: 'time-account-opening-2026-10-30',
+    captures: [
+      {
+        id: 'admin-zeiterfassung-einstellungen',
+        role: 'admin',
+        route: '/zeiterfassung/einstellungen',
+        view: { kind: 'page' },
+        widths: [1280, 375],
+        schemes: ['light', 'dark'],
+        reveal: 'Zeitkonten',
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -239,4 +261,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   organizationDeletionCaptures(),
   requestConversionCaptures(),
   settingsRoleCaptures(),
+  timeAccountOpeningCaptures(),
 ];

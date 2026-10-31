@@ -71,6 +71,77 @@ type ProjectDetailStateOptions = Pick<
   'project' | 'client' | 'jobs' | 'derivedStatus' | 'isAdminOrManager' | 'instructionItems'
 >;
 
+type ProjectDetailRealtimeOptions = {
+  router: ReturnType<typeof useRouter>;
+  liveProjectId: string;
+  isAdminOrManager: boolean;
+};
+
+function useProjectDetailRealtime({ router, liveProjectId, isAdminOrManager }: ProjectDetailRealtimeOptions) {
+  // Server props are the authority for project and job facts: Realtime
+  // changes trigger a debounced route refresh, and useProjectDetailState
+  // adopts the fresh props during render.
+  useRealtimeRouterRefresh({
+    tables: [
+      'projects',
+      'jobs',
+      'job_assignments',
+      'job_instruction_items',
+      'job_instruction_item_evidence_fulfillments',
+      'work_handover_packages',
+    ],
+  });
+
+  useRealtimeRouterRefresh({
+    tables: [
+      'job_material_lines',
+      'inventory_stock_levels',
+      'inventory_movements',
+      'inventory_items',
+      'inventory_locations',
+    ],
+    enabled: isAdminOrManager,
+  });
+
+  // Deliberate narrow event consumer: leaving the page of a project another
+  // session just deleted needs the event itself (DELETE payloads carry the
+  // id), not a refetch.
+  useRealtimeEvent('projects', (event) => {
+    const oldId = event.old?.id;
+    if (event.eventType === 'DELETE' && oldId === liveProjectId) {
+      router.push('/auftraege');
+    }
+  });
+}
+
+function useProjectArtifactOptions(
+  instructionItems: JobInstructionItemWithDetails[] | null,
+  projectTimeEntries: ReturnType<typeof useProjectDetailTime>['projectTimeEntries'],
+) {
+  const artifactEvidenceRequirements = useMemo(
+    () => (instructionItems ?? []).flatMap((item) => item.evidenceRequirements),
+    [instructionItems],
+  );
+  const artifactInstructionOptions = useMemo(
+    () => (instructionItems ?? []).map((item) => ({ id: item.id, label: item.content })),
+    [instructionItems],
+  );
+  const artifactTimeEntryOptions = useMemo(
+    () =>
+      projectTimeEntries.flatMap((group) =>
+        group.entries
+          .filter((entry) => entry.entryType === 'clock_in')
+          .map((entry) => ({
+            id: entry.canonicalSegmentId ?? entry.id,
+            sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
+            label: `${group.jobTitle} · ${formatBerlinDateTime(entry.timestamp)}`,
+          })),
+      ),
+    [projectTimeEntries],
+  );
+  return { artifactEvidenceRequirements, artifactInstructionOptions, artifactTimeEntryOptions };
+}
+
 // Live state and Realtime wiring of the page. It stays in this file:
 // eslint.config.mjs allows the raw useRealtimeEvent import only here.
 function useProjectDetailState({
@@ -100,62 +171,10 @@ function useProjectDetailState({
   const { timeView, projectTimeEntries, projectTimeSummary, isLoadingTime, timeLoadError } =
     useProjectDetailTime(liveProject.id, liveJobs);
 
-  // Server props are the authority for project and job facts: Realtime
-  // changes trigger a debounced route refresh, and the sync effects above
-  // adopt the fresh props.
-  useRealtimeRouterRefresh({
-    tables: [
-      'projects',
-      'jobs',
-      'job_assignments',
-      'job_instruction_items',
-      'job_instruction_item_evidence_fulfillments',
-      'work_handover_packages',
-    ],
-  });
+  useProjectDetailRealtime({ router, liveProjectId: liveProject.id, isAdminOrManager });
 
-  useRealtimeRouterRefresh({
-    tables: [
-      'job_material_lines',
-      'inventory_stock_levels',
-      'inventory_movements',
-      'inventory_items',
-      'inventory_locations',
-    ],
-    enabled: isAdminOrManager,
-  });
-
-  // Deliberate narrow event consumer: leaving the page of a project another
-  // session just deleted needs the event itself (DELETE payloads carry the
-  // id), not a refetch.
-  useRealtimeEvent('projects', (event) => {
-    const oldId = event.old?.id;
-    if (event.eventType === 'DELETE' && oldId === liveProject.id) {
-      router.push('/auftraege');
-    }
-  });
-
-  const artifactEvidenceRequirements = useMemo(
-    () => (instructionItems ?? []).flatMap((item) => item.evidenceRequirements),
-    [instructionItems],
-  );
-  const artifactInstructionOptions = useMemo(
-    () => (instructionItems ?? []).map((item) => ({ id: item.id, label: item.content })),
-    [instructionItems],
-  );
-  const artifactTimeEntryOptions = useMemo(
-    () =>
-      projectTimeEntries.flatMap((group) =>
-        group.entries
-          .filter((entry) => entry.entryType === 'clock_in')
-          .map((entry) => ({
-            id: entry.canonicalSegmentId ?? entry.id,
-            sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
-            label: `${group.jobTitle} · ${formatBerlinDateTime(entry.timestamp)}`,
-          })),
-      ),
-    [projectTimeEntries],
-  );
+  const { artifactEvidenceRequirements, artifactInstructionOptions, artifactTimeEntryOptions } =
+    useProjectArtifactOptions(instructionItems, projectTimeEntries);
 
   const completedCount = liveJobs.filter((j) => j.status === 'fertig').length;
   const inProgressCount = liveJobs.filter((j) => j.status === 'in_bearbeitung').length;
@@ -208,46 +227,36 @@ function useLiveDerivedStatus(
   );
 }
 
-export function ProjectDetailContent({
-  project,
-  jobs,
-  client,
-  derivedStatus,
-  members,
-  isAdminOrManager,
-  canApproveWorkArtifacts,
-  currentUserId,
-  instructionItems,
-  initialArtifacts,
-  projectDocuments,
-  jobDocumentGroups,
-  materialSummary,
-  inventoryItems,
-  inventoryLocations,
-  lifecycleSnapshot,
-  handoverWorkspace,
-  originRequest,
-}: ProjectDetailContentProps) {
+type ProjectDetailState = ReturnType<typeof useProjectDetailState>;
+
+type ProjectDetailSectionProps = {
+  content: ProjectDetailContentProps;
+  state: ProjectDetailState;
+};
+
+export function ProjectDetailContent(content: ProjectDetailContentProps) {
   const {
-    liveProject,
-    setLiveProject,
-    liveJobs,
-    setLiveJobs,
-    dialogState,
-    liveClient,
-    timeView,
-    projectTimeSummary,
-    isLoadingTime,
-    timeLoadError,
-    artifactEvidenceRequirements,
-    artifactInstructionOptions,
-    artifactTimeEntryOptions,
-    completedCount,
-    inProgressCount,
-    parkedCount,
-    progressJobCounts,
-    liveDerivedStatus,
-  } = useProjectDetailState({ project, jobs, client, derivedStatus, isAdminOrManager, instructionItems });
+    project,
+    jobs,
+    client,
+    derivedStatus,
+    members,
+    isAdminOrManager,
+    instructionItems,
+    lifecycleSnapshot,
+    handoverWorkspace,
+    originRequest,
+  } = content;
+  const state = useProjectDetailState({
+    project,
+    jobs,
+    client,
+    derivedStatus,
+    isAdminOrManager,
+    instructionItems,
+  });
+  const { liveProject, setLiveProject, liveJobs, setLiveJobs, dialogState, liveClient, liveDerivedStatus } =
+    state;
 
   const metadataFields = buildProjectDetailMetadataFields({
     project,
@@ -288,68 +297,7 @@ export function ProjectDetailContent({
           </div>
 
           {/* Right Column: Progress + Jobs + Placeholders */}
-          <div className="min-w-0 space-y-6">
-            <ProjectDetailProgressCard liveDerivedStatus={liveDerivedStatus} jobCounts={progressJobCounts} />
-
-            <ProjectDetailChildJobsCard
-              jobs={liveJobs}
-              project={liveProject}
-              isAdminOrManager={isAdminOrManager}
-              onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
-              membersFailed={members === null}
-            />
-
-            {isAdminOrManager ? (
-              <ProjectDetailManagerSections
-                liveProject={liveProject}
-                instructionItems={instructionItems}
-                materialSummary={materialSummary}
-                inventoryItems={inventoryItems}
-                inventoryLocations={inventoryLocations}
-              />
-            ) : null}
-
-            {initialArtifacts ? (
-              <WorkArtifactsSection
-                targetType="project"
-                targetId={liveProject.id}
-                initialArtifacts={initialArtifacts}
-                isManager={isAdminOrManager}
-                canApprove={canApproveWorkArtifacts}
-                currentUserId={currentUserId}
-                documents={projectDocuments ?? []}
-                evidenceRequirements={artifactEvidenceRequirements}
-                instructionOptions={artifactInstructionOptions}
-                timeEntryOptions={artifactTimeEntryOptions}
-              />
-            ) : (
-              <RegionLoadError>Arbeitsnachweise konnten nicht geladen werden.</RegionLoadError>
-            )}
-
-            {projectDocuments ? (
-              <ContextualDocumentsSection
-                title="Dokumente"
-                description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
-                documents={projectDocuments}
-                jobDocumentGroups={jobDocumentGroups}
-                documentTarget={{ kind: 'project', projectId: liveProject.id }}
-                contextLabel={liveProject.name}
-                canUpload={isAdminOrManager}
-                canManage={isAdminOrManager}
-              />
-            ) : (
-              <RegionLoadError>Dokumente konnten nicht geladen werden.</RegionLoadError>
-            )}
-
-            <ProjectDetailTimeSummaryCard
-              isLoadingTime={isLoadingTime}
-              timeLoadError={timeLoadError}
-              timeStale={timeView.isStale}
-              onRetry={timeView.refresh}
-              retryPending={timeView.isRefreshing}
-              projectTimeSummary={projectTimeSummary}
-            />
-          </div>
+          <ProjectDetailWorkColumn content={content} state={state} />
         </DetailColumns>
       </PageBody>
 
@@ -358,14 +306,96 @@ export function ProjectDetailContent({
         liveProject={liveProject}
         liveClient={liveClient}
         liveJobs={liveJobs}
-        completedCount={completedCount}
-        inProgressCount={inProgressCount}
-        parkedCount={parkedCount}
+        completedCount={state.completedCount}
+        inProgressCount={state.inProgressCount}
+        parkedCount={state.parkedCount}
         setLiveProject={setLiveProject}
         setLiveJobs={setLiveJobs}
         dialogState={dialogState}
         members={members}
       />
     </PageShell>
+  );
+}
+
+function ProjectDetailWorkColumn({ content, state }: ProjectDetailSectionProps) {
+  const { isAdminOrManager, members, instructionItems, materialSummary, inventoryItems, inventoryLocations } =
+    content;
+  const { liveProject, liveJobs, liveDerivedStatus, dialogState, timeView } = state;
+
+  return (
+    <div className="min-w-0 space-y-6">
+      <ProjectDetailProgressCard liveDerivedStatus={liveDerivedStatus} jobCounts={state.progressJobCounts} />
+
+      <ProjectDetailChildJobsCard
+        jobs={liveJobs}
+        project={liveProject}
+        isAdminOrManager={isAdminOrManager}
+        onAssignJobs={() => dialogState.setShowAssignJobsDialog(true)}
+        membersFailed={members === null}
+      />
+
+      {isAdminOrManager ? (
+        <ProjectDetailManagerSections
+          liveProject={liveProject}
+          instructionItems={instructionItems}
+          materialSummary={materialSummary}
+          inventoryItems={inventoryItems}
+          inventoryLocations={inventoryLocations}
+        />
+      ) : null}
+
+      <ProjectDetailEvidenceSections content={content} state={state} />
+
+      <ProjectDetailTimeSummaryCard
+        isLoadingTime={state.isLoadingTime}
+        timeLoadError={state.timeLoadError}
+        timeStale={timeView.isStale}
+        onRetry={timeView.refresh}
+        retryPending={timeView.isRefreshing}
+        projectTimeSummary={state.projectTimeSummary}
+      />
+    </div>
+  );
+}
+
+function ProjectDetailEvidenceSections({ content, state }: ProjectDetailSectionProps) {
+  const { isAdminOrManager, initialArtifacts, projectDocuments, jobDocumentGroups } = content;
+  const { liveProject } = state;
+
+  return (
+    <>
+      {initialArtifacts ? (
+        <WorkArtifactsSection
+          targetType="project"
+          targetId={liveProject.id}
+          initialArtifacts={initialArtifacts}
+          isManager={isAdminOrManager}
+          canApprove={content.canApproveWorkArtifacts}
+          currentUserId={content.currentUserId}
+          documents={projectDocuments ?? []}
+          evidenceRequirements={state.artifactEvidenceRequirements}
+          instructionOptions={state.artifactInstructionOptions}
+          timeEntryOptions={state.artifactTimeEntryOptions}
+        />
+      ) : (
+        <RegionLoadError>Arbeitsnachweise konnten nicht geladen werden.</RegionLoadError>
+      )}
+
+      {projectDocuments ? (
+        <ContextualDocumentsSection
+          title="Dokumente"
+          description="Projektdateien und verknüpfte Auftragsdokumente an einem Ort."
+          documents={projectDocuments}
+          jobDocumentGroups={jobDocumentGroups}
+          documentTarget={{ kind: 'project', projectId: liveProject.id }}
+          contextLabel={liveProject.name}
+          canUpload={isAdminOrManager}
+          canManage={isAdminOrManager}
+        />
+      ) : (
+        <RegionLoadError>Dokumente konnten nicht geladen werden.</RegionLoadError>
+      )}
+    </>
   );
 }

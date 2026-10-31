@@ -5,6 +5,7 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { TimeAccountDateField } from '@/components/zeiterfassung/time-account-date-field';
+import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import {
   PersonRow,
   PersonTable,
@@ -17,6 +18,7 @@ import {
   decideTimeAccountAdjustment,
   withdrawTimeAccountAdjustment,
 } from '@/lib/time-accounts/decision-actions';
+import { startDateHint } from '@/lib/time-accounts/opening-dates';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import { formatGermanDate } from '@/lib/utils';
@@ -171,11 +173,11 @@ export function EmployeeTimePolicyAssignmentCard({
 
 function MissingTimeAccount({
   employee,
-  today,
+  startDate,
   layout,
 }: {
   employee: MissingAccount;
-  today: string;
+  startDate: string;
   layout: PersonLayout;
 }) {
   const { handleSubmit, isPending, pendingValue, error } = useTimeAccountForm({
@@ -201,7 +203,7 @@ function MissingTimeAccount({
     <TimeAccountDateField
       form={formId}
       name="openedOn"
-      initialValue={today}
+      initialValue={startDate}
       ariaLabel={`Eröffnungsdatum für ${employee.employeeName}`}
     />
   );
@@ -276,46 +278,48 @@ function MissingTimeAccount({
   );
 }
 
-export function MissingTimeAccountsCard({
-  settings,
-  today,
-}: {
-  settings: TimeAccountSettingsData;
-  today: string;
-}) {
+/** Opens the missing accounts and corrects the opening date of an opened one. */
+export function MissingTimeAccountsCard({ settings }: { settings: TimeAccountSettingsData }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Zeitkonten eröffnen</CardTitle>
+        <CardTitle className="text-base">Zeitkonten</CardTitle>
         <CardDescription>
           {settings.openAccountCount} von {settings.employeeCount} Zeitkonten sind eröffnet. Jeder
           Anfangssaldo wird mit Datum und Grund ausdrücklich bestätigt.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5">
         {settings.missingAccounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">Alle Zeitkonten sind eröffnet.</p>
         ) : (
-          <PersonTable
-            heads={[
-              { label: 'Mitarbeiter' },
-              { label: 'Anfangssaldo (Minuten)', className: 'w-44' },
-              { label: 'Eröffnungsdatum', className: 'w-48' },
-              { label: 'Grund' },
-              { label: 'Aktion', className: 'sr-only' },
-            ]}
-            renderPeople={(layout) =>
-              settings.missingAccounts.map((employee) => (
-                <MissingTimeAccount
-                  key={employee.employeeRecordId}
-                  employee={employee}
-                  today={today}
-                  layout={layout}
-                />
-              ))
-            }
-          />
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{startDateHint(settings.suggestedStartDate)}</p>
+            <PersonTable
+              heads={[
+                { label: 'Mitarbeiter' },
+                { label: 'Anfangssaldo (Minuten)', className: 'w-44' },
+                { label: 'Eröffnungsdatum', className: 'w-48' },
+                { label: 'Grund' },
+                { label: 'Aktion', className: 'sr-only' },
+              ]}
+              renderPeople={(layout) =>
+                settings.missingAccounts.map((employee) => (
+                  <MissingTimeAccount
+                    key={employee.employeeRecordId}
+                    employee={employee}
+                    startDate={settings.suggestedStartDate}
+                    layout={layout}
+                  />
+                ))
+              }
+            />
+          </div>
         )}
+        <OpeningDateCorrections
+          accounts={settings.accounts}
+          suggestedStartDate={settings.suggestedStartDate}
+        />
       </CardContent>
     </Card>
   );

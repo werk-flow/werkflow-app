@@ -24,6 +24,17 @@ const FAILURE_CODES = {
     'reason_required',
     'open_failed',
   ],
+  correctOpening: [
+    'invalid_input',
+    'forbidden',
+    'not_authorized',
+    'account_not_found',
+    'reason_required',
+    'opening_date_unchanged',
+    'opening_date_locked',
+    'period_closed',
+    'correction_failed',
+  ],
   submitAdjustment: [
     'invalid_input',
     'forbidden',
@@ -170,6 +181,17 @@ const MESSAGES: ActionMessages = {
       reason_required: 'Gib einen Grund für die Eröffnung an.',
     },
     fallback: 'Das Zeitkonto konnte nicht eröffnet werden. Versuche es erneut.',
+  },
+  correctOpening: {
+    messages: {
+      forbidden: 'Nur Administratoren können ein Eröffnungsdatum korrigieren.',
+      account_not_found: 'Dieses Zeitkonto gibt es nicht mehr. Lade die Seite neu.',
+      reason_required: 'Gib einen Grund für die Korrektur an.',
+      opening_date_unchanged: 'Das Zeitkonto ist bereits an diesem Datum eröffnet. Wähle ein anderes Datum.',
+      opening_date_locked:
+        'Ein abgeschlossener Monat hängt von diesem Datum ab. Wähle ein Datum nach dem letzten abgeschlossenen Monat, oder öffne ihn zuerst wieder.',
+    },
+    fallback: 'Das Eröffnungsdatum konnte nicht korrigiert werden. Versuche es erneut.',
   },
   submitAdjustment: {
     messages: {

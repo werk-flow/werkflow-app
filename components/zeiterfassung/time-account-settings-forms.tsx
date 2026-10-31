@@ -16,11 +16,12 @@ import {
   createStarterTimePolicy,
   submitTimeAccountAdjustment,
 } from '@/lib/time-accounts/actions';
+import { startDateHint } from '@/lib/time-accounts/opening-dates';
 import { formatMinutes } from '@/lib/time-accounts/presentation';
 import type { TimeAccountSettingsData } from '@/lib/time-accounts/queries';
 
-/** Confirms the default policy version or creates an exception policy. */
-export function StarterTimePolicyForm({ today }: { today: string }) {
+/** Confirms the default policy version or creates an exception policy, from the proposed start date on. */
+export function StarterTimePolicyForm({ startDate }: { startDate: string }) {
   const { handleSubmit, handleKeyDown, isPending, pendingValue, error } = useTimeAccountForm({
     action: 'createPolicy',
     serverAction: createStarterTimePolicy,
@@ -37,7 +38,7 @@ export function StarterTimePolicyForm({ today }: { today: string }) {
           <Input name="name" defaultValue="Standard-Arbeitszeit" onKeyDown={handleKeyDown} required />
         </Field>
         <Field label="Gültig ab" htmlFor="time-policy-effective-from" required>
-          <TimeAccountDateField name="effectiveFrom" initialValue={today} ariaLabel="Gültig ab" />
+          <TimeAccountDateField name="effectiveFrom" initialValue={startDate} ariaLabel="Gültig ab" />
         </Field>
         <div className="flex flex-wrap gap-2">
           <TimeAccountSubmitButton
@@ -61,6 +62,7 @@ export function StarterTimePolicyForm({ today }: { today: string }) {
           </TimeAccountSubmitButton>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">{startDateHint(startDate)}</p>
       <ErrorText>{error}</ErrorText>
     </form>
   );
