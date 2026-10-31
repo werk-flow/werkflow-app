@@ -93,7 +93,7 @@ function signInAsMember(memberships: ReadonlyArray<{ orgId: string; role: Role }
 world.rpc = ({ name, args }) =>
   name === 'get_org_members_for_user'
     ? {
-        data: world.tables.organization_members
+        data: (world.tables.organization_members ?? [])
           .filter((row) => row.organization_id === args.p_org_id)
           .map((row) => ({
             user_id: row.user_id,
