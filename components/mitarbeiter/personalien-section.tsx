@@ -18,35 +18,10 @@ const SAVE_ERROR_MESSAGES: Readonly<Record<string, string>> = {
   record_not_found: 'Die Personalakte wurde nicht gefunden.',
 };
 
-interface PersonalienSectionProps {
-  record: EmployeeRecord;
-  canEdit: boolean;
-}
+type SaveMasterDataField = (key: keyof PersonnelMasterDataPatch) => (newValue: string) => Promise<void>;
 
-export function PersonalienSection({ record, canEdit }: PersonalienSectionProps) {
-  const router = useRouter();
-  const [saveError, setSaveError] = useState<string | null>(null);
-
-  const saveField = (key: keyof PersonnelMasterDataPatch) => {
-    return async (newValue: string) => {
-      setSaveError(null);
-      const result = await updatePersonnelMasterData(record.id, {
-        [key]: newValue.trim().length > 0 ? newValue.trim() : null,
-      });
-      if (!result.success) {
-        setSaveError(
-          describeFailure(
-            result.error ?? '',
-            SAVE_ERROR_MESSAGES,
-            'Die Änderung konnte nicht gespeichert werden.',
-          ),
-        );
-        throw new Error(result.error ?? 'update_failed');
-      }
-      router.refresh();
-    };
-  };
-
+/** Builds one text or date field of the Personalien; editable only when the caller may edit. */
+function masterDataFieldBuilders(canEdit: boolean, saveField: SaveMasterDataField) {
   const textField = (
     label: string,
     key: keyof PersonnelMasterDataPatch,
@@ -82,6 +57,40 @@ export function PersonalienSection({ record, canEdit }: PersonalienSectionProps)
         }
       : undefined,
   });
+
+  return { textField, dateField };
+}
+
+interface PersonalienSectionProps {
+  record: EmployeeRecord;
+  canEdit: boolean;
+}
+
+export function PersonalienSection({ record, canEdit }: PersonalienSectionProps) {
+  const router = useRouter();
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const saveField = (key: keyof PersonnelMasterDataPatch) => {
+    return async (newValue: string) => {
+      setSaveError(null);
+      const result = await updatePersonnelMasterData(record.id, {
+        [key]: newValue.trim().length > 0 ? newValue.trim() : null,
+      });
+      if (!result.success) {
+        setSaveError(
+          describeFailure(
+            result.error ?? '',
+            SAVE_ERROR_MESSAGES,
+            'Die Änderung konnte nicht gespeichert werden.',
+          ),
+        );
+        throw new Error(result.error ?? 'update_failed');
+      }
+      router.refresh();
+    };
+  };
+
+  const { textField, dateField } = masterDataFieldBuilders(canEdit, saveField);
 
   const fields: MetadataField[] = [
     textField('Personalnummer', 'employeeNumber', record.employeeNumber, {

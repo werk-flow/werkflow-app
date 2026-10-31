@@ -17,21 +17,39 @@ export type EmploymentConditionFormInput = {
   onClose: (saved: boolean) => void;
 };
 
+/** The German text of a stored decimal, empty when none is stored. */
+function optionalDecimalText(value: number | null | undefined, maxFractionDigits: number): string {
+  return value !== null && value !== undefined ? formatDecimalDe(value, maxFractionDigits) : '';
+}
+
+/** The field errors of one submit; a parsed decimal of `undefined` failed its parse. */
+function employmentConditionFieldErrors(
+  validFrom: string,
+  parsedWeeklyHours: number | null | undefined,
+  parsedVacationDays: number | null | undefined,
+) {
+  return {
+    validFrom: validFrom ? undefined : CONDITION_ERROR_MESSAGES.invalid_valid_from,
+    weeklyHours:
+      parsedWeeklyHours === undefined
+        ? 'Bitte gib die Wochenstunden als Zahl mit höchstens zwei Nachkommastellen an.'
+        : undefined,
+    vacationDays:
+      parsedVacationDays === undefined
+        ? 'Bitte gib die Urlaubstage als Zahl mit höchstens einer Nachkommastelle an.'
+        : undefined,
+  };
+}
+
 /** Field state, validation and save of the employment condition dialog. */
 export function useEmploymentConditionForm({ recordId, condition, onClose }: EmploymentConditionFormInput) {
   const [validFrom, setValidFrom] = useState<string>(condition?.validFrom ?? getBusinessTodayIso());
   const [employmentType, setEmploymentType] = useState<EmploymentType>(
     condition?.employmentType ?? 'vollzeit',
   );
-  const [weeklyHours, setWeeklyHours] = useState<string>(
-    condition?.weeklyHours !== null && condition?.weeklyHours !== undefined
-      ? formatDecimalDe(condition.weeklyHours)
-      : '',
-  );
+  const [weeklyHours, setWeeklyHours] = useState<string>(optionalDecimalText(condition?.weeklyHours, 2));
   const [vacationDays, setVacationDays] = useState<string>(
-    condition?.vacationDaysPerYear !== null && condition?.vacationDaysPerYear !== undefined
-      ? formatDecimalDe(condition.vacationDaysPerYear, 1)
-      : '',
+    optionalDecimalText(condition?.vacationDaysPerYear, 1),
   );
   const [note, setNote] = useState<string>(condition?.note ?? '');
   const [isSaving, setIsSaving] = useState(false);
@@ -51,17 +69,7 @@ export function useEmploymentConditionForm({ recordId, condition, onClose }: Emp
     // The columns hold two (hours) and one (days) fractional digits.
     const parsedWeeklyHours = parseBoundedDecimalInput(weeklyHours, 2);
     const parsedVacationDays = parseBoundedDecimalInput(vacationDays, 1);
-    const nextFieldErrors = {
-      validFrom: validFrom ? undefined : CONDITION_ERROR_MESSAGES.invalid_valid_from,
-      weeklyHours:
-        parsedWeeklyHours === undefined
-          ? 'Bitte gib die Wochenstunden als Zahl mit höchstens zwei Nachkommastellen an.'
-          : undefined,
-      vacationDays:
-        parsedVacationDays === undefined
-          ? 'Bitte gib die Urlaubstage als Zahl mit höchstens einer Nachkommastelle an.'
-          : undefined,
-    };
+    const nextFieldErrors = employmentConditionFieldErrors(validFrom, parsedWeeklyHours, parsedVacationDays);
     setFieldErrors(nextFieldErrors);
     const invalid = focusFirstInvalidField({
       'condition-valid-from': nextFieldErrors.validFrom,

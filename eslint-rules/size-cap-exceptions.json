@@ -12,7 +12,6 @@
     "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
-    "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
     "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
@@ -128,9 +127,6 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
-    "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
-    "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
     "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
     "components/mitarbeiter/invitations-table.tsx": { "InvitationsTable": 104 },
     "components/mitarbeiter/invite-actions-menu.tsx": { "InviteActionsMenu": 108 },
@@ -144,17 +140,7 @@
     },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
-    "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
     "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 99 },
-    "components/mitarbeiter/personalien-section.tsx": { "PersonalienSection": 97 },
-    "components/mitarbeiter/personnel-invite-dialog.tsx": { "PersonnelInviteDialog": 103 },
-    "components/mitarbeiter/personnel-lifecycle-onboarding-dialogs.tsx": {
-      "PersonnelLifecycleRequirementDialog": 87
-    },
-    "components/mitarbeiter/personnel-lifecycle-overview.tsx": { "PersonnelLifecycleStatusCards": 92 },
-    "components/mitarbeiter/personnel-lifecycle-section.tsx": { "PersonnelLifecycleSection": 108 },
-    "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 172 },
-    "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 113 },
     "components/mitarbeiter/qualification-management-definitions.tsx": {
       "QualificationManagementDefinitionForm": 111
     },
@@ -174,16 +160,6 @@
       "TeamManagementCardHeader": 83,
       "TeamManagementCardAddMemberForm": 89
     },
-    "components/mitarbeiter/use-create-personnel-dialog-form.ts": { "useCreatePersonnelDialogForm": 87 },
-    "components/mitarbeiter/use-employment-condition-form.ts": { "useEmploymentConditionForm": 94 },
-    "components/mitarbeiter/use-personnel-lifecycle-documents.ts": { "usePersonnelLifecycleDocuments": 116 },
-    "components/mitarbeiter/use-personnel-lifecycle-onboarding.ts": {
-      "usePersonnelLifecycleRequirements": 125
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-transitions.ts": {
-      "usePersonnelLifecycleTransitions": 115
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-view.ts": { "usePersonnelLifecycleView": 88 },
     "components/mitarbeiter/use-qualification-management-grant-form.ts": {
       "useQualificationManagementGrantForm": 110,
       "useQualificationManagementGrantForm > saveGrant": 82
@@ -194,7 +170,6 @@
     "components/mitarbeiter/use-sickness-report-record-form.ts": { "useSicknessReportRecordForm": 87 },
     "components/mitarbeiter/use-team-management-memberships.ts": { "useTeamManagementMemberships": 130 },
     "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
-    "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
