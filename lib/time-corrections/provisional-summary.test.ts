@@ -62,4 +62,15 @@ describe('the pending corrections in sum', () => {
     ]);
     expect(summary.days).toEqual(['2026-10-27']);
   });
+
+  test('name every day an unsplit interval spans, not only the days of its facts', () => {
+    // A legacy approved interval from 26.10. 22:00 to 28.10. 02:00 local, shortened to end on the 26th.
+    const summary = summarizePendingCorrections([
+      request(
+        snapshot(fact('clock_in', '2026-10-26T21:00:00.000Z'), fact('clock_out', '2026-10-28T01:00:00.000Z')),
+        snapshot(fact('clock_in', '2026-10-26T21:00:00.000Z'), fact('clock_out', '2026-10-26T22:30:00.000Z')),
+      ),
+    ]);
+    expect(summary.days).toEqual(['2026-10-26', '2026-10-27', '2026-10-28']);
+  });
 });
