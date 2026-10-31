@@ -11,9 +11,6 @@
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
     "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
-    "app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page.tsx": { "NestedJobDetailData": 149 },
-    "app/(app)/auftraege/projekt/[projectNumber]/loading.tsx": { "ProjectDetailLoading": 85 },
-    "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 156 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
@@ -98,20 +95,6 @@
       "WorkLifecycleTransitionActions": 95
     },
     "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
-    "components/auftraege/project-detail/project-detail-content.tsx": {
-      "useProjectDetailState": 96,
-      "ProjectDetailContent": 150
-    },
-    "components/auftraege/project-detail/project-detail-metadata-fields.tsx": {
-      "buildProjectDetailMetadataFields": 90
-    },
-    "components/auftraege/project-detail/project-qualification-section.tsx": {
-      "ProjectQualificationSection": 165
-    },
-    "components/auftraege/shared/employee-multi-select.tsx": { "EmployeeMultiSelect": 99 },
-    "components/auftraege/shared/qualification-warning-dialog.tsx": {
-      "QualificationWarningDialogContent": 115
-    },
     "components/auftraege/work-pack/field-work-pack-context-sources.tsx": {
       "FieldWorkPackContextSources": 81
     },
