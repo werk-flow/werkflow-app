@@ -105,7 +105,6 @@
   "lib/qualifications/complete-reads.test.ts": 2,
   "lib/realtime/scheduler.test.ts": 1,
   "lib/realtime/scheduler.ts": 1,
-  "lib/responsibilities/server.ts": 3,
   "lib/security/dependency-audit.test.ts": 2,
   "lib/service-cases/list-scale.test.ts": 2,
   "lib/supabase/fetch-with-timeout.ts": 1,
