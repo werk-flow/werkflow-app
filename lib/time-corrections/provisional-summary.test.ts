@@ -51,4 +51,15 @@ describe('the pending corrections in sum', () => {
       days: ['2026-10-26', '2026-10-27'],
     });
   });
+
+  test('name the day a session ends at midnight as the day it was worked', () => {
+    // 27.10. in Berlin: 18:00 to 00:00 local; the clock_out at midnight closes the 27th.
+    const summary = summarizePendingCorrections([
+      request(
+        snapshot(),
+        snapshot(fact('clock_in', '2026-10-27T17:00:00.000Z'), fact('clock_out', '2026-10-27T23:00:00.000Z')),
+      ),
+    ]);
+    expect(summary.days).toEqual(['2026-10-27']);
+  });
 });

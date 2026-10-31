@@ -1,4 +1,5 @@
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
+import { correctionDayOwner } from './timeline-validation';
 import type { TimeCorrectionRequest, TimeCorrectionSnapshot } from './types';
 
 /** The pending corrections of one person in sum: how many, their minutes before and after, and their days. */
@@ -34,7 +35,7 @@ export function summarizePendingCorrections(
   const days = new Set(
     pending.flatMap(({ revision }) =>
       [...revision.beforeSnapshot.facts, ...revision.proposedSnapshot.facts].map((fact) =>
-        formatBerlinLocalDate(fact.timestamp),
+        formatBerlinLocalDate(correctionDayOwner(fact)),
       ),
     ),
   );
