@@ -60,6 +60,76 @@ export interface EditRequestForm {
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
 
+/** The fields the edit dialog changes, with their setters. */
+type EditableRequestFields = Omit<
+  EditRequestForm,
+  'isLoading' | 'summaryError' | 'receivedAtError' | 'formError' | 'handleSubmit'
+>;
+
+/** The edit fields, starting from the request; `prefill` refills them from it. */
+function useEditableRequestFields(request: ClientRequest): {
+  fields: EditableRequestFields;
+  prefill: () => void;
+} {
+  const [summary, setSummary] = useState(request.summary);
+  const [details, setDetails] = useState(request.details ?? '');
+  const [requestNumber, setRequestNumber] = useState(request.requestNumber ?? '');
+  const [callerName, setCallerName] = useState(request.callerName ?? '');
+  const [callerPhone, setCallerPhone] = useState(request.callerPhone ?? '');
+  const [callerEmail, setCallerEmail] = useState(request.callerEmail ?? '');
+  const [callerAddress, setCallerAddress] = useState(request.callerAddress ?? '');
+  const [category, setCategory] = useState<RequestCategory>(request.category);
+  const [urgency, setUrgency] = useState<RequestUrgency>(request.urgency);
+  const [source, setSource] = useState<RequestSource>(request.source);
+  const [receivedAt, setReceivedAt] = useState(formatBerlinDateTimeInput(request.receivedAt));
+  const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
+
+  const prefill = () => {
+    setSummary(request.summary);
+    setDetails(request.details ?? '');
+    setRequestNumber(request.requestNumber ?? '');
+    setCallerName(request.callerName ?? '');
+    setCallerPhone(request.callerPhone ?? '');
+    setCallerEmail(request.callerEmail ?? '');
+    setCallerAddress(request.callerAddress ?? '');
+    setCategory(request.category);
+    setUrgency(request.urgency);
+    setSource(request.source);
+    setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
+    setAssignedTo(request.assignedTo ?? '');
+  };
+
+  return {
+    fields: {
+      summary,
+      setSummary,
+      details,
+      setDetails,
+      requestNumber,
+      setRequestNumber,
+      callerName,
+      setCallerName,
+      callerPhone,
+      setCallerPhone,
+      callerEmail,
+      setCallerEmail,
+      callerAddress,
+      setCallerAddress,
+      category,
+      setCategory,
+      urgency,
+      setUrgency,
+      source,
+      setSource,
+      receivedAt,
+      setReceivedAt,
+      assignedTo,
+      setAssignedTo,
+    },
+    prefill,
+  };
+}
+
 /** Form state of the edit dialog: prefill on open, validation and save. */
 export function useEditRequestForm({
   request,
@@ -74,18 +144,7 @@ export function useEditRequestForm({
 }): EditRequestForm {
   const router = useRouter();
   const { showBanner } = useBanner();
-  const [summary, setSummary] = useState(request.summary);
-  const [details, setDetails] = useState(request.details ?? '');
-  const [requestNumber, setRequestNumber] = useState(request.requestNumber ?? '');
-  const [callerName, setCallerName] = useState(request.callerName ?? '');
-  const [callerPhone, setCallerPhone] = useState(request.callerPhone ?? '');
-  const [callerEmail, setCallerEmail] = useState(request.callerEmail ?? '');
-  const [callerAddress, setCallerAddress] = useState(request.callerAddress ?? '');
-  const [category, setCategory] = useState<RequestCategory>(request.category);
-  const [urgency, setUrgency] = useState<RequestUrgency>(request.urgency);
-  const [source, setSource] = useState<RequestSource>(request.source);
-  const [receivedAt, setReceivedAt] = useState(formatBerlinDateTimeInput(request.receivedAt));
-  const [assignedTo, setAssignedTo] = useState(request.assignedTo ?? '');
+  const { fields, prefill } = useEditableRequestFields(request);
   const { run: runUpdate, isPending: isLoading } = useServerAction(updateClientRequest);
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
@@ -97,18 +156,7 @@ export function useEditRequestForm({
   if (open !== prefilledFor.open || request.id !== prefilledFor.requestId) {
     setPrefilledFor({ open, requestId: request.id });
     if (open) {
-      setSummary(request.summary);
-      setDetails(request.details ?? '');
-      setRequestNumber(request.requestNumber ?? '');
-      setCallerName(request.callerName ?? '');
-      setCallerPhone(request.callerPhone ?? '');
-      setCallerEmail(request.callerEmail ?? '');
-      setCallerAddress(request.callerAddress ?? '');
-      setCategory(request.category);
-      setUrgency(request.urgency);
-      setSource(request.source);
-      setReceivedAt(formatBerlinDateTimeInput(request.receivedAt));
-      setAssignedTo(request.assignedTo ?? '');
+      prefill();
       setError(null);
       setAttempted(false);
     }
@@ -116,8 +164,8 @@ export function useEditRequestForm({
 
   const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
     idPrefix: 'edit-request',
-    summary,
-    receivedAt,
+    summary: fields.summary,
+    receivedAt: fields.receivedAt,
     attempted,
     error,
   });
@@ -128,6 +176,8 @@ export function useEditRequestForm({
     setError(null);
     if (focusFirstInvalidField(errors)) return;
 
+    const { summary, details, requestNumber, callerName, callerPhone, callerEmail, callerAddress } = fields;
+    const { category, urgency, source, assignedTo } = fields;
     try {
       const result = await runUpdate(request.id, {
         summary: summary.trim(),
@@ -159,30 +209,7 @@ export function useEditRequestForm({
   };
 
   return {
-    summary,
-    setSummary,
-    details,
-    setDetails,
-    requestNumber,
-    setRequestNumber,
-    callerName,
-    setCallerName,
-    callerPhone,
-    setCallerPhone,
-    callerEmail,
-    setCallerEmail,
-    callerAddress,
-    setCallerAddress,
-    category,
-    setCategory,
-    urgency,
-    setUrgency,
-    source,
-    setSource,
-    receivedAt,
-    setReceivedAt,
-    assignedTo,
-    setAssignedTo,
+    ...fields,
     isLoading,
     summaryError,
     receivedAtError,
