@@ -23,3 +23,15 @@ export const STATE_LABELS: Record<CommunicationPreferenceState, string> = {
   disallowed: 'Nicht erlaubt',
   unknown: 'Unbekannt',
 };
+
+export function isCommunicationChannel(value: string): value is CommunicationChannel {
+  return Object.hasOwn(CHANNEL_LABELS, value);
+}
+
+export function isCommunicationPurpose(value: string): value is CommunicationPurpose {
+  return Object.hasOwn(PURPOSE_LABELS, value);
+}
+
+export function isCommunicationPreferenceState(value: string): value is CommunicationPreferenceState {
+  return Object.hasOwn(STATE_LABELS, value);
+}
