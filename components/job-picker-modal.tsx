@@ -29,6 +29,12 @@ const SEARCH_DEBOUNCE_MS = 150;
 
 type PickerPage = { jobs: PickerJob[]; hasMore: boolean; selected: PickerJob | null };
 type PickerRequest = { query: string; limit: number };
+type PickerReadInput = {
+  organizationId: string;
+  request: PickerRequest;
+  mode: JobPickerModalProps['mode'];
+  currentJobId: string | null;
+};
 
 interface JobPickerModalProps {
   open: boolean;
@@ -43,25 +49,34 @@ interface JobPickerModalProps {
   isStatusLoading?: boolean;
 }
 
-/**
- * Job picking for the clock flows. DELIBERATELY NOT a collapsed select:
- * clocking in is the field worker's most frequent action, so the search bar
- * and the full option list are visible IMMEDIATELY when the modal opens —
- * no extra click to expand a dropdown. This flat-list presentation is an
- * owner-confirmed registry design (restored 2026-08-23 after a regression
- * replaced it with a SearchableSelect inside the dialog); keep it.
- * The Dialog primitive host provides the Realtime-refresh suspension.
- */
-export function JobPickerModal({
+/** One page read of the picker: the search and length it answers for, and the running job of a switch. */
+async function readJobPickerPage(
+  signal: AbortSignal,
+  { organizationId, request, mode, currentJobId }: PickerReadInput,
+): Promise<LiveViewResult<PickerPage>> {
+  if (!organizationId) return { ok: true, data: { jobs: [], hasMore: false, selected: null } };
+  const result = await readInBackground(
+    'job-picker-jobs',
+    {
+      organizationId,
+      query: request.query,
+      limit: request.limit,
+      ...(mode === 'switch' && currentJobId ? { selectedJobId: currentJobId } : {}),
+    },
+    signal,
+  );
+  return result.success
+    ? { ok: true, data: { jobs: result.jobs, hasMore: result.hasMore, selected: result.selected } }
+    : { ok: false };
+}
+
+/** The picker's search, the live page of jobs it shows and the chosen job; each opening starts fresh. */
+function useJobPickerState({
   open,
-  onClose,
-  onConfirm,
   organizationId,
   mode,
   currentJobId,
-  isPending,
-  isStatusLoading = false,
-}: JobPickerModalProps) {
+}: Pick<JobPickerModalProps, 'open' | 'organizationId' | 'mode' | 'currentJobId'>) {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // The search and the shown length the server answers for; typing settles for a moment first.
@@ -73,22 +88,8 @@ export function JobPickerModal({
     tables: ['jobs', 'projects', 'job_assignments'],
     // Reads over GET, so opening the picker never waits behind a clock transition. The
     // database searches and ranks today's own visits first; the list re-reads what it shows.
-    read: async ({ signal }): Promise<LiveViewResult<PickerPage>> => {
-      if (!organizationId) return { ok: true, data: { jobs: [], hasMore: false, selected: null } };
-      const result = await readInBackground(
-        'job-picker-jobs',
-        {
-          organizationId,
-          query: requestRef.current.query,
-          limit: requestRef.current.limit,
-          ...(mode === 'switch' && currentJobId ? { selectedJobId: currentJobId } : {}),
-        },
-        signal,
-      );
-      return result.success
-        ? { ok: true, data: { jobs: result.jobs, hasMore: result.hasMore, selected: result.selected } }
-        : { ok: false };
-    },
+    read: ({ signal }) =>
+      readJobPickerPage(signal, { organizationId, request: requestRef.current, mode, currentJobId }),
     // Only read while the modal is open; each open triggers a fresh read.
     enabled: open,
     resetKey: organizationId,
@@ -139,6 +140,46 @@ export function JobPickerModal({
       : jobs;
   }, [page, request.query]);
   const plannedTodayCount = filteredJobs.filter((job) => job.plannedToday).length;
+  const onLoadMore = page?.hasMore
+    ? () => setRequest((current) => ({ ...current, limit: current.limit + PICKER_PAGE_SIZE }))
+    : undefined;
+  return {
+    selectedJobId,
+    setSelectedJobId,
+    searchQuery,
+    setSearchQuery,
+    request,
+    onLoadMore,
+    searchInputRef,
+    view,
+    page,
+    isLoading,
+    searchPending,
+    filteredJobs,
+    plannedTodayCount,
+  };
+}
+
+/**
+ * Job picking for the clock flows. DELIBERATELY NOT a collapsed select:
+ * clocking in is the field worker's most frequent action, so the search bar
+ * and the full option list are visible IMMEDIATELY when the modal opens —
+ * no extra click to expand a dropdown. This flat-list presentation is an
+ * owner-confirmed registry design (restored 2026-08-23 after a regression
+ * replaced it with a SearchableSelect inside the dialog); keep it.
+ * The Dialog primitive host provides the Realtime-refresh suspension.
+ */
+export function JobPickerModal({
+  open,
+  onClose,
+  onConfirm,
+  organizationId,
+  mode,
+  currentJobId,
+  isPending,
+  isStatusLoading = false,
+}: JobPickerModalProps) {
+  const { searchInputRef, ...picker } = useJobPickerState({ open, organizationId, mode, currentJobId });
 
   const title =
     mode === 'clock_in' ? 'Einstempeln' : mode === 'resume' ? 'Arbeit fortsetzen' : 'Auftrag wechseln';
@@ -167,7 +208,7 @@ export function JobPickerModal({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            onConfirm(selectedJobId);
+            onConfirm(picker.selectedJobId);
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col gap-3"
@@ -177,66 +218,122 @@ export function JobPickerModal({
               ref={searchInputRef}
               placeholder="Auftrag suchen…"
               aria-label="Auftrag suchen"
-              value={searchQuery}
-              onValueChange={setSearchQuery}
-              pending={searchPending}
+              value={picker.searchQuery}
+              onValueChange={picker.setSearchQuery}
+              pending={picker.searchPending}
             />
           </Field>
 
-          <DialogBody className="min-h-40">
-            {isLoading && page === undefined ? (
-              <JobPickerLoadingRows />
-            ) : (
-              <StaleRegion stale={view.isStale} onRetry={view.refresh}>
-                <JobPickerOptionList
-                  filteredJobs={filteredJobs}
-                  plannedTodayCount={plannedTodayCount}
-                  selectedJobId={selectedJobId}
-                  setSelectedJobId={setSelectedJobId}
-                  isLoading={isLoading}
-                  loadFailed={view.data === undefined}
-                  onRetry={() => void view.refresh()}
-                  searchQuery={request.query}
-                  onLoadMore={
-                    page?.hasMore
-                      ? () =>
-                          setRequest((current) => ({ ...current, limit: current.limit + PICKER_PAGE_SIZE }))
-                      : undefined
-                  }
-                />
-              </StaleRegion>
-            )}
-          </DialogBody>
+          <JobPickerResults
+            isLoading={picker.isLoading}
+            page={picker.page}
+            stale={picker.view.isStale}
+            onRefresh={picker.view.refresh}
+            loadFailed={picker.view.data === undefined}
+            filteredJobs={picker.filteredJobs}
+            plannedTodayCount={picker.plannedTodayCount}
+            selectedJobId={picker.selectedJobId}
+            setSelectedJobId={picker.setSelectedJobId}
+            searchQuery={picker.request.query}
+            onLoadMore={picker.onLoadMore}
+          />
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1 sm:flex-initial"
-              onClick={onClose}
-              disabled={isPending}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1 select-none sm:flex-initial"
-              pending={isPending}
-              // eslint-disable-next-line ui/submit-disabled-only-while-pending -- no field to fill: switching to the job that is already running is not an action
-              disabled={
-                isStatusLoading || (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))
-              }
-            >
-              {mode === 'switch' ? (
-                <ArrowLeftRight className="mr-2 h-4 w-4" />
-              ) : (
-                <Play className="mr-2 h-4 w-4" />
-              )}
-              {mode === 'clock_in' ? 'Einstempeln' : mode === 'resume' ? 'Fortsetzen' : 'Wechseln'}
-            </Button>
-          </DialogFooter>
+          <JobPickerFooter
+            mode={mode}
+            onClose={onClose}
+            isPending={isPending}
+            isStatusLoading={isStatusLoading}
+            selectedJobId={picker.selectedJobId}
+            currentJobId={currentJobId}
+          />
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The job list under the search: skeleton rows on the first read, then the options, inert while stale. */
+function JobPickerResults({
+  isLoading,
+  page,
+  stale,
+  onRefresh,
+  loadFailed,
+  filteredJobs,
+  plannedTodayCount,
+  selectedJobId,
+  setSelectedJobId,
+  searchQuery,
+  onLoadMore,
+}: {
+  isLoading: boolean;
+  page: PickerPage | undefined;
+  stale: boolean;
+  onRefresh: () => Promise<void>;
+  loadFailed: boolean;
+  filteredJobs: PickerJob[];
+  plannedTodayCount: number;
+  selectedJobId: string | null;
+  setSelectedJobId: (jobId: string | null) => void;
+  searchQuery: string;
+  onLoadMore: (() => void) | undefined;
+}) {
+  return (
+    <DialogBody className="min-h-40">
+      {isLoading && page === undefined ? (
+        <JobPickerLoadingRows />
+      ) : (
+        <StaleRegion stale={stale} onRetry={onRefresh}>
+          <JobPickerOptionList
+            filteredJobs={filteredJobs}
+            plannedTodayCount={plannedTodayCount}
+            selectedJobId={selectedJobId}
+            setSelectedJobId={setSelectedJobId}
+            isLoading={isLoading}
+            loadFailed={loadFailed}
+            onRetry={() => void onRefresh()}
+            searchQuery={searchQuery}
+            onLoadMore={onLoadMore}
+          />
+        </StaleRegion>
+      )}
+    </DialogBody>
+  );
+}
+
+/** Cancel and confirm; confirming waits for the clock status, a switch needs another job. */
+function JobPickerFooter({
+  mode,
+  onClose,
+  isPending,
+  isStatusLoading,
+  selectedJobId,
+  currentJobId,
+}: Pick<JobPickerModalProps, 'mode' | 'onClose' | 'isPending' | 'currentJobId'> & {
+  isStatusLoading: boolean;
+  selectedJobId: string | null;
+}) {
+  return (
+    <DialogFooter>
+      <Button
+        type="button"
+        variant="outline"
+        className="flex-1 sm:flex-initial"
+        onClick={onClose}
+        disabled={isPending}
+      >
+        Abbrechen
+      </Button>
+      <Button
+        type="submit"
+        className="flex-1 select-none sm:flex-initial"
+        pending={isPending}
+        // eslint-disable-next-line ui/submit-disabled-only-while-pending -- no field to fill: switching to the job that is already running is not an action
+        disabled={isStatusLoading || (mode === 'switch' && (selectedJobId ?? '') === (currentJobId ?? ''))}
+      >
+        {mode === 'switch' ? <ArrowLeftRight className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
+        {mode === 'clock_in' ? 'Einstempeln' : mode === 'resume' ? 'Fortsetzen' : 'Wechseln'}
+      </Button>
+    </DialogFooter>
   );
 }
