@@ -21,6 +21,17 @@ import {
   type MaterialDialogRow,
 } from './job-material-dialog-model';
 
+type MaterialDialogRowCardProps = {
+  row: MaterialDialogRow;
+  /** Undefined when the catalog page no longer holds the row's item. */
+  item: InventoryPickerOption | undefined;
+  locations: InventoryLocation[];
+  mode: MaterialDialogMode;
+  canRemove: boolean;
+  onChange: (patch: Partial<MaterialDialogRow>) => void;
+  onRemove: () => void;
+};
+
 /** One selected position of the material dialog: quantity, location, note and its effect. */
 export function MaterialDialogRowCard({
   row,
@@ -30,16 +41,7 @@ export function MaterialDialogRowCard({
   canRemove,
   onChange,
   onRemove,
-}: {
-  row: MaterialDialogRow;
-  /** Undefined when the catalog page no longer holds the row's item. */
-  item: InventoryPickerOption | undefined;
-  locations: InventoryLocation[];
-  mode: MaterialDialogMode;
-  canRemove: boolean;
-  onChange: (patch: Partial<MaterialDialogRow>) => void;
-  onRemove: () => void;
-}) {
+}: MaterialDialogRowCardProps) {
   const locationOptions = getLocationOptions(item, locations, mode);
   const unitLabel = item ? getInventoryUnitLabel(item.unit) : '';
   const effectQuantity = item
@@ -95,21 +97,28 @@ export function MaterialDialogRowCard({
         <Field label="Notiz" htmlFor={`${fieldIdPrefix}-notes`}>
           <Textarea value={row.notes} onChange={(event) => onChange({ notes: event.target.value })} />
         </Field>
-        <p
-          className={cn(
-            'rounded-md px-3 py-2 text-xs',
-            mode === 'take' && 'bg-destructive-soft text-destructive-soft-foreground',
-            mode === 'return' && 'bg-success-soft text-success-soft-foreground',
-            (mode === 'plan' || mode === 'edit') && 'bg-info-soft text-info-soft-foreground',
-          )}
-        >
-          {mode === 'take'
-            ? `Diese Zeile zieht ${effectQuantity} aus dem Lager ab.`
-            : mode === 'return'
-              ? `Diese Zeile legt ${effectQuantity} zurück ins Lager.`
-              : 'Diese Zeile plant Bedarf. Der Bestand bleibt unverändert.'}
-        </p>
+        <MaterialRowEffect mode={mode} effectQuantity={effectQuantity} />
       </div>
     </div>
+  );
+}
+
+/** What saving this row does to the stock, in words. */
+function MaterialRowEffect({ mode, effectQuantity }: { mode: MaterialDialogMode; effectQuantity: string }) {
+  return (
+    <p
+      className={cn(
+        'rounded-md px-3 py-2 text-xs',
+        mode === 'take' && 'bg-destructive-soft text-destructive-soft-foreground',
+        mode === 'return' && 'bg-success-soft text-success-soft-foreground',
+        (mode === 'plan' || mode === 'edit') && 'bg-info-soft text-info-soft-foreground',
+      )}
+    >
+      {mode === 'take'
+        ? `Diese Zeile zieht ${effectQuantity} aus dem Lager ab.`
+        : mode === 'return'
+          ? `Diese Zeile legt ${effectQuantity} zurück ins Lager.`
+          : 'Diese Zeile plant Bedarf. Der Bestand bleibt unverändert.'}
+    </p>
   );
 }

@@ -19,13 +19,13 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { describeFailure } from '@/lib/action-messages';
 import { createInventoryLocation } from '@/lib/inventory/actions';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 import { INVENTORY_LOCATION_TYPE_LABELS } from '@/lib/inventory/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { LocationTypeSelect } from './location-type-select';
 
 type LocationSelectWithCreateProps = {
   id?: string;
@@ -93,15 +93,11 @@ function getCreateLocationErrorMessage(error: string): string {
   );
 }
 
-function CreateLocationDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (location: InventoryLocation) => void;
-}) {
+/** The quick-create form's values, its validation and the create call. */
+function useQuickLocationForm(
+  onOpenChange: (open: boolean) => void,
+  onCreated: (location: InventoryLocation) => void,
+) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [locationType, setLocationType] = useState<InventoryLocationType>('room');
@@ -144,6 +140,42 @@ function CreateLocationDialog({
     })();
   }
 
+  return {
+    name,
+    setName,
+    description,
+    setDescription,
+    locationType,
+    setLocationType,
+    error,
+    nameError,
+    isPending,
+    handleSave,
+  };
+}
+
+function CreateLocationDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: (location: InventoryLocation) => void;
+}) {
+  const {
+    name,
+    setName,
+    description,
+    setDescription,
+    locationType,
+    setLocationType,
+    error,
+    nameError,
+    isPending,
+    handleSave,
+  } = useQuickLocationForm(onOpenChange, onCreated);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>
@@ -168,21 +200,7 @@ function CreateLocationDialog({
                 <Input value={name} onChange={(event) => setName(event.target.value)} />
               </Field>
               <Field label="Typ" htmlFor="quick-location-type">
-                <Select
-                  value={locationType}
-                  onValueChange={(value) => setLocationType(value as InventoryLocationType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <LocationTypeSelect value={locationType} onValueChange={setLocationType} />
               </Field>
               <Field label="Beschreibung" htmlFor="quick-location-description">
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
