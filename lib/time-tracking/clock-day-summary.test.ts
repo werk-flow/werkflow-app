@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { describeClockActivity, workTimeParts, todayWorkingTime } from './clock-day-summary';
+import { describeClockActivity, todayWorkingTime } from './clock-day-summary';
+
+/** The parts of a day without overtime. */
+const workTimeParts = (workMinutes: number, minutes: Parameters<typeof todayWorkingTime>[1]) =>
+  todayWorkingTime({ workMinutes, overtimeMinutes: 0 }, minutes).parts;
 import { createActivitySelection } from './segments';
 
 const none = { travel: 0, standby: 0, callout: 0, internal_activity: 0 };

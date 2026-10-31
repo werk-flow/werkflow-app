@@ -70,7 +70,7 @@ function roundToTotal(values: readonly number[], total: number): number[] {
  * the work comes out of the other parts evenly. Empty while the day holds work
  * only, so the total stands alone.
  */
-export function workTimeParts(
+function workTimeParts(
   workMinutes: number,
   minutes: Record<(typeof OTHER_WORK_KINDS)[number], number>,
 ): WorkTimePart[] {
