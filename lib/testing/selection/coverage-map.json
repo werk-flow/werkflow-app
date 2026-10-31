@@ -1848,6 +1848,14 @@
             "a field worker did not see exactly the assigned visits",
             "a field worker could read series, assessments or planning history"
           ]
+        },
+        {
+          "file": "lib/calendar/calendar-page-access.test.ts",
+          "kind": "unit",
+          "description": "the real Kalender page and planning read give a field worker the own visit, never a colleague's or the no-login-only visit, while Büro reads all three",
+          "titles": [
+            "the Kalender shows a field worker only their own row and visits, and another organization nothing"
+          ]
         }
       ],
       "clauses": "Handwerker sehen genau ihre Termine; Planung erzeugt nie Ist-Zeit\n`@P1-11` hält RLS-Matrix und Ist-Zeit-Null; `A6-T7` ergänzt das exakte Positiv/Negativ-Paar in der Handwerker-Kalender-UI (eigener A6-Termin sichtbar, Nur-ohne-Login-Termin abwesend) und den unveränderten organisationsweiten Ist-Zeit-Zähler über alle A6-Planungen.",

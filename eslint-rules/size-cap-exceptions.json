@@ -35,21 +35,6 @@
     "components/anfragen/use-create-request-form.ts": { "useCreateRequestForm": 146 },
     "components/anfragen/use-edit-request-form.ts": { "useEditRequestForm": 119 },
     "components/anfragen/use-request-detail-actions.ts": { "useRequestDetailActions": 148 },
-    "components/arbeitsvorlagen/apply-work-template-card.tsx": { "ApplyWorkTemplateCard": 125 },
-    "components/arbeitsvorlagen/use-apply-work-template.ts": { "useApplyWorkTemplate": 125 },
-    "components/arbeitsvorlagen/use-work-template-editor-options.ts": { "useWorkTemplateEditorOptions": 139 },
-    "components/arbeitsvorlagen/work-template-capabilities-editor.tsx": {
-      "CapabilitiesEditor": 130,
-      "CapabilitiesEditor > map#1": 84
-    },
-    "components/arbeitsvorlagen/work-template-editor-dialog.tsx": { "TemplateEditorDialog": 191 },
-    "components/arbeitsvorlagen/work-template-items-editor.tsx": {
-      "ItemsEditor": 95,
-      "WorkTemplateItemCard": 138,
-      "WorkTemplateEvidenceEditor": 105
-    },
-    "components/arbeitsvorlagen/work-template-materials-editor.tsx": { "WorkTemplateMaterialLine": 164 },
-    "components/arbeitsvorlagen/work-templates-content.tsx": { "WorkTemplatesContent": 165 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
