@@ -361,15 +361,9 @@
       "EmployeeTimePolicyAssignment": 97,
       "MissingTimeAccount": 105
     },
-    "components/zeiterfassung/time-correction-dialog-fields.tsx": { "TimeCorrectionDialogFields": 106 },
-    "components/zeiterfassung/time-correction-dialog.tsx": { "TimeCorrectionDialog": 85 },
     "components/zeiterfassung/time-correction-requests-card.tsx": { "TimeCorrectionRequestCard": 132 },
     "components/zeiterfassung/time-correction-requests.tsx": { "TimeCorrectionRequests": 128 },
     "components/zeiterfassung/time-progress-ring.tsx": { "TimeProgressRing": 103 },
-    "components/zeiterfassung/use-time-correction-dialog.ts": {
-      "useTimeCorrectionDialogSession": 86,
-      "useTimeCorrectionDialogForm": 128
-    },
     "components/zeiterfassung/use-time-correction-requests.ts": { "useTimeCorrectionRequestActions": 137 },
     "components/zeiterfassung/use-vacation-approvals.ts": { "useVacationApprovalDecisions": 83 },
     "components/zeiterfassung/vacation-approvals.tsx": { "VacationApprovals": 86 },
