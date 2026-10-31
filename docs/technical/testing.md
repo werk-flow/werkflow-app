@@ -37,10 +37,6 @@ A useful test survives an equivalent implementation. Check a regression test aga
 
 Read the evidence before you run anything again, and follow [Failures](#failures). When the test seems wrong, compare it with the catalog clause and the feature spec before you touch the assertion.
 
-### Open and babysit the pull request
-
-Open the PR with `gh pr create` and the template, then babysit it as [reviews](coderabbit.md#babysit-a-pull-request) describes until it meets [the merge gate](coderabbit.md#the-merge-gate).
-
 ### Grow a shrink-only list
 
 CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Unit (`list-growth.yml`); if that fails, push a commit.
@@ -115,7 +111,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 `scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree), each with a disposable organization in the local Supabase stack. Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start; the runner waits.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree), each with a disposable organization in the local Supabase stack. Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI the wait would spend the job timeout, so the group is blocked (harness, `midnight start window`); rerun the failed job after 00:10 Berlin.
 
 ## Specs
 
