@@ -1,9 +1,13 @@
 'use client';
 
-import { Car } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TimeProgressRing } from './time-progress-ring';
 import { formatDuration } from '@/lib/time-tracking/helpers';
+import {
+  describeClockActivity,
+  todayWorkingTime,
+  type ClockActivityTone,
+} from '@/lib/time-tracking/clock-day-summary';
 import { DEFAULT_DAILY_TARGET_MINUTES, type DailyTarget } from '@/lib/personnel/targets';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 import type { ZeiterfassungLiveTotals } from './zeiterfassung-dashboard-live-totals';
@@ -60,60 +64,61 @@ function ZeiterfassungTodayTargetNote({
   );
 }
 
-/* Time breakdown indicators */
+/* Time breakdown indicators: working time, break and overtime; below them the
+   parts the working time is made of, once it holds more than work. */
 function ZeiterfassungTimeBreakdown({ totals }: { totals: ZeiterfassungLiveTotals }) {
-  const { breakdown, liveTravelMinutes, liveStandbyMinutes, liveCalloutMinutes, liveInternalMinutes } =
-    totals;
+  const { breakdown } = totals;
+  const { workingMinutes, parts } = todayWorkingTime(breakdown, {
+    travel: totals.liveTravelMinutes,
+    standby: totals.liveStandbyMinutes,
+    callout: totals.liveCalloutMinutes,
+    internal_activity: totals.liveInternalMinutes,
+  });
 
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs">
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2 w-2 rounded-full bg-success" />
-        <span className="text-muted-foreground">Arbeitszeit</span>
-        <span className="font-medium tabular-nums">{formatDuration(breakdown.workMinutes)}</span>
-      </span>
-      {liveTravelMinutes > 0 && (
+    <div className="mt-4 flex flex-col items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
         <span className="flex items-center gap-1.5">
-          <Car className="size-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground">Fahrt</span>
-          <span className="font-medium tabular-nums">{formatDuration(liveTravelMinutes)}</span>
+          <span className="inline-block h-2 w-2 rounded-full bg-success" />
+          <span className="text-muted-foreground">Arbeitszeit</span>
+          <span className="font-medium tabular-nums">{formatDuration(breakdown.workMinutes)}</span>
         </span>
-      )}
-      {liveStandbyMinutes > 0 && (
         <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Bereitschaft</span>
-          <span className="font-medium tabular-nums">{formatDuration(liveStandbyMinutes)}</span>
+          <span className="inline-block h-2 w-2 rounded-full bg-warning" />
+          <span className="text-muted-foreground">Pause</span>
+          <span className="font-medium tabular-nums">
+            {breakdown.breakMinutes > 0 ? formatDuration(breakdown.breakMinutes) : '0 Min.'}
+          </span>
         </span>
-      )}
-      {liveCalloutMinutes > 0 && (
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Notdienst</span>
-          <span className="font-medium tabular-nums">{formatDuration(liveCalloutMinutes)}</span>
+        <span className="flex items-center gap-1.5" data-testid="today-overtime">
+          <span className="inline-block h-2 w-2 rounded-full bg-info" />
+          <span className="text-muted-foreground">Überstunden heute</span>
+          <span className="font-medium tabular-nums">
+            {breakdown.overtimeMinutes > 0 ? formatDuration(breakdown.overtimeMinutes) : '0 Min.'}
+          </span>
         </span>
-      )}
-      {liveInternalMinutes > 0 && (
-        <span className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Intern</span>
-          <span className="font-medium tabular-nums">{formatDuration(liveInternalMinutes)}</span>
-        </span>
-      )}
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2 w-2 rounded-full bg-warning" />
-        <span className="text-muted-foreground">Pause</span>
-        <span className="font-medium tabular-nums">
-          {breakdown.breakMinutes > 0 ? formatDuration(breakdown.breakMinutes) : '0 Min.'}
-        </span>
-      </span>
-      <span className="flex items-center gap-1.5" data-testid="today-overtime">
-        <span className="inline-block h-2 w-2 rounded-full bg-info" />
-        <span className="text-muted-foreground">Überstunden heute</span>
-        <span className="font-medium tabular-nums">
-          {breakdown.overtimeMinutes > 0 ? formatDuration(breakdown.overtimeMinutes) : '0 Min.'}
-        </span>
-      </span>
+      </div>
+      {parts.length > 0 ? (
+        <p className="text-center text-muted-foreground" data-testid="today-work-parts">
+          {breakdown.overtimeMinutes > 0 ? `Gesamt ${formatDuration(workingMinutes)}, davon ` : 'Davon '}
+          {parts.map((part, index) => (
+            <span key={part.kind}>
+              {index > 0 ? ' · ' : null}
+              {part.label}{' '}
+              <span className="font-medium tabular-nums text-foreground">{formatDuration(part.minutes)}</span>
+            </span>
+          ))}
+        </p>
+      ) : null}
     </div>
   );
 }
+
+const ACTIVITY_TONE_TEXT = {
+  active: 'text-success-text',
+  break: 'text-warning-text',
+  idle: 'text-muted-foreground',
+} as const satisfies Record<ClockActivityTone, string>;
 
 type ZeiterfassungDashboardHeroProps = {
   effectiveState: LiveClockState;
@@ -135,6 +140,7 @@ export function ZeiterfassungDashboardHero({
   totals,
 }: ZeiterfassungDashboardHeroProps) {
   const { liveBreakMinutes, ringTimelineSegments, workPercentage } = totals;
+  const activity = describeClockActivity(effectiveState);
 
   return (
     <div className="flex flex-col items-center py-8">
@@ -152,22 +158,7 @@ export function ZeiterfassungDashboardHero({
         <span className="mt-1 text-sm text-muted-foreground">Gesamtzeit</span>
       </TimeProgressRing>
 
-      <p
-        className={cn(
-          'mt-6 text-lg font-medium',
-          effectiveState.status === 'working'
-            ? 'text-success-text'
-            : effectiveState.status === 'on_break'
-              ? 'text-warning-text'
-              : 'text-muted-foreground',
-        )}
-      >
-        {effectiveState.status === 'working'
-          ? 'Du arbeitest gerade.'
-          : effectiveState.status === 'on_break'
-            ? 'Du machst gerade Pause.'
-            : 'Du bist nicht eingestempelt.'}
-      </p>
+      <p className={cn('mt-6 text-lg font-medium', ACTIVITY_TONE_TEXT[activity.tone])}>{activity.sentence}</p>
 
       {effectiveState.breakMode === 'automatic' ? (
         <p className="mt-1 text-sm text-muted-foreground">

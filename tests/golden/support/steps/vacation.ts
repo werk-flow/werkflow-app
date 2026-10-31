@@ -34,6 +34,15 @@ export function vacationTakenText(taken: string | number, entitlement: number): 
   return `${vacationTakenRatio(taken, entitlement)} Tagen genommen`;
 }
 
+/** The counter with approved days after today: „0 von 30 Tagen genommen, 0,5 verplant“. */
+export function vacationTakenAndPlannedText(
+  taken: string | number,
+  entitlement: number,
+  planned: string | number,
+): string {
+  return `${vacationTakenText(taken, entitlement)}, ${planned} verplant`;
+}
+
 /** The balance's remaining days: „29,5 Tage Resturlaub“ (days come formatted). */
 export function vacationRemainingText(days: string | number): string {
   return `${days} Tage Resturlaub`;
