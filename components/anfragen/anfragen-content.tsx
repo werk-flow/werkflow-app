@@ -116,13 +116,149 @@ function requestCallerLabel(entry: RequestListEntry): string {
   return 'Unbekannte/r Anrufer/in';
 }
 
+type AnfragenToolbarProps = {
+  shownStatus: RequestStatusFilter;
+  shownSearch: string;
+  onStatusChange: (status: RequestStatusFilter) => void;
+  onSearchChange: (search: string) => void;
+};
+
+/** The status tabs, the search and the refresh; stacks on phones. */
+function AnfragenToolbar({ shownStatus, shownSearch, onStatusChange, onSearchChange }: AnfragenToolbarProps) {
+  return (
+    // Stacks on phones: side by side, the search input shrank to nothing
+    // under the refresh icon and tapping "refresh" opened the keyboard.
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <Tabs
+        panels={false}
+        value={shownStatus}
+        onValueChange={(value) => {
+          const tab = FILTER_TABS.find((candidate) => candidate.value === value);
+          if (tab) onStatusChange(tab.value);
+        }}
+        className="min-w-0"
+      >
+        <TabsList className="h-9 justify-start">
+          {FILTER_TABS.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      <div className="flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end">
+        <SearchInput
+          wrapperClassName="min-w-0 flex-1 sm:max-w-xs"
+          value={shownSearch}
+          onValueChange={onSearchChange}
+          className="h-8"
+          placeholder="Anliegen, Kunde, Nummer…"
+          aria-label="Anfragen durchsuchen"
+        />
+        <RefreshButton label="Liste aktualisieren" />
+      </div>
+    </div>
+  );
+}
+
+/** Phone cards; each is a real link for keyboard and middle-click. */
+function AnfragenCards({ entries }: { entries: RequestListEntry[] }) {
+  return (
+    <div className="space-y-2 md:hidden">
+      {entries.map((entry) => (
+        <ListRow key={entry.request.id} asChild interactive>
+          <Link
+            href={`/anfragen/${entry.request.id}`}
+            aria-label={`Anfrage öffnen: ${entry.request.summary}`}
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-sm font-medium">{entry.request.summary}</p>
+                <RequestStatusBadge status={entry.request.status} />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                <span className="truncate">{requestCallerLabel(entry)}</span>
+                <span className="text-muted-foreground">&middot;</span>
+                <span>{REQUEST_CATEGORY_LABELS[entry.request.category]}</span>
+                <span className="text-muted-foreground">&middot;</span>
+                <span>{formatReceivedAt(entry.request.receivedAt)}</span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-2">
+                <RequestUrgencyBadge urgency={entry.request.urgency} />
+                {entry.convertedLabel && (
+                  <span className="text-xs text-muted-foreground">→ {entry.convertedLabel}</span>
+                )}
+              </div>
+            </div>
+          </Link>
+        </ListRow>
+      ))}
+    </div>
+  );
+}
+
+/** Desktop table; a row navigates on click and prefetches on intent. */
+function AnfragenTable({ entries }: { entries: RequestListEntry[] }) {
+  const router = useRouter();
+  return (
+    <div className="hidden md:block">
+      <Table>
+        <ColumnsTableHeader columns={REQUEST_COLUMNS} />
+        <TableBody>
+          {entries.map((entry) => (
+            <TableRow
+              key={entry.request.id}
+              interactive
+              onClick={() => router.push(`/anfragen/${entry.request.id}`)}
+              {...rowIntentPrefetch(() => router.prefetch(`/anfragen/${entry.request.id}`))}
+            >
+              <TableCell className="whitespace-nowrap text-muted-foreground">
+                {entry.request.requestNumber || '—'}
+              </TableCell>
+              <TableCell className="max-w-0">
+                {/* Real link inside the clickable row for keyboard users,
+                    middle-click, and Cmd+Click. */}
+                <Link
+                  href={`/anfragen/${entry.request.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="block truncate font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
+                >
+                  {entry.request.summary}
+                </Link>
+                {entry.convertedLabel && (
+                  <p className="truncate text-xs text-muted-foreground">→ {entry.convertedLabel}</p>
+                )}
+              </TableCell>
+              <TableCell className="max-w-0">
+                <p className="truncate">{requestCallerLabel(entry)}</p>
+              </TableCell>
+              <TableCell>{REQUEST_CATEGORY_LABELS[entry.request.category]}</TableCell>
+              <TableCell>
+                <RequestUrgencyBadge urgency={entry.request.urgency} />
+              </TableCell>
+              <TableCell>
+                <RequestStatusBadge status={entry.request.status} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {formatReceivedAt(entry.request.receivedAt)}
+              </TableCell>
+              <TableCell className="max-w-0">
+                <p className="truncate">{entry.assigneeName || '—'}</p>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 /**
  * The server selects the page: status scope, search and the count apply in
  * the database before the page boundary, and the URL owns that state. A
  * Realtime event reads the current selection again.
  */
 export function AnfragenContent({ entries, total, hasAnyRequest, query }: AnfragenContentProps) {
-  const router = useRouter();
   const navigation = useListNavigation();
   // The typed text and the chosen tab stay ahead of the URL while the read is
   // under way, so both react in the first frame.
@@ -138,44 +274,21 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
   return (
     <>
       <div className="mb-4 flex flex-col gap-3">
-        {/* Stacks on phones: side by side, the search input shrank to nothing
-            under the refresh icon and tapping "refresh" opened the keyboard. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <Tabs
-            panels={false}
-            value={shownStatus}
-            onValueChange={(value) => {
-              // Both echoes describe the same pending URL.
-              setSearch(shownSearch);
-              setStatus(value as RequestStatusFilter);
-              navigation.navigate({ status: value, page: 1 });
-            }}
-            className="min-w-0"
-          >
-            <TabsList className="h-9 justify-start">
-              {FILTER_TABS.map((tab) => (
-                <TabsTrigger key={tab.value} value={tab.value} className="shrink-0">
-                  {tab.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div className="flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end">
-            <SearchInput
-              wrapperClassName="min-w-0 flex-1 sm:max-w-xs"
-              value={shownSearch}
-              onValueChange={(value) => {
-                setStatus(shownStatus);
-                setSearch(value);
-                navigation.navigate({ q: value, page: 1 }, 250);
-              }}
-              className="h-8"
-              placeholder="Anliegen, Kunde, Nummer…"
-              aria-label="Anfragen durchsuchen"
-            />
-            <RefreshButton label="Liste aktualisieren" />
-          </div>
-        </div>
+        <AnfragenToolbar
+          shownStatus={shownStatus}
+          shownSearch={shownSearch}
+          onStatusChange={(value) => {
+            // Both echoes describe the same pending URL.
+            setSearch(shownSearch);
+            setStatus(value);
+            navigation.navigate({ status: value, page: 1 });
+          }}
+          onSearchChange={(value) => {
+            setStatus(shownStatus);
+            setSearch(value);
+            navigation.navigate({ q: value, page: 1 }, 250);
+          }}
+        />
         <p className="text-sm text-muted-foreground">
           {total} {total === 1 ? 'Anfrage' : 'Anfragen'}
         </p>
@@ -197,88 +310,8 @@ export function AnfragenContent({ entries, total, hasAnyRequest, query }: Anfrag
         )
       ) : (
         <>
-          {/* Mobile view - card layout (a real link for keyboard/middle-click) */}
-          <div className="space-y-2 md:hidden">
-            {entries.map((entry) => (
-              <ListRow key={entry.request.id} asChild interactive>
-                <Link
-                  href={`/anfragen/${entry.request.id}`}
-                  aria-label={`Anfrage öffnen: ${entry.request.summary}`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="min-w-0 truncate text-sm font-medium">{entry.request.summary}</p>
-                      <RequestStatusBadge status={entry.request.status} />
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      <span className="truncate">{requestCallerLabel(entry)}</span>
-                      <span className="text-muted-foreground">&middot;</span>
-                      <span>{REQUEST_CATEGORY_LABELS[entry.request.category]}</span>
-                      <span className="text-muted-foreground">&middot;</span>
-                      <span>{formatReceivedAt(entry.request.receivedAt)}</span>
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <RequestUrgencyBadge urgency={entry.request.urgency} />
-                      {entry.convertedLabel && (
-                        <span className="text-xs text-muted-foreground">→ {entry.convertedLabel}</span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              </ListRow>
-            ))}
-          </div>
-
-          {/* Desktop view - table layout */}
-          <div className="hidden md:block">
-            <Table>
-              <ColumnsTableHeader columns={REQUEST_COLUMNS} />
-              <TableBody>
-                {entries.map((entry) => (
-                  <TableRow
-                    key={entry.request.id}
-                    interactive
-                    onClick={() => router.push(`/anfragen/${entry.request.id}`)}
-                    {...rowIntentPrefetch(() => router.prefetch(`/anfragen/${entry.request.id}`))}
-                  >
-                    <TableCell className="whitespace-nowrap text-muted-foreground">
-                      {entry.request.requestNumber || '—'}
-                    </TableCell>
-                    <TableCell className="max-w-0">
-                      {/* Real link inside the clickable row for keyboard users,
-                          middle-click, and Cmd+Click. */}
-                      <Link
-                        href={`/anfragen/${entry.request.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="block truncate font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 rounded-sm"
-                      >
-                        {entry.request.summary}
-                      </Link>
-                      {entry.convertedLabel && (
-                        <p className="truncate text-xs text-muted-foreground">→ {entry.convertedLabel}</p>
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-0">
-                      <p className="truncate">{requestCallerLabel(entry)}</p>
-                    </TableCell>
-                    <TableCell>{REQUEST_CATEGORY_LABELS[entry.request.category]}</TableCell>
-                    <TableCell>
-                      <RequestUrgencyBadge urgency={entry.request.urgency} />
-                    </TableCell>
-                    <TableCell>
-                      <RequestStatusBadge status={entry.request.status} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatReceivedAt(entry.request.receivedAt)}
-                    </TableCell>
-                    <TableCell className="max-w-0">
-                      <p className="truncate">{entry.assigneeName || '—'}</p>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <AnfragenCards entries={entries} />
+          <AnfragenTable entries={entries} />
         </>
       )}
       <ListPagination

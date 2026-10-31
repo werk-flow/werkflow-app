@@ -11,16 +11,12 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type {
-  InventoryCategory,
-  InventoryItemType,
-  InventoryLocation,
-  InventoryUnitOption,
-} from '@/lib/inventory/types';
+import type { InventoryCategory, InventoryLocation, InventoryUnitOption } from '@/lib/inventory/types';
 import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
   INVENTORY_ITEM_TYPE_LABELS,
+  INVENTORY_ITEM_TYPES,
   INVENTORY_UNIT_OPTIONS,
 } from '@/lib/inventory/types';
 import { getItemNumberFieldErrors, NONE_VALUE, type ItemFormState } from './inventory-form-state';
@@ -58,7 +54,10 @@ export function ItemMasterDataFields({
       <Field label="Typ" htmlFor="inventory-item-type">
         <Select
           value={form.itemType}
-          onValueChange={(value) => setForm({ ...form, itemType: value as InventoryItemType })}
+          onValueChange={(value) => {
+            const itemType = INVENTORY_ITEM_TYPES.find((type) => type === value);
+            if (itemType) setForm({ ...form, itemType });
+          }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -100,6 +99,53 @@ export function ItemMasterDataFields({
   );
 }
 
+/** The Lager and Startbestand of a new item; an existing item changes stock through a booking. */
+function ItemInitialStockFields({
+  form,
+  setForm,
+  locations,
+  initialQuantity,
+  initialLocationError,
+}: ItemFieldsProps & {
+  locations: InventoryLocation[];
+  initialQuantity: number;
+  initialLocationError: string | undefined;
+}) {
+  return (
+    <>
+      <Field label="Lager" htmlFor="inventory-item-initial-location" error={initialLocationError}>
+        <LocationSelectWithCreate
+          locations={locations}
+          value={form.initialLocationId}
+          onValueChange={(value) => setForm({ ...form, initialLocationId: value })}
+          placeholder="Lager wählen oder erstellen"
+          allowNone
+          noneLabel="Noch kein Lager"
+        />
+      </Field>
+      <Field
+        label="Startbestand"
+        htmlFor="inventory-item-initial-quantity"
+        description={
+          initialQuantity > 0
+            ? `Beim Speichern werden ${formatInventoryQuantity(
+                initialQuantity,
+                form.unit,
+              )} in das gewählte Lager gebucht.`
+            : 'Ohne Startbestand wird nur der Artikel angelegt.'
+        }
+      >
+        <QuantityStepper
+          value={form.initialQuantity}
+          onChange={(value) => setForm({ ...form, initialQuantity: value })}
+          unitLabel={getInventoryUnitLabel(form.unit)}
+          min={0}
+        />
+      </Field>
+    </>
+  );
+}
+
 export function ItemStockFields({
   form,
   setForm,
@@ -117,37 +163,13 @@ export function ItemStockFields({
     <>
       <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">Bestand & Kennzeichnung</h3>
       {!form.id && (
-        <>
-          <Field label="Lager" htmlFor="inventory-item-initial-location" error={initialLocationError}>
-            <LocationSelectWithCreate
-              locations={locations}
-              value={form.initialLocationId}
-              onValueChange={(value) => setForm({ ...form, initialLocationId: value })}
-              placeholder="Lager wählen oder erstellen"
-              allowNone
-              noneLabel="Noch kein Lager"
-            />
-          </Field>
-          <Field
-            label="Startbestand"
-            htmlFor="inventory-item-initial-quantity"
-            description={
-              initialQuantity > 0
-                ? `Beim Speichern werden ${formatInventoryQuantity(
-                    initialQuantity,
-                    form.unit,
-                  )} in das gewählte Lager gebucht.`
-                : 'Ohne Startbestand wird nur der Artikel angelegt.'
-            }
-          >
-            <QuantityStepper
-              value={form.initialQuantity}
-              onChange={(value) => setForm({ ...form, initialQuantity: value })}
-              unitLabel={getInventoryUnitLabel(form.unit)}
-              min={0}
-            />
-          </Field>
-        </>
+        <ItemInitialStockFields
+          form={form}
+          setForm={setForm}
+          locations={locations}
+          initialQuantity={initialQuantity}
+          initialLocationError={initialLocationError}
+        />
       )}
       <Field label="Interne SKU" htmlFor="inventory-item-internal-sku">
         <Input
@@ -184,14 +206,13 @@ export function ItemStockFields({
   );
 }
 
-export function ItemSupplierFields({
+/** The supplier picker; a supplier created here shows as „(neu)“ until the item is saved. */
+function ItemSupplierSelect({
   form,
   setForm,
   suppliers,
-  numberErrors,
 }: ItemFieldsProps & {
   suppliers: Array<{ id: string; name: string }>;
-  numberErrors: NumberFieldErrors;
 }) {
   const supplierItems = useMemo(() => {
     const items: Array<{ id: string; name: string }> = [...suppliers];
@@ -202,6 +223,59 @@ export function ItemSupplierFields({
   }, [suppliers, form.supplierId, form.supplierName]);
 
   return (
+    <SelectWithCreate
+      items={supplierItems}
+      getOption={(supplier) => ({
+        value: supplier.id,
+        label: supplier.name,
+      })}
+      value={form.supplierId === NONE_VALUE ? '' : form.supplierId}
+      onValueChange={(value) => {
+        // The quick-create path writes id and name atomically via
+        // onCreated below; skipping here avoids an ordering dependency
+        // between the two same-tick setForm calls.
+        if (value === NEW_SUPPLIER_VALUE) return;
+        setForm({
+          ...form,
+          supplierId: value || NONE_VALUE,
+          // A picked existing supplier clears any pending new name.
+          supplierName: '',
+        });
+      }}
+      createLabel="Neuen Lieferanten anlegen"
+      renderCreateDialog={({ open: createOpen, onOpenChange: onCreateOpenChange, onCreated }) => (
+        <SupplierQuickCreateDialog
+          open={createOpen}
+          onOpenChange={onCreateOpenChange}
+          onCreated={onCreated}
+        />
+      )}
+      onCreated={(supplier) =>
+        setForm({
+          ...form,
+          supplierId: NEW_SUPPLIER_VALUE,
+          supplierName: supplier.name,
+        })
+      }
+      placeholder="Kein Lieferant"
+      searchPlaceholder="Lieferant suchen …"
+      emptyMessage="Kein Lieferant gefunden"
+      allowNone
+      noneLabel="Kein Lieferant"
+    />
+  );
+}
+
+export function ItemSupplierFields({
+  form,
+  setForm,
+  suppliers,
+  numberErrors,
+}: ItemFieldsProps & {
+  suppliers: Array<{ id: string; name: string }>;
+  numberErrors: NumberFieldErrors;
+}) {
+  return (
     <>
       <h3 className="border-t pt-4 text-sm font-semibold sm:col-span-2">Lieferant & Preise</h3>
       <Field label="Hersteller" htmlFor="inventory-item-manufacturer">
@@ -211,46 +285,7 @@ export function ItemSupplierFields({
         />
       </Field>
       <Field label="Lieferant" htmlFor="inventory-item-supplier">
-        <SelectWithCreate
-          items={supplierItems}
-          getOption={(supplier) => ({
-            value: supplier.id,
-            label: supplier.name,
-          })}
-          value={form.supplierId === NONE_VALUE ? '' : form.supplierId}
-          onValueChange={(value) => {
-            // The quick-create path writes id and name atomically via
-            // onCreated below; skipping here avoids an ordering dependency
-            // between the two same-tick setForm calls.
-            if (value === NEW_SUPPLIER_VALUE) return;
-            setForm({
-              ...form,
-              supplierId: value || NONE_VALUE,
-              // A picked existing supplier clears any pending new name.
-              supplierName: '',
-            });
-          }}
-          createLabel="Neuen Lieferanten anlegen"
-          renderCreateDialog={({ open: createOpen, onOpenChange: onCreateOpenChange, onCreated }) => (
-            <SupplierQuickCreateDialog
-              open={createOpen}
-              onOpenChange={onCreateOpenChange}
-              onCreated={onCreated}
-            />
-          )}
-          onCreated={(supplier) =>
-            setForm({
-              ...form,
-              supplierId: NEW_SUPPLIER_VALUE,
-              supplierName: supplier.name,
-            })
-          }
-          placeholder="Kein Lieferant"
-          searchPlaceholder="Lieferant suchen …"
-          emptyMessage="Kein Lieferant gefunden"
-          allowNone
-          noneLabel="Kein Lieferant"
-        />
+        <ItemSupplierSelect form={form} setForm={setForm} suppliers={suppliers} />
       </Field>
       <Field label="Lieferanten-Nr." htmlFor="inventory-item-supplier-number">
         <Input

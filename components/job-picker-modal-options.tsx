@@ -76,16 +76,7 @@ export function JobPickerOptionList({
           selectedJobId === null ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-accent',
         )}
       >
-        <div
-          className={cn(
-            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-            selectedJobId === null
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-muted-foreground/30',
-          )}
-        >
-          {selectedJobId === null && <Check className="h-3 w-3" />}
-        </div>
+        <JobPickerRadioMark checked={selectedJobId === null} />
         <span className="text-muted-foreground">Ohne Auftrag</span>
       </PlainButton>
 
@@ -108,16 +99,7 @@ export function JobPickerOptionList({
               selectedJobId === job.id ? 'bg-primary/10 ring-1 ring-primary/20' : 'hover:bg-accent',
             )}
           >
-            <div
-              className={cn(
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                selectedJobId === job.id
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-muted-foreground/30',
-              )}
-            >
-              {selectedJobId === job.id && <Check className="h-3 w-3" />}
-            </div>
+            <JobPickerRadioMark checked={selectedJobId === job.id} />
             <div className="min-w-0 flex-1">
               <p className="line-clamp-2 break-words font-medium" title={job.title}>
                 {job.title}
@@ -130,6 +112,46 @@ export function JobPickerOptionList({
         </Fragment>
       ))}
 
+      <JobPickerListStatus
+        filteredJobs={filteredJobs}
+        isLoading={isLoading}
+        loadFailed={loadFailed}
+        onRetry={onRetry}
+        searchQuery={searchQuery}
+        onLoadMore={onLoadMore}
+      />
+    </div>
+  );
+}
+
+/** The radio circle of one option, filled with a check when it is chosen. */
+function JobPickerRadioMark({ checked }: { checked: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
+        checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/30',
+      )}
+    >
+      {checked && <Check className="h-3 w-3" />}
+    </div>
+  );
+}
+
+/** Below the options: the failed read with its retry, or the empty state, and the next page. */
+function JobPickerListStatus({
+  filteredJobs,
+  isLoading,
+  loadFailed,
+  onRetry,
+  searchQuery,
+  onLoadMore,
+}: Pick<
+  JobPickerOptionListProps,
+  'filteredJobs' | 'isLoading' | 'loadFailed' | 'onRetry' | 'searchQuery' | 'onLoadMore'
+>) {
+  return (
+    <>
       {loadFailed && !isLoading ? (
         <SectionError className="mt-2" onRetry={onRetry}>
           Aufträge konnten nicht geladen werden.
@@ -148,6 +170,6 @@ export function JobPickerOptionList({
           Weitere Aufträge laden
         </Button>
       ) : null}
-    </div>
+    </>
   );
 }

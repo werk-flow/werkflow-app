@@ -98,6 +98,31 @@ function SidebarSkeleton() {
   );
 }
 
+function SidebarLogo({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="flex items-center justify-center px-4 py-5">
+      <Link href="/dashboard" className="flex items-center" onClick={onClick}>
+        <Image
+          src="/logo-text-light.svg"
+          alt="WerkFlow"
+          width={160}
+          height={35}
+          className="h-9 w-auto dark:hidden"
+          priority
+        />
+        <Image
+          src="/logo-text-dark.svg"
+          alt="WerkFlow"
+          width={160}
+          height={35}
+          className="hidden h-9 w-auto dark:block"
+          priority
+        />
+      </Link>
+    </div>
+  );
+}
+
 // Sidebar content component (shared between desktop and mobile)
 function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const pathname = usePathname();
@@ -114,27 +139,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: (() => void) | undefined 
 
   return (
     <>
-      {/* Logo */}
-      <div className="flex items-center justify-center px-4 py-5">
-        <Link href="/dashboard" className="flex items-center" onClick={handleNavClick}>
-          <Image
-            src="/logo-text-light.svg"
-            alt="WerkFlow"
-            width={160}
-            height={35}
-            className="h-9 w-auto dark:hidden"
-            priority
-          />
-          <Image
-            src="/logo-text-dark.svg"
-            alt="WerkFlow"
-            width={160}
-            height={35}
-            className="hidden h-9 w-auto dark:block"
-            priority
-          />
-        </Link>
-      </div>
+      <SidebarLogo onClick={handleNavClick} />
 
       <Separator />
 

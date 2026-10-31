@@ -15,19 +15,10 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
-import {
-  REQUEST_CATEGORY_LABELS,
-  REQUEST_CATEGORY_ORDER,
-  REQUEST_URGENCY_LABELS,
-  REQUEST_URGENCY_ORDER,
-  type RequestCategory,
-  type RequestUrgency,
-} from '@/lib/requests/types';
 import { CreateRequestCustomerFields } from './create-request-customer-fields';
 import { CreateRequestFurtherFields } from './create-request-further-fields';
+import { RequestTriageFields } from './request-triage-fields';
 import { useCreateRequestForm } from './use-create-request-form';
 
 type RequestAssigneeOption = {
@@ -41,23 +32,8 @@ interface CreateRequestDialogProps {
 
 export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
   const form = useCreateRequestForm();
-  const {
-    open,
-    handleOpenChange,
-    summary,
-    setSummary,
-    category,
-    setCategory,
-    urgency,
-    setUrgency,
-    receivedAt,
-    setReceivedAt,
-    isLoading,
-    summaryError,
-    receivedAtError,
-    formError,
-    handleSubmit,
-  } = form;
+  const { open, handleOpenChange, summary, setSummary, isLoading, summaryError, formError, handleSubmit } =
+    form;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
@@ -97,56 +73,7 @@ export function CreateRequestDialog({ assignees }: CreateRequestDialogProps) {
               />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Kategorie" htmlFor="request-category">
-                <Select
-                  value={category}
-                  onValueChange={(value) => setCategory(value as RequestCategory)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_CATEGORY_ORDER.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {REQUEST_CATEGORY_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Dringlichkeit" htmlFor="request-urgency">
-                <Select
-                  value={urgency}
-                  onValueChange={(value) => setUrgency(value as RequestUrgency)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_URGENCY_ORDER.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {REQUEST_URGENCY_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-
-            <Field label="Eingangszeit" htmlFor="request-received-at-date" error={receivedAtError}>
-              <DateTimeField
-                idPrefix="request-received-at"
-                value={receivedAt}
-                onChange={setReceivedAt}
-                disabled={isLoading}
-                dateAriaLabel="Eingangsdatum"
-                invalid={receivedAtError !== null}
-                describedById={receivedAtError ? 'request-received-at-date-error' : undefined}
-              />
-            </Field>
+            <RequestTriageFields idPrefix="request" form={form} />
 
             <CreateRequestCustomerFields form={form} />
 
