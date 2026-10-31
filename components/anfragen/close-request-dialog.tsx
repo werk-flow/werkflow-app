@@ -42,6 +42,57 @@ interface CloseRequestDialogProps {
   onSaved?: () => void;
 }
 
+interface CloseRequestFieldsProps {
+  reason: RequestCloseReason;
+  onReasonChange: (reason: RequestCloseReason) => void;
+  note: string;
+  onNoteChange: (note: string) => void;
+  disabled: boolean;
+}
+
+/** The mandatory close reason and the optional note. */
+function CloseRequestFields({
+  reason,
+  onReasonChange,
+  note,
+  onNoteChange,
+  disabled,
+}: CloseRequestFieldsProps) {
+  return (
+    <>
+      <Field label="Grund" htmlFor="close-reason" required>
+        <Select
+          value={reason}
+          onValueChange={(value) => {
+            const nextReason = REQUEST_CLOSE_REASON_ORDER.find((candidate) => candidate === value);
+            if (nextReason) onReasonChange(nextReason);
+          }}
+          disabled={disabled}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {REQUEST_CLOSE_REASON_ORDER.map((value) => (
+              <SelectItem key={value} value={value}>
+                {REQUEST_CLOSE_REASON_LABELS[value]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Notiz" htmlFor="close-note">
+        <Textarea
+          placeholder="Optionale Ergänzung, z. B. was stattdessen vereinbart wurde…"
+          value={note}
+          onChange={(e) => onNoteChange(e.target.value)}
+          disabled={disabled}
+        />
+      </Field>
+    </>
+  );
+}
+
 // Closing without work keeps the request and its history; only the reason is
 // mandatory so the decision stays explainable later.
 export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: CloseRequestDialogProps) {
@@ -93,32 +144,13 @@ export function CloseRequestDialog({ requestId, open, onOpenChange, onSaved }: C
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="Grund" htmlFor="close-reason" required>
-              <Select
-                value={reason}
-                onValueChange={(value) => setReason(value as RequestCloseReason)}
-                disabled={isLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {REQUEST_CLOSE_REASON_ORDER.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {REQUEST_CLOSE_REASON_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Notiz" htmlFor="close-note">
-              <Textarea
-                placeholder="Optionale Ergänzung, z. B. was stattdessen vereinbart wurde…"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
+            <CloseRequestFields
+              reason={reason}
+              onReasonChange={setReason}
+              note={note}
+              onNoteChange={setNote}
+              disabled={isLoading}
+            />
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>
