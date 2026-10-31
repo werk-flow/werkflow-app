@@ -23,6 +23,33 @@ interface ClientSiteRowProps {
   onToggleSiteActive: (site: ClientSite) => void;
 }
 
+/** The active equipment of one site as links; nothing when the site has none. */
+function ClientSiteEquipmentLinks({ siteId, equipment }: { siteId: string; equipment: EquipmentListItem[] }) {
+  if (!equipment.some((item) => item.siteId === siteId && !item.archivedAt)) return null;
+  return (
+    <div className="mt-3 border-t pt-3">
+      <p className="mb-2 flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <Wrench className="size-3" />
+        Anlagen & Geräte
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {equipment
+          .filter((item) => item.siteId === siteId && !item.archivedAt)
+          .map((item) => (
+            <Link
+              key={item.id}
+              href={`/service/anlagen/${encodeURIComponent(item.equipmentNumber)}`}
+              className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50"
+            >
+              <span className="font-medium">{item.name}</span>
+              <span className="ml-1 text-muted-foreground">· {EQUIPMENT_STATE_LABELS[item.state]}</span>
+            </Link>
+          ))}
+      </div>
+    </div>
+  );
+}
+
 function ClientSiteRow({
   site,
   contactNameById,
@@ -65,30 +92,7 @@ function ClientSiteRow({
             )}
           </div>
           {site.notes && <p className="mt-1 text-xs text-muted-foreground">{site.notes}</p>}
-          {!equipmentLoadFailed && equipment.some((item) => item.siteId === site.id && !item.archivedAt) && (
-            <div className="mt-3 border-t pt-3">
-              <p className="mb-2 flex items-center gap-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <Wrench className="size-3" />
-                Anlagen & Geräte
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {equipment
-                  .filter((item) => item.siteId === site.id && !item.archivedAt)
-                  .map((item) => (
-                    <Link
-                      key={item.id}
-                      href={`/service/anlagen/${encodeURIComponent(item.equipmentNumber)}`}
-                      className="rounded-md border px-2.5 py-1.5 text-xs transition-colors hover:bg-muted/50"
-                    >
-                      <span className="font-medium">{item.name}</span>
-                      <span className="ml-1 text-muted-foreground">
-                        · {EQUIPMENT_STATE_LABELS[item.state]}
-                      </span>
-                    </Link>
-                  ))}
-              </div>
-            </div>
-          )}
+          {!equipmentLoadFailed && <ClientSiteEquipmentLinks siteId={site.id} equipment={equipment} />}
         </div>
         {isAdminOrManager && (
           <div className="flex shrink-0 gap-1">
@@ -128,6 +132,50 @@ interface ClientSitesCardProps extends Omit<ClientSiteRowProps, 'site' | 'contac
   inactiveSites: ClientSite[];
   onAddSite: () => void;
   onAdoptAddress: () => void;
+}
+
+/** The archived sites with their restore action; nothing while none is archived. */
+function ClientSiteArchivedList({
+  inactiveSites,
+  isAdminOrManager,
+  isPendingRow,
+  onToggleSiteActive,
+}: Pick<ClientSitesCardProps, 'inactiveSites' | 'isAdminOrManager' | 'isPendingRow' | 'onToggleSiteActive'>) {
+  if (inactiveSites.length === 0) return null;
+  return (
+    <div className="mt-3 border-t pt-3">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Archiviert</p>
+      <ul className="space-y-1.5">
+        {inactiveSites.map((site) => (
+          <li
+            key={site.id}
+            className="flex items-center justify-between gap-3 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
+          >
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate">
+                {site.name}
+                {formatSiteAddress(site) ? ` · ${formatSiteAddress(site)}` : ''}
+              </span>
+              <InlinePending active={isPendingRow(site.id)} />
+            </span>
+            {isAdminOrManager && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground"
+                title="Einsatzort wiederherstellen"
+                disabled={isPendingRow(site.id)}
+                onClick={() => onToggleSiteActive(site)}
+              >
+                <ArchiveRestore className="size-3.5" />
+                <span className="sr-only">Einsatzort wiederherstellen</span>
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function ClientSitesCard({
@@ -189,40 +237,12 @@ export function ClientSitesCard({
         </ul>
       )}
 
-      {inactiveSites.length > 0 && (
-        <div className="mt-3 border-t pt-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Archiviert</p>
-          <ul className="space-y-1.5">
-            {inactiveSites.map((site) => (
-              <li
-                key={site.id}
-                className="flex items-center justify-between gap-3 rounded-md px-3 py-1.5 text-sm text-muted-foreground"
-              >
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate">
-                    {site.name}
-                    {formatSiteAddress(site) ? ` · ${formatSiteAddress(site)}` : ''}
-                  </span>
-                  <InlinePending active={isPendingRow(site.id)} />
-                </span>
-                {isAdminOrManager && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 text-muted-foreground"
-                    title="Einsatzort wiederherstellen"
-                    disabled={isPendingRow(site.id)}
-                    onClick={() => onToggleSiteActive(site)}
-                  >
-                    <ArchiveRestore className="size-3.5" />
-                    <span className="sr-only">Einsatzort wiederherstellen</span>
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ClientSiteArchivedList
+        inactiveSites={inactiveSites}
+        isAdminOrManager={isAdminOrManager}
+        isPendingRow={isPendingRow}
+        onToggleSiteActive={onToggleSiteActive}
+      />
     </div>
   );
 }

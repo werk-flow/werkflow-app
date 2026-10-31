@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import type { WorkTemplateTargetType } from '@/lib/work-templates/types';
+import { WORK_TEMPLATE_TARGET_TYPES, type WorkTemplateTargetType } from '@/lib/work-templates/types';
 
 import type { CreateTemplateInput } from './work-template-editor-shared';
 
@@ -69,7 +69,10 @@ export function CreateTemplateDialog({
             <Field label="Gilt für" htmlFor="new-template-target">
               <Select
                 value={targetType}
-                onValueChange={(value) => setTargetType(value as WorkTemplateTargetType)}
+                onValueChange={(value) => {
+                  const target = WORK_TEMPLATE_TARGET_TYPES.find((candidate) => candidate === value);
+                  if (target) setTargetType(target);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />

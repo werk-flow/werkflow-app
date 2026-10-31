@@ -12,22 +12,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
-import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
+import type { Client, ClientType } from '@/lib/jobs/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-
-const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
-  { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
-];
+import { ClientFormFields } from './client-form-fields';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Kunden zu verwalten.',
@@ -45,7 +37,8 @@ interface EditClientDialogProps {
   onSaved?: () => void;
 }
 
-export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditClientDialogProps) {
+/** The edit form's state, refilled on every opening, and its submit. */
+function useEditClientForm({ client, open, onOpenChange, onSaved }: EditClientDialogProps) {
   const [name, setName] = useState(client.name);
   const [clientType, setClientType] = useState<ClientType>(client.clientType);
   const [email, setEmail] = useState(client.email ?? '');
@@ -110,7 +103,22 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
     }
   };
 
-  const showNameError = hasAttemptedSubmit && nameError;
+  return {
+    values: { name, clientType, email, phone, address, notes },
+    setters: { setName, setClientType, setEmail, setPhone, setAddress, setNotes },
+    isLoading,
+    error,
+    nameError,
+    setNameError,
+    showNameError: hasAttemptedSubmit && nameError,
+    handleSubmit,
+  };
+}
+
+export function EditClientDialog(props: EditClientDialogProps) {
+  const { open, onOpenChange } = props;
+  const form = useEditClientForm(props);
+  const { values, setters, isLoading, nameError } = form;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
@@ -119,73 +127,24 @@ export function EditClientDialog({ client, open, onOpenChange, onSaved }: EditCl
           <DialogTitle>Kunde bearbeiten</DialogTitle>
           <DialogDescription>Ändere die Daten des Kunden.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} noValidate>
+        <form onSubmit={form.handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field label="Name" htmlFor="edit-client-name" required error={showNameError || undefined}>
-              <Input
-                placeholder="Kundenname"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (nameError) setNameError(null);
-                }}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Typ" htmlFor="edit-client-type">
-              <Select
-                value={clientType}
-                onValueChange={(value) => setClientType(value as ClientType)}
-                disabled={isLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Typ auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLIENT_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="E-Mail" htmlFor="edit-client-email">
-              <Input
-                type="text"
-                inputMode="email"
-                placeholder="kunde@beispiel.de"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Telefon" htmlFor="edit-client-phone">
-              <Input
-                type="tel"
-                placeholder="+49 123 456789"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Adresse" htmlFor="edit-client-address">
-              <Input
-                placeholder="Straße, PLZ Ort"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Notizen" htmlFor="edit-client-notes">
-              <Textarea
-                placeholder="Optionale Notizen zum Kunden…"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <ErrorText>{error}</ErrorText>
+            <ClientFormFields
+              idPrefix="edit-client"
+              values={values}
+              nameError={form.showNameError || undefined}
+              disabled={isLoading}
+              onNameChange={(value) => {
+                setters.setName(value);
+                if (nameError) form.setNameError(null);
+              }}
+              onClientTypeChange={setters.setClientType}
+              onEmailChange={setters.setEmail}
+              onPhoneChange={setters.setPhone}
+              onAddressChange={setters.setAddress}
+              onNotesChange={setters.setNotes}
+            />
+            <ErrorText>{form.error}</ErrorText>
           </div>
           <DialogFooter>
             <Button pending={isLoading} type="submit" disabled={isLoading}>

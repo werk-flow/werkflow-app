@@ -121,6 +121,111 @@ function useMoveDestinationFolder({
   };
 }
 
+type MoveDestinationFolderView = ReturnType<typeof useMoveDestinationFolder>;
+
+type MoveDestinationListingProps = {
+  folderView: MoveDestinationFolderView;
+  onSelectFolder: (folderId: string | null) => void;
+  onOpenDocument: (document: OrganizationDocument) => void;
+};
+
+/** The folders and documents of the folder being browsed. */
+function MoveDestinationListing({ folderView, onSelectFolder, onOpenDocument }: MoveDestinationListingProps) {
+  const {
+    selectedFolderIds,
+    selectedDocumentIds,
+    descendantFolderIds,
+    childFolders,
+    documentsInCurrentFolder,
+  } = folderView;
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-4" onContextMenu={(event) => event.preventDefault()}>
+      <div className="overflow-hidden rounded-md border bg-background">
+        <div className="grid grid-cols-[minmax(0,1fr)] border-b px-4 py-2 text-xs font-medium text-muted-foreground sm:grid-cols-[minmax(0,1fr)_140px_160px]">
+          <span>Name</span>
+          <span className="hidden sm:inline">Typ</span>
+          <span className="hidden sm:inline">Geändert</span>
+        </div>
+        <div className="divide-y">
+          {childFolders.map((folder) => (
+            <MoveDestinationFolderRow
+              key={folder.id}
+              folder={folder}
+              // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: a folder cannot move into itself or its own subfolder
+              isDisabled={selectedFolderIds.has(folder.id) || descendantFolderIds.has(folder.id)}
+              onSelectFolder={onSelectFolder}
+            />
+          ))}
+          {documentsInCurrentFolder.map((document) => (
+            <MoveDestinationDocumentRow
+              key={document.id}
+              document={document}
+              isSelected={selectedDocumentIds.has(document.id)}
+              onOpenDocument={onOpenDocument}
+            />
+          ))}
+          {childFolders.length === 0 && documentsInCurrentFolder.length === 0 && (
+            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+              Dieser Ordner ist leer.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type MoveDestinationBrowserProps = Pick<
+  MoveDestinationDialogProps,
+  'mode' | 'isPending' | 'progress' | 'error' | 'onOpenDocument'
+> &
+  Omit<MoveDestinationListingProps, 'onOpenDocument'> & {
+    currentFolderId: string | null;
+    onCancel: () => void;
+    onConfirm: () => void;
+  };
+
+/** The browsed folder's breadcrumbs, contents and confirm footer. */
+function MoveDestinationBrowser({
+  mode,
+  isPending,
+  progress,
+  error,
+  onOpenDocument,
+  folderView,
+  onSelectFolder,
+  currentFolderId,
+  onCancel,
+  onConfirm,
+}: MoveDestinationBrowserProps) {
+  return (
+    <div className="flex min-w-0 flex-1 flex-col">
+      <MoveDestinationBreadcrumbs
+        currentFolderId={currentFolderId}
+        breadcrumbFolders={folderView.breadcrumbFolders}
+        onSelectFolder={onSelectFolder}
+      />
+
+      <MoveDestinationListing
+        folderView={folderView}
+        onSelectFolder={onSelectFolder}
+        onOpenDocument={onOpenDocument}
+      />
+
+      <MoveDestinationFooter
+        mode={mode}
+        isPending={isPending}
+        progress={progress}
+        error={error}
+        disabledReason={folderView.disabledReason}
+        confirmDisabled={folderView.confirmDisabled}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />
+    </div>
+  );
+}
+
 /** Folder browser that picks the destination of a move or copy and confirms it. */
 export function MoveDestinationDialog({
   open,
@@ -141,16 +246,7 @@ export function MoveDestinationDialog({
   onOpenDocument,
 }: MoveDestinationDialogProps) {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(sourceFolderId);
-  const {
-    selectedFolderIds,
-    selectedDocumentIds,
-    descendantFolderIds,
-    breadcrumbFolders,
-    childFolders,
-    documentsInCurrentFolder,
-    confirmDisabled,
-    disabledReason,
-  } = useMoveDestinationFolder({
+  const folderView = useMoveDestinationFolder({
     mode,
     currentFolderId,
     allFolders,
@@ -192,61 +288,18 @@ export function MoveDestinationDialog({
             onSelectFolder={setCurrentFolderId}
           />
 
-          <div className="flex min-w-0 flex-1 flex-col">
-            <MoveDestinationBreadcrumbs
-              currentFolderId={currentFolderId}
-              breadcrumbFolders={breadcrumbFolders}
-              onSelectFolder={setCurrentFolderId}
-            />
-
-            <div
-              className="min-h-0 flex-1 overflow-y-auto p-4"
-              onContextMenu={(event) => event.preventDefault()}
-            >
-              <div className="overflow-hidden rounded-md border bg-background">
-                <div className="grid grid-cols-[minmax(0,1fr)] border-b px-4 py-2 text-xs font-medium text-muted-foreground sm:grid-cols-[minmax(0,1fr)_140px_160px]">
-                  <span>Name</span>
-                  <span className="hidden sm:inline">Typ</span>
-                  <span className="hidden sm:inline">Geändert</span>
-                </div>
-                <div className="divide-y">
-                  {childFolders.map((folder) => (
-                    <MoveDestinationFolderRow
-                      key={folder.id}
-                      folder={folder}
-                      // eslint-disable-next-line ui/action-disabled-only-while-pending -- availability: a folder cannot move into itself or its own subfolder
-                      isDisabled={selectedFolderIds.has(folder.id) || descendantFolderIds.has(folder.id)}
-                      onSelectFolder={setCurrentFolderId}
-                    />
-                  ))}
-                  {documentsInCurrentFolder.map((document) => (
-                    <MoveDestinationDocumentRow
-                      key={document.id}
-                      document={document}
-                      isSelected={selectedDocumentIds.has(document.id)}
-                      onOpenDocument={onOpenDocument}
-                    />
-                  ))}
-                  {childFolders.length === 0 && documentsInCurrentFolder.length === 0 && (
-                    <div className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Dieser Ordner ist leer.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <MoveDestinationFooter
-              mode={mode}
-              isPending={isPending}
-              progress={progress}
-              error={error}
-              disabledReason={disabledReason}
-              confirmDisabled={confirmDisabled}
-              onCancel={() => onOpenChange(false)}
-              onConfirm={() => onConfirm(currentFolderId)}
-            />
-          </div>
+          <MoveDestinationBrowser
+            mode={mode}
+            isPending={isPending}
+            progress={progress}
+            error={error}
+            onOpenDocument={onOpenDocument}
+            folderView={folderView}
+            onSelectFolder={setCurrentFolderId}
+            currentFolderId={currentFolderId}
+            onCancel={() => onOpenChange(false)}
+            onConfirm={() => onConfirm(currentFolderId)}
+          />
         </div>
       </DialogContent>
     </Dialog>

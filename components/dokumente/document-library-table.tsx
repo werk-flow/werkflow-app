@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ReactElement } from 'react';
+import { useRef, type ReactElement, type RefObject } from 'react';
 
 import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows } from '@/components/ui/skeleton-table';
@@ -109,8 +109,56 @@ function getDocumentActionHandlers(
   };
 }
 
-export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactElement {
-  const { selectedFolderIds, selectedDocumentIds, isItemPending, onRectangleSelectionChange } = props;
+type TableRowContext = {
+  selection: DocumentTableItemSelection;
+  selectedItemCount: number;
+  rowRefs: RefObject<Map<string, HTMLTableRowElement>>;
+  props: DocumentLibraryTableProps;
+  handleRowPointerDown: ReturnType<typeof useDocumentLibraryTableRowDrag>['handleRowPointerDown'];
+  clickSelection: ReturnType<typeof useDocumentLibraryTableClickSelection>;
+};
+
+function setRowRef(
+  rowRefs: RefObject<Map<string, HTMLTableRowElement>>,
+  key: string,
+  node: HTMLTableRowElement | null,
+): void {
+  if (node) {
+    rowRefs.current.set(key, node);
+    return;
+  }
+
+  rowRefs.current.delete(key);
+}
+
+function getRowProps(item: DocumentLibraryTableItem, context: TableRowContext): DocumentLibraryTableRowProps {
+  const { selection, selectedItemCount, rowRefs, props, handleRowPointerDown, clickSelection } = context;
+  const { isItemPending, onRectangleSelectionChange } = props;
+  const isSelected = isTableItemSelected(item, selection);
+  return {
+    isSelected,
+    hasMultiSelection: selectedItemCount > 1,
+    isPending: props.isPending,
+    isItemPending: isItemPending(item.kind === 'folder' ? item.folder.id : item.document.id),
+    rowRef: (node) => setRowRef(rowRefs, item.key, node),
+    onPointerDown: (event) => handleRowPointerDown(event, item),
+    onSelectionClick: (event) => clickSelection.handleRowSelectionClick(event, item),
+    onToggleSelection: () => clickSelection.toggleItemSelection(item),
+    onClearSelection: props.onClearSelection,
+    onActionsMenuOpenChange: () => {
+      if (!(isSelected && selectedItemCount > 1)) {
+        onRectangleSelectionChange(getSingleItemSelection(item));
+      }
+    },
+    onBatchMoveSelection: props.onBatchMoveSelection,
+    onBatchCopySelection: props.onBatchCopySelection,
+    onBatchDeleteSelection: props.onBatchDeleteSelection,
+  };
+}
+
+/** The table's refs and interaction hooks, in their call order. */
+function useDocumentLibraryTableState(props: DocumentLibraryTableProps) {
+  const { selectedFolderIds, selectedDocumentIds, onRectangleSelectionChange } = props;
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const suppressClickRef = useRef(false);
@@ -118,32 +166,28 @@ export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactEle
     folderIds: selectedFolderIds,
     documentIds: selectedDocumentIds,
   };
-  const { sortedItems, sortColumn, sortDirection, handleSort } = useDocumentLibraryTableSort(
-    props.folders,
-    props.documents,
-  );
-  const { selectionBoxStyle, handlePointerDown, handlePointerMove, handlePointerUp } =
-    useDocumentLibraryTableRectangleSelection({
-      tableContainerRef,
-      rowRefs,
-      suppressClickRef,
-      sortedItems,
-      onRectangleSelectionChange,
-      onRectangleSelectionComplete: props.onRectangleSelectionComplete,
-    });
-  const { draggedItem, draggedSelection, dragTargetFolderId, dragPosition, handleRowPointerDown } =
-    useDocumentLibraryTableRowDrag({
-      suppressClickRef,
-      selection,
-      onDragSelectionStart: props.onDragSelectionStart,
-      onDragSelectionEnd: props.onDragSelectionEnd,
-      onMoveItemsToFolder: props.onMoveItemsToFolder,
-      onMoveItemsToTrash: props.onMoveItemsToTrash,
-      onPointerDropTargetChange: props.onPointerDropTargetChange,
-      canDropSelectionIntoFolder: props.canDropSelectionIntoFolder,
-    });
+  const sort = useDocumentLibraryTableSort(props.folders, props.documents);
+  const { sortedItems } = sort;
+  const rectangleSelection = useDocumentLibraryTableRectangleSelection({
+    tableContainerRef,
+    rowRefs,
+    suppressClickRef,
+    sortedItems,
+    onRectangleSelectionChange,
+    onRectangleSelectionComplete: props.onRectangleSelectionComplete,
+  });
+  const rowDrag = useDocumentLibraryTableRowDrag({
+    suppressClickRef,
+    selection,
+    onDragSelectionStart: props.onDragSelectionStart,
+    onDragSelectionEnd: props.onDragSelectionEnd,
+    onMoveItemsToFolder: props.onMoveItemsToFolder,
+    onMoveItemsToTrash: props.onMoveItemsToTrash,
+    onPointerDropTargetChange: props.onPointerDropTargetChange,
+    canDropSelectionIntoFolder: props.canDropSelectionIntoFolder,
+  });
 
-  const { toggleItemSelection, handleRowSelectionClick } = useDocumentLibraryTableClickSelection({
+  const clickSelection = useDocumentLibraryTableClickSelection({
     suppressClickRef,
     sortedItems,
     selection,
@@ -154,54 +198,47 @@ export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactEle
 
   const selectedItemCount = sortedItems.filter((item) => isTableItemSelected(item, selection)).length;
   const allVisibleSelected = sortedItems.length > 0 && selectedItemCount === sortedItems.length;
+  const rowContext: TableRowContext = {
+    selection,
+    selectedItemCount,
+    rowRefs,
+    props,
+    handleRowPointerDown: rowDrag.handleRowPointerDown,
+    clickSelection,
+  };
 
-  function setRowRef(key: string, node: HTMLTableRowElement | null): void {
-    if (node) {
-      rowRefs.current.set(key, node);
-      return;
-    }
+  return {
+    tableContainerRef,
+    sort,
+    rectangleSelection,
+    rowDrag,
+    allVisibleSelected,
+    getRowProps: (item: DocumentLibraryTableItem) => getRowProps(item, rowContext),
+  };
+}
 
-    rowRefs.current.delete(key);
-  }
-
-  function getRowProps(item: DocumentLibraryTableItem): DocumentLibraryTableRowProps {
-    const isSelected = isTableItemSelected(item, selection);
-    return {
-      isSelected,
-      hasMultiSelection: selectedItemCount > 1,
-      isPending: props.isPending,
-      isItemPending: isItemPending(item.kind === 'folder' ? item.folder.id : item.document.id),
-      rowRef: (node) => setRowRef(item.key, node),
-      onPointerDown: (event) => handleRowPointerDown(event, item),
-      onSelectionClick: (event) => handleRowSelectionClick(event, item),
-      onToggleSelection: () => toggleItemSelection(item),
-      onClearSelection: props.onClearSelection,
-      onActionsMenuOpenChange: () => {
-        if (!(isSelected && selectedItemCount > 1)) {
-          onRectangleSelectionChange(getSingleItemSelection(item));
-        }
-      },
-      onBatchMoveSelection: props.onBatchMoveSelection,
-      onBatchCopySelection: props.onBatchCopySelection,
-      onBatchDeleteSelection: props.onBatchDeleteSelection,
-    };
-  }
+export function DocumentLibraryTable(props: DocumentLibraryTableProps): ReactElement {
+  const { tableContainerRef, sort, rectangleSelection, rowDrag, allVisibleSelected, getRowProps } =
+    useDocumentLibraryTableState(props);
+  const { sortedItems } = sort;
+  const { selectionBoxStyle } = rectangleSelection;
+  const { draggedItem, draggedSelection, dragTargetFolderId, dragPosition } = rowDrag;
 
   return (
     <div
       ref={tableContainerRef}
       className="relative -mx-4 hidden min-h-[50dvh] flex-1 select-none px-4 sm:-mx-6 sm:px-6 md:block"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      onPointerDown={rectangleSelection.handlePointerDown}
+      onPointerMove={rectangleSelection.handlePointerMove}
+      onPointerUp={rectangleSelection.handlePointerUp}
+      onPointerCancel={rectangleSelection.handlePointerUp}
     >
       <Table>
         <DocumentLibraryTableHeader
           allVisibleSelected={allVisibleSelected}
-          sortColumn={sortColumn}
-          sortDirection={sortDirection}
-          onSort={handleSort}
+          sortColumn={sort.sortColumn}
+          sortDirection={sort.sortDirection}
+          onSort={sort.handleSort}
           onToggleAllVisible={allVisibleSelected ? props.onClearSelection : props.onSelectAllVisible}
         />
         <TableBody>

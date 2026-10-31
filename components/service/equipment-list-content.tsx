@@ -29,7 +29,6 @@ import {
   EQUIPMENT_CATEGORIES,
   EQUIPMENT_CATEGORY_LABELS,
   EQUIPMENT_STATE_LABELS,
-  type EquipmentCategory,
   type EquipmentListItem,
 } from '@/lib/installed-equipment/types';
 import {
@@ -93,7 +92,11 @@ function EquipmentListFilterBar({ filters, onChange }: EquipmentListFiltersProps
       />
       <Select
         value={category}
-        onValueChange={(value) => onChange({ category: value as EquipmentCategory | 'all' })}
+        onValueChange={(value) => {
+          const next =
+            value === 'all' ? value : EQUIPMENT_CATEGORIES.find((candidate) => candidate === value);
+          if (next) onChange({ category: next });
+        }}
       >
         <SelectTrigger className="w-full md:w-64" aria-label="Anlagen nach Kategorie filtern">
           <SelectValue />
@@ -168,6 +171,43 @@ function EquipmentCards({ filtered, visiblePending }: EquipmentRowsProps): React
   );
 }
 
+function EquipmentPendingTableRow({ draft }: { draft: EquipmentPendingDraft }): ReactElement {
+  return (
+    <PendingRow
+      columns={EQUIPMENT_COLUMNS}
+      cells={{
+        equipment: (
+          <span>
+            <span className="block font-medium">{draft.name}</span>
+            <span className="block text-xs text-muted-foreground">
+              {EQUIPMENT_CATEGORY_LABELS[draft.category]}
+            </span>
+          </span>
+        ),
+        site: (
+          <span>
+            <span className="block">{draft.clientName}</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <MapPin className="size-3 shrink-0" />
+              {draft.siteName}
+            </span>
+          </span>
+        ),
+        manufacturer: (
+          <span className="text-muted-foreground">
+            {[draft.manufacturer, draft.model].filter(Boolean).join(' · ') || 'Nicht erfasst'}
+          </span>
+        ),
+        state: (
+          <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
+            {EQUIPMENT_STATE_LABELS[draft.state]}
+          </span>
+        ),
+      }}
+    />
+  );
+}
+
 function EquipmentTable({ filtered, visiblePending }: EquipmentRowsProps): ReactElement {
   const router = useRouter();
   return (
@@ -219,39 +259,7 @@ function EquipmentTable({ filtered, visiblePending }: EquipmentRowsProps): React
             );
           })}
           {visiblePending.map((draft) => (
-            <PendingRow
-              key={draft.id}
-              columns={EQUIPMENT_COLUMNS}
-              cells={{
-                equipment: (
-                  <span>
-                    <span className="block font-medium">{draft.name}</span>
-                    <span className="block text-xs text-muted-foreground">
-                      {EQUIPMENT_CATEGORY_LABELS[draft.category]}
-                    </span>
-                  </span>
-                ),
-                site: (
-                  <span>
-                    <span className="block">{draft.clientName}</span>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <MapPin className="size-3 shrink-0" />
-                      {draft.siteName}
-                    </span>
-                  </span>
-                ),
-                manufacturer: (
-                  <span className="text-muted-foreground">
-                    {[draft.manufacturer, draft.model].filter(Boolean).join(' · ') || 'Nicht erfasst'}
-                  </span>
-                ),
-                state: (
-                  <span className="rounded-md bg-muted px-2 py-1 text-xs font-medium">
-                    {EQUIPMENT_STATE_LABELS[draft.state]}
-                  </span>
-                ),
-              }}
-            />
+            <EquipmentPendingTableRow key={draft.id} draft={draft} />
           ))}
         </TableBody>
       </Table>
@@ -301,6 +309,22 @@ export function EquipmentListContent({ initialPage, query }: EquipmentListConten
         onPageChange={(page) => navigation.navigate({ page })}
       />
     </div>
+  );
+}
+
+function EquipmentEmptyState({ hasAnyEquipment }: { hasAnyEquipment: boolean }): ReactElement {
+  return hasAnyEquipment ? (
+    <EmptyState
+      icon={Wrench}
+      title="Keine Anlagen gefunden"
+      description="Zu Suche und Filtern gibt es keine Anlage. Ändere die Suche oder blende archivierte Anlagen ein."
+    />
+  ) : (
+    <EmptyState
+      icon={Wrench}
+      title="Noch keine Anlagen"
+      description="Erfasse die erste installierte Anlage über „Anlage erfassen“."
+    />
   );
 }
 
@@ -369,19 +393,7 @@ function EquipmentListResults({
         </SectionError>
       )}
       {page.equipment.length === 0 && visiblePending.length === 0 ? (
-        page.hasAnyEquipment ? (
-          <EmptyState
-            icon={Wrench}
-            title="Keine Anlagen gefunden"
-            description="Zu Suche und Filtern gibt es keine Anlage. Ändere die Suche oder blende archivierte Anlagen ein."
-          />
-        ) : (
-          <EmptyState
-            icon={Wrench}
-            title="Noch keine Anlagen"
-            description="Erfasse die erste installierte Anlage über „Anlage erfassen“."
-          />
-        )
+        <EquipmentEmptyState hasAnyEquipment={page.hasAnyEquipment} />
       ) : (
         <>
           <EquipmentCards filtered={page.equipment} visiblePending={visiblePending} />

@@ -3,7 +3,7 @@
 import { PlainButton } from '@/components/ui/plain-button';
 import { formatGermanDate as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
-import { useState, type DragEvent, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { ChevronRight, FileText } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,20 +14,18 @@ import {
   type OrganizationDocument,
   type ProjectJobDocumentGroup,
 } from '@/lib/documents/types';
-import { useBanner } from '@/components/ui/banner';
-import { useBusyIds } from '@/hooks/use-busy-id';
-import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { useSettleOnChange } from '@/hooks/use-settle-on-change';
 import { cn } from '@/lib/utils';
 import { AttachDocumentDialog } from './attach-document-dialog';
-import { getContextualAttachTarget, getContextualDocumentLinkContext } from './contextual-documents-context';
 import { ContextualDocumentsDeleteDialog } from './contextual-documents-delete-dialog';
 import { ContextualDocumentsEmptyState } from './contextual-documents-empty-state';
 import { ContextualDocumentsRenameForm } from './contextual-documents-rename-form';
+import { ContextualDocumentRowMenu } from './contextual-documents-row-menu';
 import {
-  ContextualDocumentRowMenu,
-  type ContextualDocumentRowMenuProps,
-} from './contextual-documents-row-menu';
+  useContextualDocumentsSectionState,
+  type ContextualDocumentsSectionState,
+  type DocumentRowProps,
+  type SharedDocumentRowProps,
+} from './contextual-documents-section-state';
 import { ContextualDocumentsToolbar } from './contextual-documents-toolbar';
 import { DocumentLinkDialog } from './document-link-dialog';
 import { DocumentUploadDialog } from './document-upload-dialog';
@@ -38,8 +36,6 @@ import {
   CONTEXTUAL_DOCUMENT_LIST_CLASS,
   CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
 } from './contextual-documents-layout';
-import { useContextualDocumentRowActions } from './use-contextual-documents-row-actions';
-import { useContextualDocumentUploads } from './use-contextual-documents-uploads';
 
 type ContextualDocumentsSectionProps = {
   title: string;
@@ -53,13 +49,6 @@ type ContextualDocumentsSectionProps = {
   emphasizeUpload?: boolean;
   keepUploadedDocumentsVisible?: boolean;
 };
-
-type DocumentRowProps = ContextualDocumentRowMenuProps & {
-  indented?: boolean;
-};
-
-/** What every row of one list shares; the row adds its document and busy state. */
-type SharedDocumentRowProps = Omit<DocumentRowProps, 'document' | 'isBusy' | 'indented'>;
 
 function DocumentRow({ indented = false, ...menuProps }: DocumentRowProps) {
   const { document, isBusy, onOpen } = menuProps;
@@ -173,129 +162,78 @@ function ContextualProjectDocumentGroups({
   );
 }
 
-export function ContextualDocumentsSection({
-  title,
-  description,
-  documents,
-  jobDocumentGroups = [],
-  documentTarget,
-  contextLabel,
-  canUpload,
-  canManage,
-  emphasizeUpload = CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
-  keepUploadedDocumentsVisible = false,
-}: ContextualDocumentsSectionProps): ReactElement {
-  const context = getContextualDocumentLinkContext(documentTarget);
-  const attachTarget = canManage ? getContextualAttachTarget(context) : null;
-  // Row-scoped pending: the acting row shows a spinner and stays busy until
-  // the action's rendered props land, so the rename/unlink/trash result is on screen
-  // before the indicator goes away (feedback canon).
-  const { isBusy, run: runBusy } = useBusyIds();
-  const waitForDocuments = useSettleOnChange(documents);
-  const { showBanner } = useBanner();
-  const [attachDialogOpen, setAttachDialogOpen] = useState(false);
-  const [linkDialogDocument, setLinkDialogDocument] = useState<OrganizationDocument | null>(null);
-  const [expandedJobGroups, setExpandedJobGroups] = useState<Set<string>>(new Set());
-  const [isDragActive, setIsDragActive] = useState(false);
-  const uploads = useContextualDocumentUploads({
-    documents,
-    keepUploadedDocumentsVisible,
-  });
-  const [viewerDocument, setViewerDocument] = useState<OrganizationDocument | null>(null);
-  const [deleteDocumentTarget, setDeleteDocumentTarget] = useState<OrganizationDocument | null>(null);
-  const { displayedDocuments } = uploads;
-  const totalDocumentCount =
-    displayedDocuments.length + jobDocumentGroups.reduce((total, group) => total + group.documents.length, 0);
+type ContextualDocumentsSectionToolbarProps = {
+  section: ContextualDocumentsSectionState;
+  emphasizeUpload: boolean;
+};
 
-  useRealtimeRouterRefresh({
-    tables: ['documents', 'document_links', 'document_audit_events', 'document_versions'],
-  });
-
-  function showFeedback(variant: 'success' | 'error', message: string) {
-    showBanner({ variant, message });
-  }
-
-  // Every document action here revalidates (`revalidateDocuments`), so its
-  // response renders the route: no client refresh follows a save.
-  const rowActions = useContextualDocumentRowActions({
-    runBusy,
-    waitForDocuments,
-    showBanner,
-    setRecentlyUploadedDocuments: uploads.setRecentlyUploadedDocuments,
-  });
-  const isRenamePending = rowActions.renameDocument ? isBusy(rowActions.renameDocument.id) : false;
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setIsDragActive(false);
-    if (!canUpload) return;
-    uploads.handleUpload(event.dataTransfer.files);
-  }
-
-  function toggleJobGroup(jobIdToToggle: string) {
-    setExpandedJobGroups((current) => {
-      const next = new Set(current);
-      if (next.has(jobIdToToggle)) next.delete(jobIdToToggle);
-      else next.add(jobIdToToggle);
-      return next;
-    });
-  }
-
-  const rowProps: SharedDocumentRowProps = {
-    canManage,
-    context,
-    onOpen: setViewerDocument,
-    onManageLinks: setLinkDialogDocument,
-    onRename: rowActions.startRename,
-    onUnlink: rowActions.handleUnlink,
-    onDelete: setDeleteDocumentTarget,
-  };
-
+function ContextualDocumentsSectionToolbar({
+  section,
+  emphasizeUpload,
+}: ContextualDocumentsSectionToolbarProps) {
   return (
-    <ContextualDocumentsFrame
-      data-testid="contextual-documents-section"
-      title={title}
-      description={description}
-      actions={
-        canUpload ? (
-          <ContextualDocumentsToolbar
-            canAttach={attachTarget !== null}
-            emphasizeUpload={emphasizeUpload}
-            fileInputRef={uploads.fileInputRef}
-            onAttach={() => setAttachDialogOpen(true)}
-            onFilesSelected={uploads.handleUpload}
-          />
-        ) : undefined
-      }
-      className={cn(isDragActive && 'border-primary bg-primary/5')}
-      onDragOver={(event) => {
-        if (!canUpload) return;
-        event.preventDefault();
-        setIsDragActive(true);
-      }}
-      onDragLeave={() => setIsDragActive(false)}
-      onDrop={handleDrop}
-    >
-      {totalDocumentCount === 0 ? (
-        <ContextualDocumentsEmptyState
-          canUpload={canUpload}
-          canAttach={attachTarget !== null}
-          context={context}
-          contextLabel={contextLabel}
-        />
-      ) : context.projectId ? (
-        <ContextualProjectDocumentGroups
-          documents={displayedDocuments}
-          jobDocumentGroups={jobDocumentGroups}
-          expandedJobGroups={expandedJobGroups}
-          onToggleJobGroup={toggleJobGroup}
-          isBusy={isBusy}
-          rowProps={rowProps}
-        />
-      ) : (
-        <ContextualDocumentList documents={displayedDocuments} isBusy={isBusy} rowProps={rowProps} />
-      )}
+    <ContextualDocumentsToolbar
+      canAttach={section.attachTarget !== null}
+      emphasizeUpload={emphasizeUpload}
+      fileInputRef={section.uploads.fileInputRef}
+      onAttach={() => section.setAttachDialogOpen(true)}
+      onFilesSelected={section.uploads.handleUpload}
+    />
+  );
+}
 
+type ContextualDocumentsListingProps = {
+  section: ContextualDocumentsSectionState;
+  jobDocumentGroups: ProjectJobDocumentGroup[];
+  canUpload: boolean;
+  contextLabel: string | undefined;
+};
+
+function ContextualDocumentsListing({
+  section,
+  jobDocumentGroups,
+  canUpload,
+  contextLabel,
+}: ContextualDocumentsListingProps): ReactElement {
+  const { context, displayedDocuments, isBusy, rowProps } = section;
+  if (section.totalDocumentCount === 0) {
+    return (
+      <ContextualDocumentsEmptyState
+        canUpload={canUpload}
+        canAttach={section.attachTarget !== null}
+        context={context}
+        contextLabel={contextLabel}
+      />
+    );
+  }
+  if (context.projectId) {
+    return (
+      <ContextualProjectDocumentGroups
+        documents={displayedDocuments}
+        jobDocumentGroups={jobDocumentGroups}
+        expandedJobGroups={section.expandedJobGroups}
+        onToggleJobGroup={section.toggleJobGroup}
+        isBusy={isBusy}
+        rowProps={rowProps}
+      />
+    );
+  }
+  return <ContextualDocumentList documents={displayedDocuments} isBusy={isBusy} rowProps={rowProps} />;
+}
+
+type ContextualDocumentsLeadingDialogsProps = {
+  section: ContextualDocumentsSectionState;
+  documentTarget: DocumentContextTarget;
+};
+
+/** The upload, viewer and link dialogs, rendered before the rename dialog. */
+function ContextualDocumentsLeadingDialogs({
+  section,
+  documentTarget,
+}: ContextualDocumentsLeadingDialogsProps) {
+  const { uploads, showFeedback } = section;
+  return (
+    <>
       <DocumentUploadDialog
         open={uploads.uploadDialogOpen}
         onOpenChange={uploads.setUploadDialogOpen}
@@ -310,18 +248,100 @@ export function ContextualDocumentsSection({
       />
 
       <DocumentViewerDialog
-        document={viewerDocument}
-        open={!!viewerDocument}
-        onOpenChange={(open) => !open && setViewerDocument(null)}
+        document={section.viewerDocument}
+        open={!!section.viewerDocument}
+        onOpenChange={(open) => !open && section.setViewerDocument(null)}
       />
 
       <DocumentLinkDialog
-        key={linkDialogDocument?.id ?? 'closed-context-link-dialog'}
-        document={linkDialogDocument}
-        open={!!linkDialogDocument}
-        onOpenChange={(open) => !open && setLinkDialogDocument(null)}
+        key={section.linkDialogDocument?.id ?? 'closed-context-link-dialog'}
+        document={section.linkDialogDocument}
+        open={!!section.linkDialogDocument}
+        onOpenChange={(open) => !open && section.setLinkDialogDocument(null)}
         onComplete={showFeedback}
       />
+    </>
+  );
+}
+
+type ContextualDocumentsTrailingDialogsProps = {
+  section: ContextualDocumentsSectionState;
+  contextLabel: string | undefined;
+};
+
+/** The delete and attach dialogs, rendered after the rename dialog. */
+function ContextualDocumentsTrailingDialogs({
+  section,
+  contextLabel,
+}: ContextualDocumentsTrailingDialogsProps) {
+  const { attachTarget } = section;
+  return (
+    <>
+      <ContextualDocumentsDeleteDialog
+        target={section.deleteDocumentTarget}
+        onClose={() => section.setDeleteDocumentTarget(null)}
+        onConfirm={section.rowActions.handleTrash}
+      />
+
+      {attachTarget && (
+        <AttachDocumentDialog
+          open={section.attachDialogOpen}
+          onOpenChange={section.setAttachDialogOpen}
+          targetType={attachTarget.targetType}
+          targetId={attachTarget.targetId}
+          targetLabel={contextLabel}
+          onAttached={section.showFeedback}
+        />
+      )}
+    </>
+  );
+}
+
+export function ContextualDocumentsSection({
+  title,
+  description,
+  documents,
+  jobDocumentGroups = [],
+  documentTarget,
+  contextLabel,
+  canUpload,
+  canManage,
+  emphasizeUpload = CONTEXTUAL_DOCUMENTS_EMPHASIZE_UPLOAD,
+  keepUploadedDocumentsVisible = false,
+}: ContextualDocumentsSectionProps): ReactElement {
+  const section = useContextualDocumentsSectionState({
+    documents,
+    jobDocumentGroups,
+    documentTarget,
+    canUpload,
+    canManage,
+    keepUploadedDocumentsVisible,
+  });
+  const { rowActions, isRenamePending } = section;
+
+  return (
+    <ContextualDocumentsFrame
+      data-testid="contextual-documents-section"
+      title={title}
+      description={description}
+      actions={
+        canUpload ? (
+          <ContextualDocumentsSectionToolbar section={section} emphasizeUpload={emphasizeUpload} />
+        ) : undefined
+      }
+      className={cn(section.isDragActive && 'border-primary bg-primary/5')}
+      onDragOver={section.handleDragOver}
+      onDragLeave={() => section.setIsDragActive(false)}
+      onDrop={section.handleDrop}
+    >
+      <ContextualDocumentsListing
+        section={section}
+        jobDocumentGroups={jobDocumentGroups}
+        canUpload={canUpload}
+        contextLabel={contextLabel}
+      />
+
+      <ContextualDocumentsLeadingDialogs section={section} documentTarget={documentTarget} />
 
       <Dialog
         open={!!rowActions.renameDocument}
@@ -349,22 +369,7 @@ export function ContextualDocumentsSection({
         </DialogContent>
       </Dialog>
 
-      <ContextualDocumentsDeleteDialog
-        target={deleteDocumentTarget}
-        onClose={() => setDeleteDocumentTarget(null)}
-        onConfirm={rowActions.handleTrash}
-      />
-
-      {attachTarget && (
-        <AttachDocumentDialog
-          open={attachDialogOpen}
-          onOpenChange={setAttachDialogOpen}
-          targetType={attachTarget.targetType}
-          targetId={attachTarget.targetId}
-          targetLabel={contextLabel}
-          onAttached={showFeedback}
-        />
-      )}
+      <ContextualDocumentsTrailingDialogs section={section} contextLabel={contextLabel} />
     </ContextualDocumentsFrame>
   );
 }

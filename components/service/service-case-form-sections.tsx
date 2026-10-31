@@ -14,11 +14,9 @@ import {
   SERVICE_CASE_CHARGE_CONTEXT_LABELS,
   SERVICE_CASE_STATUSES,
   SERVICE_CASE_STATUS_LABELS,
+  SERVICE_CASE_URGENCIES,
   SERVICE_CASE_URGENCY_LABELS,
-  type ServiceCaseChargeContext,
-  type ServiceCaseStatus,
 } from '@/lib/service-cases/types';
-import type { ServiceCaseFormState } from './service-case-form-state';
 import type { ServiceCaseFormController } from './use-service-case-form';
 
 type ServiceCaseFieldsProps = {
@@ -107,6 +105,83 @@ export function ServiceCaseIntakeFields({
   );
 }
 
+type ServiceCaseFormFieldProps = Pick<ServiceCaseFormController, 'form' | 'setForm'>;
+
+function ServiceCaseUrgencyField({ form, setForm }: ServiceCaseFormFieldProps): ReactElement {
+  return (
+    <Field label="Dringlichkeit" htmlFor="service-urgency">
+      <Select
+        value={form.urgency}
+        onValueChange={(selected) => {
+          const urgency = SERVICE_CASE_URGENCIES.find((candidate) => candidate === selected);
+          if (urgency) setForm((value) => ({ ...value, urgency }));
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.entries(SERVICE_CASE_URGENCY_LABELS).map(([value, label]) => (
+            <SelectItem key={value} value={value}>
+              {label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function ServiceCaseStatusField({ form, setForm }: ServiceCaseFormFieldProps): ReactElement {
+  return (
+    <Field label="Status" htmlFor="service-status">
+      <Select
+        value={form.status}
+        onValueChange={(selected) => {
+          const status = SERVICE_CASE_STATUSES.find((candidate) => candidate === selected);
+          if (status) setForm((value) => ({ ...value, status }));
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SERVICE_CASE_STATUSES.map((value) => (
+            <SelectItem key={value} value={value}>
+              {SERVICE_CASE_STATUS_LABELS[value]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function ServiceCaseChargeContextField({ form, setForm }: ServiceCaseFormFieldProps): ReactElement {
+  return (
+    <Field label="Vorläufiger Kostenkontext" htmlFor="service-charge" className="sm:col-span-2">
+      <Select
+        value={form.chargeContext}
+        onValueChange={(selected) => {
+          const chargeContext = SERVICE_CASE_CHARGE_CONTEXTS.find((candidate) => candidate === selected);
+          if (chargeContext) setForm((value) => ({ ...value, chargeContext }));
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SERVICE_CASE_CHARGE_CONTEXTS.map((value) => (
+            <SelectItem key={value} value={value}>
+              {SERVICE_CASE_CHARGE_CONTEXT_LABELS[value]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 /** Summary, urgency, status, charge context and the linked job. */
 export function ServiceCaseTriageFields({ controller, isUpdate }: ServiceCaseFieldsProps): ReactElement {
   const { form, setForm, fieldErrors, jobSearch } = controller;
@@ -124,74 +199,9 @@ export function ServiceCaseTriageFields({ controller, isUpdate }: ServiceCaseFie
           onChange={(event) => setForm((value) => ({ ...value, summary: event.target.value }))}
         />
       </Field>
-      <Field label="Dringlichkeit" htmlFor="service-urgency">
-        <Select
-          value={form.urgency}
-          onValueChange={(urgency) =>
-            setForm((value) => ({
-              ...value,
-              urgency: urgency as ServiceCaseFormState['urgency'],
-            }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SERVICE_CASE_URGENCY_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      {isUpdate && (
-        <Field label="Status" htmlFor="service-status">
-          <Select
-            value={form.status}
-            onValueChange={(status) =>
-              setForm((value) => ({
-                ...value,
-                status: status as ServiceCaseStatus,
-              }))
-            }
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {SERVICE_CASE_STATUSES.map((value) => (
-                <SelectItem key={value} value={value}>
-                  {SERVICE_CASE_STATUS_LABELS[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-      )}
-      <Field label="Vorläufiger Kostenkontext" htmlFor="service-charge" className="sm:col-span-2">
-        <Select
-          value={form.chargeContext}
-          onValueChange={(chargeContext) =>
-            setForm((value) => ({
-              ...value,
-              chargeContext: chargeContext as ServiceCaseChargeContext,
-            }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SERVICE_CASE_CHARGE_CONTEXTS.map((value) => (
-              <SelectItem key={value} value={value}>
-                {SERVICE_CASE_CHARGE_CONTEXT_LABELS[value]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <ServiceCaseUrgencyField form={form} setForm={setForm} />
+      {isUpdate && <ServiceCaseStatusField form={form} setForm={setForm} />}
+      <ServiceCaseChargeContextField form={form} setForm={setForm} />
       {isUpdate && (
         <Field label="Operativer Auftrag (optional)" htmlFor="service-job" className="sm:col-span-2">
           <SearchableSelect
