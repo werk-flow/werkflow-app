@@ -224,9 +224,9 @@ export function documentLibraryNewFolderItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: LIBRARY.newFolder });
 }
 
-/** The visible search field: a role query skips the hidden tree of a view Next keeps after a navigation. */
+/** The visible search field: a role query skips a hidden second input the page keeps after a navigation. */
 export function documentLibrarySearch(page: Page): Locator {
-  return page.getByRole('textbox', { name: LIBRARY.searchLabel });
+  return page.getByRole('textbox', { name: LIBRARY.searchLabel, exact: true });
 }
 
 export function documentLibraryFilterToggle(page: Page): Locator {
