@@ -30,9 +30,12 @@ fi
 
 # Signed out, the login page reads no data. It renders when the title and the password field are there.
 page="$RUNNER_TEMP/login.html"
-status="$(curl --silent --max-time 30 --output "$page" --write-out '%{http_code}' "${APP_URL}/login" || true)"
+loaded=0
+status="$(curl --silent --max-time 30 --output "$page" --write-out '%{http_code}' "${APP_URL}/login")" || loaded=$?
 if test "$status" != 200; then
   fail "The login page answered HTTP ${status}."
+elif test "$loaded" != 0; then
+  fail "The login page answered 200 but did not finish loading (curl exit ${loaded})."
 elif ! grep -q '<title>Anmelden</title>' "$page" || ! grep -q 'type="password"' "$page"; then
   fail "The login page answered 200 without its title or password field."
 else
