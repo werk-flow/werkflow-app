@@ -1,7 +1,12 @@
 import { z } from '@/lib/zod';
 
 import { parseListPage } from '@/lib/ui/list-pagination';
-import { REQUEST_CATEGORY_LABELS, type ClientRequest, type RequestCategory } from './types';
+import {
+  REQUEST_CATEGORY_LABELS,
+  REQUEST_CATEGORY_ORDER,
+  type ClientRequest,
+  type RequestCategory,
+} from './types';
 
 const REQUEST_STATUS_FILTERS = ['aktiv', 'umgewandelt', 'geschlossen', 'alle'] as const;
 export type RequestStatusFilter = (typeof REQUEST_STATUS_FILTERS)[number];
@@ -46,7 +51,7 @@ export function parseRequestListQuery(
 export function requestCategoriesMatching(search: string): RequestCategory[] {
   const query = search.trim().toLocaleLowerCase('de');
   if (!query) return [];
-  return (Object.keys(REQUEST_CATEGORY_LABELS) as RequestCategory[]).filter((category) =>
+  return REQUEST_CATEGORY_ORDER.filter((category) =>
     REQUEST_CATEGORY_LABELS[category].toLocaleLowerCase('de').includes(query),
   );
 }
