@@ -1,7 +1,7 @@
 'use client';
 
 import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useFieldContext } from '@/components/ui/field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -60,6 +60,171 @@ function formatMonth(value: string): string {
   const parsed = /^(\d{4})-(\d{2})$/.exec(value);
   if (!parsed) return '';
   return `${parsed[2]}.${parsed[1]}`;
+}
+
+function MonthGridYearNav({
+  gridYear,
+  setGridYear,
+}: {
+  gridYear: number;
+  setGridYear: Dispatch<SetStateAction<number>>;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between">
+      <button
+        type="button"
+        aria-label="Vorheriges Jahr"
+        onClick={() => setGridYear((year) => year - 1)}
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <ChevronLeft className="size-4" />
+      </button>
+      <span className="text-sm font-medium tabular-nums">{gridYear}</span>
+      <button
+        type="button"
+        aria-label="Nächstes Jahr"
+        onClick={() => setGridYear((year) => year + 1)}
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+      >
+        <ChevronRight className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+function MonthTextInput({
+  controlId,
+  displayText,
+  disabled,
+  required,
+  ariaLabel,
+  describedBy,
+  invalid,
+  current,
+  setText,
+  setEditing,
+  commit,
+  handleBlur,
+}: {
+  controlId: string;
+  displayText: string;
+  disabled: boolean | undefined;
+  required: boolean | undefined;
+  ariaLabel: string | undefined;
+  describedBy: string | undefined;
+  invalid: boolean | undefined;
+  current: string;
+  setText: (text: string) => void;
+  setEditing: (editing: boolean) => void;
+  commit: (next: string) => void;
+  handleBlur: () => void;
+}) {
+  return (
+    <input
+      id={controlId}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder="MM.JJJJ"
+      value={displayText}
+      disabled={disabled}
+      required={required}
+      aria-label={ariaLabel}
+      aria-describedby={describedBy}
+      aria-invalid={invalid || undefined}
+      onChange={(event) => {
+        setText(event.target.value);
+        // Commit a complete value at once (four-digit year and two-digit
+        // month), so a form submitted right after typing never reads a
+        // stale hidden value; partial input waits for blur.
+        if (/^(\d{4}-\d{2}|\d{2}[./]\d{4})$/.test(event.target.value.trim())) {
+          const parsed = parseMonth(event.target.value);
+          if (parsed) commit(parsed);
+        }
+      }}
+      onFocus={() => {
+        setText(formatMonth(current));
+        setEditing(true);
+      }}
+      onBlur={() => {
+        handleBlur();
+        setEditing(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') handleBlur();
+      }}
+      className={cn(
+        'border-input dark:bg-input/30 placeholder:text-muted-foreground h-9 w-full min-w-0 rounded-md border bg-transparent py-1 pr-9 pl-3 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
+        'focus-visible:ring-ring/50 focus-visible:ring-2',
+        'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
+        'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
+      )}
+    />
+  );
+}
+
+function MonthGridPopover({
+  open,
+  setOpen,
+  disabled,
+  gridYear,
+  setGridYear,
+  selectedYear,
+  selectedMonth,
+  commit,
+}: {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  disabled: boolean | undefined;
+  gridYear: number;
+  setGridYear: Dispatch<SetStateAction<number>>;
+  selectedYear: number;
+  selectedMonth: number;
+  commit: (next: string) => void;
+}) {
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label="Auswahl öffnen"
+          className="absolute right-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+        >
+          <CalendarIcon className="size-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3" align="end">
+        <MonthGridYearNav gridYear={gridYear} setGridYear={setGridYear} />
+        <div className="grid grid-cols-3 gap-1">
+          {MONTH_LABELS.map((label, index) => {
+            const month = index + 1;
+            const isSelected = gridYear === selectedYear && month === selectedMonth;
+            return (
+              <button
+                key={label}
+                type="button"
+                aria-label={`${MONTH_NAMES[index]} ${gridYear}`}
+                aria-pressed={isSelected}
+                onClick={() => {
+                  commit(`${gridYear}-${String(month).padStart(2, '0')}`);
+                  setOpen(false);
+                }}
+                className={cn(
+                  'h-9 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                  isSelected
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-accent hover:text-accent-foreground',
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function MonthPicker({
@@ -123,105 +288,30 @@ export function MonthPicker({
   return (
     <div className={cn('relative flex items-center', className)}>
       {name && <input type="hidden" name={name} value={current} />}
-      <input
-        id={controlId}
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        placeholder="MM.JJJJ"
-        value={displayText}
+      <MonthTextInput
+        controlId={controlId}
+        displayText={displayText}
         disabled={disabled}
         required={required ?? field?.required}
-        aria-label={ariaLabel}
-        aria-describedby={field?.describedBy}
-        aria-invalid={field?.invalid || undefined}
-        onChange={(event) => {
-          setText(event.target.value);
-          // Commit a complete value at once (four-digit year and two-digit
-          // month), so a form submitted right after typing never reads a
-          // stale hidden value; partial input waits for blur.
-          if (/^(\d{4}-\d{2}|\d{2}[./]\d{4})$/.test(event.target.value.trim())) {
-            const parsed = parseMonth(event.target.value);
-            if (parsed) commit(parsed);
-          }
-        }}
-        onFocus={() => {
-          setText(formatMonth(current));
-          setEditing(true);
-        }}
-        onBlur={() => {
-          handleBlur();
-          setEditing(false);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') handleBlur();
-        }}
-        className={cn(
-          'border-input dark:bg-input/30 placeholder:text-muted-foreground h-9 w-full min-w-0 rounded-md border bg-transparent py-1 pr-9 pl-3 text-base shadow-xs transition-[color,box-shadow] outline-none md:text-sm',
-          'focus-visible:ring-ring/50 focus-visible:ring-2',
-          'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
-          'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
-        )}
+        ariaLabel={ariaLabel}
+        describedBy={field?.describedBy}
+        invalid={field?.invalid}
+        current={current}
+        setText={setText}
+        setEditing={setEditing}
+        commit={commit}
+        handleBlur={handleBlur}
       />
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            aria-label="Auswahl öffnen"
-            className="absolute right-2 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
-          >
-            <CalendarIcon className="size-4" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-3" align="end">
-          <div className="mb-2 flex items-center justify-between">
-            <button
-              type="button"
-              aria-label="Vorheriges Jahr"
-              onClick={() => setGridYear((year) => year - 1)}
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <span className="text-sm font-medium tabular-nums">{gridYear}</span>
-            <button
-              type="button"
-              aria-label="Nächstes Jahr"
-              onClick={() => setGridYear((year) => year + 1)}
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {MONTH_LABELS.map((label, index) => {
-              const month = index + 1;
-              const isSelected = gridYear === selectedYear && month === selectedMonth;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  aria-label={`${MONTH_NAMES[index]} ${gridYear}`}
-                  aria-pressed={isSelected}
-                  onClick={() => {
-                    commit(`${gridYear}-${String(month).padStart(2, '0')}`);
-                    setOpen(false);
-                  }}
-                  className={cn(
-                    'h-9 rounded-md text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    isSelected
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-accent hover:text-accent-foreground',
-                  )}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-        </PopoverContent>
-      </Popover>
+      <MonthGridPopover
+        open={open}
+        setOpen={setOpen}
+        disabled={disabled}
+        gridYear={gridYear}
+        setGridYear={setGridYear}
+        selectedYear={selectedYear}
+        selectedMonth={selectedMonth}
+        commit={commit}
+      />
     </div>
   );
 }

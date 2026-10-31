@@ -37,29 +37,23 @@ type JobMaterialsSectionProps = {
 
 const getLineId = (line: JobMaterialLine) => line.id;
 
-export function JobMaterialsSection({
+/**
+ * The lines the section shows, with the optimistic overlay, the busy marks,
+ * the read a booking waits for, and the dialog save and line removal.
+ */
+function useJobMaterialLines({
   jobId,
   projectId,
   initialLines,
-  inventoryItems,
-  locations,
   isAdminOrManager,
-  inheritedJobGroups = [],
-  totals = [],
-  readOnly = false,
-}: JobMaterialsSectionProps): ReactElement {
-  const {
-    dialog,
-    setDialog,
-    sectionError,
-    pickerItems,
-    pickerLocations,
-    isPickerLoading,
-    searchFailed,
-    retrySearch,
-    openDialog,
-  } = useJobMaterialDialog({ jobId, isAdminOrManager, inventoryItems, locations });
-  const isProjectContext = Boolean(projectId && !jobId);
+  materialDialog,
+}: {
+  jobId: string | undefined;
+  projectId: string | undefined;
+  initialLines: JobMaterialLine[];
+  isAdminOrManager: boolean;
+  materialDialog: ReturnType<typeof useJobMaterialDialog>;
+}) {
   // Field workers cannot router.refresh their way to fresh lines, so their
   // view refetches; managers keep the server-rendered props.
   const fieldView = useLiveView<JobMaterialLine[]>({
@@ -90,19 +84,36 @@ export function JobMaterialsSection({
     return waitForLines(since);
   }
   const { handleDialogSave, handleDelete, isSaving, isSettling } = useJobMaterialMutations({
-    dialog,
-    setDialog,
+    dialog: materialDialog.dialog,
+    setDialog: materialDialog.setDialog,
     lines,
     busyLines,
     readFreshLines,
     markLines: waitForLines.markChange,
-    pickerItems,
-    pickerLocations,
+    pickerItems: materialDialog.pickerItems,
+    pickerLocations: materialDialog.pickerLocations,
     jobId,
     projectId,
   });
+  return { fieldView, lines, busyLines, handleDialogSave, handleDelete, isSaving, isSettling };
+}
 
-  const hasDirectLines = lines.items.length > 0;
+export function JobMaterialsSection({
+  jobId,
+  projectId,
+  initialLines,
+  inventoryItems,
+  locations,
+  isAdminOrManager,
+  inheritedJobGroups = [],
+  totals = [],
+  readOnly = false,
+}: JobMaterialsSectionProps): ReactElement {
+  const materialDialog = useJobMaterialDialog({ jobId, isAdminOrManager, inventoryItems, locations });
+  const isProjectContext = Boolean(projectId && !jobId);
+  const { fieldView, lines, busyLines, handleDialogSave, handleDelete, isSaving, isSettling } =
+    useJobMaterialLines({ jobId, projectId, initialLines, isAdminOrManager, materialDialog });
+
   const hasInheritedLines = inheritedJobGroups.length > 0;
 
   return (
@@ -113,10 +124,10 @@ export function JobMaterialsSection({
         totalCount={totals.length}
         isAdminOrManager={isAdminOrManager}
         readOnly={readOnly}
-        isPickerLoading={isPickerLoading}
+        isPickerLoading={materialDialog.isPickerLoading}
         inventoryItemCount={inventoryItems.length}
-        onPlan={() => void openDialog('plan')}
-        onTake={() => void openDialog('take')}
+        onPlan={() => void materialDialog.openDialog('plan')}
+        onTake={() => void materialDialog.openDialog('take')}
       />
 
       <StaleRegion
@@ -124,32 +135,16 @@ export function JobMaterialsSection({
         onRetry={fieldView.refresh}
         notice="Der aktuelle Materialstand konnte nicht geladen werden. Die letzten bekannten Angaben bleiben sichtbar."
       >
-        {!hasDirectLines ? (
-          <EmptyState
-            size="compact"
-            title={
-              isProjectContext ? 'Noch kein direktes Projektmaterial erfasst.' : 'Noch kein Material erfasst.'
-            }
-            description="Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager."
-          />
-        ) : (
-          <div className="space-y-3">
-            {lines.items.map(({ item: line, isOptimistic }) => (
-              <MaterialLineRow
-                key={line.id}
-                line={line}
-                isAdminOrManager={isAdminOrManager}
-                isBusy={isOptimistic || busyLines.isBusy(line.id)}
-                locations={pickerLocations}
-                readOnly={readOnly}
-                onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
-                onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
-                onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
-                onDelete={() => handleDelete(line.id)}
-              />
-            ))}
-          </div>
-        )}
+        <JobMaterialLineList
+          lines={lines}
+          busyLines={busyLines}
+          isProjectContext={isProjectContext}
+          isAdminOrManager={isAdminOrManager}
+          locations={materialDialog.pickerLocations}
+          readOnly={readOnly}
+          openDialog={materialDialog.openDialog}
+          onDelete={handleDelete}
+        />
       </StaleRegion>
 
       {hasInheritedLines && (
@@ -164,19 +159,70 @@ export function JobMaterialsSection({
         <ProjectMaterialTotals totals={totals} isAdminOrManager={isAdminOrManager} />
       )}
 
-      <ErrorText className="mt-3">{sectionError}</ErrorText>
+      <ErrorText className="mt-3">{materialDialog.sectionError}</ErrorText>
 
       <MaterialSelectionDialog
-        dialog={dialog}
-        setDialog={setDialog}
-        items={pickerItems}
-        locations={pickerLocations}
+        dialog={materialDialog.dialog}
+        setDialog={materialDialog.setDialog}
+        items={materialDialog.pickerItems}
+        locations={materialDialog.pickerLocations}
         isSaving={isSaving}
-        isSearching={isPickerLoading}
-        searchFailed={searchFailed}
-        onRetrySearch={retrySearch}
+        isSearching={materialDialog.isPickerLoading}
+        searchFailed={materialDialog.searchFailed}
+        onRetrySearch={materialDialog.retrySearch}
         onSave={handleDialogSave}
       />
+    </div>
+  );
+}
+
+type JobMaterialLines = ReturnType<typeof useJobMaterialLines>;
+
+/** The section's own lines; take, return and edit open the dialog while the line shows busy. */
+function JobMaterialLineList({
+  lines,
+  busyLines,
+  isProjectContext,
+  isAdminOrManager,
+  locations,
+  readOnly,
+  openDialog,
+  onDelete,
+}: Pick<JobMaterialLines, 'lines' | 'busyLines'> & {
+  isProjectContext: boolean;
+  isAdminOrManager: boolean;
+  locations: InventoryLocation[];
+  readOnly: boolean;
+  openDialog: ReturnType<typeof useJobMaterialDialog>['openDialog'];
+  onDelete: (lineId: string) => void;
+}) {
+  if (lines.items.length === 0) {
+    return (
+      <EmptyState
+        size="compact"
+        title={
+          isProjectContext ? 'Noch kein direktes Projektmaterial erfasst.' : 'Noch kein Material erfasst.'
+        }
+        description="Planen speichert nur den Bedarf. Entnehmen bucht die tatsächliche Bewegung im Lager."
+      />
+    );
+  }
+  return (
+    <div className="space-y-3">
+      {lines.items.map(({ item: line, isOptimistic }) => (
+        <MaterialLineRow
+          key={line.id}
+          line={line}
+          isAdminOrManager={isAdminOrManager}
+          isBusy={isOptimistic || busyLines.isBusy(line.id)}
+          locations={locations}
+          readOnly={readOnly}
+          onTake={() => void busyLines.run(line.id, () => openDialog('take', line))}
+          onReturn={() => void busyLines.run(line.id, () => openDialog('return', line))}
+          onEdit={() => void busyLines.run(line.id, () => openDialog('edit', line))}
+          onDelete={() => onDelete(line.id)}
+        />
+      ))}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { getJobInstructionItems } from '@/lib/jobs/instruction-items-actions';
 import type { JobInstructionActor, JobWithDetails } from '@/lib/jobs/types';
 import { getTimeEntriesForJob } from '@/lib/time-tracking/entry-read-actions';
+import type { TimeEntry } from '@/lib/time-tracking/types';
 import { getWorkArtifacts } from '@/lib/work-artifacts/actions';
 import { getWorkLifecycleSnapshot } from '@/lib/work-lifecycle/actions';
 import { getWorkHandoverFieldStatus } from '@/lib/work-handover/actions';
@@ -17,11 +18,49 @@ import { getAssignedServiceContextForJob } from '@/lib/service-cases/actions';
 import { getAssignedMaintenanceContextForJob } from '@/lib/maintenance/actions';
 import { formatBerlinDateTime } from '@/lib/utils';
 
+type FieldWorkPackAssignment = JobWithDetails['assignments'][number];
+
+/** The job's material lines as the field sees them: never billable. */
+function fieldMaterialLines(materialLinesResult: Awaited<ReturnType<typeof getJobMaterialLines>>) {
+  return materialLinesResult.success
+    ? materialLinesResult.lines.map((line) => ({
+        ...line,
+        billableQuantity: 0,
+        isBillable: false,
+      }))
+    : [];
+}
+
+/** The signed-in assignee as an instruction actor. */
+function fieldWorkPackActor(
+  currentUserId: string,
+  currentUserAssignment: FieldWorkPackAssignment,
+): JobInstructionActor {
+  return {
+    userId: currentUserId,
+    firstName: currentUserAssignment.firstName,
+    lastName: currentUserAssignment.lastName,
+    email: null,
+    avatarPath: null,
+  };
+}
+
+/** The clock-ins on this job that evidence can name as its time source. */
+function fieldTimeEntryOptions(timeEntries: TimeEntry[], jobId: string) {
+  return timeEntries
+    .filter((entry) => entry.entryType === 'clock_in' && entry.jobId === jobId)
+    .map((entry) => ({
+      id: entry.canonicalSegmentId ?? entry.id,
+      sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
+      label: formatBerlinDateTime(entry.timestamp),
+    }));
+}
+
 /** Every source of the field work pack, read in parallel, with the values the page derives from them. */
 export async function loadFieldWorkPackData(
   job: JobWithDetails,
   currentUserId: string,
-  currentUserAssignment: JobWithDetails['assignments'][number],
+  currentUserAssignment: FieldWorkPackAssignment,
 ) {
   const [
     instructionItemsResult,
@@ -54,35 +93,17 @@ export async function loadFieldWorkPackData(
     ? sanitizeFieldInstructionItems(instructionItemsResult.items)
     : [];
   const documents = documentsResult.success ? documentsResult.documents : [];
-  const materialLines = materialLinesResult.success
-    ? materialLinesResult.lines.map((line) => ({
-        ...line,
-        billableQuantity: 0,
-        isBillable: false,
-      }))
-    : [];
+  const materialLines = fieldMaterialLines(materialLinesResult);
   const timeEntries = timeResult.success
     ? timeResult.entries.filter((entry) => entry.userId === currentUserId)
     : [];
-  const currentUserActor: JobInstructionActor = {
-    userId: currentUserId,
-    firstName: currentUserAssignment.firstName,
-    lastName: currentUserAssignment.lastName,
-    email: null,
-    avatarPath: null,
-  };
+  const currentUserActor = fieldWorkPackActor(currentUserId, currentUserAssignment);
   const readOnly = lifecycleResult.success
     ? isFieldWorkPackReadOnly(lifecycleResult.snapshot.executionState)
     : true;
   const dispatchCards = dispatchResult.success ? dispatchResult.cards : undefined;
   const evidenceRequirements = instructionItems.flatMap((item) => item.evidenceRequirements);
-  const timeEntryOptions = timeEntries
-    .filter((entry) => entry.entryType === 'clock_in' && entry.jobId === job.id)
-    .map((entry) => ({
-      id: entry.canonicalSegmentId ?? entry.id,
-      sourceType: entry.canonicalSegmentId ? ('time_segment' as const) : ('time_entry' as const),
-      label: formatBerlinDateTime(entry.timestamp),
-    }));
+  const timeEntryOptions = fieldTimeEntryOptions(timeEntries, job.id);
 
   return {
     instructionItemsResult,

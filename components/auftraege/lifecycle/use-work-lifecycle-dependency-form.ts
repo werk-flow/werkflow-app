@@ -8,11 +8,11 @@ import { usePendingTask } from '@/hooks/use-server-action';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { saveWorkDependency } from '@/lib/work-lifecycle/actions';
-import type {
-  WorkDeclaredDependencyKind,
-  WorkDependencyEffect,
-  WorkEntityOption,
-  WorkLifecycleSnapshot,
+import {
+  WORK_DECLARED_DEPENDENCY_KINDS,
+  type WorkDependencyEffect,
+  type WorkEntityOption,
+  type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
 import { PREDECESSOR_SEARCH_FAILED_MESSAGE, workLifecycleErrorMessage } from './work-lifecycle-messages';
 
@@ -22,7 +22,12 @@ export type WorkDependencyDialogProps = {
   onChanged: () => Promise<void>;
 };
 
-type WorkDependencyPredecessorType = 'job' | 'project' | 'instruction' | 'declared';
+/** The kinds of predecessor the dialog's „Art“ select offers. */
+export const WORK_DEPENDENCY_PREDECESSOR_TYPES = ['job', 'project', 'instruction', 'declared'] as const;
+
+type WorkDependencyPredecessorType = (typeof WORK_DEPENDENCY_PREDECESSOR_TYPES)[number];
+
+type WorkDependencyPredecessor = Parameters<typeof saveWorkDependency>[0]['predecessor'];
 
 const PREDECESSOR_SEARCH_DELAY_MS = 200;
 
@@ -79,6 +84,20 @@ function usePredecessorSearch(type: WorkDependencyPredecessorType, search: strin
   });
 }
 
+/**
+ * The chosen predecessor as the save expects it, or null while none is chosen.
+ * A declared condition takes its kind from the select's options, which list
+ * every declared kind.
+ */
+function chosenPredecessor(
+  type: WorkDependencyPredecessorType,
+  predecessor: string,
+): WorkDependencyPredecessor | null {
+  if (type !== 'declared') return predecessor ? { type, id: predecessor } : null;
+  const kind = WORK_DECLARED_DEPENDENCY_KINDS.find((candidate) => candidate === predecessor);
+  return kind ? { type, kind } : null;
+}
+
 /** State, debounced predecessor search, validation and save of the dependency dialog. */
 export function useWorkLifecycleDependencyForm({
   snapshot,
@@ -94,8 +113,9 @@ export function useWorkLifecycleDependencyForm({
   const { run: runDependencyTask, isPending: pending } = usePendingTask();
   const predecessorSearch = usePredecessorSearch(type, search);
   const [attempted, setAttempted] = useState(false);
+  const chosen = chosenPredecessor(type, predecessor);
   const fieldErrors = {
-    'dependency-target': predecessor ? undefined : 'Bitte wähle eine Voraussetzung.',
+    'dependency-target': chosen ? undefined : 'Bitte wähle eine Voraussetzung.',
     'dependency-description':
       type === 'declared' && description.trim().length < 3
         ? 'Bitte beschreibe die Bedingung mit mindestens 3 Zeichen.'
@@ -104,15 +124,12 @@ export function useWorkLifecycleDependencyForm({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     setAttempted(true);
-    if (focusFirstInvalidField(fieldErrors)) return;
+    if (focusFirstInvalidField(fieldErrors) || !chosen) return;
     void runDependencyTask(async () => {
       const result = await saveWorkDependency({
         targetType: snapshot.targetType,
         targetId: snapshot.targetId,
-        predecessor:
-          type === 'declared'
-            ? { type, kind: predecessor as WorkDeclaredDependencyKind }
-            : { type, id: predecessor },
+        predecessor: chosen,
         ...(description.trim() ? { description: description.trim() } : {}),
         effect,
       });
