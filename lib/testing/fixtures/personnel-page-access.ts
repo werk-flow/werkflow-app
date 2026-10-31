@@ -87,6 +87,35 @@ function signInAsMember(memberships: ReadonlyArray<{ orgId: string; role: Role }
   ];
 }
 
+// The member read is the database function scoped to the organization it is
+// given; the fake answers that organization's rows, so the list shows whose
+// members the page asked for.
+world.rpc = ({ name, args }) =>
+  name === 'get_org_members_for_user'
+    ? {
+        data: world.tables.organization_members
+          .filter((row) => row.organization_id === args.p_org_id)
+          .map((row) => ({
+            user_id: row.user_id,
+            role: row.role,
+            joined_at: row.joined_at,
+            email: '',
+            first_name: '',
+            last_name: '',
+          })),
+        error: null,
+      }
+    : { data: null, error: null };
+
+/** The user ids of the members the list page hands to its tabs. */
+async function listedMemberIds(): Promise<string[]> {
+  const tabs = (await renderTree(list)).find((element) => field(element, 'props', 'members') !== undefined);
+  assert.ok(tabs, 'the list rendered no member tab');
+  const members = field(tabs, 'props', 'members');
+  assert.ok(Array.isArray(members), 'the members are no list');
+  return members.map((entry: unknown) => String(field(entry, 'user_id'))).sort();
+}
+
 /** The ids of the personnel records the list page hands to its tabs. */
 async function listedRecordIds(): Promise<string[]> {
   const tabs = (await renderTree(list)).find(
@@ -115,19 +144,31 @@ signInAsMember(
 );
 assert.equal(await refusal(list), 'redirect:/dashboard', 'joined employee on /mitarbeiter');
 assert.equal(await refusal(customers), 'redirect:/dashboard', 'joined employee on /kunden');
+assert.equal(await refusal(detail(colleagueId)), 'redirect:/dashboard', 'joined employee on a detail');
 world.activeOrganizationCookie = ORGANIZATION_B;
 assert.equal(field(await render(customers), 'props', 'href'), undefined, 'admin of B was sent from /kunden');
 assert.deepEqual(await listedRecordIds(), [foreignRecordId]);
+assert.deepEqual(await listedMemberIds(), [CALLER_ID, foreignColleagueId].sort());
+const foreignMember = (await renderTree(detail(foreignColleagueId))).find(
+  (element) => field(element, 'props', 'member') !== undefined,
+);
+assert.equal(
+  field(foreignMember, 'props', 'member', 'userId'),
+  foreignColleagueId,
+  'admin of B does not open a person of B',
+);
 
 // A member of another organization finds no person or record by its id and lists none of them.
 signInAsMember([{ orgId: ORGANIZATION_B, role: 'admin' }], ORGANIZATION_B);
 for (const id of [colleagueId, colleagueRecordId, noLoginRecordId])
   assert.equal(await refusal(detail(id)), 'route-redirect:/mitarbeiter', `outsider on /mitarbeiter/${id}`);
 assert.deepEqual(await listedRecordIds(), [foreignRecordId]);
+assert.deepEqual(await listedMemberIds(), [CALLER_ID, foreignColleagueId].sort());
 
 // Büro of the owning organization lists both people and opens both details.
 signInAsMember([{ orgId: ORGANIZATION_A, role: 'buero' }], ORGANIZATION_A);
 assert.deepEqual(await listedRecordIds(), [colleagueRecordId, noLoginRecordId].sort());
+assert.deepEqual(await listedMemberIds(), [CALLER_ID, colleagueId].sort());
 const member = (await renderTree(detail(colleagueId))).find(
   (element) => field(element, 'props', 'member') !== undefined,
 );
@@ -150,5 +191,7 @@ signInAsMember(
   ORGANIZATION_B,
 );
 assert.deepEqual(await listedRecordIds(), [foreignRecordId]);
+assert.deepEqual(await listedMemberIds(), [CALLER_ID, foreignColleagueId].sort());
 world.activeOrganizationCookie = ORGANIZATION_A;
 assert.deepEqual(await listedRecordIds(), [colleagueRecordId, noLoginRecordId].sort());
+assert.deepEqual(await listedMemberIds(), [CALLER_ID, colleagueId].sort());
