@@ -256,5 +256,5 @@ export async function getProvisionalTimeSummary(rawInput: {
     filter: { status: 'open', subjectUserId: input.userId },
   });
   if (!result.success) return result;
-  return { success: true, ...summarizePendingCorrections(result.requests) };
+  return { success: true, ...summarizePendingCorrections(result.requests, input.userId) };
 }

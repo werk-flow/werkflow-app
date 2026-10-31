@@ -12,19 +12,13 @@ export type ProvisionalTimeSummary = {
 };
 
 /**
- * A snapshot's facts per person, each in time order. A reassignment keeps two
- * people's facts in one snapshot; each person's intervals are their own.
+ * The subject's facts of a snapshot, in time order. A reassignment keeps two
+ * people's facts in one snapshot; the summary of one person counts only theirs.
  */
-function factsByOwner(snapshot: TimeCorrectionSnapshot): TimeCorrectionFact[][] {
-  const owners = new Map<string, TimeCorrectionFact[]>();
-  for (const fact of snapshot.facts) owners.set(fact.userId, [...(owners.get(fact.userId) ?? []), fact]);
-  return [...owners.values()].map((facts) =>
-    facts.sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
-  );
-}
-
-function snapshotMinutes(snapshot: TimeCorrectionSnapshot): number {
-  return factsByOwner(snapshot).reduce((total, facts) => total + ownerMinutes(facts), 0);
+function subjectFacts(snapshot: TimeCorrectionSnapshot, subjectUserId: string): TimeCorrectionFact[] {
+  return snapshot.facts
+    .filter((fact) => fact.userId === subjectUserId)
+    .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
 }
 
 function ownerMinutes(facts: readonly TimeCorrectionFact[]): number {
@@ -47,10 +41,6 @@ function ownerMinutes(facts: readonly TimeCorrectionFact[]): number {
  * interval spans between its start and its close. An unsplit legacy interval
  * across several midnights touches the days between them too.
  */
-function snapshotDays(snapshot: TimeCorrectionSnapshot): string[] {
-  return factsByOwner(snapshot).flatMap(ownerDays);
-}
-
 function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
   const days: string[] = [];
   let openDay: string | null = null;
@@ -64,24 +54,26 @@ function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
   return days;
 }
 
-/** The sum of the pending corrections, each counted by its current revision. */
+/** The sum of one person's pending corrections, each counted by its current revision and only by that person's facts. */
 export function summarizePendingCorrections(
   pending: readonly Pick<TimeCorrectionRequest, 'revision'>[],
+  subjectUserId: string,
 ): ProvisionalTimeSummary {
   const days = new Set(
     pending.flatMap(({ revision }) => [
-      ...snapshotDays(revision.beforeSnapshot),
-      ...snapshotDays(revision.proposedSnapshot),
+      ...ownerDays(subjectFacts(revision.beforeSnapshot, subjectUserId)),
+      ...ownerDays(subjectFacts(revision.proposedSnapshot, subjectUserId)),
     ]),
   );
   return {
     count: pending.length,
     beforeMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.beforeSnapshot),
+      (total, request) => total + ownerMinutes(subjectFacts(request.revision.beforeSnapshot, subjectUserId)),
       0,
     ),
     proposedMinutes: pending.reduce(
-      (total, request) => total + snapshotMinutes(request.revision.proposedSnapshot),
+      (total, request) =>
+        total + ownerMinutes(subjectFacts(request.revision.proposedSnapshot, subjectUserId)),
       0,
     ),
     days: [...days].sort(),

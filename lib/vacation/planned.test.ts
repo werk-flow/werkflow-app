@@ -69,10 +69,15 @@ describe('planned vacation days', () => {
     ).toBe(0);
   });
 
-  test('a running vacation plans at most its approval-time snapshot', () => {
-    // Approved as 1 day although the range now counts more.
+  test('a running vacation spends its approval-time snapshot on the taken days first', () => {
+    // Approved as 1 day although the range now counts more: Monday to Wednesday
+    // already took it, so nothing of it is still planned.
     expect(
       plannedVacationDays(2026, [approved('snapshot', '2026-10-26', '2026-10-30', 1)], context, today),
+    ).toBe(0);
+    // Approved as 4 days: 3 are taken through today, 1 of the 2 days ahead stays planned.
+    expect(
+      plannedVacationDays(2026, [approved('snapshot', '2026-10-26', '2026-10-30', 4)], context, today),
     ).toBe(1);
   });
 });

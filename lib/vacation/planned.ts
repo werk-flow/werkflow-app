@@ -6,8 +6,9 @@ import type { VacationRequest } from './types';
  * The approved vacation days of a year that still lie after `today`
  * („verplant“): approved, but not yet taken. A request that starts after today
  * counts its whole approval-time snapshot for the year; one that runs over
- * today counts its remaining days, at most its snapshot. So taken plus planned
- * stays the approved total the balance consumes.
+ * today counts its remaining days, at most what its snapshot leaves after the
+ * days through today, which are taken first. So taken plus planned stays the
+ * approved total the balance consumes, and a taken day is never planned.
  */
 export function plannedVacationDays(
   year: number,
@@ -25,8 +26,9 @@ export function plannedVacationDays(
       planned += approvedDays;
       continue;
     }
+    const takenDays = countVacationDaysByYear({ ...request, endDate: today }, context)[yearKey] ?? 0;
     const remainingDays = countVacationDaysByYear({ ...request, startDate: tomorrow }, context)[yearKey] ?? 0;
-    planned += Math.min(approvedDays, remainingDays);
+    planned += Math.min(remainingDays, Math.max(0, approvedDays - takenDays));
   }
   return planned;
 }
