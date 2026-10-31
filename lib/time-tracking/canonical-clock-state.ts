@@ -100,7 +100,7 @@ async function readClockJobInfo(
           .eq('id', job.project_id)
           .eq('organization_id', organizationId)
           .maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
     job.client_id
       ? admin
           .from('clients')
@@ -108,8 +108,10 @@ async function readClockJobInfo(
           .eq('id', job.client_id)
           .eq('organization_id', organizationId)
           .maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ]);
+  logReadErrors('readClockJobInfo: project label read failed', projectData.error);
+  logReadErrors('readClockJobInfo: customer label read failed', clientData.error);
   return {
     success: true,
     info: {
