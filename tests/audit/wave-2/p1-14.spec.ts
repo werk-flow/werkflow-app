@@ -17,7 +17,6 @@ import {
   createJob,
   createProject,
   expectNoLifecycleCardButton,
-  expectNoWorkLifecycleCard,
   handoverAction,
   handoverField,
   handoverMessage,
@@ -389,15 +388,12 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     });
   });
 
-  test('project derivation, parking cascade, reasoned override, and outsider denial hold', async ({
-    adminPage,
-    outsiderPage,
-    world,
-  }) => {
+  test('project derivation, parking cascade, and reasoned override hold', async ({ adminPage, world }) => {
     // Child-derived/empty/mixed projects, reasoned override and
-    // clear; no cascade; project parking reaches its children and unparks them;
-    // outsider page denial. The automatic time start is the golden journey;
-    // ledger side effects and RLS are in supabase/tests/work_execution_boundaries.sql.
+    // clear; no cascade; project parking reaches its children and unparks them.
+    // The automatic time start is the golden journey; ledger side effects and
+    // RLS are in supabase/tests/work_execution_boundaries.sql, and another
+    // organization's page denial in lib/org/work-page-access.test.ts.
     const projectNumber = `PRJ-${world.runId}-P114`;
     const jobNumber = `AUF-${world.runId}-P114-AUTO`;
     const title = `Audit Automatik ${world.runId}`;
@@ -468,8 +464,5 @@ test.describe('P1-14 exhaustive work lifecycle flows @AUDIT-W2-P1-14 @AUDIT-W2',
     expect(projectState.entity).toMatchObject({
       execution_state_override: null,
     });
-
-    await outsiderPage.goto(`/auftraege/${jobNumber}`);
-    await expectNoWorkLifecycleCard(outsiderPage);
   });
 });

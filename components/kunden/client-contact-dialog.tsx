@@ -25,6 +25,78 @@ interface ClientContactDialogProps {
   onSave: () => void;
 }
 
+/** Phone, e-mail, notes and the primary flag of the open contact draft. */
+function ClientContactDetailFields({
+  contactDialog,
+  onContactDialogChange,
+}: {
+  contactDialog: ContactDialogState;
+  onContactDialogChange: (next: ContactDialogState | null) => void;
+}) {
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Telefon" htmlFor="contact-phone">
+          <Input
+            value={contactDialog.draft.phone ?? ''}
+            onChange={(e) =>
+              onContactDialogChange({
+                ...contactDialog,
+                draft: {
+                  ...contactDialog.draft,
+                  phone: e.target.value,
+                },
+              })
+            }
+          />
+        </Field>
+        <Field label="E-Mail" htmlFor="contact-email">
+          <Input
+            type="text"
+            inputMode="email"
+            value={contactDialog.draft.email ?? ''}
+            onChange={(e) =>
+              onContactDialogChange({
+                ...contactDialog,
+                draft: {
+                  ...contactDialog.draft,
+                  email: e.target.value,
+                },
+              })
+            }
+          />
+        </Field>
+      </div>
+      <Field label="Notizen" htmlFor="contact-notes">
+        <Textarea
+          value={contactDialog.draft.notes ?? ''}
+          onChange={(e) =>
+            onContactDialogChange({
+              ...contactDialog,
+              draft: { ...contactDialog.draft, notes: e.target.value },
+            })
+          }
+        />
+      </Field>
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={contactDialog.draft.isPrimary ?? false}
+          onCheckedChange={(checked) =>
+            onContactDialogChange({
+              ...contactDialog,
+              draft: {
+                ...contactDialog.draft,
+                isPrimary: checked === true,
+              },
+            })
+          }
+        />
+        Als Hauptkontakt festlegen
+      </label>
+    </>
+  );
+}
+
 export function ClientContactDialog({
   contactDialog,
   onContactDialogChange,
@@ -70,64 +142,10 @@ export function ClientContactDialog({
                 onContactDialogChange({ ...contactDialog, draft: { ...contactDialog.draft, role } })
               }
             />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Telefon" htmlFor="contact-phone">
-                <Input
-                  value={contactDialog.draft.phone ?? ''}
-                  onChange={(e) =>
-                    onContactDialogChange({
-                      ...contactDialog,
-                      draft: {
-                        ...contactDialog.draft,
-                        phone: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </Field>
-              <Field label="E-Mail" htmlFor="contact-email">
-                <Input
-                  type="text"
-                  inputMode="email"
-                  value={contactDialog.draft.email ?? ''}
-                  onChange={(e) =>
-                    onContactDialogChange({
-                      ...contactDialog,
-                      draft: {
-                        ...contactDialog.draft,
-                        email: e.target.value,
-                      },
-                    })
-                  }
-                />
-              </Field>
-            </div>
-            <Field label="Notizen" htmlFor="contact-notes">
-              <Textarea
-                value={contactDialog.draft.notes ?? ''}
-                onChange={(e) =>
-                  onContactDialogChange({
-                    ...contactDialog,
-                    draft: { ...contactDialog.draft, notes: e.target.value },
-                  })
-                }
-              />
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={contactDialog.draft.isPrimary ?? false}
-                onCheckedChange={(checked) =>
-                  onContactDialogChange({
-                    ...contactDialog,
-                    draft: {
-                      ...contactDialog.draft,
-                      isPrimary: checked === true,
-                    },
-                  })
-                }
-              />
-              Als Hauptkontakt festlegen
-            </label>
+            <ClientContactDetailFields
+              contactDialog={contactDialog}
+              onContactDialogChange={onContactDialogChange}
+            />
             <ErrorText>{contactDialog.error}</ErrorText>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => onContactDialogChange(null)}>

@@ -16,13 +16,11 @@ import type { Client, Job, ProjectWithDetails } from '@/lib/jobs/types';
 import { cn } from '@/lib/utils';
 import { DocumentLibraryBody } from './document-library-body';
 import { DocumentLibraryBreadcrumbs } from './document-library-breadcrumbs';
+import { DocumentLibraryContentToolbar } from './document-library-content-toolbar';
 import { DocumentLibraryDialogs } from './document-library-dialogs';
 import { DocumentLibraryHeaderActions } from './document-library-header-actions';
-import { DocumentLibrarySelectionActions } from './document-library-selection-actions';
-import { DocumentLibraryToolbar } from './document-library-toolbar';
-import { DocumentLibraryViewSwitch } from './document-library-view-switch';
 import { MoveDestinationDialog } from './document-move-destination-dialog';
-import { useDocumentLibrary } from './use-document-library';
+import { type DocumentLibrary, useDocumentLibrary } from './use-document-library';
 import type { DocumentMoveCopy } from './use-document-move-copy';
 
 type DocumentLibraryContentProps = {
@@ -104,32 +102,25 @@ function DocumentMoveCopyDialog({
   );
 }
 
+type ListNavigation = ReturnType<typeof useListNavigation>;
+
 /**
- * The document library page. `useDocumentLibrary` owns the state; this
- * component lays out header actions, toolbar, breadcrumbs, content and dialogs.
- * It holds the library's named `useTransition` exception (folder navigation).
+ * The library's state hooks in their call order. It holds the library's named
+ * `useTransition` exception (folder navigation).
  */
-export function DocumentLibraryContent({
-  page,
-  total,
-  folderPage,
-  folderTotal,
+function useDocumentLibraryContentState({
   view,
   searchQuery: initialSearchQuery,
   category,
   linkFilter,
   currentFolderId,
-  breadcrumbs,
+  page,
+  folderPage,
   folders,
   allFolders,
   documents: serverDocuments,
-  jobs,
-  projects,
-  clients,
-  employees,
   initialDocumentId,
   initialDocument,
-  initialDocumentUnavailable,
 }: DocumentLibraryContentProps) {
   const paginationNavigation = useListNavigation();
   const [isNavigationPending, startNavigationTransition] = useTransition();
@@ -149,80 +140,48 @@ export function DocumentLibraryContent({
     isNavigationPending,
     startNavigationTransition,
   });
-  const { documents, isTrashView, canUseUploadActions } = library;
-  const { selection, navigation, dropTargets, upload, deleteActions } = library;
+  return { paginationNavigation, isNavigationPending, library };
+}
+
+type DocumentLibraryContentMainProps = Pick<
+  DocumentLibraryContentProps,
+  | 'page'
+  | 'total'
+  | 'folderPage'
+  | 'folderTotal'
+  | 'currentFolderId'
+  | 'breadcrumbs'
+  | 'folders'
+  | 'jobs'
+  | 'projects'
+  | 'clients'
+  | 'employees'
+> & {
+  library: DocumentLibrary;
+  paginationNavigation: ListNavigation;
+};
+
+/** Breadcrumbs, document pagination and the library body below the toolbar. */
+function DocumentLibraryContentMain({
+  page,
+  total,
+  folderPage,
+  folderTotal,
+  currentFolderId,
+  breadcrumbs,
+  folders,
+  jobs,
+  projects,
+  clients,
+  employees,
+  library,
+  paginationNavigation,
+}: DocumentLibraryContentMainProps) {
+  const { documents, isTrashView, selection, navigation, dropTargets, deleteActions } = library;
   const { searchQuery, visibleView } = navigation;
 
   return (
-    <div
-      className={cn(
-        'flex min-h-[calc(100dvh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors',
-        upload.isDragActive && 'bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80',
-      )}
-      onDragOver={upload.handleDragOver}
-      onDragLeave={upload.handleDragLeave}
-      onDrop={upload.handleDrop}
-    >
-      <DocumentLibraryHeaderActions
-        showMenu={!isTrashView}
-        menuDisabled={isNavigationPending || !canUseUploadActions}
-        canCreateFolder={visibleView === 'folders'}
-        fileInputRef={upload.fileInputRef}
-        folderInputRef={upload.folderInputRef}
-        onCreateFolder={() => library.folderCreation.openCreateFolderDialog(currentFolderId)}
-        onFilesChosen={upload.handleUpload}
-        onFolderChosen={upload.handleFolderInput}
-      />
-
-      {initialDocumentUnavailable && (
-        <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-          Das verknüpfte Dokument wurde nicht gefunden oder ist nicht mehr verfügbar.
-        </p>
-      )}
-
-      <DocumentLibraryToolbar
-        visibleView={visibleView}
-        searchQuery={searchQuery}
-        category={category}
-        linkFilter={linkFilter}
-        viewSwitch={
-          <DocumentLibraryViewSwitch
-            visibleView={visibleView}
-            searchQuery={searchQuery}
-            category={category}
-            linkFilter={linkFilter}
-            isMutating={library.isMutating}
-            isNavigationPending={isNavigationPending}
-            isTrashDragOver={dropTargets.isTrashDragOver}
-            onNavigate={navigation.navigateToDocumentLocation}
-            onTrashDragOverChange={dropTargets.setIsTrashDragOver}
-            onTrashDrop={dropTargets.handleTrashDrop}
-          />
-        }
-        selectionActions={
-          selection.selectedItemCount > 0 &&
-          visibleView !== 'work' && (
-            <DocumentLibrarySelectionActions
-              selectedItemCount={selection.selectedItemCount}
-              isTrashView={isTrashView}
-              isBusy={library.mutations.busy.anyBusy}
-              canRestore={selection.selectedDocuments.length > 0}
-              onClearSelection={selection.clearSelection}
-              onRestore={deleteActions.handleBatchRestore}
-              onMove={library.openBatchMoveSelectionDialog}
-              onCopy={library.openBatchCopySelectionDialog}
-              onDelete={deleteActions.handleBatchDelete}
-            />
-          )
-        }
-        onSearchQueryChange={navigation.setSearchQuery}
-        onSubmitSearch={(query) =>
-          navigation.updateSearch(query === undefined ? {} : { nextSearchQuery: query })
-        }
-        onCategoryChange={(nextCategory) => navigation.updateSearch({ nextCategory })}
-        onLinkFilterChange={(nextLinkFilter) => navigation.updateSearch({ nextLinkFilter })}
-      />
-
+    <>
       {visibleView === 'folders' && (
         <DocumentLibraryBreadcrumbs
           currentFolderId={currentFolderId}
@@ -274,6 +233,55 @@ export function DocumentLibraryContent({
         onBatchCopySelection={library.openBatchCopySelectionDialog}
         onBatchDeleteSelection={deleteActions.handleBatchDelete}
       />
+    </>
+  );
+}
+
+/**
+ * The document library page. `useDocumentLibrary` owns the state; this
+ * component lays out header actions, toolbar, breadcrumbs, content and dialogs.
+ */
+export function DocumentLibraryContent(props: DocumentLibraryContentProps) {
+  const { category, linkFilter, currentFolderId, allFolders, initialDocumentUnavailable } = props;
+  const { paginationNavigation, isNavigationPending, library } = useDocumentLibraryContentState(props);
+  const { documents, isTrashView, canUseUploadActions, upload } = library;
+  const { visibleView } = library.navigation;
+
+  return (
+    <div
+      className={cn(
+        'flex min-h-[calc(100dvh-3rem)] flex-col gap-4 rounded-lg p-2 transition-colors',
+        upload.isDragActive && 'bg-primary/5 outline-1 outline-offset-4 outline-dashed outline-primary/80',
+      )}
+      onDragOver={upload.handleDragOver}
+      onDragLeave={upload.handleDragLeave}
+      onDrop={upload.handleDrop}
+    >
+      <DocumentLibraryHeaderActions
+        showMenu={!isTrashView}
+        menuDisabled={isNavigationPending || !canUseUploadActions}
+        canCreateFolder={visibleView === 'folders'}
+        fileInputRef={upload.fileInputRef}
+        folderInputRef={upload.folderInputRef}
+        onCreateFolder={() => library.folderCreation.openCreateFolderDialog(currentFolderId)}
+        onFilesChosen={upload.handleUpload}
+        onFolderChosen={upload.handleFolderInput}
+      />
+
+      {initialDocumentUnavailable && (
+        <p role="status" className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          Das verknüpfte Dokument wurde nicht gefunden oder ist nicht mehr verfügbar.
+        </p>
+      )}
+
+      <DocumentLibraryContentToolbar
+        library={library}
+        category={category}
+        linkFilter={linkFilter}
+        isNavigationPending={isNavigationPending}
+      />
+
+      <DocumentLibraryContentMain {...props} library={library} paginationNavigation={paginationNavigation} />
 
       <DocumentLibraryDialogs
         library={library}

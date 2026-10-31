@@ -26,27 +26,7 @@ import { useDocumentViewer } from './use-document-viewer';
 
 export type DocumentLibrary = ReturnType<typeof useDocumentLibrary>;
 
-/**
- * Wires the route payload of the document library to its state hooks and
- * returns them for the page to lay out. Every hook owns one concern; this one
- * only passes them what they need from each other.
- */
-export function useDocumentLibrary({
-  view,
-  initialSearchQuery,
-  category,
-  linkFilter,
-  currentFolderId,
-  page,
-  folderPage,
-  folders,
-  allFolders,
-  serverDocuments,
-  initialDocument,
-  initialDocumentId,
-  isNavigationPending,
-  startNavigationTransition,
-}: {
+type DocumentLibraryOptions = {
   view: DocumentLibraryView;
   initialSearchQuery: string;
   category: DocumentLibraryCategoryFilter;
@@ -61,10 +41,13 @@ export function useDocumentLibrary({
   initialDocumentId: string | null;
   isNavigationPending: boolean;
   startNavigationTransition: TransitionStartFunction;
-}) {
-  const mutations = useDocumentLibraryMutations(serverDocuments);
-  const { documents, busy } = mutations;
-  const isMutating = busy.anyBusy || mutations.hasPendingDocumentMutation;
+};
+
+/** The selection and the folder, view and search navigation that clears it. */
+function useDocumentLibraryLocation(
+  options: DocumentLibraryOptions & { documents: OrganizationDocument[]; isMutating: boolean },
+) {
+  const { documents, folders, allFolders, currentFolderId, view } = options;
   const selection = useDocumentLibrarySelection({
     documents,
     folders,
@@ -74,49 +57,31 @@ export function useDocumentLibrary({
   });
   const navigation = useDocumentLibraryNavigation({
     view,
-    initialSearchQuery,
-    category,
-    linkFilter,
+    initialSearchQuery: options.initialSearchQuery,
+    category: options.category,
+    linkFilter: options.linkFilter,
     currentFolderId,
-    page,
-    folderPage,
-    isMutating,
-    isNavigationPending,
-    startNavigationTransition,
+    page: options.page,
+    folderPage: options.folderPage,
+    isMutating: options.isMutating,
+    isNavigationPending: options.isNavigationPending,
+    startNavigationTransition: options.startNavigationTransition,
     clearSelection: selection.clearSelection,
   });
-  const { visibleView } = navigation;
-  const isTrashView = visibleView === 'trash';
-  const canUseUploadActions = visibleView === 'folders' || visibleView === 'all';
-  const libraryScope = { isTrashView, mutations };
+  return { selection, navigation };
+}
 
-  const viewer = useDocumentViewer({ initialDocument, initialDocumentId });
-  const [linkDialog, setLinkDialog] = useState<OrganizationDocument | null>(null);
-  const folderCreation = useDocumentFolderCreation({
-    currentFolderId,
-    isTrashView,
-  });
-  const rename = useDocumentRename(libraryScope);
-  const deleteActions = useDocumentDeleteActions({ mutations, selection });
-  const moveCopy = useDocumentMoveCopy({
-    ...libraryScope,
-    allFolders,
-    currentFolderId,
-    visibleView,
-    selection,
-  });
-  const details = useDocumentDetailsDialog(libraryScope);
-  const versionActions = useDocumentVersionActions({ details, mutations });
-  const dropTargets = useDocumentLibraryDropTargets({
-    ...libraryScope,
-    documents,
-    folders,
-    allFolders,
-    currentFolderId,
-    visibleView,
-    selection,
-    onDeleteSelection: deleteActions.openDeleteConfirmationForSelection,
-  });
+/** The row drag onto folders and the trash, the upload intake, and the live refresh of the library tables. */
+function useDocumentLibraryIntake({
+  dropTargetOptions,
+  canUseUploadActions,
+  isNavigationPending,
+}: {
+  dropTargetOptions: Parameters<typeof useDocumentLibraryDropTargets>[0];
+  canUseUploadActions: boolean;
+  isNavigationPending: boolean;
+}) {
+  const dropTargets = useDocumentLibraryDropTargets(dropTargetOptions);
   const upload = useDocumentLibraryUpload({
     canUseUploadActions,
     isNavigationPending,
@@ -126,7 +91,30 @@ export function useDocumentLibrary({
     tables: ['documents', 'document_folders', 'document_links'],
   });
 
-  const rowActions: DocumentLibraryRowActions = {
+  return { dropTargets, upload };
+}
+
+/** The row menu entries, each opening its dialog or running its action. */
+function buildRowActions({
+  isTrashView,
+  navigation,
+  rename,
+  moveCopy,
+  deleteActions,
+  viewer,
+  details,
+  setLinkDialog,
+}: {
+  isTrashView: boolean;
+  navigation: ReturnType<typeof useDocumentLibraryNavigation>;
+  rename: ReturnType<typeof useDocumentRename>;
+  moveCopy: ReturnType<typeof useDocumentMoveCopy>;
+  deleteActions: ReturnType<typeof useDocumentDeleteActions>;
+  viewer: ReturnType<typeof useDocumentViewer>;
+  details: ReturnType<typeof useDocumentDetailsDialog>;
+  setLinkDialog: (document: OrganizationDocument) => void;
+}): DocumentLibraryRowActions {
+  return {
     onOpenFolder: (folder) => navigation.navigateToFolder(folder.id),
     onRenameFolder: rename.openRenameFolderDialog,
     onMoveFolder: (folder) => moveCopy.openMoveCopyDialog({ kind: 'folder', folder }, 'move'),
@@ -145,6 +133,64 @@ export function useDocumentLibrary({
     onRestoreDocument: deleteActions.handleRestoreDocument,
     onPermanentDeleteDocument: deleteActions.handlePermanentDeleteDocument,
   };
+}
+
+/**
+ * Wires the route payload of the document library to its state hooks and
+ * returns them for the page to lay out. Every hook owns one concern; this one
+ * only passes them what they need from each other.
+ */
+export function useDocumentLibrary(options: DocumentLibraryOptions) {
+  const { currentFolderId, folders, allFolders, serverDocuments, initialDocument, initialDocumentId } =
+    options;
+  const mutations = useDocumentLibraryMutations(serverDocuments);
+  const { documents, busy } = mutations;
+  const isMutating = busy.anyBusy || mutations.hasPendingDocumentMutation;
+  const { selection, navigation } = useDocumentLibraryLocation({ ...options, documents, isMutating });
+  const { visibleView } = navigation;
+  const isTrashView = visibleView === 'trash';
+  const canUseUploadActions = visibleView === 'folders' || visibleView === 'all';
+  const libraryScope = { isTrashView, mutations };
+
+  const viewer = useDocumentViewer({ initialDocument, initialDocumentId });
+  const [linkDialog, setLinkDialog] = useState<OrganizationDocument | null>(null);
+  const folderCreation = useDocumentFolderCreation({ currentFolderId, isTrashView });
+  const rename = useDocumentRename(libraryScope);
+  const deleteActions = useDocumentDeleteActions({ mutations, selection });
+  const moveCopy = useDocumentMoveCopy({
+    ...libraryScope,
+    allFolders,
+    currentFolderId,
+    visibleView,
+    selection,
+  });
+  const details = useDocumentDetailsDialog(libraryScope);
+  const versionActions = useDocumentVersionActions({ details, mutations });
+  const { dropTargets, upload } = useDocumentLibraryIntake({
+    dropTargetOptions: {
+      ...libraryScope,
+      documents,
+      folders,
+      allFolders,
+      currentFolderId,
+      visibleView,
+      selection,
+      onDeleteSelection: deleteActions.openDeleteConfirmationForSelection,
+    },
+    canUseUploadActions,
+    isNavigationPending: options.isNavigationPending,
+  });
+
+  const rowActions = buildRowActions({
+    isTrashView,
+    navigation,
+    rename,
+    moveCopy,
+    deleteActions,
+    viewer,
+    details,
+    setLinkDialog,
+  });
 
   return {
     documents,

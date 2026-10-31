@@ -14,6 +14,25 @@ type RenameDialogState =
 
 export type DocumentRename = ReturnType<typeof useDocumentRename>;
 
+type RenameTarget = NonNullable<RenameDialogState>;
+
+const RENAME_FAILURES: Record<RenameTarget['kind'], string> = {
+  folder: 'Der Ordner konnte nicht umbenannt werden.',
+  document: 'Die Datei konnte nicht umbenannt werden.',
+};
+
+function renameTarget(target: RenameTarget, nextName: string) {
+  return target.kind === 'folder'
+    ? renameDocumentFolder({
+        folderId: target.id,
+        name: nextName,
+      })
+    : renameDocument({
+        documentId: target.id,
+        displayName: nextName,
+      });
+}
+
 /** State and submit of the rename dialog for one folder or one document. */
 export function useDocumentRename({
   isTrashView,
@@ -58,23 +77,11 @@ export function useDocumentRename({
     }
 
     const target = renameDialog;
-    const renameFailure =
-      target.kind === 'folder'
-        ? 'Der Ordner konnte nicht umbenannt werden.'
-        : 'Die Datei konnte nicht umbenannt werden.';
+    const renameFailure = RENAME_FAILURES[target.kind];
     setRenameError(null);
     void busy
       .run(target.id, async () => {
-        const result =
-          target.kind === 'folder'
-            ? await renameDocumentFolder({
-                folderId: target.id,
-                name: nextName,
-              })
-            : await renameDocument({
-                documentId: target.id,
-                displayName: nextName,
-              });
+        const result = await renameTarget(target, nextName);
         if (!result.success) {
           setRenameError(renameFailure);
           return;

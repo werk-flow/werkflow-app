@@ -167,29 +167,13 @@ function DocumentUploadRowList({ rows }: { rows: UploadRow[] }): ReactElement {
     </div>
   );
 }
-export function DocumentUploadDialog({
-  open,
-  onOpenChange,
-  title = 'Dateien hochladen',
-  description = 'Die Dateien werden automatisch hochgeladen.',
-  items,
-  target,
-  allowFolderCreation = false,
-  onComplete,
-}: DocumentUploadDialogProps): ReactElement {
-  const { run: runUploadTask, isPending } = usePendingTask();
-  const [rows, setRows] = useState<UploadRow[]>([]);
-  const [hasStarted, setHasStarted] = useState(false);
-  const closeTimeoutRef = useRef<number | null>(null);
-  const startedItemsKeyRef = useRef<string | null>(null);
-  const itemsKey = useMemo(
-    () =>
-      items
-        .map((item) => `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`)
-        .join('|'),
-    [items],
-  );
+function uploadItemsKey(items: DocumentUploadItem[]): string {
+  return items
+    .map((item) => `${item.id}:${item.file.name}:${item.file.size}:${item.file.lastModified}`)
+    .join('|');
+}
 
+function summarizeUploadProgress(rows: UploadRow[], items: DocumentUploadItem[]) {
   const activeRows: UploadRow[] =
     rows.length > 0
       ? rows
@@ -209,7 +193,89 @@ export function DocumentUploadDialog({
     0,
   );
   const progressPercentage = activeRows.length ? Math.round((totalProgress / activeRows.length) * 100) : 0;
-  const isComplete = hasStarted && completedCount === activeRows.length;
+  return { activeRows, completedCount, progressPercentage };
+}
+
+function initialUploadRows(items: DocumentUploadItem[]): UploadRow[] {
+  return items.map((item) => ({
+    ...item,
+    status: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'error' : 'queued',
+    error: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'Datei ist größer als 50 MB.' : undefined,
+  }));
+}
+
+type UploadQueueOptions = {
+  allowFolderCreation: boolean;
+  target: DocumentUploadTarget;
+  updateRow: (id: string, update: Partial<UploadRow>) => void;
+};
+
+/** Uploads the queued rows one after another and reports each row's state through `updateRow`. */
+async function uploadQueuedRows(
+  initialRows: UploadRow[],
+  { allowFolderCreation, target, updateRow }: UploadQueueOptions,
+) {
+  let failures = initialRows.filter((row) => row.status === 'error').length;
+  const uploadedDocuments: OrganizationDocument[] = [];
+  const folderCache = new Map<string, string | null>();
+
+  for (const row of initialRows) {
+    if (row.status === 'error') continue;
+
+    updateRow(row.id, { status: 'uploading', progress: 0 });
+
+    try {
+      const folderId = await ensureUploadTargetFolder(
+        allowFolderCreation,
+        target,
+        folderCache,
+        row.relativePath,
+      );
+      const result = await uploadDocumentDirect({
+        file: row.file,
+        target: { ...target, folderId },
+        ...(row.category ? { category: row.category } : {}),
+        onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
+      });
+      if (!result.success) {
+        failures++;
+        updateRow(row.id, {
+          status: 'error',
+          error: 'Upload fehlgeschlagen.',
+        });
+        continue;
+      }
+
+      uploadedDocuments.push(result.document);
+      updateRow(row.id, { status: 'done' });
+    } catch (error) {
+      failures++;
+      updateRow(row.id, {
+        status: 'error',
+        error:
+          error instanceof Error && error.message === 'folder_failed'
+            ? 'Der Zielordner konnte nicht angelegt werden.'
+            : 'Upload fehlgeschlagen.',
+      });
+    }
+  }
+
+  return { failures, uploadedDocuments };
+}
+
+type DocumentUploadQueueInput = Pick<
+  DocumentUploadDialogProps,
+  'open' | 'onOpenChange' | 'items' | 'target' | 'onComplete'
+> & { allowFolderCreation: boolean };
+
+function useDocumentUploadQueue(input: DocumentUploadQueueInput) {
+  const { open, onOpenChange, items, target, allowFolderCreation, onComplete } = input;
+  const { run: runUploadTask, isPending } = usePendingTask();
+  const [rows, setRows] = useState<UploadRow[]>([]);
+  const [hasStarted, setHasStarted] = useState(false);
+  const closeTimeoutRef = useRef<number | null>(null);
+  const startedItemsKeyRef = useRef<string | null>(null);
+  const itemsKey = useMemo(() => uploadItemsKey(items), [items]);
 
   const oversizedCount = useMemo(
     () => items.filter((item) => item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES).length,
@@ -228,11 +294,7 @@ export function DocumentUploadDialog({
   }, []);
 
   function handleStartUpload() {
-    const initialRows: UploadRow[] = items.map((item) => ({
-      ...item,
-      status: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'error' : 'queued',
-      error: item.file.size > DOCUMENT_MAX_FILE_SIZE_BYTES ? 'Datei ist größer als 50 MB.' : undefined,
-    }));
+    const initialRows = initialUploadRows(items);
 
     setRows(initialRows);
     setHasStarted(true);
@@ -240,50 +302,11 @@ export function DocumentUploadDialog({
     clearCloseTimeout();
 
     void runUploadTask(async () => {
-      let failures = initialRows.filter((row) => row.status === 'error').length;
-      const uploadedDocuments: OrganizationDocument[] = [];
-      const folderCache = new Map<string, string | null>();
-
-      for (const row of initialRows) {
-        if (row.status === 'error') continue;
-
-        updateRow(row.id, { status: 'uploading', progress: 0 });
-
-        try {
-          const folderId = await ensureUploadTargetFolder(
-            allowFolderCreation,
-            target,
-            folderCache,
-            row.relativePath,
-          );
-          const result = await uploadDocumentDirect({
-            file: row.file,
-            target: { ...target, folderId },
-            ...(row.category ? { category: row.category } : {}),
-            onProgress: (fraction) => updateRow(row.id, { progress: fraction }),
-          });
-          if (!result.success) {
-            failures++;
-            updateRow(row.id, {
-              status: 'error',
-              error: 'Upload fehlgeschlagen.',
-            });
-            continue;
-          }
-
-          uploadedDocuments.push(result.document);
-          updateRow(row.id, { status: 'done' });
-        } catch (error) {
-          failures++;
-          updateRow(row.id, {
-            status: 'error',
-            error:
-              error instanceof Error && error.message === 'folder_failed'
-                ? 'Der Zielordner konnte nicht angelegt werden.'
-                : 'Upload fehlgeschlagen.',
-          });
-        }
-      }
+      const { failures, uploadedDocuments } = await uploadQueuedRows(initialRows, {
+        allowFolderCreation,
+        target,
+        updateRow,
+      });
 
       onComplete(failures, uploadedDocuments);
       if (failures === 0) {
@@ -323,6 +346,31 @@ export function DocumentUploadDialog({
     }
     onOpenChange(nextOpen);
   }
+
+  return { isPending, rows, hasStarted, oversizedCount, handleOpenChange };
+}
+
+export function DocumentUploadDialog({
+  open,
+  onOpenChange,
+  title = 'Dateien hochladen',
+  description = 'Die Dateien werden automatisch hochgeladen.',
+  items,
+  target,
+  allowFolderCreation = false,
+  onComplete,
+}: DocumentUploadDialogProps): ReactElement {
+  const queue = useDocumentUploadQueue({
+    open,
+    onOpenChange,
+    items,
+    target,
+    allowFolderCreation,
+    onComplete,
+  });
+  const { isPending, hasStarted, oversizedCount, handleOpenChange } = queue;
+  const { activeRows, completedCount, progressPercentage } = summarizeUploadProgress(queue.rows, items);
+  const isComplete = hasStarted && completedCount === activeRows.length;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isPending && !isComplete}>

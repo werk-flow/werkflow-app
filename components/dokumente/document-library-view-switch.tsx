@@ -92,47 +92,84 @@ export function DocumentLibraryViewSwitch({
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant={visibleView === 'trash' ? 'secondary' : 'outline'}
-          data-document-trash-drop="true"
-          disabled={isMutating || isNavigationPending}
-          className={cn(
-            'min-w-32',
-            isTrashDragOver && 'border-destructive text-destructive ring-2 ring-destructive/30',
-          )}
-          onClick={() => {
-            onNavigate({
-              href: getViewHref({
-                view: 'trash',
-                searchQuery,
-              }),
-              targetView: 'trash',
-              targetFolderId: null,
-            });
-          }}
-          onDragOver={(event) => {
-            if (!hasInternalRowDrag(event.dataTransfer)) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-            onTrashDragOverChange(true);
-          }}
-          onDragEnter={(event) => {
-            if (!hasInternalRowDrag(event.dataTransfer)) return;
-            event.preventDefault();
-            onTrashDragOverChange(true);
-          }}
-          onDragLeave={() => onTrashDragOverChange(false)}
-          onDrop={onTrashDrop}
-        >
-          {isMutating ? (
-            <InlinePending active label="Dokumentaktion wird ausgeführt" />
-          ) : (
-            <Trash2 className="size-4" />
-          )}
-          Papierkorb
-        </Button>
+        <DocumentLibraryTrashButton
+          visibleView={visibleView}
+          searchQuery={searchQuery}
+          isMutating={isMutating}
+          isNavigationPending={isNavigationPending}
+          isTrashDragOver={isTrashDragOver}
+          onNavigate={onNavigate}
+          onTrashDragOverChange={onTrashDragOverChange}
+          onTrashDrop={onTrashDrop}
+        />
       </div>
     </div>
+  );
+}
+
+type DocumentLibraryTrashButtonProps = Pick<
+  DocumentLibraryViewSwitchProps,
+  | 'visibleView'
+  | 'searchQuery'
+  | 'isMutating'
+  | 'isNavigationPending'
+  | 'isTrashDragOver'
+  | 'onNavigate'
+  | 'onTrashDragOverChange'
+  | 'onTrashDrop'
+>;
+
+/** The trash view button; it also takes dropped table rows. */
+function DocumentLibraryTrashButton({
+  visibleView,
+  searchQuery,
+  isMutating,
+  isNavigationPending,
+  isTrashDragOver,
+  onNavigate,
+  onTrashDragOverChange,
+  onTrashDrop,
+}: DocumentLibraryTrashButtonProps) {
+  return (
+    <Button
+      size="sm"
+      variant={visibleView === 'trash' ? 'secondary' : 'outline'}
+      data-document-trash-drop="true"
+      disabled={isMutating || isNavigationPending}
+      className={cn(
+        'min-w-32',
+        isTrashDragOver && 'border-destructive text-destructive ring-2 ring-destructive/30',
+      )}
+      onClick={() => {
+        onNavigate({
+          href: getViewHref({
+            view: 'trash',
+            searchQuery,
+          }),
+          targetView: 'trash',
+          targetFolderId: null,
+        });
+      }}
+      onDragOver={(event) => {
+        if (!hasInternalRowDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        onTrashDragOverChange(true);
+      }}
+      onDragEnter={(event) => {
+        if (!hasInternalRowDrag(event.dataTransfer)) return;
+        event.preventDefault();
+        onTrashDragOverChange(true);
+      }}
+      onDragLeave={() => onTrashDragOverChange(false)}
+      onDrop={onTrashDrop}
+    >
+      {isMutating ? (
+        <InlinePending active label="Dokumentaktion wird ausgeführt" />
+      ) : (
+        <Trash2 className="size-4" />
+      )}
+      Papierkorb
+    </Button>
   );
 }

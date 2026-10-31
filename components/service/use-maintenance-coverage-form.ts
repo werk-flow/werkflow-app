@@ -19,14 +19,8 @@ function coverageErrorMessage(code: string): string {
   return describeFailure(code, COVERAGE_ERROR_MESSAGES, GENERIC_ERROR);
 }
 
-/** Form state, validation and both submit paths of the coverage create dialog. */
-export function useMaintenanceCoverageForm({
-  onOpenChange,
-  onSubmitted,
-}: {
-  onOpenChange: (open: boolean) => void;
-  onSubmitted: ((submission: MaintenanceCoverageCreateSubmission) => void) | undefined;
-}) {
+/** The coverage's own fields, each with its setter. */
+function useCoverageFields() {
   const [clientId, setClientId] = useState('');
   const [siteId, setSiteId] = useState('');
   const [reference, setReference] = useState('');
@@ -37,6 +31,77 @@ export function useMaintenanceCoverageForm({
   const [renewalDate, setRenewalDate] = useState('');
   const [reviewDueDate, setReviewDueDate] = useState('');
   const [operationalNote, setOperationalNote] = useState('');
+  return {
+    clientId,
+    setClientId,
+    siteId,
+    setSiteId,
+    reference,
+    setReference,
+    description,
+    setDescription,
+    validFrom,
+    setValidFrom,
+    validUntil,
+    setValidUntil,
+    noticeDate,
+    setNoticeDate,
+    renewalDate,
+    setRenewalDate,
+    reviewDueDate,
+    setReviewDueDate,
+    operationalNote,
+    setOperationalNote,
+  };
+}
+
+type CoverageFields = ReturnType<typeof useCoverageFields>;
+
+function coverageInput(fields: CoverageFields, identity: { coverageId: string; idempotencyKey: string }) {
+  return {
+    coverageId: identity.coverageId,
+    clientId: fields.clientId,
+    siteId: fields.siteId,
+    reference: fields.reference || null,
+    description: fields.description || null,
+    status: 'active' as const,
+    validFrom: fields.validFrom || null,
+    validUntil: fields.validUntil || null,
+    noticeDate: fields.noticeDate || null,
+    renewalDate: fields.renewalDate || null,
+    reviewDueDate: fields.reviewDueDate || null,
+    operationalNote: fields.operationalNote || null,
+    idempotencyKey: identity.idempotencyKey,
+  };
+}
+
+/** The create's outcome for the caller's banner; it never rejects. */
+function coverageSubmissionResult(
+  created: ReturnType<typeof createMaintenanceCoverage>,
+): MaintenanceCoverageCreateSubmission['result'] {
+  return created.then(
+    (outcome) =>
+      outcome.success
+        ? { success: true as const }
+        : {
+            success: false as const,
+            error: outcome.error,
+            message: coverageErrorMessage(outcome.error),
+          },
+    () => ({ success: false as const, error: 'unexpected_error', message: GENERIC_ERROR }),
+  );
+}
+
+/** Form state, validation and both submit paths of the coverage create dialog. */
+export function useMaintenanceCoverageForm({
+  onOpenChange,
+  onSubmitted,
+}: {
+  onOpenChange: (open: boolean) => void;
+  onSubmitted: ((submission: MaintenanceCoverageCreateSubmission) => void) | undefined;
+}) {
+  const fields = useCoverageFields();
+  const { clientId, siteId, reference } = fields;
   const [error, setError] = useState<string | null>(null);
   const [attempted, setAttempted] = useState(false);
   const mutationIdentity = useRef({
@@ -46,26 +111,9 @@ export function useMaintenanceCoverageForm({
   // The chosen customer's sites, read when the customer is chosen.
   const clientOption = useClientOption(clientId);
   const client = clientOption.client;
-  function buildInput() {
-    return {
-      coverageId: mutationIdentity.current.coverageId,
-      clientId,
-      siteId,
-      reference: reference || null,
-      description: description || null,
-      status: 'active' as const,
-      validFrom: validFrom || null,
-      validUntil: validUntil || null,
-      noticeDate: noticeDate || null,
-      renewalDate: renewalDate || null,
-      reviewDueDate: reviewDueDate || null,
-      operationalNote: operationalNote || null,
-      idempotencyKey: mutationIdentity.current.idempotencyKey,
-    };
-  }
   const { run, isPending } = useServerAction(async () => {
     setError(null);
-    const result = await createMaintenanceCoverage(buildInput());
+    const result = await createMaintenanceCoverage(coverageInput(fields, mutationIdentity.current));
     if (!result.success) {
       setError(coverageErrorMessage(result.error));
       return;
@@ -88,16 +136,8 @@ export function useMaintenanceCoverageForm({
           siteName: client?.sites.find((site) => site.id === siteId)?.name ?? '',
           reference: reference || null,
         },
-        result: createMaintenanceCoverage(buildInput()).then(
-          (created) =>
-            created.success
-              ? { success: true as const }
-              : {
-                  success: false as const,
-                  error: created.error,
-                  message: coverageErrorMessage(created.error),
-                },
-          () => ({ success: false as const, error: 'unexpected_error', message: GENERIC_ERROR }),
+        result: coverageSubmissionResult(
+          createMaintenanceCoverage(coverageInput(fields, mutationIdentity.current)),
         ),
       });
       onOpenChange(false);
@@ -107,26 +147,7 @@ export function useMaintenanceCoverageForm({
   }
 
   return {
-    clientId,
-    setClientId,
-    siteId,
-    setSiteId,
-    reference,
-    setReference,
-    description,
-    setDescription,
-    validFrom,
-    setValidFrom,
-    validUntil,
-    setValidUntil,
-    noticeDate,
-    setNoticeDate,
-    renewalDate,
-    setRenewalDate,
-    reviewDueDate,
-    setReviewDueDate,
-    operationalNote,
-    setOperationalNote,
+    ...fields,
     error,
     isPending,
     client,

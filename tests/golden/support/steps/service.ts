@@ -109,7 +109,6 @@ const SERVICE_CASE_COPY = {
 } as const;
 
 const MAINTENANCE_COPY = {
-  heading: 'Wartung',
   createCoverage: 'Abdeckung erfassen',
   saveCoverage: 'Abdeckung speichern',
   createPlan: 'Wartungsplan anlegen',
@@ -677,11 +676,6 @@ export async function createServiceCaseFollowUp(page: Page, note: string): Promi
 
 // ---------------------------------------------------------------------------
 // Maintenance coverage, plans and due work (P1-20)
-
-/** The workspace heading of /service/wartung. */
-export function maintenancePageHeading(page: Page): Locator {
-  return page.getByRole('heading', { name: MAINTENANCE_COPY.heading, exact: true });
-}
 
 export function maintenanceTab(page: Page, tab: keyof typeof MAINTENANCE_TABS): Locator {
   return page.getByRole('tab', { name: MAINTENANCE_TABS[tab] });

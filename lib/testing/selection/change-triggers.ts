@@ -100,16 +100,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
   },
-  'golden:p1-14': {
-    tests: ['an assigned field worker reports and resolves an own blocker and starts work by clocking in'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-15': {
-    tests: [
-      'a field worker submits a work report, a second person approves it, and a measurement is recorded',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
   'golden:p1-16': {
     tests: ['an assigned field worker works through the pack and completes the job'],
     movesIn: 'werk-flow/werkflow-planning#37',
@@ -127,18 +117,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
       'keeps a correction provisional, then applies one attributable second-person decision @P1-22-stage-submit @P1-22-stage-approve @READINESS',
     ],
     movesIn: 'werk-flow/werkflow-planning#39',
-  },
-  'golden:p1-24a': {
-    tests: ['the employee sees the week as their own row only'],
-    movesIn: 'werk-flow/werkflow-planning#38',
-  },
-  'audit:wave-1:a1-auftraege': {
-    tests: ['A1-12/A1-13: Zuweisung entfernen, bearbeiten und Auftrag löschen'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'audit:wave-1:a1-kalender': {
-    tests: ['A1-21/A1-24: Kalenderansichten und getrennte Plan-/Arbeitszeitfilter'],
-    movesIn: 'werk-flow/werkflow-planning#38',
   },
   'audit:wave-1:a1-organisation': {
     tests: [
@@ -169,12 +147,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
       'A5-07/A5-08/A5-09/A5-10: Fünf Abdeckungszustände mit stärkster Person, Mehrfach-Warnung mit Pflichtgrund, Azubi-Standard aus, rechtzeitiger Ablaufhinweis; Bearbeitungsdialog und Kalender-Drag prüfen erneut und die Eigenansicht bleibt nur lesend [P1-09-F02/P1-09-F03/P1-09-F04/P1-09-F05/P1-09-F06]',
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a6': {
-    tests: [
-      'A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine [P1-11-F05]',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#38',
   },
   'audit:wave-2:p1-22': {
     tests: [

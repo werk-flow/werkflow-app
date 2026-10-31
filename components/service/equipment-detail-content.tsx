@@ -48,6 +48,30 @@ type EquipmentStateFormProps = {
   setStatusOpen: (open: boolean) => void;
 };
 
+/** Records the chosen state change with its reason, unless one is running or the reason is missing. */
+function submitEquipmentState(
+  actions: EquipmentDetailActions,
+  targetState: EquipmentState,
+  setStatusOpen: (open: boolean) => void,
+): void {
+  const { busy, item, reason, reasonError, perform, rejectInvalid } = actions;
+  if (busy.isBusy('state')) return;
+  if (rejectInvalid('state', { 'equipment-state-reason': reasonError })) return;
+  perform(
+    'state',
+    () =>
+      transitionInstalledEquipment({
+        equipmentId: item.id,
+        expectedVersion: item.version,
+        toState: targetState,
+        effectiveAt: new Date().toISOString(),
+        reason,
+        idempotencyKey: crypto.randomUUID(),
+      }),
+    () => setStatusOpen(false),
+  );
+}
+
 // Stays in this file: the state Select is registered here as a bounded runtime
 // choice (lib/ui/select-registry.test.ts).
 function EquipmentStateForm({
@@ -57,8 +81,7 @@ function EquipmentStateForm({
   setTargetState,
   setStatusOpen,
 }: EquipmentStateFormProps): ReactElement {
-  const { busy, item, reason, setReason, reasonError, attempted, errorFor } = actions;
-  const { perform, rejectInvalid } = actions;
+  const { busy, reason, setReason, reasonError, attempted, errorFor } = actions;
   return (
     <>
       <DialogHeader>
@@ -71,21 +94,7 @@ function EquipmentStateForm({
         onSubmit={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          if (busy.isBusy('state')) return;
-          if (rejectInvalid('state', { 'equipment-state-reason': reasonError })) return;
-          perform(
-            'state',
-            () =>
-              transitionInstalledEquipment({
-                equipmentId: item.id,
-                expectedVersion: item.version,
-                toState: targetState,
-                effectiveAt: new Date().toISOString(),
-                reason,
-                idempotencyKey: crypto.randomUUID(),
-              }),
-            () => setStatusOpen(false),
-          );
+          submitEquipmentState(actions, targetState, setStatusOpen);
         }}
         noValidate
         className="flex min-h-0 flex-1 flex-col gap-4"
@@ -135,6 +144,125 @@ function EquipmentStateForm({
   );
 }
 
+/** Which of the detail page's dialogs is open. */
+function useEquipmentDialogs() {
+  const [editOpen, setEditOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [workLinkOpen, setWorkLinkOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  return {
+    editOpen,
+    setEditOpen,
+    replaceOpen,
+    setReplaceOpen,
+    statusOpen,
+    setStatusOpen,
+    correctionOpen,
+    setCorrectionOpen,
+    archiveOpen,
+    setArchiveOpen,
+    workLinkOpen,
+    setWorkLinkOpen,
+    sourceOpen,
+    setSourceOpen,
+  };
+}
+
+type EquipmentDialogs = ReturnType<typeof useEquipmentDialogs>;
+
+type EquipmentDetailRegionProps = {
+  actions: EquipmentDetailActions;
+  dialogs: EquipmentDialogs;
+  documents: OrganizationDocument[];
+  documentsLoadFailed: boolean;
+  terminalEvent: EquipmentDetail['events'][number] | undefined;
+  transitionStates: EquipmentState[];
+  onChangeState: () => void;
+};
+
+/** The record's header, data, documents, history and sidebar, behind the live view's stale state. */
+function EquipmentDetailRegion({
+  actions,
+  dialogs,
+  documents,
+  documentsLoadFailed,
+  terminalEvent,
+  transitionStates,
+  onChangeState,
+}: EquipmentDetailRegionProps): ReactElement {
+  const { busy, live, item, clearReason } = actions;
+  const headerBusy = busy.isBusy('state') || busy.isBusy('correction') || busy.isBusy('archive');
+  return (
+    <StaleRegion stale={live.isStale} onRetry={live.refresh} className="space-y-6">
+      <EquipmentDetailHeader
+        item={item}
+        headerBusy={headerBusy}
+        canChangeState={!(item.archivedAt || item.voidedAt || transitionStates.length === 0)}
+        onEdit={() => dialogs.setEditOpen(true)}
+        onReplace={() => dialogs.setReplaceOpen(true)}
+        onChangeState={onChangeState}
+      />
+
+      {item.voidedAt && (
+        <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+          Dieser Nachfolger wurde durch eine Korrektur als irrtümlich erfasst markiert. Seine Historie bleibt
+          erhalten.
+        </p>
+      )}
+      <ErrorText>{actions.pageError}</ErrorText>
+
+      <DetailColumns layout="main-and-wide-aside">
+        <div className="min-w-0 space-y-6">
+          <EquipmentDataSection item={item} detailsBusy={busy.isBusy('details')} />
+
+          {documentsLoadFailed ? (
+            <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+          ) : (
+            <ContextualDocumentsSection
+              title="Dokumente & Bilder"
+              description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
+              documents={documents}
+              documentTarget={{ kind: 'equipment', equipmentId: item.id }}
+              contextLabel={item.name}
+              canUpload
+              canManage
+              keepUploadedDocumentsVisible
+            />
+          )}
+
+          <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
+        </div>
+
+        <EquipmentDetailSidebar
+          actions={actions}
+          canCorrectTerminalAction={Boolean(terminalEvent && !item.archivedAt)}
+          onOpenWorkLink={() => {
+            actions.setAttempted(null);
+            dialogs.setWorkLinkOpen(true);
+          }}
+          onOpenSource={() => {
+            actions.setError(null);
+            actions.setAttempted(null);
+            clearReason();
+            dialogs.setSourceOpen(true);
+          }}
+          onOpenCorrection={() => {
+            clearReason();
+            dialogs.setCorrectionOpen(true);
+          }}
+          onOpenArchive={() => {
+            clearReason();
+            dialogs.setArchiveOpen(true);
+          }}
+        />
+      </DetailColumns>
+    </StaleRegion>
+  );
+}
+
 type EquipmentDetailContentProps = {
   initial: EquipmentDetail;
   documents: OrganizationDocument[];
@@ -148,19 +276,15 @@ export function EquipmentDetailContent({
 }: EquipmentDetailContentProps): ReactElement {
   const actions = useEquipmentDetailActions(initial);
   const { busy, live, item, clearReason } = actions;
-  const [editOpen, setEditOpen] = useState(false);
-  const [replaceOpen, setReplaceOpen] = useState(false);
-  const [statusOpen, setStatusOpen] = useState(false);
-  const [correctionOpen, setCorrectionOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
-  const [workLinkOpen, setWorkLinkOpen] = useState(false);
-  const [sourceOpen, setSourceOpen] = useState(false);
+  const dialogs = useEquipmentDialogs();
+  const { editOpen, setEditOpen, replaceOpen, setReplaceOpen, statusOpen, setStatusOpen } = dialogs;
+  const { correctionOpen, setCorrectionOpen, archiveOpen, setArchiveOpen } = dialogs;
+  const { workLinkOpen, setWorkLinkOpen, sourceOpen, setSourceOpen } = dialogs;
   const [targetState, setTargetState] = useState<EquipmentState>('inactive');
   const terminalEvent = item.events.find(
     (event) => event.eventType === 'replaced' || event.eventType === 'decommissioned',
   );
   const transitionStates = getAllowedEquipmentTransitions(item.state);
-  const headerBusy = busy.isBusy('state') || busy.isBusy('correction') || busy.isBusy('archive');
 
   function openStatusDialog(): void {
     const [firstTransition] = transitionStates;
@@ -172,70 +296,15 @@ export function EquipmentDetailContent({
 
   return (
     <>
-      <StaleRegion stale={live.isStale} onRetry={live.refresh} className="space-y-6">
-        <EquipmentDetailHeader
-          item={item}
-          headerBusy={headerBusy}
-          canChangeState={!(item.archivedAt || item.voidedAt || transitionStates.length === 0)}
-          onEdit={() => setEditOpen(true)}
-          onReplace={() => setReplaceOpen(true)}
-          onChangeState={openStatusDialog}
-        />
-
-        {item.voidedAt && (
-          <p role="status" className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
-            Dieser Nachfolger wurde durch eine Korrektur als irrtümlich erfasst markiert. Seine Historie
-            bleibt erhalten.
-          </p>
-        )}
-        <ErrorText>{actions.pageError}</ErrorText>
-
-        <DetailColumns layout="main-and-wide-aside">
-          <div className="min-w-0 space-y-6">
-            <EquipmentDataSection item={item} detailsBusy={busy.isBusy('details')} />
-
-            {documentsLoadFailed ? (
-              <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-            ) : (
-              <ContextualDocumentsSection
-                title="Dokumente & Bilder"
-                description="Dokumente werden aus der zentralen Dokumentenablage verknüpft. Es entsteht keine Dateikopie."
-                documents={documents}
-                documentTarget={{ kind: 'equipment', equipmentId: item.id }}
-                contextLabel={item.name}
-                canUpload
-                canManage
-                keepUploadedDocumentsVisible
-              />
-            )}
-
-            <EquipmentHistorySection events={item.events} sourceBusy={busy.isBusy('source')} />
-          </div>
-
-          <EquipmentDetailSidebar
-            actions={actions}
-            canCorrectTerminalAction={Boolean(terminalEvent && !item.archivedAt)}
-            onOpenWorkLink={() => {
-              actions.setAttempted(null);
-              setWorkLinkOpen(true);
-            }}
-            onOpenSource={() => {
-              actions.setError(null);
-              actions.setAttempted(null);
-              clearReason();
-              setSourceOpen(true);
-            }}
-            onOpenCorrection={() => {
-              clearReason();
-              setCorrectionOpen(true);
-            }}
-            onOpenArchive={() => {
-              clearReason();
-              setArchiveOpen(true);
-            }}
-          />
-        </DetailColumns>
-      </StaleRegion>
+      <EquipmentDetailRegion
+        actions={actions}
+        dialogs={dialogs}
+        documents={documents}
+        documentsLoadFailed={documentsLoadFailed}
+        terminalEvent={terminalEvent}
+        transitionStates={transitionStates}
+        onChangeState={openStatusDialog}
+      />
 
       {editOpen && (
         <EquipmentFormDialog
