@@ -84,15 +84,32 @@ async function readClockJobInfo(
     'readClockJobInfo: jobs read failed',
     admin
       .from('jobs')
-      .select('id, title, description, job_number, status, projects(name), clients(name)')
+      .select('id, title, description, job_number, status, project_id, client_id')
       .eq('organization_id', organizationId)
       .eq('id', jobId)
       .maybeSingle(),
   );
   if (jobError) return { success: false, error: 'fetch_failed' };
   if (!job) return { success: true, info: null };
-  const project = Array.isArray(job.projects) ? job.projects[0] : job.projects;
-  const client = Array.isArray(job.clients) ? job.clients[0] : job.clients;
+  // Best effort: the job row fails closed, a failed project or customer name only drops its label.
+  const [projectData, clientData] = await Promise.all([
+    job.project_id
+      ? admin
+          .from('projects')
+          .select('name')
+          .eq('id', job.project_id)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    job.client_id
+      ? admin
+          .from('clients')
+          .select('name')
+          .eq('id', job.client_id)
+          .eq('organization_id', organizationId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
   return {
     success: true,
     info: {
@@ -100,8 +117,8 @@ async function readClockJobInfo(
       title: getJobDisplayTitle({ title: job.title, description: job.description }),
       jobNumber: job.job_number,
       status: job.status === 'nicht_bearbeitet' ? 'in_bearbeitung' : job.status,
-      projectName: project?.name ?? null,
-      clientName: client?.name ?? null,
+      projectName: projectData.data?.name ?? null,
+      clientName: clientData.data?.name ?? null,
     },
   };
 }
