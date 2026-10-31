@@ -143,6 +143,112 @@ function showPlanEcho(
   return draft;
 }
 
+/** What a dialog save touches besides the bookings: the dialog, the list echo and the banner. */
+type DialogSaveContext = MaterialContext & {
+  markLines: () => number;
+  setDialog: Dispatch<SetStateAction<MaterialDialogState | null>>;
+  updateDialogError: (error: string, mode: MaterialDialogMode) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  lines: OptimisticMaterialLines;
+  pickerItems: InventoryPickerOption[];
+  pickerLocations: InventoryLocation[];
+};
+
+/**
+ * Validates and books the dialog's rows in order. Resolves with the booked
+ * line ids on success, null when the dialog stays open with an error.
+ */
+async function saveDialogRows(
+  dialog: MaterialDialogState,
+  {
+    markLines,
+    setDialog,
+    updateDialogError,
+    showBanner,
+    lines,
+    pickerItems,
+    pickerLocations,
+    jobId,
+    projectId,
+  }: DialogSaveContext,
+): Promise<SavedLines | null> {
+  const since = markLines();
+  const validation = validateDialogRows(dialog);
+  if (!validation.ok) {
+    updateDialogError(validation.error, dialog.mode);
+    return null;
+  }
+
+  const validatedRows = validation.rows;
+  const { mode } = dialog;
+
+  // A plan or its edit books nothing and has no correctable server answer,
+  // so the dialog closes and the lines show the outcome in the first frame.
+  const echoContext = { lines, pickerItems, pickerLocations, jobId, projectId };
+  const echoes =
+    mode === 'plan' || mode === 'edit'
+      ? validatedRows.map(({ row, quantity }) => showPlanEcho(mode, row, quantity, echoContext))
+      : [];
+  if (echoes.length > 0) setDialog(null);
+
+  for (const [rowIndex, { row, quantity }] of validatedRows.entries()) {
+    let result: MaterialBookingResult;
+    try {
+      result = await bookMaterialRow(mode, row, quantity, { jobId, projectId });
+    } catch {
+      result = { success: false, error: 'unexpected_error' };
+    }
+
+    if (!result.success) {
+      // The refused row and the rows behind it leave the list and come
+      // back in the dialog with the reason; saved rows stay.
+      for (const echo of echoes.slice(rowIndex)) if (echo) lines.rollback(echo.id);
+      setDialog({
+        ...dialog,
+        rows: dialog.rows.slice(rowIndex),
+        error: getActionErrorMessage(result.error, mode),
+      });
+      return rowIndex > 0 ? { lineIds: [], since } : null;
+    }
+    const echo = echoes[rowIndex];
+    if (echo && mode === 'plan' && result.lineId) {
+      lines.commit(echo.id, { ...echo, id: result.lineId });
+    }
+  }
+
+  setDialog(null);
+  showBanner({
+    variant: 'success',
+    message:
+      dialog.mode === 'take'
+        ? 'Die Entnahme wurde gebucht.'
+        : dialog.mode === 'return'
+          ? 'Das Material wurde zurückgelegt.'
+          : 'Die Materialplanung wurde gespeichert.',
+  });
+  return { lineIds: dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : [])), since };
+}
+
+type JobMaterialMutationsOptions = MaterialContext & {
+  dialog: MaterialDialogState | null;
+  setDialog: Dispatch<SetStateAction<MaterialDialogState | null>>;
+  lines: OptimisticMaterialLines;
+  busyLines: ReturnType<typeof useBusyIds<string>>;
+  /** Resolves when the authoritative lines landed, counting from `since` (`markLines`). */
+  readFreshLines: (since?: number) => Promise<void>;
+  /** Marks the lines seen so far, before a save of several bookings. */
+  markLines: () => number;
+  pickerItems: InventoryPickerOption[];
+  pickerLocations: InventoryLocation[];
+};
+
+type JobMaterialMutations = {
+  handleDialogSave: () => void;
+  handleDelete: (lineId: string) => void;
+  isSaving: boolean;
+  isSettling: boolean;
+};
+
 /**
  * Saving the material dialog and removing a line. A plan or its edit shows at
  * once; a booking waits for the server and then marks the booked lines until
@@ -159,23 +265,7 @@ export function useJobMaterialMutations({
   pickerLocations,
   jobId,
   projectId,
-}: MaterialContext & {
-  dialog: MaterialDialogState | null;
-  setDialog: Dispatch<SetStateAction<MaterialDialogState | null>>;
-  lines: OptimisticMaterialLines;
-  busyLines: ReturnType<typeof useBusyIds<string>>;
-  /** Resolves when the authoritative lines landed, counting from `since` (`markLines`). */
-  readFreshLines: (since?: number) => Promise<void>;
-  /** Marks the lines seen so far, before a save of several bookings. */
-  markLines: () => number;
-  pickerItems: InventoryPickerOption[];
-  pickerLocations: InventoryLocation[];
-}): {
-  handleDialogSave: () => void;
-  handleDelete: (lineId: string) => void;
-  isSaving: boolean;
-  isSettling: boolean;
-} {
+}: JobMaterialMutationsOptions): JobMaterialMutations {
   const { showBanner } = useBanner();
   // The dialog save: `isSaving` drives the dialog's button spinner; after the
   // dialog closes, the booked lines (or the section header, when new lines
@@ -208,63 +298,19 @@ export function useJobMaterialMutations({
     setDialog({ ...dialog, error: null });
     // Resolves with the booked line ids on success (the settle read marks
     // them), null when the dialog stays open with an error.
-    void runDialogSave(async () => {
-      const since = markLines();
-      const validation = validateDialogRows(dialog);
-      if (!validation.ok) {
-        updateDialogError(validation.error, dialog.mode);
-        return null;
-      }
-
-      const validatedRows = validation.rows;
-      const { mode } = dialog;
-
-      // A plan or its edit books nothing and has no correctable server answer,
-      // so the dialog closes and the lines show the outcome in the first frame.
-      const echoContext = { lines, pickerItems, pickerLocations, jobId, projectId };
-      const echoes =
-        mode === 'plan' || mode === 'edit'
-          ? validatedRows.map(({ row, quantity }) => showPlanEcho(mode, row, quantity, echoContext))
-          : [];
-      if (echoes.length > 0) setDialog(null);
-
-      for (const [rowIndex, { row, quantity }] of validatedRows.entries()) {
-        let result: MaterialBookingResult;
-        try {
-          result = await bookMaterialRow(mode, row, quantity, { jobId, projectId });
-        } catch {
-          result = { success: false, error: 'unexpected_error' };
-        }
-
-        if (!result.success) {
-          // The refused row and the rows behind it leave the list and come
-          // back in the dialog with the reason; saved rows stay.
-          for (const echo of echoes.slice(rowIndex)) if (echo) lines.rollback(echo.id);
-          setDialog({
-            ...dialog,
-            rows: dialog.rows.slice(rowIndex),
-            error: getActionErrorMessage(result.error, mode),
-          });
-          return rowIndex > 0 ? { lineIds: [], since } : null;
-        }
-        const echo = echoes[rowIndex];
-        if (echo && mode === 'plan' && result.lineId) {
-          lines.commit(echo.id, { ...echo, id: result.lineId });
-        }
-      }
-
-      setDialog(null);
-      showBanner({
-        variant: 'success',
-        message:
-          dialog.mode === 'take'
-            ? 'Die Entnahme wurde gebucht.'
-            : dialog.mode === 'return'
-              ? 'Das Material wurde zurückgelegt.'
-              : 'Die Materialplanung wurde gespeichert.',
-      });
-      return { lineIds: dialog.rows.flatMap((row) => (row.lineId ? [row.lineId] : [])), since };
-    }).catch(() => updateDialogError('unexpected_error', dialog.mode));
+    void runDialogSave(() =>
+      saveDialogRows(dialog, {
+        markLines,
+        setDialog,
+        updateDialogError,
+        showBanner,
+        lines,
+        pickerItems,
+        pickerLocations,
+        jobId,
+        projectId,
+      }),
+    ).catch(() => updateDialogError('unexpected_error', dialog.mode));
   }
 
   function handleDelete(lineId: string) {
