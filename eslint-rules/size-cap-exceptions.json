@@ -15,38 +15,6 @@
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
-    "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
-    "components/auftraege/artifacts/use-work-artifact-customer-actions.ts": {
-      "useWorkArtifactCustomerActions": 129
-    },
-    "components/auftraege/artifacts/use-work-artifact-editor.ts": { "useWorkArtifactEditor": 132 },
-    "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 151 },
-    "components/auftraege/artifacts/work-artifact-action-panel.tsx": {
-      "WorkArtifactLinkDisclosures": 144,
-      "WorkArtifactActionPanel": 138
-    },
-    "components/auftraege/artifacts/work-artifact-detail.tsx": { "ArtifactDetail": 142 },
-    "components/auftraege/artifacts/work-artifact-form.tsx": { "ArtifactForm": 118 },
-    "components/auftraege/artifacts/work-artifact-kind-fields.tsx": {
-      "WorkArtifactMeasurementFields": 123,
-      "WorkArtifactDefectFields": 83
-    },
-    "components/auftraege/artifacts/work-artifacts-section.tsx": {
-      "WorkArtifactsSection": 139,
-      "WorkArtifactDialog": 197
-    },
-    "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
-    "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
-    "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },
-    "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": {
-      "InstructionItemDetailsDialog": 104
-    },
-    "components/auftraege/instructions/job-instruction-item-row.tsx": { "JobInstructionItemRow": 141 },
-    "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 120 },
-    "components/auftraege/instructions/job-instruction-row-actions.ts": {
-      "createJobInstructionRowActions": 91
-    },
-    "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
     "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
     "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },

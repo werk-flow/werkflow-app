@@ -1,18 +1,88 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type PointerEvent, type RefObject } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
 
-export function SignaturePad({
-  disabled,
-  onChange,
-}: {
+/**
+ * Sizes the canvas to its box at the device pixel ratio and keeps it sized. A resize keeps the
+ * drawn mark; a first sizing without a mark resets the pad through `onReset`.
+ */
+function observeSignatureCanvasSize(
+  canvas: HTMLCanvasElement,
+  hasMarkRef: RefObject<boolean>,
+  onReset: () => void,
+): () => void {
+  let [previousWidth, previousHeight] = [0, 0];
+  const applySize = () => {
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    if (!width || !height || (width === previousWidth && height === previousHeight)) return;
+    const snapshot =
+      hasMarkRef.current && previousWidth && previousHeight ? document.createElement('canvas') : null;
+    if (snapshot) {
+      snapshot.width = canvas.width;
+      snapshot.height = canvas.height;
+      snapshot.getContext('2d')?.drawImage(canvas, 0, 0);
+    }
+    previousWidth = width;
+    previousHeight = height;
+    const ratio = window.devicePixelRatio || 1;
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.lineWidth = 2;
+    context.strokeStyle = getComputedStyle(canvas).color;
+    if (snapshot) {
+      context.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, width, height);
+      return;
+    }
+    onReset();
+  };
+  applySize();
+  const observer = new ResizeObserver(applySize);
+  observer.observe(canvas);
+  return () => observer.disconnect();
+}
+
+function canvasPoint(event: PointerEvent<HTMLCanvasElement>) {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+}
+
+/** Captures the pointer and starts a stroke at it; false when the canvas has no 2D context. */
+function beginStroke(event: PointerEvent<HTMLCanvasElement>): boolean {
+  event.currentTarget.setPointerCapture(event.pointerId);
+  const context = event.currentTarget.getContext('2d');
+  if (!context) return false;
+  const start = canvasPoint(event);
+  context.beginPath();
+  context.moveTo(start.x, start.y);
+  return true;
+}
+
+/** Draws the stroke on to the pointer; false when the canvas has no 2D context. */
+function extendStroke(event: PointerEvent<HTMLCanvasElement>): boolean {
+  const context = event.currentTarget.getContext('2d');
+  if (!context) return false;
+  const next = canvasPoint(event);
+  context.lineTo(next.x, next.y);
+  context.stroke();
+  return true;
+}
+
+type SignaturePadProps = {
   disabled?: boolean;
   onChange: (file: File | null) => void;
-}) {
+};
+
+export function SignaturePad({ disabled, onChange }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const hasMarkRef = useRef(false);
@@ -22,72 +92,26 @@ export function SignaturePad({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    let [previousWidth, previousHeight] = [0, 0];
-    const applySize = () => {
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      if (!width || !height || (width === previousWidth && height === previousHeight)) return;
-      const snapshot =
-        hasMarkRef.current && previousWidth && previousHeight ? document.createElement('canvas') : null;
-      if (snapshot) {
-        snapshot.width = canvas.width;
-        snapshot.height = canvas.height;
-        snapshot.getContext('2d')?.drawImage(canvas, 0, 0);
-      }
-      previousWidth = width;
-      previousHeight = height;
-      const ratio = window.devicePixelRatio || 1;
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-      const context = canvas.getContext('2d');
-      if (!context) return;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      context.lineCap = 'round';
-      context.lineJoin = 'round';
-      context.lineWidth = 2;
-      context.strokeStyle = getComputedStyle(canvas).color;
-      if (snapshot) {
-        context.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, width, height);
-        return;
-      }
+    return observeSignatureCanvasSize(canvas, hasMarkRef, () => {
       hasMarkRef.current = false;
       setHasMark(false);
       onChange(null);
-    };
-    applySize();
-    const observer = new ResizeObserver(applySize);
-    observer.observe(canvas);
-    return () => observer.disconnect();
+    });
   }, [onChange]);
 
-  function point(event: React.PointerEvent<HTMLCanvasElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
-  }
-
-  function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (disabled) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    const context = event.currentTarget.getContext('2d');
-    if (!context) return;
-    const start = point(event);
-    context.beginPath();
-    context.moveTo(start.x, start.y);
-    drawingRef.current = true;
+    if (beginStroke(event)) drawingRef.current = true;
   }
 
-  function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
+  function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current || disabled) return;
-    const context = event.currentTarget.getContext('2d');
-    if (!context) return;
-    const next = point(event);
-    context.lineTo(next.x, next.y);
-    context.stroke();
+    if (!extendStroke(event)) return;
     hasMarkRef.current = true;
     setHasMark(true);
   }
 
-  function finish(event: React.PointerEvent<HTMLCanvasElement>) {
+  function finish(event: PointerEvent<HTMLCanvasElement>) {
     if (!drawingRef.current) return;
     drawingRef.current = false;
     event.currentTarget.releasePointerCapture(event.pointerId);
@@ -131,28 +155,50 @@ export function SignaturePad({
           Zurücksetzen
         </Button>
       </div>
-      <Field
-        label="Oder Unterschrift als Bild auswählen"
-        htmlFor="artifact-signature-upload"
-        error={uploadError}
-      >
-        <Input
-          type="file"
-          accept="image/*"
-          disabled={disabled}
-          onChange={(event) => {
-            const file = event.target.files?.[0] ?? null;
-            if (file && !file.type.startsWith('image/')) {
-              setUploadError('Bitte wähle eine Bilddatei aus.');
-              event.target.value = '';
-              onChange(null);
-              return;
-            }
-            setUploadError(null);
-            onChange(file);
-          }}
-        />
-      </Field>
+      <SignatureImageField
+        disabled={disabled}
+        uploadError={uploadError}
+        setUploadError={setUploadError}
+        onChange={onChange}
+      />
     </div>
+  );
+}
+
+/** The file alternative to drawing; only an image file becomes the signature. */
+function SignatureImageField({
+  disabled,
+  uploadError,
+  setUploadError,
+  onChange,
+}: {
+  disabled: boolean | undefined;
+  uploadError: string | null;
+  setUploadError: (message: string | null) => void;
+  onChange: (file: File | null) => void;
+}) {
+  return (
+    <Field
+      label="Oder Unterschrift als Bild auswählen"
+      htmlFor="artifact-signature-upload"
+      error={uploadError}
+    >
+      <Input
+        type="file"
+        accept="image/*"
+        disabled={disabled}
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          if (file && !file.type.startsWith('image/')) {
+            setUploadError('Bitte wähle eine Bilddatei aus.');
+            event.target.value = '';
+            onChange(null);
+            return;
+          }
+          setUploadError(null);
+          onChange(file);
+        }}
+      />
+    </Field>
   );
 }

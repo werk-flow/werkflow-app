@@ -22,6 +22,28 @@ type JobInstructionRowActionsOptions = {
   showErrorBanner: (message: string) => void;
 };
 
+/** The row as shown while its completion toggle is pending. */
+function optimisticallyToggled(
+  item: JobInstructionItemWithDetails,
+  currentUserActor: JobInstructionActor | null,
+): JobInstructionItemWithDetails {
+  const optimisticTimestamp = new Date().toISOString();
+  return {
+    ...item,
+    isCompleted: !item.isCompleted,
+    lastStatusChangedAt: optimisticTimestamp,
+    lastStatusChangedBy: currentUserActor?.userId ?? item.lastStatusChangedBy,
+    lastStatusChangedByProfile: currentUserActor ?? item.lastStatusChangedByProfile,
+    updatedAt: optimisticTimestamp,
+  };
+}
+
+function reorderInstructionItemsFor(owner: InstructionListOwner, itemIds: string[]) {
+  return owner.projectId !== undefined
+    ? reorderProjectInstructionItems({ projectId: owner.projectId, itemIds })
+    : reorderJobInstructionItems({ jobId: owner.jobId, itemIds });
+}
+
 /**
  * Toggle, delete and reorder for one render of the card: the handlers close
  * over the rows of that render, so the card builds them on every render.
@@ -38,16 +60,7 @@ export function createJobInstructionRowActions({
 
   async function handleToggleItem(item: JobInstructionItemWithDetails) {
     if (isBusy(item.id)) return;
-    const optimisticTimestamp = new Date().toISOString();
-
-    replaceItem({
-      ...item,
-      isCompleted: !item.isCompleted,
-      lastStatusChangedAt: optimisticTimestamp,
-      lastStatusChangedBy: currentUserActor?.userId ?? item.lastStatusChangedBy,
-      lastStatusChangedByProfile: currentUserActor ?? item.lastStatusChangedByProfile,
-      updatedAt: optimisticTimestamp,
-    });
+    replaceItem(optimisticallyToggled(item, currentUserActor));
 
     // Optimistic flip: roll back to the previous row and surface the error
     // when the server rejects or the call throws.
@@ -105,11 +118,7 @@ export function createJobInstructionRowActions({
     let errorMessage: string | null = null;
     try {
       const itemIds = nextItems.map((item) => item.id);
-      const result = await runOnRow(itemId, () =>
-        owner.projectId !== undefined
-          ? reorderProjectInstructionItems({ projectId: owner.projectId, itemIds })
-          : reorderJobInstructionItems({ jobId: owner.jobId, itemIds }),
-      );
+      const result = await runOnRow(itemId, () => reorderInstructionItemsFor(owner, itemIds));
       if (result.success) {
         await syncItemsFromServer();
         return;
