@@ -107,32 +107,39 @@ function CommunicationPreferencesSummary({ bundle, contacts }: CommunicationPref
   );
 }
 
-export function CommunicationPreferencesSection({
-  clientId,
-  contacts,
-  bundle,
-  settingsOpen,
-  preferenceOpen,
-  isPending,
-  isSettling,
-  onSettingsOpenChange,
-  onPreferenceOpenChange,
-  onSaved,
-  runTask,
-}: {
+/** The settings dialog's draft, filled from the stored settings. */
+function communicationSettingsDraft(
+  settings: CustomerRelationshipBundle['communicationSettings'],
+): CommunicationSettingsInput {
+  return {
+    preferredContactId: settings?.preferredContactId ?? undefined,
+    preferredChannel: settings?.preferredChannel ?? undefined,
+    doNotContactInstruction: settings?.doNotContactInstruction ?? '',
+    contactTimeNote: settings?.contactTimeNote ?? '',
+    languageNote: settings?.languageNote ?? '',
+    accessibilityNote: settings?.accessibilityNote ?? '',
+    sourceNote: settings?.sourceNote ?? '',
+  };
+}
+
+interface CommunicationPreferenceEditorsOptions {
   clientId: string;
-  contacts: ClientContact[];
   bundle: CustomerRelationshipBundle;
-  settingsOpen: boolean;
-  preferenceOpen: boolean;
-  isPending: boolean;
-  /** A save was confirmed and the refreshed bundle has not landed yet. */
-  isSettling: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   onPreferenceOpenChange: (open: boolean) => void;
   onSaved: () => void;
   runTask: (task: () => Promise<void>) => Promise<void | null>;
-}) {
+}
+
+/** The drafts, errors and saves behind the two communication dialogs. */
+function useCommunicationPreferenceEditors({
+  clientId,
+  bundle,
+  onSettingsOpenChange,
+  onPreferenceOpenChange,
+  onSaved,
+  runTask,
+}: CommunicationPreferenceEditorsOptions) {
   const settings = bundle.communicationSettings;
   const { showBanner } = useBanner();
   const [settingsDraft, setSettingsDraft] = useState<CommunicationSettingsInput>({});
@@ -157,15 +164,7 @@ export function CommunicationPreferencesSection({
   }
 
   function openSettings() {
-    setSettingsDraft({
-      preferredContactId: settings?.preferredContactId ?? undefined,
-      preferredChannel: settings?.preferredChannel ?? undefined,
-      doNotContactInstruction: settings?.doNotContactInstruction ?? '',
-      contactTimeNote: settings?.contactTimeNote ?? '',
-      languageNote: settings?.languageNote ?? '',
-      accessibilityNote: settings?.accessibilityNote ?? '',
-      sourceNote: settings?.sourceNote ?? '',
-    });
+    setSettingsDraft(communicationSettingsDraft(settings));
     onSettingsOpenChange(true);
   }
 
@@ -197,28 +196,97 @@ export function CommunicationPreferencesSection({
     });
   }
 
+  return {
+    settingsDraft,
+    setSettingsDraft,
+    settingsError,
+    setSettingsError,
+    preferenceDraft,
+    setPreferenceDraft,
+    preferenceError,
+    handlePreferenceOpenChange,
+    openSettings,
+    saveSettings,
+    savePreference,
+  };
+}
+
+/** The section heading with the two editor openers. */
+function CommunicationPreferencesHeader({
+  isSettling,
+  onEditSettings,
+  onAddPreference,
+}: {
+  isSettling: boolean;
+  onEditSettings: () => void;
+  onAddPreference: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h3 id="communication-heading" className="flex items-center gap-2 text-sm font-semibold">
+          <MessageSquareWarning className="size-4 text-muted-foreground" />
+          Kontaktvorgaben
+          <InlinePending active={isSettling} />
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Hinweise für zukünftige Kontakte. Es werden keine Nachrichten versendet.
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={onEditSettings}>
+          Allgemein bearbeiten
+        </Button>
+        <Button variant="outline" size="sm" onClick={onAddPreference}>
+          <Plus className="size-3.5" /> Präferenz
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function CommunicationPreferencesSection({
+  clientId,
+  contacts,
+  bundle,
+  settingsOpen,
+  preferenceOpen,
+  isPending,
+  isSettling,
+  onSettingsOpenChange,
+  onPreferenceOpenChange,
+  onSaved,
+  runTask,
+}: {
+  clientId: string;
+  contacts: ClientContact[];
+  bundle: CustomerRelationshipBundle;
+  settingsOpen: boolean;
+  preferenceOpen: boolean;
+  isPending: boolean;
+  /** A save was confirmed and the refreshed bundle has not landed yet. */
+  isSettling: boolean;
+  onSettingsOpenChange: (open: boolean) => void;
+  onPreferenceOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+  runTask: (task: () => Promise<void>) => Promise<void | null>;
+}) {
+  const editors = useCommunicationPreferenceEditors({
+    clientId,
+    bundle,
+    onSettingsOpenChange,
+    onPreferenceOpenChange,
+    onSaved,
+    runTask,
+  });
+
   return (
     <section id="kontaktvorgaben" className="scroll-mt-4 space-y-3" aria-labelledby="communication-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 id="communication-heading" className="flex items-center gap-2 text-sm font-semibold">
-            <MessageSquareWarning className="size-4 text-muted-foreground" />
-            Kontaktvorgaben
-            <InlinePending active={isSettling} />
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Hinweise für zukünftige Kontakte. Es werden keine Nachrichten versendet.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={openSettings}>
-            Allgemein bearbeiten
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => handlePreferenceOpenChange(true)}>
-            <Plus className="size-3.5" /> Präferenz
-          </Button>
-        </div>
-      </div>
+      <CommunicationPreferencesHeader
+        isSettling={isSettling}
+        onEditSettings={editors.openSettings}
+        onAddPreference={() => editors.handlePreferenceOpenChange(true)}
+      />
 
       <CommunicationPreferencesSummary bundle={bundle} contacts={contacts} />
       <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -229,26 +297,26 @@ export function CommunicationPreferencesSection({
       <CommunicationSettingsDialog
         open={settingsOpen}
         contacts={contacts}
-        settingsDraft={settingsDraft}
-        settingsError={settingsError}
+        settingsDraft={editors.settingsDraft}
+        settingsError={editors.settingsError}
         isPending={isPending}
-        onDraftChange={setSettingsDraft}
+        onDraftChange={editors.setSettingsDraft}
         onOpenChange={(open) => {
-          if (!open) setSettingsError(null);
+          if (!open) editors.setSettingsError(null);
           onSettingsOpenChange(open);
         }}
-        onSave={saveSettings}
+        onSave={editors.saveSettings}
       />
 
       <CommunicationPreferenceDialog
         open={preferenceOpen}
         contacts={contacts}
-        preferenceDraft={preferenceDraft}
-        preferenceError={preferenceError}
+        preferenceDraft={editors.preferenceDraft}
+        preferenceError={editors.preferenceError}
         isPending={isPending}
-        onDraftChange={setPreferenceDraft}
-        onOpenChange={handlePreferenceOpenChange}
-        onSave={savePreference}
+        onDraftChange={editors.setPreferenceDraft}
+        onOpenChange={editors.handlePreferenceOpenChange}
+        onSave={editors.savePreference}
       />
     </section>
   );

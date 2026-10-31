@@ -7,10 +7,78 @@ import {
   getDocumentSignedUrl,
   getDocumentVersionSignedUrl,
 } from '@/lib/documents/actions';
-import type { OrganizationDocument } from '@/lib/documents/types';
+import type { DocumentVersion, OrganizationDocument, SignedDocumentUrlResult } from '@/lib/documents/types';
 import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
 import type { DocumentDetailsDialogState } from './use-document-details-dialog';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
+
+/** Opens a signed URL in a new tab under the busy id; a failure renders inside the dialog. */
+function openSignedUrl({
+  busy,
+  busyId,
+  readSignedUrl,
+  failure,
+  setDetailsError,
+}: {
+  busy: DocumentLibraryMutations['busy'];
+  busyId: string;
+  readSignedUrl: () => Promise<SignedDocumentUrlResult>;
+  failure: string;
+  setDetailsError: DocumentDetailsDialogState['setDetailsError'];
+}): void {
+  setDetailsError(null);
+  void busy
+    .run(busyId, async () => {
+      const result = await readSignedUrl();
+      if (!result.success) {
+        setDetailsError(failure);
+        return;
+      }
+      window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
+    })
+    .catch(() => setDetailsError(failure));
+}
+
+/** Shows an uploaded version in the dialog, when it still shows that document, and reloads its details. */
+async function showUploadedVersion({
+  details,
+  activeDocument,
+  version,
+}: {
+  details: DocumentDetailsDialogState;
+  activeDocument: OrganizationDocument;
+  version: DocumentVersion;
+}): Promise<void> {
+  const { setDetailsDialog, detailsDialogIdRef, setDetailsData, setIsDetailsLoading } = details;
+  const documentId = activeDocument.id;
+  if (detailsDialogIdRef.current !== documentId) return;
+  const refreshedDocument = {
+    ...activeDocument,
+    currentVersionNumber: version.versionNumber,
+    storagePath: version.storagePath,
+    originalFileName: version.originalFileName,
+    mimeType: version.mimeType,
+    sizeBytes: version.sizeBytes,
+    uploadedBy: version.uploadedBy,
+    updatedAt: version.createdAt,
+    uploader: version.uploader,
+  };
+  setDetailsDialog(refreshedDocument);
+  setDetailsData(null);
+  setIsDetailsLoading(true);
+  // The upload is saved: a failed reload reports the details, never the upload.
+  const detailsResult = await getDocumentDetails(documentId).catch(() => null);
+  if (detailsDialogIdRef.current === documentId) {
+    // A failed reload leaves `detailsData` empty; the dialog shows it with a retry.
+    if (detailsResult?.success) {
+      setDetailsData({
+        ...detailsResult,
+        document: refreshedDocument,
+      });
+    }
+    setIsDetailsLoading(false);
+  }
+}
 
 /**
  * The file actions of the „Dateidetails" dialog: download, upload of a new
@@ -25,29 +93,17 @@ export function useDocumentVersionActions({
   mutations: DocumentLibraryMutations;
 }) {
   const { busy, showFeedback } = mutations;
-  const {
-    detailsDialog,
-    setDetailsDialog,
-    detailsDialogIdRef,
-    setDetailsData,
-    setIsDetailsLoading,
-    setDetailsError,
-  } = details;
+  const { detailsDialog, detailsDialogIdRef, setIsDetailsLoading, setDetailsError } = details;
   const versionInputRef = useRef<HTMLInputElement>(null);
 
   function handleDownload(document: OrganizationDocument) {
-    const downloadFailure = 'Die Datei konnte nicht geöffnet werden.';
-    setDetailsError(null);
-    void busy
-      .run(document.id, async () => {
-        const result = await getDocumentSignedUrl(document.id);
-        if (!result.success) {
-          setDetailsError(downloadFailure);
-          return;
-        }
-        window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
-      })
-      .catch(() => setDetailsError(downloadFailure));
+    openSignedUrl({
+      busy,
+      busyId: document.id,
+      readSignedUrl: () => getDocumentSignedUrl(document.id),
+      failure: 'Die Datei konnte nicht geöffnet werden.',
+      setDetailsError,
+    });
   }
 
   function handleVersionUpload(files: FileList | null) {
@@ -74,34 +130,7 @@ export function useDocumentVersionActions({
         }
 
         showFeedback('success', 'Neue Version wurde hochgeladen.');
-        if (detailsDialogIdRef.current === documentId) {
-          const refreshedDocument = {
-            ...activeDocument,
-            currentVersionNumber: result.version.versionNumber,
-            storagePath: result.version.storagePath,
-            originalFileName: result.version.originalFileName,
-            mimeType: result.version.mimeType,
-            sizeBytes: result.version.sizeBytes,
-            uploadedBy: result.version.uploadedBy,
-            updatedAt: result.version.createdAt,
-            uploader: result.version.uploader,
-          };
-          setDetailsDialog(refreshedDocument);
-          setDetailsData(null);
-          setIsDetailsLoading(true);
-          // The upload is saved: a failed reload reports the details, never the upload.
-          const detailsResult = await getDocumentDetails(documentId).catch(() => null);
-          if (detailsDialogIdRef.current === documentId) {
-            // A failed reload leaves `detailsData` empty; the dialog shows it with a retry.
-            if (detailsResult?.success) {
-              setDetailsData({
-                ...detailsResult,
-                document: refreshedDocument,
-              });
-            }
-            setIsDetailsLoading(false);
-          }
-        }
+        await showUploadedVersion({ details, activeDocument, version: result.version });
       })
       .catch(() => {
         if (detailsDialogIdRef.current === documentId) {
@@ -115,20 +144,16 @@ export function useDocumentVersionActions({
   }
 
   function handleDownloadVersion(versionId: string) {
-    const downloadFailure = 'Die Version konnte nicht geöffnet werden.';
-    setDetailsError(null);
-    void busy
-      .run(versionId, async () => {
-        const result = await getDocumentVersionSignedUrl(versionId, {
+    openSignedUrl({
+      busy,
+      busyId: versionId,
+      readSignedUrl: () =>
+        getDocumentVersionSignedUrl(versionId, {
           download: true,
-        });
-        if (!result.success) {
-          setDetailsError(downloadFailure);
-          return;
-        }
-        window.open(result.signedUrl, '_blank', 'noopener,noreferrer');
-      })
-      .catch(() => setDetailsError(downloadFailure));
+        }),
+      failure: 'Die Version konnte nicht geöffnet werden.',
+      setDetailsError,
+    });
   }
 
   return {

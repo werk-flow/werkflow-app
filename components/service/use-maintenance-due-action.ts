@@ -55,6 +55,16 @@ export type MaintenanceDueActionController = MaintenanceDueActionValues & {
   submit: () => void;
 };
 
+/** The evidence options of the due work's job, read while the dialog is open. */
+function useMaintenanceEvidenceRead(open: boolean, jobId: MaintenanceDueItem['jobId']) {
+  return useClientRead({
+    read: (signal) => readInBackground('maintenance-evidence-options', { jobId: jobId ?? '' }, signal),
+    deps: [jobId],
+    enabled: open && Boolean(jobId),
+    failureMessage: 'Die Arbeitsnachweise konnten nicht geladen werden.',
+  });
+}
+
 /** Collected values, the evidence read and the submit of the due-work action dialog. */
 export function useMaintenanceDueAction({
   open,
@@ -77,12 +87,7 @@ export function useMaintenanceDueAction({
   const [attempted, setAttempted] = useState(false);
   const idempotencyKey = useRef(crypto.randomUUID());
   const jobId = due.jobId;
-  const evidenceRead = useClientRead({
-    read: (signal) => readInBackground('maintenance-evidence-options', { jobId: jobId ?? '' }, signal),
-    deps: [jobId],
-    enabled: open && Boolean(jobId),
-    failureMessage: 'Die Arbeitsnachweise konnten nicht geladen werden.',
-  });
+  const evidenceRead = useMaintenanceEvidenceRead(open, jobId);
   const values: MaintenanceDueActionValues = {
     action,
     reason,

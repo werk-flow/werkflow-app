@@ -25,20 +25,22 @@ import { parseBerlinDateTimeInput, tomorrowMorningInBerlin } from '@/lib/date-ti
 import type { MaintenanceCatalogs, MaintenanceCoverageItem } from '@/lib/maintenance/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
-export function MaintenanceCoverageFollowUpDialog({
-  open,
-  onOpenChange,
-  coverage,
-  currentActorId,
-  owners,
-}: {
+type CoverageFollowUpDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   coverage: MaintenanceCoverageItem;
   currentActorId: string;
   /** Null: the catalog read failed, and the owner field shows the failure. */
   owners: FollowUpOwners | null;
-}): ReactElement {
+};
+
+/** The follow-up's fields, their errors after a first submit, and the create. */
+function useCoverageFollowUpForm({
+  onOpenChange,
+  coverage,
+  currentActorId,
+  owners,
+}: Omit<CoverageFollowUpDialogProps, 'open'>) {
   const [title, setTitle] = useState(`Abdeckung ${coverage.coverageNumber} prüfen`);
   const [note, setNote] = useState(coverage.operationalNote ?? '');
   const [ownerUserId, setOwnerUserId] = useState(
@@ -86,6 +88,34 @@ export function MaintenanceCoverageFollowUpDialog({
     void run();
   }
 
+  return {
+    title,
+    setTitle,
+    note,
+    setNote,
+    ownerUserId,
+    setOwnerUserId,
+    dueAt,
+    setDueAt,
+    error,
+    isPending,
+    titleError,
+    ownerError,
+    dueError,
+    submit,
+  };
+}
+
+export function MaintenanceCoverageFollowUpDialog({
+  open,
+  onOpenChange,
+  coverage,
+  currentActorId,
+  owners,
+}: CoverageFollowUpDialogProps): ReactElement {
+  const form = useCoverageFollowUpForm({ onOpenChange, coverage, currentActorId, owners });
+  const { title, setTitle, note, setNote, ownerUserId, setOwnerUserId, dueAt, setDueAt } = form;
+  const { error, isPending, titleError, ownerError, dueError, submit } = form;
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>

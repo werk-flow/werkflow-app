@@ -25,6 +25,48 @@ type DocumentLinkTargetListProps = {
   activeSearch: JobEntityOptionsState | null;
 };
 
+type DocumentLinkTargetRowProps = {
+  target: JobEntityOption;
+  isSelected: boolean;
+  wasLinked: boolean;
+  onToggle: (option: JobEntityOption) => void;
+  ActiveIcon: LucideIcon;
+  noun: string | undefined;
+};
+
+function DocumentLinkTargetRow({
+  target,
+  isSelected,
+  wasLinked,
+  onToggle,
+  ActiveIcon,
+  noun,
+}: DocumentLinkTargetRowProps): ReactElement {
+  return (
+    <PlainButton
+      type="button"
+      onClick={() => onToggle(target)}
+      className={cn(
+        'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60',
+        isSelected && 'bg-accent',
+      )}
+    >
+      <ActiveIcon className="size-4 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{target.label}</span>
+        <span className="block text-xs text-muted-foreground">
+          {isSelected ? (wasLinked ? 'Verknüpft' : 'Neu ausgewählt') : wasLinked ? 'Wird entfernt' : noun}
+        </span>
+      </span>
+      {isSelected && (
+        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="size-3.5" />
+        </span>
+      )}
+    </PlainButton>
+  );
+}
+
 export function DocumentLinkTargetList({
   listFailure,
   isLoadingList,
@@ -57,40 +99,17 @@ export function DocumentLinkTargetList({
         <EmptyState title="Keine passenden Einträge gefunden" />
       ) : (
         <div className="divide-y">
-          {visibleTargets.map((target) => {
-            const isSelected = selectedIds.has(target.value);
-            const wasLinked = linkedIds.includes(target.value);
-            return (
-              <PlainButton
-                key={target.value}
-                type="button"
-                onClick={() => onToggle(target)}
-                className={cn(
-                  'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted/60',
-                  isSelected && 'bg-accent',
-                )}
-              >
-                <ActiveIcon className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">{target.label}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {isSelected
-                      ? wasLinked
-                        ? 'Verknüpft'
-                        : 'Neu ausgewählt'
-                      : wasLinked
-                        ? 'Wird entfernt'
-                        : noun}
-                  </span>
-                </span>
-                {isSelected && (
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    <Check className="size-3.5" />
-                  </span>
-                )}
-              </PlainButton>
-            );
-          })}
+          {visibleTargets.map((target) => (
+            <DocumentLinkTargetRow
+              key={target.value}
+              target={target}
+              isSelected={selectedIds.has(target.value)}
+              wasLinked={linkedIds.includes(target.value)}
+              onToggle={onToggle}
+              ActiveIcon={ActiveIcon}
+              noun={noun}
+            />
+          ))}
           {activeSearch?.onLoadMore && (
             <div className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-muted-foreground">
               <span>Es gibt weitere Einträge. Suche gezielt oder lade mehr.</span>

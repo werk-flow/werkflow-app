@@ -48,6 +48,108 @@ function isAllowedContactHref(channel: PendingContact['channel'], href: string):
   }
 }
 
+interface RecordExceptionAndContactInput {
+  clientId: string;
+  pendingContact: PendingContact;
+  reason: string;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  /** Closes the guard right before the contact link opens. */
+  onContacting: () => void;
+}
+
+/** Documents the reasoned exception, then opens the contact link. */
+async function recordExceptionAndContact({
+  clientId,
+  pendingContact,
+  reason,
+  showBanner,
+  onContacting,
+}: RecordExceptionAndContactInput): Promise<void> {
+  const result = await recordCustomerCommunicationException(clientId, {
+    contactId: pendingContact.contactId,
+    channel: pendingContact.channel,
+    purpose: 'appointment_service',
+    reason,
+  });
+  if (!result.success) {
+    showBanner({
+      variant: 'error',
+      message: 'Die begründete Ausnahme konnte nicht dokumentiert werden.',
+    });
+    return;
+  }
+  const href = pendingContact.href;
+  if (!isAllowedContactHref(pendingContact.channel, href)) {
+    showBanner({ variant: 'error', message: 'Der Kontaktlink ist ungültig.' });
+    return;
+  }
+  onContacting();
+  loadDocument(href);
+}
+
+interface ContactGuardWarningsAndReasonProps {
+  warnings: CommunicationWarningCode[] | undefined;
+  reason: string;
+  reasonError: string | null;
+  onReasonChange: (reason: string) => void;
+}
+
+/** The warnings the server found and the required reason for contacting anyway. */
+function ContactGuardWarningsAndReason({
+  warnings,
+  reason,
+  reasonError,
+  onReasonChange,
+}: ContactGuardWarningsAndReasonProps) {
+  return (
+    <div className="space-y-4">
+      <ul className="space-y-2">
+        {warnings?.map((warning) => (
+          <li key={warning} className="flex gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            <CircleAlert className="mt-0.5 size-4 shrink-0" />
+            {WARNING_TEXT[warning]}
+          </li>
+        ))}
+      </ul>
+      <Field
+        label="Begründung für die Ausnahme"
+        htmlFor="contact-exception-reason"
+        required
+        error={reasonError}
+      >
+        <Textarea
+          value={reason}
+          onChange={(event) => onReasonChange(event.target.value)}
+          placeholder="Warum ist dieser Kontakt im konkreten Fall erforderlich?"
+          maxLength={1000}
+        />
+      </Field>
+    </div>
+  );
+}
+
+/** Cancel, or continue with the documented exception. */
+function ContactGuardFooter({
+  isPending,
+  onCancel,
+  onContinue,
+}: {
+  isPending: boolean;
+  onCancel: () => void;
+  onContinue: () => void;
+}) {
+  return (
+    <DialogFooter>
+      <Button variant="outline" onClick={onCancel} disabled={isPending}>
+        Abbrechen
+      </Button>
+      <Button pending={isPending} onClick={onContinue} disabled={isPending}>
+        Begründet fortfahren
+      </Button>
+    </DialogFooter>
+  );
+}
+
 export function useCommunicationContactGuard({ clientId }: { clientId: string }) {
   const { showBanner } = useBanner();
   const [pendingContact, setPendingContact] = useState<PendingContact | null>(null);
@@ -90,28 +192,15 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
     const nextReasonError = reason.trim() ? undefined : 'Bitte begründe die Ausnahme.';
     setReasonError(nextReasonError ?? null);
     if (focusFirstInvalidField({ 'contact-exception-reason': nextReasonError })) return;
-    void runGuardTask(async () => {
-      const result = await recordCustomerCommunicationException(clientId, {
-        contactId: pendingContact.contactId,
-        channel: pendingContact.channel,
-        purpose: 'appointment_service',
+    void runGuardTask(() =>
+      recordExceptionAndContact({
+        clientId,
+        pendingContact,
         reason,
-      });
-      if (!result.success) {
-        showBanner({
-          variant: 'error',
-          message: 'Die begründete Ausnahme konnte nicht dokumentiert werden.',
-        });
-        return;
-      }
-      const href = pendingContact.href;
-      if (!isAllowedContactHref(pendingContact.channel, href)) {
-        showBanner({ variant: 'error', message: 'Der Kontaktlink ist ungültig.' });
-        return;
-      }
-      setPendingContact(null);
-      loadDocument(href);
-    });
+        showBanner,
+        onContacting: () => setPendingContact(null),
+      }),
+    );
   }
 
   const dialog = (
@@ -128,40 +217,20 @@ export function useCommunicationContactGuard({ clientId }: { clientId: string })
             nicht über die rechtliche Zulässigkeit.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
-          <ul className="space-y-2">
-            {pendingContact?.warnings.map((warning) => (
-              <li key={warning} className="flex gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-                <CircleAlert className="mt-0.5 size-4 shrink-0" />
-                {WARNING_TEXT[warning]}
-              </li>
-            ))}
-          </ul>
-          <Field
-            label="Begründung für die Ausnahme"
-            htmlFor="contact-exception-reason"
-            required
-            error={reasonError}
-          >
-            <Textarea
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value);
-                setReasonError(null);
-              }}
-              placeholder="Warum ist dieser Kontakt im konkreten Fall erforderlich?"
-              maxLength={1000}
-            />
-          </Field>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setPendingContact(null)} disabled={isPending}>
-            Abbrechen
-          </Button>
-          <Button pending={isPending} onClick={continueWithException} disabled={isPending}>
-            Begründet fortfahren
-          </Button>
-        </DialogFooter>
+        <ContactGuardWarningsAndReason
+          warnings={pendingContact?.warnings}
+          reason={reason}
+          reasonError={reasonError}
+          onReasonChange={(value) => {
+            setReason(value);
+            setReasonError(null);
+          }}
+        />
+        <ContactGuardFooter
+          isPending={isPending}
+          onCancel={() => setPendingContact(null)}
+          onContinue={continueWithException}
+        />
       </DialogContent>
     </Dialog>
   );

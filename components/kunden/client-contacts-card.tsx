@@ -31,6 +31,57 @@ interface ClientContactRowProps {
   onToggleContactActive: (contact: ClientContact) => void;
 }
 
+/** The phone and e-mail links of a contact; a request handler checks the contact preference first. */
+function ClientContactLinks({
+  contact,
+  onRequestContact,
+}: {
+  contact: ClientContact;
+  onRequestContact: ContactRequestHandler | undefined;
+}) {
+  return (
+    <>
+      {contact.phone && (
+        <a
+          href={`tel:${normalizePhoneHref(contact.phone)}`}
+          className="inline-flex items-center gap-1 hover:text-foreground"
+          onClick={(event) => {
+            if (!onRequestContact) return;
+            event.preventDefault();
+            onRequestContact({
+              contactId: contact.id,
+              contactName: contact.name,
+              channel: 'phone',
+              href: `tel:${normalizePhoneHref(contact.phone ?? '')}`,
+            });
+          }}
+        >
+          <Phone className="size-3.5" />
+          {contact.phone}
+        </a>
+      )}
+      {contact.email && (
+        <a
+          href={`mailto:${contact.email}`}
+          className="hover:text-foreground"
+          onClick={(event) => {
+            if (!onRequestContact) return;
+            event.preventDefault();
+            onRequestContact({
+              contactId: contact.id,
+              contactName: contact.name,
+              channel: 'email',
+              href: `mailto:${contact.email ?? ''}`,
+            });
+          }}
+        >
+          {contact.email}
+        </a>
+      )}
+    </>
+  );
+}
+
 function ClientContactRow({
   contact,
   isAdminOrManager,
@@ -64,43 +115,7 @@ function ClientContactRow({
             )}
           </div>
           <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
-            {contact.phone && (
-              <a
-                href={`tel:${normalizePhoneHref(contact.phone)}`}
-                className="inline-flex items-center gap-1 hover:text-foreground"
-                onClick={(event) => {
-                  if (!onRequestContact) return;
-                  event.preventDefault();
-                  onRequestContact({
-                    contactId: contact.id,
-                    contactName: contact.name,
-                    channel: 'phone',
-                    href: `tel:${normalizePhoneHref(contact.phone ?? '')}`,
-                  });
-                }}
-              >
-                <Phone className="size-3.5" />
-                {contact.phone}
-              </a>
-            )}
-            {contact.email && (
-              <a
-                href={`mailto:${contact.email}`}
-                className="hover:text-foreground"
-                onClick={(event) => {
-                  if (!onRequestContact) return;
-                  event.preventDefault();
-                  onRequestContact({
-                    contactId: contact.id,
-                    contactName: contact.name,
-                    channel: 'email',
-                    href: `mailto:${contact.email ?? ''}`,
-                  });
-                }}
-              >
-                {contact.email}
-              </a>
-            )}
+            <ClientContactLinks contact={contact} onRequestContact={onRequestContact} />
           </div>
           {contact.notes && <p className="mt-1 text-xs text-muted-foreground">{contact.notes}</p>}
         </div>

@@ -159,6 +159,59 @@ export function ServiceCaseHistorySection({ item }: { item: ServiceCaseDetail })
   );
 }
 
+type ServiceCaseSidebarItem = ServiceCaseDetailWorkspace['serviceCase'];
+
+function ServiceCaseEquipmentCard({ item }: { item: ServiceCaseSidebarItem }): ReactElement {
+  return (
+    <section className="rounded-lg border p-4 shadow-xs">
+      <h2 className="text-base font-semibold">Betroffene Anlagen</h2>
+      {item.equipment.length ? (
+        <div className="mt-3 space-y-2">
+          {item.equipment.map((equipment) => (
+            <ListRow key={equipment.id} asChild interactive className="text-sm">
+              <Link href={`/service/anlagen/${equipment.equipmentNumber}`}>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{equipment.name}</span>
+                  <span className="text-xs text-muted-foreground">{equipment.equipmentNumber}</span>
+                </span>
+                <Wrench className="size-4 shrink-0" />
+              </Link>
+            </ListRow>
+          ))}
+        </div>
+      ) : (
+        <EmptyState size="compact" className="mt-2" title="Noch keine Anlage zugeordnet." />
+      )}
+    </section>
+  );
+}
+
+/** The linked job, or the way to create one in the job area. */
+function ServiceCaseJobCard({ item }: { item: ServiceCaseSidebarItem }): ReactElement {
+  return (
+    <section className="rounded-lg border p-4 shadow-xs">
+      <h2 className="text-base font-semibold">Operativer Auftrag</h2>
+      {item.jobId ? (
+        <Button asChild variant="outline" className="mt-3 w-full">
+          <Link href={`/auftraege/${encodeURIComponent(item.jobNumber ?? item.jobId)}`}>
+            {item.jobNumber ?? 'Auftrag öffnen'}
+            <ExternalLink className="size-4" />
+          </Link>
+        </Button>
+      ) : (
+        <>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Lege den Auftrag im bestehenden Auftragsbereich an und ordne ihn anschließend hier zu.
+          </p>
+          <Button asChild variant="outline" className="mt-3 w-full">
+            <Link href="/auftraege/neu">Auftrag anlegen</Link>
+          </Button>
+        </>
+      )}
+    </section>
+  );
+}
+
 export function ServiceCaseDetailSidebar({
   workspace,
   isStale,
@@ -189,46 +242,8 @@ export function ServiceCaseDetailSidebar({
         </p>
         {item.contactName && <p className="mt-2 text-sm">Ansprechpartner: {item.contactName}</p>}
       </section>
-      <section className="rounded-lg border p-4 shadow-xs">
-        <h2 className="text-base font-semibold">Betroffene Anlagen</h2>
-        {item.equipment.length ? (
-          <div className="mt-3 space-y-2">
-            {item.equipment.map((equipment) => (
-              <ListRow key={equipment.id} asChild interactive className="text-sm">
-                <Link href={`/service/anlagen/${equipment.equipmentNumber}`}>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{equipment.name}</span>
-                    <span className="text-xs text-muted-foreground">{equipment.equipmentNumber}</span>
-                  </span>
-                  <Wrench className="size-4 shrink-0" />
-                </Link>
-              </ListRow>
-            ))}
-          </div>
-        ) : (
-          <EmptyState size="compact" className="mt-2" title="Noch keine Anlage zugeordnet." />
-        )}
-      </section>
-      <section className="rounded-lg border p-4 shadow-xs">
-        <h2 className="text-base font-semibold">Operativer Auftrag</h2>
-        {item.jobId ? (
-          <Button asChild variant="outline" className="mt-3 w-full">
-            <Link href={`/auftraege/${encodeURIComponent(item.jobNumber ?? item.jobId)}`}>
-              {item.jobNumber ?? 'Auftrag öffnen'}
-              <ExternalLink className="size-4" />
-            </Link>
-          </Button>
-        ) : (
-          <>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Lege den Auftrag im bestehenden Auftragsbereich an und ordne ihn anschließend hier zu.
-            </p>
-            <Button asChild variant="outline" className="mt-3 w-full">
-              <Link href="/auftraege/neu">Auftrag anlegen</Link>
-            </Button>
-          </>
-        )}
-      </section>
+      <ServiceCaseEquipmentCard item={item} />
+      <ServiceCaseJobCard item={item} />
       <section className="rounded-lg border p-4 shadow-xs" data-testid="service-case-follow-up">
         <h2 className="text-base font-semibold">Nächster Schritt</h2>
         <p className="mt-2 text-sm text-muted-foreground">
