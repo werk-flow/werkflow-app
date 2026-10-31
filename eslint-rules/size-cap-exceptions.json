@@ -355,11 +355,6 @@
       "useManualEntrySubmit": 138,
       "useManualEntrySubmit > handleSubmit": 98
     },
-    "components/zeiterfassung/time-account-settings-forms.tsx": { "AdjustmentRequestForm": 125 },
-    "components/zeiterfassung/time-account-settings-sections.tsx": {
-      "EmployeeTimePolicyAssignment": 97,
-      "MissingTimeAccount": 105
-    },
     "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {
       "ZeiterfassungDashboardStatusCard": 82
     },

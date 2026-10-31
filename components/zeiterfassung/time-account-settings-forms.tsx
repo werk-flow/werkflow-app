@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -74,6 +75,81 @@ const ADJUSTMENT_KINDS = [
   { value: 'payout', label: 'Auszahlung', pendingLabel: 'Auszahlung wird beantragt' },
 ] as const;
 
+/** The kind buttons: each submits the account's correction with its kind. */
+function AdjustmentKindButtons({
+  formId,
+  employeeName,
+  isPending,
+  pendingValue,
+}: {
+  formId: string;
+  employeeName: string;
+  isPending: boolean;
+  pendingValue: string | null;
+}) {
+  return (
+    <div className="flex flex-wrap gap-1" role="group" aria-label={`Art der Korrektur für ${employeeName}`}>
+      {ADJUSTMENT_KINDS.map((kind) => (
+        <TimeAccountSubmitButton
+          key={kind.value}
+          form={formId}
+          name="adjustmentKind"
+          value={kind.value}
+          variant="outline"
+          size="sm"
+          isPending={isPending}
+          pendingValue={pendingValue}
+          pendingLabel={kind.pendingLabel}
+        >
+          {kind.label}
+        </TimeAccountSubmitButton>
+      ))}
+    </div>
+  );
+}
+
+/** The table row takes the bare controls; a card labels each one. */
+function adjustmentCells(
+  layout: PersonLayout,
+  controls: { minutes: ReactNode; effectiveDate: ReactNode; reason: ReactNode; kinds: ReactNode },
+): Parameters<typeof PersonRow>[0]['cells'] {
+  const { minutes, effectiveDate, reason, kinds } = controls;
+  return layout === 'row'
+    ? [
+        { key: 'minutes', content: minutes },
+        { key: 'effectiveDate', content: effectiveDate },
+        { key: 'reason', content: reason },
+        { key: 'kind', content: kinds },
+      ]
+    : [
+        {
+          key: 'minutes',
+          content: (
+            <Field label="Minuten" required>
+              {minutes}
+            </Field>
+          ),
+        },
+        {
+          key: 'effectiveDate',
+          content: (
+            <Field label="Wirksam am" required>
+              {effectiveDate}
+            </Field>
+          ),
+        },
+        {
+          key: 'reason',
+          content: (
+            <Field label="Grund" required>
+              {reason}
+            </Field>
+          ),
+        },
+        { key: 'kind', content: kinds },
+      ];
+}
+
 function AdjustmentRequestForm({
   account,
   today,
@@ -91,27 +167,12 @@ function AdjustmentRequestForm({
   });
   const formId = `adjustment-${layout}-${account.id}`;
   const kinds = (
-    <div
-      className="flex flex-wrap gap-1"
-      role="group"
-      aria-label={`Art der Korrektur für ${account.employeeName}`}
-    >
-      {ADJUSTMENT_KINDS.map((kind) => (
-        <TimeAccountSubmitButton
-          key={kind.value}
-          form={formId}
-          name="adjustmentKind"
-          value={kind.value}
-          variant="outline"
-          size="sm"
-          isPending={isPending}
-          pendingValue={pendingValue}
-          pendingLabel={kind.pendingLabel}
-        >
-          {kind.label}
-        </TimeAccountSubmitButton>
-      ))}
-    </div>
+    <AdjustmentKindButtons
+      formId={formId}
+      employeeName={account.employeeName}
+      isPending={isPending}
+      pendingValue={pendingValue}
+    />
   );
   // Enter in a text field must not submit through the first kind button.
   const minutes = (
@@ -160,42 +221,7 @@ function AdjustmentRequestForm({
           <input type="hidden" name="expectedVersion" value={account.version} />
         </form>
       }
-      cells={
-        layout === 'row'
-          ? [
-              { key: 'minutes', content: minutes },
-              { key: 'effectiveDate', content: effectiveDate },
-              { key: 'reason', content: reason },
-              { key: 'kind', content: kinds },
-            ]
-          : [
-              {
-                key: 'minutes',
-                content: (
-                  <Field label="Minuten" required>
-                    {minutes}
-                  </Field>
-                ),
-              },
-              {
-                key: 'effectiveDate',
-                content: (
-                  <Field label="Wirksam am" required>
-                    {effectiveDate}
-                  </Field>
-                ),
-              },
-              {
-                key: 'reason',
-                content: (
-                  <Field label="Grund" required>
-                    {reason}
-                  </Field>
-                ),
-              },
-              { key: 'kind', content: kinds },
-            ]
-      }
+      cells={adjustmentCells(layout, { minutes, effectiveDate, reason, kinds })}
       error={error}
     />
   );
