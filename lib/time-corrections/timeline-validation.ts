@@ -5,7 +5,8 @@ import { validateDayEntrySequence } from '@/lib/time-tracking/validation';
 import { applyApprovedTimeCorrections } from './projection';
 import type { TimeCorrectionApplicationProjection, TimeCorrectionFact } from './types';
 
-function correctionDayOwner(entry: Pick<TimeEntry, 'timestamp' | 'entryType'>): Date {
+/** The instant whose Berlin day owns a fact: a clock_out or break_end at 00:00 closes the preceding day. */
+export function correctionDayOwner(entry: Pick<TimeEntry, 'timestamp' | 'entryType'>): Date {
   const timestamp = new Date(entry.timestamp);
   const closesAtMidnight =
     ['clock_out', 'break_end'].includes(entry.entryType) &&

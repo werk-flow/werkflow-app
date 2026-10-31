@@ -9,48 +9,9 @@
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
-    "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
-    "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
-    "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
-    "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
-    "components/auftraege/job-detail/job-dispatch-section.tsx": { "JobDispatchSection": 100 },
-    "components/auftraege/job-detail/job-qualification-add-form.tsx": { "JobQualificationAddForm": 85 },
-    "components/auftraege/job-detail/job-qualification-section.tsx": { "JobQualificationSection": 105 },
-    "components/auftraege/job-detail/use-job-detail-assignments.ts": { "useJobDetailAssignments": 122 },
-    "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": {
-      "buildJobDetailPlanningFields": 134
-    },
-    "components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx": {
-      "ArtifactApprovalDependencyDialog": 104
-    },
-    "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": { "WorkBlockerDialog": 85 },
-    "components/auftraege/lifecycle/work-lifecycle-blockers-section.tsx": {
-      "WorkLifecycleBlockersSection": 93
-    },
-    "components/auftraege/lifecycle/work-lifecycle-card-dialogs.tsx": { "WorkLifecycleCardDialogs": 96 },
-    "components/auftraege/lifecycle/work-lifecycle-card.tsx": {
-      "useWorkLifecycleCardState": 108,
-      "WorkLifecycleCard": 132
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependencies-section.tsx": {
-      "WorkLifecycleDependenciesSection": 90
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependency-dialog.tsx": { "WorkDependencyDialog": 125 },
-    "components/auftraege/lifecycle/work-lifecycle-transition-actions.tsx": {
-      "WorkLifecycleTransitionActions": 95
-    },
-    "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
-    "components/auftraege/work-pack/field-work-pack-context-sources.tsx": {
-      "FieldWorkPackContextSources": 81
-    },
-    "components/auftraege/work-pack/field-work-pack-data.ts": { "loadFieldWorkPackData": 88 },
-    "components/auftraege/work-pack/field-work-pack-overview.tsx": { "FieldWorkPackOverview": 145 },
-    "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
-    "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
-    "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
@@ -106,48 +67,8 @@
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
     "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
-    "components/mitarbeiter/invitations-table.tsx": { "InvitationsTable": 104 },
-    "components/mitarbeiter/invite-actions-menu.tsx": { "InviteActionsMenu": 108 },
-    "components/mitarbeiter/invite-dialog.tsx": { "InviteDialog": 125 },
-    "components/mitarbeiter/join-requests-section.tsx": { "JoinRequestsSection": 84 },
-    "components/mitarbeiter/member-actions-menu.tsx": { "MemberActionsMenu": 99 },
-    "components/mitarbeiter/members-table.tsx": {
-      "MemberCard": 82,
-      "MemberTableRow": 91,
-      "MembersTable": 93
-    },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
-    "components/mitarbeiter/own-qualification-overview.tsx": { "OwnQualificationOverview": 99 },
-    "components/mitarbeiter/qualification-management-definitions.tsx": {
-      "QualificationManagementDefinitionForm": 111
-    },
-    "components/mitarbeiter/qualification-management-grant-form.tsx": {
-      "QualificationManagementGrantForm": 139
-    },
-    "components/mitarbeiter/qualification-management-records.tsx": {
-      "QualificationManagementRecordActions": 121
-    },
-    "components/mitarbeiter/qualification-management-section.tsx": { "QualificationManagementSection": 100 },
-    "components/mitarbeiter/sickness-report-manager-dialogs.tsx": {
-      "EvidenceDialog": 93,
-      "ManagerCancelDialog": 84
-    },
-    "components/mitarbeiter/sickness-report-record-dialog.tsx": { "RecordSicknessDialog": 88 },
-    "components/mitarbeiter/team-management-team-card.tsx": {
-      "TeamManagementCardHeader": 83,
-      "TeamManagementCardAddMemberForm": 89
-    },
-    "components/mitarbeiter/use-qualification-management-grant-form.ts": {
-      "useQualificationManagementGrantForm": 110,
-      "useQualificationManagementGrantForm > saveGrant": 82
-    },
-    "components/mitarbeiter/use-sickness-report-correction-form.ts": {
-      "useSicknessReportCorrectionForm": 81
-    },
-    "components/mitarbeiter/use-sickness-report-record-form.ts": { "useSicknessReportRecordForm": 87 },
-    "components/mitarbeiter/use-team-management-memberships.ts": { "useTeamManagementMemberships": 130 },
-    "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
@@ -205,9 +126,6 @@
     "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
     "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
     "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
-    "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {
-      "ZeiterfassungDashboardStatusCard": 82
-    },
     "lib/customer-relationships/actions.ts": {
       "buildTimelineRecordQueries": 105,
       "buildTimelineLinkAndEventQueries": 104,

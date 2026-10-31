@@ -14,7 +14,8 @@ import { getJobByNumber } from '@/lib/jobs/actions';
 import { WORK_EXECUTION_LABELS } from '@/lib/work-lifecycle/types';
 import { WORK_EXECUTION_CLASSES } from '../status-classes';
 import { FieldWorkPackContextSources, FieldWorkPackEquipmentSource } from './field-work-pack-context-sources';
-import { loadFieldWorkPackData } from './field-work-pack-data';
+import { loadFieldWorkPackData, type FieldWorkPackData } from './field-work-pack-data';
+import type { FieldWorkPackJob } from '@/lib/jobs/field-work-pack';
 import { jobDetailHref } from '@/lib/jobs/routes';
 import { FieldWorkPackRecordSources, FieldWorkPackTimeAndMaterials } from './field-work-pack-record-sources';
 
@@ -56,29 +57,7 @@ export async function FieldWorkPackPage({
   return (
     <PageShell className="bg-muted/20">
       <UrlFlashBanner paramKey="field_transition" messageTemplate="Arbeitsstand wurde aktualisiert." />
-      <DetailPageHeader
-        breadcrumbs={[
-          { label: 'Aufträge', href: '/auftraege' },
-          ...(fieldJob.project ? [{ label: fieldJob.project.name }] : []),
-          { label: `Auftrag ${fieldJob.jobNumber ?? 'Ohne Nummer'}` },
-        ]}
-        title={fieldJob.title}
-        subtitle={`Auftrag ${fieldJob.jobNumber ?? 'Ohne Nummer'}`}
-        badges={
-          <Badge
-            variant="secondary"
-            className={
-              lifecycleResult.success
-                ? WORK_EXECUTION_CLASSES[lifecycleResult.snapshot.executionState]
-                : undefined
-            }
-          >
-            {lifecycleResult.success
-              ? WORK_EXECUTION_LABELS[lifecycleResult.snapshot.executionState]
-              : 'Arbeitsstand unbekannt'}
-          </Badge>
-        }
-      />
+      <FieldWorkPackPageHeader fieldJob={fieldJob} lifecycleResult={lifecycleResult} />
 
       <PageBody maxWidth="wide">
         {/* The test id scopes the pack's body content; the specs never reach the header through it. */}
@@ -101,32 +80,73 @@ export async function FieldWorkPackPage({
 
           <FieldWorkPackTimeAndMaterials job={job} currentUserId={currentUserId} data={data} />
 
-          <section
-            className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
-            aria-labelledby="field-reference-heading"
-          >
-            <FormDisclosure label="Weitere Auftragsangaben">
-              <div className="space-y-2 pt-3 text-sm">
-                <h2 id="field-reference-heading" className="sr-only">
-                  Weitere Auftragsangaben
-                </h2>
-                {fieldJob.project ? (
-                  <p>
-                    <span className="text-muted-foreground">Projekt:</span> {fieldJob.project.name} ·{' '}
-                    {fieldJob.project.projectNumber}
-                  </p>
-                ) : (
-                  <p className="text-muted-foreground">Dieser Auftrag gehört zu keinem Projekt.</p>
-                )}
-                <p className="text-muted-foreground">
-                  Planung, Zeiterfassung, Material, Dokumente und Nachweise bleiben getrennte verbindliche
-                  Bereiche.
-                </p>
-              </div>
-            </FormDisclosure>
-          </section>
+          <FieldWorkPackReferenceSection fieldJob={fieldJob} />
         </div>
       </PageBody>
     </PageShell>
+  );
+}
+
+/** Breadcrumbs, title and the job's execution state. */
+function FieldWorkPackPageHeader({
+  fieldJob,
+  lifecycleResult,
+}: {
+  fieldJob: FieldWorkPackJob;
+  lifecycleResult: FieldWorkPackData['lifecycleResult'];
+}): ReactElement {
+  return (
+    <DetailPageHeader
+      breadcrumbs={[
+        { label: 'Aufträge', href: '/auftraege' },
+        ...(fieldJob.project ? [{ label: fieldJob.project.name }] : []),
+        { label: `Auftrag ${fieldJob.jobNumber ?? 'Ohne Nummer'}` },
+      ]}
+      title={fieldJob.title}
+      subtitle={`Auftrag ${fieldJob.jobNumber ?? 'Ohne Nummer'}`}
+      badges={
+        <Badge
+          variant="secondary"
+          className={
+            lifecycleResult.success
+              ? WORK_EXECUTION_CLASSES[lifecycleResult.snapshot.executionState]
+              : undefined
+          }
+        >
+          {lifecycleResult.success
+            ? WORK_EXECUTION_LABELS[lifecycleResult.snapshot.executionState]
+            : 'Arbeitsstand unbekannt'}
+        </Badge>
+      }
+    />
+  );
+}
+
+/** The job's project and the note on separate binding areas, behind a disclosure. */
+function FieldWorkPackReferenceSection({ fieldJob }: { fieldJob: FieldWorkPackJob }): ReactElement {
+  return (
+    <section
+      className="rounded-lg border bg-card p-4 shadow-xs sm:p-5"
+      aria-labelledby="field-reference-heading"
+    >
+      <FormDisclosure label="Weitere Auftragsangaben">
+        <div className="space-y-2 pt-3 text-sm">
+          <h2 id="field-reference-heading" className="sr-only">
+            Weitere Auftragsangaben
+          </h2>
+          {fieldJob.project ? (
+            <p>
+              <span className="text-muted-foreground">Projekt:</span> {fieldJob.project.name} ·{' '}
+              {fieldJob.project.projectNumber}
+            </p>
+          ) : (
+            <p className="text-muted-foreground">Dieser Auftrag gehört zu keinem Projekt.</p>
+          )}
+          <p className="text-muted-foreground">
+            Planung, Zeiterfassung, Material, Dokumente und Nachweise bleiben getrennte verbindliche Bereiche.
+          </p>
+        </div>
+      </FormDisclosure>
+    </section>
   );
 }

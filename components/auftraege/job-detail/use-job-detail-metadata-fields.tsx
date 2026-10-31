@@ -11,13 +11,10 @@ import {
   formatMinutesAsHoursInput,
   parseHoursInputToMinutes,
 } from '@/lib/jobs/planned-working';
-import {
-  type JobWithDetails,
-  type JobPriority,
-  JOB_PRIORITY_LABELS,
-  normalizeJobPlannedTime,
-} from '@/lib/jobs/types';
+import { type JobWithDetails, JOB_PRIORITY_LABELS, normalizeJobPlannedTime } from '@/lib/jobs/types';
 import { jobFormEditsSchedule } from '@/lib/jobs/visit-schedule';
+import { Constants } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import { useQualificationWarningConfirmation } from '../shared/qualification-warning-dialog';
 import { getJobStatusClass, getJobStatusLabel } from '../status-classes';
 import { PRIORITY_CLASSES, formatDurationOrDash, formatPlannedTime } from './job-detail-format';
@@ -102,7 +99,7 @@ function buildJobDetailIdentityFields({
             currentValue: liveJob.priority,
             onSave: async (v) => {
               const result = await updateJob(liveJob.id, {
-                priority: v as JobPriority,
+                priority: constrainedValue(Constants.public.Enums.job_priority, v, 'job priority'),
               });
               if (!result.success) {
                 throw new Error('Failed to update priority');
@@ -153,7 +150,8 @@ function SeveralVisitsDate({ plannedDate }: { plannedDate: string | null }): Rea
   );
 }
 
-function buildJobDetailPlanningFields({
+/** Planned date and time; both are edited here only on a job with one visit. */
+function buildJobDetailScheduleFields({
   liveJob,
   displayTitle,
   isAdminOrManager,
@@ -218,6 +216,18 @@ function buildJobDetailPlanningFields({
           }
         : undefined,
     },
+  ];
+}
+
+/** Estimated duration, planned effort and location. */
+function buildJobDetailEffortFields({
+  liveJob,
+  isAdminOrManager,
+  scheduleEditable,
+  applyLiveJobPatch,
+}: JobDetailFieldContext): MetadataField[] {
+  const editsSchedule = isAdminOrManager && scheduleEditable;
+  return [
     {
       label: 'Geschätzte Dauer',
       value: formatDurationOrDash(liveJob.estimatedDurationMinutes),
@@ -286,6 +296,10 @@ function buildJobDetailPlanningFields({
         : undefined,
     },
   ];
+}
+
+function buildJobDetailPlanningFields(context: JobDetailFieldContext): MetadataField[] {
+  return [...buildJobDetailScheduleFields(context), ...buildJobDetailEffortFields(context)];
 }
 
 // Site and contact come from the server-loaded job: an inline save returns the job row without them.
