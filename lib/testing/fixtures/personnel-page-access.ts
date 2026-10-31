@@ -93,8 +93,12 @@ function signInAsMember(memberships: ReadonlyArray<{ orgId: string; role: Role }
 world.rpc = ({ name, args }) => {
   if (name !== 'get_org_members_for_user') return { data: null, error: null };
   const rows = world.tables.organization_members ?? [];
-  // Like the function, it refuses a caller who is not a member of the organization it names.
-  if (!rows.some((row) => row.organization_id === args.p_org_id && row.user_id === args.p_user_id))
+  // Like the function behind the session, it answers only the signed-in caller, and only for
+  // an organization that caller belongs to.
+  if (
+    args.p_user_id !== CALLER_ID ||
+    !rows.some((row) => row.organization_id === args.p_org_id && row.user_id === args.p_user_id)
+  )
     return { data: null, error: { message: 'not_authorized' } };
   return {
     data: rows
