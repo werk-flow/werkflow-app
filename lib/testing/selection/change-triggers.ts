@@ -100,18 +100,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
   },
-  'golden:p1-16': {
-    tests: ['an assigned field worker works through the pack and completes the job'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-18': {
-    tests: ['registers, links, corrects and replaces one site-owned asset @P1-18-journey'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-20': {
-    tests: ['plans maintenance and completes the first visit with exact evidence @P1-20-journey'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
   'golden:p1-22': {
     tests: [
       'keeps a correction provisional, then applies one attributable second-person decision @P1-22-stage-submit @P1-22-stage-approve @READINESS',
