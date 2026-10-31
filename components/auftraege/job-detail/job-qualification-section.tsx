@@ -14,9 +14,77 @@ import { setJobCapabilityRequirements } from '@/lib/qualifications/requirement-a
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { JobQualificationDetail } from '@/lib/qualifications/types';
 import { ADD_BUSY_ID, JobQualificationAddForm } from './job-qualification-add-form';
-import { JobQualificationCoverageList } from './job-qualification-coverage-list';
+import {
+  JobQualificationCoverageList,
+  type SaveJobQualificationRequirements,
+} from './job-qualification-coverage-list';
 
 const SAVE_FAILED_MESSAGE = 'Die Anforderungen konnten nicht gespeichert werden.';
+
+/** The section's skeleton while the first read runs. */
+function JobQualificationSectionLoading() {
+  return (
+    <Card className="gap-4 p-4" role="status" aria-busy="true">
+      <span className="sr-only">Qualifikationsabdeckung wird geladen.</span>
+      <div className="flex items-center gap-2">
+        <Skeleton className="size-4" />
+        <Skeleton className="h-4 w-40" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    </Card>
+  );
+}
+
+function JobQualificationSectionHeading({ isAdding }: { isAdding: boolean }) {
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <Award className="size-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold">Qualifikationsabdeckung</h2>
+        <InlinePending active={isAdding} label="Anforderung wird gespeichert" />
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Zeigt die von der Organisation hinterlegten Planungshinweise. Keine rechtliche Einsatzbewertung.
+      </p>
+    </div>
+  );
+}
+
+// Every save replaces the whole requirement list, so saves stay mutually
+// exclusive (`anyBusy` disables the controls); `busyId` only chooses where
+// the spinner shows. Never rejects: every failure lands in `saveError`.
+async function saveJobQualificationRequirements({
+  jobId,
+  busyId,
+  requirements,
+  runSave,
+  setSaveError,
+  refresh,
+}: {
+  jobId: string;
+  busyId: string;
+  requirements: Parameters<SaveJobQualificationRequirements>[1];
+  runSave: ReturnType<typeof useBusyIds>['run'];
+  setSaveError: (error: string | null) => void;
+  refresh: () => Promise<void>;
+}): Promise<boolean> {
+  setSaveError(null);
+  try {
+    const result = await runSave(busyId, () => setJobCapabilityRequirements({ jobId, requirements }));
+    if (!result.success) {
+      setSaveError(SAVE_FAILED_MESSAGE);
+      return false;
+    }
+    await refresh();
+    return true;
+  } catch {
+    setSaveError(SAVE_FAILED_MESSAGE);
+    return false;
+  }
+}
 
 export function JobQualificationSection({ jobId, canEdit }: { jobId: string; canEdit: boolean }) {
   const [selectedCapabilityId, setSelectedCapabilityId] = useState('');
@@ -41,21 +109,7 @@ export function JobQualificationSection({ jobId, canEdit }: { jobId: string; can
   const detail = view.data;
 
   if (detail === undefined) {
-    if (view.isLoading) {
-      return (
-        <Card className="gap-4 p-4" role="status" aria-busy="true">
-          <span className="sr-only">Qualifikationsabdeckung wird geladen.</span>
-          <div className="flex items-center gap-2">
-            <Skeleton className="size-4" />
-            <Skeleton className="h-4 w-40" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-9 w-full" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        </Card>
-      );
-    }
+    if (view.isLoading) return <JobQualificationSectionLoading />;
     return (
       <SectionError onRetry={() => void refresh()}>
         Qualifikationsabdeckung konnte nicht geladen werden.
@@ -66,40 +120,12 @@ export function JobQualificationSection({ jobId, canEdit }: { jobId: string; can
   // Every save replaces the whole requirement list, so saves stay mutually
   // exclusive (`anyBusy` disables the controls); `busyId` only chooses where
   // the spinner shows. Never rejects: every failure lands in `saveError`.
-  const saveRequirements = async (
-    busyId: string,
-    requirements: Array<{
-      capabilityId: string;
-      requireConfirmation: boolean;
-    }>,
-  ): Promise<boolean> => {
-    setSaveError(null);
-    try {
-      const result = await runSave(busyId, () => setJobCapabilityRequirements({ jobId, requirements }));
-      if (!result.success) {
-        setSaveError(SAVE_FAILED_MESSAGE);
-        return false;
-      }
-      await refresh();
-      return true;
-    } catch {
-      setSaveError(SAVE_FAILED_MESSAGE);
-      return false;
-    }
-  };
+  const saveRequirements: SaveJobQualificationRequirements = (busyId, requirements) =>
+    saveJobQualificationRequirements({ jobId, busyId, requirements, runSave, setSaveError, refresh });
 
   return (
     <Card className="gap-4 p-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <Award className="size-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Qualifikationsabdeckung</h2>
-          <InlinePending active={isBusy(ADD_BUSY_ID)} label="Anforderung wird gespeichert" />
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Zeigt die von der Organisation hinterlegten Planungshinweise. Keine rechtliche Einsatzbewertung.
-        </p>
-      </div>
+      <JobQualificationSectionHeading isAdding={isBusy(ADD_BUSY_ID)} />
 
       <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
         {canEdit && (

@@ -7,9 +7,6 @@ import { useActiveJobs } from '@/hooks/use-active-jobs';
 import { DetailColumns } from '@/components/shared/detail-columns';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UsableContent } from '@/components/shared/usable-content';
-import { QualificationWarningDialog } from '../shared/qualification-warning-dialog';
-import { EditJobDialog } from '../forms/edit-job-dialog';
-import { knownProjectOption } from '../forms/job-form-options';
 import type { WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import type { WorkArtifactSummary } from '@/lib/work-artifacts/types';
 
@@ -28,12 +25,10 @@ import type { OrgMemberOption } from '../shared/employee-multi-select';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import type { InventoryLocation, InventoryPickerOption, JobMaterialLine } from '@/lib/inventory/types';
 import type { WorkHandoverWorkspace } from '@/lib/work-handover/types';
-import { JobDetailAssignDialog } from './job-detail-assign-dialog-sections';
 import { JobDetailMainColumn, JobDetailSideColumn } from './job-detail-columns';
-import { JobDetailDeleteDialog } from './job-detail-delete-dialog';
+import { JobDetailContentDialogs, useJobDetailDialogVisibility } from './job-detail-content-dialogs';
 import { JobDetailHeader } from './job-detail-header';
 import { JobDetailOverview } from './job-detail-overview';
-import { JobDetailRelationDialogs } from './job-detail-relation-dialogs';
 import { useJobDetailAssignments } from './use-job-detail-assignments';
 import { useJobDetailMetadataFields } from './use-job-detail-metadata-fields';
 import { useJobDetailTimeSummary } from './use-job-detail-time-summary';
@@ -137,40 +132,23 @@ interface JobDetailContentProps {
   originRequest?: OriginRequestLink;
 }
 
-export function JobDetailContent({
+/** Every hook of the job page, in render order: the live job, dialogs, assignments, fields, time and refresh. */
+function useJobDetailContentView({
   job,
   parentProject,
   members,
   isAdminOrManager,
-  canApproveWorkArtifacts,
-  instructionItems,
-  initialArtifacts,
-  documents,
-  materialLines,
-  inventoryItems,
-  inventoryLocations,
-  currentUserId,
-  lifecycleSnapshot,
-  handoverWorkspace,
-  originRequest,
-}: JobDetailContentProps) {
+}: Pick<JobDetailContentProps, 'job' | 'parentProject' | 'members' | 'isAdminOrManager'>) {
   const { liveJob, setLiveJob, applyLiveJobPatch } = useJobDetailLiveJob(job);
   const { activeJobIds } = useActiveJobs();
   const displayTitle = getJobDisplayTitle(liveJob);
   const isJobActive = activeJobIds.has(liveJob.id);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showAssignDialog, setShowAssignDialog] = useState(false);
-  const [showClientDialog, setShowClientDialog] = useState(false);
-  const [showProjectDialog, setShowProjectDialog] = useState(false);
-  // No refresh on close: updateJob's response renders the route, and a
-  // Realtime refresh deferred while the dialog was open runs once it closes.
-  const handleEditDialogOpenChange = (open: boolean) => setShowEditDialog(open);
+  const dialogs = useJobDetailDialogVisibility();
   const assignment = useJobDetailAssignments({
     liveJob,
     setLiveJob,
     dialogMembers: members,
-    setShowAssignDialog,
+    setShowAssignDialog: dialogs.setShowAssignDialog,
   });
   const { metadataFields, inlineEditWarningDialog } = useJobDetailMetadataFields({
     job,
@@ -192,16 +170,92 @@ export function JobDetailContent({
   });
   const projectInfo = parentProject ?? liveJob.project;
 
+  return {
+    liveJob,
+    applyLiveJobPatch,
+    displayTitle,
+    isJobActive,
+    dialogs,
+    assignment,
+    metadataFields,
+    inlineEditWarningDialog,
+    timeEntries,
+    isLoadingTime,
+    isTimeStale,
+    refreshTime,
+    isDeletingRef,
+    suppressRefreshRef,
+    timeSummary,
+    projectInfo,
+  };
+}
+
+type JobDetailContentView = ReturnType<typeof useJobDetailContentView>;
+
+/** The two detail columns: metadata, customer and team left; project, material and time right. */
+function JobDetailContentColumns({
+  content,
+  view,
+}: {
+  content: JobDetailContentProps;
+  view: JobDetailContentView;
+}) {
+  const { isAdminOrManager, documents } = content;
+  const { liveJob } = view;
+  return (
+    <DetailColumns layout="halves">
+      {/* Left Column: Metadata + Client + Employees */}
+      <JobDetailMainColumn
+        liveJob={liveJob}
+        isAdminOrManager={isAdminOrManager}
+        canApproveWorkArtifacts={content.canApproveWorkArtifacts}
+        currentUserId={content.currentUserId}
+        members={content.members}
+        metadataFields={view.metadataFields}
+        instructionItems={content.instructionItems}
+        initialArtifacts={content.initialArtifacts}
+        documents={documents}
+        timeEntries={view.timeEntries}
+        setShowClientDialog={view.dialogs.setShowClientDialog}
+        openAssignDialog={view.assignment.openAssignDialog}
+        isUnassigning={view.assignment.isUnassigning}
+        handleUnassign={view.assignment.handleUnassign}
+      />
+
+      {/* Right Column: Project + Placeholders */}
+      <JobDetailSideColumn
+        liveJob={liveJob}
+        projectInfo={view.projectInfo}
+        isAdminOrManager={isAdminOrManager}
+        documents={documents}
+        materialLines={content.materialLines}
+        inventoryItems={content.inventoryItems}
+        inventoryLocations={content.inventoryLocations}
+        isLoadingTime={view.isLoadingTime}
+        isTimeStale={view.isTimeStale}
+        refreshTime={view.refreshTime}
+        timeSummary={view.timeSummary}
+        setShowProjectDialog={view.dialogs.setShowProjectDialog}
+      />
+    </DetailColumns>
+  );
+}
+
+export function JobDetailContent(props: JobDetailContentProps) {
+  const { parentProject, members, isAdminOrManager } = props;
+  const view = useJobDetailContentView(props);
+  const { liveJob, displayTitle, dialogs, projectInfo } = view;
+
   return (
     <PageShell>
       <JobDetailHeader
         liveJob={liveJob}
         projectInfo={projectInfo}
         displayTitle={displayTitle}
-        isJobActive={isJobActive}
+        isJobActive={view.isJobActive}
         isAdminOrManager={isAdminOrManager}
-        handleEditDialogOpenChange={handleEditDialogOpenChange}
-        setShowDeleteDialog={setShowDeleteDialog}
+        handleEditDialogOpenChange={dialogs.handleEditDialogOpenChange}
+        setShowDeleteDialog={dialogs.setShowDeleteDialog}
       />
 
       <PageBody>
@@ -211,101 +265,27 @@ export function JobDetailContent({
             parentProject={parentProject}
             displayTitle={displayTitle}
             isAdminOrManager={isAdminOrManager}
-            lifecycleSnapshot={lifecycleSnapshot}
-            handoverWorkspace={handoverWorkspace}
-            originRequest={originRequest}
+            lifecycleSnapshot={props.lifecycleSnapshot}
+            handoverWorkspace={props.handoverWorkspace}
+            originRequest={props.originRequest}
           />
-          <DetailColumns layout="halves">
-            {/* Left Column: Metadata + Client + Employees */}
-            <JobDetailMainColumn
-              liveJob={liveJob}
-              isAdminOrManager={isAdminOrManager}
-              canApproveWorkArtifacts={canApproveWorkArtifacts}
-              currentUserId={currentUserId}
-              members={members}
-              metadataFields={metadataFields}
-              instructionItems={instructionItems}
-              initialArtifacts={initialArtifacts}
-              documents={documents}
-              timeEntries={timeEntries}
-              setShowClientDialog={setShowClientDialog}
-              openAssignDialog={assignment.openAssignDialog}
-              isUnassigning={assignment.isUnassigning}
-              handleUnassign={assignment.handleUnassign}
-            />
-
-            {/* Right Column: Project + Placeholders */}
-            <JobDetailSideColumn
-              liveJob={liveJob}
-              projectInfo={projectInfo}
-              isAdminOrManager={isAdminOrManager}
-              documents={documents}
-              materialLines={materialLines}
-              inventoryItems={inventoryItems}
-              inventoryLocations={inventoryLocations}
-              isLoadingTime={isLoadingTime}
-              isTimeStale={isTimeStale}
-              refreshTime={refreshTime}
-              timeSummary={timeSummary}
-              setShowProjectDialog={setShowProjectDialog}
-            />
-          </DetailColumns>
+          <JobDetailContentColumns content={props} view={view} />
         </UsableContent>
       </PageBody>
 
-      {/* Delete Dialog */}
-      <JobDetailDeleteDialog
-        open={showDeleteDialog}
-        setShowDeleteDialog={setShowDeleteDialog}
-        jobId={liveJob.id}
-        displayTitle={displayTitle}
-        projectNumber={projectInfo?.projectNumber}
-        isDeletingRef={isDeletingRef}
-        suppressRefreshRef={suppressRefreshRef}
-      />
-
-      {/* Assign Employee Dialog */}
-      <JobDetailAssignDialog
-        open={showAssignDialog}
-        setShowAssignDialog={setShowAssignDialog}
-        assignment={assignment}
-        members={members}
-        assessedForDate={liveJob.plannedDate}
-      />
-
-      <JobDetailRelationDialogs
+      <JobDetailContentDialogs
+        dialogs={dialogs}
         liveJob={liveJob}
         parentProject={parentProject}
-        showClientDialog={showClientDialog}
-        setShowClientDialog={setShowClientDialog}
-        showProjectDialog={showProjectDialog}
-        setShowProjectDialog={setShowProjectDialog}
-        applyLiveJobPatch={applyLiveJobPatch}
-        suppressRefreshRef={suppressRefreshRef}
-      />
-
-      <EditJobDialog
-        job={liveJob}
-        open={showEditDialog}
-        onOpenChange={handleEditDialogOpenChange}
-        selectedClient={liveJob.client}
+        projectInfo={projectInfo}
+        displayTitle={displayTitle}
         members={members}
-        knownProject={
-          projectInfo && liveJob.projectId === projectInfo.id
-            ? knownProjectOption({ ...projectInfo, clientId: liveJob.clientId }, liveJob.client?.name ?? null)
-            : undefined
-        }
-        onSuccess={assignment.handleJobEdited}
+        assignment={view.assignment}
+        applyLiveJobPatch={view.applyLiveJobPatch}
+        isDeletingRef={view.isDeletingRef}
+        suppressRefreshRef={view.suppressRefreshRef}
+        inlineEditWarningDialog={view.inlineEditWarningDialog}
       />
-
-      <QualificationWarningDialog
-        evaluation={assignment.qualificationWarning}
-        isSubmitting={assignment.isAssigning || assignment.isQualificationOverrideSaving}
-        error={assignment.qualificationOverrideError}
-        onCancel={assignment.cancelQualificationWarning}
-        onConfirm={assignment.handleQualificationOverride}
-      />
-      {inlineEditWarningDialog}
     </PageShell>
   );
 }
