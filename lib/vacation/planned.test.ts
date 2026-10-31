@@ -79,5 +79,10 @@ describe('planned vacation days', () => {
     expect(
       plannedVacationDays(2026, [approved('snapshot', '2026-10-26', '2026-10-30', 4)], context, today),
     ).toBe(1);
+    // Approved as 6 days under an earlier schedule: 3 are taken, all 3 left stay planned,
+    // even though the current schedule counts only 2 days ahead.
+    expect(
+      plannedVacationDays(2026, [approved('snapshot', '2026-10-26', '2026-10-30', 6)], context, today),
+    ).toBe(3);
   });
 });
