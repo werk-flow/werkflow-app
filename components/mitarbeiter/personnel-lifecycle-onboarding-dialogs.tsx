@@ -16,7 +16,6 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import type { PersonnelRequirementType } from '@/lib/personnel/lifecycle';
 
 import { REQUIREMENT_TYPES } from './personnel-lifecycle-options';
 import type {
@@ -115,14 +114,12 @@ type PersonnelLifecycleRequirementDialogProps = {
   requirements: PersonnelLifecycleRequirements;
 };
 
-export function PersonnelLifecycleRequirementDialog({
+function PersonnelLifecycleRequirementFields({
   lifecycle,
   requirements,
 }: PersonnelLifecycleRequirementDialogProps) {
-  const { isPending, mutationDisabled, error, fieldErrors } = lifecycle;
+  const { error, fieldErrors } = lifecycle;
   const {
-    requirementOpen,
-    setRequirementOpen,
     requirementTitle,
     setRequirementTitle,
     requirementType,
@@ -131,8 +128,49 @@ export function PersonnelLifecycleRequirementDialog({
     setRequirementRequired,
     requirementBlocksAccess,
     setRequirementBlocksAccess,
-    submitRequirement,
   } = requirements;
+
+  return (
+    <>
+      <Field label="Art" htmlFor="onboarding-requirement-type">
+        <SearchableSelect
+          options={REQUIREMENT_TYPES}
+          value={requirementType}
+          onChange={(value) => {
+            const nextType = REQUIREMENT_TYPES.find((option) => option.value === value);
+            if (nextType) setRequirementType(nextType.value);
+          }}
+          searchPlaceholder="Art suchen…"
+        />
+      </Field>
+      <Field label="Titel" htmlFor="requirement-title" required error={fieldErrors['requirement-title']}>
+        <Input value={requirementTitle} onChange={(event) => setRequirementTitle(event.target.value)} />
+      </Field>
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={requirementRequired}
+          onCheckedChange={(value) => setRequirementRequired(value === true)}
+        />
+        Erforderlich
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={requirementBlocksAccess}
+          onCheckedChange={(value) => setRequirementBlocksAccess(value === true)}
+        />
+        Blockiert die Zugangsaktivierung
+      </label>
+      <ErrorText>{error}</ErrorText>
+    </>
+  );
+}
+
+export function PersonnelLifecycleRequirementDialog({
+  lifecycle,
+  requirements,
+}: PersonnelLifecycleRequirementDialogProps) {
+  const { isPending, mutationDisabled } = lifecycle;
+  const { requirementOpen, setRequirementOpen, submitRequirement } = requirements;
 
   return (
     <Dialog open={requirementOpen} onOpenChange={setRequirementOpen} pending={isPending}>
@@ -153,37 +191,7 @@ export function PersonnelLifecycleRequirementDialog({
           className="flex min-h-0 flex-1 flex-col gap-4"
         >
           <DialogBody className="space-y-4 py-1">
-            <Field label="Art" htmlFor="onboarding-requirement-type">
-              <SearchableSelect
-                options={REQUIREMENT_TYPES}
-                value={requirementType}
-                onChange={(value) => setRequirementType(value as PersonnelRequirementType)}
-                searchPlaceholder="Art suchen…"
-              />
-            </Field>
-            <Field
-              label="Titel"
-              htmlFor="requirement-title"
-              required
-              error={fieldErrors['requirement-title']}
-            >
-              <Input value={requirementTitle} onChange={(event) => setRequirementTitle(event.target.value)} />
-            </Field>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={requirementRequired}
-                onCheckedChange={(value) => setRequirementRequired(value === true)}
-              />
-              Erforderlich
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={requirementBlocksAccess}
-                onCheckedChange={(value) => setRequirementBlocksAccess(value === true)}
-              />
-              Blockiert die Zugangsaktivierung
-            </label>
-            <ErrorText>{error}</ErrorText>
+            <PersonnelLifecycleRequirementFields lifecycle={lifecycle} requirements={requirements} />
           </DialogBody>
           <DialogFooter>
             <Button

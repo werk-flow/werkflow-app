@@ -15,25 +15,80 @@ import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { UrlFlashBanner } from '@/components/ui/banner';
 import { getProfilesByIds } from '@/lib/members/actions';
 import { isManagerRole, type OrgRole } from '@/lib/roles';
-import { getOrgMembersForUser } from '@/lib/members/queries';
+import { getOrgMembersForUser, type ProfileNamesRead } from '@/lib/members/queries';
 import { logError } from '@/lib/logging';
 import { readPendingJoinRequests } from '@/lib/org/join-requests';
-import { getPersonnelRecords } from '@/lib/personnel/record-read-actions';
+import { getPersonnelRecords, type PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import { getTodayTargetsForMembers } from '@/lib/personnel/target-actions';
 import { getQualificationWorkspace } from '@/lib/qualifications/workspace-actions';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getResponsibilitiesStrandedByEmployeeRemoval } from '@/lib/responsibilities/resolution';
 import { getResponsibilityRemovalBlockMessage } from '@/lib/members/errors';
 
-async function MitarbeiterData({
-  activeOrgId,
-  userId,
-  currentUserRole,
-}: {
+// Complete on purpose: a plain select stops at the response cap without
+// an error and would hide older invitations.
+function readOrganizationInviteRows(activeOrgId: string) {
+  return readCompleteRows(
+    (from, to) =>
+      createSupabaseAdminClient()
+        .from('organization_invites')
+        .select('id, email, status, created_at, expires_at, accepted_at, invited_role')
+        .eq('organization_id', activeOrgId)
+        .order('created_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    LIST_ROW_CAP,
+  );
+}
+
+/** Why each linked member cannot be removed yet: the responsibilities only they hold. */
+function removalBlockMessagesByUserId(
+  personnelEntries: PersonnelListEntry[],
+  effective: Parameters<typeof getResponsibilitiesStrandedByEmployeeRemoval>[0],
+): Record<string, string> {
+  const removalBlockedByUserId: Record<string, string> = {};
+  for (const entry of personnelEntries) {
+    if (!entry.record.userId) continue;
+    const message = getResponsibilityRemovalBlockMessage(
+      getResponsibilitiesStrandedByEmployeeRemoval(effective, entry.record.id),
+    );
+    if (message) removalBlockedByUserId[entry.record.userId] = message;
+  }
+  return removalBlockedByUserId;
+}
+
+/** The profile name of each linked personnel record, keyed by record id. */
+function personnelProfileNamesByRecordId(
+  personnelEntries: PersonnelListEntry[],
+  profileNamesByUserId: Extract<ProfileNamesRead, { success: true }>['profiles'],
+): Record<string, string> {
+  const personnelProfileNames: Record<string, string> = {};
+  for (const entry of personnelEntries) {
+    if (!entry.record.userId) continue;
+    const profile = profileNamesByUserId[entry.record.userId];
+    if (!profile) continue;
+    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
+    if (name) personnelProfileNames[entry.record.id] = name;
+  }
+  return personnelProfileNames;
+}
+
+function MitarbeiterLoadWarning({ failedRegions }: { failedRegions: string[] }) {
+  return (
+    <RegionLoadError className="mb-4" title={`Nicht geladen: ${failedRegions.join(', ')}`}>
+      Die Listen unten können deshalb unvollständig sein. Lade die Seite erneut, bevor du Änderungen
+      vornimmst.
+    </RegionLoadError>
+  );
+}
+
+type MitarbeiterDataProps = {
   activeOrgId: string;
   userId: string;
   currentUserRole: OrgRole;
-}) {
+};
+
+async function MitarbeiterData({ activeOrgId, userId, currentUserRole }: MitarbeiterDataProps) {
   const [
     membersResult,
     invitesResult,
@@ -45,19 +100,7 @@ async function MitarbeiterData({
     joinRequestsResult,
   ] = await Promise.all([
     getOrgMembersForUser(activeOrgId, userId),
-    // Complete on purpose: a plain select stops at the response cap without
-    // an error and would hide older invitations.
-    readCompleteRows(
-      (from, to) =>
-        createSupabaseAdminClient()
-          .from('organization_invites')
-          .select('id, email, status, created_at, expires_at, accepted_at, invited_role')
-          .eq('organization_id', activeOrgId)
-          .order('created_at', { ascending: false })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
+    readOrganizationInviteRows(activeOrgId),
     getPersonnelRecords(),
     getTodayTargetsForMembers(),
     getResponsibilitySettingsData(),
@@ -81,19 +124,9 @@ async function MitarbeiterData({
     logError('Mitarbeiter: personnel record read failed', personnelResult.error);
   }
   const personnelEntries = personnelResult.success ? personnelResult.entries : [];
-  const removalBlockedByUserId: Record<string, string> = {};
-  if (responsibilitySettingsResult.success) {
-    for (const entry of personnelEntries) {
-      if (!entry.record.userId) continue;
-      const message = getResponsibilityRemovalBlockMessage(
-        getResponsibilitiesStrandedByEmployeeRemoval(
-          responsibilitySettingsResult.data.effective,
-          entry.record.id,
-        ),
-      );
-      if (message) removalBlockedByUserId[entry.record.userId] = message;
-    }
-  }
+  const removalBlockedByUserId = responsibilitySettingsResult.success
+    ? removalBlockMessagesByUserId(personnelEntries, responsibilitySettingsResult.data.effective)
+    : {};
 
   // Exited people keep their linked login; resolve those names from profiles.
   const linkedUserIds = personnelEntries
@@ -101,14 +134,7 @@ async function MitarbeiterData({
     .filter((id): id is string => Boolean(id));
   const profileNamesResult = await getProfilesByIds(linkedUserIds);
   const profileNamesByUserId = profileNamesResult.success ? profileNamesResult.profiles : {};
-  const personnelProfileNames: Record<string, string> = {};
-  for (const entry of personnelEntries) {
-    if (!entry.record.userId) continue;
-    const profile = profileNamesByUserId[entry.record.userId];
-    if (!profile) continue;
-    const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ');
-    if (name) personnelProfileNames[entry.record.id] = name;
-  }
+  const personnelProfileNames = personnelProfileNamesByRecordId(personnelEntries, profileNamesByUserId);
 
   // A failed read must not look like an empty list (feedback canon: no
   // silent failures). The tabs still render what did load.
@@ -125,12 +151,7 @@ async function MitarbeiterData({
 
   return (
     <>
-      {failedRegions.length > 0 && (
-        <RegionLoadError className="mb-4" title={`Nicht geladen: ${failedRegions.join(', ')}`}>
-          Die Listen unten können deshalb unvollständig sein. Lade die Seite erneut, bevor du Änderungen
-          vornimmst.
-        </RegionLoadError>
-      )}
+      {failedRegions.length > 0 && <MitarbeiterLoadWarning failedRegions={failedRegions} />}
       <MitarbeiterTabs
         members={memberList}
         invites={inviteList}

@@ -24,17 +24,12 @@ interface PersonnelRecordsSectionProps {
   profileNames: Record<string, string>;
 }
 
-/**
- * Personnel records that are not active members: future starters and personnel
- * without app access, plus exited people whose membership was removed. Active
- * members stay in the members table above.
- */
-export function PersonnelRecordsSection({ entries, profileNames }: PersonnelRecordsSectionProps) {
-  const router = useRouter();
-
-  if (entries.length === 0) return null;
-
-  const sorted = [...entries].sort((a, b) => {
+/** Planned first, then active, then exited; by name within a state. */
+function sortPersonnelRecordEntries(
+  entries: PersonnelListEntry[],
+  profileNames: Record<string, string>,
+): PersonnelListEntry[] {
+  return [...entries].sort((a, b) => {
     const stateOrder = { geplant: 0, aktiv: 1, ausgeschieden: 2 } as const;
     const stateA = getEmploymentState(a.record);
     const stateB = getEmploymentState(b.record);
@@ -46,6 +41,53 @@ export function PersonnelRecordsSection({ entries, profileNames }: PersonnelReco
       'de',
     );
   });
+}
+
+function PersonnelRecordCards({ entries, profileNames }: PersonnelRecordsSectionProps) {
+  return (
+    <div className="space-y-2 md:hidden">
+      {entries.map(({ record, hasPendingInvite }) => {
+        const name = formatEmployeeRecordName(record, profileNames[record.id]);
+        return (
+          // A real link so keyboard, middle-click, and copy-link work.
+          <ListRow key={record.id} asChild interactive>
+            <Link href={`/mitarbeiter/${record.id}`} aria-label={`Personalakte öffnen: ${name}`}>
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium">{name}</p>
+                  {record.employeeNumber && (
+                    <span className="shrink-0 text-xs text-muted-foreground">{record.employeeNumber}</span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <EmploymentStateBadge state={getEmploymentState(record)} />
+                  <AccessStateBadge state={getAccessState(record, hasPendingInvite)} />
+                </div>
+                {record.entryDate && (
+                  <p className="text-xs text-muted-foreground">
+                    Eintritt: {formatGermanDate(record.entryDate)}
+                  </p>
+                )}
+              </div>
+            </Link>
+          </ListRow>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Personnel records that are not active members: future starters and personnel
+ * without app access, plus exited people whose membership was removed. Active
+ * members stay in the members table above.
+ */
+export function PersonnelRecordsSection({ entries, profileNames }: PersonnelRecordsSectionProps) {
+  const router = useRouter();
+
+  if (entries.length === 0) return null;
+
+  const sorted = sortPersonnelRecordEntries(entries, profileNames);
 
   return (
     <section className="mt-6">
@@ -58,35 +100,7 @@ export function PersonnelRecordsSection({ entries, profileNames }: PersonnelReco
       </p>
 
       {/* Mobile view - card list */}
-      <div className="space-y-2 md:hidden">
-        {sorted.map(({ record, hasPendingInvite }) => {
-          const name = formatEmployeeRecordName(record, profileNames[record.id]);
-          return (
-            // A real link so keyboard, middle-click, and copy-link work.
-            <ListRow key={record.id} asChild interactive>
-              <Link href={`/mitarbeiter/${record.id}`} aria-label={`Personalakte öffnen: ${name}`}>
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-sm font-medium">{name}</p>
-                    {record.employeeNumber && (
-                      <span className="shrink-0 text-xs text-muted-foreground">{record.employeeNumber}</span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <EmploymentStateBadge state={getEmploymentState(record)} />
-                    <AccessStateBadge state={getAccessState(record, hasPendingInvite)} />
-                  </div>
-                  {record.entryDate && (
-                    <p className="text-xs text-muted-foreground">
-                      Eintritt: {formatGermanDate(record.entryDate)}
-                    </p>
-                  )}
-                </div>
-              </Link>
-            </ListRow>
-          );
-        })}
-      </div>
+      <PersonnelRecordCards entries={sorted} profileNames={profileNames} />
 
       {/* Desktop view - table */}
       <div className="hidden md:block">

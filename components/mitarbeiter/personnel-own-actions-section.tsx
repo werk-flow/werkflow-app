@@ -22,7 +22,7 @@ import { Field } from '@/components/ui/field';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBusyIds } from '@/hooks/use-busy-id';
-import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { uploadPersonnelDocumentDirect } from '@/lib/documents/upload-client';
@@ -124,17 +124,8 @@ function PersonnelEvidenceUploadDialog({
     </Dialog>
   );
 }
-export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisible?: boolean }) {
-  const { showBanner } = useBanner();
-  const evidenceFormId = useId();
-  const { run: runBusy, isBusy } = useBusyIds();
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [documentType, setDocumentType] = useState('Krankheitsnachweis');
-  const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<EvidenceFieldErrors>({});
-  const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
-  const view = useLiveView<OwnPersonnelActions>({
+function useOwnPersonnelActionsView() {
+  return useLiveView<OwnPersonnelActions>({
     tables: [
       'personnel_documents',
       'personnel_document_releases',
@@ -146,6 +137,145 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
       return result.success ? { ok: true, data: result.data } : { ok: false };
     },
   });
+}
+
+/** What every own action reports through: the view it refreshes, the row spinner, the banner and the error. */
+type OwnPersonnelActionsContext = {
+  view: LiveViewState<OwnPersonnelActions>;
+  runBusy: ReturnType<typeof useBusyIds>['run'];
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  setError: (error: string | null) => void;
+};
+
+async function acknowledgeOwnRequirement(
+  { view, runBusy, showBanner, setError }: OwnPersonnelActionsContext,
+  requirementId: string,
+  requirementVersion: number,
+): Promise<void> {
+  setError(null);
+  await runBusy(requirementId, async () => {
+    try {
+      const result = await acknowledgePersonnelRequirement({
+        requirementId,
+        requirementVersion,
+        statement: 'Von mir als erledigt bestätigt.',
+        operationId: crypto.randomUUID(),
+      });
+      if (!result.success)
+        setError(
+          describeFailure(
+            result.error,
+            { stale_version: 'Die Aufgabe wurde inzwischen geändert.' },
+            'Die Bestätigung konnte nicht gespeichert werden.',
+          ),
+        );
+      else showBanner({ variant: 'success', message: 'Die Bestätigung wurde gespeichert.' });
+      await view.refresh();
+    } catch {
+      setError('Die Bestätigung konnte nicht gespeichert werden.');
+    }
+  });
+}
+
+async function openOwnPersonnelDocument(
+  { runBusy, setError }: OwnPersonnelActionsContext,
+  rowId: string,
+  documentId: string,
+): Promise<void> {
+  await runBusy(rowId, async () => {
+    try {
+      const result = await getPersonnelDocumentSignedUrl(documentId);
+      if (!result.success) {
+        setError('Das Dokument konnte nicht geöffnet werden.');
+        return;
+      }
+      window.location.assign(result.data.signedUrl);
+    } catch {
+      setError('Das Dokument konnte nicht geöffnet werden.');
+    }
+  });
+}
+
+async function acknowledgeOwnDocument(
+  { view, runBusy, showBanner, setError }: OwnPersonnelActionsContext,
+  personnelDocumentId: string,
+  version: number,
+): Promise<void> {
+  setError(null);
+  await runBusy(personnelDocumentId, async () => {
+    try {
+      const result = await acknowledgePersonnelDocument({
+        personnelDocumentId,
+        documentVersionNumber: version,
+        statement: 'Erhalt dieser Dokumentversion bestätigt.',
+        operationId: crypto.randomUUID(),
+      });
+      if (!result.success) {
+        setError('Die Empfangsbestätigung konnte nicht gespeichert werden.');
+      } else {
+        showBanner({ variant: 'success', message: 'Der Erhalt der Dokumentversion wurde bestätigt.' });
+        await view.refresh();
+      }
+    } catch {
+      setError('Die Empfangsbestätigung konnte nicht gespeichert werden.');
+    }
+  });
+}
+
+/** The evidence dialog's fields and its save, as the section renders them. */
+type OwnEvidenceUpload = {
+  file: File | null;
+  documentType: string;
+  setFieldErrors: (fieldErrors: EvidenceFieldErrors) => void;
+  run: (task: () => Promise<void>) => Promise<void>;
+  setUploadOpen: (open: boolean) => void;
+  setFile: (file: File | null) => void;
+};
+
+async function uploadOwnEvidence(
+  { view, showBanner, setError }: OwnPersonnelActionsContext,
+  { file, documentType, setFieldErrors, run, setUploadOpen, setFile }: OwnEvidenceUpload,
+): Promise<void> {
+  setError(null);
+  const fileError = file ? undefined : 'Bitte wähle eine Datei aus.';
+  const typeError = documentType.trim().length < 2 ? 'Bitte gib die Dokumentart an.' : undefined;
+  setFieldErrors({ file: fileError, type: typeError });
+  const evidenceErrors = { 'own-evidence-file': fileError, 'own-evidence-type': typeError };
+  if (focusFirstInvalidField(evidenceErrors) || !file) return;
+  const employeeRecordId = view.data?.employeeRecordId;
+  if (!employeeRecordId) return;
+  await run(async () => {
+    const result = await uploadPersonnelDocumentDirect({
+      employeeRecordId,
+      file,
+      documentType,
+      accessClass: 'health_evidence',
+      evidenceState: 'valid',
+      validUntil: null,
+      operationId: crypto.randomUUID(),
+    });
+    if (!result.success) {
+      setError('Der Nachweis konnte nicht hochgeladen werden.');
+      return;
+    }
+    setUploadOpen(false);
+    setFile(null);
+    showBanner({ variant: 'success', message: 'Der Gesundheitsnachweis wurde hochgeladen.' });
+    await view.refresh();
+  });
+}
+
+export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisible?: boolean }) {
+  const { showBanner } = useBanner();
+  const evidenceFormId = useId();
+  const { run: runBusy, isBusy } = useBusyIds();
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [documentType, setDocumentType] = useState('Krankheitsnachweis');
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<EvidenceFieldErrors>({});
+  const { run, isPending } = useServerAction(async (task: () => Promise<void>) => task());
+  const view = useOwnPersonnelActionsView();
 
   // On the task list the section stays empty for most people, so a placeholder there
   // would collapse and pull the list up while it loads (audit:layout streaming shift).
@@ -160,98 +290,7 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
   const { requirements, documents, prestart } = view.data;
   if (!forceVisible && requirements.length === 0 && documents.length === 0) return null;
 
-  async function acknowledge(requirementId: string, requirementVersion: number): Promise<void> {
-    setError(null);
-    await runBusy(requirementId, async () => {
-      try {
-        const result = await acknowledgePersonnelRequirement({
-          requirementId,
-          requirementVersion,
-          statement: 'Von mir als erledigt bestätigt.',
-          operationId: crypto.randomUUID(),
-        });
-        if (!result.success)
-          setError(
-            describeFailure(
-              result.error,
-              { stale_version: 'Die Aufgabe wurde inzwischen geändert.' },
-              'Die Bestätigung konnte nicht gespeichert werden.',
-            ),
-          );
-        else showBanner({ variant: 'success', message: 'Die Bestätigung wurde gespeichert.' });
-        await view.refresh();
-      } catch {
-        setError('Die Bestätigung konnte nicht gespeichert werden.');
-      }
-    });
-  }
-
-  async function download(rowId: string, documentId: string): Promise<void> {
-    await runBusy(rowId, async () => {
-      try {
-        const result = await getPersonnelDocumentSignedUrl(documentId);
-        if (!result.success) {
-          setError('Das Dokument konnte nicht geöffnet werden.');
-          return;
-        }
-        window.location.assign(result.data.signedUrl);
-      } catch {
-        setError('Das Dokument konnte nicht geöffnet werden.');
-      }
-    });
-  }
-
-  async function acknowledgeDocument(personnelDocumentId: string, version: number): Promise<void> {
-    setError(null);
-    await runBusy(personnelDocumentId, async () => {
-      try {
-        const result = await acknowledgePersonnelDocument({
-          personnelDocumentId,
-          documentVersionNumber: version,
-          statement: 'Erhalt dieser Dokumentversion bestätigt.',
-          operationId: crypto.randomUUID(),
-        });
-        if (!result.success) {
-          setError('Die Empfangsbestätigung konnte nicht gespeichert werden.');
-        } else {
-          showBanner({ variant: 'success', message: 'Der Erhalt der Dokumentversion wurde bestätigt.' });
-          await view.refresh();
-        }
-      } catch {
-        setError('Die Empfangsbestätigung konnte nicht gespeichert werden.');
-      }
-    });
-  }
-
-  async function uploadEvidence(): Promise<void> {
-    setError(null);
-    const fileError = file ? undefined : 'Bitte wähle eine Datei aus.';
-    const typeError = documentType.trim().length < 2 ? 'Bitte gib die Dokumentart an.' : undefined;
-    setFieldErrors({ file: fileError, type: typeError });
-    const evidenceErrors = { 'own-evidence-file': fileError, 'own-evidence-type': typeError };
-    if (focusFirstInvalidField(evidenceErrors) || !file) return;
-    const employeeRecordId = view.data?.employeeRecordId;
-    if (!employeeRecordId) return;
-    await run(async () => {
-      const result = await uploadPersonnelDocumentDirect({
-        employeeRecordId,
-        file,
-        documentType,
-        accessClass: 'health_evidence',
-        evidenceState: 'valid',
-        validUntil: null,
-        operationId: crypto.randomUUID(),
-      });
-      if (!result.success) {
-        setError('Der Nachweis konnte nicht hochgeladen werden.');
-        return;
-      }
-      setUploadOpen(false);
-      setFile(null);
-      showBanner({ variant: 'success', message: 'Der Gesundheitsnachweis wurde hochgeladen.' });
-      await view.refresh();
-    });
-  }
+  const actions: OwnPersonnelActionsContext = { view, runBusy, showBanner, setError };
 
   return (
     <section
@@ -277,15 +316,19 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
           <PersonnelOwnRequirementList
             requirements={requirements}
             isBusy={isBusy}
-            onAcknowledge={acknowledge}
+            onAcknowledge={(requirementId, requirementVersion) =>
+              acknowledgeOwnRequirement(actions, requirementId, requirementVersion)
+            }
           />
         ) : null}
         {documents.length > 0 ? (
           <PersonnelOwnDocumentList
             documents={documents}
             isBusy={isBusy}
-            onDownload={download}
-            onAcknowledge={acknowledgeDocument}
+            onDownload={(rowId, documentId) => openOwnPersonnelDocument(actions, rowId, documentId)}
+            onAcknowledge={(personnelDocumentId, version) =>
+              acknowledgeOwnDocument(actions, personnelDocumentId, version)
+            }
           />
         ) : null}
       </StaleRegion>
@@ -301,7 +344,9 @@ export function PersonnelOwnActionsSection({ forceVisible = false }: { forceVisi
         onFileChange={setFile}
         onDocumentTypeChange={setDocumentType}
         error={error}
-        onSubmit={uploadEvidence}
+        onSubmit={() =>
+          uploadOwnEvidence(actions, { file, documentType, setFieldErrors, run, setUploadOpen, setFile })
+        }
       />
     </section>
   );

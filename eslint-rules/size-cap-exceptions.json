@@ -11,7 +11,6 @@
   "functions": {
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 132 },
-    "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
@@ -67,31 +66,7 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
-    "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
-    "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 129 },
-    "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
-    "components/mitarbeiter/personalien-section.tsx": { "PersonalienSection": 97 },
-    "components/mitarbeiter/personnel-invite-dialog.tsx": { "PersonnelInviteDialog": 103 },
-    "components/mitarbeiter/personnel-lifecycle-onboarding-dialogs.tsx": {
-      "PersonnelLifecycleRequirementDialog": 87
-    },
-    "components/mitarbeiter/personnel-lifecycle-overview.tsx": { "PersonnelLifecycleStatusCards": 92 },
-    "components/mitarbeiter/personnel-lifecycle-section.tsx": { "PersonnelLifecycleSection": 108 },
-    "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 172 },
-    "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 113 },
-    "components/mitarbeiter/use-create-personnel-dialog-form.ts": { "useCreatePersonnelDialogForm": 87 },
-    "components/mitarbeiter/use-employment-condition-form.ts": { "useEmploymentConditionForm": 94 },
-    "components/mitarbeiter/use-personnel-lifecycle-documents.ts": { "usePersonnelLifecycleDocuments": 116 },
-    "components/mitarbeiter/use-personnel-lifecycle-onboarding.ts": {
-      "usePersonnelLifecycleRequirements": 125
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-transitions.ts": {
-      "usePersonnelLifecycleTransitions": 115
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-view.ts": { "usePersonnelLifecycleView": 88 },
-    "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
