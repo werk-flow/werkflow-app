@@ -1,7 +1,9 @@
 // Actual sickness actions over the in-memory database: a field worker is
 // refused the office reads and writes before any database access and cannot
 // change a colleague's report; a report or employee record of another
-// organization is not found, and nothing is written on a refusal.
+// organization is not found, and nothing is written on a refusal. The shared
+// calendar shows a field worker only the own absence and a manager every
+// absence of the organization, never its kind.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -17,6 +19,7 @@ const colleagueRecordId = '86000000-0000-4000-8000-000000000002';
 const foreignRecordId = '86000000-0000-4000-8000-000000000003';
 const colleagueReportId = '86000000-0000-4000-8000-000000000004';
 const foreignReportId = '86000000-0000-4000-8000-000000000005';
+const ownReportId = '86000000-0000-4000-8000-000000000006';
 
 const report = (id: string, organizationId: string, employeeRecordId: string) => ({
   id,
@@ -44,6 +47,7 @@ const world = installActionWorld({
     { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: null },
   ],
   sickness_reports: [
+    report(ownReportId, ORGANIZATION_A, ownRecordId),
     report(colleagueReportId, ORGANIZATION_A, colleagueRecordId),
     report(foreignReportId, ORGANIZATION_B, foreignRecordId),
   ],
@@ -128,3 +132,16 @@ await assertRefused(
 // Another organization's employee record lists none of its reports.
 assert.deepEqual(await getSicknessReportsForRecord(foreignRecordId), { success: true, reports: [] });
 assert.equal(world.rpcCalls.length, 0);
+
+// The calendar shows a field worker only the own absence, a manager every
+// absence of the organization, and no one its kind.
+const calendarIds = async (): Promise<string[]> => {
+  const calendar = await getSicknessCalendarEntries({ from: '2026-10-01', to: '2026-10-31' });
+  assert.ok(calendar.success, `the calendar failed: ${JSON.stringify(calendar)}`);
+  assert.doesNotMatch(JSON.stringify(calendar.entries), /krankheit|absenceType|absence_type/);
+  return calendar.entries.map((entry) => entry.id).sort();
+};
+signInAs(world, 'employee');
+assert.deepEqual(await calendarIds(), [ownReportId]);
+signInAs(world, 'buero');
+assert.deepEqual(await calendarIds(), [colleagueReportId, ownReportId].sort());

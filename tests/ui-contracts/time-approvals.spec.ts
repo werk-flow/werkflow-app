@@ -38,6 +38,21 @@ test('a refused time-entry review comes back and says that nothing changed', asy
   expect(await page.evaluate(() => window.uiContractTimeApprovals.sessions)).toHaveLength(1);
 });
 
+test('a review refused because the responsibility ended says so and never confirms', async ({ page }) => {
+  const approve = page.getByTitle('Genehmigen - Eintrag bleibt erhalten', { exact: true });
+  await expect(approve).toBeVisible();
+  await approve.click();
+  await expectHeldWrite(page, 'review-entries');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await answerHeldWrite(page, 'not_responsible');
+  // The refusal is the only message: no confirmation banner beside it.
+  await expect(page.getByRole('alert')).toHaveText(
+    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  await expect(page.getByRole('alert')).toHaveCount(1);
+});
+
 test('a refused change request comes back with the reason and never confirms', async ({ page }) => {
   const approve = page.getByTitle('Genehmigen - Änderung wird bestätigt', { exact: true });
   await expect(approve).toBeVisible();

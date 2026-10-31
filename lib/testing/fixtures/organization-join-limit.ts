@@ -1,7 +1,8 @@
 // Actual requestOrganizationJoin and code generator with only identity,
 // cookies and the database replaced: wrong codes are counted per user and
 // refused after the limit, a right code creates one open join request and no
-// membership, and codes come from the cryptographic random source.
+// membership, another owner's code is refused, and codes come from the
+// cryptographic random source.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import { createInMemoryAdmin, type InMemoryTables } from './in-memory-admin';
@@ -90,6 +91,29 @@ const repeated = await requestOrganizationJoin(validCode);
 assert.equal(repeated.success, false);
 assert.ok(!repeated.success && repeated.error === 'request_pending');
 assert.equal(repeated.request.id, requested.request.id);
+assert.equal(joinRequests().length, 1);
+
+// All organizations of one person belong to one owner: a member of the
+// owner's other organization still reaches the open request, but the code of
+// another owner's organization is refused before any request.
+const foreignOwnerCode = 'XYZ234';
+tables.organizations?.push({
+  id: '10000000-0000-4000-8000-000000000002',
+  admin_id: 'other-owner',
+  name: 'Other company',
+  unique_code: foreignOwnerCode,
+});
+members().push({
+  organization_id: '10000000-0000-4000-8000-000000000003',
+  user_id: 'caller',
+  organizations: { admin_id: 'owner' },
+});
+const sameOwner = await requestOrganizationJoin(validCode);
+assert.ok(!sameOwner.success && sameOwner.error === 'request_pending');
+assert.deepEqual(await requestOrganizationJoin(foreignOwnerCode), {
+  success: false,
+  error: 'admin_mismatch',
+});
 assert.equal(joinRequests().length, 1);
 
 // Codes never come from Math.random, and a byte that would bias the charset is drawn again.

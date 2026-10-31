@@ -31,9 +31,11 @@ function comparable(value: unknown, filterValue: string): [number | string, numb
 /** One `column.operator.value` term of a PostgREST `or` filter. */
 function orTerm(term: string): (row: Row) => boolean {
   const [column = '', operator = '', ...rest] = term.split('.');
+  const value = rest.join('.');
+  // A column the row leaves out is the database's null.
+  if (operator === 'is' && value === 'null') return (row) => (row[column] ?? null) === null;
   const compare = comparators[operator];
   if (!compare) throw new Error(`The in-memory admin does not implement the "${operator}" or-filter.`);
-  const value = rest.join('.');
   return (row) => compare(...comparable(row[column], value));
 }
 

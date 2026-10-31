@@ -2,9 +2,16 @@
 // database: a field worker is refused before any database access, only an
 // admin switches the apprentice warning, a job, project, team or employee of
 // another organization is unreachable, and each write is one database call
-// that names the caller's organization and the caller.
+// that names the caller's organization and the caller. A field worker's own
+// overview lists only their own teams and qualifications.
 import assert from 'node:assert/strict';
-import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import {
+  CALLER_ID,
+  ORGANIZATION_A,
+  ORGANIZATION_B,
+  installActionWorld,
+  signInAs,
+} from './action-boundary-world';
 import { assertRefused, refuseForeignIds } from './operations-boundary-refusals';
 
 const foreignJobId = '81000000-0000-4000-8000-000000000001';
@@ -25,6 +32,7 @@ const world = installActionWorld({
     { id: foreignEmployeeRecordId, organization_id: ORGANIZATION_B, user_id: null, first_name: 'Fremd' },
   ],
 });
+const { getOwnQualificationProfile } = await import('@/lib/qualifications/actions');
 const { getQualificationWorkspace, getPersonnelQualificationSummary } = await import(
   '@/lib/qualifications/workspace-actions'
 );
@@ -176,3 +184,77 @@ for (const [write, error] of refusals) {
   assert.ok(call, `${write[0]}: no database call`);
   assert.equal(call.args.p_organization_id, ORGANIZATION_A, `${write[0]}: not the caller's organization`);
 }
+
+// A field worker's own overview lists the own team and qualification, never a colleague's.
+const callerRecordId = '81000000-0000-4000-8000-000000000010';
+const colleagueRecordId = '81000000-0000-4000-8000-000000000011';
+const ownTeamId = '81000000-0000-4000-8000-000000000012';
+const colleagueTeamId = '81000000-0000-4000-8000-000000000013';
+const ownDefinitionId = '81000000-0000-4000-8000-000000000014';
+const colleagueDefinitionId = '81000000-0000-4000-8000-000000000015';
+const ownQualificationId = '81000000-0000-4000-8000-000000000016';
+const team = (id: string, name: string) => ({
+  id,
+  organization_id: ORGANIZATION_A,
+  name,
+  dissolved_at: null,
+});
+const teamMembership = (id: string, teamId: string, employeeRecordId: string) => ({
+  id,
+  organization_id: ORGANIZATION_A,
+  team_id: teamId,
+  employee_record_id: employeeRecordId,
+  valid_from: '2026-01-01',
+  valid_until: null,
+});
+const definition = (id: string, name: string) => ({
+  id,
+  organization_id: ORGANIZATION_A,
+  kind: 'certification',
+  name,
+  description: null,
+  default_expiry_warning_days: 30,
+  retired_at: null,
+});
+const qualification = (id: string, capabilityId: string, employeeRecordId: string) => ({
+  id,
+  organization_id: ORGANIZATION_A,
+  employee_record_id: employeeRecordId,
+  capability_id: capabilityId,
+  capability_kind: 'certification',
+  valid_from: '2026-01-01',
+  valid_until: null,
+  issuer: null,
+  renewal_due_date: null,
+  confirmation_status: 'confirmed',
+  evidence_state: 'received',
+  operational_note: null,
+  supersedes_id: null,
+  superseded_at: null,
+});
+world.tables.employee_records = [
+  ...(world.tables.employee_records ?? []),
+  { id: callerRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID, first_name: 'Eva' },
+  { id: colleagueRecordId, organization_id: ORGANIZATION_A, user_id: null, first_name: 'Kai' },
+];
+world.tables.teams = [team(ownTeamId, 'Kundendienst'), team(colleagueTeamId, 'Disposition')];
+world.tables.team_memberships = [
+  teamMembership('81000000-0000-4000-8000-000000000017', ownTeamId, callerRecordId),
+  teamMembership('81000000-0000-4000-8000-000000000018', colleagueTeamId, colleagueRecordId),
+];
+world.tables.organization_capabilities = [
+  definition(ownDefinitionId, 'Herstellertraining'),
+  definition(colleagueDefinitionId, 'Gasschein'),
+];
+world.tables.employee_capabilities = [
+  qualification(ownQualificationId, ownDefinitionId, callerRecordId),
+  qualification('81000000-0000-4000-8000-000000000019', colleagueDefinitionId, colleagueRecordId),
+];
+signInAs(world, 'employee');
+const ownProfile = await getOwnQualificationProfile();
+assert.ok(ownProfile.success && ownProfile.data, `the own overview failed: ${JSON.stringify(ownProfile)}`);
+assert.deepEqual(ownProfile.data.teamNames, ['Kundendienst']);
+assert.deepEqual(
+  ownProfile.data.capabilities.map((entry) => entry.record.id),
+  [ownQualificationId],
+);
