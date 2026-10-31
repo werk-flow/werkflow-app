@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react';
 
 import { useOrganization } from '@/components/organization/organization-context';
-import { useLiveView } from '@/hooks/use-live-view';
+import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { useServerAction } from '@/hooks/use-server-action';
 import { fetchCurrentClockState } from '@/lib/time-tracking/state-client';
 import { isClockStateEventRelevant } from '@/lib/time-tracking/clock-state-events';
@@ -106,6 +106,117 @@ type ClockStateContextValue = {
 
 const ClockStateContext = createContext<ClockStateContextValue | null>(null);
 
+type ClockLiveView = LiveViewState<LiveClockState | null>;
+
+type ClockTransitionExecute = (
+  action: TimeTransitionInput['action'],
+  selection: TimeActivitySelection | null,
+  acknowledgeLong?: boolean,
+) => Promise<TimeTransitionResult>;
+
+/**
+ * Sends one transition against the session the provider last read, echoes an
+ * accepted one at once and reads fresh after it or after a stale version.
+ */
+function useClockTransitionExecute({
+  activeOrgId,
+  isReady,
+  run,
+  sessionId,
+  sessionVersion,
+  invalidate,
+  refresh,
+  setData,
+}: {
+  activeOrgId: string | null;
+  isReady: boolean;
+  run: (input: TimeTransitionInput) => Promise<TimeTransitionResult>;
+  sessionId: string | null;
+  sessionVersion: number | null;
+  invalidate: ClockLiveView['invalidate'];
+  refresh: ClockLiveView['refresh'];
+  setData: ClockLiveView['setData'];
+}): ClockTransitionExecute {
+  return useCallback(
+    async (
+      action: TimeTransitionInput['action'],
+      selection: TimeActivitySelection | null,
+      acknowledgeLong = false,
+    ): Promise<TimeTransitionResult> => {
+      if (!activeOrgId) return { success: false, error: 'no_active_org' };
+      // Never infer a new session from an unknown or failed initial read.
+      if (!isReady) return { success: false, error: 'time_transition_failed' };
+      let result: TimeTransitionResult;
+      try {
+        result = await run({
+          organizationId: activeOrgId,
+          operationId: crypto.randomUUID(),
+          action,
+          expectedSessionId: sessionId,
+          expectedVersion: sessionVersion,
+          selection,
+          acknowledgeLong,
+        });
+      } catch {
+        return { success: false, error: 'time_transition_failed' };
+      }
+      if (result.success) {
+        // Echo first so no in-flight read overwrites it, then read fresh.
+        invalidate();
+        setData((previous) => (previous ? applyTransitionEcho(previous, selection, result) : previous));
+      }
+      if (result.success || (!result.success && result.error === 'time_transition_stale_version')) {
+        await refresh();
+      }
+      return result;
+    },
+    [activeOrgId, invalidate, isReady, refresh, run, sessionId, sessionVersion, setData],
+  );
+}
+
+/** The clock's commands, each mapped onto the transition the running session allows. */
+function useClockTransitionCommands(
+  execute: ClockTransitionExecute,
+  legacyOpen: boolean,
+  isClockedIn: boolean,
+  recoveryReason: LiveClockState['recoveryReason'],
+): Pick<
+  ClockStateContextValue,
+  'transitionActivity' | 'recoverAndContinue' | 'clockIn' | 'clockOut' | 'switchJob'
+> {
+  const transitionActivity = useCallback(
+    async (selection: TimeActivitySelection): Promise<TimeTransitionResult> => {
+      const action = legacyOpen ? 'continue_legacy' : isClockedIn ? 'switch' : 'start';
+      return execute(action, selection);
+    },
+    [execute, isClockedIn, legacyOpen],
+  );
+  const recoverAndContinue = useCallback(
+    (selection: TimeActivitySelection) => execute('recover_continue', selection, true),
+    [execute],
+  );
+  const clockIn = useCallback(
+    (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
+    [transitionActivity],
+  );
+  const clockOut = useCallback(
+    (acknowledgeRecovery = false) => {
+      const action = legacyOpen
+        ? 'end_legacy'
+        : recoveryReason && acknowledgeRecovery
+          ? 'recover_end'
+          : 'end';
+      return execute(action, null, acknowledgeRecovery && action === 'recover_end');
+    },
+    [execute, legacyOpen, recoveryReason],
+  );
+  const switchJob = useCallback(
+    (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
+    [transitionActivity],
+  );
+  return { transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob };
+}
+
 export function ClockStateProvider({
   children,
   initialState = null,
@@ -141,71 +252,21 @@ export function ClockStateProvider({
   const isClockedIn = currentState?.isClockedIn ?? false;
   const recoveryReason = currentState?.recoveryReason ?? null;
 
-  const execute = useCallback(
-    async (
-      action: TimeTransitionInput['action'],
-      selection: TimeActivitySelection | null,
-      acknowledgeLong = false,
-    ): Promise<TimeTransitionResult> => {
-      if (!activeOrgId) return { success: false, error: 'no_active_org' };
-      // Never infer a new session from an unknown or failed initial read.
-      if (!isReady) return { success: false, error: 'time_transition_failed' };
-      let result: TimeTransitionResult;
-      try {
-        result = await run({
-          organizationId: activeOrgId,
-          operationId: crypto.randomUUID(),
-          action,
-          expectedSessionId: sessionId,
-          expectedVersion: sessionVersion,
-          selection,
-          acknowledgeLong,
-        });
-      } catch {
-        return { success: false, error: 'time_transition_failed' };
-      }
-      if (result.success) {
-        // Echo first so no in-flight read overwrites it, then read fresh.
-        invalidate();
-        setData((previous) => (previous ? applyTransitionEcho(previous, selection, result) : previous));
-      }
-      if (result.success || (!result.success && result.error === 'time_transition_stale_version')) {
-        await refresh();
-      }
-      return result;
-    },
-    [activeOrgId, invalidate, isReady, refresh, run, sessionId, sessionVersion, setData],
-  );
-
-  const transitionActivity = useCallback(
-    async (selection: TimeActivitySelection): Promise<TimeTransitionResult> => {
-      const action = legacyOpen ? 'continue_legacy' : isClockedIn ? 'switch' : 'start';
-      return execute(action, selection);
-    },
-    [execute, isClockedIn, legacyOpen],
-  );
-  const recoverAndContinue = useCallback(
-    (selection: TimeActivitySelection) => execute('recover_continue', selection, true),
-    [execute],
-  );
-  const clockIn = useCallback(
-    (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
-    [transitionActivity],
-  );
-  const clockOut = useCallback(
-    (acknowledgeRecovery = false) => {
-      const action = legacyOpen
-        ? 'end_legacy'
-        : recoveryReason && acknowledgeRecovery
-          ? 'recover_end'
-          : 'end';
-      return execute(action, null, acknowledgeRecovery && action === 'recover_end');
-    },
-    [execute, legacyOpen, recoveryReason],
-  );
-  const switchJob = useCallback(
-    (jobId: string | null) => transitionActivity(createActivitySelection('work', jobId)),
-    [transitionActivity],
+  const execute = useClockTransitionExecute({
+    activeOrgId,
+    isReady,
+    run,
+    sessionId,
+    sessionVersion,
+    invalidate,
+    refresh,
+    setData,
+  });
+  const { transitionActivity, recoverAndContinue, clockIn, clockOut, switchJob } = useClockTransitionCommands(
+    execute,
+    legacyOpen,
+    isClockedIn,
+    recoveryReason,
   );
 
   const value = useMemo<ClockStateContextValue>(
