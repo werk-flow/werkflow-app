@@ -7,14 +7,14 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import { resolveActionContext, resolveActionContextFor } from '@/lib/org/action-context';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
 import { getAuthenticatedUser, CACHE_TAGS } from '@/lib/data/cached';
-import { getResponsibilitiesStrandedByMemberRemoval } from '@/lib/responsibilities/server';
 import { getOrgMembersForUser, getProfileNamesVisibleTo, type ProfileNamesRead } from './queries';
+import { memberRemovalFailure, memberTargetRefusal, strandedRemovalRefusal } from './removal';
 import { z } from '@/lib/zod';
 import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { Constants } from '@/lib/supabase/database.types';
 import { bueroMayManage, type OrgRole } from '@/lib/roles';
-import { strandedResponsibilityOf, type OrganizationResponsibility } from '@/lib/responsibilities/types';
+import type { OrganizationResponsibility } from '@/lib/responsibilities/types';
 
 const memberRoleChangeSchema = z.object({
   memberId: uuidSchema,
@@ -177,52 +177,16 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
       return { success: false, error: 'not_authorized' };
     }
 
-    const { data: targetMember, error: targetError } = await admin
-      .from('organization_members')
-      .select('user_id, role')
-      .eq('organization_id', orgId)
-      .eq('user_id', memberId)
-      .single();
-
-    if (targetError || !targetMember) {
-      return { success: false, error: 'member_not_found' };
-    }
-
-    const targetRole = targetMember.role;
-
-    // Cannot remove self
-    if (targetMember.user_id === callerId) {
-      return { success: false, error: 'cannot_remove_self' };
-    }
-
-    // Cannot remove the admin
-    if (targetRole === 'admin') {
-      return { success: false, error: 'cannot_remove_admin' };
-    }
-
-    // Büro users can only remove employees
-    if (callerRole === 'buero') {
-      if (!bueroMayManage(targetRole)) {
-        return { success: false, error: 'insufficient_permissions' };
-      }
-    }
-
-    // Names every stranded responsibility at once; the membership trigger is
-    // the backstop and names only the first.
-    const strandedResponsibilities = await getResponsibilitiesStrandedByMemberRemoval({
+    const targetRefusal = await memberTargetRefusal(admin, {
       organizationId: orgId,
-      userId: memberId,
+      callerId,
+      callerRole,
+      memberId,
     });
-    if (!strandedResponsibilities) {
-      return { success: false, error: 'delete_failed' };
-    }
-    if (strandedResponsibilities.length > 0) {
-      return {
-        success: false,
-        error: 'last_responsibility_holder',
-        responsibilities: strandedResponsibilities,
-      };
-    }
+    if (targetRefusal) return targetRefusal;
+
+    const strandedRefusal = await strandedRemovalRefusal(orgId, memberId);
+    if (strandedRefusal) return strandedRefusal;
 
     // One transaction: the membership goes, and the personnel record survives
     // marked as exited today with a membership_removed event (P1-03), or
@@ -236,23 +200,7 @@ export async function removeMember(memberIdInput: string): Promise<RemoveMemberR
 
     if (deleteError) {
       logError('Error removing member atomically:', deleteError);
-      // SI-006 containment: recorded time keeps the member; offboarding runs
-      // through the P1-24 employment transitions until P1-33.
-      if (deleteError.message.includes('time_member_removal_has_history')) {
-        return { success: false, error: 'has_time_history' };
-      }
-      if (deleteError.message.includes('member_removal_exit_before_entry')) {
-        return { success: false, error: 'exit_before_entry' };
-      }
-      const strandedResponsibility = strandedResponsibilityOf(deleteError.message);
-      if (strandedResponsibility) {
-        return {
-          success: false,
-          error: 'last_responsibility_holder',
-          responsibilities: [strandedResponsibility],
-        };
-      }
-      return { success: false, error: 'delete_failed' };
+      return memberRemovalFailure(deleteError);
     }
 
     if (orgId) {

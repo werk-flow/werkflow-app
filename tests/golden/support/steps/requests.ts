@@ -66,7 +66,7 @@ export const REQUEST_DETAIL_TEXT = {
   closedWithoutWork: 'Ohne Auftrag geschlossen:',
   converted: 'Diese Anfrage wurde umgewandelt',
   /** The conversion dialog's promise that it plans nothing by itself. */
-  noAutomaticScheduling: 'Es wird nichts automatisch terminiert.',
+  noAutomaticScheduling: 'Nichts wird automatisch terminiert.',
   /** The empty planned-date picker of the conversion dialog. */
   noPlannedDate: 'Datum wählen',
   /** The banner after an unknown caller became a customer. */
