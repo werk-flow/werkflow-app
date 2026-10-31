@@ -69,7 +69,8 @@ export function legacyDayTotals(entries: TimeEntry[], now: Date): ClockDayTotals
 
 /**
  * Both capture models' minutes of the day. Neither carries its blocks' times,
- * so the ring shows the legacy blocks first.
+ * so a day with blocks from both shows no block order: the ring falls back to
+ * its aggregate view instead of placing one model's blocks first.
  */
 export function combineClockDayTotals(legacy: ClockDayTotals, canonical: ClockDayTotals): ClockDayTotals {
   return {
@@ -79,6 +80,9 @@ export function combineClockDayTotals(legacy: ClockDayTotals, canonical: ClockDa
     standbyMinutes: legacy.standbyMinutes + canonical.standbyMinutes,
     calloutMinutes: legacy.calloutMinutes + canonical.calloutMinutes,
     internalMinutes: legacy.internalMinutes + canonical.internalMinutes,
-    timelineSegments: [...legacy.timelineSegments, ...canonical.timelineSegments],
+    timelineSegments:
+      legacy.timelineSegments.length > 0 && canonical.timelineSegments.length > 0
+        ? []
+        : [...legacy.timelineSegments, ...canonical.timelineSegments],
   };
 }

@@ -1,4 +1,4 @@
-import { liveMinutes } from '@/lib/time-tracking/helpers';
+import { liveMinutes, todayRunningSince } from '@/lib/time-tracking/helpers';
 import { computeBreakdownForSettings } from '@/lib/time-tracking/settings';
 import type { ClockTimelineSegment, LiveClockState } from '@/lib/time-tracking/types';
 
@@ -22,7 +22,11 @@ export function computeZeiterfassungLiveTotals(
   todayTargetMinutes: number | undefined,
   nowMs: number | null,
 ): ZeiterfassungLiveTotals {
-  const runningSince = nowMs !== null && effectiveState.isClockedIn ? effectiveState.statusStartedAt : null;
+  // Today counts a running activity from midnight at the earliest.
+  const runningSince =
+    nowMs !== null && effectiveState.isClockedIn
+      ? todayRunningSince(effectiveState.statusStartedAt, nowMs)
+      : null;
   // The minutes of the still-running activity; 0 when nothing runs.
   const currentActivityMinutes = liveMinutes(0, runningSince, nowMs ?? 0);
 
