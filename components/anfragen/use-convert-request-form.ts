@@ -28,7 +28,9 @@ const ERROR_MESSAGES = {
   template_apply_failed: 'Die Arbeitsvorlage konnte nicht übernommen werden.',
 } satisfies Record<string, string>;
 
-export type ConversionTarget = 'job' | 'project';
+export const CONVERSION_TARGETS = ['job', 'project'] as const;
+
+type ConversionTarget = (typeof CONVERSION_TARGETS)[number];
 
 type ConversionFieldId = 'convert-title' | 'convert-number' | 'convert-client';
 
@@ -69,6 +71,20 @@ function conversionFieldError(
   const ownMessage = attempted ? fieldErrors[id] : undefined;
   if (ownMessage) return ownMessage;
   return error !== null && FIELD_SERVER_MESSAGES[id].includes(error) ? error : null;
+}
+
+/** Each field's message and the submit-level message. */
+function conversionErrors(
+  fieldErrors: Record<ConversionFieldId, string | undefined>,
+  attempted: boolean,
+  error: string | null,
+): Pick<ConvertRequestForm, 'titleError' | 'numberError' | 'clientError' | 'formError'> {
+  const titleError = conversionFieldError('convert-title', fieldErrors, attempted, error);
+  const numberError = conversionFieldError('convert-number', fieldErrors, attempted, error);
+  const clientError = conversionFieldError('convert-client', fieldErrors, attempted, error);
+  // A server refusal shows once: on the field it names, else above the actions.
+  const formError = [titleError, numberError, clientError].includes(error) ? null : error;
+  return { titleError, numberError, clientError, formError };
 }
 
 export interface ConvertRequestForm {
@@ -137,6 +153,141 @@ function useSuggestedConversionNumber(
   return { number, setNumber };
 }
 
+/** The editable conversion fields; the number lives in useSuggestedConversionNumber. */
+type ConversionFields = Pick<
+  ConvertRequestForm,
+  | 'title'
+  | 'setTitle'
+  | 'description'
+  | 'setDescription'
+  | 'clientId'
+  | 'setClientId'
+  | 'siteId'
+  | 'setSiteId'
+  | 'contactId'
+  | 'setContactId'
+  | 'priority'
+  | 'setPriority'
+  | 'plannedDate'
+  | 'setPlannedDate'
+  | 'plannedTime'
+  | 'setPlannedTime'
+  | 'location'
+  | 'setLocation'
+  | 'templateVersionId'
+  | 'setTemplateVersionId'
+>;
+
+/** The conversion fields, starting from the request; `prefill` refills them from it. */
+function useConversionFields(request: ClientRequest): { fields: ConversionFields; prefill: () => void } {
+  const [title, setTitle] = useState(request.summary);
+  const [description, setDescription] = useState(request.details ?? '');
+  const [clientId, setClientId] = useState(request.clientId ?? '');
+  const [siteId, setSiteId] = useState(request.siteId ?? '');
+  const [contactId, setContactId] = useState(request.contactId ?? '');
+  const [priority, setPriority] = useState<JobPriority>(requestUrgencyToJobPriority(request.urgency));
+  const [plannedDate, setPlannedDate] = useState('');
+  const [plannedTime, setPlannedTime] = useState('');
+  const [location, setLocation] = useState('');
+  const [templateVersionId, setTemplateVersionId] = useState('');
+
+  const prefill = () => {
+    setTitle(request.summary);
+    setDescription(request.details ?? '');
+    setClientId(request.clientId ?? '');
+    setSiteId(request.siteId ?? '');
+    setContactId(request.contactId ?? '');
+    setPriority(requestUrgencyToJobPriority(request.urgency));
+    setPlannedDate('');
+    setPlannedTime('');
+    setLocation('');
+    setTemplateVersionId('');
+  };
+
+  return {
+    fields: {
+      title,
+      setTitle,
+      description,
+      setDescription,
+      clientId,
+      setClientId,
+      siteId,
+      setSiteId,
+      contactId,
+      setContactId,
+      priority,
+      setPriority,
+      plannedDate,
+      setPlannedDate,
+      plannedTime,
+      setPlannedTime,
+      location,
+      setLocation,
+      templateVersionId,
+      setTemplateVersionId,
+    },
+    prefill,
+  };
+}
+
+type ConversionOutcome =
+  | { kind: 'converted'; message: string }
+  | { kind: 'qualification_warning'; evaluation: AssignmentEvaluation }
+  | { kind: 'failed'; error: string };
+
+/** Sends the conversion to the job or project action and names its outcome. */
+async function convertRequest(
+  requestId: string,
+  target: ConversionTarget,
+  fields: ConversionFields & { number: string },
+  approval: AssignmentApproval | undefined,
+): Promise<ConversionOutcome> {
+  const { title, description, clientId, siteId, contactId, number } = fields;
+  if (target === 'job') {
+    const { priority, plannedDate, plannedTime, location, templateVersionId } = fields;
+    const result = await convertRequestToJob(requestId, {
+      title: title.trim(),
+      ...(description.trim() ? { description: description.trim() } : {}),
+      clientId,
+      ...(siteId ? { siteId } : {}),
+      ...(contactId ? { contactId } : {}),
+      jobNumber: number.trim(),
+      priority,
+      ...(plannedDate ? { plannedDate } : {}),
+      // The time field hides without a date; an undated job carries no time.
+      ...(plannedDate && plannedTime ? { plannedTime } : {}),
+      ...(location.trim() ? { location: location.trim() } : {}),
+      ...(templateVersionId ? { templateVersionId } : {}),
+      assignmentApproval: approval ?? null,
+    });
+    if (!result.success) {
+      if (
+        (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+        'evaluation' in result
+      ) {
+        return { kind: 'qualification_warning', evaluation: result.evaluation };
+      }
+      return { kind: 'failed', error: describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler') };
+    }
+    return { kind: 'converted', message: 'Anfrage wurde in einen Auftrag umgewandelt.' };
+  }
+  const { templateVersionId } = fields;
+  const result = await convertRequestToProject(requestId, {
+    name: title.trim(),
+    ...(description.trim() ? { description: description.trim() } : {}),
+    clientId,
+    ...(siteId ? { siteId } : {}),
+    ...(contactId ? { contactId } : {}),
+    ...(number.trim() ? { projectNumber: number.trim() } : {}),
+    ...(templateVersionId ? { templateVersionId } : {}),
+  });
+  if (!result.success) {
+    return { kind: 'failed', error: describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler') };
+  }
+  return { kind: 'converted', message: 'Anfrage wurde in ein Projekt umgewandelt.' };
+}
+
 /** Form state of the conversion dialog: prefill, number suggestion, validation and submit. */
 export function useConvertRequestForm({
   request,
@@ -151,16 +302,7 @@ export function useConvertRequestForm({
 }): ConvertRequestForm {
   const { showBanner } = useBanner();
   const [target, setTarget] = useState<ConversionTarget>('job');
-  const [title, setTitle] = useState(request.summary);
-  const [description, setDescription] = useState(request.details ?? '');
-  const [clientId, setClientId] = useState(request.clientId ?? '');
-  const [siteId, setSiteId] = useState(request.siteId ?? '');
-  const [contactId, setContactId] = useState(request.contactId ?? '');
-  const [priority, setPriority] = useState<JobPriority>(requestUrgencyToJobPriority(request.urgency));
-  const [plannedDate, setPlannedDate] = useState('');
-  const [plannedTime, setPlannedTime] = useState('');
-  const [location, setLocation] = useState('');
-  const [templateVersionId, setTemplateVersionId] = useState('');
+  const { fields, prefill } = useConversionFields(request);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
@@ -174,16 +316,7 @@ export function useConvertRequestForm({
   if (open !== prefilledFor.open || request.id !== prefilledFor.requestId) {
     setPrefilledFor({ open, requestId: request.id });
     if (open) {
-      setTitle(request.summary);
-      setDescription(request.details ?? '');
-      setClientId(request.clientId ?? '');
-      setSiteId(request.siteId ?? '');
-      setContactId(request.contactId ?? '');
-      setPriority(requestUrgencyToJobPriority(request.urgency));
-      setPlannedDate('');
-      setPlannedTime('');
-      setLocation('');
-      setTemplateVersionId('');
+      prefill();
       setError(null);
       setAttempted(false);
     }
@@ -191,13 +324,13 @@ export function useConvertRequestForm({
 
   const { number, setNumber } = useSuggestedConversionNumber(open, target);
 
-  const fieldErrors = conversionFieldErrors(target, title, number, clientId);
+  const fieldErrors = conversionFieldErrors(target, fields.title, number, fields.clientId);
 
   // A template belongs to one target kind, so switching the target clears it.
   const changeTarget = (nextTarget: ConversionTarget) => {
     if (nextTarget === target) return;
     setTarget(nextTarget);
-    setTemplateVersionId('');
+    fields.setTemplateVersionId('');
   };
 
   const submitConversion = async (approval?: AssignmentApproval) => {
@@ -211,60 +344,18 @@ export function useConvertRequestForm({
 
     await runConvert(async () => {
       try {
-        if (target === 'job') {
-          const result = await convertRequestToJob(request.id, {
-            title: title.trim(),
-            ...(description.trim() ? { description: description.trim() } : {}),
-            clientId,
-            ...(siteId ? { siteId } : {}),
-            ...(contactId ? { contactId } : {}),
-            jobNumber: number.trim(),
-            priority,
-            ...(plannedDate ? { plannedDate } : {}),
-            // The time field hides without a date; an undated job carries no time.
-            ...(plannedDate && plannedTime ? { plannedTime } : {}),
-            ...(location.trim() ? { location: location.trim() } : {}),
-            ...(templateVersionId ? { templateVersionId } : {}),
-            assignmentApproval: approval ?? null,
-          });
-          if (!result.success) {
-            if (
-              (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-              'evaluation' in result
-            ) {
-              setQualificationWarning(result.evaluation);
-              return;
-            }
-            setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
-            return;
-          }
-          onOpenChange(false);
-          onSaved?.();
-          showBanner({
-            variant: 'success',
-            message: 'Anfrage wurde in einen Auftrag umgewandelt.',
-          });
-        } else {
-          const result = await convertRequestToProject(request.id, {
-            name: title.trim(),
-            ...(description.trim() ? { description: description.trim() } : {}),
-            clientId,
-            ...(siteId ? { siteId } : {}),
-            ...(contactId ? { contactId } : {}),
-            ...(number.trim() ? { projectNumber: number.trim() } : {}),
-            ...(templateVersionId ? { templateVersionId } : {}),
-          });
-          if (!result.success) {
-            setError(describeFailure(result.error, ERROR_MESSAGES, 'Unbekannter Fehler'));
-            return;
-          }
-          onOpenChange(false);
-          onSaved?.();
-          showBanner({
-            variant: 'success',
-            message: 'Anfrage wurde in ein Projekt umgewandelt.',
-          });
+        const outcome = await convertRequest(request.id, target, { ...fields, number }, approval);
+        if (outcome.kind === 'qualification_warning') {
+          setQualificationWarning(outcome.evaluation);
+          return;
         }
+        if (outcome.kind === 'failed') {
+          setError(outcome.error);
+          return;
+        }
+        onOpenChange(false);
+        onSaved?.();
+        showBanner({ variant: 'success', message: outcome.message });
       } catch {
         setError('Ein unerwarteter Fehler ist aufgetreten.');
       }
@@ -276,44 +367,16 @@ export function useConvertRequestForm({
     await submitConversion();
   };
 
-  const titleError = conversionFieldError('convert-title', fieldErrors, attempted, error);
-  const numberError = conversionFieldError('convert-number', fieldErrors, attempted, error);
-  const clientError = conversionFieldError('convert-client', fieldErrors, attempted, error);
-  // A server refusal shows once: on the field it names, else above the actions.
-  const formError = [titleError, numberError, clientError].includes(error) ? null : error;
-
   return {
+    ...fields,
     target,
     setTarget: changeTarget,
-    title,
-    setTitle,
-    description,
-    setDescription,
     number,
     setNumber,
-    clientId,
-    setClientId,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    priority,
-    setPriority,
-    plannedDate,
-    setPlannedDate,
-    plannedTime,
-    setPlannedTime,
-    location,
-    setLocation,
-    templateVersionId,
-    setTemplateVersionId,
     qualificationWarning,
     setQualificationWarning,
     isLoading,
-    titleError,
-    numberError,
-    clientError,
-    formError,
+    ...conversionErrors(fieldErrors, attempted, error),
     submitConversion,
     handleSubmit,
   };

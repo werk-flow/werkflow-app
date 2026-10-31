@@ -66,6 +66,36 @@ export type UnifiedAuftraegeJobRowCellsProps = UnifiedAuftraegeJobMenuProps & {
   visibleColumns: AuftraegeColumnId[];
 };
 
+type JobRowMenuCellProps = UnifiedAuftraegeJobMenuProps &
+  Pick<UnifiedAuftraegeJobRowCellsProps, 'job' | 'project' | 'detailHref' | 'clientName'>;
+
+/** The actions cell of a job row; a click inside it never opens the job. */
+function JobRowMenuCell({
+  job,
+  project,
+  detailHref,
+  clientName,
+  members,
+  onJobUpdated,
+  onJobDeleted,
+  onJobDeleteRequested,
+}: JobRowMenuCellProps) {
+  return (
+    <TableCell onClick={(e) => e.stopPropagation()}>
+      <JobActionsMenu
+        job={job}
+        detailHref={detailHref}
+        clientName={clientName}
+        members={members}
+        knownProject={project}
+        onJobUpdated={onJobUpdated}
+        onJobDeleted={onJobDeleted}
+        onDeleteRequested={onJobDeleteRequested}
+      />
+    </TableCell>
+  );
+}
+
 /** The cells of one job row; the owning table keeps the `TableRow`. */
 export function UnifiedAuftraegeJobRowCells({
   job,
@@ -79,10 +109,7 @@ export function UnifiedAuftraegeJobRowCells({
   memberLookup,
   assignedUserIds,
   visibleColumns,
-  members,
-  onJobUpdated,
-  onJobDeleted,
-  onJobDeleteRequested,
+  ...menuProps
 }: UnifiedAuftraegeJobRowCellsProps) {
   return (
     <>
@@ -133,18 +160,13 @@ export function UnifiedAuftraegeJobRowCells({
         </TableCell>
       )}
       {isAdminOrManager && (
-        <TableCell onClick={(e) => e.stopPropagation()}>
-          <JobActionsMenu
-            job={job}
-            detailHref={detailHref}
-            clientName={clientName}
-            members={members}
-            knownProject={project}
-            onJobUpdated={onJobUpdated}
-            onJobDeleted={onJobDeleted}
-            onDeleteRequested={onJobDeleteRequested}
-          />
-        </TableCell>
+        <JobRowMenuCell
+          job={job}
+          project={project}
+          detailHref={detailHref}
+          clientName={clientName}
+          {...menuProps}
+        />
       )}
     </>
   );
@@ -166,6 +188,68 @@ type UnifiedAuftraegeProjectRowCellsProps = UnifiedAuftraegeProjectMenuProps & {
   memberLookup: Map<string, OrgMemberOption>;
   visibleColumns: AuftraegeColumnId[];
 };
+
+/** The expand toggle cell of a project row; a click inside it never opens the project. */
+function ProjectRowToggleCell({
+  isExpanded,
+  onToggle,
+}: Pick<UnifiedAuftraegeProjectRowCellsProps, 'isExpanded' | 'onToggle'>) {
+  return (
+    <TableCell className="w-[36px] pr-0" onClick={(e) => e.stopPropagation()}>
+      <PlainButton
+        onClick={onToggle}
+        className="flex size-6 items-center justify-center rounded-sm hover:bg-accent"
+        aria-label={isExpanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
+        aria-expanded={isExpanded}
+      >
+        <ChevronRight
+          className={cn(
+            'size-4 text-muted-foreground transition-transform duration-200',
+            isExpanded && 'rotate-90',
+          )}
+        />
+      </PlainButton>
+    </TableCell>
+  );
+}
+
+type ProjectRowStatusCellProps = Pick<
+  UnifiedAuftraegeProjectRowCellsProps,
+  'project' | 'effectiveStatus' | 'progress' | 'trafficLight'
+>;
+
+/** The status cell of a project row: status badge, job progress and traffic light. */
+function ProjectRowStatusCell({
+  project,
+  effectiveStatus,
+  progress,
+  trafficLight,
+}: ProjectRowStatusCellProps) {
+  return (
+    <TableCell>
+      <div className="flex items-center gap-2">
+        <Badge
+          variant="secondary"
+          className={cn('max-w-48 justify-center truncate', getProjectStatusClass(project, effectiveStatus))}
+          title={getProjectStatusLabel(project)}
+        >
+          {getProjectStatusLabel(project)}
+        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Progress
+            value={progress}
+            label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
+            className="h-1.5 w-12"
+          />
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {project.completedJobCount}/{project.jobCount}
+          </span>
+        </div>
+        <TrafficLight status={trafficLight} />
+      </div>
+    </TableCell>
+  );
+}
 
 /** The cells of one project row; the owning table keeps the `TableRow`. */
 export function UnifiedAuftraegeProjectRowCells({
@@ -190,21 +274,7 @@ export function UnifiedAuftraegeProjectRowCells({
 }: UnifiedAuftraegeProjectRowCellsProps) {
   return (
     <>
-      <TableCell className="w-[36px] pr-0" onClick={(e) => e.stopPropagation()}>
-        <PlainButton
-          onClick={onToggle}
-          className="flex size-6 items-center justify-center rounded-sm hover:bg-accent"
-          aria-label={isExpanded ? 'Projekt zuklappen' : 'Projekt aufklappen'}
-          aria-expanded={isExpanded}
-        >
-          <ChevronRight
-            className={cn(
-              'size-4 text-muted-foreground transition-transform duration-200',
-              isExpanded && 'rotate-90',
-            )}
-          />
-        </PlainButton>
-      </TableCell>
+      <ProjectRowToggleCell isExpanded={isExpanded} onToggle={onToggle} />
       {isAuftraegeColumnVisible(visibleColumns, 'nr') && (
         <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
           {project.projectNumber || '—'}
@@ -223,31 +293,12 @@ export function UnifiedAuftraegeProjectRowCells({
       )}
       {isAuftraegeColumnVisible(visibleColumns, 'kunde') && <TableCell>{clientName}</TableCell>}
       {isAuftraegeColumnVisible(visibleColumns, 'status') && (
-        <TableCell>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant="secondary"
-              className={cn(
-                'max-w-48 justify-center truncate',
-                getProjectStatusClass(project, effectiveStatus),
-              )}
-              title={getProjectStatusLabel(project)}
-            >
-              {getProjectStatusLabel(project)}
-            </Badge>
-            <div className="flex items-center gap-1.5">
-              <Progress
-                value={progress}
-                label={`Erledigte Aufträge des Projekts: ${project.completedJobCount} von ${project.jobCount}`}
-                className="h-1.5 w-12"
-              />
-              <span className="text-xs tabular-nums text-muted-foreground">
-                {project.completedJobCount}/{project.jobCount}
-              </span>
-            </div>
-            <TrafficLight status={trafficLight} />
-          </div>
-        </TableCell>
+        <ProjectRowStatusCell
+          project={project}
+          effectiveStatus={effectiveStatus}
+          progress={progress}
+          trafficLight={trafficLight}
+        />
       )}
       {isAuftraegeColumnVisible(visibleColumns, 'prioritaet') && <TableCell />}
       {isAuftraegeColumnVisible(visibleColumns, 'mitarbeiter') && (

@@ -11,15 +11,9 @@ interface CreateRequestCustomerFieldsProps {
   form: CreateRequestForm;
 }
 
-/** The customer with site and contact, or the caller data while no customer is chosen. */
-export function CreateRequestCustomerFields({ form }: CreateRequestCustomerFieldsProps) {
+/** The caller's data while the request has no customer yet. */
+function CreateRequestCallerFields({ form }: CreateRequestCustomerFieldsProps) {
   const {
-    clientId,
-    handleClientChange,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
     callerName,
     setCallerName,
     callerPhone,
@@ -30,6 +24,56 @@ export function CreateRequestCustomerFields({ form }: CreateRequestCustomerField
     setCallerAddress,
     isLoading,
   } = form;
+
+  return (
+    <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Anrufer/in (noch kein Kunde)
+      </p>
+      <Field label="Name" htmlFor="request-caller-name">
+        <Input
+          placeholder="Name der Anruferin / des Anrufers"
+          value={callerName}
+          onChange={(e) => setCallerName(e.target.value)}
+          disabled={isLoading}
+        />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Telefon" htmlFor="request-caller-phone">
+          <Input
+            type="tel"
+            placeholder="+49 123 456789"
+            value={callerPhone}
+            onChange={(e) => setCallerPhone(e.target.value)}
+            disabled={isLoading}
+          />
+        </Field>
+        <Field label="E-Mail" htmlFor="request-caller-email">
+          <Input
+            type="text"
+            inputMode="email"
+            placeholder="name@beispiel.de"
+            value={callerEmail}
+            onChange={(e) => setCallerEmail(e.target.value)}
+            disabled={isLoading}
+          />
+        </Field>
+      </div>
+      <Field label="Adresse" htmlFor="request-caller-address">
+        <Input
+          placeholder="Straße, PLZ Ort"
+          value={callerAddress}
+          onChange={(e) => setCallerAddress(e.target.value)}
+          disabled={isLoading}
+        />
+      </Field>
+    </div>
+  );
+}
+
+/** The customer with site and contact, or the caller data while no customer is chosen. */
+export function CreateRequestCustomerFields({ form }: CreateRequestCustomerFieldsProps) {
+  const { clientId, handleClientChange, siteId, setSiteId, contactId, setContactId, isLoading } = form;
 
   return (
     <>
@@ -59,48 +103,7 @@ export function CreateRequestCustomerFields({ form }: CreateRequestCustomerField
           idPrefix="request"
         />
       ) : (
-        <div className="grid gap-3 rounded-md border bg-muted/20 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Anrufer/in (noch kein Kunde)
-          </p>
-          <Field label="Name" htmlFor="request-caller-name">
-            <Input
-              placeholder="Name der Anruferin / des Anrufers"
-              value={callerName}
-              onChange={(e) => setCallerName(e.target.value)}
-              disabled={isLoading}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Telefon" htmlFor="request-caller-phone">
-              <Input
-                type="tel"
-                placeholder="+49 123 456789"
-                value={callerPhone}
-                onChange={(e) => setCallerPhone(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="E-Mail" htmlFor="request-caller-email">
-              <Input
-                type="text"
-                inputMode="email"
-                placeholder="name@beispiel.de"
-                value={callerEmail}
-                onChange={(e) => setCallerEmail(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-          </div>
-          <Field label="Adresse" htmlFor="request-caller-address">
-            <Input
-              placeholder="Straße, PLZ Ort"
-              value={callerAddress}
-              onChange={(e) => setCallerAddress(e.target.value)}
-              disabled={isLoading}
-            />
-          </Field>
-        </div>
+        <CreateRequestCallerFields form={form} />
       )}
     </>
   );

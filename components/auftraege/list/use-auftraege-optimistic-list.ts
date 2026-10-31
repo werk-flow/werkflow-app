@@ -22,6 +22,65 @@ type AuftraegeOptimisticListOptions = Pick<
   initialProjects: ProjectWithDetails[];
 };
 
+type AuftraegeListSectionsInput = Pick<AuftraegeOptimisticListOptions, 'initialJobs' | 'initialProjects'> & {
+  jobOverlay: ReturnType<typeof useOptimisticList<Job>>['items'];
+  projectOverlay: ReturnType<typeof useOptimisticList<ProjectWithDetails>>['items'];
+  settlingIds: AuftraegeRowFeedback['settlingIds'];
+};
+
+/** The sections, row feedback and picker jobs derived from the merged optimistic view. */
+function useAuftraegeListSections({
+  jobOverlay,
+  projectOverlay,
+  settlingIds,
+  initialJobs,
+  initialProjects,
+}: AuftraegeListSectionsInput) {
+  const visibleJobs = useMemo(() => jobOverlay.map((entry) => entry.item), [jobOverlay]);
+  const visibleProjects = useMemo(() => projectOverlay.map((entry) => entry.item), [projectOverlay]);
+  // Creation pickers must follow the same client-owned collection as the
+  // table, otherwise a confirmed create remains unselectable until the next
+  // route refresh. Pending inserts stay out because their temporary ids are
+  // not valid server references.
+  const dialogJobs = useMemo(
+    () => jobOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
+    [jobOverlay],
+  );
+  const rowFeedback = useMemo<AuftraegeRowFeedback>(
+    () => ({
+      pendingIds: new Set(
+        [...jobOverlay, ...projectOverlay]
+          .filter((entry) => entry.isOptimistic)
+          .map((entry) => entry.item.id),
+      ),
+      settlingIds,
+    }),
+    [jobOverlay, projectOverlay, settlingIds],
+  );
+
+  const unifiedEntries = useMemo(
+    () => buildUnifiedList(visibleJobs, visibleProjects),
+    [visibleJobs, visibleProjects],
+  );
+
+  const {
+    active: rawActive,
+    parked: rawParked,
+    archived: rawArchived,
+  } = useMemo(() => splitEntries(unifiedEntries), [unifiedEntries]);
+
+  const initialIds = useMemo(
+    () => new Set([...initialJobs, ...initialProjects].map((entry) => entry.id)),
+    [initialJobs, initialProjects],
+  );
+  const localPendingIds = useMemo(
+    () => new Set([...rowFeedback.pendingIds, ...settlingIds]),
+    [rowFeedback.pendingIds, settlingIds],
+  );
+
+  return { dialogJobs, rowFeedback, rawActive, rawParked, rawArchived, initialIds, localPendingIds };
+}
+
 /**
  * The list's own-action layer: the optimistic overlay over the live jobs and
  * projects, the create, edit and delete handlers that drive it, and the
@@ -78,47 +137,8 @@ export function useAuftraegeOptimisticList({
     handleProjectCreated: localUpdates.handleProjectCreated,
   });
 
-  const visibleJobs = useMemo(() => jobOverlay.map((entry) => entry.item), [jobOverlay]);
-  const visibleProjects = useMemo(() => projectOverlay.map((entry) => entry.item), [projectOverlay]);
-  // Creation pickers must follow the same client-owned collection as the
-  // table, otherwise a confirmed create remains unselectable until the next
-  // route refresh. Pending inserts stay out because their temporary ids are
-  // not valid server references.
-  const dialogJobs = useMemo(
-    () => jobOverlay.filter((entry) => entry.tempId === null).map((entry) => entry.item),
-    [jobOverlay],
-  );
-  const rowFeedback = useMemo<AuftraegeRowFeedback>(
-    () => ({
-      pendingIds: new Set(
-        [...jobOverlay, ...projectOverlay]
-          .filter((entry) => entry.isOptimistic)
-          .map((entry) => entry.item.id),
-      ),
-      settlingIds,
-    }),
-    [jobOverlay, projectOverlay, settlingIds],
-  );
-
-  const unifiedEntries = useMemo(
-    () => buildUnifiedList(visibleJobs, visibleProjects),
-    [visibleJobs, visibleProjects],
-  );
-
-  const {
-    active: rawActive,
-    parked: rawParked,
-    archived: rawArchived,
-  } = useMemo(() => splitEntries(unifiedEntries), [unifiedEntries]);
-
-  const initialIds = useMemo(
-    () => new Set([...initialJobs, ...initialProjects].map((entry) => entry.id)),
-    [initialJobs, initialProjects],
-  );
-  const localPendingIds = useMemo(
-    () => new Set([...rowFeedback.pendingIds, ...settlingIds]),
-    [rowFeedback.pendingIds, settlingIds],
-  );
+  const { dialogJobs, rowFeedback, rawActive, rawParked, rawArchived, initialIds, localPendingIds } =
+    useAuftraegeListSections({ jobOverlay, projectOverlay, settlingIds, initialJobs, initialProjects });
 
   return {
     dialogJobs,
