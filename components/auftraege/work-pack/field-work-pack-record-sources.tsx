@@ -16,18 +16,7 @@ type FieldWorkPackRecordProps = {
 
 /** Handover status, instructions, work artifacts and documents of the job. */
 export function FieldWorkPackRecordSources({ job, currentUserId, data }: FieldWorkPackRecordProps) {
-  const {
-    handoverStatusResult,
-    instructionItemsResult,
-    instructionItems,
-    currentUserActor,
-    readOnly,
-    artifactsResult,
-    documents,
-    evidenceRequirements,
-    timeEntryOptions,
-    documentsResult,
-  } = data;
+  const { handoverStatusResult, instructionItemsResult, instructionItems, currentUserActor, readOnly } = data;
   return (
     <>
       <FieldWorkPackSource
@@ -58,55 +47,72 @@ export function FieldWorkPackRecordSources({ job, currentUserId, data }: FieldWo
         ) : null}
       </FieldWorkPackSource>
 
-      <FieldWorkPackSource
-        sourceId={`${job.id}:artifacts`}
-        success={artifactsResult.success}
-        title="Arbeitsnachweise nicht verfügbar"
-        description="Fortschritt und Nachweise konnten nicht geladen werden. Bitte lade die Seite erneut, bevor du etwas dokumentierst."
-      >
-        {artifactsResult.success ? (
-          <WorkArtifactsSection
-            key={job.id}
-            targetType="job"
-            targetId={job.id}
-            initialArtifacts={artifactsResult.artifacts}
-            isManager={false}
-            canApprove={false}
-            currentUserId={currentUserId}
-            documents={documents}
-            evidenceRequirements={evidenceRequirements}
-            instructionOptions={instructionItems.map((item) => ({
-              id: item.id,
-              label: item.content,
-            }))}
-            defaultSiteId={job.site?.id}
-            timeEntryOptions={timeEntryOptions}
-            readOnly={readOnly}
-          />
-        ) : null}
-      </FieldWorkPackSource>
+      <FieldWorkPackArtifactsSource job={job} currentUserId={currentUserId} data={data} />
 
-      <FieldWorkPackSource
-        sourceId={`${job.id}:documents`}
-        success={documentsResult.success}
-        title="Dokumente nicht verfügbar"
-        description="Dokumente und Bilder konnten nicht geladen werden. Ein fehlgeschlagener Abruf wird nicht als leere Ablage angezeigt."
-      >
-        {documentsResult.success ? (
-          <ContextualDocumentsSection
-            title="Dokumente & Bilder"
-            description="Dateien zu diesem Auftrag ansehen oder direkt vom Einsatz hochladen."
-            documents={documents}
-            documentTarget={{ kind: 'job', jobId: job.id }}
-            contextLabel={job.title}
-            canUpload={!readOnly}
-            canManage={false}
-            emphasizeUpload={false}
-            keepUploadedDocumentsVisible
-          />
-        ) : null}
-      </FieldWorkPackSource>
+      <FieldWorkPackDocumentsSource job={job} data={data} />
     </>
+  );
+}
+
+/** Progress and evidence recorded on the job. */
+function FieldWorkPackArtifactsSource({ job, currentUserId, data }: FieldWorkPackRecordProps) {
+  const { artifactsResult, documents, evidenceRequirements, instructionItems, timeEntryOptions, readOnly } =
+    data;
+  return (
+    <FieldWorkPackSource
+      sourceId={`${job.id}:artifacts`}
+      success={artifactsResult.success}
+      title="Arbeitsnachweise nicht verfügbar"
+      description="Fortschritt und Nachweise konnten nicht geladen werden. Bitte lade die Seite erneut, bevor du etwas dokumentierst."
+    >
+      {artifactsResult.success ? (
+        <WorkArtifactsSection
+          key={job.id}
+          targetType="job"
+          targetId={job.id}
+          initialArtifacts={artifactsResult.artifacts}
+          isManager={false}
+          canApprove={false}
+          currentUserId={currentUserId}
+          documents={documents}
+          evidenceRequirements={evidenceRequirements}
+          instructionOptions={instructionItems.map((item) => ({
+            id: item.id,
+            label: item.content,
+          }))}
+          defaultSiteId={job.site?.id}
+          timeEntryOptions={timeEntryOptions}
+          readOnly={readOnly}
+        />
+      ) : null}
+    </FieldWorkPackSource>
+  );
+}
+
+/** Documents and images of the job. */
+function FieldWorkPackDocumentsSource({ job, data }: Omit<FieldWorkPackRecordProps, 'currentUserId'>) {
+  const { documentsResult, documents, readOnly } = data;
+  return (
+    <FieldWorkPackSource
+      sourceId={`${job.id}:documents`}
+      success={documentsResult.success}
+      title="Dokumente nicht verfügbar"
+      description="Dokumente und Bilder konnten nicht geladen werden. Ein fehlgeschlagener Abruf wird nicht als leere Ablage angezeigt."
+    >
+      {documentsResult.success ? (
+        <ContextualDocumentsSection
+          title="Dokumente & Bilder"
+          description="Dateien zu diesem Auftrag ansehen oder direkt vom Einsatz hochladen."
+          documents={documents}
+          documentTarget={{ kind: 'job', jobId: job.id }}
+          contextLabel={job.title}
+          canUpload={!readOnly}
+          canManage={false}
+          emphasizeUpload={false}
+          keepUploadedDocumentsVisible
+        />
+      ) : null}
+    </FieldWorkPackSource>
   );
 }
 

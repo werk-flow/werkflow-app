@@ -84,6 +84,116 @@ type JobDetailAssignmentsInput = {
   setShowAssignDialog: (open: boolean) => void;
 };
 
+type RequestQualificationOverride = (nextIds: string[], evaluation: AssignmentEvaluation) => void;
+
+type SaveJobDetailAssignmentsInput = Pick<
+  JobDetailAssignmentsInput,
+  'liveJob' | 'setLiveJob' | 'dialogMembers'
+> & {
+  assignSelectedIds: string[];
+  assignmentTeamSourceId: string | null;
+  setAssignError: (error: string | null) => void;
+  requestQualificationOverride: RequestQualificationOverride;
+  onSaved: () => void;
+};
+
+/** Saves the dialog's selection as the job's complete crew, then patches the shown assignments. */
+async function saveJobDetailAssignments({
+  liveJob,
+  setLiveJob,
+  dialogMembers,
+  assignSelectedIds,
+  assignmentTeamSourceId,
+  setAssignError,
+  requestQualificationOverride,
+  onSaved,
+}: SaveJobDetailAssignmentsInput) {
+  // The dialog opens with the current crew selected, so its selection is
+  // the complete set: an unchecked assignee is removed.
+  const nextIds = [...new Set(assignSelectedIds)];
+  const newIds = nextIds.filter((id) => !liveJob.assignments.some((a) => a.userId === id));
+  let result: Awaited<ReturnType<typeof updateJobAssignments>>;
+  try {
+    result = await updateJobAssignments(liveJob.id, nextIds, null, assignmentTeamSourceId);
+  } catch {
+    setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
+    return;
+  }
+  if (!result.success) {
+    if (
+      (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+      'evaluation' in result
+    ) {
+      requestQualificationOverride(nextIds, result.evaluation);
+    } else {
+      setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
+    }
+    return;
+  }
+  const keptIds = new Set(nextIds);
+  const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
+  setLiveJob((current) => {
+    const withoutRemoved = current.assignments
+      .filter((assignment) => !keptIds.has(assignment.userId))
+      .reduce((job, assignment) => removeJobAssignment(job, assignment.userId), current);
+    return appendOptimisticJobAssignments(withoutRemoved, newIds, memberLookup);
+  });
+
+  onSaved();
+}
+
+type UnassignJobDetailEmployeeInput = Pick<JobDetailAssignmentsInput, 'liveJob' | 'setLiveJob'> & {
+  userId: string;
+  runUnassign: ReturnType<typeof useBusyIds>['run'];
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  requestQualificationOverride: RequestQualificationOverride;
+};
+
+/** Removes one employee from the job; a qualification refusal asks for the reasoned override. */
+async function unassignJobDetailEmployee({
+  userId,
+  liveJob,
+  setLiveJob,
+  runUnassign,
+  showBanner,
+  requestQualificationOverride,
+}: UnassignJobDetailEmployeeInput) {
+  const nextIds = liveJob.assignments.map((assignment) => assignment.userId).filter((id) => id !== userId);
+  let result: Awaited<ReturnType<typeof updateJobAssignments>>;
+  try {
+    result = await runUnassign(userId, () => updateJobAssignments(liveJob.id, nextIds));
+  } catch {
+    showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
+    return;
+  }
+  if (
+    !result.success &&
+    (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+    'evaluation' in result
+  ) {
+    requestQualificationOverride(nextIds, result.evaluation);
+    return;
+  }
+  if (!result.success) {
+    showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
+    return;
+  }
+  setLiveJob((current) => removeJobAssignment(current, userId));
+}
+
+type EditedJob = { job: Job; selectedEmployeeIds?: string[] };
+
+/** Takes the edit dialog's saved job and crew into the shown job. */
+function applyEditedJobAssignments({
+  edit: { job: updatedJob, selectedEmployeeIds },
+  dialogMembers,
+  setLiveJob,
+}: Pick<JobDetailAssignmentsInput, 'dialogMembers' | 'setLiveJob'> & { edit: EditedJob }) {
+  const selectedIds = new Set(selectedEmployeeIds ?? []);
+  const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
+  setLiveJob((current) => replaceJobAssignmentsAfterEdit(current, updatedJob, selectedIds, memberLookup));
+}
+
 /** Assigning and unassigning employees on the job detail page. */
 export function useJobDetailAssignments({
   liveJob,
@@ -98,91 +208,44 @@ export function useJobDetailAssignments({
   const [assignmentTeamSourceId, setAssignmentTeamSourceId] = useState<string | null>(null);
   const [isExpandingAssignmentTeam, setIsExpandingAssignmentTeam] = useState(false);
   const { run: runAssignTask, isPending: isAssigning } = usePendingTask();
+  const closeSavedAssignDialog = () => {
+    setShowAssignDialog(false);
+    setAssignSelectedIds([]);
+    setAssignmentTeamSourceId(null);
+  };
   const { requestQualificationOverride, ...qualificationOverride } = useJobDetailQualificationOverride({
     jobId: liveJob.id,
     assignmentTeamSourceId,
-    onSaved: () => {
-      setShowAssignDialog(false);
-      setAssignSelectedIds([]);
-      setAssignmentTeamSourceId(null);
-    },
+    onSaved: closeSavedAssignDialog,
   });
 
   const handleAssignEmployees = () => {
     setAssignError(null);
-    void runAssignTask(async () => {
-      // The dialog opens with the current crew selected, so its selection is
-      // the complete set: an unchecked assignee is removed.
-      const nextIds = [...new Set(assignSelectedIds)];
-      const newIds = nextIds.filter((id) => !liveJob.assignments.some((a) => a.userId === id));
-      let result: Awaited<ReturnType<typeof updateJobAssignments>>;
-      try {
-        result = await updateJobAssignments(liveJob.id, nextIds, null, assignmentTeamSourceId);
-      } catch {
-        setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
-        return;
-      }
-      if (!result.success) {
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result
-        ) {
-          requestQualificationOverride(nextIds, result.evaluation);
-        } else {
-          setAssignError('Die Zuweisung konnte nicht gespeichert werden.');
-        }
-        return;
-      }
-      const keptIds = new Set(nextIds);
-      const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
-      setLiveJob((current) => {
-        const withoutRemoved = current.assignments
-          .filter((assignment) => !keptIds.has(assignment.userId))
-          .reduce((job, assignment) => removeJobAssignment(job, assignment.userId), current);
-        return appendOptimisticJobAssignments(withoutRemoved, newIds, memberLookup);
-      });
+    void runAssignTask(() =>
+      saveJobDetailAssignments({
+        liveJob,
+        setLiveJob,
+        dialogMembers,
+        assignSelectedIds,
+        assignmentTeamSourceId,
+        setAssignError,
+        requestQualificationOverride,
+        onSaved: closeSavedAssignDialog,
+      }),
+    );
+  };
 
-      setShowAssignDialog(false);
-      setAssignSelectedIds([]);
-      setAssignmentTeamSourceId(null);
+  const handleUnassign = (userId: string) =>
+    unassignJobDetailEmployee({
+      userId,
+      liveJob,
+      setLiveJob,
+      runUnassign,
+      showBanner,
+      requestQualificationOverride,
     });
-  };
 
-  const handleUnassign = async (userId: string) => {
-    const nextIds = liveJob.assignments.map((assignment) => assignment.userId).filter((id) => id !== userId);
-    let result: Awaited<ReturnType<typeof updateJobAssignments>>;
-    try {
-      result = await runUnassign(userId, () => updateJobAssignments(liveJob.id, nextIds));
-    } catch {
-      showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
-      return;
-    }
-    if (
-      !result.success &&
-      (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-      'evaluation' in result
-    ) {
-      requestQualificationOverride(nextIds, result.evaluation);
-      return;
-    }
-    if (!result.success) {
-      showBanner({ variant: 'error', message: 'Die Zuweisung konnte nicht gespeichert werden.' });
-      return;
-    }
-    setLiveJob((current) => removeJobAssignment(current, userId));
-  };
-
-  const handleJobEdited = ({
-    job: updatedJob,
-    selectedEmployeeIds,
-  }: {
-    job: Job;
-    selectedEmployeeIds?: string[];
-  }) => {
-    const selectedIds = new Set(selectedEmployeeIds ?? []);
-    const memberLookup = new Map(dialogMembers.map((member) => [member.userId, member]));
-    setLiveJob((current) => replaceJobAssignmentsAfterEdit(current, updatedJob, selectedIds, memberLookup));
-  };
+  const handleJobEdited = (edit: EditedJob) => applyEditedJobAssignments({ edit, dialogMembers, setLiveJob });
 
   const openAssignDialog = () => {
     setAssignSelectedIds(liveJob.assignments.map((a) => a.userId));

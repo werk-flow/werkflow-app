@@ -9,51 +9,12 @@
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
-    "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
-    "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
-    "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
-    "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
-    "components/auftraege/job-detail/job-dispatch-section.tsx": { "JobDispatchSection": 100 },
-    "components/auftraege/job-detail/job-qualification-add-form.tsx": { "JobQualificationAddForm": 85 },
-    "components/auftraege/job-detail/job-qualification-section.tsx": { "JobQualificationSection": 105 },
-    "components/auftraege/job-detail/use-job-detail-assignments.ts": { "useJobDetailAssignments": 122 },
-    "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": {
-      "buildJobDetailPlanningFields": 134
-    },
-    "components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx": {
-      "ArtifactApprovalDependencyDialog": 104
-    },
-    "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": { "WorkBlockerDialog": 85 },
-    "components/auftraege/lifecycle/work-lifecycle-blockers-section.tsx": {
-      "WorkLifecycleBlockersSection": 93
-    },
-    "components/auftraege/lifecycle/work-lifecycle-card-dialogs.tsx": { "WorkLifecycleCardDialogs": 96 },
-    "components/auftraege/lifecycle/work-lifecycle-card.tsx": {
-      "useWorkLifecycleCardState": 108,
-      "WorkLifecycleCard": 132
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependencies-section.tsx": {
-      "WorkLifecycleDependenciesSection": 90
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependency-dialog.tsx": { "WorkDependencyDialog": 125 },
-    "components/auftraege/lifecycle/work-lifecycle-transition-actions.tsx": {
-      "WorkLifecycleTransitionActions": 95
-    },
-    "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
-    "components/auftraege/work-pack/field-work-pack-context-sources.tsx": {
-      "FieldWorkPackContextSources": 81
-    },
-    "components/auftraege/work-pack/field-work-pack-data.ts": { "loadFieldWorkPackData": 88 },
-    "components/auftraege/work-pack/field-work-pack-overview.tsx": { "FieldWorkPackOverview": 145 },
-    "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
-    "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
-    "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
     "components/inventar/inventory-content.tsx": {
       "InventoryContent": 148,
       "InventoryTable": 92,
