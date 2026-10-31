@@ -275,8 +275,8 @@ async function loadEquipmentWorkLinks(
   });
 }
 
-/** Every related read of one equipment detail; a failed read throws after logging, never an empty section. */
-async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): Promise<EquipmentDetail> {
+/** The related equipment, events and work links of one equipment; a failed read throws after logging. */
+async function readEquipmentDetailRows(context: ManagerContext, row: EquipmentRow) {
   const [relatedRowsResult, eventsResult, workLinksResult] = await Promise.all([
     readCompleteRows(
       (from, to) =>
@@ -321,8 +321,19 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
     logReadErrors('getInstalledEquipmentDetailByNumber: read failed', detailError);
     throw new Error('installed_equipment_detail_failed');
   }
+  return {
+    relatedRows: relatedRowsResult.data,
+    eventRows: eventsResult.data,
+    workLinkRows: workLinksResult.data,
+  };
+}
+
+type EquipmentEventRow = Database['public']['Tables']['installed_equipment_events']['Row'];
+
+/** The links of the given events; a failed read throws after logging. */
+async function readEquipmentEventLinkRows(context: ManagerContext, eventRows: EquipmentEventRow[]) {
   const eventLinksResult = await readInBatches(
-    eventsResult.data.map((event) => event.id),
+    eventRows.map((event) => event.id),
     (batch) =>
       readCompleteRows(
         (from, to) =>
@@ -340,12 +351,16 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
     logReadErrors('getInstalledEquipmentDetailByNumber: event link read failed', eventLinksResult.error);
     throw new Error('installed_equipment_detail_failed');
   }
-  const allRows = [row, ...relatedRowsResult.data.filter((related) => related.id !== row.id)];
-  const items = await loadListItems(context.admin, context.organizationId, allRows);
-  const current = items.find((item) => item.id === row.id);
-  if (!current) throw new Error('installed_equipment_detail_failed');
+  return eventLinksResult.data;
+}
 
-  const actorIds = [...new Set(eventsResult.data.map((event) => event.actor_id))];
+/** The events with their actors named and their links hydrated; a failed read throws after logging. */
+async function loadEquipmentEvents(
+  context: ManagerContext,
+  eventRows: EquipmentEventRow[],
+  eventLinkRows: Database['public']['Tables']['installed_equipment_event_links']['Row'][],
+): Promise<EquipmentEvent[]> {
+  const actorIds = [...new Set(eventRows.map((event) => event.actor_id))];
   const { data: actors, error: actorsError } = await readInBatches(actorIds, (batch) =>
     context.admin
       .from('profiles')
@@ -362,8 +377,8 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
       [actor.first_name, actor.last_name].filter(Boolean).join(' ') || actor.email || 'Unbekannt',
     ]),
   );
-  const eventLinks = await hydrateEventLinks(context.admin, context.organizationId, eventLinksResult.data);
-  const events: EquipmentEvent[] = eventsResult.data.map((event) => ({
+  const eventLinks = await hydrateEventLinks(context.admin, context.organizationId, eventLinkRows);
+  return eventRows.map((event) => ({
     id: event.id,
     eventType: event.event_type,
     fromState: event.from_state,
@@ -378,8 +393,19 @@ async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): 
     afterSnapshot: event.after_snapshot,
     links: eventLinks.get(event.id) ?? [],
   }));
+}
 
-  const workLinks = await loadEquipmentWorkLinks(context, workLinksResult.data);
+/** Every related read of one equipment detail; a failed read throws after logging, never an empty section. */
+async function loadEquipmentDetail(context: ManagerContext, row: EquipmentRow): Promise<EquipmentDetail> {
+  const { relatedRows, eventRows, workLinkRows } = await readEquipmentDetailRows(context, row);
+  const eventLinkRows = await readEquipmentEventLinkRows(context, eventRows);
+  const allRows = [row, ...relatedRows.filter((related) => related.id !== row.id)];
+  const items = await loadListItems(context.admin, context.organizationId, allRows);
+  const current = items.find((item) => item.id === row.id);
+  if (!current) throw new Error('installed_equipment_detail_failed');
+
+  const events = await loadEquipmentEvents(context, eventRows, eventLinkRows);
+  const workLinks = await loadEquipmentWorkLinks(context, workLinkRows);
 
   const detail: EquipmentDetail = {
     ...current,

@@ -12,6 +12,7 @@ import type {
 import type { Tables } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { LIST_PAGE_SIZE } from '@/lib/ui/list-pagination';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import { uuidSchema } from '@/lib/validation/uuid';
 import type {
   MaintenanceCatalogs,
@@ -33,15 +34,8 @@ function renewalSignal(reviewDueDate: string | null, today: string): Maintenance
   return reviewDueDate <= addLocalDays(today, 30) ? 'due_soon' : 'scheduled';
 }
 
-/**
- * The published job templates and the follow-up owners: small, complete
- * catalogs the page reads once, outside the live refresh of the lists. Null
- * after logging a failed read, so a catalog is never shortened.
- */
-export async function loadMaintenanceCatalogs(
-  admin: AdminClient,
-  organizationId: string,
-): Promise<MaintenanceCatalogs | null> {
+/** The published template versions and the office members; null after logging a failed read. */
+async function readCatalogRows(admin: AdminClient, organizationId: string) {
   const [versionsResult, membershipsResult] = await Promise.all([
     readCompleteRows(
       (from, to) =>
@@ -75,9 +69,61 @@ export async function loadMaintenanceCatalogs(
     });
     return null;
   }
+  return { versions: versionsResult.data, memberships: membershipsResult.data };
+}
+
+type CatalogRows = NonNullable<Awaited<ReturnType<typeof readCatalogRows>>>;
+
+function toMaintenanceCatalogs(
+  { versions, memberships }: CatalogRows,
+  templates: Pick<Tables<'work_templates'>, 'id' | 'target_type' | 'archived_at'>[],
+  profileRows: Pick<Tables<'profiles'>, 'id' | 'first_name' | 'last_name' | 'email'>[],
+): MaintenanceCatalogs {
+  const profiles = new Map(profileRows.map((profile) => [profile.id, profile]));
+  const availableTemplateIds = new Set(
+    templates
+      .filter((template) => template.target_type === 'job' && !template.archived_at)
+      .map((template) => template.id),
+  );
+  return {
+    templates: versions
+      .filter((version) => availableTemplateIds.has(version.template_id))
+      .map((version) => ({
+        versionId: version.id,
+        name: version.name,
+        versionNumber: version.version_number,
+      })),
+    followUpOwners: memberships
+      .map((member) => {
+        const profile = profiles.get(member.user_id);
+        return {
+          userId: member.user_id,
+          // The read filters on these two roles.
+          role: constrainedValue(['admin', 'buero'], member.role, 'organization_members.role'),
+          name:
+            [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
+            profile?.email ||
+            'Unbekannte Person',
+        };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name, 'de')),
+  };
+}
+
+/**
+ * The published job templates and the follow-up owners: small, complete
+ * catalogs the page reads once, outside the live refresh of the lists. Null
+ * after logging a failed read, so a catalog is never shortened.
+ */
+export async function loadMaintenanceCatalogs(
+  admin: AdminClient,
+  organizationId: string,
+): Promise<MaintenanceCatalogs | null> {
+  const rows = await readCatalogRows(admin, organizationId);
+  if (!rows) return null;
   const [templatesResult, profilesResult] = await Promise.all([
     readInBatches(
-      versionsResult.data.map((row) => row.template_id),
+      rows.versions.map((row) => row.template_id),
       (batch) =>
         admin
           .from('work_templates')
@@ -86,7 +132,7 @@ export async function loadMaintenanceCatalogs(
           .in('id', [...batch]),
     ),
     readInBatches(
-      membershipsResult.data.map((member) => member.user_id),
+      rows.memberships.map((member) => member.user_id),
       (batch) =>
         admin
           .from('profiles')
@@ -102,34 +148,7 @@ export async function loadMaintenanceCatalogs(
     });
     return null;
   }
-  const profiles = new Map(profilesResult.data.map((profile) => [profile.id, profile]));
-  const availableTemplateIds = new Set(
-    templatesResult.data
-      .filter((template) => template.target_type === 'job' && !template.archived_at)
-      .map((template) => template.id),
-  );
-  return {
-    templates: versionsResult.data
-      .filter((version) => availableTemplateIds.has(version.template_id))
-      .map((version) => ({
-        versionId: version.id,
-        name: version.name,
-        versionNumber: version.version_number,
-      })),
-    followUpOwners: membershipsResult.data
-      .map((member) => {
-        const profile = profiles.get(member.user_id);
-        return {
-          userId: member.user_id,
-          role: member.role as 'admin' | 'buero',
-          name:
-            [profile?.first_name, profile?.last_name].filter(Boolean).join(' ') ||
-            profile?.email ||
-            'Unbekannte Person',
-        };
-      })
-      .sort((left, right) => left.name.localeCompare(right.name, 'de')),
-  };
+  return toMaintenanceCatalogs(rows, templatesResult.data, profilesResult.data);
 }
 
 type MaintenanceLookups = {
@@ -326,17 +345,14 @@ function inSelectionOrder<Row extends { id: string }>(ids: string[], rows: Row[]
 }
 
 /**
- * The plan items of the given plans with their current revision, active
- * equipment and open due work inside the horizon, plus the lookups of every
- * record the page references (the caller's ids and the plans' own). Null
- * after logging a failed read.
+ * The current revisions, their equipment links and the open due dates inside
+ * the horizon of the given plans. Null after logging a failed read.
  */
-async function readPlanItems(
+async function readPlanRelations(
   context: ManagerContext,
   planRows: Tables<'maintenance_plans'>[],
   throughDate: string,
-  pageIds: Pick<LookupIds, 'clientIds' | 'siteIds'>,
-): Promise<{ items: Map<string, MaintenancePlanItem>; lookups: MaintenanceLookups } | null> {
+) {
   const { admin, organizationId } = context;
   const planIds = planRows.map((plan) => plan.id);
   const revisionIds = planRows.flatMap((plan) =>
@@ -391,17 +407,38 @@ async function readPlanItems(
     });
     return null;
   }
-  const revisions = new Map(revisionsResult.data.map((row) => [row.id, row]));
+  return {
+    revisions: revisionsResult.data,
+    equipmentLinks: equipmentLinksResult.data,
+    openDue: openDueResult.data,
+  };
+}
+
+/**
+ * The plan items of the given plans with their current revision, active
+ * equipment and open due work inside the horizon, plus the lookups of every
+ * record the page references (the caller's ids and the plans' own). Null
+ * after logging a failed read.
+ */
+async function readPlanItems(
+  context: ManagerContext,
+  planRows: Tables<'maintenance_plans'>[],
+  throughDate: string,
+  pageIds: Pick<LookupIds, 'clientIds' | 'siteIds'>,
+): Promise<{ items: Map<string, MaintenancePlanItem>; lookups: MaintenanceLookups } | null> {
+  const relations = await readPlanRelations(context, planRows, throughDate);
+  if (!relations) return null;
+  const revisions = new Map(relations.revisions.map((row) => [row.id, row]));
   const equipmentIdsByRevision = groupBy(
-    equipmentLinksResult.data,
+    relations.equipmentLinks,
     (link) => link.maintenance_plan_revision_id,
   );
-  const openDueByPlan = groupBy(openDueResult.data, (due) => due.maintenance_plan_id);
+  const openDueByPlan = groupBy(relations.openDue, (due) => due.maintenance_plan_id);
   const lookups = await readMaintenanceLookups(context, {
     clientIds: [...pageIds.clientIds, ...planRows.map((plan) => plan.client_id)],
     siteIds: [...pageIds.siteIds, ...planRows.map((plan) => plan.site_id)],
-    equipmentIds: equipmentLinksResult.data.map((link) => link.equipment_id),
-    templateVersionIds: revisionsResult.data.map((revision) => revision.template_version_id),
+    equipmentIds: relations.equipmentLinks.map((link) => link.equipment_id),
+    templateVersionIds: relations.revisions.map((revision) => revision.template_version_id),
     coverageIds: planRows.flatMap((plan) =>
       plan.maintenance_coverage_id ? [plan.maintenance_coverage_id] : [],
     ),
@@ -439,6 +476,86 @@ const workspaceSelectionSchema = z.object({
   coverages: listSelectionSchema,
 });
 
+/** The page ids and counts of the three lists; null after logging a failed or malformed selection. */
+async function readWorkspaceSelection(
+  context: ManagerContext,
+  query: MaintenanceWorkspaceQuery,
+  throughDate: string,
+) {
+  const selected = await context.admin.rpc('list_maintenance_workspace_page', {
+    p_organization_id: context.organizationId,
+    p_due_through: throughDate,
+    p_search: query.search,
+    p_due_page: query.duePage,
+    p_plan_page: query.planPage,
+    p_coverage_page: query.coveragePage,
+    p_page_size: LIST_PAGE_SIZE,
+  });
+  const selection = workspaceSelectionSchema.safeParse(selected.data);
+  if (selected.error || !selection.success) {
+    logReadFailure('getMaintenanceWorkspace: page selection failed', {
+      code: selected.error?.code ?? 'malformed_page',
+    });
+    return null;
+  }
+  return selection.data;
+}
+
+/** The selected due and coverage rows in selection order; null after logging a failed read. */
+async function readWorkspacePageRows(context: ManagerContext, dueIds: string[], coverageIds: string[]) {
+  const { admin, organizationId } = context;
+  const [dueResult, coverageResult] = await Promise.all([
+    readInBatches(dueIds, (batch) =>
+      admin
+        .from('maintenance_due_work')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .in('id', [...batch]),
+    ),
+    readInBatches(coverageIds, (batch) =>
+      admin
+        .from('maintenance_coverages')
+        .select('*')
+        .eq('organization_id', organizationId)
+        .in('id', [...batch]),
+    ),
+  ]);
+  if (dueResult.error || coverageResult.error) {
+    logReadErrors('getMaintenanceWorkspace: page rows read failed', dueResult.error, coverageResult.error);
+    return null;
+  }
+  return {
+    dueRows: inSelectionOrder(dueIds, dueResult.data),
+    coverageRows: inSelectionOrder(coverageIds, coverageResult.data),
+  };
+}
+
+function toMaintenanceCoverageItem(
+  coverage: Tables<'maintenance_coverages'>,
+  lookups: MaintenanceLookups,
+  today: string,
+): MaintenanceCoverageItem {
+  return {
+    id: coverage.id,
+    coverageNumber: coverage.coverage_number,
+    clientId: coverage.client_id,
+    clientName: lookups.clientNames.get(coverage.client_id) ?? 'Unbekannter Kunde',
+    siteId: coverage.site_id,
+    siteName: lookups.siteNames.get(coverage.site_id) ?? 'Unbekannter Einsatzort',
+    reference: coverage.reference,
+    description: coverage.description,
+    status: coverage.status,
+    validFrom: coverage.valid_from,
+    validUntil: coverage.valid_until,
+    noticeDate: coverage.notice_date,
+    renewalDate: coverage.renewal_date,
+    reviewDueDate: coverage.review_due_date,
+    operationalNote: coverage.operational_note,
+    renewalSignal: renewalSignal(coverage.review_due_date, today),
+    version: coverage.version,
+  };
+}
+
 /**
  * One page of each workspace list. The database applies the search, the
  * horizon and the counts before the page boundary; this reader hydrates the
@@ -452,46 +569,13 @@ export async function readMaintenanceWorkspace(
   const { admin, organizationId } = context;
   const today = formatBerlinLocalDate(new Date());
   const throughDate = addLocalMonthsClamped(today, 18);
-  const selected = await admin.rpc('list_maintenance_workspace_page', {
-    p_organization_id: organizationId,
-    p_due_through: throughDate,
-    p_search: query.search,
-    p_due_page: query.duePage,
-    p_plan_page: query.planPage,
-    p_coverage_page: query.coveragePage,
-    p_page_size: LIST_PAGE_SIZE,
-  });
-  const selection = workspaceSelectionSchema.safeParse(selected.data);
-  if (selected.error || !selection.success) {
-    logReadFailure('getMaintenanceWorkspace: page selection failed', {
-      code: selected.error?.code ?? 'malformed_page',
-    });
-    return LOAD_FAILED;
-  }
-  const { due, plans, coverages } = selection.data;
+  const selection = await readWorkspaceSelection(context, query, throughDate);
+  if (!selection) return LOAD_FAILED;
+  const { due, plans, coverages } = selection;
 
-  const [dueResult, coverageResult] = await Promise.all([
-    readInBatches(due.ids, (batch) =>
-      admin
-        .from('maintenance_due_work')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(coverages.ids, (batch) =>
-      admin
-        .from('maintenance_coverages')
-        .select('*')
-        .eq('organization_id', organizationId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (dueResult.error || coverageResult.error) {
-    logReadErrors('getMaintenanceWorkspace: page rows read failed', dueResult.error, coverageResult.error);
-    return LOAD_FAILED;
-  }
-  const dueRows = inSelectionOrder(due.ids, dueResult.data);
-  const coverageRows = inSelectionOrder(coverages.ids, coverageResult.data);
+  const pageRows = await readWorkspacePageRows(context, due.ids, coverages.ids);
+  if (!pageRows) return LOAD_FAILED;
+  const { dueRows, coverageRows } = pageRows;
   // The due page names plans of other plan pages; their items carry the
   // plan's number, customer, site, equipment and visit duration.
   const planIds = [...new Set([...plans.ids, ...dueRows.map((row) => row.maintenance_plan_id)])];
@@ -536,27 +620,7 @@ export async function readMaintenanceWorkspace(
         const plan = planItems.get(row.maintenance_plan_id);
         return plan ? [toMaintenanceDueItem(row, plan, jobNumbers)] : [];
       }),
-      coverages: coverageRows.map(
-        (coverage): MaintenanceCoverageItem => ({
-          id: coverage.id,
-          coverageNumber: coverage.coverage_number,
-          clientId: coverage.client_id,
-          clientName: lookups.clientNames.get(coverage.client_id) ?? 'Unbekannter Kunde',
-          siteId: coverage.site_id,
-          siteName: lookups.siteNames.get(coverage.site_id) ?? 'Unbekannter Einsatzort',
-          reference: coverage.reference,
-          description: coverage.description,
-          status: coverage.status,
-          validFrom: coverage.valid_from,
-          validUntil: coverage.valid_until,
-          noticeDate: coverage.notice_date,
-          renewalDate: coverage.renewal_date,
-          reviewDueDate: coverage.review_due_date,
-          operationalNote: coverage.operational_note,
-          renewalSignal: renewalSignal(coverage.review_due_date, today),
-          version: coverage.version,
-        }),
-      ),
+      coverages: coverageRows.map((coverage) => toMaintenanceCoverageItem(coverage, lookups, today)),
       totals: {
         due: { total: due.total, hasAny: due.hasAny },
         plans: { total: plans.total, hasAny: plans.hasAny },
