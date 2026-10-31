@@ -42,9 +42,8 @@ export function useWorkScheduleForm({ recordId, schedule, onClose }: WorkSchedul
     return Math.round(parsed * 60);
   });
 
-  const weeklyMinutes = parsedDayMinutes.every((m) => m !== null)
-    ? (parsedDayMinutes as number[]).reduce((total, m) => total + m, 0)
-    : null;
+  const completeDayMinutes = parsedDayMinutes.every((m) => m !== null) ? parsedDayMinutes : null;
+  const weeklyMinutes = completeDayMinutes ? completeDayMinutes.reduce((total, m) => total + m, 0) : null;
   const validFromError = validFrom ? undefined : SCHEDULE_ERROR_MESSAGES.invalid_valid_from;
   const dayErrors = parsedDayMinutes.map((m) =>
     m === null ? SCHEDULE_ERROR_MESSAGES.invalid_day_minutes : undefined,
@@ -59,12 +58,13 @@ export function useWorkScheduleForm({ recordId, schedule, onClose }: WorkSchedul
       'schedule-valid-from': validFromError,
       ...Object.fromEntries(dayErrors.map((dayError, index) => [`schedule-day-${index}`, dayError])),
     });
-    if (invalid) return;
+    // Every day parsed whenever no day error stopped the submit above.
+    if (invalid || !completeDayMinutes) return;
 
     setIsSaving(true);
     const input = {
       validFrom,
-      dayMinutes: parsedDayMinutes as number[],
+      dayMinutes: completeDayMinutes,
       note: note.trim().length > 0 ? note.trim() : null,
     };
     // A rejected Server Action shows the fallback instead of a stuck spinner.
