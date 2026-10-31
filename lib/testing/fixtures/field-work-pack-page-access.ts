@@ -4,7 +4,7 @@
 // e-mail address, a colleague's draft, a sibling job, a serial number, a
 // warranty, a price, a billable quantity or the maintenance contract. A field
 // worker who is not assigned, and a member of another organization, get no
-// pack and no pack reader answers them. Büro and Admin of the owning
+// pack, and the pack readers refuse them or find nothing of this organization. Büro and Admin of the owning
 // organization open the same jobs in the office view with these values, so
 // each absence answers the role, not a missing row.
 import assert from 'node:assert/strict';
@@ -478,6 +478,11 @@ assert.deepEqual(
   false,
   'the field worker reads the billable flag of a material line',
 );
+assert.equal(
+  field(lines, 'lines', '0', 'billableQuantity'),
+  0,
+  'the field worker reads the billable quantity of a material line',
+);
 assert.deepEqual(
   await getWorkArtifacts({ targetType: 'job', targetId: childJobId }),
   { success: true, artifacts: [] },
@@ -499,14 +504,15 @@ for (const reader of [
     `${reader.name} answers the unassigned field worker`,
   );
 
-// A member of another organization gets no pack and no pack reader answers them.
+// A member of another organization gets no pack: the equipment reader refuses them, and the
+// maintenance reader, scoped to their own organization, finds nothing of this one.
 signInAsMember('admin', ORGANIZATION_B);
 assert.equal(await refusal(pages.projectJob), 'route-redirect:/auftraege');
 assert.deepEqual(await getAssignedEquipmentForJob(jobId), notAuthorized);
 assert.deepEqual(
   await getAssignedMaintenanceContextForJob(jobId),
   { success: true, contexts: [] },
-  'another organization reads the maintenance context',
+  'the maintenance read of another organization finds a context of this one',
 );
 
 // The owning organization's office opens the same jobs in the office view with the office-only values.
@@ -537,7 +543,13 @@ signInAsMember('buero');
 const officeEquipment = renderedValues(await getInstalledEquipmentDetailByNumber('ANL-0118'));
 for (const secret of [officeOnly.serialNumber, officeOnly.warrantyProvider])
   assertCarries(officeEquipment, secret, 'buero on the equipment');
-assert.equal(field(await getJobMaterialLines(jobId), 'lines', '0', 'isBillable'), true);
+const officeLines = await getJobMaterialLines(jobId);
+assert.equal(field(officeLines, 'lines', '0', 'isBillable'), true);
+assert.equal(
+  field(officeLines, 'lines', '0', 'billableQuantity'),
+  officeOnly.billableQuantity,
+  'the office reads no billable quantity',
+);
 assert.equal(
   field(await getWorkArtifacts({ targetType: 'job', targetId: childJobId }), 'artifacts', 'length'),
   1,
