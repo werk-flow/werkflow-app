@@ -1,6 +1,7 @@
-import { Suspense } from 'react';
+import { Suspense, type ComponentProps } from 'react';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
+import type { OriginRequestLink } from '@/components/auftraege/shared/origin-request-line';
 import { redirect } from 'next/navigation';
 import { logError } from '@/lib/logging';
 
@@ -25,14 +26,19 @@ interface ProjectDetailPageProps {
   params: Promise<{ projectNumber: string }>;
 }
 
-async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
-  const { user, membership } = await resolvePageMembership();
-  if (!membership) redirect('/auftraege');
+type ProjectDetailReadScope = {
+  projectNumber: string;
+  activeOrgId: string;
+  userId: string;
+  isAdminOrManager: boolean;
+};
 
-  const activeOrgId = membership.orgId;
-  const isAdminOrManager = isManagerRole(membership.role);
-  const admin = createSupabaseAdminClient();
-
+async function loadProjectDetailReads({
+  projectNumber,
+  activeOrgId,
+  userId,
+  isAdminOrManager,
+}: ProjectDetailReadScope) {
   const projectResultPromise = getProjectByNumber(decodeURIComponent(projectNumber));
   const documentsResultPromise = projectResultPromise.then(async (result) => {
     if (!result.success) return null;
@@ -59,7 +65,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
     organizationId: activeOrgId,
     responsibility: 'work_artifact_approval',
-    actorUserId: user.id,
+    actorUserId: userId,
   });
   const handoverWorkspacePromise = projectResultPromise.then((result) =>
     result.success
@@ -84,7 +90,7 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
   ] = await Promise.all([
     projectResultPromise,
     // The create-job dialog assigns employees; only managers open it.
-    isAdminOrManager ? getOrgMembersForUser(activeOrgId, user.id) : null,
+    isAdminOrManager ? getOrgMembersForUser(activeOrgId, userId) : null,
     documentsResultPromise,
     materialResultPromise,
     inventoryOptionsResultPromise,
@@ -94,24 +100,38 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     approvalHolderPromise,
     handoverWorkspacePromise,
   ]);
+  return {
+    result,
+    membersResult,
+    documentsResult,
+    materialResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    instructionItemsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  };
+}
 
-  // A missing or forbidden project leaves the page; a failed read must not look like one.
-  if (!result.success && (result.error === 'load_failed' || result.error === 'unexpected_error')) {
-    return (
-      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
-        Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
-      </RegionLoadError>
-    );
-  }
+type ProjectDetailReads = Awaited<ReturnType<typeof loadProjectDetailReads>>;
+type ProjectDetailContentProps = ComponentProps<typeof ProjectDetailContent>;
 
-  if (!result.success) {
-    return (
-      <RouteRedirect href="/auftraege">
-        <ProjectDetailLoading />
-      </RouteRedirect>
-    );
-  }
-
+/** The page regions fed by the project's secondary reads. */
+function projectDetailRegions(
+  {
+    membersResult,
+    documentsResult,
+    materialResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    instructionItemsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  }: ProjectDetailReads,
+  isAdminOrManager: boolean,
+) {
   // Null: the manager's member read failed, and the jobs card shows the failure
   // instead of the create-job action. An employee never reads the members.
   const members: OrgMemberOption[] | null = !membersResult
@@ -124,8 +144,6 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
           role: member.role,
         }))
       : null;
-
-  const { project, client, jobs, derivedStatus } = result.details;
 
   // A failed read stays null so that its region shows the failure instead of an empty list.
   // The instruction read is manager-only: an employee's refused read stays empty. The documents
@@ -146,16 +164,99 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
     : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
       ? 'not_reviewer'
       : null;
-  // Origin request (P1-02); the banner itself is manager-only in the component.
+
+  return {
+    members,
+    canApproveWorkArtifacts: Boolean(approvalHolder),
+    instructionItems,
+    initialArtifacts: artifactsResult?.success ? artifactsResult.artifacts : null,
+    projectDocuments,
+    jobDocumentGroups,
+    materialSummary,
+    inventoryItems,
+    inventoryLocations,
+    lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
+    handoverWorkspace,
+  } satisfies Partial<ProjectDetailContentProps>;
+}
+
+type OriginRequestScope = {
+  admin: ReturnType<typeof createSupabaseAdminClient>;
+  activeOrgId: string;
+  projectId: string;
+  isAdminOrManager: boolean;
+};
+
+// Origin request (P1-02); the banner itself is manager-only in the component.
+async function readProjectOriginRequest({
+  admin,
+  activeOrgId,
+  projectId,
+  isAdminOrManager,
+}: OriginRequestScope): Promise<OriginRequestLink> {
   const { data: originRequestRow, error: originRequestError } = isAdminOrManager
     ? await admin
         .from('client_requests')
         .select('id, request_number, summary')
         .eq('organization_id', activeOrgId)
-        .eq('converted_project_id', project.id)
+        .eq('converted_project_id', projectId)
         .maybeSingle()
     : { data: null, error: null };
   if (originRequestError) logError('Project detail: origin request read failed', originRequestError);
+
+  return originRequestError
+    ? 'failed'
+    : originRequestRow
+      ? {
+          label: originRequestRow.request_number
+            ? `Anfrage ${originRequestRow.request_number}`
+            : `Anfrage „${originRequestRow.summary}“`,
+          href: `/anfragen/${originRequestRow.id}`,
+        }
+      : null;
+}
+
+async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/auftraege');
+
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
+  const admin = createSupabaseAdminClient();
+
+  const reads = await loadProjectDetailReads({
+    projectNumber,
+    activeOrgId,
+    userId: user.id,
+    isAdminOrManager,
+  });
+  const { result } = reads;
+
+  // A missing or forbidden project leaves the page; a failed read must not look like one.
+  if (!result.success && (result.error === 'load_failed' || result.error === 'unexpected_error')) {
+    return (
+      <RegionLoadError title="Das Projekt konnte nicht geladen werden">
+        Das Projekt ist gerade nicht erreichbar. Versuche es in einem Moment erneut.
+      </RegionLoadError>
+    );
+  }
+
+  if (!result.success) {
+    return (
+      <RouteRedirect href="/auftraege">
+        <ProjectDetailLoading />
+      </RouteRedirect>
+    );
+  }
+
+  const regions = projectDetailRegions(reads, isAdminOrManager);
+  const { project, client, jobs, derivedStatus } = result.details;
+  const originRequest = await readProjectOriginRequest({
+    admin,
+    activeOrgId,
+    projectId: project.id,
+    isAdminOrManager,
+  });
 
   return (
     <>
@@ -170,31 +271,10 @@ async function ProjectDetailData({ projectNumber }: { projectNumber: string }) {
         client={client}
         jobs={jobs}
         derivedStatus={derivedStatus}
-        members={members}
         isAdminOrManager={isAdminOrManager}
-        canApproveWorkArtifacts={Boolean(approvalHolder)}
         currentUserId={user.id}
-        instructionItems={instructionItems}
-        initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : null}
-        projectDocuments={projectDocuments}
-        jobDocumentGroups={jobDocumentGroups}
-        materialSummary={materialSummary}
-        inventoryItems={inventoryItems}
-        inventoryLocations={inventoryLocations}
-        originRequest={
-          originRequestError
-            ? 'failed'
-            : originRequestRow
-              ? {
-                  label: originRequestRow.request_number
-                    ? `Anfrage ${originRequestRow.request_number}`
-                    : `Anfrage „${originRequestRow.summary}“`,
-                  href: `/anfragen/${originRequestRow.id}`,
-                }
-              : null
-        }
-        lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
-        handoverWorkspace={handoverWorkspace}
+        originRequest={originRequest}
+        {...regions}
       />
     </>
   );

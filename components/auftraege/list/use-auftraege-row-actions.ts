@@ -36,26 +36,27 @@ type AuftraegeRowActionsOptions = Pick<
   rollbackProject: OptimisticListControls['rollback'];
 };
 
-/** Optimistic delete and settle-after-edit for the rows of the Aufträge list. */
-export function useAuftraegeRowActions({
-  initialJobs,
-  initialProjects,
-  setJobs,
+type AuftraegeRowDeletesOptions = Pick<
+  AuftraegeRowActionsOptions,
+  | 'showBanner'
+  | 'removeJob'
+  | 'rollbackJob'
+  | 'removeProject'
+  | 'rollbackProject'
+  | 'handleJobDelete'
+  | 'handleProjectDelete'
+>;
+
+/** The optimistic row deletes: the row leaves at once and returns when the server refuses. */
+function useAuftraegeRowDeletes({
   showBanner,
   removeJob,
   rollbackJob,
   removeProject,
   rollbackProject,
-  handleJobUpsert,
   handleJobDelete,
-  handleProjectUpsert,
   handleProjectDelete,
-  handleJobAssignmentsReplace,
-}: AuftraegeRowActionsOptions) {
-  const { busyIds: settlingIds, run: markSettling } = useBusyIds();
-  const waitForJobsRefresh = useSettleOnChange(initialJobs);
-  const waitForProjectsRefresh = useSettleOnChange(initialProjects);
-
+}: AuftraegeRowDeletesOptions) {
   const handleJobDeleteRequested = useCallback(
     async (jobId: string) => {
       removeJob(jobId);
@@ -95,6 +96,39 @@ export function useAuftraegeRowActions({
     },
     [handleProjectDelete, removeProject, rollbackProject, showBanner],
   );
+
+  return { handleJobDeleteRequested, handleProjectDeleteRequested };
+}
+
+/** Optimistic delete and settle-after-edit for the rows of the Aufträge list. */
+export function useAuftraegeRowActions({
+  initialJobs,
+  initialProjects,
+  setJobs,
+  showBanner,
+  removeJob,
+  rollbackJob,
+  removeProject,
+  rollbackProject,
+  handleJobUpsert,
+  handleJobDelete,
+  handleProjectUpsert,
+  handleProjectDelete,
+  handleJobAssignmentsReplace,
+}: AuftraegeRowActionsOptions) {
+  const { busyIds: settlingIds, run: markSettling } = useBusyIds();
+  const waitForJobsRefresh = useSettleOnChange(initialJobs);
+  const waitForProjectsRefresh = useSettleOnChange(initialProjects);
+
+  const { handleJobDeleteRequested, handleProjectDeleteRequested } = useAuftraegeRowDeletes({
+    showBanner,
+    removeJob,
+    rollbackJob,
+    removeProject,
+    rollbackProject,
+    handleJobDelete,
+    handleProjectDelete,
+  });
 
   const handleJobEdited = useCallback(
     ({ job, selectedEmployeeIds }: { job: Job; selectedEmployeeIds?: string[] }) => {

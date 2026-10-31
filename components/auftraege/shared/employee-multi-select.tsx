@@ -63,58 +63,18 @@ export function EmployeeMultiSelect({
   return (
     <div className="space-y-2">
       {teams.length > 0 && (
-        <div
-          className="flex flex-wrap items-center gap-1.5"
-          role="group"
-          aria-label="Team für die Zuweisung übernehmen"
-        >
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Users className="size-3.5" />
-            Team übernehmen:
-          </span>
-          {teams.map((team) => (
-            <Button
-              key={team.id}
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7"
-              aria-busy={pendingTeamId === team.id || undefined}
-              disabled={disabled || (pendingTeamId !== null && pendingTeamId !== team.id)}
-              onClick={async () => {
-                if (pendingTeamId !== null) return;
-                setPendingTeamId(team.id);
-                onTeamExpansionPendingChange?.(true);
-                try {
-                  const result = await expandTeamForAssignment({
-                    teamId: team.id,
-                    ...(assessedForDate !== undefined ? { assessedForDate } : {}),
-                  });
-                  if (!result.success) {
-                    showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
-                    return;
-                  }
-                  onSelectionChange([...new Set([...selectedIds, ...result.userIds])]);
-                  onTeamApplied?.(result.teamSourceId);
-                  if (result.skippedNames.length > 0) {
-                    const verb = result.skippedNames.length === 1 ? 'wurde' : 'wurden';
-                    showBanner({
-                      variant: 'info',
-                      message: `${result.skippedNames.join(', ')} ${verb} nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`,
-                    });
-                  }
-                } catch {
-                  showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
-                } finally {
-                  setPendingTeamId(null);
-                  onTeamExpansionPendingChange?.(false);
-                }
-              }}
-            >
-              {team.name}
-            </Button>
-          ))}
-        </div>
+        <EmployeeTeamShortcuts
+          teams={teams}
+          pendingTeamId={pendingTeamId}
+          setPendingTeamId={setPendingTeamId}
+          disabled={disabled}
+          assessedForDate={assessedForDate}
+          selectedIds={selectedIds}
+          onSelectionChange={onSelectionChange}
+          onTeamApplied={onTeamApplied}
+          onTeamExpansionPendingChange={onTeamExpansionPendingChange}
+          showBanner={showBanner}
+        />
       )}
       <SearchableMultiSelect
         options={options}
@@ -131,6 +91,87 @@ export function EmployeeMultiSelect({
         // so the selection stays fixed until the expansion settles.
         disabled={disabled || pendingTeamId !== null}
       />
+    </div>
+  );
+}
+
+type EmployeeTeamShortcutsProps = {
+  teams: Array<{ id: string; name: string }>;
+  pendingTeamId: string | null;
+  setPendingTeamId: (teamId: string | null) => void;
+  disabled: boolean;
+  assessedForDate: string | null | undefined;
+  selectedIds: string[];
+  onSelectionChange: (ids: string[]) => void;
+  onTeamApplied: ((teamId: string | null) => void) | undefined;
+  onTeamExpansionPendingChange: ((pending: boolean) => void) | undefined;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+function EmployeeTeamShortcuts({
+  teams,
+  pendingTeamId,
+  setPendingTeamId,
+  disabled,
+  assessedForDate,
+  selectedIds,
+  onSelectionChange,
+  onTeamApplied,
+  onTeamExpansionPendingChange,
+  showBanner,
+}: EmployeeTeamShortcutsProps) {
+  return (
+    <div
+      className="flex flex-wrap items-center gap-1.5"
+      role="group"
+      aria-label="Team für die Zuweisung übernehmen"
+    >
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Users className="size-3.5" />
+        Team übernehmen:
+      </span>
+      {teams.map((team) => (
+        <Button
+          key={team.id}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7"
+          aria-busy={pendingTeamId === team.id || undefined}
+          disabled={disabled || (pendingTeamId !== null && pendingTeamId !== team.id)}
+          onClick={async () => {
+            if (pendingTeamId !== null) return;
+            setPendingTeamId(team.id);
+            onTeamExpansionPendingChange?.(true);
+            try {
+              const result = await expandTeamForAssignment({
+                teamId: team.id,
+                ...(assessedForDate !== undefined ? { assessedForDate } : {}),
+              });
+              if (!result.success) {
+                showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
+                return;
+              }
+              onSelectionChange([...new Set([...selectedIds, ...result.userIds])]);
+              onTeamApplied?.(result.teamSourceId);
+              if (result.skippedNames.length > 0) {
+                const verb = result.skippedNames.length === 1 ? 'wurde' : 'wurden';
+                showBanner({
+                  variant: 'info',
+                  message: `${result.skippedNames.join(', ')} ${verb} nicht übernommen, da kein aktiver App-Zugang verknüpft ist.`,
+                });
+              }
+            } catch {
+              showBanner({ variant: 'error', message: 'Das Team konnte nicht übernommen werden.' });
+            } finally {
+              setPendingTeamId(null);
+              onTeamExpansionPendingChange?.(false);
+            }
+          }}
+        >
+          {team.name}
+        </Button>
+      ))}
     </div>
   );
 }
