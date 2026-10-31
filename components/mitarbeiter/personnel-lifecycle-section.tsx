@@ -1,20 +1,12 @@
 'use client';
 
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 import {
-  PersonnelLifecycleAccessFields,
-  PersonnelLifecycleDialogFooter,
-  PersonnelLifecycleEmploymentFields,
-  PersonnelLifecycleUploadFields,
+  PersonnelLifecycleAccessBody,
+  PersonnelLifecycleEmploymentBody,
+  PersonnelLifecycleUploadBody,
 } from './personnel-lifecycle-dialog-parts';
 import { PersonnelLifecycleDocumentsList } from './personnel-lifecycle-documents-list';
 import {
@@ -31,24 +23,25 @@ import {
 import { usePersonnelLifecycleTransitions } from './use-personnel-lifecycle-transitions';
 import { usePersonnelLifecycleView } from './use-personnel-lifecycle-view';
 
+type PersonnelLifecycleSectionProps = {
+  data: PersonnelLifecycleView;
+  canManage: boolean;
+  canAdministerAccess: boolean;
+};
+
 export function PersonnelLifecycleSection({
   data: initialData,
   canManage,
   canAdministerAccess,
-}: {
-  data: PersonnelLifecycleView;
-  canManage: boolean;
-  canAdministerAccess: boolean;
-}) {
+}: PersonnelLifecycleSectionProps) {
   const lifecycle = usePersonnelLifecycleView(initialData);
   const transitions = usePersonnelLifecycleTransitions(lifecycle);
   const plan = usePersonnelLifecyclePlan(lifecycle);
   const requirements = usePersonnelLifecycleRequirements(lifecycle);
   const documents = usePersonnelLifecycleDocuments(lifecycle);
   const { data, isPending } = lifecycle;
-  const { accessOpen, setAccessOpen, employmentOpen, setEmploymentOpen, submitAccess, submitEmployment } =
-    transitions;
-  const { uploadOpen, setUploadOpen, submitUpload } = documents;
+  const { accessOpen, setAccessOpen, employmentOpen, setEmploymentOpen } = transitions;
+  const { uploadOpen, setUploadOpen } = documents;
   const hasUnresolvedWork =
     data.transitionInventory.activeJobs.length > 0 ||
     data.transitionInventory.strandedResponsibilities.length > 0;
@@ -85,15 +78,7 @@ export function PersonnelLifecycleSection({
               Die Änderung gilt nur für diese Organisation. Das globale Konto bleibt unberührt.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <PersonnelLifecycleAccessFields lifecycle={lifecycle} transitions={transitions} />
-          </DialogBody>
-          <PersonnelLifecycleDialogFooter
-            lifecycle={lifecycle}
-            submitLabel="Speichern"
-            onCancel={() => setAccessOpen(false)}
-            onSubmit={submitAccess}
-          />
+          <PersonnelLifecycleAccessBody lifecycle={lifecycle} transitions={transitions} />
         </DialogContent>
       </Dialog>
 
@@ -105,18 +90,10 @@ export function PersonnelLifecycleSection({
               Historische Zuordnungen bleiben erhalten. Vollständiges Offboarding folgt separat.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <PersonnelLifecycleEmploymentFields
-              lifecycle={lifecycle}
-              transitions={transitions}
-              hasUnresolvedWork={hasUnresolvedWork}
-            />
-          </DialogBody>
-          <PersonnelLifecycleDialogFooter
+          <PersonnelLifecycleEmploymentBody
             lifecycle={lifecycle}
-            submitLabel="Speichern"
-            onCancel={() => setEmploymentOpen(false)}
-            onSubmit={submitEmployment}
+            transitions={transitions}
+            hasUnresolvedWork={hasUnresolvedWork}
           />
         </DialogContent>
       </Dialog>
@@ -134,15 +111,7 @@ export function PersonnelLifecycleSection({
               Dokumentenbibliothek.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="space-y-4 py-1">
-            <PersonnelLifecycleUploadFields lifecycle={lifecycle} documents={documents} />
-          </DialogBody>
-          <PersonnelLifecycleDialogFooter
-            lifecycle={lifecycle}
-            submitLabel="Hochladen"
-            onCancel={() => setUploadOpen(false)}
-            onSubmit={submitUpload}
-          />
+          <PersonnelLifecycleUploadBody lifecycle={lifecycle} documents={documents} />
         </DialogContent>
       </Dialog>
     </section>

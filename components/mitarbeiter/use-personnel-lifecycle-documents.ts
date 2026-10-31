@@ -4,7 +4,8 @@ import { useState } from 'react';
 
 import { uploadPersonnelDocumentDirect } from '@/lib/documents/upload-client';
 import { getPersonnelDocumentSignedUrl } from '@/lib/personnel/document-download-actions';
-import { setPersonnelDocumentRelease, type PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
+import { setPersonnelDocumentRelease } from '@/lib/personnel/lifecycle-actions';
+import type { ProtectedPersonnelDocument } from '@/lib/personnel/lifecycle-rows';
 import type { PersonnelDocumentAccessClass } from '@/lib/personnel/lifecycle';
 
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
@@ -15,13 +16,72 @@ import { logError } from '@/lib/logging';
 
 export type PersonnelLifecycleDocuments = ReturnType<typeof usePersonnelLifecycleDocuments>;
 
+async function togglePersonnelDocumentRelease(
+  lifecycle: PersonnelLifecycleController,
+  document: ProtectedPersonnelDocument,
+): Promise<void> {
+  const { data, mutationDisabled, rowBusy, showBanner, reconcileMutation, failureMessage } = lifecycle;
+  if (mutationDisabled) return;
+  await rowBusy
+    .run(document.id, async () => {
+      const result = await setPersonnelDocumentRelease({
+        employeeRecordId: data.employeeRecordId,
+        personnelDocumentId: document.id,
+        documentVersionNumber: document.currentVersionNumber,
+        release: !document.releasedToEmployee,
+        reason: document.releasedToEmployee ? 'Freigabe zurückgenommen' : null,
+        operationId: crypto.randomUUID(),
+      });
+      showBanner(
+        result.success
+          ? {
+              variant: 'success',
+              message: document.releasedToEmployee
+                ? 'Freigabe wurde zurückgenommen.'
+                : 'Dokument wurde für die betroffene Person freigegeben.',
+            }
+          : { variant: 'error', message: failureMessage(result.error) },
+      );
+      if (result.success) reconcileMutation();
+    })
+    .catch((submitError: unknown) => {
+      logError('Unexpected error updating the document release:', submitError);
+      showBanner({
+        variant: 'error',
+        message: ERROR_MESSAGES.mutation_failed,
+      });
+    });
+}
+
+async function openPersonnelDocument(
+  lifecycle: PersonnelLifecycleController,
+  document: ProtectedPersonnelDocument,
+): Promise<void> {
+  const { rowBusy, showBanner, failureMessage } = lifecycle;
+  await rowBusy
+    .run(document.id, async () => {
+      const result = await getPersonnelDocumentSignedUrl(document.documentId);
+      if (!result.success) {
+        showBanner({ variant: 'error', message: failureMessage(result.error) });
+        return;
+      }
+      window.location.assign(result.data.signedUrl);
+    })
+    .catch((downloadError: unknown) => {
+      logError('Unexpected error opening the personnel document:', downloadError);
+      showBanner({
+        variant: 'error',
+        message: 'Das Dokument konnte nicht geöffnet werden.',
+      });
+    });
+}
+
 /** Protected personnel documents: upload dialog, release toggle and download. */
 export function usePersonnelLifecycleDocuments(lifecycle: PersonnelLifecycleController) {
   const {
     data,
     run,
     mutationDisabled,
-    rowBusy,
     showBanner,
     setError,
     setFieldErrors,
@@ -71,58 +131,6 @@ export function usePersonnelLifecycleDocuments(lifecycle: PersonnelLifecycleCont
     }
   }
 
-  async function toggleRelease(document: PersonnelLifecycleView['documents'][number]): Promise<void> {
-    if (mutationDisabled) return;
-    await rowBusy
-      .run(document.id, async () => {
-        const result = await setPersonnelDocumentRelease({
-          employeeRecordId: data.employeeRecordId,
-          personnelDocumentId: document.id,
-          documentVersionNumber: document.currentVersionNumber,
-          release: !document.releasedToEmployee,
-          reason: document.releasedToEmployee ? 'Freigabe zurückgenommen' : null,
-          operationId: crypto.randomUUID(),
-        });
-        showBanner(
-          result.success
-            ? {
-                variant: 'success',
-                message: document.releasedToEmployee
-                  ? 'Freigabe wurde zurückgenommen.'
-                  : 'Dokument wurde für die betroffene Person freigegeben.',
-              }
-            : { variant: 'error', message: failureMessage(result.error) },
-        );
-        if (result.success) reconcileMutation();
-      })
-      .catch((submitError: unknown) => {
-        logError('Unexpected error updating the document release:', submitError);
-        showBanner({
-          variant: 'error',
-          message: ERROR_MESSAGES.mutation_failed,
-        });
-      });
-  }
-
-  async function downloadDocument(document: PersonnelLifecycleView['documents'][number]): Promise<void> {
-    await rowBusy
-      .run(document.id, async () => {
-        const result = await getPersonnelDocumentSignedUrl(document.documentId);
-        if (!result.success) {
-          showBanner({ variant: 'error', message: failureMessage(result.error) });
-          return;
-        }
-        window.location.assign(result.data.signedUrl);
-      })
-      .catch((downloadError: unknown) => {
-        logError('Unexpected error opening the personnel document:', downloadError);
-        showBanner({
-          variant: 'error',
-          message: 'Das Dokument konnte nicht geöffnet werden.',
-        });
-      });
-  }
-
   return {
     uploadOpen,
     setUploadOpen,
@@ -132,7 +140,9 @@ export function usePersonnelLifecycleDocuments(lifecycle: PersonnelLifecycleCont
     accessClass,
     setAccessClass,
     submitUpload,
-    toggleRelease,
-    downloadDocument,
+    toggleRelease: (document: ProtectedPersonnelDocument): Promise<void> =>
+      togglePersonnelDocumentRelease(lifecycle, document),
+    downloadDocument: (document: ProtectedPersonnelDocument): Promise<void> =>
+      openPersonnelDocument(lifecycle, document),
   };
 }

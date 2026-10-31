@@ -17,6 +17,47 @@ import { logError } from '@/lib/logging';
 
 export type PersonnelLifecycleController = ReturnType<typeof usePersonnelLifecycleView>;
 
+type LifecycleManifestDownload = {
+  employeeRecordId: string;
+  run: (task: () => Promise<void>) => Promise<void>;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  failureMessage: (code: string) => string;
+};
+
+/** Exports the lifecycle work state as a JSON file the browser downloads. */
+async function downloadLifecycleManifest({
+  employeeRecordId,
+  run,
+  showBanner,
+  failureMessage,
+}: LifecycleManifestDownload): Promise<void> {
+  try {
+    await run(async () => {
+      const result = await exportPersonnelLifecycleManifest(employeeRecordId);
+      if (!result.success) {
+        showBanner({ variant: 'error', message: failureMessage(result.error) });
+        return;
+      }
+      const url = URL.createObjectURL(
+        new Blob([JSON.stringify(result.data, null, 2)], {
+          type: 'application/json',
+        }),
+      );
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `personalprozess-${employeeRecordId}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    });
+  } catch (downloadError) {
+    logError('Unexpected error exporting the personnel lifecycle manifest:', downloadError);
+    showBanner({
+      variant: 'error',
+      message: 'Der Arbeitsstand konnte nicht exportiert werden.',
+    });
+  }
+}
+
 /**
  * Owns the live lifecycle view, the shared mutation transition and the error
  * state every lifecycle dialog shares.
@@ -73,32 +114,13 @@ export function usePersonnelLifecycleView(initialData: PersonnelLifecycleView) {
     return personnelLifecycleErrorMessage(code);
   }
 
-  async function downloadManifest(): Promise<void> {
-    try {
-      await run(async () => {
-        const result = await exportPersonnelLifecycleManifest(data.employeeRecordId);
-        if (!result.success) {
-          showBanner({ variant: 'error', message: failureMessage(result.error) });
-          return;
-        }
-        const url = URL.createObjectURL(
-          new Blob([JSON.stringify(result.data, null, 2)], {
-            type: 'application/json',
-          }),
-        );
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = `personalprozess-${data.employeeRecordId}.json`;
-        anchor.click();
-        URL.revokeObjectURL(url);
-      });
-    } catch (downloadError) {
-      logError('Unexpected error exporting the personnel lifecycle manifest:', downloadError);
-      showBanner({
-        variant: 'error',
-        message: 'Der Arbeitsstand konnte nicht exportiert werden.',
-      });
-    }
+  function downloadManifest(): Promise<void> {
+    return downloadLifecycleManifest({
+      employeeRecordId: data.employeeRecordId,
+      run,
+      showBanner,
+      failureMessage,
+    });
   }
 
   return {
