@@ -50,6 +50,8 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   private predicates: Array<(row: Row) => boolean> = [];
   private cardinality: 'many' | 'single' | 'maybeSingle' = 'many';
   private headOnly = false;
+  /** Embeds the select joins with `!inner`, by alias or table name. */
+  private readonly innerEmbeds = new Set<string>();
 
   constructor(
     private readonly tables: InMemoryTables,
@@ -58,8 +60,10 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     private readonly beforeWrite: BeforeWrite = () => {},
   ) {}
 
-  select(_columns?: string, options?: { head?: boolean }): this {
+  select(columns?: string, options?: { head?: boolean }): this {
     this.operation ??= 'select';
+    for (const [, alias, table = ''] of columns?.matchAll(/(?:(\w+):)?(\w+)!inner\(/g) ?? [])
+      this.innerEmbeds.add(alias ?? table);
     this.headOnly = options?.head ?? false;
     return this;
   }
@@ -82,7 +86,17 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   eq(column: string, value: unknown): this {
-    return this.where((row) => filtersEmbed(row, column) || row[column] === value);
+    // A dotted column on a seeded embedded array filters that embed, never its parent row,
+    // unless the select joins the embed with `!inner`: then it keeps only parents with a match (PostgREST).
+    const dot = column.indexOf('.');
+    const embedded = dot === -1 ? null : column.slice(0, dot);
+    return this.where((row) => {
+      const embed = embedded === null ? undefined : row[embedded];
+      if (embedded === null || !Array.isArray(embed)) return row[column] === value;
+      return (
+        !this.innerEmbeds.has(embedded) || embed.some((item: Row) => item[column.slice(dot + 1)] === value)
+      );
+    });
   }
   neq(column: string, value: unknown): this {
     return this.where((row) => row[column] !== value);
