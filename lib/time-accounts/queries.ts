@@ -15,7 +15,7 @@ import {
 } from './decision-reads';
 import { canCorrectOpeningDate } from './opening-dates';
 import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts } from './opening-reads';
-import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
   PayrollExportState,
   TimeFindingDecision,

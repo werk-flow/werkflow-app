@@ -10,7 +10,7 @@ import {
   createDocumentVersionUploadTicket,
   finalizeDocumentUpload,
   finalizeDocumentVersionUpload,
-} from './actions';
+} from './upload-actions';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
 import type {

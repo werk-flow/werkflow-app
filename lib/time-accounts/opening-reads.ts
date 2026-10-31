@@ -4,7 +4,7 @@ import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows } from '@/lib/supabase/query-batches';
 import { suggestTimeAccountStartDate } from './opening-dates';
-import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-preparation';
+import { PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import { requireRead, type ReaderContext } from './read-support';
 
 /** One correction of an account's opening date, as the history shows it. */

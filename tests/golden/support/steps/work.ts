@@ -133,11 +133,6 @@ export function workTransitionReasonField(dialog: Locator): Locator {
   return dialog.locator('#work-transition-reason');
 }
 
-/** Proves no copy of the lifecycle card exists in the DOM. */
-export async function expectNoWorkLifecycleCard(page: Page): Promise<void> {
-  await expect(page.getByTestId('work-lifecycle-card')).toHaveCount(0);
-}
-
 /** Proves no copy of the lifecycle card in the DOM offers a button with this name. */
 export async function expectNoLifecycleCardButton(page: Page, buttonName: string): Promise<void> {
   await expect(page.getByTestId('work-lifecycle-card').getByRole('button', { name: buttonName })).toHaveCount(

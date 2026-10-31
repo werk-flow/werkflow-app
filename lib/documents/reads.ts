@@ -4,7 +4,7 @@ import { loggedRead, logReadErrors } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import type { AuthorizedDocumentContext } from './access';
-import { documentRowsFromOrdinaryView, hydrateDocuments } from './hydration';
+import { documentRowsFromOrdinaryView, hydrateDocuments, type OrdinaryDocumentViewRow } from './hydration';
 import { newestDocumentsFirst } from './ordering';
 import { toDocumentFolder, type DocumentFolder, type DocumentListResult } from './types';
 
@@ -73,6 +73,32 @@ export async function readLinkedDocuments(
     logError(`readLinkedDocuments: ${column} hydration failed`, error);
     return { success: false, error: 'documents_failed' };
   }
+}
+
+/**
+ * The `ordinary_documents` rows of the given ids in the order of the ids; an
+ * id without a row is skipped. `null` when the read failed (logged).
+ */
+export async function readOrdinaryDocumentsInOrder(
+  context: AuthorizedDocumentContext,
+  documentIds: readonly string[],
+  failureLabel: string,
+): Promise<OrdinaryDocumentViewRow[] | null> {
+  const documentsResult = await readInBatches(documentIds, (ids) =>
+    context.admin
+      .from('ordinary_documents')
+      .select('*')
+      .eq('organization_id', context.orgId)
+      .in('id', [...ids]),
+  );
+  if (documentsResult.error) {
+    logReadErrors(failureLabel, documentsResult.error);
+    return null;
+  }
+  return documentIds.flatMap((id) => {
+    const row = documentsResult.data.find((row) => row.id === id);
+    return row ? [row] : [];
+  });
 }
 
 /**

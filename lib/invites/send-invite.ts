@@ -8,6 +8,7 @@ import { getSiteUrl, getSupabaseSecretKey } from '@/lib/env/server';
 import { logError } from '@/lib/logging';
 import { consumeRateLimit } from '@/lib/security/rate-limit';
 import type { AdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/database.types';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import type { InviteRole } from './actions';
 
@@ -72,39 +73,8 @@ export async function createAndMailOrganizationInvite(
   const isExistingUser = userCheck?.user_exists === true;
   const existingUserId = userCheck?.user_id || null;
 
-  if (existingUserId) {
-    const { data: existingMember, error: existingMemberError } = await loggedRead(
-      'createAndMailOrganizationInvite: organization_members read failed',
-      admin
-        .from('organization_members')
-        .select('id')
-        .eq('organization_id', organizationId)
-        .eq('user_id', existingUserId)
-        .maybeSingle(),
-    );
-    if (existingMemberError) return { success: false, error: 'load_failed' };
-    if (existingMember) {
-      return { success: false, error: 'already_member' };
-    }
-  }
-
-  // An early answer that spends no rate-limit attempt; the function repeats
-  // the check under its lock. The record's own invite is replaced, not a conflict.
-  let pendingInviteQuery = admin
-    .from('organization_invites')
-    .select('id')
-    .eq('organization_id', organizationId)
-    .eq('email', email)
-    .eq('status', 'pending');
-  if (send.replacedInviteId) pendingInviteQuery = pendingInviteQuery.neq('id', send.replacedInviteId);
-  const { data: existingInvite, error: existingInviteError } = await loggedRead(
-    'createAndMailOrganizationInvite: organization_invites read failed',
-    pendingInviteQuery.maybeSingle(),
-  );
-  if (existingInviteError) return { success: false, error: 'load_failed' };
-  if (existingInvite) {
-    return { success: false, error: 'invite_already_pending' };
-  }
+  const conflict = await inviteRecipientConflict(send, existingUserId);
+  if (conflict) return conflict;
 
   // Every invite sends a mail: limited per organization and per recipient
   // address. A limiter that cannot decide refuses (rate-limit.ts).
@@ -152,6 +122,71 @@ export async function createAndMailOrganizationInvite(
     ? `${origin}/auth/callback?invite_code=${inviteCode}`
     : `${origin}/signup?invite_code=${inviteCode}`;
 
+  return mailOrDiscardInvite(send, createdInvite, {
+    inviterName,
+    organizationName: organization.name,
+    inviteUrl,
+    isExistingUser,
+  });
+}
+
+/**
+ * The refusal when the address already belongs to a member or has another
+ * pending invite, null when neither. An early answer that spends no
+ * rate-limit attempt; create_organization_invite repeats the check under its lock.
+ */
+async function inviteRecipientConflict(
+  send: OrganizationInviteSend,
+  existingUserId: string | null,
+): Promise<ActionFailure | null> {
+  const { admin, organizationId, email } = send;
+  if (existingUserId) {
+    const { data: existingMember, error: existingMemberError } = await loggedRead(
+      'createAndMailOrganizationInvite: organization_members read failed',
+      admin
+        .from('organization_members')
+        .select('id')
+        .eq('organization_id', organizationId)
+        .eq('user_id', existingUserId)
+        .maybeSingle(),
+    );
+    if (existingMemberError) return { success: false, error: 'load_failed' };
+    if (existingMember) {
+      return { success: false, error: 'already_member' };
+    }
+  }
+
+  // The record's own invite is replaced, not a conflict.
+  let pendingInviteQuery = admin
+    .from('organization_invites')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('email', email)
+    .eq('status', 'pending');
+  if (send.replacedInviteId) pendingInviteQuery = pendingInviteQuery.neq('id', send.replacedInviteId);
+  const { data: existingInvite, error: existingInviteError } = await loggedRead(
+    'createAndMailOrganizationInvite: organization_invites read failed',
+    pendingInviteQuery.maybeSingle(),
+  );
+  if (existingInviteError) return { success: false, error: 'load_failed' };
+  if (existingInvite) {
+    return { success: false, error: 'invite_already_pending' };
+  }
+  return null;
+}
+
+type CreatedInvite = Database['public']['Functions']['create_organization_invite']['Returns'][number];
+
+/**
+ * Mails a created invite. When the mail fails, discard_unsent_organization_invite
+ * withdraws what this send wrote and gives a personnel record its replaced invite back.
+ */
+async function mailOrDiscardInvite(
+  send: OrganizationInviteSend,
+  createdInvite: CreatedInvite,
+  mail: { inviterName: string; organizationName: string; inviteUrl: string; isExistingUser: boolean },
+): Promise<OrganizationInviteSendResult> {
+  const { admin, organizationId, email } = send;
   const supabaseSecretKey = getSupabaseSecretKey();
   const { error: emailError } = await admin.functions.invoke('send-invite-email', {
     headers: {
@@ -160,10 +195,10 @@ export async function createAndMailOrganizationInvite(
     },
     body: {
       to: email,
-      inviterName,
-      organizationName: organization.name,
-      inviteUrl,
-      isExistingUser,
+      inviterName: mail.inviterName,
+      organizationName: mail.organizationName,
+      inviteUrl: mail.inviteUrl,
+      isExistingUser: mail.isExistingUser,
     },
   });
 

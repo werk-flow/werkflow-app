@@ -12,21 +12,32 @@ export type TrailingScheduler = {
   pending: () => boolean;
 };
 
-export function createTrailingScheduler(input: {
-  delayMs: number;
-  maxWaitMs: number;
-  run: () => void;
-  now?: () => number;
-  setTimer?: (callback: () => void, delayMs: number) => unknown;
-  clearTimer?: (handle: unknown) => void;
-}): TrailingScheduler {
+/** A caller's own timers come as a pair, so a handle only ever reaches the clear that belongs to it. */
+type SchedulerTimers =
+  | { setTimer: (callback: () => void, delayMs: number) => unknown; clearTimer: (handle: unknown) => void }
+  | { setTimer?: never; clearTimer?: never };
+
+type SchedulerTiming = { delayMs: number; maxWaitMs: number; run: () => void; now?: () => number };
+
+export function createTrailingScheduler(input: SchedulerTiming & SchedulerTimers): TrailingScheduler {
   if (input.maxWaitMs < input.delayMs) {
     throw new Error('A maximum wait cannot be shorter than the trailing delay.');
   }
+  if (input.setTimer) return scheduleWith(input, input.setTimer, input.clearTimer);
+  return scheduleWith(
+    input,
+    (callback, delayMs) => setTimeout(callback, delayMs),
+    (handle) => clearTimeout(handle),
+  );
+}
+
+function scheduleWith<Handle>(
+  input: SchedulerTiming,
+  setTimer: (callback: () => void, delayMs: number) => Handle,
+  clearTimer: (handle: Handle) => void,
+): TrailingScheduler {
   const now = input.now ?? (() => Date.now());
-  const setTimer = input.setTimer ?? ((callback, delayMs) => setTimeout(callback, delayMs));
-  const clearTimer = input.clearTimer ?? ((handle) => clearTimeout(handle as ReturnType<typeof setTimeout>));
-  let handle: unknown = null;
+  let handle: Handle | null = null;
   let burstStartedAt: number | null = null;
 
   const fire = (): void => {

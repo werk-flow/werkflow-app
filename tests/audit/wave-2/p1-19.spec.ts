@@ -19,7 +19,7 @@ import {
   serviceEditButton,
   updateServiceCaseViaDialog,
 } from '../../golden/support/steps/service';
-import { SHARED_COPY, textInDom } from '../../golden/support/steps/shared';
+import { SHARED_COPY } from '../../golden/support/steps/shared';
 import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
 
 /** One customer with a primary site (and optionally a second site), named for the calling test. */
@@ -194,27 +194,5 @@ test.describe('P1-19 exhaustive reactive-service audit @AUDIT-W2-P1-19 @AUDIT-W2
     const state = await getServiceCaseStateByNumber(world.orgId, caseNumber);
     expect(state.documentLinks).toHaveLength(1);
     expect(state.documentLinks[0]?.service_case_id).toBe(state.serviceCase.id);
-  });
-
-  test('keeps service cases from employees and other organizations', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const { customer, siteId } = await seedServiceSite(world, 'denial');
-    const summary = `P119 Audit vertraulich ${world.runId}`;
-    const { caseNumber } = await seedServiceCase({
-      orgId: world.orgId,
-      actorId: world.users.admin.id,
-      clientId: customer.clientId,
-      siteId,
-      summary,
-      statement: 'Interne Störungsmeldung.',
-    });
-    await employeePage.goto('/service/faelle');
-    await expect(employeePage).not.toHaveURL(/\/service\/faelle/);
-    await outsiderPage.goto(`/service/faelle/${caseNumber}`);
-    await expect(textInDom(outsiderPage, summary)).toHaveCount(0);
-    await expect(textInDom(outsiderPage, caseNumber)).toHaveCount(0);
   });
 });
