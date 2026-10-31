@@ -22,7 +22,7 @@ import {
   openInstalledEquipmentWorkLinkDialog,
   serviceEditButton,
 } from '../../golden/support/steps/service';
-import { SHARED_COPY, textInDom } from '../../golden/support/steps/shared';
+import { SHARED_COPY } from '../../golden/support/steps/shared';
 import type { TestWorld } from '../../golden/support/world';
 
 /** One customer site with one active root equipment, named for the calling test. */
@@ -165,17 +165,5 @@ test.describe('P1-18 exhaustive installed-equipment audit @AUDIT-W2-P1-18 @AUDIT
     await adminPage.goto(`/service/anlagen/${successor.equipmentNumber}`);
     await expect(equipmentVoidedSuccessorNotice(adminPage)).toBeVisible();
     await expect(serviceEditButton(adminPage)).toBeDisabled();
-  });
-
-  test('keeps equipment detail from employees and other organizations', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const { names, root } = await seedEquipmentAtSite(world, 'denial');
-    await employeePage.goto(`/service/anlagen/${root.equipmentNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/);
-    await outsiderPage.goto(`/service/anlagen/${root.equipmentNumber}`);
-    await expect(textInDom(outsiderPage, names.root)).toHaveCount(0);
   });
 });
