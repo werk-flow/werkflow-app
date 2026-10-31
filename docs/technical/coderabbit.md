@@ -58,7 +58,7 @@ A PR is ready when all of these hold on its latest commit:
 - The proof covers every change in the diff.
 - The level's reviews are done, and each finding is fixed or dismissed with a reason in its thread.
 - GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`).
-- No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours.
+- No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours. One overlap needs no new run: when the only shared file is `eslint-rules/size-cap-exceptions.json`, no entry is changed on both sides, the merge is clean, and `bun run test:unit lib/conventions` passes on the merged result.
 
 Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
 
