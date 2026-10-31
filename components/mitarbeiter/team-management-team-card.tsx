@@ -28,16 +28,7 @@ function TeamManagementCardHeader({
   isOptimistic,
   management,
 }: TeamManagementCardPartProps & { isOptimistic: boolean }) {
-  const {
-    editingTeamId,
-    setEditingTeamId,
-    editingTeamName,
-    setEditingTeamName,
-    renameError,
-    anyBusy,
-    handleRename,
-    setTeamToDissolve,
-  } = management;
+  const { editingTeamId, editingTeamName, setEditingTeamName, renameError } = management;
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
       <div className="min-w-0 flex-1">
@@ -66,43 +57,58 @@ function TeamManagementCardHeader({
         </div>
         {team.description && <p className="mt-1 text-sm text-muted-foreground">{team.description}</p>}
       </div>
-      <div className="flex flex-wrap gap-1">
-        {editingTeamId === team.id ? (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={anyBusy}
-              onClick={() => void handleRename(team, editingTeamName)}
-            >
-              Speichern
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setEditingTeamId(null)}>
-              Abbrechen
-            </Button>
-          </>
-        ) : (
+      <TeamManagementCardHeaderActions team={team} management={management} />
+    </div>
+  );
+}
+
+function TeamManagementCardHeaderActions({ team, management }: TeamManagementCardPartProps) {
+  const {
+    editingTeamId,
+    setEditingTeamId,
+    editingTeamName,
+    setEditingTeamName,
+    anyBusy,
+    handleRename,
+    setTeamToDissolve,
+  } = management;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {editingTeamId === team.id ? (
+        <>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setEditingTeamId(team.id);
-              setEditingTeamName(team.name);
-            }}
+            disabled={anyBusy}
+            onClick={() => void handleRename(team, editingTeamName)}
           >
-            Umbenennen
+            Speichern
           </Button>
-        )}
+          <Button variant="ghost" size="sm" onClick={() => setEditingTeamId(null)}>
+            Abbrechen
+          </Button>
+        </>
+      ) : (
         <Button
           variant="ghost"
           size="sm"
-          className="text-destructive hover:text-destructive"
-          disabled={anyBusy}
-          onClick={() => setTeamToDissolve(team)}
+          onClick={() => {
+            setEditingTeamId(team.id);
+            setEditingTeamName(team.name);
+          }}
         >
-          Auflösen
+          Umbenennen
         </Button>
-      </div>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="text-destructive hover:text-destructive"
+        disabled={anyBusy}
+        onClick={() => setTeamToDissolve(team)}
+      >
+        Auflösen
+      </Button>
     </div>
   );
 }
@@ -158,12 +164,9 @@ function TeamManagementCardAddMemberForm({
   availableEmployees: QualificationWorkspace['employees'];
 }) {
   const {
-    today,
     anyBusy,
     selectedEmployeeByTeam,
     setSelectedEmployeeByTeam,
-    membershipWindowByTeam,
-    setMembershipWindowByTeam,
     addFieldErrorsByTeam,
     addErrorByTeam,
     handleAddMembership,
@@ -195,6 +198,22 @@ function TeamManagementCardAddMemberForm({
           emptyMessage="Kein Mitarbeiter gefunden"
         />
       </Field>
+      <TeamManagementCardWindowFields team={team} management={management} />
+      <Button variant="outline" disabled={anyBusy} onClick={() => handleAddMembership(team)}>
+        Hinzufügen
+      </Button>
+      <div className="sm:col-span-2">
+        <ErrorText>{addErrorByTeam[team.id]}</ErrorText>
+      </div>
+    </div>
+  );
+}
+
+/** The membership window of the add form: from today by default, open-ended unless set. */
+function TeamManagementCardWindowFields({ team, management }: TeamManagementCardPartProps) {
+  const { today, membershipWindowByTeam, setMembershipWindowByTeam, addFieldErrorsByTeam } = management;
+  return (
+    <>
       <Field label="Gültig ab" htmlFor={`team-${team.id}-valid-from`} className="gap-1.5">
         <DatePicker
           ariaLabel={`Teamzugehörigkeit zu ${team.name} gültig ab`}
@@ -230,13 +249,7 @@ function TeamManagementCardAddMemberForm({
           }
         />
       </Field>
-      <Button variant="outline" disabled={anyBusy} onClick={() => handleAddMembership(team)}>
-        Hinzufügen
-      </Button>
-      <div className="sm:col-span-2">
-        <ErrorText>{addErrorByTeam[team.id]}</ErrorText>
-      </div>
-    </div>
+    </>
   );
 }
 

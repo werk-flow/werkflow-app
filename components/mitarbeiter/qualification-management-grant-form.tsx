@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { EvidenceState } from '@/lib/qualifications/types';
+import { EVIDENCE_STATES } from '@/lib/qualifications/types';
 import { toLocalDateString, parseIsoLocalDate } from '@/lib/utils';
 
 import type { QualificationManagementGrantFormState } from './use-qualification-management-grant-form';
@@ -32,20 +32,11 @@ export function QualificationManagementGrantForm({
   anyBusy,
 }: QualificationManagementGrantFormProps) {
   const {
-    employeeRecordId,
-    setEmployeeRecordId,
-    capabilityId,
-    setCapabilityId,
-    validFrom,
-    setValidFrom,
-    validUntil,
-    setValidUntil,
     operationalNote,
     setOperationalNote,
     supersedesId,
     editingRecordId,
     grantError,
-    grantFieldErrors,
     selectedDefinition,
     isRecordIdentityLocked,
     resetGrantForm,
@@ -62,67 +53,12 @@ export function QualificationManagementGrantForm({
         </p>
       </div>
       <Card className="grid gap-3 p-4 md:grid-cols-2">
-        <Field
-          label="Mitarbeiter"
-          htmlFor="qualification-employee"
-          required
-          error={grantFieldErrors.employee}
-          className="gap-1.5"
-        >
-          <SearchableSelect
-            ariaLabel="Mitarbeiter für Qualifikation"
-            options={employeeOptions}
-            value={employeeRecordId}
-            onChange={setEmployeeRecordId}
-            disabled={isRecordIdentityLocked}
-            placeholder="Mitarbeiter auswählen"
-            searchPlaceholder="Mitarbeiter suchen …"
-            emptyMessage="Kein Mitarbeiter gefunden"
-          />
-        </Field>
-        <Field
-          label="Fähigkeit oder Zertifizierung"
-          htmlFor="qualification-capability"
-          required
-          error={grantFieldErrors.capability}
-          className="gap-1.5"
-        >
-          <SearchableSelect
-            ariaLabel="Qualifikation auswählen"
-            options={capabilityOptions}
-            value={capabilityId}
-            onChange={setCapabilityId}
-            disabled={isRecordIdentityLocked}
-            placeholder="Begriff auswählen"
-            searchPlaceholder="Begriff suchen …"
-            emptyMessage="Kein Begriff gefunden"
-          />
-        </Field>
-        <Field
-          label="Gültig ab"
-          htmlFor="qualification-valid-from"
-          required
-          error={grantFieldErrors.validFrom}
-          className="gap-1.5"
-        >
-          <DatePicker
-            ariaLabel="Qualifikation gültig ab"
-            value={parseIsoLocalDate(validFrom)}
-            onChange={(date) => setValidFrom(date ? toLocalDateString(date) : '')}
-          />
-        </Field>
-        <Field
-          label="Gültig bis (optional)"
-          htmlFor="qualification-valid-until"
-          error={grantFieldErrors.validUntil}
-          className="gap-1.5"
-        >
-          <DatePicker
-            ariaLabel="Qualifikation gültig bis"
-            value={parseIsoLocalDate(validUntil)}
-            onChange={(date) => setValidUntil(date ? toLocalDateString(date) : '')}
-          />
-        </Field>
+        <QualificationManagementGrantIdentityFields
+          form={form}
+          employeeOptions={employeeOptions}
+          capabilityOptions={capabilityOptions}
+        />
+        <QualificationManagementGrantDateFields form={form} />
         {selectedDefinition?.kind === 'certification' && (
           <QualificationManagementCertificationFields form={form} />
         )}
@@ -166,6 +102,96 @@ export function QualificationManagementGrantForm({
   );
 }
 
+function QualificationManagementGrantIdentityFields({
+  form,
+  employeeOptions,
+  capabilityOptions,
+}: Pick<QualificationManagementGrantFormProps, 'form' | 'employeeOptions' | 'capabilityOptions'>) {
+  const {
+    employeeRecordId,
+    setEmployeeRecordId,
+    capabilityId,
+    setCapabilityId,
+    grantFieldErrors,
+    isRecordIdentityLocked,
+  } = form;
+
+  return (
+    <>
+      <Field
+        label="Mitarbeiter"
+        htmlFor="qualification-employee"
+        required
+        error={grantFieldErrors.employee}
+        className="gap-1.5"
+      >
+        <SearchableSelect
+          ariaLabel="Mitarbeiter für Qualifikation"
+          options={employeeOptions}
+          value={employeeRecordId}
+          onChange={setEmployeeRecordId}
+          disabled={isRecordIdentityLocked}
+          placeholder="Mitarbeiter auswählen"
+          searchPlaceholder="Mitarbeiter suchen …"
+          emptyMessage="Kein Mitarbeiter gefunden"
+        />
+      </Field>
+      <Field
+        label="Fähigkeit oder Zertifizierung"
+        htmlFor="qualification-capability"
+        required
+        error={grantFieldErrors.capability}
+        className="gap-1.5"
+      >
+        <SearchableSelect
+          ariaLabel="Qualifikation auswählen"
+          options={capabilityOptions}
+          value={capabilityId}
+          onChange={setCapabilityId}
+          disabled={isRecordIdentityLocked}
+          placeholder="Begriff auswählen"
+          searchPlaceholder="Begriff suchen …"
+          emptyMessage="Kein Begriff gefunden"
+        />
+      </Field>
+    </>
+  );
+}
+
+function QualificationManagementGrantDateFields({ form }: { form: QualificationManagementGrantFormState }) {
+  const { validFrom, setValidFrom, validUntil, setValidUntil, grantFieldErrors } = form;
+
+  return (
+    <>
+      <Field
+        label="Gültig ab"
+        htmlFor="qualification-valid-from"
+        required
+        error={grantFieldErrors.validFrom}
+        className="gap-1.5"
+      >
+        <DatePicker
+          ariaLabel="Qualifikation gültig ab"
+          value={parseIsoLocalDate(validFrom)}
+          onChange={(date) => setValidFrom(date ? toLocalDateString(date) : '')}
+        />
+      </Field>
+      <Field
+        label="Gültig bis (optional)"
+        htmlFor="qualification-valid-until"
+        error={grantFieldErrors.validUntil}
+        className="gap-1.5"
+      >
+        <DatePicker
+          ariaLabel="Qualifikation gültig bis"
+          value={parseIsoLocalDate(validUntil)}
+          onChange={(date) => setValidUntil(date ? toLocalDateString(date) : '')}
+        />
+      </Field>
+    </>
+  );
+}
+
 function QualificationManagementCertificationFields({
   form,
 }: {
@@ -199,7 +225,13 @@ function QualificationManagementCertificationFields({
         />
       </Field>
       <Field label="Nachweisstatus" htmlFor="qualification-evidence-state" className="gap-1.5">
-        <Select value={evidenceState} onValueChange={(value) => setEvidenceState(value as EvidenceState)}>
+        <Select
+          value={evidenceState}
+          onValueChange={(value) => {
+            const match = EVIDENCE_STATES.find((candidate) => candidate === value);
+            if (match) setEvidenceState(match);
+          }}
+        >
           <SelectTrigger aria-label="Nachweisstatus">
             <SelectValue />
           </SelectTrigger>

@@ -26,6 +26,49 @@ const DECISION_FALLBACK = 'Die Anfrage konnte nicht bearbeitet werden. Bitte ver
 
 const getRequestId = (request: PendingJoinRequest) => request.id;
 
+type JoinRequestRowProps = {
+  request: PendingJoinRequest;
+  isBusy: boolean;
+  decide: (request: PendingJoinRequest, approve: boolean) => Promise<void>;
+};
+
+function JoinRequestRow({ request, isBusy, decide }: JoinRequestRowProps) {
+  return (
+    <ListRow
+      variant="plain"
+      className="flex flex-wrap items-center justify-between gap-3"
+      data-join-request={request.id}
+    >
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{request.name}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {request.email ? `${request.email} · ` : ''}angefragt {formatBerlinDateTime(request.requestedAt)}
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isBusy}
+          onClick={() => void decide(request, false)}
+          aria-label={`Anfrage von ${request.name} ablehnen`}
+        >
+          Ablehnen
+        </Button>
+        <Button
+          size="sm"
+          disabled={isBusy}
+          onClick={() => void decide(request, true)}
+          aria-label={`${request.name} freigeben`}
+        >
+          Freigeben
+        </Button>
+        <InlinePending active={isBusy} label="Anfrage wird bearbeitet" keepSpace />
+      </div>
+    </ListRow>
+  );
+}
+
 /**
  * Open join requests of the organization. Admin and Büro approve a person, who
  * then joins as Handwerker/in, or decline the request. The section exists only
@@ -76,45 +119,14 @@ export function JoinRequestsSection({ requests }: { requests: PendingJoinRequest
         </p>
       </div>
       <Card className="gap-0 divide-y py-0">
-        {list.items.map(({ item: request }) => {
-          const isBusy = busy.isBusy(request.id);
-          return (
-            <ListRow
-              key={request.id}
-              variant="plain"
-              className="flex flex-wrap items-center justify-between gap-3"
-              data-join-request={request.id}
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{request.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {request.email ? `${request.email} · ` : ''}angefragt{' '}
-                  {formatBerlinDateTime(request.requestedAt)}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={isBusy}
-                  onClick={() => void decide(request, false)}
-                  aria-label={`Anfrage von ${request.name} ablehnen`}
-                >
-                  Ablehnen
-                </Button>
-                <Button
-                  size="sm"
-                  disabled={isBusy}
-                  onClick={() => void decide(request, true)}
-                  aria-label={`${request.name} freigeben`}
-                >
-                  Freigeben
-                </Button>
-                <InlinePending active={isBusy} label="Anfrage wird bearbeitet" keepSpace />
-              </div>
-            </ListRow>
-          );
-        })}
+        {list.items.map(({ item: request }) => (
+          <JoinRequestRow
+            key={request.id}
+            request={request}
+            isBusy={busy.isBusy(request.id)}
+            decide={decide}
+          />
+        ))}
       </Card>
     </section>
   );
