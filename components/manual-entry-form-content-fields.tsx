@@ -10,6 +10,8 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import { DatePicker } from '@/components/ui/date-picker';
 import type { ManualEntryMode } from '@/components/use-manual-entry-form-draft';
 
+const ENTRY_MODES: readonly ManualEntryMode[] = ['both', 'clock_in', 'clock_out'];
+
 type ManualEntryAssignmentFieldsProps = {
   lockEntryMode: boolean | undefined;
   entryMode: ManualEntryMode;
@@ -50,7 +52,13 @@ export function ManualEntryAssignmentFields({
     <>
       {!lockEntryMode && (
         <Field label="Art des Eintrags">
-          <Select value={entryMode} onValueChange={(value) => setEntryMode(value as ManualEntryMode)}>
+          <Select
+            value={entryMode}
+            onValueChange={(value) => {
+              const mode = ENTRY_MODES.find((candidate) => candidate === value);
+              if (mode) setEntryMode(mode);
+            }}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>

@@ -3,6 +3,13 @@
 import * as React from 'react';
 import { clickedSegment } from '@/components/ui/clicked-segment';
 import { useFieldContext } from '@/components/ui/field';
+import {
+  TIME_SEGMENTS,
+  handleTimeSegmentKeyDown,
+  padTimeSegment,
+  parseTimeInputValue,
+  type TimeSegment,
+} from '@/components/ui/time-input-keys';
 import { cn } from '@/lib/utils';
 
 interface TimeInputProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 'defaultValue' | 'value'> {
@@ -12,11 +19,147 @@ interface TimeInputProps extends Omit<React.ComponentProps<'div'>, 'onChange' | 
   id?: string;
 }
 
-const TIME_SEGMENTS = ['hours', 'minutes'] as const;
-type Segment = (typeof TIME_SEGMENTS)[number];
+type Segment = TimeSegment;
 
 function EmptySegmentLine() {
   return <span aria-hidden className="inline-block h-px w-4 rounded-full bg-muted-foreground align-middle" />;
+}
+
+const segmentBaseClass = 'px-1.5 py-1 rounded-sm cursor-pointer transition-colors select-none';
+const segmentActiveClass = 'bg-primary text-primary-foreground';
+const segmentInactiveClass = 'hover:bg-accent';
+
+function TimeInputSegment({
+  segment,
+  activeSegment,
+  hasValue,
+  amount,
+}: {
+  segment: Segment;
+  activeSegment: Segment | null;
+  hasValue: boolean;
+  amount: number;
+}) {
+  return (
+    <span
+      data-segment={segment}
+      className={cn(segmentBaseClass, activeSegment === segment ? segmentActiveClass : segmentInactiveClass)}
+    >
+      {!hasValue && activeSegment !== segment ? <EmptySegmentLine /> : padTimeSegment(amount)}
+    </span>
+  );
+}
+
+function TimeInputSegments({
+  activeSegment,
+  hasValue,
+  hours,
+  minutes,
+}: {
+  activeSegment: Segment | null;
+  hasValue: boolean;
+  hours: number;
+  minutes: number;
+}) {
+  return (
+    <>
+      {/* Hours segment */}
+      <TimeInputSegment segment="hours" activeSegment={activeSegment} hasValue={hasValue} amount={hours} />
+
+      {/* Separator */}
+      <span className="text-muted-foreground select-none">:</span>
+
+      {/* Minutes segment */}
+      <TimeInputSegment
+        segment="minutes"
+        activeSegment={activeSegment}
+        hasValue={hasValue}
+        amount={minutes}
+      />
+    </>
+  );
+}
+
+function timeInputClassName(
+  isFocused: boolean,
+  disabled: boolean | undefined,
+  className: string | undefined,
+) {
+  return cn(
+    'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none md:text-sm',
+    'border-input dark:bg-input/30',
+    isFocused && 'ring-ring/50 ring-2',
+    disabled && 'pointer-events-none cursor-not-allowed opacity-50',
+    className,
+  );
+}
+
+/** The group's name, description and invalid state: the caller's own, else the enclosing `Field`'s. */
+function timeInputGroupAria(
+  field: ReturnType<typeof useFieldContext>,
+  {
+    ariaLabel,
+    ariaLabelledBy,
+    ariaDescribedBy,
+    ariaInvalid,
+  }: {
+    ariaLabel: string | undefined;
+    ariaLabelledBy: string | undefined;
+    ariaDescribedBy: string | undefined;
+    ariaInvalid: TimeInputProps['aria-invalid'];
+  },
+) {
+  return {
+    'aria-label': ariaLabel ?? (field ? undefined : 'Uhrzeit'),
+    'aria-labelledby': ariaLabelledBy ?? (ariaLabel ? undefined : field?.labelId),
+    'aria-describedby':
+      ariaDescribedBy ??
+      ([field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined),
+    'data-invalid': ariaInvalid ?? (field?.invalid || undefined),
+  };
+}
+
+/** Focus and active segment of a `TimeInput`. */
+function useTimeSegmentFocus(disabled: boolean | undefined) {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [activeSegment, setActiveSegment] = React.useState<Segment | null>(null);
+  const [isFocused, setIsFocused] = React.useState(false);
+
+  // Handle segment click
+  const handleSegmentClick = (segment: Segment) => {
+    if (disabled) return;
+    setActiveSegment(segment);
+    setIsFocused(true);
+  };
+
+  // Handle container focus
+  const handleFocus = () => {
+    if (disabled) return;
+    setIsFocused(true);
+    if (!activeSegment) {
+      setActiveSegment('hours');
+    }
+  };
+
+  // Handle container blur
+  const handleBlur = (e: React.FocusEvent) => {
+    // Check if focus is moving to a child element
+    if (e.relatedTarget instanceof Node && containerRef.current?.contains(e.relatedTarget)) {
+      return;
+    }
+    setIsFocused(false);
+    setActiveSegment(null);
+  };
+
+  return {
+    containerRef,
+    activeSegment,
+    setActiveSegment,
+    isFocused,
+    handleSegmentClick,
+    handleFocus,
+    handleBlur,
+  };
 }
 
 /**
@@ -48,59 +191,24 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
   ) => {
     const field = useFieldContext();
     const id = idProp ?? field?.controlId;
-    const containerRef = React.useRef<HTMLDivElement>(null);
-    const [activeSegment, setActiveSegment] = React.useState<Segment | null>(null);
-    const [isFocused, setIsFocused] = React.useState(false);
+    const {
+      containerRef,
+      activeSegment,
+      setActiveSegment,
+      isFocused,
+      handleSegmentClick,
+      handleFocus,
+      handleBlur,
+    } = useTimeSegmentFocus(disabled);
     // Combine refs
     React.useImperativeHandle<HTMLDivElement | null, HTMLDivElement | null>(ref, () => containerRef.current);
 
-    // Parse value into hours and minutes
-    const parseValue = (val: string): { hours: number; minutes: number } => {
-      if (!val || !/^\d{2}:\d{2}$/.test(val)) {
-        return { hours: 0, minutes: 0 };
-      }
-      const [h, m] = val.split(':').map(Number);
-      if (h === undefined || m === undefined) {
-        return { hours: 0, minutes: 0 };
-      }
-      return { hours: h, minutes: m };
-    };
-
-    const { hours, minutes } = parseValue(value);
+    const { hours, minutes } = parseTimeInputValue(value);
     const hasValue = !!value && /^\d{2}:\d{2}$/.test(value);
-
-    // Format a number to 2 digits
-    const pad = (n: number) => String(n).padStart(2, '0');
 
     // Update value
     const updateValue = (newHours: number, newMinutes: number) => {
-      onChange(`${pad(newHours)}:${pad(newMinutes)}`);
-    };
-
-    // Handle segment click
-    const handleSegmentClick = (segment: Segment) => {
-      if (disabled) return;
-      setActiveSegment(segment);
-      setIsFocused(true);
-    };
-
-    // Handle container focus
-    const handleFocus = () => {
-      if (disabled) return;
-      setIsFocused(true);
-      if (!activeSegment) {
-        setActiveSegment('hours');
-      }
-    };
-
-    // Handle container blur
-    const handleBlur = (e: React.FocusEvent) => {
-      // Check if focus is moving to a child element
-      if (containerRef.current?.contains(e.relatedTarget as Node)) {
-        return;
-      }
-      setIsFocused(false);
-      setActiveSegment(null);
+      onChange(`${padTimeSegment(newHours)}:${padTimeSegment(newMinutes)}`);
     };
 
     // Handle keyboard input
@@ -108,112 +216,15 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
       onKeyDown?.(e);
       if (e.defaultPrevented) return;
       if (disabled || !activeSegment) return;
-
-      // Arrow up/down - increment/decrement
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        const delta = e.key === 'ArrowUp' ? 1 : -1;
-
-        if (activeSegment === 'hours') {
-          const newHours = (hours + delta + 24) % 24;
-          updateValue(newHours, minutes);
-        } else {
-          const newMinutes = (minutes + delta + 60) % 60;
-          updateValue(hours, newMinutes);
-        }
-        return;
-      }
-
-      // Arrow left/right - move between segments
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        e.preventDefault();
-        setActiveSegment(e.key === 'ArrowLeft' ? 'hours' : 'minutes');
-        return;
-      }
-
-      // Tab - move between segments or to next field
-      if (e.key === 'Tab') {
-        if (!e.shiftKey && activeSegment === 'hours') {
-          e.preventDefault();
-          setActiveSegment('minutes');
-          return;
-        }
-        if (e.shiftKey && activeSegment === 'minutes') {
-          e.preventDefault();
-          setActiveSegment('hours');
-          return;
-        }
-        // Let default tab behavior proceed to move to next/prev field
-        setActiveSegment(null);
-        return;
-      }
-
-      // Number keys - input digits
-      if (/^[0-9]$/.test(e.key)) {
-        e.preventDefault();
-        const digit = parseInt(e.key, 10);
-
-        if (activeSegment === 'hours') {
-          // Build 2-digit hours
-          let newHours: number;
-          if (hours < 3) {
-            // Can potentially add second digit
-            const combined = hours * 10 + digit;
-            newHours = combined <= 23 ? combined : digit;
-          } else {
-            // Start fresh
-            newHours = digit;
-          }
-          updateValue(newHours, minutes);
-
-          // Auto-advance to minutes if we have a complete hour
-          if (newHours >= 3 || (hours >= 1 && hours * 10 + digit <= 23)) {
-            setActiveSegment('minutes');
-          }
-        } else {
-          // Build 2-digit minutes
-          let newMinutes: number;
-          if (minutes < 6) {
-            // Can potentially add second digit
-            const combined = minutes * 10 + digit;
-            newMinutes = combined <= 59 ? combined : digit;
-          } else {
-            // Start fresh
-            newMinutes = digit;
-          }
-          updateValue(hours, newMinutes);
-        }
-        return;
-      }
-
-      // Backspace/Delete - reset segment to 00
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        e.preventDefault();
-        if (activeSegment === 'hours') {
-          updateValue(0, minutes);
-        } else {
-          updateValue(hours, 0);
-        }
-        return;
-      }
+      handleTimeSegmentKeyDown(e, { activeSegment, hours, minutes, updateValue, setActiveSegment });
     };
-
-    const segmentBaseClass = 'px-1.5 py-1 rounded-sm cursor-pointer transition-colors select-none';
-    const segmentActiveClass = 'bg-primary text-primary-foreground';
-    const segmentInactiveClass = 'hover:bg-accent';
 
     return (
       // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- one tab stop like a native time field: the group owns the arrow and digit keys of its segments, and a click picks the segment the arrow keys reach
       <div
         ref={containerRef}
         role="group"
-        aria-label={ariaLabel ?? (field ? undefined : 'Uhrzeit')}
-        aria-labelledby={ariaLabelledBy ?? (ariaLabel ? undefined : field?.labelId)}
-        aria-describedby={
-          ariaDescribedBy ??
-          ([field?.describedBy, field?.requiredDescriptionId].filter(Boolean).join(' ') || undefined)
-        }
-        data-invalid={ariaInvalid ?? (field?.invalid || undefined)}
+        {...timeInputGroupAria(field, { ariaLabel, ariaLabelledBy, ariaDescribedBy, ariaInvalid })}
         aria-disabled={disabled || undefined}
         tabIndex={disabled ? -1 : 0}
         id={id}
@@ -231,39 +242,15 @@ const TimeInput = React.forwardRef<HTMLDivElement, TimeInputProps>(
           if (segment) handleSegmentClick(segment);
           onClick?.(event);
         }}
-        className={cn(
-          'inline-flex h-9 w-full items-center gap-0.5 rounded-md border bg-transparent px-3 py-1 text-base transition-[color,box-shadow] outline-none md:text-sm',
-          'border-input dark:bg-input/30',
-          isFocused && 'ring-ring/50 ring-2',
-          disabled && 'pointer-events-none cursor-not-allowed opacity-50',
-          className,
-        )}
+        className={timeInputClassName(isFocused, disabled, className)}
         {...props}
       >
-        {/* Hours segment */}
-        <span
-          data-segment="hours"
-          className={cn(
-            segmentBaseClass,
-            activeSegment === 'hours' ? segmentActiveClass : segmentInactiveClass,
-          )}
-        >
-          {!hasValue && activeSegment !== 'hours' ? <EmptySegmentLine /> : pad(hours)}
-        </span>
-
-        {/* Separator */}
-        <span className="text-muted-foreground select-none">:</span>
-
-        {/* Minutes segment */}
-        <span
-          data-segment="minutes"
-          className={cn(
-            segmentBaseClass,
-            activeSegment === 'minutes' ? segmentActiveClass : segmentInactiveClass,
-          )}
-        >
-          {!hasValue && activeSegment !== 'minutes' ? <EmptySegmentLine /> : pad(minutes)}
-        </span>
+        <TimeInputSegments
+          activeSegment={activeSegment}
+          hasValue={hasValue}
+          hours={hours}
+          minutes={minutes}
+        />
       </div>
     );
   },

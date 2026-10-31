@@ -15,8 +15,39 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Textarea } from '@/components/ui/textarea';
-import { WORK_BLOCKER_REASON_LABELS, type WorkBlockerReason } from '@/lib/work-lifecycle/types';
+import {
+  WORK_BLOCKER_REASON_LABELS,
+  WORK_BLOCKER_REASONS,
+  type WorkBlockerReason,
+} from '@/lib/work-lifecycle/types';
 import { useWorkLifecycleBlockerForm, type WorkBlockerDialogProps } from './use-work-lifecycle-blocker-form';
+
+function BlockerReasonField({
+  reason,
+  setReason,
+}: {
+  reason: WorkBlockerReason;
+  setReason: (reason: WorkBlockerReason) => void;
+}) {
+  return (
+    <Field label="Grund" htmlFor="work-blocker-reason" required>
+      {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
+      <SearchableSelect
+        options={Object.entries(WORK_BLOCKER_REASON_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        }))}
+        value={reason}
+        onChange={(value) => {
+          const nextReason = WORK_BLOCKER_REASONS.find((candidate) => candidate === value);
+          if (nextReason) setReason(nextReason);
+        }}
+        searchPlaceholder="Grund suchen"
+        emptyMessage="Kein passender Grund gefunden"
+      />
+    </Field>
+  );
+}
 
 export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
   const { snapshot, kind, blocker, isManager, onClose } = props;
@@ -41,19 +72,7 @@ export function WorkBlockerDialog(props: WorkBlockerDialogProps) {
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Grund" htmlFor="work-blocker-reason" required>
-              {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
-              <SearchableSelect
-                options={Object.entries(WORK_BLOCKER_REASON_LABELS).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-                value={form.reason}
-                onChange={(value) => form.setReason(value as WorkBlockerReason)}
-                searchPlaceholder="Grund suchen"
-                emptyMessage="Kein passender Grund gefunden"
-              />
-            </Field>
+            <BlockerReasonField reason={form.reason} setReason={form.setReason} />
             <Field
               label="Nächster Schritt / Details"
               htmlFor="work-blocker-details"
