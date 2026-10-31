@@ -26,6 +26,11 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+# The Vercel project that serves app.werk-flow.app.
+env:
+  VERCEL_TEAM_ID: team_B8v4QHjpjZWyFXo6wkhiXkgN
+  VERCEL_PROJECT_ID: prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R
+
 jobs:
   candidate:
     name: Find a full run
@@ -74,6 +79,8 @@ jobs:
     environment: production
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    outputs:
+      deployment: ${{ steps.promote.outputs.deployment }}
     steps:
       # The deploy key is the only actor the production ruleset lets update the branch.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -113,14 +120,15 @@ jobs:
       # A failed build gets one redeploy, whose own id the step then waits for: a rerun of this
       # workflow pushes the same commit, which starts no build, and lands here too.
       - name: Promote the production build
+        id: promote
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           SHA: ${{ needs.candidate.outputs.sha }}
         run: |
           api() { curl --fail --silent --show-error -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
           vercel() { npx --yes vercel@65 "$@" --scope werkflows-projects --token "$VERCEL_TOKEN"; }
-          team="teamId=team_B8v4QHjpjZWyFXo6wkhiXkgN"
-          query="projectId=prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R&${team}&target=production&limit=20"
+          team="teamId=${VERCEL_TEAM_ID}"
+          query="projectId=${VERCEL_PROJECT_ID}&${team}&target=production&limit=20"
           deadline=$((SECONDS + 1800))
           id=""
           redeployed=false
@@ -155,3 +163,28 @@ jobs:
             vercel promote "$id" --yes
             echo "Production serves ${SHA} (${id})."
           fi
+          echo "deployment=$id" >> "$GITHUB_OUTPUT"
+
+  smoke:
+    name: Check production
+    needs: [candidate, release]
+    # After a release, its build; in a dry run, the build that serves now, whatever the decision.
+    if: ${{ !cancelled() && (inputs.dry_run || needs.release.result == 'success') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Only the scripts are read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      # Data-free reads only (.github/scripts/release-smoke.sh). A red check means: roll back through
+      # Vercel and report (docs/technical/environments.md, "Release and rollback", step 3).
+      - name: Smoke-check production without reading its data
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          HEALTH_CHECK_TOKEN: ${{ secrets.HEALTH_CHECK_TOKEN }}
+          APP_URL: https://app.werk-flow.app
+          HEALTH_URL: https://jbgaqpdjauzoocplgdsn.supabase.co/functions/v1/health
+          DEPLOYMENT: ${{ needs.release.outputs.deployment }}
+        run: bash .github/scripts/release-smoke.sh "$DEPLOYMENT"
