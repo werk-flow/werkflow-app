@@ -56,20 +56,75 @@ type ApplyWorkTemplateState = {
   openDialog: () => void;
 };
 
-/** Option loading, preview and application of a published work template onto one job or project. */
-export function useApplyWorkTemplate({
+type ApplyFailure = Exclude<Awaited<ReturnType<typeof applyWorkTemplate>>, { success: true }>;
+
+/** What a refused or unreachable application shows: the qualification warning, or a sentence. */
+function applyFailureFeedback(
+  result: ApplyFailure | null,
+): { kind: 'warning'; evaluation: AssignmentEvaluation } | { kind: 'error'; message: string } {
+  if (!result) return { kind: 'error', message: 'Die Arbeitsvorlage konnte nicht angewendet werden.' };
+  if (
+    (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+    'evaluation' in result &&
+    result.evaluation
+  ) {
+    return { kind: 'warning', evaluation: result.evaluation };
+  }
+  if (
+    result.error === 'work_template_reference_unavailable' &&
+    'referenceName' in result &&
+    result.referenceName
+  ) {
+    return {
+      kind: 'error',
+      message: `„${result.referenceName}“ ist nicht mehr aktiv. Korrigiere die Vorlage und versuche es erneut.`,
+    };
+  }
+  return {
+    kind: 'error',
+    message: describeFailure(
+      result.error,
+      APPLY_ERROR_MESSAGES,
+      'Die Arbeitsvorlage konnte nicht angewendet werden.',
+    ),
+  };
+}
+
+/** The application of one version onto the target; the same version on the same target repeats its key. */
+function applyRequest({
   targetType,
   targetId,
-  onApplied,
-}: ApplyWorkTemplateInput): ApplyWorkTemplateState {
-  const [open, setOpen] = useState(false);
-  const [versionId, setVersionId] = useState('');
-  const [allowAdditional, setAllowAdditional] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [attempted, setAttempted] = useState(false);
-  const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
-  const { run: runPendingTask, isPending } = usePendingTask();
-  const { showBanner } = useBanner();
+  versionId,
+  allowAdditional,
+  approval,
+}: {
+  targetType: WorkTemplateTargetType;
+  targetId: string;
+  versionId: string;
+  allowAdditional: boolean;
+  approval: AssignmentApproval | undefined;
+}): Parameters<typeof applyWorkTemplate>[0] {
+  return {
+    templateVersionId: versionId,
+    ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }),
+    allowAdditional,
+    idempotencyKey: `apply-${targetType}-${targetId}-${versionId}`,
+    assignmentApproval: approval ?? null,
+  };
+}
+
+/** The published templates while the dialog is open, and the preview of the chosen version. */
+function useApplyTemplateReads({
+  targetType,
+  targetId,
+  open,
+  versionId,
+}: {
+  targetType: WorkTemplateTargetType;
+  targetId: string;
+  open: boolean;
+  versionId: string;
+}) {
   // Each opening reads the published templates fresh; a closed dialog drops them.
   const templates = useClientRead({
     read: (signal) => readInBackground('published-work-templates', { targetType }, signal),
@@ -88,6 +143,24 @@ export function useApplyWorkTemplate({
     enabled: versionId !== '',
     failureMessage: 'Die Vorschau konnte nicht geladen werden.',
   });
+  return { templates, previewRead };
+}
+
+/** Option loading, preview and application of a published work template onto one job or project. */
+export function useApplyWorkTemplate({
+  targetType,
+  targetId,
+  onApplied,
+}: ApplyWorkTemplateInput): ApplyWorkTemplateState {
+  const [open, setOpen] = useState(false);
+  const [versionId, setVersionId] = useState('');
+  const [allowAdditional, setAllowAdditional] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
+  const { run: runPendingTask, isPending } = usePendingTask();
+  const { showBanner } = useBanner();
+  const { templates, previewRead } = useApplyTemplateReads({ targetType, targetId, open, versionId });
   const options = templates.data?.data ?? null;
   const preview = previewRead.data?.data ?? null;
   // Selecting a version clears preview and error; the window until either lands must not look idle.
@@ -107,43 +180,13 @@ export function useApplyWorkTemplate({
     // Close the warning first so a failure message is not hidden behind it.
     setQualificationWarning(null);
     void runPendingTask(async () => {
-      const result = await applyWorkTemplate({
-        templateVersionId: versionId,
-        ...(targetType === 'job' ? { jobId: targetId } : { projectId: targetId }),
-        allowAdditional,
-        idempotencyKey: `apply-${targetType}-${targetId}-${versionId}`,
-        assignmentApproval: approval ?? null,
-      }).catch(() => null);
+      const result = await applyWorkTemplate(
+        applyRequest({ targetType, targetId, versionId, allowAdditional, approval }),
+      ).catch(() => null);
       if (!result?.success) {
-        if (!result) {
-          setError('Die Arbeitsvorlage konnte nicht angewendet werden.');
-          return;
-        }
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result &&
-          result.evaluation
-        ) {
-          setQualificationWarning(result.evaluation);
-          return;
-        }
-        if (
-          result.error === 'work_template_reference_unavailable' &&
-          'referenceName' in result &&
-          result.referenceName
-        ) {
-          setError(
-            `„${result.referenceName}“ ist nicht mehr aktiv. Korrigiere die Vorlage und versuche es erneut.`,
-          );
-          return;
-        }
-        setError(
-          describeFailure(
-            result.error,
-            APPLY_ERROR_MESSAGES,
-            'Die Arbeitsvorlage konnte nicht angewendet werden.',
-          ),
-        );
+        const feedback = applyFailureFeedback(result);
+        if (feedback.kind === 'warning') setQualificationWarning(feedback.evaluation);
+        else setError(feedback.message);
         return;
       }
       setOpen(false);

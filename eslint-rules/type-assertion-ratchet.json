@@ -1,5 +1,4 @@
 {
-  "app/(app)/arbeitsvorlagen/page.tsx": 1,
   "components/anfragen/anfragen-content.tsx": 1,
   "components/anfragen/close-request-dialog.tsx": 1,
   "components/anfragen/convert-request-dialog.tsx": 1,
@@ -8,10 +7,6 @@
   "components/anfragen/create-request-further-fields.tsx": 1,
   "components/anfragen/edit-request-dialog.tsx": 2,
   "components/anfragen/edit-request-routing-fields.tsx": 1,
-  "components/arbeitsvorlagen/create-work-template-dialog.tsx": 1,
-  "components/arbeitsvorlagen/work-template-capabilities-editor.tsx": 1,
-  "components/arbeitsvorlagen/work-template-items-editor.tsx": 3,
-  "components/arbeitsvorlagen/work-templates-content.tsx": 2,
   "components/auftraege/artifacts/work-artifact-action-panel.tsx": 1,
   "components/auftraege/artifacts/work-artifact-content.ts": 1,
   "components/auftraege/artifacts/work-artifact-form.tsx": 2,
