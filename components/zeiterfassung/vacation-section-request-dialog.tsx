@@ -125,20 +125,15 @@ function VacationRequestPeriodFields({
 }
 
 type VacationDaysPreviewStatusProps = {
-  isPreviewing: boolean;
-  previewDays: number | null;
-  previewError: string | null;
+  preview: Pick<
+    ReturnType<typeof useVacationDaysPreview>,
+    'isPreviewing' | 'previewDays' | 'previewError' | 'retryPreview'
+  >;
   rangePreviewError: string | null;
-  retryPreview: () => void;
 };
 
-function VacationDaysPreviewStatus({
-  isPreviewing,
-  previewDays,
-  previewError,
-  rangePreviewError,
-  retryPreview,
-}: VacationDaysPreviewStatusProps) {
+function VacationDaysPreviewStatus({ preview, rangePreviewError }: VacationDaysPreviewStatusProps) {
+  const { isPreviewing, previewDays, previewError, retryPreview } = preview;
   return (
     <div aria-live="polite" className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
       {isPreviewing ? (
@@ -168,6 +163,76 @@ function VacationDaysPreviewStatus({
   );
 }
 
+/** The start and end errors of a request; an end before the start is the range error. */
+function vacationRequestDateErrors(
+  startDate: string,
+  endDate: string,
+): { start: string | undefined; end: string | undefined } {
+  const startError = startDate ? undefined : 'Bitte wähle ein Startdatum aus.';
+  const endError = !endDate
+    ? 'Bitte wähle ein Enddatum aus.'
+    : endDate < startDate
+      ? REQUEST_ERROR_MESSAGES.invalid_range
+      : undefined;
+  return { start: startError, end: endError };
+}
+
+// An end before the start shows on the end field while the dates are picked.
+function vacationRangePreviewError(startDate: string, endDate: string): string | null {
+  return startDate && endDate && endDate < startDate ? REQUEST_ERROR_MESSAGES.invalid_range : null;
+}
+
+function VacationRequestCommentField({
+  comment,
+  setComment,
+  isSaving,
+}: {
+  comment: string;
+  setComment: (value: string) => void;
+  isSaving: boolean;
+}) {
+  return (
+    <Field label="Notiz (optional)" htmlFor="vacation-comment">
+      <Textarea
+        placeholder="z. B. Familienfeier"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        disabled={isSaving}
+      />
+    </Field>
+  );
+}
+
+function VacationNoEntitlementHint() {
+  return (
+    <p className="text-xs text-muted-foreground">
+      Hinweis: Für dich ist noch kein Urlaubsanspruch hinterlegt. Der Antrag ist trotzdem möglich; die
+      Freigabe entscheidet dein Betrieb.
+    </p>
+  );
+}
+
+function VacationRequestFooter({
+  isSaving,
+  isPreviewing,
+  onClose,
+}: {
+  isSaving: boolean;
+  isPreviewing: boolean;
+  onClose: (saved: boolean) => void;
+}) {
+  return (
+    <DialogFooter>
+      <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
+        Abbrechen
+      </Button>
+      <Button pending={isSaving} type="submit" disabled={isSaving || isPreviewing}>
+        {isSaving ? 'Wird eingereicht…' : 'Antrag einreichen'}
+      </Button>
+    </DialogFooter>
+  );
+}
+
 export function OwnVacationRequestDialog({
   hasEntitlement,
   onClose,
@@ -186,24 +251,17 @@ export function OwnVacationRequestDialog({
 
   const isSingleDay = startDate === endDate;
   const dayPortion = halfDay && isSingleDay ? 'half_day' : 'full';
-  const rangePreviewError =
-    startDate && endDate && endDate < startDate ? REQUEST_ERROR_MESSAGES.invalid_range : null;
+  const rangePreviewError = vacationRangePreviewError(startDate, endDate);
 
-  const { previewDays, isPreviewing, previewError, invalidatePreview, retryPreview } = useVacationDaysPreview(
-    { startDate, endDate, dayPortion },
-  );
+  const preview = useVacationDaysPreview({ startDate, endDate, dayPortion });
+  const { isPreviewing, invalidatePreview } = preview;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setError(null);
 
-    const startError = startDate ? undefined : 'Bitte wähle ein Startdatum aus.';
-    const endError = !endDate
-      ? 'Bitte wähle ein Enddatum aus.'
-      : endDate < startDate
-        ? REQUEST_ERROR_MESSAGES.invalid_range
-        : undefined;
+    const { start: startError, end: endError } = vacationRequestDateErrors(startDate, endDate);
     setDateErrors({ start: startError, end: endError });
     if (focusFirstInvalidField({ 'vacation-start-date': startError, 'vacation-end-date': endError })) return;
 
@@ -251,40 +309,15 @@ export function OwnVacationRequestDialog({
               rangePreviewError={rangePreviewError}
             />
 
-            <VacationDaysPreviewStatus
-              isPreviewing={isPreviewing}
-              previewDays={previewDays}
-              previewError={previewError}
-              rangePreviewError={rangePreviewError}
-              retryPreview={retryPreview}
-            />
+            <VacationDaysPreviewStatus preview={preview} rangePreviewError={rangePreviewError} />
 
-            <Field label="Notiz (optional)" htmlFor="vacation-comment">
-              <Textarea
-                placeholder="z. B. Familienfeier"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={isSaving}
-              />
-            </Field>
+            <VacationRequestCommentField comment={comment} setComment={setComment} isSaving={isSaving} />
 
-            {!hasEntitlement && (
-              <p className="text-xs text-muted-foreground">
-                Hinweis: Für dich ist noch kein Urlaubsanspruch hinterlegt. Der Antrag ist trotzdem möglich;
-                die Freigabe entscheidet dein Betrieb.
-              </p>
-            )}
+            {!hasEntitlement && <VacationNoEntitlementHint />}
 
             <ErrorText>{error}</ErrorText>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
-              Abbrechen
-            </Button>
-            <Button pending={isSaving} type="submit" disabled={isSaving || isPreviewing}>
-              {isSaving ? 'Wird eingereicht…' : 'Antrag einreichen'}
-            </Button>
-          </DialogFooter>
+          <VacationRequestFooter isSaving={isSaving} isPreviewing={isPreviewing} onClose={onClose} />
         </form>
       </DialogContent>
     </Dialog>
