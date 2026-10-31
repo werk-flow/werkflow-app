@@ -13,6 +13,8 @@ import {
   readLatestFindingDecisions,
   readPendingAdjustments,
 } from './decision-reads';
+import { canCorrectOpeningDate } from './opening-dates';
+import { type OpeningDateCorrection, type OpeningDateFacts, readOpeningDateFacts } from './opening-reads';
 import { getBerlinInstant, PERIOD_SOURCE_ROW_CAP, requirePeriodRows } from './period-sources';
 import type {
   PayrollExportState,
@@ -104,6 +106,8 @@ export type TimeAccountSettingsData = {
   employeeCount: number;
   openAccountCount: number;
   mappingVersion: number | null;
+  /** The first day of the oldest month without a closed period: the proposed rule and account start. */
+  suggestedStartDate: string;
   missingAccounts: Array<{ employeeRecordId: string; employeeName: string }>;
   employees: Array<{
     employeeRecordId: string;
@@ -116,6 +120,10 @@ export type TimeAccountSettingsData = {
     employeeName: string;
     currentBalanceMinutes: number;
     version: number;
+    openedOn: string;
+    /** No closed period ends on or after the opening date, so it may still be corrected. */
+    canCorrectOpenedOn: boolean;
+    openingCorrections: OpeningDateCorrection[];
   }>;
   pendingAdjustments: Array<Omit<PendingAdjustment, 'employeeRecordId'> & { employeeName: string }>;
 };
@@ -479,7 +487,7 @@ function toTimePeriodDetail(input: {
   };
 }
 
-const EMPTY_TIME_ACCOUNT_SETTINGS: TimeAccountSettingsData = {
+const EMPTY_TIME_ACCOUNT_SETTINGS: Omit<TimeAccountSettingsData, 'suggestedStartDate'> = {
   policies: [],
   employeeCount: 0,
   openAccountCount: 0,
@@ -493,7 +501,10 @@ const EMPTY_TIME_ACCOUNT_SETTINGS: TimeAccountSettingsData = {
 export async function getTimeAccountSettings(): Promise<TimeAccountRead<TimeAccountSettingsData>> {
   const context = await requireAuth();
   if (context.role !== 'admin' && context.role !== 'buero')
-    return { success: true, data: EMPTY_TIME_ACCOUNT_SETTINGS };
+    return {
+      success: true,
+      data: { ...EMPTY_TIME_ACCOUNT_SETTINGS, suggestedStartDate: getBusinessTodayIso() },
+    };
   return readRegion('getTimeAccountSettings: settings failed', () => readTimeAccountSettings(context));
 }
 
@@ -502,7 +513,7 @@ type SettingsRows = {
   employees: NamedEmployee[];
   accounts: Pick<
     Tables<'time_accounts'>,
-    'id' | 'employee_record_id' | 'current_balance_minutes' | 'version'
+    'id' | 'employee_record_id' | 'current_balance_minutes' | 'version' | 'opened_on'
   >[];
   mapping: Pick<Tables<'payroll_mapping_profiles'>, 'current_version_id'> | null;
   assignments: Pick<
@@ -515,13 +526,14 @@ type SettingsDetails = {
   profiles: NamedProfile[];
   versions: Pick<Tables<'time_account_policy_versions'>, 'policy_id' | 'effective_from' | 'version'>[];
   mappingVersion: number | null;
+  openingDates: OpeningDateFacts;
 };
 
 async function readTimeAccountSettings(context: ReaderContext): Promise<TimeAccountSettingsData> {
   const admin = createSupabaseAdminClient();
   const today = getBusinessTodayIso();
   const rows = await readSettingsRows(admin, context, today);
-  const [profiles, { data: versions }, mappingVersion] = await Promise.all([
+  const [profiles, { data: versions }, mappingVersion, openingDates] = await Promise.all([
     readProfiles(admin, rows.employees),
     readInBatches(
       rows.policies.map((policy) => policy.id),
@@ -549,8 +561,9 @@ async function readTimeAccountSettings(context: ReaderContext): Promise<TimeAcco
           .then(requireRead)
           .then((version) => version.version)
       : Promise.resolve(null),
+    readOpeningDateFacts(admin, context, today),
   ]);
-  return toTimeAccountSettings(rows, { profiles, versions, mappingVersion });
+  return toTimeAccountSettings(rows, { profiles, versions, mappingVersion, openingDates });
 }
 
 // The organization's policies, employees, accounts, mapping profile, today's
@@ -582,7 +595,7 @@ async function readSettingsRows(
         (from, to) =>
           admin
             .from('time_accounts')
-            .select('id, employee_record_id, current_balance_minutes, version')
+            .select('id, employee_record_id, current_balance_minutes, version, opened_on')
             .eq('organization_id', context.orgId)
             .order('id')
             .range(from, to),
@@ -614,7 +627,7 @@ async function readSettingsRows(
 
 function toTimeAccountSettings(rows: SettingsRows, details: SettingsDetails): TimeAccountSettingsData {
   const { policies, employees, accounts, assignments, pending } = rows;
-  const { profiles, versions, mappingVersion } = details;
+  const { profiles, versions, mappingVersion, openingDates } = details;
   const employeeNameById = mapEmployeeNames(employees, profiles);
   const nameOf = (id: string): string => employeeNameById.get(id) ?? 'Unbekannt';
   const employeesByName = byEmployeeName(employees, (employee) => employee.id, nameOf);
@@ -638,6 +651,7 @@ function toTimeAccountSettings(rows: SettingsRows, details: SettingsDetails): Ti
     employeeCount: employees.length,
     openAccountCount: accounts.length,
     mappingVersion,
+    suggestedStartDate: openingDates.suggestedStartDate,
     missingAccounts: employeesByName
       .filter((employee) => !openEmployeeIds.has(employee.id))
       .map((employee) => ({ employeeRecordId: employee.id, employeeName: nameOf(employee.id) })),
@@ -652,6 +666,9 @@ function toTimeAccountSettings(rows: SettingsRows, details: SettingsDetails): Ti
       employeeName: nameOf(account.employee_record_id),
       currentBalanceMinutes: account.current_balance_minutes,
       version: Number(account.version),
+      openedOn: account.opened_on,
+      canCorrectOpenedOn: canCorrectOpeningDate(account.opened_on, openingDates.latestClosedPeriodEnd),
+      openingCorrections: openingDates.correctionsByAccount.get(account.id) ?? [],
     })),
     pendingAdjustments: pending.map(({ employeeRecordId, ...request }) => ({
       ...request,

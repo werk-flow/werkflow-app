@@ -1,5 +1,5 @@
 // Actual time-account form actions over the in-memory database: rules,
-// account openings, period reopening and the payroll mapping are Admin-only,
+// account openings and their date corrections, period reopening and the payroll mapping are Admin-only,
 // adjustments need Admin or Büro, the period and decision actions need a
 // manager or a time-approval holder, and an Admin of organization A reaches
 // no employee, account, request, finding, period or export of organization B.
@@ -124,6 +124,7 @@ const foreignKeyViolation = { code: '23503', message: 'violates foreign key cons
 const targets: Readonly<Record<string, readonly [string, string, string | typeof foreignKeyViolation]>> = {
   assign_time_account_policy: ['employee_records', 'p_employee_record_id', foreignKeyViolation],
   open_time_account: ['employee_records', 'p_employee_record_id', 'employee_not_found'],
+  correct_time_account_opening_date: ['time_accounts', 'p_account_id', 'account_not_found'],
   submit_time_account_adjustment: ['time_accounts', 'p_account_id', 'account_not_found'],
   decide_time_account_adjustment: ['time_account_adjustment_requests', 'p_request_id', 'request_not_found'],
   withdraw_time_account_adjustment: ['time_account_adjustment_requests', 'p_request_id', 'request_not_found'],
@@ -156,6 +157,7 @@ mock.module('@/lib/storage/r2', () => ({
 const {
   assignEmployeeTimePolicy,
   closeTimePeriod,
+  correctTimeAccountOpeningDate,
   createDefaultPayrollMapping,
   createStarterTimePolicy,
   downloadPayrollExport,
@@ -181,6 +183,8 @@ const forms = {
     form({ employeeRecordId, policyId, validFrom: '2026-11-01', reason: 'Teilzeitregel' }),
   open: (employeeRecordId: string) =>
     form({ employeeRecordId, openingMinutes: '0', openedOn: '2026-11-01', reason: 'Einführung' }),
+  correctOpening: (accountId: string) =>
+    form({ accountId, openedOn: '2026-08-01', reason: 'Falsches Eröffnungsdatum' }),
   adjust: (accountId: string) =>
     form({
       accountId,
@@ -225,6 +229,7 @@ assert.deepEqual(await getTimeAccountAccess(), {
   canExportPayroll: false,
 });
 assert.deepEqual(await submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), forbidden);
+assert.deepEqual(await correctTimeAccountOpeningDate(forms.correctOpening(foreignAccountId)), forbidden);
 assert.deepEqual(await decideTimeAccountAdjustment(forms.decide(foreignRequestId)), forbidden);
 assert.deepEqual(await withdrawTimeAccountAdjustment(forms.withdraw(ownProposalId)), forbidden);
 assert.deepEqual(await prepareTimePeriod(forms.prepare()), forbidden);
@@ -278,11 +283,12 @@ assert.deepEqual(signedPaths, [], 'a holder received a signed export URL');
 delete world.tables.organization_responsibility_configurations;
 delete world.tables.organization_responsibility_assignments;
 
-// Büro changes no rule, opens no account, reopens no period and maps no payroll codes.
+// Büro changes no rule, opens or re-dates no account, reopens no period and maps no payroll codes.
 signInWithRole('buero');
 assert.deepEqual(await createStarterTimePolicy(forms.policy()), forbidden);
 assert.deepEqual(await assignEmployeeTimePolicy(forms.assign(ownRecordId)), forbidden);
 assert.deepEqual(await openMissingTimeAccounts(forms.open(ownRecordId)), forbidden);
+assert.deepEqual(await correctTimeAccountOpeningDate(forms.correctOpening(foreignAccountId)), forbidden);
 assert.deepEqual(await reopenTimePeriod(forms.reopen(foreignPeriodId)), forbidden);
 assert.deepEqual(await createDefaultPayrollMapping(), forbidden);
 assert.equal(world.rpcCalls.length, 0);
@@ -323,6 +329,7 @@ signInWithRole('admin');
 for (const [write, expected] of [
   [() => assignEmployeeTimePolicy(forms.assign(foreignRecordId)), 'assignment_failed'],
   [() => openMissingTimeAccounts(forms.open(foreignRecordId)), 'employee_not_found'],
+  [() => correctTimeAccountOpeningDate(forms.correctOpening(foreignAccountId)), 'account_not_found'],
   [() => submitTimeAccountAdjustment(forms.adjust(foreignAccountId)), 'account_not_found'],
   [() => closeTimePeriod(forms.period(foreignPeriodId)), 'period_not_found'],
   [() => reopenTimePeriod(forms.reopen(foreignPeriodId)), 'period_not_found'],

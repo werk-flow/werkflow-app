@@ -8532,6 +8532,90 @@ export type Database = {
           },
         ];
       };
+      time_account_opening_corrections: {
+        Row: {
+          account_id: string;
+          corrected_opened_on: string;
+          created_at: string;
+          created_by: string;
+          id: string;
+          opening_event_id: string;
+          operation_id: string;
+          organization_id: string;
+          previous_opened_on: string;
+          reason: string;
+          request_hash: string;
+          reversal_event_id: string;
+          reversed_event_id: string;
+        };
+        Insert: {
+          account_id: string;
+          corrected_opened_on: string;
+          created_at?: string;
+          created_by: string;
+          id?: string;
+          opening_event_id: string;
+          operation_id: string;
+          organization_id: string;
+          previous_opened_on: string;
+          reason: string;
+          request_hash: string;
+          reversal_event_id: string;
+          reversed_event_id: string;
+        };
+        Update: {
+          account_id?: string;
+          corrected_opened_on?: string;
+          created_at?: string;
+          created_by?: string;
+          id?: string;
+          opening_event_id?: string;
+          operation_id?: string;
+          organization_id?: string;
+          previous_opened_on?: string;
+          reason?: string;
+          request_hash?: string;
+          reversal_event_id?: string;
+          reversed_event_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "time_account_opening_corrections_account_org_fkey";
+            columns: ["account_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_accounts";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_opening_corrections_opening_org_fkey";
+            columns: ["opening_event_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_events";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_opening_corrections_organization_id_fkey";
+            columns: ["organization_id"];
+            isOneToOne: false;
+            referencedRelation: "organizations";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "time_account_opening_corrections_reversal_org_fkey";
+            columns: ["reversal_event_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_events";
+            referencedColumns: ["id", "organization_id"];
+          },
+          {
+            foreignKeyName: "time_account_opening_corrections_reversed_org_fkey";
+            columns: ["reversed_event_id", "organization_id"];
+            isOneToOne: false;
+            referencedRelation: "time_account_events";
+            referencedColumns: ["id", "organization_id"];
+          },
+        ];
+      };
       time_account_policies: {
         Row: {
           created_at: string;
@@ -13465,6 +13549,18 @@ export type Database = {
           isOneToOne: true;
           isSetofReturn: false;
         };
+      };
+      correct_time_account_opening_date: {
+        Args: {
+          p_account_id: string;
+          p_actor_id: string;
+          p_opened_on: string;
+          p_operation_id: string;
+          p_organization_id: string;
+          p_reason: string;
+          p_request_hash: string;
+        };
+        Returns: string;
       };
       create_capability_definition: {
         Args: {
