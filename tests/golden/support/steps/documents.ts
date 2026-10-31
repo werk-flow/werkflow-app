@@ -26,7 +26,7 @@ const LIBRARY = {
   createMenu: 'Hochladen oder Erstellen',
   uploadFiles: 'Dateien hochladen',
   newFolder: 'Neuer Ordner',
-  search: 'Dokumente suchen…',
+  searchLabel: 'Dokumente suchen',
   filterToggle: 'Filter',
   linkFilter: 'Verknüpfung filtern',
   categoryFilter: 'Kategorie filtern',
@@ -224,8 +224,9 @@ export function documentLibraryNewFolderItem(page: Page): Locator {
   return page.getByRole('menuitem', { name: LIBRARY.newFolder });
 }
 
+/** The visible search field: a role query skips the hidden tree of a view Next keeps after a navigation. */
 export function documentLibrarySearch(page: Page): Locator {
-  return page.getByPlaceholder(LIBRARY.search);
+  return page.getByRole('textbox', { name: LIBRARY.searchLabel });
 }
 
 export function documentLibraryFilterToggle(page: Page): Locator {
