@@ -9,7 +9,6 @@
   "components/anfragen/edit-request-routing-fields.tsx": 1,
   "components/auftraege/forms/create-job-form-sections.tsx": 1,
   "components/auftraege/forms/edit-job-form-fields.tsx": 1,
-  "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": 2,
   "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": 1,
   "components/auftraege/lifecycle/use-work-lifecycle-dependency-form.ts": 1,
   "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": 1,

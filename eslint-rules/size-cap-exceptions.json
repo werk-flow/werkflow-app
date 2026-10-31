@@ -49,18 +49,6 @@
     "components/auftraege/forms/use-edit-job-form.ts": { "useEditJobForm": 156 },
     "components/auftraege/forms/use-edit-project-form.ts": { "useEditProjectForm": 125 },
     "components/auftraege/forms/use-edit-project-submit.ts": { "useEditProjectSubmit": 94 },
-    "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
-    "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
-    "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },
-    "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": {
-      "InstructionItemDetailsDialog": 104
-    },
-    "components/auftraege/instructions/job-instruction-item-row.tsx": { "JobInstructionItemRow": 141 },
-    "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 120 },
-    "components/auftraege/instructions/job-instruction-row-actions.ts": {
-      "createJobInstructionRowActions": 91
-    },
-    "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
     "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
     "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
