@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { redirect } from 'next/navigation';
 
 import { resolvePageMembership } from '@/lib/org/page-context';
@@ -8,6 +9,7 @@ import { getJobDocuments } from '@/lib/documents/actions';
 import { getInventoryPickerPage, getJobMaterialLines } from '@/lib/inventory/actions';
 import { getProjectByNumber } from '@/lib/projects/actions';
 import { getOrgMembersForUser } from '@/lib/members/queries';
+import type { OrgMemberInfo } from '@/lib/members/actions';
 import { JobDetailContent } from '@/components/auftraege/job-detail/job-detail-content';
 import { FieldWorkPackPage } from '@/components/auftraege/work-pack/field-work-pack-page';
 import type { OrgMemberOption } from '@/components/auftraege/shared/employee-multi-select';
@@ -21,6 +23,132 @@ import NestedJobDetailLoading from './loading';
 
 interface NestedJobDetailPageProps {
   params: Promise<{ projectNumber: string; jobNumber: string }>;
+}
+
+type NestedJobDetailReadScope = {
+  projectNumber: string;
+  jobNumber: string;
+  activeOrgId: string;
+  userId: string;
+};
+
+async function loadNestedJobDetailReads({
+  projectNumber,
+  jobNumber,
+  activeOrgId,
+  userId,
+}: NestedJobDetailReadScope) {
+  const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
+  const instructionItemsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobInstructionItems(result.job.id) : null,
+  );
+  const documentsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobDocuments(result.job.id) : null,
+  );
+  const materialLinesResultPromise = jobResultPromise.then((result) =>
+    result.success ? getJobMaterialLines(result.job.id) : null,
+  );
+  const inventoryOptionsResultPromise = getInventoryPickerPage();
+  const lifecycleResultPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id }) : null,
+  );
+  const artifactsResultPromise = jobResultPromise.then((result) =>
+    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null,
+  );
+  const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
+    organizationId: activeOrgId,
+    responsibility: 'work_artifact_approval',
+    actorUserId: userId,
+  });
+  const handoverWorkspacePromise = jobResultPromise.then((result) =>
+    result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
+  );
+
+  const [
+    projectResult,
+    jobResult,
+    membersResult,
+    instructionItemsResult,
+    documentsResult,
+    materialLinesResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  ] = await Promise.all([
+    getProjectByNumber(decodeURIComponent(projectNumber)),
+    jobResultPromise,
+    getOrgMembersForUser(activeOrgId, userId),
+    instructionItemsResultPromise,
+    documentsResultPromise,
+    materialLinesResultPromise,
+    inventoryOptionsResultPromise,
+    lifecycleResultPromise,
+    artifactsResultPromise,
+    approvalHolderPromise,
+    handoverWorkspacePromise,
+  ]);
+  return {
+    projectResult,
+    jobResult,
+    membersResult,
+    instructionItemsResult,
+    documentsResult,
+    materialLinesResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  };
+}
+
+/** The page regions fed by the job's member list and secondary reads. */
+function nestedJobDetailRegions(
+  {
+    instructionItemsResult,
+    documentsResult,
+    materialLinesResult,
+    inventoryOptionsResult,
+    lifecycleResult,
+    artifactsResult,
+    approvalHolder,
+    handoverWorkspaceResult,
+  }: Awaited<ReturnType<typeof loadNestedJobDetailReads>>,
+  memberRows: readonly OrgMemberInfo[],
+) {
+  const members: OrgMemberOption[] = memberRows.map((member) => ({
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  }));
+  // A failed read stays null so that its region shows the failure instead of an empty list.
+  const instructionItems = instructionItemsResult?.success ? instructionItemsResult.items : null;
+  const documents = documentsResult?.success ? documentsResult.documents : null;
+  const materialLines = materialLinesResult?.success ? materialLinesResult.lines : null;
+  const inventoryItems = inventoryOptionsResult.success ? inventoryOptionsResult.items : null;
+  const inventoryLocations = inventoryOptionsResult.success ? inventoryOptionsResult.locations : null;
+  // Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden.
+  const handoverWorkspace = handoverWorkspaceResult?.success
+    ? handoverWorkspaceResult.workspace
+    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
+      ? 'not_reviewer'
+      : null;
+
+  return {
+    members,
+    canApproveWorkArtifacts: Boolean(approvalHolder),
+    instructionItems,
+    initialArtifacts: artifactsResult?.success ? artifactsResult.artifacts : null,
+    documents,
+    materialLines,
+    inventoryItems,
+    inventoryLocations,
+    lifecycleSnapshot: lifecycleResult?.success ? lifecycleResult.snapshot : null,
+    handoverWorkspace,
+  } satisfies Partial<ComponentProps<typeof JobDetailContent>>;
 }
 
 async function NestedJobDetailData({
@@ -44,57 +172,8 @@ async function NestedJobDetailData({
       />
     );
   }
-  const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
-  const instructionItemsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobInstructionItems(result.job.id) : null,
-  );
-  const documentsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobDocuments(result.job.id) : null,
-  );
-  const materialLinesResultPromise = jobResultPromise.then((result) =>
-    result.success ? getJobMaterialLines(result.job.id) : null,
-  );
-  const inventoryOptionsResultPromise = getInventoryPickerPage();
-  const lifecycleResultPromise = jobResultPromise.then((result) =>
-    result.success ? getWorkLifecycleSnapshot({ targetType: 'job', targetId: result.job.id }) : null,
-  );
-  const artifactsResultPromise = jobResultPromise.then((result) =>
-    result.success ? getWorkArtifacts({ targetType: 'job', targetId: result.job.id }) : null,
-  );
-  const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
-    organizationId: activeOrgId,
-    responsibility: 'work_artifact_approval',
-    actorUserId: user.id,
-  });
-  const handoverWorkspacePromise = jobResultPromise.then((result) =>
-    result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
-  );
-
-  const [
-    projectResult,
-    jobResult,
-    membersResult,
-    instructionItemsResult,
-    documentsResult,
-    materialLinesResult,
-    inventoryOptionsResult,
-    lifecycleResult,
-    artifactsResult,
-    approvalHolder,
-    handoverWorkspaceResult,
-  ] = await Promise.all([
-    getProjectByNumber(decodeURIComponent(projectNumber)),
-    jobResultPromise,
-    getOrgMembersForUser(activeOrgId, user.id),
-    instructionItemsResultPromise,
-    documentsResultPromise,
-    materialLinesResultPromise,
-    inventoryOptionsResultPromise,
-    lifecycleResultPromise,
-    artifactsResultPromise,
-    approvalHolderPromise,
-    handoverWorkspacePromise,
-  ]);
+  const reads = await loadNestedJobDetailReads({ projectNumber, jobNumber, activeOrgId, userId: user.id });
+  const { projectResult, jobResult, membersResult } = reads;
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
   if (!jobResult.success && (jobResult.error === 'fetch_failed' || jobResult.error === 'unexpected_error')) {
@@ -134,25 +213,7 @@ async function NestedJobDetailData({
 
   const { project } = projectResult.details;
   const { job } = jobResult;
-  const members: OrgMemberOption[] = membersResult.members.map((member) => ({
-    userId: member.user_id,
-    firstName: member.first_name,
-    lastName: member.last_name,
-    role: member.role,
-  }));
-
-  // A failed read stays null so that its region shows the failure instead of an empty list.
-  const instructionItems = instructionItemsResult?.success ? instructionItemsResult.items : null;
-  const documents = documentsResult?.success ? documentsResult.documents : null;
-  const materialLines = materialLinesResult?.success ? materialLinesResult.lines : null;
-  const inventoryItems = inventoryOptionsResult.success ? inventoryOptionsResult.items : null;
-  const inventoryLocations = inventoryOptionsResult.success ? inventoryOptionsResult.locations : null;
-  // Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden.
-  const handoverWorkspace = handoverWorkspaceResult?.success
-    ? handoverWorkspaceResult.workspace
-    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
-      ? 'not_reviewer'
-      : null;
+  const regions = nestedJobDetailRegions(reads, membersResult.members);
   if (job.project?.id !== project.id) {
     return (
       <RouteRedirect href="/auftraege">
@@ -169,18 +230,9 @@ async function NestedJobDetailData({
         name: project.name,
         projectNumber: project.projectNumber,
       }}
-      members={members}
       isAdminOrManager={isAdminOrManager}
-      canApproveWorkArtifacts={Boolean(approvalHolder)}
-      instructionItems={instructionItems}
-      initialArtifacts={artifactsResult?.success ? artifactsResult.artifacts : null}
-      documents={documents}
-      materialLines={materialLines}
-      inventoryItems={inventoryItems}
-      inventoryLocations={inventoryLocations}
       currentUserId={user.id}
-      lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
-      handoverWorkspace={handoverWorkspace}
+      {...regions}
     />
   );
 }

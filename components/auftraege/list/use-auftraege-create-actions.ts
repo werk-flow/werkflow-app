@@ -42,81 +42,19 @@ type AuftraegeCreateActionsOptions = Pick<
   rollbackProject: ReturnType<typeof useOptimisticList<ProjectWithDetails>>['rollback'];
 };
 
-/** Deferred creates from the dialog: pending row, server call, qualification confirm, rollback. */
-export function useAuftraegeCreateActions({
+type AuftraegeProjectCreateOptions = Pick<
+  AuftraegeCreateActionsOptions,
+  'showBanner' | 'insertProject' | 'rollbackProject' | 'handleProjectCreated'
+>;
+
+/** The deferred project create: pending row, server call, job links, rollback. */
+function useAuftraegeProjectCreate({
   showBanner,
-  insertJob,
-  rollbackJob,
   insertProject,
   rollbackProject,
-  handleJobCreated,
   handleProjectCreated,
-}: AuftraegeCreateActionsOptions) {
-  const { run: runCreateJob, isPending: isCreatingJob } = useServerAction(createJob);
-  const [jobCreateAwaitingApproval, setJobCreateAwaitingApproval] =
-    useState<JobCreateAwaitingApproval | null>(null);
-
-  const runJobCreate = useCallback(
-    async (pending: CreateJobSubmission & { tempId: string }, approval: AssignmentApproval | null) => {
-      try {
-        const result = await runCreateJob({
-          ...pending.input,
-          assignmentApproval: approval,
-        });
-        if (result.success) {
-          setJobCreateAwaitingApproval(null);
-          rollbackJob(pending.tempId);
-          handleJobCreated({
-            job: result.job,
-            assignedUserIds: pending.assignedUserIds,
-          });
-          showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
-          return;
-        }
-        if (
-          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
-          'evaluation' in result
-        ) {
-          // The confirm step runs at list level; the pending row stays until
-          // the user decides.
-          setJobCreateAwaitingApproval({ ...pending, evaluation: result.evaluation });
-          return;
-        }
-        setJobCreateAwaitingApproval(null);
-        rollbackJob(pending.tempId);
-        showBanner({
-          variant: 'error',
-          message: createFailureMessage(CREATE_JOB_ERROR_MESSAGES, result.error, JOB_NOT_CREATED),
-        });
-      } catch {
-        setJobCreateAwaitingApproval(null);
-        rollbackJob(pending.tempId);
-        showBanner({
-          variant: 'error',
-          message: createFailureMessage(CREATE_JOB_ERROR_MESSAGES, 'unexpected_error', JOB_NOT_CREATED),
-        });
-      }
-    },
-    [handleJobCreated, rollbackJob, runCreateJob, showBanner],
-  );
-
-  const handleJobSubmit = useCallback(
-    (submission: CreateJobSubmission) => {
-      const tempId = `pending-job-${crypto.randomUUID()}`;
-      insertJob(tempId, buildJobDraft(tempId, submission.input));
-      void runJobCreate({ ...submission, tempId }, null);
-    },
-    [insertJob, runJobCreate],
-  );
-
-  const handleJobCreateCancel = useCallback(() => {
-    if (!jobCreateAwaitingApproval) return;
-    rollbackJob(jobCreateAwaitingApproval.tempId);
-    setJobCreateAwaitingApproval(null);
-    showBanner({ variant: 'info', message: JOB_NOT_CREATED });
-  }, [jobCreateAwaitingApproval, rollbackJob, showBanner]);
-
-  const handleProjectSubmit = useCallback(
+}: AuftraegeProjectCreateOptions) {
+  return useCallback(
     async (submission: CreateProjectSubmission) => {
       const tempId = `pending-project-${crypto.randomUUID()}`;
       insertProject(tempId, buildProjectDraft(tempId, submission.input));
@@ -151,6 +89,86 @@ export function useAuftraegeCreateActions({
     },
     [handleProjectCreated, insertProject, rollbackProject, showBanner],
   );
+}
+
+/** Deferred creates from the dialog: pending row, server call, qualification confirm, rollback. */
+export function useAuftraegeCreateActions({
+  showBanner,
+  insertJob,
+  rollbackJob,
+  insertProject,
+  rollbackProject,
+  handleJobCreated,
+  handleProjectCreated,
+}: AuftraegeCreateActionsOptions) {
+  const { run: runCreateJob, isPending: isCreatingJob } = useServerAction(createJob);
+  const [jobCreateAwaitingApproval, setJobCreateAwaitingApproval] =
+    useState<JobCreateAwaitingApproval | null>(null);
+
+  const runJobCreate = useCallback(
+    async (pending: CreateJobSubmission & { tempId: string }, approval: AssignmentApproval | null) => {
+      const rejectJobCreate = (error: string) => {
+        setJobCreateAwaitingApproval(null);
+        rollbackJob(pending.tempId);
+        showBanner({
+          variant: 'error',
+          message: createFailureMessage(CREATE_JOB_ERROR_MESSAGES, error, JOB_NOT_CREATED),
+        });
+      };
+      try {
+        const result = await runCreateJob({
+          ...pending.input,
+          assignmentApproval: approval,
+        });
+        if (result.success) {
+          setJobCreateAwaitingApproval(null);
+          rollbackJob(pending.tempId);
+          handleJobCreated({
+            job: result.job,
+            assignedUserIds: pending.assignedUserIds,
+          });
+          showBanner({ variant: 'success', message: 'Auftrag erfolgreich erstellt!' });
+          return;
+        }
+        if (
+          (result.error === 'qualification_warning' || result.error === 'stale_evaluation') &&
+          'evaluation' in result
+        ) {
+          // The confirm step runs at list level; the pending row stays until
+          // the user decides.
+          setJobCreateAwaitingApproval({ ...pending, evaluation: result.evaluation });
+          return;
+        }
+        rejectJobCreate(result.error);
+      } catch {
+        rejectJobCreate('unexpected_error');
+      }
+    },
+    [handleJobCreated, rollbackJob, runCreateJob, showBanner],
+  );
+
+  const handleJobSubmit = useCallback(
+    (submission: CreateJobSubmission) => {
+      const tempId = `pending-job-${crypto.randomUUID()}`;
+      insertJob(tempId, buildJobDraft(tempId, submission.input));
+      void runJobCreate({ ...submission, tempId }, null);
+    },
+    [insertJob, runJobCreate],
+  );
+
+  const handleJobCreateCancel = useCallback(() => {
+    if (!jobCreateAwaitingApproval) return;
+    rollbackJob(jobCreateAwaitingApproval.tempId);
+    setJobCreateAwaitingApproval(null);
+    showBanner({ variant: 'info', message: JOB_NOT_CREATED });
+  }, [jobCreateAwaitingApproval, rollbackJob, showBanner]);
+
+  const handleProjectSubmit = useAuftraegeProjectCreate({
+    showBanner,
+    insertProject,
+    rollbackProject,
+    handleProjectCreated,
+  });
 
   return {
     isCreatingJob,

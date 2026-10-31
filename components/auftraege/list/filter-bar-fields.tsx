@@ -19,6 +19,8 @@ type FilterBarFieldsProps = {
   lockedClientLabel: string | undefined;
 };
 
+const ENTRY_TYPE_FILTERS = ['alle', 'jobs', 'projekte'] as const satisfies readonly EntryTypeFilter[];
+
 /**
  * The filter controls, shown in the desktop panel and in the mobile sheet.
  * Every `Field` generates its control id, so both copies can be mounted at once.
@@ -78,7 +80,10 @@ export function FilterBarFields({
       <Field label="Typ" className="gap-1.5 sm:col-span-2">
         <Select
           value={filters.entryType}
-          onValueChange={(v) => updateFilter('entryType', v as EntryTypeFilter)}
+          onValueChange={(v) => {
+            const entryType = ENTRY_TYPE_FILTERS.find((candidate) => candidate === v);
+            if (entryType) updateFilter('entryType', entryType);
+          }}
         >
           <SelectTrigger className="h-8 text-xs">
             <SelectValue />
