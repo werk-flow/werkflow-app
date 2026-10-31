@@ -12,6 +12,7 @@ import {
   resolveEffectiveResponsibility,
   type ResponsibilityAssignment,
   type ResponsibilityConfiguration,
+  type ResponsibilityMember,
 } from './resolution';
 import { loadResponsibilityRuntimeState } from './server';
 import type { OrganizationResponsibility, ResponsibilityConfigurationMode } from './types';
@@ -95,6 +96,37 @@ function refreshResponsibilitySurfaces(): void {
   revalidatePath('/zeiterfassung');
 }
 
+/** The assignments the proposed configuration would store: the selected people, or every active Admin and Büro member. */
+function previewAssignments(
+  mode: ResponsibilityConfigurationMode,
+  selectedIds: string[],
+  members: ResponsibilityMember[],
+  previewConfigurationId: string,
+): ResponsibilityAssignment[] {
+  return mode === 'selected'
+    ? selectedIds.map((employeeRecordId, index) => ({
+        id: `preview-assignment-${index}`,
+        configurationId: previewConfigurationId,
+        employeeRecordId,
+        source: 'direct',
+        roleSnapshot: null,
+      }))
+    : members.flatMap((member, index) => {
+        if (!member.active || (member.role !== 'admin' && member.role !== 'buero')) {
+          return [];
+        }
+        return [
+          {
+            id: `preview-assignment-${index}`,
+            configurationId: previewConfigurationId,
+            employeeRecordId: member.employeeRecordId,
+            source: 'role_default' as const,
+            roleSnapshot: member.role,
+          },
+        ];
+      });
+}
+
 export async function previewResponsibilityConfiguration(rawInput: {
   responsibility: OrganizationResponsibility;
   mode: ResponsibilityConfigurationMode;
@@ -132,29 +164,7 @@ export async function previewResponsibilityConfiguration(rawInput: {
     ...state,
   });
   const previewConfigurationId = `preview-${input.responsibility}`;
-  const assignments: ResponsibilityAssignment[] =
-    input.mode === 'selected'
-      ? selectedIds.map((employeeRecordId, index) => ({
-          id: `preview-assignment-${index}`,
-          configurationId: previewConfigurationId,
-          employeeRecordId,
-          source: 'direct',
-          roleSnapshot: null,
-        }))
-      : state.members.flatMap((member, index) => {
-          if (!member.active || (member.role !== 'admin' && member.role !== 'buero')) {
-            return [];
-          }
-          return [
-            {
-              id: `preview-assignment-${index}`,
-              configurationId: previewConfigurationId,
-              employeeRecordId: member.employeeRecordId,
-              source: 'role_default' as const,
-              roleSnapshot: member.role,
-            },
-          ];
-        });
+  const assignments = previewAssignments(input.mode, selectedIds, state.members, previewConfigurationId);
   // Advance the synthetic version and resolver timestamps by one millisecond
   // each so the proposed version wins without depending on equal timestamps.
   const previewConfiguration: ResponsibilityConfiguration = {

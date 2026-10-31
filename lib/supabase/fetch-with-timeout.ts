@@ -31,6 +31,6 @@ function boundedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Res
   return scheduleRequest(getReadRequestPriority(), signal, () => fetch(input, { ...init, signal }));
 }
 
-// Cast: Node's `typeof fetch` additionally declares the `preconnect` static,
-// which the Supabase clients never call.
-export const fetchWithTimeout = boundedFetch as typeof fetch;
+// `typeof fetch` also declares Bun's `preconnect` static; the bounded fetch
+// carries the global one, which the Supabase clients never call.
+export const fetchWithTimeout: typeof fetch = Object.assign(boundedFetch, { preconnect: fetch.preconnect });

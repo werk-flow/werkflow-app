@@ -132,20 +132,13 @@ function compareDelegationPrecedence(
   return left.id.localeCompare(right.id);
 }
 
-export function resolveEffectiveResponsibility({
-  responsibility,
-  actionTime,
-  businessDate,
-  members,
-  configurations,
-  delegations,
-}: ResolveEffectiveResponsibilityInput): EffectiveResponsibility {
-  const activeMemberByRecordId = new Map(
-    members.filter((member) => member.active).map((member) => [member.employeeRecordId, member]),
-  );
-  const configuration = selectEffectiveConfiguration(configurations, responsibility, actionTime);
-
-  const baseHolders: EffectiveResponsibilityHolder[] = configuration
+/** The holders the configuration names, or every active Admin and Büro member when none is effective. */
+function resolveBaseHolders(
+  configuration: ResponsibilityConfiguration | null,
+  members: ResponsibilityMember[],
+  activeMemberByRecordId: Map<string, ResponsibilityMember>,
+): EffectiveResponsibilityHolder[] {
+  return configuration
     ? configuration.assignments.flatMap<EffectiveResponsibilityHolder>((assignment) => {
         const member = activeMemberByRecordId.get(assignment.employeeRecordId);
         if (!member) return [];
@@ -200,18 +193,19 @@ export function resolveEffectiveResponsibility({
           },
         ];
       });
+}
 
-  const holders = new Map(baseHolders.map((holder) => [holder.employeeRecordId, holder]));
-
-  const effectiveDelegations = delegations
-    .filter(
-      (delegation) =>
-        delegation.responsibility === responsibility &&
-        isDelegationEffective(delegation, businessDate) &&
-        activeMemberByRecordId.get(delegation.delegatorEmployeeRecordId)?.hasEffectiveAccess === true,
-    )
-    .toSorted(compareDelegationPrecedence);
-
+/**
+ * Adds the substitute of each effective delegation, in precedence order. A
+ * substitute who already holds the responsibility keeps their own source, and
+ * a delegated holding is never passed on.
+ */
+function addDelegatedHolders(
+  holders: Map<string, EffectiveResponsibilityHolder>,
+  effectiveDelegations: ResponsibilityDelegation[],
+  activeMemberByRecordId: Map<string, ResponsibilityMember>,
+  configurationId: string | null,
+): void {
   for (const delegation of effectiveDelegations) {
     if (holders.has(delegation.substituteEmployeeRecordId)) {
       continue;
@@ -228,7 +222,7 @@ export function resolveEffectiveResponsibility({
       userId: substitute.userId,
       source: {
         kind: 'delegation',
-        configurationId: configuration?.id ?? null,
+        configurationId,
         delegationId: delegation.id,
         delegatedFromEmployeeRecordId: delegator.employeeRecordId,
         validFrom: delegation.validFrom,
@@ -237,6 +231,33 @@ export function resolveEffectiveResponsibility({
       },
     });
   }
+}
+
+export function resolveEffectiveResponsibility({
+  responsibility,
+  actionTime,
+  businessDate,
+  members,
+  configurations,
+  delegations,
+}: ResolveEffectiveResponsibilityInput): EffectiveResponsibility {
+  const activeMemberByRecordId = new Map(
+    members.filter((member) => member.active).map((member) => [member.employeeRecordId, member]),
+  );
+  const configuration = selectEffectiveConfiguration(configurations, responsibility, actionTime);
+
+  const baseHolders = resolveBaseHolders(configuration, members, activeMemberByRecordId);
+  const holders = new Map(baseHolders.map((holder) => [holder.employeeRecordId, holder]));
+
+  const effectiveDelegations = delegations
+    .filter(
+      (delegation) =>
+        delegation.responsibility === responsibility &&
+        isDelegationEffective(delegation, businessDate) &&
+        activeMemberByRecordId.get(delegation.delegatorEmployeeRecordId)?.hasEffectiveAccess === true,
+    )
+    .toSorted(compareDelegationPrecedence);
+  addDelegatedHolders(holders, effectiveDelegations, activeMemberByRecordId, configuration?.id ?? null);
 
   return {
     responsibility,

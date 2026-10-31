@@ -275,6 +275,125 @@ function readLayerTitle(sources: ParsedSources, layer: ts.JsxElement, titleTag: 
   return title;
 }
 
+/** One layer's walk: the parsed sources, the layer root and the contract it fills. */
+type LayerWalk = { sources: ParsedSources; layer: ts.JsxElement; contract: DialogContract };
+
+/**
+ * Records a rendered element on the contract: a submitting form, a submit
+ * associated by `form`, a dialog body, a control outside any form. Returns
+ * whether the element's content is inside a submitting form.
+ */
+function recordLayerElement(
+  contract: DialogContract,
+  element: ts.JsxElement | ts.JsxSelfClosingElement,
+  opening: ts.JsxOpeningElement | ts.JsxSelfClosingElement,
+  tag: string,
+  inForm: boolean,
+): boolean {
+  if (tag === 'form') {
+    const submits = opening.attributes.properties.some(
+      (attribute) =>
+        ts.isJsxAttribute(attribute) && ['onSubmit', 'action'].includes(attribute.name.getText()),
+    );
+    if (submits) {
+      contract.forms += 1;
+      contract.formBoundaries.push({
+        id: attributeValue(opening, 'id'),
+        conditions: renderConditions(element),
+      });
+    }
+    inForm = submits;
+  }
+  if (
+    ['Button', 'button', 'input'].includes(tag) &&
+    attributeValue(opening, 'type') === 'submit' &&
+    attributeValue(opening, 'form')
+  ) {
+    contract.associatedSubmits.push({
+      id: attributeValue(opening, 'form'),
+      conditions: renderConditions(element),
+    });
+  }
+  if (tag === 'DialogBody') contract.bodies += 1;
+  if (editableControls.has(tag) && !inForm) contract.uncoveredControls.push(tag);
+  return inForm;
+}
+
+/** Walks what a rendered component returns, with the children its caller passed. */
+function walkRenderedComponent(
+  walk: LayerWalk,
+  implementation: Component,
+  inForm: boolean,
+  active: ReadonlySet<ts.Node>,
+  passedChildren: readonly ts.JsxChild[],
+): void {
+  function render(part: ts.Node): void {
+    if (part !== implementation && isComponent(part)) return;
+    if (ts.isReturnStatement(part) && part.expression) {
+      walkLayer(walk, part.expression, inForm, active, passedChildren);
+      return;
+    }
+    ts.forEachChild(part, render);
+  }
+  if (ts.isArrowFunction(implementation) && !ts.isBlock(implementation.body)) {
+    walkLayer(walk, implementation.body, inForm, active, passedChildren);
+  } else render(implementation);
+}
+
+/** A rendered element: stops at a nested portal, records it, then follows its component or its children. */
+function walkLayerElement(
+  walk: LayerWalk,
+  current: ts.JsxElement | ts.JsxSelfClosingElement,
+  inForm: boolean,
+  active: ReadonlySet<ts.Node>,
+  children: readonly ts.JsxChild[],
+): void {
+  const opening = ts.isJsxElement(current) ? current.openingElement : current;
+  const tag = layerTagName(walk.sources, opening);
+  if (current !== walk.layer && portalBoundaries.has(tag)) return;
+  inForm = recordLayerElement(walk.contract, current, opening, tag, inForm);
+  const implementation = editableControls.has(tag)
+    ? undefined
+    : findComponentImplementation(walk.sources, current.getSourceFile(), opening.tagName.getText());
+  if (implementation && !active.has(implementation)) {
+    const passedChildren = ts.isJsxElement(current) ? current.children : [];
+    walkRenderedComponent(walk, implementation, inForm, new Set([...active, implementation]), passedChildren);
+    return;
+  }
+  if (ts.isJsxElement(current))
+    for (const child of current.children) walkLayer(walk, child, inForm, active, children);
+}
+
+/** Walks one node of a layer, resolving `children` and local JSX constants to what they render. */
+function walkLayer(
+  walk: LayerWalk,
+  current: ts.Node,
+  inForm: boolean,
+  active: ReadonlySet<ts.Node>,
+  children: readonly ts.JsxChild[] = [],
+): void {
+  if (
+    ts.isJsxExpression(current) &&
+    current.expression &&
+    ['children', 'props.children'].includes(current.expression.getText())
+  ) {
+    for (const child of children) walkLayer(walk, child, inForm, active);
+    return;
+  }
+  if (ts.isJsxExpression(current) && current.expression && ts.isIdentifier(current.expression)) {
+    const initializer = localInitializer(current.expression);
+    if (initializer && !active.has(initializer)) {
+      walkLayer(walk, initializer, inForm, new Set([...active, initializer]), children);
+      return;
+    }
+  }
+  if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) {
+    walkLayerElement(walk, current, inForm, active, children);
+    return;
+  }
+  ts.forEachChild(current, (child) => walkLayer(walk, child, inForm, active, children));
+}
+
 /** The form contract of one rendered layer, following the components it renders. */
 function inspectLayer(
   sources: ParsedSources,
@@ -299,84 +418,7 @@ function inspectLayer(
     (attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText() === 'className',
   );
   if (classAttribute) contract.contentScrolls = classScrolls(classAttribute, source);
-
-  function walk(
-    current: ts.Node,
-    inForm: boolean,
-    active: ReadonlySet<ts.Node>,
-    children: readonly ts.JsxChild[] = [],
-  ): void {
-    if (
-      ts.isJsxExpression(current) &&
-      current.expression &&
-      ['children', 'props.children'].includes(current.expression.getText())
-    ) {
-      for (const child of children) walk(child, inForm, active);
-      return;
-    }
-    if (ts.isJsxExpression(current) && current.expression && ts.isIdentifier(current.expression)) {
-      const initializer = localInitializer(current.expression);
-      if (initializer && !active.has(initializer)) {
-        walk(initializer, inForm, new Set([...active, initializer]), children);
-        return;
-      }
-    }
-    if (ts.isJsxElement(current) || ts.isJsxSelfClosingElement(current)) {
-      const opening = ts.isJsxElement(current) ? current.openingElement : current;
-      const tag = layerTagName(sources, opening);
-      if (current !== node && portalBoundaries.has(tag)) return;
-      if (tag === 'form') {
-        const submits = opening.attributes.properties.some(
-          (attribute) =>
-            ts.isJsxAttribute(attribute) && ['onSubmit', 'action'].includes(attribute.name.getText()),
-        );
-        if (submits) {
-          contract.forms += 1;
-          contract.formBoundaries.push({
-            id: attributeValue(opening, 'id'),
-            conditions: renderConditions(current),
-          });
-        }
-        inForm = submits;
-      }
-      if (
-        ['Button', 'button', 'input'].includes(tag) &&
-        attributeValue(opening, 'type') === 'submit' &&
-        attributeValue(opening, 'form')
-      ) {
-        contract.associatedSubmits.push({
-          id: attributeValue(opening, 'form'),
-          conditions: renderConditions(current),
-        });
-      }
-      if (tag === 'DialogBody') contract.bodies += 1;
-      if (editableControls.has(tag) && !inForm) contract.uncoveredControls.push(tag);
-      const implementation = editableControls.has(tag)
-        ? undefined
-        : findComponentImplementation(sources, current.getSourceFile(), opening.tagName.getText());
-      if (implementation && !active.has(implementation)) {
-        const next = new Set([...active, implementation]);
-        const passedChildren = ts.isJsxElement(current) ? current.children : [];
-        function render(part: ts.Node): void {
-          if (part !== implementation && isComponent(part)) return;
-          if (ts.isReturnStatement(part) && part.expression) {
-            walk(part.expression, inForm, next, passedChildren);
-            return;
-          }
-          ts.forEachChild(part, render);
-        }
-        if (ts.isArrowFunction(implementation) && !ts.isBlock(implementation.body)) {
-          walk(implementation.body, inForm, next, passedChildren);
-        } else render(implementation);
-        return;
-      }
-      if (ts.isJsxElement(current))
-        for (const child of current.children) walk(child, inForm, active, children);
-      return;
-    }
-    ts.forEachChild(current, (child) => walk(child, inForm, active, children));
-  }
-  walk(node, false, new Set());
+  walkLayer({ sources, layer: node, contract }, node, false, new Set());
   return contract;
 }
 

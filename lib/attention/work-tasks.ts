@@ -4,7 +4,7 @@ import 'server-only';
 // Server Actions in `./actions`. Like every derivation there, they read the
 // owning domains through the caller's organization and never mutate state.
 
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import type { ActionContext } from '@/lib/org/action-context';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
@@ -14,9 +14,9 @@ import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/qu
 import { readHandoverCandidateProjects } from '@/lib/attention/pending-sets';
 import type { Tables } from '@/lib/supabase/database.types';
 import { logError } from '@/lib/logging';
+import { workTargetHref, workTargetLabel } from './task-labels';
 import type { AttentionTask } from './types';
 
-type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
 type DerivedTasks = { tasks: AttentionTask[]; failed: boolean };
 
 type WorkArtifactAttentionRow = Pick<
@@ -42,7 +42,7 @@ type HandoverProjectRow = Pick<
 
 /** The jobs, projects, own employee record, and assignments that decide who may see an artifact task. */
 async function readWorkArtifactAttentionTargets(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   context: ActionContext,
   isManager: boolean,
   artifacts: WorkArtifactAttentionRow[],
@@ -142,17 +142,8 @@ function toWorkArtifactTasks(
     if (!revision) continue;
     const job = artifact.job_id ? jobs.get(artifact.job_id) : undefined;
     const project = artifact.project_id ? projects.get(artifact.project_id) : undefined;
-    const targetHref = job?.job_number
-      ? `/auftraege/${encodeURIComponent(job.job_number)}`
-      : project?.project_number
-        ? `/auftraege/projekt/${encodeURIComponent(project.project_number)}`
-        : '/auftraege';
-    const targetLabel =
-      job?.title.trim() ||
-      job?.description?.trim() ||
-      project?.name.trim() ||
-      project?.description?.trim() ||
-      'Arbeit';
+    const targetHref = workTargetHref(job, project);
+    const targetLabel = workTargetLabel(job, project);
     const canAccessTarget =
       isManager ||
       (artifact.job_id
@@ -276,6 +267,27 @@ export async function deriveWorkArtifactTasks(context: ActionContext): Promise<D
     ).values(),
   ];
   if (!artifacts.length) return { tasks: [], failed: false };
+  const facts = await readWorkArtifactTaskFacts(admin, context, isManager, artifacts);
+  if (!facts) return { tasks: [], failed: true };
+  const tasks = toWorkArtifactTasks(
+    context,
+    isManager,
+    Boolean(holder),
+    artifacts,
+    facts.revisions,
+    dueDefectsResult.data ?? [],
+    facts.targets,
+  );
+  return { tasks, failed: false };
+}
+
+/** The current revisions of the artifacts and the targets that decide who sees them; null when a read failed. */
+async function readWorkArtifactTaskFacts(
+  admin: AdminClient,
+  context: ActionContext,
+  isManager: boolean,
+  artifacts: WorkArtifactAttentionRow[],
+) {
   const revisionIds = artifacts.flatMap((artifact) =>
     artifact.current_revision_id ? [artifact.current_revision_id] : [],
   );
@@ -288,20 +300,11 @@ export async function deriveWorkArtifactTasks(context: ActionContext): Promise<D
   );
   if (revisionsResult.error) {
     logError('Failed to load work artifact attention facts', revisionsResult.error);
-    return { tasks: [], failed: true };
+    return null;
   }
   const targets = await readWorkArtifactAttentionTargets(admin, context, isManager, artifacts);
-  if (!targets) return { tasks: [], failed: true };
-  const tasks = toWorkArtifactTasks(
-    context,
-    isManager,
-    Boolean(holder),
-    artifacts,
-    revisionsResult.data ?? [],
-    dueDefectsResult.data ?? [],
-    targets,
-  );
-  return { tasks, failed: false };
+  if (!targets) return null;
+  return { revisions: revisionsResult.data ?? [], targets };
 }
 
 /**
@@ -309,7 +312,7 @@ export async function deriveWorkArtifactTasks(context: ActionContext): Promise<D
  * derived ones whose child jobs all reached a terminal state. Null when a read fails.
  */
 async function resolveCompleteHandoverProjects(
-  admin: SupabaseAdminClient,
+  admin: AdminClient,
   context: ActionContext,
   explicitProjects: HandoverProjectRow[],
   terminalChildSignals: Array<{ project_id: string | null }>,
@@ -482,11 +485,28 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
     terminalChildSignalsResult.data ?? [],
   );
   if (!projects) return { tasks: [], failed: true };
-  const jobIds = (jobsResult.data ?? []).map((job) => job.id);
+  const packages = await readHandoverPackageStates(admin, context, jobsResult.data ?? [], projects);
+  if (!packages) return { tasks: [], failed: true };
+  const tasks = toWorkHandoverTasks(
+    jobsResult.data ?? [],
+    projects,
+    packages.jobPackages,
+    packages.projectPackages,
+    packages.parentProjects,
+  );
+  return { tasks, failed: false };
+}
+
+/** The handover packages of the due jobs and projects, and the numbers of the jobs' projects; null when a read failed. */
+async function readHandoverPackageStates(
+  admin: AdminClient,
+  context: ActionContext,
+  jobs: HandoverJobRow[],
+  projects: HandoverProjectRow[],
+) {
+  const jobIds = jobs.map((job) => job.id);
   const projectIds = projects.map((project) => project.id);
-  const parentProjectIds = [
-    ...new Set((jobsResult.data ?? []).flatMap((job) => (job.project_id ? [job.project_id] : []))),
-  ];
+  const parentProjectIds = [...new Set(jobs.flatMap((job) => (job.project_id ? [job.project_id] : [])))];
   const [jobPackagesResult, projectPackagesResult, parentProjectsResult] = await Promise.all([
     readInBatches(jobIds, (batch) =>
       admin
@@ -515,14 +535,11 @@ export async function deriveWorkHandoverTasks(context: ActionContext): Promise<D
       'Failed to load work handover attention package states',
       jobPackagesResult.error ?? projectPackagesResult.error ?? parentProjectsResult.error,
     );
-    return { tasks: [], failed: true };
+    return null;
   }
-  const tasks = toWorkHandoverTasks(
-    jobsResult.data ?? [],
-    projects,
-    jobPackagesResult.data ?? [],
-    projectPackagesResult.data ?? [],
-    parentProjectsResult.data ?? [],
-  );
-  return { tasks, failed: false };
+  return {
+    jobPackages: jobPackagesResult.data ?? [],
+    projectPackages: projectPackagesResult.data ?? [],
+    parentProjects: parentProjectsResult.data ?? [],
+  };
 }
