@@ -1,5 +1,5 @@
 import { expect, test } from './support/fixtures';
-import { previousTestBusinessMonth } from '../../lib/testing/runner/business-date';
+import { previousTestBusinessMonth, testBusinessDate } from '../../lib/testing/runner/business-date';
 import { expectDefined } from '../../lib/testing/spec-support/expect-defined';
 import { PERIOD_STATE_LABELS } from '../../lib/time-accounts/presentation';
 import {
@@ -15,11 +15,13 @@ import {
   closeMonthButton,
   confirmDefaultMappingButton,
   confirmDefaultTimePolicy,
+  correctOpeningDate,
   createPayrollExportButton,
   currentMappingText,
   expectNoApproveFindingButton,
   fillOpeningBalance,
   openAccountButton,
+  openingDateCorrectionText,
   payrollExportText,
   periodFindingsHeading,
   preparePeriodMonth,
@@ -31,8 +33,8 @@ import {
   timeAccountVersionText,
 } from './support/steps/time-tracking';
 
-// One connected payroll month: configure, close and export, read as the
-// employee, reopen. Ledger arithmetic, the complete-workforce rule, immutable
+// One connected payroll month: configure (with an account opened on the wrong
+// day and corrected), close and export, read as the employee, reopen. Ledger arithmetic, the complete-workforce rule, immutable
 // close versions, retained history on reopen and tenant isolation are proven in
 // supabase/tests/p1_23_time_accounts.sql and lib/time-accounts/*.test.ts.
 
@@ -57,13 +59,21 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
       await confirmDefaultTimePolicy(settings, period.start);
       await expect(visibleText(settings, timeAccountVersionText(1))).toBeVisible();
 
+      // Opened with today's date, the account would block the month to close
+      // with „Zeitkonto fehlt“; the correction moves it to the month's start.
       const adminName = `${world.users.admin.firstName} ${world.users.admin.lastName}`;
-      await fillOpeningBalance(settings, adminName, { openedOn: period.start, minutes: 15 });
+      const wrongOpeningDate = testBusinessDate();
+      await fillOpeningBalance(settings, adminName, { openedOn: wrongOpeningDate, minutes: 15 });
       const openAccount = openAccountButton(settings, adminName);
       await openAccount.click();
       // The form disappears only after the Server Action commits and its
       // authoritative settings read no longer lists this account as missing.
       await expect(openAccount).toHaveCount(0);
+      const correctionReason = 'Konto ab dem abzuschließenden Monat führen';
+      await correctOpeningDate(settings, adminName, { openedOn: period.start, reason: correctionReason });
+      await expect(
+        visibleText(settings, openingDateCorrectionText(wrongOpeningDate, period.start, correctionReason)),
+      ).toBeVisible();
       await openRemainingP123Accounts({
         organizationId: world.orgId,
         actorUserId: world.users.admin.id,
@@ -77,6 +87,7 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
 
       const state = await getP123State(world.orgId);
       expect(state.accounts).toHaveLength(employees.length);
+      expect(state.accounts.map((account) => account.opened_on)).toEqual(employees.map(() => period.start));
       expect(state.mappings).toHaveLength(1);
     });
 
@@ -110,6 +121,14 @@ test.describe('P1-23 time accounts and payroll handoff @P1-23 @GG-07', () => {
       expect(state.exports.filter((item) => item.period_id === preparedPeriod.id)).toMatchObject([
         { state: 'ready', version: 1 },
       ]);
+      // The closed month now depends on every opening date: none is offered for correction.
+      await adminPage.goto('/zeiterfassung/einstellungen');
+      await expect(
+        visibleText(timeAccountSettings(adminPage), TIME_ACCOUNT_COPY.openingDateLocked),
+      ).toBeVisible();
+      await expect(
+        timeAccountSettings(adminPage).getByRole('button', { name: TIME_ACCOUNT_COPY.correctOpeningDate }),
+      ).toHaveCount(0);
       return preparedPeriod.id;
     });
 

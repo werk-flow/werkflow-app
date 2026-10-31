@@ -388,7 +388,6 @@
     "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
     "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
     "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
-    "hooks/use-live-view.ts": { "useLiveView": 192 },
     "lib/customer-relationships/actions.ts": {
       "buildTimelineRecordQueries": 105,
       "buildTimelineLinkAndEventQueries": 104,
