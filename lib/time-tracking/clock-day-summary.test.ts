@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { describeClockActivity, workTimeParts } from './clock-day-summary';
+import { describeClockActivity, workTimeParts, todayWorkingTime } from './clock-day-summary';
 import { createActivitySelection } from './segments';
 
 const none = { travel: 0, standby: 0, callout: 0, internal_activity: 0 };
@@ -70,7 +70,9 @@ describe('the parts of today’s working time', () => {
 
   test('a day past its target keeps every recorded minute of travel in the parts', () => {
     // 480 minutes of target plus 120 of overtime: the parts describe all 600.
-    expect(workTimeParts(480 + 120, { ...none, travel: 400 })).toEqual([
+    const today = todayWorkingTime({ workMinutes: 480, overtimeMinutes: 120 }, { ...none, travel: 400 });
+    expect(today.workingMinutes).toBe(600);
+    expect(today.parts).toEqual([
       { kind: 'work', label: 'Arbeit', minutes: 200 },
       { kind: 'travel', label: 'Fahrt', minutes: 400 },
     ]);

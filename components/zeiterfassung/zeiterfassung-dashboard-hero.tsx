@@ -5,7 +5,7 @@ import { TimeProgressRing } from './time-progress-ring';
 import { formatDuration } from '@/lib/time-tracking/helpers';
 import {
   describeClockActivity,
-  workTimeParts,
+  todayWorkingTime,
   type ClockActivityTone,
 } from '@/lib/time-tracking/clock-day-summary';
 import { DEFAULT_DAILY_TARGET_MINUTES, type DailyTarget } from '@/lib/personnel/targets';
@@ -68,10 +68,7 @@ function ZeiterfassungTodayTargetNote({
    parts the working time is made of, once it holds more than work. */
 function ZeiterfassungTimeBreakdown({ totals }: { totals: ZeiterfassungLiveTotals }) {
   const { breakdown } = totals;
-  // The parts describe all of today's working time, overtime included, so a
-  // recorded drive keeps its minutes on a day past the target.
-  const workingMinutes = breakdown.workMinutes + breakdown.overtimeMinutes;
-  const parts = workTimeParts(workingMinutes, {
+  const { workingMinutes, parts } = todayWorkingTime(breakdown, {
     travel: totals.liveTravelMinutes,
     standby: totals.liveStandbyMinutes,
     callout: totals.liveCalloutMinutes,

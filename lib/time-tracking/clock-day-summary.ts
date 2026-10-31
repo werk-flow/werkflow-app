@@ -94,3 +94,16 @@ export function workTimeParts(
     .filter((part) => part.kind === 'work' || part.minutes > 0);
   return parts.length > 1 ? parts : [];
 }
+
+/**
+ * Today's working time with its overtime, and the parts it is made of. The
+ * parts cover the overtime too, so a recorded drive keeps its minutes on a day
+ * past the target.
+ */
+export function todayWorkingTime(
+  breakdown: { workMinutes: number; overtimeMinutes: number },
+  minutes: Record<(typeof OTHER_WORK_KINDS)[number], number>,
+): { workingMinutes: number; parts: WorkTimePart[] } {
+  const workingMinutes = breakdown.workMinutes + breakdown.overtimeMinutes;
+  return { workingMinutes, parts: workTimeParts(workingMinutes, minutes) };
+}
