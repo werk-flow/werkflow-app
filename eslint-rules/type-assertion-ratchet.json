@@ -167,7 +167,6 @@
   "tests/audit/support/visual-references.ts": 2,
   "tests/audit/wave-1/a1-auftraege.spec.ts": 1,
   "tests/audit/wave-1/a5-aufgaben-qualifikationen.spec.ts": 6,
-  "tests/audit/wave-3/p1-24a.spec.ts": 1,
   "tests/canary/support/realtime-boundaries.ts": 3,
   "tests/golden/p1-24.spec.ts": 1,
   "tests/golden/support/db/attention.ts": 6,
