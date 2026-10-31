@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ExternalLink, Trash2, Pencil } from 'lucide-react';
 
 import { RowActionsMenu } from '@/components/ui/row-actions-menu';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
@@ -22,6 +21,7 @@ import { deleteJob } from '@/lib/jobs/actions';
 import { JOB_DELETE_FAILED_MESSAGE, JOB_DELETE_HISTORY_MESSAGE } from '@/lib/jobs/messages';
 import { getJobDisplayTitle, type Job, type ProjectWithDetails } from '@/lib/jobs/types';
 import { knownProjectOption } from '../forms/job-form-options';
+import { rowMenuActions } from './job-actions-menu-items';
 import type { OrgMemberOption } from '../shared/employee-multi-select';
 
 const JOB_DELETE_ERROR_MESSAGES = {
@@ -52,16 +52,10 @@ interface JobActionsMenuProps {
   onDeleteRequested?: ((jobId: string) => void) | undefined;
 }
 
-export function JobActionsMenu({
-  job,
-  detailHref,
-  clientName,
-  members,
-  knownProject,
-  onJobUpdated,
-  onJobDeleted,
-  onDeleteRequested,
-}: JobActionsMenuProps) {
+type JobDeleteStateInput = Pick<JobActionsMenuProps, 'job' | 'onJobDeleted' | 'onDeleteRequested'>;
+
+/** The menu's dialog state and the delete, run here or handed to the optimistic list. */
+function useJobActionsMenuState({ job, onJobDeleted, onDeleteRequested }: JobDeleteStateInput) {
   const router = useRouter();
   const displayTitle = getJobDisplayTitle(job);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -101,41 +95,60 @@ export function JobActionsMenu({
     });
   };
 
-  const isLoading = isDeleting;
+  const handleDeleteDialogOpenChange = (open: boolean) => {
+    setShowDeleteDialog(open);
+    if (!open) setError(null);
+  };
+
+  return {
+    router,
+    displayTitle,
+    showDeleteDialog,
+    setShowDeleteDialog,
+    showEditDialog,
+    setShowEditDialog,
+    isDeleting,
+    error,
+    handleDeleteDialogOpenChange,
+    handleDelete,
+  };
+}
+
+export function JobActionsMenu({
+  job,
+  detailHref,
+  clientName,
+  members,
+  knownProject,
+  onJobUpdated,
+  onJobDeleted,
+  onDeleteRequested,
+}: JobActionsMenuProps) {
+  const {
+    router,
+    displayTitle,
+    showDeleteDialog,
+    setShowDeleteDialog,
+    showEditDialog,
+    setShowEditDialog,
+    isDeleting,
+    error,
+    handleDeleteDialogOpenChange,
+    handleDelete,
+  } = useJobActionsMenuState({ job, onJobDeleted, onDeleteRequested });
 
   return (
     <>
       <RowActionsMenu
-        disabled={isLoading}
-        actions={[
-          {
-            label: 'Details anzeigen',
-            icon: <ExternalLink className="size-4" />,
-            onSelect: () => router.push(detailHref),
-          },
-          {
-            label: 'Bearbeiten',
-            icon: <Pencil className="size-4" />,
-            onSelect: () => setShowEditDialog(true),
-          },
-          {
-            label: 'Löschen',
-            icon: <Trash2 className="size-4" />,
-            onSelect: () => setShowDeleteDialog(true),
-            variant: 'destructive',
-            separatorBefore: true,
-          },
-        ]}
+        disabled={isDeleting}
+        actions={rowMenuActions({
+          openDetails: () => router.push(detailHref),
+          openEdit: () => setShowEditDialog(true),
+          openDelete: () => setShowDeleteDialog(true),
+        })}
       />
 
-      <AlertDialog
-        open={showDeleteDialog}
-        pending={isDeleting}
-        onOpenChange={(open) => {
-          setShowDeleteDialog(open);
-          if (!open) setError(null);
-        }}
-      >
+      <AlertDialog open={showDeleteDialog} pending={isDeleting} onOpenChange={handleDeleteDialogOpenChange}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Auftrag löschen?</AlertDialogTitle>

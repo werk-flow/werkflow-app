@@ -17,6 +17,37 @@ type EditProjectFormFieldsProps = {
 };
 
 export function EditProjectFormFields({ form, selectedClient }: EditProjectFormFieldsProps) {
+  const { clientId, handleClientChange, siteId, setSiteId, contactId, setContactId, formDisabled } = form;
+
+  return (
+    <>
+      <EditProjectContentFields form={form} />
+
+      <Field label="Kunde" htmlFor="edit-project-client">
+        <ClientSelectWithCreate
+          selectedClient={selectedClient}
+          value={clientId}
+          onValueChange={handleClientChange}
+          disabled={formDisabled}
+        />
+      </Field>
+
+      <SiteContactFields
+        clientId={clientId}
+        siteId={siteId}
+        contactId={contactId}
+        onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
+        onContactChange={setContactId}
+        disabled={formDisabled}
+        idPrefix="edit-project"
+      />
+
+      <EditProjectPlanningFields form={form} />
+    </>
+  );
+}
+
+function EditProjectContentFields({ form }: { form: EditProjectForm }) {
   const {
     name,
     setName,
@@ -24,21 +55,6 @@ export function EditProjectFormFields({ form, selectedClient }: EditProjectFormF
     setDescription,
     projectNumber,
     setProjectNumber,
-    clientId,
-    handleClientChange,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    plannedStartDate,
-    setPlannedStartDate,
-    plannedEndDate,
-    setPlannedEndDate,
-    selectedJobIds,
-    setSelectedJobIds,
-    jobSearch,
-    isLoadingJobs,
-    jobsFailure,
     contentError,
     setContentError,
     showContentError,
@@ -84,26 +100,26 @@ export function EditProjectFormFields({ form, selectedClient }: EditProjectFormF
           disabled={formDisabled}
         />
       </Field>
+    </>
+  );
+}
 
-      <Field label="Kunde" htmlFor="edit-project-client">
-        <ClientSelectWithCreate
-          selectedClient={selectedClient}
-          value={clientId}
-          onValueChange={handleClientChange}
-          disabled={formDisabled}
-        />
-      </Field>
+function EditProjectPlanningFields({ form }: { form: EditProjectForm }) {
+  const {
+    plannedStartDate,
+    setPlannedStartDate,
+    plannedEndDate,
+    setPlannedEndDate,
+    selectedJobIds,
+    setSelectedJobIds,
+    jobSearch,
+    isLoadingJobs,
+    jobsFailure,
+    formDisabled,
+  } = form;
 
-      <SiteContactFields
-        clientId={clientId}
-        siteId={siteId}
-        contactId={contactId}
-        onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
-        onContactChange={setContactId}
-        disabled={formDisabled}
-        idPrefix="edit-project"
-      />
-
+  return (
+    <>
       <Separator />
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planung</p>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type DragEvent } from 'react';
+import { useState, type Dispatch, type DragEvent, type SetStateAction } from 'react';
 
 import { moveDocumentFolder } from '@/lib/documents/folder-actions';
 import { moveDocument } from '@/lib/documents/library-actions';
@@ -114,6 +114,118 @@ function moveSelectionIntoFolder(
   });
 }
 
+type DocumentLibraryDropTargetsOptions = {
+  documents: OrganizationDocument[];
+  folders: DocumentFolder[];
+  allFolders: DocumentFolder[];
+  currentFolderId: string | null;
+  visibleView: DocumentLibraryView;
+  isTrashView: boolean;
+  mutations: DocumentLibraryMutations;
+  selection: DocumentLibrarySelection;
+  onDeleteSelection: (input: {
+    documentsToDelete: OrganizationDocument[];
+    foldersToDelete: DocumentFolder[];
+  }) => void;
+};
+
+type NativeRowDropOptions = {
+  draggedTableSelection: DocumentTableDragSelection | null;
+  canDropSelectionIntoFolder: (
+    dragSelection: DocumentTableDragSelection,
+    targetFolderId: string | null,
+  ) => boolean;
+  setIsTrashDragOver: Dispatch<SetStateAction<boolean>>;
+  setBreadcrumbDropTargetId: Dispatch<SetStateAction<string | 'root' | null>>;
+  onMoveItemsToTrash: (dragSelection: DocumentTableDragSelection) => void;
+  onMoveItemsIntoFolder: (dragSelection: DocumentTableDragSelection, targetFolderId: string | null) => void;
+};
+
+/** The native drag and drop of rows onto the trash button or a breadcrumb folder. */
+function createNativeRowDropHandlers({
+  draggedTableSelection,
+  canDropSelectionIntoFolder,
+  setIsTrashDragOver,
+  setBreadcrumbDropTargetId,
+  onMoveItemsToTrash,
+  onMoveItemsIntoFolder,
+}: NativeRowDropOptions) {
+  function handleTrashDrop(event: DragEvent<HTMLButtonElement>) {
+    if (!hasInternalRowDrag(event.dataTransfer)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    setIsTrashDragOver(false);
+
+    const dragSelection = readInternalRowDragSelection(event.dataTransfer, draggedTableSelection);
+    if (!dragSelection) return;
+
+    onMoveItemsToTrash(dragSelection);
+  }
+
+  function handleBreadcrumbDragOver(event: DragEvent<HTMLElement>, targetFolderId: string | null) {
+    if (!hasInternalRowDrag(event.dataTransfer)) return;
+    event.preventDefault();
+
+    const dragSelection =
+      readInternalRowDragSelection(event.dataTransfer, draggedTableSelection) ?? draggedTableSelection;
+    if (!dragSelection || !canDropSelectionIntoFolder(dragSelection, targetFolderId)) {
+      event.dataTransfer.dropEffect = 'none';
+      setBreadcrumbDropTargetId(null);
+      return;
+    }
+
+    event.dataTransfer.dropEffect = 'move';
+    setBreadcrumbDropTargetId(targetFolderId ?? 'root');
+  }
+
+  function handleBreadcrumbDrop(event: DragEvent<HTMLElement>, targetFolderId: string | null) {
+    if (!hasInternalRowDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setBreadcrumbDropTargetId(null);
+
+    const dragSelection =
+      readInternalRowDragSelection(event.dataTransfer, draggedTableSelection) ?? draggedTableSelection;
+    if (!dragSelection || !canDropSelectionIntoFolder(dragSelection, targetFolderId)) {
+      return;
+    }
+
+    onMoveItemsIntoFolder(dragSelection, targetFolderId);
+  }
+
+  return { handleTrashDrop, handleBreadcrumbDragOver, handleBreadcrumbDrop };
+}
+
+/** The dragged rows and the trash and breadcrumb highlights they light up. */
+function useDocumentLibraryDropHighlights() {
+  const [draggedTableSelection, setDraggedTableSelection] = useState<DocumentTableDragSelection | null>(null);
+  const [isTrashDragOver, setIsTrashDragOver] = useState(false);
+  const [breadcrumbDropTargetId, setBreadcrumbDropTargetId] = useState<string | 'root' | null>(null);
+
+  function handlePointerDropTargetChange(target: PointerDropTarget) {
+    setIsTrashDragOver(target?.kind === 'trash');
+    setBreadcrumbDropTargetId(target?.kind === 'folder' ? (target.folderId ?? 'root') : null);
+  }
+
+  function handleDragSelectionEnd() {
+    setDraggedTableSelection(null);
+    setIsTrashDragOver(false);
+    setBreadcrumbDropTargetId(null);
+  }
+
+  return {
+    draggedTableSelection,
+    isTrashDragOver,
+    setIsTrashDragOver,
+    breadcrumbDropTargetId,
+    setBreadcrumbDropTargetId,
+    setDraggedTableSelection,
+    handlePointerDropTargetChange,
+    handleDragSelectionEnd,
+  };
+}
+
 export type DocumentLibraryDropTargets = ReturnType<typeof useDocumentLibraryDropTargets>;
 
 /**
@@ -130,20 +242,7 @@ export function useDocumentLibraryDropTargets({
   mutations,
   selection,
   onDeleteSelection,
-}: {
-  documents: OrganizationDocument[];
-  folders: DocumentFolder[];
-  allFolders: DocumentFolder[];
-  currentFolderId: string | null;
-  visibleView: DocumentLibraryView;
-  isTrashView: boolean;
-  mutations: DocumentLibraryMutations;
-  selection: DocumentLibrarySelection;
-  onDeleteSelection: (input: {
-    documentsToDelete: OrganizationDocument[];
-    foldersToDelete: DocumentFolder[];
-  }) => void;
-}) {
+}: DocumentLibraryDropTargetsOptions) {
   const draggedRowsScope: DraggedRowsScope = {
     documents,
     folders,
@@ -152,9 +251,7 @@ export function useDocumentLibraryDropTargets({
     mutations,
     selection,
   };
-  const [draggedTableSelection, setDraggedTableSelection] = useState<DocumentTableDragSelection | null>(null);
-  const [isTrashDragOver, setIsTrashDragOver] = useState(false);
-  const [breadcrumbDropTargetId, setBreadcrumbDropTargetId] = useState<string | 'root' | null>(null);
+  const { draggedTableSelection, ...highlights } = useDocumentLibraryDropHighlights();
 
   /** The current folder is never a target: its items are already there. */
   function canDropSelectionIntoFolder(
@@ -194,74 +291,21 @@ export function useDocumentLibraryDropTargets({
     });
   }
 
-  function handlePointerDropTargetChange(target: PointerDropTarget) {
-    setIsTrashDragOver(target?.kind === 'trash');
-    setBreadcrumbDropTargetId(target?.kind === 'folder' ? (target.folderId ?? 'root') : null);
-  }
-
-  function handleDragSelectionEnd() {
-    setDraggedTableSelection(null);
-    setIsTrashDragOver(false);
-    setBreadcrumbDropTargetId(null);
-  }
-
-  function handleTrashDrop(event: DragEvent<HTMLButtonElement>) {
-    if (!hasInternalRowDrag(event.dataTransfer)) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    setIsTrashDragOver(false);
-
-    const dragSelection = readInternalRowDragSelection(event.dataTransfer, draggedTableSelection);
-    if (!dragSelection) return;
-
-    handleMoveItemsToTrash(dragSelection);
-  }
-
-  function handleBreadcrumbDragOver(event: DragEvent<HTMLElement>, targetFolderId: string | null) {
-    if (!hasInternalRowDrag(event.dataTransfer)) return;
-    event.preventDefault();
-
-    const dragSelection =
-      readInternalRowDragSelection(event.dataTransfer, draggedTableSelection) ?? draggedTableSelection;
-    if (!dragSelection || !canDropSelectionIntoFolder(dragSelection, targetFolderId)) {
-      event.dataTransfer.dropEffect = 'none';
-      setBreadcrumbDropTargetId(null);
-      return;
-    }
-
-    event.dataTransfer.dropEffect = 'move';
-    setBreadcrumbDropTargetId(targetFolderId ?? 'root');
-  }
-
-  function handleBreadcrumbDrop(event: DragEvent<HTMLElement>, targetFolderId: string | null) {
-    if (!hasInternalRowDrag(event.dataTransfer)) return;
-    event.preventDefault();
-    event.stopPropagation();
-    setBreadcrumbDropTargetId(null);
-
-    const dragSelection =
-      readInternalRowDragSelection(event.dataTransfer, draggedTableSelection) ?? draggedTableSelection;
-    if (!dragSelection || !canDropSelectionIntoFolder(dragSelection, targetFolderId)) {
-      return;
-    }
-
-    moveSelectionIntoFolder(draggedRowsScope, dragSelection, targetFolderId);
-  }
+  const nativeRowDrop = createNativeRowDropHandlers({
+    draggedTableSelection,
+    canDropSelectionIntoFolder,
+    setIsTrashDragOver: highlights.setIsTrashDragOver,
+    setBreadcrumbDropTargetId: highlights.setBreadcrumbDropTargetId,
+    onMoveItemsToTrash: handleMoveItemsToTrash,
+    onMoveItemsIntoFolder: (dragSelection, targetFolderId) =>
+      moveSelectionIntoFolder(draggedRowsScope, dragSelection, targetFolderId),
+  });
 
   return {
-    isTrashDragOver,
-    setIsTrashDragOver,
-    breadcrumbDropTargetId,
-    setBreadcrumbDropTargetId,
-    setDraggedTableSelection,
+    ...highlights,
     canDropSelectionIntoFolder,
     handleMoveItemsToFolder,
     handleMoveItemsToTrash,
-    handlePointerDropTargetChange,
-    handleDragSelectionEnd,
-    handleTrashDrop,
-    handleBreadcrumbDragOver,
-    handleBreadcrumbDrop,
+    ...nativeRowDrop,
   };
 }

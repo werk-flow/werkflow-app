@@ -31,6 +31,7 @@ function comparable(value: unknown, filterValue: string): [number | string, numb
 /** One `column.operator.value` term of a PostgREST `or` filter. */
 function orTerm(term: string): (row: Row) => boolean {
   const [column = '', operator = '', ...rest] = term.split('.');
+  if (operator === 'is' && rest.join('.') === 'null') return (row) => (row[column] ?? null) === null;
   const compare = comparators[operator];
   if (!compare) throw new Error(`The in-memory admin does not implement the "${operator}" or-filter.`);
   const value = rest.join('.');
@@ -44,6 +45,8 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   private predicates: Array<(row: Row) => boolean> = [];
   private cardinality: 'many' | 'single' | 'maybeSingle' = 'many';
   private headOnly = false;
+  /** Embeds the select joins with `!inner`, by alias or table name. */
+  private readonly innerEmbeds = new Set<string>();
 
   constructor(
     private readonly tables: InMemoryTables,
@@ -52,8 +55,10 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     private readonly beforeWrite: BeforeWrite = () => {},
   ) {}
 
-  select(_columns?: string, options?: { head?: boolean }): this {
+  select(columns?: string, options?: { head?: boolean }): this {
     this.operation ??= 'select';
+    for (const [, alias, table = ''] of columns?.matchAll(/(?:(\w+):)?(\w+)!inner\(/g) ?? [])
+      this.innerEmbeds.add(alias ?? table);
     this.headOnly = options?.head ?? false;
     return this;
   }
@@ -83,9 +88,17 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this;
   }
   eq(column: string, value: unknown): this {
-    // A dotted column on a seeded embedded array filters that embed, never its parent row (PostgREST).
-    const embedded = column.includes('.') ? column.slice(0, column.indexOf('.')) : null;
-    return this.where((row) => (embedded !== null && Array.isArray(row[embedded])) || row[column] === value);
+    // A dotted column on a seeded embedded array filters that embed, never its parent row,
+    // unless the select joins the embed with `!inner`: then it keeps only parents with a match (PostgREST).
+    const dot = column.indexOf('.');
+    const embedded = dot === -1 ? null : column.slice(0, dot);
+    return this.where((row) => {
+      const embed = embedded === null ? undefined : row[embedded];
+      if (embedded === null || !Array.isArray(embed)) return row[column] === value;
+      return (
+        !this.innerEmbeds.has(embedded) || embed.some((item: Row) => item[column.slice(dot + 1)] === value)
+      );
+    });
   }
   neq(column: string, value: unknown): this {
     return this.where((row) => row[column] !== value);

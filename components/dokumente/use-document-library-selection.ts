@@ -1,10 +1,93 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import type { DocumentFolder, DocumentLibraryView, OrganizationDocument } from '@/lib/documents/types';
 
 export type DocumentLibrarySelection = ReturnType<typeof useDocumentLibrarySelection>;
+
+function withoutIds(current: Set<string>, ids: Iterable<string>): Set<string> {
+  const next = new Set(current);
+  for (const id of ids) next.delete(id);
+  return next;
+}
+
+function withIds(current: Set<string>, ids: Iterable<string>): Set<string> {
+  const next = new Set(current);
+  for (const id of ids) next.add(id);
+  return next;
+}
+
+function withIdToggled(current: Set<string>, id: string): Set<string> {
+  const next = new Set(current);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  return next;
+}
+
+/** Inside a selection circle, a preserving region or an open menu, a click keeps the selection. */
+function preservesSelection(target: Element | null): boolean {
+  if (target?.closest('[data-document-selection-circle="true"]')) return true;
+  if (target?.closest('[data-document-selection-preserve="true"]')) return true;
+  return Boolean(target?.closest('[role="menu"], [data-radix-popper-content-wrapper]'));
+}
+
+type SelectionSetters = {
+  setSelectedDocumentIds: Dispatch<SetStateAction<Set<string>>>;
+  setSelectedFolderIds: Dispatch<SetStateAction<Set<string>>>;
+};
+
+/** The updates of the selected id sets that toggle, add or remove single ids. */
+function createSelectionUpdates({
+  documents,
+  folders,
+  setSelectedDocumentIds,
+  setSelectedFolderIds,
+}: SelectionSetters & { documents: OrganizationDocument[]; folders: DocumentFolder[] }) {
+  return {
+    removeDocumentsFromSelection: (documentIds: string[]) => {
+      setSelectedDocumentIds((current) => withoutIds(current, documentIds));
+    },
+    removeFolderFromSelection: (folderId: string) => {
+      setSelectedFolderIds((current) => withoutIds(current, [folderId]));
+    },
+    toggleDocumentSelection: (documentId: string) => {
+      setSelectedDocumentIds((current) => withIdToggled(current, documentId));
+    },
+    toggleFolderSelection: (folderId: string) => {
+      setSelectedFolderIds((current) => withIdToggled(current, folderId));
+    },
+    selectAllVisible: () => {
+      setSelectedDocumentIds((current) =>
+        withIds(
+          current,
+          documents.map((document) => document.id),
+        ),
+      );
+      setSelectedFolderIds((current) =>
+        withIds(
+          current,
+          folders.map((folder) => folder.id),
+        ),
+      );
+    },
+    replaceSelection: ({ folderIds, documentIds }: { folderIds: Set<string>; documentIds: Set<string> }) => {
+      setSelectedFolderIds(folderIds);
+      setSelectedDocumentIds(documentIds);
+    },
+  };
+}
+
+type DocumentLibrarySelectionOptions = {
+  documents: OrganizationDocument[];
+  folders: DocumentFolder[];
+  allFolders: DocumentFolder[];
+  currentFolderId: string | null;
+  view: DocumentLibraryView;
+};
 
 /**
  * The selected documents and folders of the library: checkbox toggles, the
@@ -16,13 +99,7 @@ export function useDocumentLibrarySelection({
   allFolders,
   currentFolderId,
   view,
-}: {
-  documents: OrganizationDocument[];
-  folders: DocumentFolder[];
-  allFolders: DocumentFolder[];
-  currentFolderId: string | null;
-  view: DocumentLibraryView;
-}) {
+}: DocumentLibrarySelectionOptions) {
   const suppressNextSelectionClearRef = useRef(false);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<Set<string>>(() => new Set());
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(() => new Set());
@@ -36,78 +113,16 @@ export function useDocumentLibrarySelection({
     [allFolders, selectedFolderIds],
   );
   const selectedItemCount = selectedDocuments.length + selectedFolders.length;
-
-  function removeDocumentsFromSelection(documentIds: string[]) {
-    setSelectedDocumentIds((current) => {
-      const next = new Set(current);
-      for (const documentId of documentIds) next.delete(documentId);
-      return next;
-    });
-  }
-
-  function removeFolderFromSelection(folderId: string) {
-    setSelectedFolderIds((current) => {
-      const next = new Set(current);
-      next.delete(folderId);
-      return next;
-    });
-  }
-
-  function toggleDocumentSelection(documentId: string) {
-    setSelectedDocumentIds((current) => {
-      const next = new Set(current);
-      if (next.has(documentId)) {
-        next.delete(documentId);
-      } else {
-        next.add(documentId);
-      }
-      return next;
-    });
-  }
-
-  function toggleFolderSelection(folderId: string) {
-    setSelectedFolderIds((current) => {
-      const next = new Set(current);
-      if (next.has(folderId)) {
-        next.delete(folderId);
-      } else {
-        next.add(folderId);
-      }
-      return next;
-    });
-  }
+  const selectionUpdates = createSelectionUpdates({
+    documents,
+    folders,
+    setSelectedDocumentIds,
+    setSelectedFolderIds,
+  });
 
   function clearSelection() {
     setSelectedDocumentIds(new Set());
     setSelectedFolderIds(new Set());
-  }
-
-  function selectAllVisible() {
-    setSelectedDocumentIds((current) => {
-      const next = new Set(current);
-      for (const document of documents) {
-        next.add(document.id);
-      }
-      return next;
-    });
-    setSelectedFolderIds((current) => {
-      const next = new Set(current);
-      for (const folder of folders) {
-        next.add(folder.id);
-      }
-      return next;
-    });
-  }
-
-  function replaceSelection({
-    folderIds,
-    documentIds,
-  }: {
-    folderIds: Set<string>;
-    documentIds: Set<string>;
-  }) {
-    setSelectedFolderIds(folderIds);
-    setSelectedDocumentIds(documentIds);
   }
 
   /** The click that ends a rectangle selection must not clear what it just selected. */
@@ -129,16 +144,12 @@ export function useDocumentLibrarySelection({
     if (selectedItemCount === 0) return;
 
     function handleDocumentClick(event: MouseEvent) {
-      const target = event.target as HTMLElement | null;
+      const target = event.target instanceof Element ? event.target : null;
       if (suppressNextSelectionClearRef.current) {
         suppressNextSelectionClearRef.current = false;
         return;
       }
-      if (target?.closest('[data-document-selection-circle="true"]')) return;
-      if (target?.closest('[data-document-selection-preserve="true"]')) return;
-      if (target?.closest('[role="menu"], [data-radix-popper-content-wrapper]')) {
-        return;
-      }
+      if (preservesSelection(target)) return;
       window.setTimeout(clearSelection, 0);
     }
 
@@ -152,13 +163,8 @@ export function useDocumentLibrarySelection({
     selectedDocuments,
     selectedFolders,
     selectedItemCount,
-    removeDocumentsFromSelection,
-    removeFolderFromSelection,
-    toggleDocumentSelection,
-    toggleFolderSelection,
+    ...selectionUpdates,
     clearSelection,
-    selectAllVisible,
-    replaceSelection,
     suppressNextSelectionClear,
   };
 }

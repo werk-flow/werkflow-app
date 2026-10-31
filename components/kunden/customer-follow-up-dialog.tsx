@@ -73,42 +73,14 @@ export function CustomerFollowUpDialog({
             {followUpDraft.sourceLabel && (
               <p className="rounded-md bg-muted px-3 py-2 text-sm">Quelle: {followUpDraft.sourceLabel}</p>
             )}
-            <Field label="Titel" htmlFor="follow-up-title" required error={followUpTitleError}>
-              <Input
-                value={followUpDraft.title}
-                onChange={(event) => onDraftChange({ ...followUpDraft, title: event.target.value })}
-                maxLength={160}
-              />
-            </Field>
-            <Field label="Zuständig" htmlFor="follow-up-owner" required error={followUpOwnerError}>
-              <SearchableSelect
-                options={followUpOwners.map((owner) => ({
-                  value: owner.userId,
-                  label: owner.name,
-                }))}
-                value={followUpDraft.ownerUserId}
-                onChange={(value) => onDraftChange({ ...followUpDraft, ownerUserId: value })}
-                placeholder="Person wählen"
-                searchPlaceholder="Person suchen…"
-                emptyMessage="Keine Person gefunden"
-              />
-            </Field>
-            <Field label="Fällig am" htmlFor="follow-up-due-date" required error={followUpDueError}>
-              <DateTimeField
-                idPrefix="follow-up-due"
-                value={followUpDraft.dueAt}
-                onChange={(value) => onDraftChange({ ...followUpDraft, dueAt: value })}
-                dateAriaLabel="Fälligkeitsdatum"
-                invalid={Boolean(followUpDueError)}
-              />
-            </Field>
-            <Field label="Notiz" htmlFor="follow-up-note">
-              <Textarea
-                value={followUpDraft.note}
-                onChange={(event) => onDraftChange({ ...followUpDraft, note: event.target.value })}
-                maxLength={2000}
-              />
-            </Field>
+            <CustomerFollowUpFields
+              followUpDraft={followUpDraft}
+              followUpOwners={followUpOwners}
+              followUpTitleError={followUpTitleError}
+              followUpOwnerError={followUpOwnerError}
+              followUpDueError={followUpDueError}
+              onDraftChange={onDraftChange}
+            />
             <ErrorText>{followUpError}</ErrorText>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
@@ -122,5 +94,61 @@ export function CustomerFollowUpDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+type CustomerFollowUpFieldsProps = Pick<
+  CustomerFollowUpDialogProps,
+  'followUpOwners' | 'followUpTitleError' | 'followUpOwnerError' | 'followUpDueError' | 'onDraftChange'
+> & { followUpDraft: FollowUpDraft };
+
+/** The title, owner, due date and note fields of an open follow-up draft. */
+function CustomerFollowUpFields({
+  followUpDraft,
+  followUpOwners,
+  followUpTitleError,
+  followUpOwnerError,
+  followUpDueError,
+  onDraftChange,
+}: CustomerFollowUpFieldsProps) {
+  return (
+    <>
+      <Field label="Titel" htmlFor="follow-up-title" required error={followUpTitleError}>
+        <Input
+          value={followUpDraft.title}
+          onChange={(event) => onDraftChange({ ...followUpDraft, title: event.target.value })}
+          maxLength={160}
+        />
+      </Field>
+      <Field label="Zuständig" htmlFor="follow-up-owner" required error={followUpOwnerError}>
+        <SearchableSelect
+          options={followUpOwners.map((owner) => ({
+            value: owner.userId,
+            label: owner.name,
+          }))}
+          value={followUpDraft.ownerUserId}
+          onChange={(value) => onDraftChange({ ...followUpDraft, ownerUserId: value })}
+          placeholder="Person wählen"
+          searchPlaceholder="Person suchen…"
+          emptyMessage="Keine Person gefunden"
+        />
+      </Field>
+      <Field label="Fällig am" htmlFor="follow-up-due-date" required error={followUpDueError}>
+        <DateTimeField
+          idPrefix="follow-up-due"
+          value={followUpDraft.dueAt}
+          onChange={(value) => onDraftChange({ ...followUpDraft, dueAt: value })}
+          dateAriaLabel="Fälligkeitsdatum"
+          invalid={Boolean(followUpDueError)}
+        />
+      </Field>
+      <Field label="Notiz" htmlFor="follow-up-note">
+        <Textarea
+          value={followUpDraft.note}
+          onChange={(event) => onDraftChange({ ...followUpDraft, note: event.target.value })}
+          maxLength={2000}
+        />
+      </Field>
+    </>
   );
 }

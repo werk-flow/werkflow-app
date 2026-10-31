@@ -26,6 +26,38 @@ type CreateJobSubmitOptions = {
   onSubmitDeferred: CreateJobFormContentProps['onSubmitDeferred'];
 };
 
+/** The required-field errors of the create form, keyed by field id. */
+function createJobFieldErrors({ jobNumber, title, description }: CreateJobFormValues) {
+  return {
+    'job-number': jobNumber.trim() ? undefined : 'Bitte gib eine Auftragsnummer ein.',
+    'job-title':
+      title.trim() || description.trim()
+        ? undefined
+        : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
+  };
+}
+
+type CreateJobFailureSetters = {
+  setJobNumberError: (error: string | null) => void;
+  setContentError: (error: string | null) => void;
+  setError: (error: string | null) => void;
+};
+
+/** Shows a refused create at the field it concerns, otherwise as the form-level error. */
+function showCreateJobFailure(
+  error: string,
+  { setJobNumberError, setContentError, setError }: CreateJobFailureSetters,
+) {
+  const message = describeFailure(error, CREATE_JOB_ERROR_MESSAGES, 'Unbekannter Fehler');
+  if (error === 'job_number_required' || error === 'job_number_taken') {
+    setJobNumberError(message);
+  } else if (error === 'title_or_description_required') {
+    setContentError(message);
+  } else {
+    setError(message);
+  }
+}
+
 /** Validation, the create call (or the deferred hand-over) and the field errors it reports. */
 export function useCreateJobSubmit({
   values,
@@ -34,7 +66,7 @@ export function useCreateJobSubmit({
   onSuccess,
   onSubmitDeferred,
 }: CreateJobSubmitOptions) {
-  const { jobNumber, title, description, selectedEmployees } = values;
+  const { selectedEmployees } = values;
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [contentError, setContentError] = useState<string | null>(null);
@@ -49,13 +81,7 @@ export function useCreateJobSubmit({
     setContentError(null);
     setJobNumberError(null);
 
-    const fieldErrors = {
-      'job-number': jobNumber.trim() ? undefined : 'Bitte gib eine Auftragsnummer ein.',
-      'job-title':
-        title.trim() || description.trim()
-          ? undefined
-          : 'Bitte gib mindestens einen Titel oder eine Beschreibung ein.',
-    };
+    const fieldErrors = createJobFieldErrors(values);
     setJobNumberError(fieldErrors['job-number'] ?? null);
     setContentError(fieldErrors['job-title'] ?? null);
     if (focusFirstInvalidField(fieldErrors)) return;
@@ -79,14 +105,7 @@ export function useCreateJobSubmit({
             setQualificationWarning(result.evaluation);
             return;
           }
-          const message = describeFailure(result.error, CREATE_JOB_ERROR_MESSAGES, 'Unbekannter Fehler');
-          if (result.error === 'job_number_required' || result.error === 'job_number_taken') {
-            setJobNumberError(message);
-          } else if (result.error === 'title_or_description_required') {
-            setContentError(message);
-          } else {
-            setError(message);
-          }
+          showCreateJobFailure(result.error, { setJobNumberError, setContentError, setError });
           return;
         }
 

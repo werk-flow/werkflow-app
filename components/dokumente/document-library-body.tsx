@@ -41,29 +41,9 @@ type DocumentLibraryBodyProps = {
 };
 
 /** The library's content below the toolbar: navigation skeleton, link view, or cards plus table. */
-export function DocumentLibraryBody({
-  pendingView,
-  isWorkView,
-  isTrashView,
-  searchQuery,
-  folders,
-  documents,
-  jobs,
-  projects,
-  clients,
-  employees,
-  folderPage,
-  folderTotal,
-  isPaginationBusy,
-  isItemBusy,
-  rowActions,
-  selection,
-  dropTargets,
-  onFolderPageChange,
-  onBatchMoveSelection,
-  onBatchCopySelection,
-  onBatchDeleteSelection,
-}: DocumentLibraryBodyProps) {
+export function DocumentLibraryBody(props: DocumentLibraryBodyProps) {
+  const { pendingView, isWorkView, documents, jobs, projects, clients, employees, isItemBusy, rowActions } =
+    props;
   if (pendingView !== null) {
     return (
       <DokumenteTabContentSkeleton
@@ -101,6 +81,32 @@ export function DocumentLibraryBody({
     );
   }
 
+  return <DocumentLibraryBrowseContent {...props} />;
+}
+
+type DocumentLibraryBrowseContentProps = Omit<
+  DocumentLibraryBodyProps,
+  'pendingView' | 'isWorkView' | 'jobs' | 'projects' | 'clients' | 'employees'
+>;
+
+/** Folder and file browsing: mobile cards, folder pagination and the desktop table. */
+function DocumentLibraryBrowseContent({
+  isTrashView,
+  searchQuery,
+  folders,
+  documents,
+  folderPage,
+  folderTotal,
+  isPaginationBusy,
+  isItemBusy,
+  rowActions,
+  selection,
+  dropTargets,
+  onFolderPageChange,
+  onBatchMoveSelection,
+  onBatchCopySelection,
+  onBatchDeleteSelection,
+}: DocumentLibraryBrowseContentProps) {
   return (
     <>
       <DocumentLibraryMobileList

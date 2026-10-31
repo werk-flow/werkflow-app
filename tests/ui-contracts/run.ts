@@ -119,6 +119,9 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve({ filter: /^@\/lib\/qualifications\/actions$/ }, () => ({
               path: join(import.meta.dir, 'qualification-service-boundaries.ts'),
             }));
+            builder.onResolve({ filter: /^@\/lib\/time-accounts\/actions$/ }, () => ({
+              path: join(import.meta.dir, 'time-account-boundaries.ts'),
+            }));
             builder.onResolve({ filter: /^@\/lib\/calendar\/client$/ }, () => ({
               path: join(import.meta.dir, 'calendar-service-boundaries.tsx'),
             }));

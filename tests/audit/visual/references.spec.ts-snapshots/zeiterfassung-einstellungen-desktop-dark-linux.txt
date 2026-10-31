@@ -40,14 +40,16 @@ Pflichtfeld
 2026
 Standardversion bestätigen
 Neue Ausnahmeregel anlegen
+Vorschlag 01.01.2026: der erste Tag des ältesten Monats ohne Abschluss. Ein Monat lässt sich nur abschließen, wenn Regel und Zeitkonto spätestens an seinem ersten Tag beginnen.
 Individuelle Regeln
 Standardmäßig gilt die Organisationsregel. Bei Bedarf kann für einzelne Mitarbeitende eine datumswirksame Ausnahme festgelegt werden. Ein Klick auf eine Regel weist sie zu.
 Lege zuerst einen weiteren Regelsatz an, um eine individuelle Ausnahme zuzuweisen.
-Zeitkonten eröffnen
+Zeitkonten
 0
 von
 4
 Zeitkonten sind eröffnet. Jeder Anfangssaldo wird mit Datum und Grund ausdrücklich bestätigt.
+Vorschlag 01.01.2026: der erste Tag des ältesten Monats ohne Abschluss. Ein Monat lässt sich nur abschließen, wenn Regel und Zeitkonto spätestens an seinem ersten Tag beginnen.
 Mitarbeiter
 Anfangssaldo (Minuten)
 Eröffnungsdatum
@@ -61,13 +63,6 @@ Jonas Becker
 2026
 Konto eröffnen
 Kevin Schmid
-01
-.
-01
-.
-2026
-Konto eröffnen
-Martin Krämer
 01
 .
 01

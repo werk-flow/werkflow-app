@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useBatchProgress } from '@/hooks/use-batch-progress';
 import type { ActionResult } from '@/lib/action-result';
@@ -113,6 +113,172 @@ function getMoveCopyDestinationError({
   return null;
 }
 
+type MoveCopyItems = {
+  documents: OrganizationDocument[];
+  folders: DocumentFolder[];
+};
+
+/** The items a row's move or copy acts on: the whole selection when the row is part of it. */
+function moveCopyItemsFor(
+  item: DocumentMoveCopyItem,
+  selectedDocuments: OrganizationDocument[],
+  selectedFolders: DocumentFolder[],
+): MoveCopyItems {
+  const shouldUseCurrentSelection =
+    item.kind === 'document'
+      ? selectedDocuments.some((document) => document.id === item.document.id)
+      : selectedFolders.some((folder) => folder.id === item.folder.id);
+  return {
+    documents: shouldUseCurrentSelection
+      ? selectedDocuments
+      : item.kind === 'document'
+        ? [item.document]
+        : [],
+    folders: shouldUseCurrentSelection ? selectedFolders : item.kind === 'folder' ? [item.folder] : [],
+  };
+}
+
+function moveCopyDialogFor({
+  mode,
+  documents,
+  folders,
+  currentFolderId,
+}: MoveCopyItems & {
+  mode: MoveCopyMode;
+  currentFolderId: string | null;
+}): NonNullable<MoveCopyDialogState> {
+  return {
+    mode,
+    documents,
+    folders,
+    sourceFolderId: getSharedSourceFolderId({
+      documentsToCheck: documents,
+      foldersToCheck: folders,
+      fallbackFolderId: currentFolderId,
+    }),
+  };
+}
+
+type MoveCopyRequest = {
+  mode: MoveCopyMode;
+  documentsToProcess: OrganizationDocument[];
+  foldersToProcess: DocumentFolder[];
+  destinationFolderId: string | null;
+  onSuccess: () => void;
+};
+
+type MoveCopyOperationContext = {
+  moveCopyBatch: ReturnType<typeof useBatchProgress<BulkStep>>;
+  allFolders: DocumentFolder[];
+  visibleView: DocumentLibraryView;
+  mutations: DocumentLibraryMutations;
+  selection: DocumentLibrarySelection;
+  setMoveCopyError: Dispatch<SetStateAction<string | null>>;
+  setMoveCopyDialog: Dispatch<SetStateAction<MoveCopyDialogState>>;
+};
+
+/** Runs the steps as one batch and records which of them went through. */
+async function runTrackedMoveCopySteps(
+  moveCopyBatch: MoveCopyOperationContext['moveCopyBatch'],
+  steps: Array<{ id: string; item: BulkStep }>,
+): Promise<{ failures: number; succeededIds: Set<string> }> {
+  const succeededIds = new Set<string>();
+  const trackedSteps = steps.map(({ id, item }) => ({
+    id,
+    item: async () => {
+      const result = await item();
+      if (result.success) succeededIds.add(id);
+      return result;
+    },
+  }));
+
+  const { failures } = await moveCopyBatch.start(trackedSteps, async (perform) => {
+    const result = await perform();
+    if (!result.success) throw new Error('bulk_step_failed');
+  });
+  return { failures, succeededIds };
+}
+
+async function runMoveCopyOperation(
+  context: MoveCopyOperationContext,
+  { mode, documentsToProcess, foldersToProcess, destinationFolderId, onSuccess }: MoveCopyRequest,
+): Promise<void> {
+  const {
+    moveCopyBatch,
+    allFolders,
+    visibleView,
+    mutations,
+    selection,
+    setMoveCopyError,
+    setMoveCopyDialog,
+  } = context;
+  const { documentList, showFeedback } = mutations;
+  if (moveCopyBatch.isRunning) return;
+
+  const itemCount = documentsToProcess.length + foldersToProcess.length;
+  if (itemCount === 0) return;
+
+  // Validation and failures render inside the destination dialog, which
+  // stays open until the batch succeeds.
+  const destinationError = getMoveCopyDestinationError({
+    mode,
+    allFolders,
+    documentsToProcess,
+    foldersToProcess,
+    destinationFolderId,
+  });
+  if (destinationError) {
+    setMoveCopyError(destinationError);
+    return;
+  }
+
+  const topLevelFoldersToProcess = getTopLevelSelectedFolders(foldersToProcess, allFolders);
+  const actionLabel = mode === 'copy' ? 'kopiert' : 'verschoben';
+  setMoveCopyError(null);
+
+  const { failures, succeededIds } = await runTrackedMoveCopySteps(
+    moveCopyBatch,
+    buildMoveCopySteps({
+      mode,
+      documentsToProcess,
+      topLevelFoldersToProcess,
+      destinationFolderId,
+    }),
+  );
+
+  if (failures > 0) {
+    const failedItemLabel = failures === 1 ? '1 Eintrag' : `${failures} Einträge`;
+    setMoveCopyError(
+      `${failedItemLabel} ${failures === 1 ? 'konnte' : 'konnten'} nicht ${actionLabel} werden.`,
+    );
+    // The steps that went through are persisted: a retry must not copy them twice.
+    // A failed top-level folder carries its selected subfolders along.
+    setMoveCopyDialog((current) =>
+      current
+        ? {
+            ...current,
+            documents: documentsToProcess.filter((document) => !succeededIds.has(document.id)),
+            folders: topLevelFoldersToProcess.filter((folder) => !succeededIds.has(folder.id)),
+          }
+        : current,
+    );
+    return;
+  }
+
+  // Moved documents leave the current folder before the refresh lands.
+  if (mode === 'move' && visibleView === 'folders') {
+    for (const document of documentsToProcess) {
+      documentList.remove(document.id);
+    }
+  }
+  onSuccess();
+  selection.clearSelection();
+  showFeedback(
+    'success',
+    itemCount === 1 ? `1 Eintrag wurde ${actionLabel}.` : `${itemCount} Einträge wurden ${actionLabel}.`,
+  );
+}
+
 export type DocumentMoveCopy = ReturnType<typeof useDocumentMoveCopy>;
 
 /**
@@ -134,159 +300,52 @@ export function useDocumentMoveCopy({
   mutations: DocumentLibraryMutations;
   selection: DocumentLibrarySelection;
 }) {
-  const { documentList, showFeedback } = mutations;
   const { selectedDocuments, selectedFolders, selectedItemCount } = selection;
   const moveCopyBatch = useBatchProgress<BulkStep>();
   const [moveCopyError, setMoveCopyError] = useState<string | null>(null);
   const [moveCopyDialog, setMoveCopyDialog] = useState<MoveCopyDialogState>(null);
 
-  async function runMoveCopyOperation({
-    mode,
-    documentsToProcess,
-    foldersToProcess,
-    destinationFolderId,
-    onSuccess,
-  }: {
-    mode: MoveCopyMode;
-    documentsToProcess: OrganizationDocument[];
-    foldersToProcess: DocumentFolder[];
-    destinationFolderId: string | null;
-    onSuccess: () => void;
-  }) {
-    if (moveCopyBatch.isRunning) return;
-
-    const itemCount = documentsToProcess.length + foldersToProcess.length;
-    if (itemCount === 0) return;
-
-    // Validation and failures render inside the destination dialog, which
-    // stays open until the batch succeeds.
-    const destinationError = getMoveCopyDestinationError({
-      mode,
-      allFolders,
-      documentsToProcess,
-      foldersToProcess,
-      destinationFolderId,
-    });
-    if (destinationError) {
-      setMoveCopyError(destinationError);
-      return;
-    }
-
-    const topLevelFoldersToProcess = getTopLevelSelectedFolders(foldersToProcess, allFolders);
-    const actionLabel = mode === 'copy' ? 'kopiert' : 'verschoben';
-    setMoveCopyError(null);
-
-    const succeededIds = new Set<string>();
-    const steps = buildMoveCopySteps({
-      mode,
-      documentsToProcess,
-      topLevelFoldersToProcess,
-      destinationFolderId,
-    }).map(({ id, item }) => ({
-      id,
-      item: async () => {
-        const result = await item();
-        if (result.success) succeededIds.add(id);
-        return result;
-      },
-    }));
-
-    const { failures } = await moveCopyBatch.start(steps, async (perform) => {
-      const result = await perform();
-      if (!result.success) throw new Error('bulk_step_failed');
-    });
-
-    if (failures > 0) {
-      const failedItemLabel = failures === 1 ? '1 Eintrag' : `${failures} Einträge`;
-      setMoveCopyError(
-        `${failedItemLabel} ${failures === 1 ? 'konnte' : 'konnten'} nicht ${actionLabel} werden.`,
-      );
-      // The steps that went through are persisted: a retry must not copy them twice.
-      // A failed top-level folder carries its selected subfolders along.
-      setMoveCopyDialog((current) =>
-        current
-          ? {
-              ...current,
-              documents: documentsToProcess.filter((document) => !succeededIds.has(document.id)),
-              folders: topLevelFoldersToProcess.filter((folder) => !succeededIds.has(folder.id)),
-            }
-          : current,
-      );
-      return;
-    }
-
-    // Moved documents leave the current folder before the refresh lands.
-    if (mode === 'move' && visibleView === 'folders') {
-      for (const document of documentsToProcess) {
-        documentList.remove(document.id);
-      }
-    }
-    onSuccess();
-    selection.clearSelection();
-    showFeedback(
-      'success',
-      itemCount === 1 ? `1 Eintrag wurde ${actionLabel}.` : `${itemCount} Einträge wurden ${actionLabel}.`,
-    );
-  }
-
   function openMoveCopyDialog(item: DocumentMoveCopyItem, mode: MoveCopyMode) {
     if (isTrashView) return;
 
-    const shouldUseCurrentSelection =
-      item.kind === 'document'
-        ? selectedDocuments.some((document) => document.id === item.document.id)
-        : selectedFolders.some((folder) => folder.id === item.folder.id);
-    const documentsToUse = shouldUseCurrentSelection
-      ? selectedDocuments
-      : item.kind === 'document'
-        ? [item.document]
-        : [];
-    const foldersToUse = shouldUseCurrentSelection
-      ? selectedFolders
-      : item.kind === 'folder'
-        ? [item.folder]
-        : [];
-
-    setMoveCopyDialog({
-      mode,
-      documents: documentsToUse,
-      folders: foldersToUse,
-      sourceFolderId: getSharedSourceFolderId({
-        documentsToCheck: documentsToUse,
-        foldersToCheck: foldersToUse,
-        fallbackFolderId: currentFolderId,
+    setMoveCopyDialog(
+      moveCopyDialogFor({
+        mode,
+        ...moveCopyItemsFor(item, selectedDocuments, selectedFolders),
+        currentFolderId,
       }),
-    });
+    );
   }
 
   function openMoveCopyDialogForSelection(mode: MoveCopyMode) {
     if (isTrashView || selectedItemCount === 0) return;
 
-    setMoveCopyDialog({
-      mode,
-      documents: selectedDocuments,
-      folders: selectedFolders,
-      sourceFolderId: getSharedSourceFolderId({
-        documentsToCheck: selectedDocuments,
-        foldersToCheck: selectedFolders,
-        fallbackFolderId: currentFolderId,
+    setMoveCopyDialog(
+      moveCopyDialogFor({
+        mode,
+        documents: selectedDocuments,
+        folders: selectedFolders,
+        currentFolderId,
       }),
-    });
+    );
   }
 
   function handleMoveCopyConfirm(destinationFolderId: string | null) {
     if (!moveCopyDialog) return;
 
-    void runMoveCopyOperation({
-      mode: moveCopyDialog.mode,
-      documentsToProcess: moveCopyDialog.documents,
-      foldersToProcess: moveCopyDialog.folders,
-      destinationFolderId,
-      onSuccess: () => {
-        setMoveCopyDialog(null);
-        moveCopyBatch.reset();
+    void runMoveCopyOperation(
+      { moveCopyBatch, allFolders, visibleView, mutations, selection, setMoveCopyError, setMoveCopyDialog },
+      {
+        mode: moveCopyDialog.mode,
+        documentsToProcess: moveCopyDialog.documents,
+        foldersToProcess: moveCopyDialog.folders,
+        destinationFolderId,
+        onSuccess: () => {
+          setMoveCopyDialog(null);
+          moveCopyBatch.reset();
+        },
       },
-    });
+    );
   }
 
   function handleMoveCopyOpenChange(open: boolean) {

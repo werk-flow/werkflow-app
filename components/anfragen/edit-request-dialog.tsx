@@ -13,19 +13,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Field } from '@/components/ui/field';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateTimeField } from '@/components/ui/date-time-field';
 import { ErrorText } from '@/components/ui/error-text';
-import {
-  REQUEST_CATEGORY_LABELS,
-  REQUEST_CATEGORY_ORDER,
-  REQUEST_URGENCY_LABELS,
-  REQUEST_URGENCY_ORDER,
-  type ClientRequest,
-  type RequestCategory,
-  type RequestUrgency,
-} from '@/lib/requests/types';
+import type { ClientRequest } from '@/lib/requests/types';
 import { EditRequestCallerFields } from './edit-request-caller-fields';
+import { RequestTriageFields } from './request-triage-fields';
 import { EditRequestRoutingFields } from './edit-request-routing-fields';
 import { useEditRequestForm } from './use-edit-request-form';
 
@@ -46,23 +37,7 @@ export function EditRequestDialog({
   onSaved,
 }: EditRequestDialogProps) {
   const form = useEditRequestForm({ request, open, onOpenChange, onSaved });
-  const {
-    summary,
-    setSummary,
-    details,
-    setDetails,
-    category,
-    setCategory,
-    urgency,
-    setUrgency,
-    receivedAt,
-    setReceivedAt,
-    isLoading,
-    summaryError,
-    receivedAtError,
-    formError,
-    handleSubmit,
-  } = form;
+  const { summary, setSummary, details, setDetails, isLoading, summaryError, formError, handleSubmit } = form;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isLoading}>
@@ -77,56 +52,7 @@ export function EditRequestDialog({
               <Input value={summary} onChange={(e) => setSummary(e.target.value)} disabled={isLoading} />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Kategorie" htmlFor="edit-request-category">
-                <Select
-                  value={category}
-                  onValueChange={(value) => setCategory(value as RequestCategory)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_CATEGORY_ORDER.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {REQUEST_CATEGORY_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Dringlichkeit" htmlFor="edit-request-urgency">
-                <Select
-                  value={urgency}
-                  onValueChange={(value) => setUrgency(value as RequestUrgency)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {REQUEST_URGENCY_ORDER.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {REQUEST_URGENCY_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-
-            <Field label="Eingangszeit" htmlFor="edit-request-received-at-date" error={receivedAtError}>
-              <DateTimeField
-                idPrefix="edit-request-received-at"
-                value={receivedAt}
-                onChange={setReceivedAt}
-                disabled={isLoading}
-                dateAriaLabel="Eingangsdatum"
-                invalid={receivedAtError !== null}
-                describedById={receivedAtError ? 'edit-request-received-at-date-error' : undefined}
-              />
-            </Field>
+            <RequestTriageFields idPrefix="edit-request" form={form} />
 
             <Field label="Details" htmlFor="edit-request-details">
               <Textarea value={details} onChange={(e) => setDetails(e.target.value)} disabled={isLoading} />

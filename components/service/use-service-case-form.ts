@@ -13,6 +13,7 @@ import type {
   ServiceCaseCreateInput,
   ServiceCaseDetail,
   ServiceCaseListItem,
+  ServiceCaseUpdateInput,
 } from '@/lib/service-cases/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import {
@@ -63,72 +64,68 @@ export type ServiceCaseFormController = {
   submit: () => void;
 };
 
-/** Form state, the chosen customer's options and the create/update submit of the service case dialog. */
-export function useServiceCaseForm({
-  onOpenChange,
-  preloadedClient,
-  initial,
-  onSubmitted,
-  onSaved,
-}: UseServiceCaseFormOptions): ServiceCaseFormController {
-  const router = useRouter();
-  const [form, setForm] = useState<ServiceCaseFormState>(() =>
-    initial ? fromDetail(initial) : EMPTY_SERVICE_CASE_FORM,
+function serviceCaseCreateInput(form: ServiceCaseFormState, serviceCaseId: string): ServiceCaseCreateInput {
+  return {
+    serviceCaseId,
+    idempotencyKey: crypto.randomUUID(),
+    clientId: form.clientId,
+    siteId: form.siteId,
+    contactId: form.contactId || null,
+    originalStatement: form.originalStatement,
+    originalDetails: form.originalDetails,
+    summary: form.summary,
+    urgency: form.urgency,
+    chargeContext: form.chargeContext,
+    accessInstructions: form.accessInstructions,
+    triageNote: form.triageNote,
+    equipmentIds: form.equipmentIds,
+  };
+}
+
+function serviceCaseUpdateInput(
+  initial: ServiceCaseDetail,
+  form: ServiceCaseFormState,
+): ServiceCaseUpdateInput {
+  return {
+    serviceCaseId: initial.id,
+    expectedVersion: initial.version,
+    summary: form.summary,
+    urgency: form.urgency,
+    status: form.status,
+    chargeContext: form.chargeContext,
+    accessInstructions: form.accessInstructions,
+    triageNote: form.triageNote,
+    resolutionNote: form.resolutionNote,
+    jobId: form.jobId || null,
+    equipmentIds: form.equipmentIds,
+    reason: form.reason,
+    idempotencyKey: crypto.randomUUID(),
+  };
+}
+
+/** The create's outcome for the caller's banner; it never rejects. */
+function serviceCaseSubmissionResult(
+  created: ReturnType<typeof createServiceCase>,
+): ServiceCaseCreateSubmission['result'] {
+  return created.then(
+    (outcome) =>
+      outcome.success
+        ? { success: true as const }
+        : {
+            success: false as const,
+            error: outcome.error,
+            message: describeFailure(outcome.error, SERVICE_CASE_ERRORS, GENERIC_SERVICE_CASE_ERROR),
+          },
+    () => ({ success: false as const, error: 'unexpected_error', message: GENERIC_SERVICE_CASE_ERROR }),
   );
-  const [error, setError] = useState<string | null>(null);
-  const [attempted, setAttempted] = useState(false);
-  function createInput(serviceCaseId: string): ServiceCaseCreateInput {
-    return {
-      serviceCaseId,
-      idempotencyKey: crypto.randomUUID(),
-      clientId: form.clientId,
-      siteId: form.siteId,
-      contactId: form.contactId || null,
-      originalStatement: form.originalStatement,
-      originalDetails: form.originalDetails,
-      summary: form.summary,
-      urgency: form.urgency,
-      chargeContext: form.chargeContext,
-      accessInstructions: form.accessInstructions,
-      triageNote: form.triageNote,
-      equipmentIds: form.equipmentIds,
-    };
-  }
-  const { run, isPending } = useServerAction(async () => {
-    const result = initial
-      ? await updateServiceCase({
-          serviceCaseId: initial.id,
-          expectedVersion: initial.version,
-          summary: form.summary,
-          urgency: form.urgency,
-          status: form.status,
-          chargeContext: form.chargeContext,
-          accessInstructions: form.accessInstructions,
-          triageNote: form.triageNote,
-          resolutionNote: form.resolutionNote,
-          jobId: form.jobId || null,
-          equipmentIds: form.equipmentIds,
-          reason: form.reason,
-          idempotencyKey: crypto.randomUUID(),
-        })
-      : await createServiceCase(createInput(crypto.randomUUID()));
-    if (!result.success) {
-      setError(describeFailure(result.error, SERVICE_CASE_ERRORS, GENERIC_SERVICE_CASE_ERROR));
-      return;
-    }
-    onOpenChange(false);
-    // Without a caller's live read, the action's response renders the route.
-    if (!initial) {
-      router.push(`/service/faelle/${result.serviceCase.case_number}`);
-    } else if (onSaved) {
-      onSaved();
-    }
-  });
-  // Sites, contacts and equipment of the chosen customer only.
-  const clientOption = useClientOption(form.clientId, preloadedClient);
-  const client = clientOption.client;
-  const site = client?.sites.find((item) => item.id === form.siteId);
-  const jobSearch = useJobEntityOptions(
+}
+
+/** The server search of the customer's jobs at the case's site; a case under edit keeps its job's label. */
+function useServiceCaseJobSearch(
+  form: ServiceCaseFormState,
+  initial: ServiceCaseDetail | undefined,
+): JobEntityOptionsState {
+  return useJobEntityOptions(
     {
       kind: 'jobs',
       purpose: 'equipment-work',
@@ -146,6 +143,43 @@ export function useServiceCaseForm({
         ]
       : undefined,
   );
+}
+
+/** Form state, the chosen customer's options and the create/update submit of the service case dialog. */
+export function useServiceCaseForm({
+  onOpenChange,
+  preloadedClient,
+  initial,
+  onSubmitted,
+  onSaved,
+}: UseServiceCaseFormOptions): ServiceCaseFormController {
+  const router = useRouter();
+  const [form, setForm] = useState<ServiceCaseFormState>(() =>
+    initial ? fromDetail(initial) : EMPTY_SERVICE_CASE_FORM,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [attempted, setAttempted] = useState(false);
+  const { run, isPending } = useServerAction(async () => {
+    const result = initial
+      ? await updateServiceCase(serviceCaseUpdateInput(initial, form))
+      : await createServiceCase(serviceCaseCreateInput(form, crypto.randomUUID()));
+    if (!result.success) {
+      setError(describeFailure(result.error, SERVICE_CASE_ERRORS, GENERIC_SERVICE_CASE_ERROR));
+      return;
+    }
+    onOpenChange(false);
+    // Without a caller's live read, the action's response renders the route.
+    if (!initial) {
+      router.push(`/service/faelle/${result.serviceCase.case_number}`);
+    } else if (onSaved) {
+      onSaved();
+    }
+  });
+  // Sites, contacts and equipment of the chosen customer only.
+  const clientOption = useClientOption(form.clientId, preloadedClient);
+  const client = clientOption.client;
+  const site = client?.sites.find((item) => item.id === form.siteId);
+  const jobSearch = useServiceCaseJobSearch(form, initial);
   const terminal = ['resolved', 'closed_without_visit', 'duplicate'].includes(form.status);
   const missingFields = missingServiceCaseFields(form, Boolean(initial), terminal);
   const fieldErrors = attempted ? missingFields : {};
@@ -168,17 +202,7 @@ export function useServiceCaseForm({
           clientName: client?.name ?? '',
           siteName: site?.name ?? '',
         },
-        result: createServiceCase(createInput(serviceCaseId)).then(
-          (created) =>
-            created.success
-              ? { success: true as const }
-              : {
-                  success: false as const,
-                  error: created.error,
-                  message: describeFailure(created.error, SERVICE_CASE_ERRORS, GENERIC_SERVICE_CASE_ERROR),
-                },
-          () => ({ success: false as const, error: 'unexpected_error', message: GENERIC_SERVICE_CASE_ERROR }),
-        ),
+        result: serviceCaseSubmissionResult(createServiceCase(serviceCaseCreateInput(form, serviceCaseId))),
       });
       onOpenChange(false);
       return;

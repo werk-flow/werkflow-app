@@ -50,6 +50,112 @@ function initialDueAt(): string {
   return tomorrowMorningInBerlin();
 }
 
+/** Field errors keyed by control id in visual order; shown after the first submit attempt. */
+function followUpDraftErrors(followUpDraft: FollowUpDraft | null) {
+  return {
+    'follow-up-title':
+      followUpDraft && !followUpDraft.title.trim() ? 'Bitte gib einen Titel ein.' : undefined,
+    'follow-up-owner':
+      followUpDraft && !followUpDraft.ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined,
+    'follow-up-due-date':
+      followUpDraft && !parseBerlinDateTimeInput(followUpDraft.dueAt)
+        ? 'Bitte gib eine Fälligkeit an.'
+        : undefined,
+  };
+}
+
+/** A blank draft owned by the caller when they may own follow-ups, else by the first owner. */
+function newFollowUpDraft(
+  followUpOwners: CustomerRelationshipBundle['followUpOwners'],
+  currentUserId: string,
+  source: FollowUpSource | undefined,
+): FollowUpDraft {
+  const defaultOwner = followUpOwners.find((owner) => owner.userId === currentUserId) ?? followUpOwners[0];
+  return {
+    id: null,
+    title: '',
+    note: '',
+    ownerUserId: defaultOwner?.userId ?? '',
+    dueAt: initialDueAt(),
+    sourceType: source?.type ?? null,
+    sourceId: source?.id ?? null,
+    sourceLabel: source?.label ?? null,
+  };
+}
+
+function existingFollowUpDraft(followUp: ClientFollowUp): FollowUpDraft {
+  return {
+    id: followUp.id,
+    title: followUp.title,
+    note: followUp.note ?? '',
+    ownerUserId: followUp.ownerUserId,
+    dueAt: toDateTimeInput(followUp.dueAt),
+    sourceType: followUp.sourceType,
+    sourceId: followUp.sourceId,
+    sourceLabel: followUp.sourceLabel,
+  };
+}
+
+function followUpInputFromDraft(followUpDraft: FollowUpDraft, dueDate: Date): FollowUpInput {
+  return {
+    title: followUpDraft.title,
+    note: followUpDraft.note,
+    ownerUserId: followUpDraft.ownerUserId,
+    dueAt: dueDate.toISOString(),
+    sourceType: followUpDraft.sourceType ?? undefined,
+    sourceId: followUpDraft.sourceId ?? undefined,
+  };
+}
+
+/** The open follow-ups and the completed or cancelled ones, each memoized on the bundle's list. */
+function useSplitFollowUps(followUps: ClientFollowUp[]) {
+  const openFollowUps = useMemo(
+    () => followUps.filter((followUp) => followUp.status === 'open'),
+    [followUps],
+  );
+  const historicFollowUps = useMemo(
+    () => followUps.filter((followUp) => followUp.status !== 'open'),
+    [followUps],
+  );
+  return { openFollowUps, historicFollowUps };
+}
+
+/** Completes or cancels one follow-up while its row shows busy, then waits for the fresh bundle. */
+function runFollowUpTransition(
+  {
+    clientId,
+    runRowTask,
+    waitForBundle,
+    showBanner,
+    router,
+  }: {
+    clientId: string;
+    runRowTask: (id: string, task: () => Promise<void>) => Promise<void>;
+    waitForBundle: () => Promise<void>;
+    showBanner: ReturnType<typeof useBanner>['showBanner'];
+    router: ReturnType<typeof useRouter>;
+  },
+  followUp: ClientFollowUp,
+  status: 'completed' | 'cancelled',
+): void {
+  void runRowTask(followUp.id, async () => {
+    const result = await transitionCustomerFollowUp(clientId, followUp.id, status);
+    if (!result.success) {
+      showBanner({
+        variant: 'error',
+        message: 'Die Nachfassaktion konnte nicht aktualisiert werden.',
+      });
+      return;
+    }
+    showBanner({
+      variant: 'success',
+      message: status === 'completed' ? 'Nachfassaktion erledigt.' : 'Nachfassaktion abgebrochen.',
+    });
+    router.refresh();
+    await waitForBundle();
+  });
+}
+
 interface FollowUpEditorState {
   openFollowUps: ClientFollowUp[];
   historicFollowUps: ClientFollowUp[];
@@ -86,57 +192,20 @@ export function useFollowUpEditor({
   const [followUpDraft, setFollowUpDraft] = useState<FollowUpDraft | null>(null);
   const [followUpError, setFollowUpError] = useState<string | null>(null);
   const [followUpAttempted, setFollowUpAttempted] = useState(false);
-  // Keyed by control id in visual order; shown after the first submit attempt.
-  const followUpErrors = {
-    'follow-up-title':
-      followUpDraft && !followUpDraft.title.trim() ? 'Bitte gib einen Titel ein.' : undefined,
-    'follow-up-owner':
-      followUpDraft && !followUpDraft.ownerUserId ? 'Bitte wähle eine zuständige Person.' : undefined,
-    'follow-up-due-date':
-      followUpDraft && !parseBerlinDateTimeInput(followUpDraft.dueAt)
-        ? 'Bitte gib eine Fälligkeit an.'
-        : undefined,
-  };
+  const followUpErrors = followUpDraftErrors(followUpDraft);
   const followUpTitleError = followUpAttempted ? followUpErrors['follow-up-title'] : undefined;
   const followUpOwnerError = followUpAttempted ? followUpErrors['follow-up-owner'] : undefined;
   const followUpDueError = followUpAttempted ? followUpErrors['follow-up-due-date'] : undefined;
   const { showBanner } = useBanner();
 
-  const openFollowUps = useMemo(
-    () => bundle.followUps.filter((followUp) => followUp.status === 'open'),
-    [bundle.followUps],
-  );
-  const historicFollowUps = useMemo(
-    () => bundle.followUps.filter((followUp) => followUp.status !== 'open'),
-    [bundle.followUps],
-  );
+  const { openFollowUps, historicFollowUps } = useSplitFollowUps(bundle.followUps);
 
   function openNewFollowUp(source?: FollowUpSource): void {
-    const defaultOwner =
-      bundle.followUpOwners.find((owner) => owner.userId === currentUserId) ?? bundle.followUpOwners[0];
-    setFollowUpDraft({
-      id: null,
-      title: '',
-      note: '',
-      ownerUserId: defaultOwner?.userId ?? '',
-      dueAt: initialDueAt(),
-      sourceType: source?.type ?? null,
-      sourceId: source?.id ?? null,
-      sourceLabel: source?.label ?? null,
-    });
+    setFollowUpDraft(newFollowUpDraft(bundle.followUpOwners, currentUserId, source));
   }
 
   function openExistingFollowUp(followUp: ClientFollowUp): void {
-    setFollowUpDraft({
-      id: followUp.id,
-      title: followUp.title,
-      note: followUp.note ?? '',
-      ownerUserId: followUp.ownerUserId,
-      dueAt: toDateTimeInput(followUp.dueAt),
-      sourceType: followUp.sourceType,
-      sourceId: followUp.sourceId,
-      sourceLabel: followUp.sourceLabel,
-    });
+    setFollowUpDraft(existingFollowUpDraft(followUp));
   }
 
   function closeFollowUpDialog(): void {
@@ -151,14 +220,7 @@ export function useFollowUpEditor({
     setFollowUpAttempted(true);
     const dueDate = parseBerlinDateTimeInput(followUpDraft.dueAt);
     if (focusFirstInvalidField(followUpErrors) || !dueDate) return;
-    const input: FollowUpInput = {
-      title: followUpDraft.title,
-      note: followUpDraft.note,
-      ownerUserId: followUpDraft.ownerUserId,
-      dueAt: dueDate.toISOString(),
-      sourceType: followUpDraft.sourceType ?? undefined,
-      sourceId: followUpDraft.sourceId ?? undefined,
-    };
+    const input = followUpInputFromDraft(followUpDraft, dueDate);
     void runTask(async () => {
       const result = followUpDraft.id
         ? await updateCustomerFollowUp(clientId, followUpDraft.id, input)
@@ -175,22 +237,7 @@ export function useFollowUpEditor({
   }
 
   function transitionFollowUp(followUp: ClientFollowUp, status: 'completed' | 'cancelled'): void {
-    void runRowTask(followUp.id, async () => {
-      const result = await transitionCustomerFollowUp(clientId, followUp.id, status);
-      if (!result.success) {
-        showBanner({
-          variant: 'error',
-          message: 'Die Nachfassaktion konnte nicht aktualisiert werden.',
-        });
-        return;
-      }
-      showBanner({
-        variant: 'success',
-        message: status === 'completed' ? 'Nachfassaktion erledigt.' : 'Nachfassaktion abgebrochen.',
-      });
-      router.refresh();
-      await waitForBundle();
-    });
+    runFollowUpTransition({ clientId, runRowTask, waitForBundle, showBanner, router }, followUp, status);
   }
 
   return {

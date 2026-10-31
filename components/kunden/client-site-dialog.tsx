@@ -28,13 +28,12 @@ interface ClientSiteDialogProps {
   onSave: () => void;
 }
 
-function ClientSiteAddressFields({
-  siteDialog,
-  onSiteDialogChange,
-}: {
+interface ClientSiteFieldsProps {
   siteDialog: SiteDialogState;
   onSiteDialogChange: (next: SiteDialogState | null) => void;
-}) {
+}
+
+function ClientSiteAddressFields({ siteDialog, onSiteDialogChange }: ClientSiteFieldsProps) {
   return (
     <>
       <Field label="Straße und Hausnummer" htmlFor="site-street">
@@ -76,6 +75,76 @@ function ClientSiteAddressFields({
           />
         </Field>
       </div>
+    </>
+  );
+}
+
+function ClientSiteContactField({
+  siteDialog,
+  contacts,
+  onSiteDialogChange,
+}: ClientSiteFieldsProps & { contacts: ClientContact[] }) {
+  return (
+    <Field label="Ansprechpartner vor Ort" htmlFor="site-primary-contact">
+      <SearchableSelect
+        options={contacts
+          // Archived contacts stay visible only while they are the
+          // current selection, so editing never silently drops them.
+          .filter((contact) => contact.isActive || contact.id === siteDialog.draft.primaryContactId)
+          .map((contact) => ({
+            value: contact.id,
+            label: `${contact.name}${contact.role ? ` (${contact.role})` : ''}${!contact.isActive ? ' · archiviert' : ''}`,
+          }))}
+        value={siteDialog.draft.primaryContactId ?? ''}
+        onChange={(value) =>
+          onSiteDialogChange({
+            ...siteDialog,
+            draft: {
+              ...siteDialog.draft,
+              primaryContactId: value || null,
+            },
+          })
+        }
+        placeholder="Nicht festgelegt"
+        searchPlaceholder="Ansprechpartner suchen…"
+        emptyMessage="Kein Ansprechpartner gefunden"
+        allowNone
+        noneLabel="Nicht festgelegt"
+      />
+    </Field>
+  );
+}
+
+/** Notes and the primary flag of the open site draft. */
+function ClientSiteNotesFields({ siteDialog, onSiteDialogChange }: ClientSiteFieldsProps) {
+  return (
+    <>
+      <Field label="Notizen" htmlFor="site-notes">
+        <Textarea
+          value={siteDialog.draft.notes ?? ''}
+          onChange={(e) =>
+            onSiteDialogChange({
+              ...siteDialog,
+              draft: { ...siteDialog.draft, notes: e.target.value },
+            })
+          }
+        />
+      </Field>
+      <label className="flex items-center gap-2 text-sm">
+        <Checkbox
+          checked={siteDialog.draft.isPrimary ?? false}
+          onCheckedChange={(checked) =>
+            onSiteDialogChange({
+              ...siteDialog,
+              draft: {
+                ...siteDialog.draft,
+                isPrimary: checked === true,
+              },
+            })
+          }
+        />
+        Als Hauptstandort festlegen
+      </label>
     </>
   );
 }
@@ -135,59 +204,12 @@ export function ClientSiteDialog({
                   placeholder="z. B. Schlüssel bei Hausmeister, Parken im Hof"
                 />
               </Field>
-              <Field label="Ansprechpartner vor Ort" htmlFor="site-primary-contact">
-                <SearchableSelect
-                  options={contacts
-                    // Archived contacts stay visible only while they are the
-                    // current selection, so editing never silently drops them.
-                    .filter((contact) => contact.isActive || contact.id === siteDialog.draft.primaryContactId)
-                    .map((contact) => ({
-                      value: contact.id,
-                      label: `${contact.name}${contact.role ? ` (${contact.role})` : ''}${!contact.isActive ? ' · archiviert' : ''}`,
-                    }))}
-                  value={siteDialog.draft.primaryContactId ?? ''}
-                  onChange={(value) =>
-                    onSiteDialogChange({
-                      ...siteDialog,
-                      draft: {
-                        ...siteDialog.draft,
-                        primaryContactId: value || null,
-                      },
-                    })
-                  }
-                  placeholder="Nicht festgelegt"
-                  searchPlaceholder="Ansprechpartner suchen…"
-                  emptyMessage="Kein Ansprechpartner gefunden"
-                  allowNone
-                  noneLabel="Nicht festgelegt"
-                />
-              </Field>
-              <Field label="Notizen" htmlFor="site-notes">
-                <Textarea
-                  value={siteDialog.draft.notes ?? ''}
-                  onChange={(e) =>
-                    onSiteDialogChange({
-                      ...siteDialog,
-                      draft: { ...siteDialog.draft, notes: e.target.value },
-                    })
-                  }
-                />
-              </Field>
-              <label className="flex items-center gap-2 text-sm">
-                <Checkbox
-                  checked={siteDialog.draft.isPrimary ?? false}
-                  onCheckedChange={(checked) =>
-                    onSiteDialogChange({
-                      ...siteDialog,
-                      draft: {
-                        ...siteDialog.draft,
-                        isPrimary: checked === true,
-                      },
-                    })
-                  }
-                />
-                Als Hauptstandort festlegen
-              </label>
+              <ClientSiteContactField
+                siteDialog={siteDialog}
+                contacts={contacts}
+                onSiteDialogChange={onSiteDialogChange}
+              />
+              <ClientSiteNotesFields siteDialog={siteDialog} onSiteDialogChange={onSiteDialogChange} />
               <ErrorText>{siteDialog.error}</ErrorText>
             </DialogBody>
             <DialogFooter>
