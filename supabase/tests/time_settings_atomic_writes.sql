@@ -159,12 +159,17 @@ begin
         and entry_type = 'break_end' and status = 'approved' and not is_manual and job_id is null
         and timestamp = now()) <> 1
   then raise exception 'a clean save did not end the open break'; end if;
+  -- The completed day's rows stay as they were, and the one break end above is the only new row.
   if exists (
     select entry from pg_temp.completed_day
     except
     select to_jsonb(entry) from public.time_entries entry
     where organization_id = '26104154-0000-0000-0000-000000000010'
-  ) then raise exception 'a saved break rule rewrote a completed day'; end if;
+  ) or (
+    select count(*) from public.time_entries
+    where organization_id = '26104154-0000-0000-0000-000000000010'
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
+  ) <> 1 then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
   -- second save from the same empty snapshot refuses instead of overwriting.
