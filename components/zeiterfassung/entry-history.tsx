@@ -351,6 +351,8 @@ function EntryHistoryResults(props: EntryHistoryRowsProps) {
 type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
   hasRange: boolean;
   view: LiveViewState<EntryHistoryData>;
+  /** The last read failed: the rows stay, marked stale and inert below its retry. */
+  isStale: boolean;
   members: MemberListEntry[];
 };
 
@@ -358,6 +360,7 @@ type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
 function EntryHistoryRegion({
   hasRange,
   view,
+  isStale,
   members,
   settling,
   hydrated,
@@ -382,7 +385,7 @@ function EntryHistoryRegion({
   ) : view.data === undefined ? (
     loadError
   ) : (
-    <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-4">
+    <StaleRegion stale={isStale} onRetry={view.refresh} className="space-y-4">
       {entries.length === 0 ? (
         <EmptyState
           icon={Clock}
@@ -465,6 +468,7 @@ export function EntryHistory({
       <EntryHistoryRegion
         hasRange={hasRange}
         view={view}
+        isStale={view.isStale}
         members={members}
         settling={settling}
         hydrated={hydrated}
