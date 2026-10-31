@@ -70,8 +70,6 @@
   "components/mitarbeiter/sickness-report-record-dialog.tsx": 1,
   "components/mitarbeiter/use-work-schedule-form.ts": 2,
   "components/otp-form.tsx": 1,
-  "components/service/equipment-form-dialog.tsx": 1,
-  "components/service/equipment-list-content.tsx": 1,
   "components/service/maintenance-due-action-dialog.tsx": 2,
   "components/service/maintenance-plan-form-sections.tsx": 2,
   "components/service/service-case-detail-dialogs.tsx": 1,

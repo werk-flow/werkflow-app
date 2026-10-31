@@ -382,14 +382,6 @@
       "RealtimeProvider": 125,
       "RealtimeProvider > useEffect#1": 118
     },
-    "components/service/equipment-detail-content.tsx": {
-      "EquipmentStateForm": 84,
-      "EquipmentDetailContent": 123
-    },
-    "components/service/equipment-form-dialog.tsx": { "EquipmentClassificationFields": 107 },
-    "components/service/equipment-list-content.tsx": { "EquipmentTable": 90, "EquipmentListResults": 81 },
-    "components/service/equipment-source-dialog.tsx": { "EquipmentSourceDialog": 178 },
-    "components/service/equipment-work-link-dialog.tsx": { "EquipmentWorkLinkDialog": 122 },
     "components/service/maintenance-content.tsx": { "MaintenanceWorkspaceView": 183 },
     "components/service/maintenance-coverage-dialog.tsx": { "MaintenanceCoverageDialog": 151 },
     "components/service/maintenance-coverage-follow-up-dialog.tsx": {
