@@ -7,7 +7,6 @@ import {
   EQUIPMENT_STATES,
   EQUIPMENT_SUBTYPES,
   EQUIPMENT_SUBTYPES_BY_CATEGORY,
-  type EquipmentSubtype,
 } from './types';
 
 const trimmedNullableText = (maximum: number) => z.string().trim().max(maximum).optional().nullable();
@@ -51,7 +50,7 @@ export const equipmentFormSchema = z
     effectiveAt: z.string().datetime({ offset: true }).optional().nullable(),
   })
   .superRefine((input, context) => {
-    const validSubtypes = EQUIPMENT_SUBTYPES_BY_CATEGORY[input.category] as readonly EquipmentSubtype[];
+    const validSubtypes = EQUIPMENT_SUBTYPES_BY_CATEGORY[input.category];
     if (input.subtype && !validSubtypes.includes(input.subtype)) {
       context.addIssue({
         code: 'custom',

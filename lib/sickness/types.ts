@@ -22,7 +22,7 @@ type SicknessReportStatus = (typeof SICKNESS_REPORT_STATUSES)[number];
 // Neutral operational absence-type vocabulary.
 // These are labels for planning and paperwork, never legal categories, and no
 // field anywhere may invite diagnosis detail.
-const SICKNESS_ABSENCE_TYPES = ['krankheit', 'kind_krank', 'sonstige'] as const;
+export const SICKNESS_ABSENCE_TYPES = ['krankheit', 'kind_krank', 'sonstige'] as const;
 export type SicknessAbsenceType = (typeof SICKNESS_ABSENCE_TYPES)[number];
 
 const SICKNESS_EVIDENCE_STATUSES = ['not_required', 'pending', 'received'] as const;

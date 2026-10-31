@@ -126,20 +126,13 @@ function PayrollExportCard({
   );
 }
 
-export default async function TimePeriodDetailPage({ params }: { params: Promise<{ periodId: string }> }) {
-  const { periodId } = await params;
-  const [detailRead, access] = await Promise.all([getTimePeriodDetail(periodId), getTimeAccountAccess()]);
-  if (!detailRead.success)
-    return (
-      <div className="mx-auto w-full max-w-6xl space-y-6">
-        <LiveRouteRefresh tables={TIME_PERIOD_DETAIL_LIVE_TABLES} />
-        <RegionLoadError title="Die Periode konnte nicht geladen werden">
-          Monatswerte und Prüfhinweise sind gerade nicht erreichbar. Versuche es in einem Moment erneut.
-        </RegionLoadError>
-      </div>
-    );
-  const detail = detailRead.data;
-  if (!detail) notFound();
+// The close's blockers: open approvals, blocking findings, and running
+// sessions the calculation has no finding for yet.
+function periodCloseState(detail: TimePeriodDetail): {
+  unresolvedApprovalCount: number;
+  liveSessions: OpenPeriodSession[];
+  blockedCount: number;
+} {
   const unresolvedApprovalCount = detail.findings.filter(
     (finding) => finding.severity === 'approval_required' && finding.decision !== 'approved',
   ).length;
@@ -155,6 +148,134 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
   );
   const blockedCount =
     detail.findings.filter((finding) => finding.severity === 'close_blocked').length + liveSessions.length;
+  return { unresolvedApprovalCount, liveSessions, blockedCount };
+}
+
+function PeriodSummaryCards({
+  employeeCount,
+  unresolvedApprovalCount,
+  blockedCount,
+}: {
+  employeeCount: number;
+  unresolvedApprovalCount: number;
+  blockedCount: number;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      <Card className="gap-2 py-4">
+        <CardHeader className="px-4">
+          <CardTitle className="text-sm text-muted-foreground">Mitarbeitende</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 text-2xl font-semibold">{employeeCount}</CardContent>
+      </Card>
+      <Card className="gap-2 py-4">
+        <CardHeader className="px-4">
+          <CardTitle className="text-sm text-muted-foreground">Freigaben offen</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 text-2xl font-semibold">{unresolvedApprovalCount}</CardContent>
+      </Card>
+      <Card className="gap-2 py-4">
+        <CardHeader className="px-4">
+          <CardTitle className="text-sm text-muted-foreground">Abschluss blockiert</CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 text-2xl font-semibold">{blockedCount}</CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PeriodFindingsSection({
+  periodId,
+  findings,
+  liveSessions,
+}: {
+  periodId: string;
+  findings: TimePeriodDetail['findings'];
+  liveSessions: OpenPeriodSession[];
+}) {
+  return (
+    <section className="space-y-3">
+      <h3 className="font-semibold">Prüfhinweise</h3>
+      <div className="space-y-2">
+        {liveSessions.map((session) => (
+          <OpenSessionFinding key={session.employeeRecordId} session={session} />
+        ))}
+        {findings.length === 0 && liveSessions.length === 0 ? (
+          <EmptyState size="compact" title="Keine Prüfhinweise." />
+        ) : (
+          findings.map((finding) => (
+            <PeriodFindingRow key={finding.id} finding={finding} periodId={periodId} />
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Close or reopen the period, with what still blocks the close. */
+function PeriodCloseCard({
+  periodId,
+  detail,
+  isAdmin,
+  blockedCount,
+  unresolvedApprovalCount,
+}: {
+  periodId: string;
+  detail: Pick<TimePeriodDetail, 'period' | 'calculation'>;
+  isAdmin: boolean;
+  blockedCount: number;
+  unresolvedApprovalCount: number;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Periodenabschluss</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-3">
+        {detail.period.state !== 'closed' ? (
+          <TimePeriodCloseForm
+            periodId={periodId}
+            blocked={!detail.calculation || blockedCount > 0 || unresolvedApprovalCount > 0}
+          />
+        ) : null}
+        {detail.period.state === 'closed' && isAdmin ? <TimePeriodReopenForm periodId={periodId} /> : null}
+        {!detail.calculation ? (
+          <p className="text-sm text-muted-foreground">Die Periode muss zuerst vorbereitet werden.</p>
+        ) : null}
+        {detail.calculation && blockedCount > 0 ? (
+          <p className="text-sm text-destructive" role="status">
+            {blockedCount === 1
+              ? 'Ein blockierender Hinweis muss zuerst behoben werden.'
+              : `${blockedCount} blockierende Hinweise müssen zuerst behoben werden.`}
+          </p>
+        ) : null}
+        {detail.calculation && unresolvedApprovalCount > 0 ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {unresolvedApprovalCount === 1
+              ? 'Eine Freigabe ist noch offen.'
+              : `${unresolvedApprovalCount} Freigaben sind noch offen.`}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default async function TimePeriodDetailPage({ params }: { params: Promise<{ periodId: string }> }) {
+  const { periodId } = await params;
+  const [detailRead, access] = await Promise.all([getTimePeriodDetail(periodId), getTimeAccountAccess()]);
+  if (!detailRead.success)
+    return (
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <LiveRouteRefresh tables={TIME_PERIOD_DETAIL_LIVE_TABLES} />
+        <RegionLoadError title="Die Periode konnte nicht geladen werden">
+          Monatswerte und Prüfhinweise sind gerade nicht erreichbar. Versuche es in einem Moment erneut.
+        </RegionLoadError>
+      </div>
+    );
+  const detail = detailRead.data;
+  if (!detail) notFound();
+  const { unresolvedApprovalCount, liveSessions, blockedCount } = periodCloseState(detail);
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6">
       <LiveRouteRefresh tables={TIME_PERIOD_DETAIL_LIVE_TABLES} />
@@ -165,26 +286,11 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
         }`}
       />
 
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm text-muted-foreground">Mitarbeitende</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 text-2xl font-semibold">{detail.results.length}</CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm text-muted-foreground">Freigaben offen</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 text-2xl font-semibold">{unresolvedApprovalCount}</CardContent>
-        </Card>
-        <Card className="gap-2 py-4">
-          <CardHeader className="px-4">
-            <CardTitle className="text-sm text-muted-foreground">Abschluss blockiert</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 text-2xl font-semibold">{blockedCount}</CardContent>
-        </Card>
-      </div>
+      <PeriodSummaryCards
+        employeeCount={detail.results.length}
+        unresolvedApprovalCount={unresolvedApprovalCount}
+        blockedCount={blockedCount}
+      />
 
       <section className="space-y-3" aria-labelledby="time-period-results-title">
         <h3 id="time-period-results-title" className="font-semibold">
@@ -193,55 +299,15 @@ export default async function TimePeriodDetailPage({ params }: { params: Promise
         <TimePeriodResults results={detail.results} />
       </section>
 
-      <section className="space-y-3">
-        <h3 className="font-semibold">Prüfhinweise</h3>
-        <div className="space-y-2">
-          {liveSessions.map((session) => (
-            <OpenSessionFinding key={session.employeeRecordId} session={session} />
-          ))}
-          {detail.findings.length === 0 && liveSessions.length === 0 ? (
-            <EmptyState size="compact" title="Keine Prüfhinweise." />
-          ) : (
-            detail.findings.map((finding) => (
-              <PeriodFindingRow key={finding.id} finding={finding} periodId={periodId} />
-            ))
-          )}
-        </div>
-      </section>
+      <PeriodFindingsSection periodId={periodId} findings={detail.findings} liveSessions={liveSessions} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Periodenabschluss</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
-          {detail.period.state !== 'closed' ? (
-            <TimePeriodCloseForm
-              periodId={periodId}
-              blocked={!detail.calculation || blockedCount > 0 || unresolvedApprovalCount > 0}
-            />
-          ) : null}
-          {detail.period.state === 'closed' && access.isAdmin ? (
-            <TimePeriodReopenForm periodId={periodId} />
-          ) : null}
-          {!detail.calculation ? (
-            <p className="text-sm text-muted-foreground">Die Periode muss zuerst vorbereitet werden.</p>
-          ) : null}
-          {detail.calculation && blockedCount > 0 ? (
-            <p className="text-sm text-destructive" role="status">
-              {blockedCount === 1
-                ? 'Ein blockierender Hinweis muss zuerst behoben werden.'
-                : `${blockedCount} blockierende Hinweise müssen zuerst behoben werden.`}
-            </p>
-          ) : null}
-          {detail.calculation && unresolvedApprovalCount > 0 ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              {unresolvedApprovalCount === 1
-                ? 'Eine Freigabe ist noch offen.'
-                : `${unresolvedApprovalCount} Freigaben sind noch offen.`}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      <PeriodCloseCard
+        periodId={periodId}
+        detail={detail}
+        isAdmin={access.isAdmin}
+        blockedCount={blockedCount}
+        unresolvedApprovalCount={unresolvedApprovalCount}
+      />
 
       {access.canExportPayroll ? <PayrollExportCard periodId={periodId} detail={detail} /> : null}
     </div>

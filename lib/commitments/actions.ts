@@ -80,7 +80,7 @@ export async function recordCustomerCommitment(
           : 'update_failed',
     };
   }
-  return { success: true, commitmentId: data as string };
+  return { success: true, commitmentId: data };
 }
 
 export async function withdrawCustomerCommitment(

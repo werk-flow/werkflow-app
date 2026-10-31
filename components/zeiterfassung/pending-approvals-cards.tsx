@@ -81,6 +81,88 @@ function pendingSessionToWorkSession(session: PendingSession): WorkSession {
   };
 }
 
+/** The requester, the day, the clocked span and the job of a session request. */
+function SessionRequestSummary({ session, displayName }: { session: PendingSession; displayName: string }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2 flex-wrap">
+        <RequestTypeIcon />
+        <span className="font-medium">{displayName}</span>
+        <RequestTypeBadge type="session" />
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(session.date)}</p>
+      {session.clockIn && session.clockOut ? (
+        <p className="text-xs text-muted-foreground">
+          {formatBerlinTime(session.clockIn.timestamp)} – {formatBerlinTime(session.clockOut.timestamp)}
+          <span className="ml-2 text-muted-foreground">
+            ({formatDuration(clockedMinutes(session.clockIn.timestamp, session.clockOut.timestamp))})
+          </span>
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {session.clockIn
+            ? `Einstempeln: ${formatBerlinTime(session.clockIn.timestamp)}`
+            : session.clockOut && `Ausstempeln: ${formatBerlinTime(session.clockOut.timestamp)}`}
+        </p>
+      )}
+      {session.jobTitle && (
+        <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+          <Briefcase className="h-3 w-3 shrink-0" />
+          <span className="truncate" title={session.jobTitle}>
+            {session.jobTitle}
+          </span>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Edit, approve and reject a session request. */
+function SessionRequestActions({
+  onEdit,
+  onApprove,
+  onReject,
+}: {
+  onEdit: () => void;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="flex gap-2 shrink-0 ml-4">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onEdit}
+        title="Bearbeiten"
+        aria-label="Bearbeiten"
+        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onApprove}
+        title="Genehmigen - Eintrag bleibt erhalten"
+        aria-label="Genehmigen"
+        className="h-8 w-8 text-success-text hover:bg-success-soft"
+      >
+        <Check className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onReject}
+        title="Ablehnen - Eintrag wird entfernt"
+        aria-label="Ablehnen"
+        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
 // Card for session requests (new entry)
 export function SessionRequestCard({
   session,
@@ -116,69 +198,13 @@ export function SessionRequestCard({
     <>
       <Card className="py-0" data-testid={`pending-session-${session.id}`} data-user-id={session.userId}>
         <CardContent className="flex items-center justify-between p-4">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <RequestTypeIcon />
-              <span className="font-medium">{displayName}</span>
-              <RequestTypeBadge type="session" />
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(session.date)}</p>
-            {session.clockIn && session.clockOut ? (
-              <p className="text-xs text-muted-foreground">
-                {formatBerlinTime(session.clockIn.timestamp)} – {formatBerlinTime(session.clockOut.timestamp)}
-                <span className="ml-2 text-muted-foreground">
-                  ({formatDuration(clockedMinutes(session.clockIn.timestamp, session.clockOut.timestamp))})
-                </span>
-              </p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {session.clockIn
-                  ? `Einstempeln: ${formatBerlinTime(session.clockIn.timestamp)}`
-                  : session.clockOut && `Ausstempeln: ${formatBerlinTime(session.clockOut.timestamp)}`}
-              </p>
-            )}
-            {session.jobTitle && (
-              <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                <Briefcase className="h-3 w-3 shrink-0" />
-                <span className="truncate" title={session.jobTitle}>
-                  {session.jobTitle}
-                </span>
-              </p>
-            )}
-          </div>
+          <SessionRequestSummary session={session} displayName={displayName} />
 
-          <div className="flex gap-2 shrink-0 ml-4">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsEditDialogOpen(true)}
-              title="Bearbeiten"
-              aria-label="Bearbeiten"
-              className="h-8 w-8 text-muted-foreground hover:text-foreground"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onApprove}
-              title="Genehmigen - Eintrag bleibt erhalten"
-              aria-label="Genehmigen"
-              className="h-8 w-8 text-success-text hover:bg-success-soft"
-            >
-              <Check className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={onReject}
-              title="Ablehnen - Eintrag wird entfernt"
-              aria-label="Ablehnen"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <SessionRequestActions
+            onEdit={() => setIsEditDialogOpen(true)}
+            onApprove={onApprove}
+            onReject={onReject}
+          />
         </CardContent>
       </Card>
 
@@ -197,17 +223,13 @@ export function SessionRequestCard({
   );
 }
 
-// Card for change requests (edit/delete)
-export function ChangeRequestCard({
+/** The requester and what an edit or delete request changes. */
+function ChangeRequestSummary({
   request,
   type,
-  onApprove,
-  onReject,
 }: {
   request: ChangeRequestWithDetails;
   type: 'edit' | 'delete';
-  onApprove: () => void;
-  onReject: () => void;
 }) {
   const displayName =
     request.requesterFirstName || request.requesterLastName
@@ -227,87 +249,117 @@ export function ChangeRequestCard({
   const dateStr = isPairedDelete && clockInEntry ? toLocalDateString(new Date(clockInEntry.timestamp)) : '';
 
   return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2 flex-wrap">
+        <RequestTypeIcon />
+        <span className="font-medium">{displayName}</span>
+        <RequestTypeBadge type={type} />
+      </div>
+
+      {type === 'edit' ? (
+        <>
+          <p className="mt-1 text-sm text-muted-foreground">{entryTypeLabel} ändern</p>
+          <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
+            <p>
+              <span className="text-muted-foreground">Aktuell:</span>{' '}
+              {formatWeekdayDateTime(request.entry.timestamp)}
+            </p>
+            {request.proposedTimestamp && (
+              <p>
+                <span className="text-info-text">Neu:</span>{' '}
+                {formatWeekdayDateTime(request.proposedTimestamp)}
+              </p>
+            )}
+          </div>
+        </>
+      ) : isPairedDelete && clockInEntry && clockOutEntry ? (
+        // Paired delete request - show like session requests
+        <>
+          <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(dateStr)}</p>
+          <p className="text-xs text-muted-foreground">
+            {formatBerlinTime(clockInEntry.timestamp)} – {formatBerlinTime(clockOutEntry.timestamp)}
+            <span className="ml-2 text-muted-foreground">
+              ({formatDuration(clockedMinutes(clockInEntry.timestamp, clockOutEntry.timestamp))})
+            </span>
+          </p>
+        </>
+      ) : (
+        // Single entry delete request
+        <>
+          <p className="mt-1 text-sm text-muted-foreground">{entryTypeLabel} löschen</p>
+          <p className="text-xs text-muted-foreground">{formatWeekdayDateTime(request.entry.timestamp)}</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Approve and reject an edit or delete request. */
+function ChangeRequestActions({
+  type,
+  onApprove,
+  onReject,
+}: {
+  type: 'edit' | 'delete';
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
+    <div className="flex gap-2 shrink-0 ml-4">
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onApprove}
+        aria-label="Genehmigen"
+        title={
+          type === 'edit'
+            ? 'Genehmigen - Änderung wird bestätigt'
+            : type === 'delete'
+              ? 'Genehmigen - Löschung wird bestätigt'
+              : 'Genehmigen'
+        }
+        className="h-8 w-8 text-success-text hover:bg-success-soft"
+      >
+        <Check className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="outline"
+        size="icon"
+        onClick={onReject}
+        aria-label="Ablehnen"
+        title={
+          type === 'edit'
+            ? 'Ablehnen - Änderung wird rückgängig gemacht'
+            : type === 'delete'
+              ? 'Ablehnen - Eintrag bleibt erhalten'
+              : 'Ablehnen'
+        }
+        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+// Card for change requests (edit/delete)
+export function ChangeRequestCard({
+  request,
+  type,
+  onApprove,
+  onReject,
+}: {
+  request: ChangeRequestWithDetails;
+  type: 'edit' | 'delete';
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  return (
     <Card className="py-0">
       <CardContent className="flex items-center justify-between p-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <RequestTypeIcon />
-            <span className="font-medium">{displayName}</span>
-            <RequestTypeBadge type={type} />
-          </div>
+        <ChangeRequestSummary request={request} type={type} />
 
-          {type === 'edit' ? (
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">{entryTypeLabel} ändern</p>
-              <div className="text-xs text-muted-foreground space-y-0.5 mt-1">
-                <p>
-                  <span className="text-muted-foreground">Aktuell:</span>{' '}
-                  {formatWeekdayDateTime(request.entry.timestamp)}
-                </p>
-                {request.proposedTimestamp && (
-                  <p>
-                    <span className="text-info-text">Neu:</span>{' '}
-                    {formatWeekdayDateTime(request.proposedTimestamp)}
-                  </p>
-                )}
-              </div>
-            </>
-          ) : isPairedDelete && clockInEntry && clockOutEntry ? (
-            // Paired delete request - show like session requests
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">{formatWeekdayDate(dateStr)}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatBerlinTime(clockInEntry.timestamp)} – {formatBerlinTime(clockOutEntry.timestamp)}
-                <span className="ml-2 text-muted-foreground">
-                  ({formatDuration(clockedMinutes(clockInEntry.timestamp, clockOutEntry.timestamp))})
-                </span>
-              </p>
-            </>
-          ) : (
-            // Single entry delete request
-            <>
-              <p className="mt-1 text-sm text-muted-foreground">{entryTypeLabel} löschen</p>
-              <p className="text-xs text-muted-foreground">
-                {formatWeekdayDateTime(request.entry.timestamp)}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="flex gap-2 shrink-0 ml-4">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onApprove}
-            aria-label="Genehmigen"
-            title={
-              type === 'edit'
-                ? 'Genehmigen - Änderung wird bestätigt'
-                : type === 'delete'
-                  ? 'Genehmigen - Löschung wird bestätigt'
-                  : 'Genehmigen'
-            }
-            className="h-8 w-8 text-success-text hover:bg-success-soft"
-          >
-            <Check className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={onReject}
-            aria-label="Ablehnen"
-            title={
-              type === 'edit'
-                ? 'Ablehnen - Änderung wird rückgängig gemacht'
-                : type === 'delete'
-                  ? 'Ablehnen - Eintrag bleibt erhalten'
-                  : 'Ablehnen'
-            }
-            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+        <ChangeRequestActions type={type} onApprove={onApprove} onReject={onReject} />
       </CardContent>
     </Card>
   );

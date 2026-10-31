@@ -30,6 +30,18 @@ type CorrectionDialogProps = {
   closedPeriods: readonly ClosedTimePeriod[];
 };
 
+/** „Korrigieren“ on an entry, „Zeit nachtragen“ without one. */
+function TimeCorrectionTrigger({ entry }: { entry: TimeEntry | undefined }) {
+  return (
+    <DialogTrigger asChild>
+      <Button variant={entry ? 'ghost' : 'outline'} size="sm">
+        {entry ? <Pencil className="mr-1.5 size-4" /> : <Plus className="mr-1.5 size-4" />}
+        {entry ? 'Korrigieren' : 'Zeit nachtragen'}
+      </Button>
+    </DialogTrigger>
+  );
+}
+
 export function TimeCorrectionDialog({
   organizationId,
   entry,
@@ -54,14 +66,7 @@ export function TimeCorrectionDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen} pending={submitting}>
-      {!hideTrigger ? (
-        <DialogTrigger asChild>
-          <Button variant={entry ? 'ghost' : 'outline'} size="sm">
-            {entry ? <Pencil className="mr-1.5 size-4" /> : <Plus className="mr-1.5 size-4" />}
-            {entry ? 'Korrigieren' : 'Zeit nachtragen'}
-          </Button>
-        </DialogTrigger>
-      ) : null}
+      {!hideTrigger ? <TimeCorrectionTrigger entry={entry} /> : null}
       <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Zeitkorrektur</DialogTitle>

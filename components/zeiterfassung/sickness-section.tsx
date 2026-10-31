@@ -72,44 +72,11 @@ export function SicknessSection() {
           Die Krankmeldungen konnten nicht geladen werden.
         </SectionError>
       ) : (
-        <Card>
-          <CardContent className="p-4">
-            {isLoading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-56" />
-              </div>
-            ) : (
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Thermometer className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">Krank oder verhindert?</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Melde deine Abwesenheit mit wenigen Angaben. Ein Enddatum kannst du später nachtragen.
-                  </p>
-                  <div className="mt-3">
-                    <Button
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => setShowReportDialog(true)}
-                      disabled={!overview?.employeeRecordId}
-                    >
-                      <Thermometer className="size-3.5" />
-                      Krank melden
-                    </Button>
-                    {overview && !overview.employeeRecordId && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {SICKNESS_ERROR_MESSAGES.no_employee_record}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <SicknessReportCard
+          isLoading={isLoading}
+          overview={overview}
+          onReport={() => setShowReportDialog(true)}
+        />
       )}
 
       {overview && (activeReports.length > 0 || pastReports.length > 0) && (
@@ -153,6 +120,58 @@ export function SicknessSection() {
         />
       )}
     </div>
+  );
+}
+
+/** The report prompt: a skeleton while the first read runs, then the „Krank melden“ button. */
+function SicknessReportCard({
+  isLoading,
+  overview,
+  onReport,
+}: {
+  isLoading: boolean;
+  overview: OwnSicknessOverview | null;
+  onReport: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+        ) : (
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Thermometer className="h-6 w-6 text-muted-foreground" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">Krank oder verhindert?</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Melde deine Abwesenheit mit wenigen Angaben. Ein Enddatum kannst du später nachtragen.
+              </p>
+              <div className="mt-3">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={onReport}
+                  disabled={!overview?.employeeRecordId}
+                >
+                  <Thermometer className="size-3.5" />
+                  Krank melden
+                </Button>
+                {overview && !overview.employeeRecordId && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {SICKNESS_ERROR_MESSAGES.no_employee_record}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

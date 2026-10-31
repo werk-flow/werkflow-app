@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test';
 import {
   changedTestsFirstBlock,
+  holdOutsideMidnightWindow,
   MIDNIGHT_START_WINDOW,
   midnightStartWaitMs,
   runGroupSchedule,
-  waitOutsideMidnightWindow,
 } from './group-schedule';
 
 const MINUTE_MS = 60_000;
@@ -43,11 +43,12 @@ test('Berlin midnight is found on the days around both daylight-saving changes',
   }
 });
 
-test('the wait logs its reason and resume time, and the run signal cancels it', async () => {
+test('locally the wait logs its reason and resume time, and the run signal cancels it', async () => {
   const lines: string[] = [];
   const controller = new AbortController();
-  const waiting = waitOutsideMidnightWindow({
+  const waiting = holdOutsideMidnightWindow({
     groupId: 'audit:wave-1:a3',
+    ci: false,
     signal: controller.signal,
     log: (line) => lines.push(line),
     now: () => new Date(SUMMER_MIDNIGHT - MINUTE_MS),
@@ -57,13 +58,39 @@ test('the wait logs its reason and resume time, and the run signal cancels it', 
   expect(lines).toEqual([
     "audit:wave-1:a3: Berlin time is inside the midnight start window (23:40 to 00:10), where a group's business date can change or its day is too young; waiting 11 min until 2026-07-01T22:10:00.000Z (00:10 Berlin).",
   ]);
-  await waitOutsideMidnightWindow({
-    groupId: 'golden:gg-00',
-    signal: AbortSignal.abort(),
-    log: (line) => lines.push(line),
-    now: () => new Date(SUMMER_MIDNIGHT + 12 * 60 * MINUTE_MS),
-  });
+  expect(
+    await holdOutsideMidnightWindow({
+      groupId: 'golden:gg-00',
+      ci: false,
+      signal: AbortSignal.abort(),
+      log: (line) => lines.push(line),
+      now: () => new Date(SUMMER_MIDNIGHT + 12 * 60 * MINUTE_MS),
+    }),
+  ).toBeUndefined();
   expect(lines).toHaveLength(1);
+});
+
+test('in CI a group inside the window is blocked at once as a harness result, and starts outside it', async () => {
+  const hold = (instant: number): Promise<string | undefined> =>
+    // A live signal: a CI hold that slept would never settle within the test.
+    holdOutsideMidnightWindow({
+      groupId: 'audit:visual:acceptance',
+      ci: true,
+      signal: new AbortController().signal,
+      log: () => expect.unreachable('CI logs no wait'),
+      now: () => new Date(instant),
+    });
+  // Browser 2 of run 41137727269 reached its group at 23:43 Berlin and waited 27 minutes.
+  expect(await hold(SUMMER_MIDNIGHT - 17 * MINUTE_MS)).toBe(
+    "harness, midnight start window: Berlin time is inside the midnight start window (23:40 to 00:10), where a group's business date can change or its day is too young. A CI job's timeout would count the 27 min wait, so the group did not run; rerun the failed job after 2026-07-01T22:10:00.000Z (00:10 Berlin).",
+  );
+  const opening = SUMMER_MIDNIGHT - MIDNIGHT_START_WINDOW.leadMs;
+  expect(await hold(opening)).toStartWith('harness, midnight start window:');
+  expect(await hold(SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs - 1)).toStartWith(
+    'harness, midnight start window:',
+  );
+  expect(await hold(opening - 1)).toBeUndefined();
+  expect(await hold(SUMMER_MIDNIGHT + MIDNIGHT_START_WINDOW.trailMs)).toBeUndefined();
 });
 
 test('independent groups overlap within two slots; freshness and database gates remain exclusive', async () => {

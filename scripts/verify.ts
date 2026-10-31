@@ -38,8 +38,8 @@ import { runWithLogCleanup } from '../lib/testing/runner/command-log';
 import { loadEnvLocal } from '../tests/golden/support/env';
 import {
   changedTestsFirstBlock,
+  holdOutsideMidnightWindow,
   runGroupSchedule,
-  waitOutsideMidnightWindow,
 } from '../lib/testing/runner/group-schedule';
 import {
   createRunKey,
@@ -638,22 +638,26 @@ async function main(): Promise<void> {
                       recoveredRunKeys,
                       recoveredAttemptKeys,
                     }));
-            if (blocked) {
-              console.log(`[verify] ${entry.group.id}: blocked; ${blocked}`);
-              const startedAt = new Date().toISOString();
+            const recordBlocked = (reason: string, backendHealth?: BackendHealth): void => {
+              console.log(`[verify] ${entry.group.id}: blocked; ${reason}`);
+              const blockedAt = new Date().toISOString();
               report.results.push({
                 groupId: entry.group.id,
                 fingerprint: entry.fingerprint,
                 status: 'blocked',
-                startedAt,
-                completedAt: startedAt,
+                startedAt: blockedAt,
+                completedAt: blockedAt,
                 durationMs: 0,
                 runKey: null,
                 buildId: null,
                 logPath,
-                reason: blocked,
+                reason,
+                ...(backendHealth ? { backendHealth } : {}),
               });
               publish();
+            };
+            if (blocked) {
+              recordBlocked(blocked);
               return;
             }
             // Preparation and the probe reach the shared gateway, so they wait for another worktree's measuring group.
@@ -664,11 +668,16 @@ async function main(): Promise<void> {
             if (browser) {
               preparation ??= sharedHold('browser preparation', prepareBrowsers);
               await preparation;
-              await waitOutsideMidnightWindow({
+              const midnightBlock = await holdOutsideMidnightWindow({
                 groupId: entry.group.id,
+                ci: process.env.GITHUB_ACTIONS === 'true',
                 signal,
                 log: (line) => console.log(`[verify] ${line}`),
               });
+              if (midnightBlock) {
+                recordBlocked(midnightBlock);
+                return;
+              }
               // The preflight proved the backend once per run; one that died since blocks the group instead of failing it.
               const before = await sharedHold(`${entry.group.id} backend probe`, () =>
                 backendHealthBeforeGroup({
@@ -677,23 +686,7 @@ async function main(): Promise<void> {
                 }),
               );
               if (!before.healthy) {
-                const reason = backendDownBeforeGroupReason(before);
-                console.log(`[verify] ${entry.group.id}: blocked; ${reason}`);
-                const blockedAt = new Date().toISOString();
-                report.results.push({
-                  groupId: entry.group.id,
-                  fingerprint: entry.fingerprint,
-                  status: 'blocked',
-                  startedAt: blockedAt,
-                  completedAt: blockedAt,
-                  durationMs: 0,
-                  runKey: null,
-                  buildId: null,
-                  logPath,
-                  reason,
-                  backendHealth: before,
-                });
-                publish();
+                recordBlocked(backendDownBeforeGroupReason(before), before);
                 return;
               }
             }

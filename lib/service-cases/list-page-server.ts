@@ -13,17 +13,8 @@ import { serviceCaseListQuerySchema, type ServiceCaseListQuery, type ServiceCase
 import { requireServiceManager, type ServiceAdminClient as AdminClient } from './manager-context';
 import type { ServiceCaseEquipment, ServiceCaseListItem, ServiceCaseRow } from './types';
 
-/**
- * Hydrates service-case rows of one organization into list items: customer,
- * site, job and linked equipment. A failed related read throws instead of
- * returning a shortened list.
- */
-export async function hydrateListItems(
-  admin: AdminClient,
-  organizationId: string,
-  rows: ServiceCaseRow[],
-): Promise<ServiceCaseListItem[]> {
-  if (rows.length === 0) return [];
+/** The customers, sites, jobs and equipment links of the rows; a failed read throws after logging. */
+async function readListRelations(admin: AdminClient, organizationId: string, rows: ServiceCaseRow[]) {
   const clientIds = [...new Set(rows.map((row) => row.client_id))];
   const siteIds = [...new Set(rows.map((row) => row.site_id))];
   const jobIds = [...new Set(rows.flatMap((row) => (row.job_id ? [row.job_id] : [])))];
@@ -72,7 +63,21 @@ export async function hydrateListItems(
     });
     throw new Error('service_case_hydration_failed');
   }
-  const equipmentIds = linksResult.data.map((link) => link.equipment_id);
+  return {
+    clients: clientsResult.data,
+    sites: sitesResult.data,
+    jobs: jobsResult.data,
+    links: linksResult.data,
+  };
+}
+
+/** The linked equipment of each case, in link order; a failed read throws after logging. */
+async function readEquipmentByCase(
+  admin: AdminClient,
+  organizationId: string,
+  links: { service_case_id: string; equipment_id: string }[],
+): Promise<Map<string, ServiceCaseEquipment[]>> {
+  const equipmentIds = links.map((link) => link.equipment_id);
   const equipmentResult = await readInBatches(equipmentIds, (batch) =>
     admin
       .from('installed_equipment')
@@ -87,9 +92,6 @@ export async function hydrateListItems(
     });
     throw new Error('service_case_equipment_failed');
   }
-  const clients = new Map((clientsResult.data ?? []).map((client) => [client.id, client.name]));
-  const sites = new Map((sitesResult.data ?? []).map((site) => [site.id, site]));
-  const jobs = new Map((jobsResult.data ?? []).map((job) => [job.id, job]));
   const equipment = new Map<string, ServiceCaseEquipment>(
     (equipmentResult.data ?? []).map((item) => [
       item.id,
@@ -104,13 +106,32 @@ export async function hydrateListItems(
     ]),
   );
   const equipmentByCase = new Map<string, ServiceCaseEquipment[]>();
-  for (const link of linksResult.data ?? []) {
+  for (const link of links ?? []) {
     const item = equipment.get(link.equipment_id);
     if (!item) continue;
     const values = equipmentByCase.get(link.service_case_id) ?? [];
     values.push(item);
     equipmentByCase.set(link.service_case_id, values);
   }
+  return equipmentByCase;
+}
+
+/**
+ * Hydrates service-case rows of one organization into list items: customer,
+ * site, job and linked equipment. A failed related read throws instead of
+ * returning a shortened list.
+ */
+export async function hydrateListItems(
+  admin: AdminClient,
+  organizationId: string,
+  rows: ServiceCaseRow[],
+): Promise<ServiceCaseListItem[]> {
+  if (rows.length === 0) return [];
+  const relations = await readListRelations(admin, organizationId, rows);
+  const equipmentByCase = await readEquipmentByCase(admin, organizationId, relations.links);
+  const clients = new Map((relations.clients ?? []).map((client) => [client.id, client.name]));
+  const sites = new Map((relations.sites ?? []).map((site) => [site.id, site]));
+  const jobs = new Map((relations.jobs ?? []).map((job) => [job.id, job]));
   return rows.flatMap((row) => {
     const clientName = clients.get(row.client_id);
     const site = sites.get(row.site_id);

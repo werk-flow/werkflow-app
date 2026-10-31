@@ -10,7 +10,6 @@ import {
   TARGET_COPY,
   addClosureDayViaSettings,
   addWorkScheduleViaDialog,
-  closureDaySubmitButton,
   holidayRegionSelect,
   holidayTargetText,
   openMemberDetailFromList,
@@ -95,7 +94,8 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
     });
     await setHolidayRegionViaSettings(adminPage, HOLIDAY_REGION_LABELS.BY);
 
-    // Büro sees the selection but cannot change it (admin-only policy).
+    // Büro sees the selection but cannot change it (admin-only policy). The
+    // refused write and the field worker's redirect: lib/testing/fixtures/time-page-access.ts.
     await bueroPage.goto('/einstellungen/zeiterfassung');
     await expect(holidayRegionSelect(bueroPage)).toContainText(HOLIDAY_REGION_LABELS.BY);
     await expect(holidayRegionSelect(bueroPage)).toBeDisabled();
@@ -269,20 +269,5 @@ test.describe('P1-04 Arbeitszeitmodelle und Feiertage @P1-04', () => {
 
     await expect(visibleText(adminPage, PERSONNEL_COPY.noScheduleDefaultTarget)).toBeVisible();
     await expect(visibleText(adminPage, PERSONNEL_COPY.noScheduleSection)).toBeVisible();
-  });
-
-  test('Handwerker erreicht keine Verwaltung des Feiertagskalenders und der Betriebsruhe', async ({
-    employeePage,
-  }) => {
-    // The time settings are an Admin and Büro section: the server sends an
-    // employee to their profile, so neither the region nor the closure-day
-    // form renders (werk-flow/werkflow-planning#74).
-    await employeePage.goto('/einstellungen/zeiterfassung');
-    await expect(employeePage).toHaveURL(/\/einstellungen\/profil$/);
-    await expect(holidayRegionSelect(employeePage)).toHaveCount(0);
-    await expect(saveHolidayRegionButton(employeePage)).toHaveCount(0);
-    await expect(closureDaySubmitButton(employeePage)).toHaveCount(0);
-    // Which schedule rows each role can read is a database rule:
-    // supabase/tests/people_boundaries.sql.
   });
 });

@@ -56,6 +56,16 @@ type VacationApprovalDecisions = {
   handleReasonSubmit: (reason: string) => Promise<void>;
 };
 
+function vacationDecisionFailure(error: string): string {
+  return describeFailure(error, DECISION_ERROR_MESSAGES, 'Die Entscheidung konnte nicht gespeichert werden.');
+}
+
+function reasonDecisionConfirmation(mode: 'reject' | 'cancel', item: ApproverVacationRequest): string {
+  return mode === 'reject'
+    ? `Der Urlaubsantrag von ${item.personName} wurde abgelehnt.`
+    : `Der Urlaub von ${item.personName} wurde storniert.`;
+}
+
 // The approver's decisions: approve in place, reject or cancel through the
 // reason dialog, each with its optimistic removal, banner and follow-up read.
 export function useVacationApprovalDecisions({
@@ -120,25 +130,13 @@ export function useVacationApprovalDecisions({
           : cancelApprovedVacationRequest({ requestId, reason })
       ).catch(() => ({ success: false as const, error: 'unexpected_error' }));
       if (!result.success) {
-        setDialogError(
-          describeFailure(
-            result.error,
-            DECISION_ERROR_MESSAGES,
-            'Die Entscheidung konnte nicht gespeichert werden.',
-          ),
-        );
+        setDialogError(vacationDecisionFailure(result.error));
         return;
       }
       view.invalidate();
       (mode === 'reject' ? pendingList : approvedList).remove(requestId);
       setReasonDialog({ mode: 'closed' });
-      showBanner({
-        variant: 'success',
-        message:
-          mode === 'reject'
-            ? `Der Urlaubsantrag von ${item.personName} wurde abgelehnt.`
-            : `Der Urlaub von ${item.personName} wurde storniert.`,
-      });
+      showBanner({ variant: 'success', message: reasonDecisionConfirmation(mode, item) });
       await refetch();
     });
   };
