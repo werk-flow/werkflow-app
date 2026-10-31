@@ -111,16 +111,38 @@ export interface CreateRequestForm {
   handleSubmit: (event: React.FormEvent) => Promise<void>;
 }
 
-/** Form state of the intake dialog: number suggestion, reset on close, validation and save. */
-export function useCreateRequestForm(): CreateRequestForm {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const [open, setOpen] = useState(false);
+/** The fields the intake dialog edits, with their change handlers. */
+type IntakeFields = Omit<
+  CreateRequestForm,
+  | 'open'
+  | 'handleOpenChange'
+  | 'isLoading'
+  | 'summaryError'
+  | 'receivedAtError'
+  | 'formError'
+  | 'handleSubmit'
+>;
 
-  const [summary, setSummary] = useState('');
-  const [details, setDetails] = useState('');
-  const [requestNumber, setRequestNumber] = useState('');
-  const requestNumberEditedRef = useRef(false);
+type IntakeCustomerFields = Pick<
+  IntakeFields,
+  | 'clientId'
+  | 'handleClientChange'
+  | 'siteId'
+  | 'setSiteId'
+  | 'contactId'
+  | 'setContactId'
+  | 'callerName'
+  | 'setCallerName'
+  | 'callerPhone'
+  | 'setCallerPhone'
+  | 'callerEmail'
+  | 'setCallerEmail'
+  | 'callerAddress'
+  | 'setCallerAddress'
+>;
+
+/** The customer with site and contact, or the caller data while no customer is chosen. */
+function useCreateRequestCustomerFields(): { fields: IntakeCustomerFields; resetFields: () => void } {
   const [clientId, setClientId] = useState('');
   const [siteId, setSiteId] = useState('');
   const [contactId, setContactId] = useState('');
@@ -128,27 +150,8 @@ export function useCreateRequestForm(): CreateRequestForm {
   const [callerPhone, setCallerPhone] = useState('');
   const [callerEmail, setCallerEmail] = useState('');
   const [callerAddress, setCallerAddress] = useState('');
-  const [category, setCategory] = useState<RequestCategory>('sonstiges');
-  const [urgency, setUrgency] = useState<RequestUrgency>('normal');
-  const [source, setSource] = useState<RequestSource>('telefon');
-  const [receivedAt, setReceivedAt] = useState(() => formatBerlinDateTimeInput(new Date()));
-  const [assignedTo, setAssignedTo] = useState('');
-  const { run: runCreate, isPending: isLoading } = useServerAction(createClientRequest);
-  const [error, setError] = useState<string | null>(null);
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
-  // Suggest the next free number when the dialog opens; the field stays
-  // editable. The suggestion must never overwrite a number the user has
-  // already typed while the fetch was in flight.
-  useSuggestedRecordNumber('next-request-number', open, (suggestion) => {
-    if (!requestNumberEditedRef.current) setRequestNumber((current) => current || suggestion);
-  });
-
-  const resetForm = () => {
-    requestNumberEditedRef.current = false;
-    setSummary('');
-    setDetails('');
-    setRequestNumber('');
+  const resetFields = () => {
     setClientId('');
     setSiteId('');
     setContactId('');
@@ -156,22 +159,6 @@ export function useCreateRequestForm(): CreateRequestForm {
     setCallerPhone('');
     setCallerEmail('');
     setCallerAddress('');
-    setCategory('sonstiges');
-    setUrgency('normal');
-    setSource('telefon');
-    setReceivedAt(formatBerlinDateTimeInput(new Date()));
-    setAssignedTo('');
-    setHasAttemptedSubmit(false);
-    setError(null);
-  };
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    setOpen(nextOpen);
-    if (nextOpen) {
-      setReceivedAt(formatBerlinDateTimeInput(new Date()));
-    } else {
-      resetForm();
-    }
   };
 
   const handleClientChange = (nextClientId: string) => {
@@ -180,15 +167,149 @@ export function useCreateRequestForm(): CreateRequestForm {
     setContactId('');
   };
 
+  return {
+    fields: {
+      clientId,
+      handleClientChange,
+      siteId,
+      setSiteId,
+      contactId,
+      setContactId,
+      callerName,
+      setCallerName,
+      callerPhone,
+      setCallerPhone,
+      callerEmail,
+      setCallerEmail,
+      callerAddress,
+      setCallerAddress,
+    },
+    resetFields,
+  };
+}
+
+/** The intake fields; `applySuggestedNumber` never overwrites a number the user typed. */
+function useCreateRequestFields(): {
+  fields: IntakeFields;
+  resetFields: () => void;
+  applySuggestedNumber: (suggestion: string) => void;
+} {
+  const [summary, setSummary] = useState('');
+  const [details, setDetails] = useState('');
+  const [requestNumber, setRequestNumber] = useState('');
+  const requestNumberEditedRef = useRef(false);
+  const customer = useCreateRequestCustomerFields();
+  const [category, setCategory] = useState<RequestCategory>('sonstiges');
+  const [urgency, setUrgency] = useState<RequestUrgency>('normal');
+  const [source, setSource] = useState<RequestSource>('telefon');
+  const [receivedAt, setReceivedAt] = useState(() => formatBerlinDateTimeInput(new Date()));
+  const [assignedTo, setAssignedTo] = useState('');
+
+  const resetFields = () => {
+    requestNumberEditedRef.current = false;
+    setSummary('');
+    setDetails('');
+    setRequestNumber('');
+    customer.resetFields();
+    setCategory('sonstiges');
+    setUrgency('normal');
+    setSource('telefon');
+    setReceivedAt(formatBerlinDateTimeInput(new Date()));
+    setAssignedTo('');
+  };
+
   const handleRequestNumberChange = (nextRequestNumber: string) => {
     requestNumberEditedRef.current = true;
     setRequestNumber(nextRequestNumber);
   };
 
+  const applySuggestedNumber = (suggestion: string) => {
+    if (!requestNumberEditedRef.current) setRequestNumber((current) => current || suggestion);
+  };
+
+  return {
+    fields: {
+      summary,
+      setSummary,
+      details,
+      setDetails,
+      requestNumber,
+      handleRequestNumberChange,
+      ...customer.fields,
+      category,
+      setCategory,
+      urgency,
+      setUrgency,
+      source,
+      setSource,
+      receivedAt,
+      setReceivedAt,
+      assignedTo,
+      setAssignedTo,
+    },
+    resetFields,
+    applySuggestedNumber,
+  };
+}
+
+/** The action input: trimmed text, and only the optional values the user gave. */
+function createRequestInput(fields: IntakeFields, receivedAtDate: Date | null): CreateClientRequestInput {
+  const { summary, details, requestNumber, clientId, siteId, contactId, assignedTo } = fields;
+  const { callerName, callerPhone, callerEmail, callerAddress, category, urgency, source } = fields;
+  return {
+    summary: summary.trim(),
+    ...(details.trim() ? { details: details.trim() } : {}),
+    ...(requestNumber.trim() ? { requestNumber: requestNumber.trim() } : {}),
+    ...(clientId ? { clientId } : {}),
+    ...(siteId ? { siteId } : {}),
+    ...(contactId ? { contactId } : {}),
+    ...(callerName.trim() ? { callerName: callerName.trim() } : {}),
+    ...(callerPhone.trim() ? { callerPhone: callerPhone.trim() } : {}),
+    ...(callerEmail.trim() ? { callerEmail: callerEmail.trim() } : {}),
+    ...(callerAddress.trim() ? { callerAddress: callerAddress.trim() } : {}),
+    category,
+    urgency,
+    source,
+    ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
+    ...(assignedTo ? { assignedTo } : {}),
+  };
+}
+
+/** Form state of the intake dialog: number suggestion, reset on close, validation and save. */
+export function useCreateRequestForm(): CreateRequestForm {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [open, setOpen] = useState(false);
+
+  const { fields, resetFields, applySuggestedNumber } = useCreateRequestFields();
+  const { run: runCreate, isPending: isLoading } = useServerAction(createClientRequest);
+  const [error, setError] = useState<string | null>(null);
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+
+  // Suggest the next free number when the dialog opens; the field stays
+  // editable. The suggestion must never overwrite a number the user has
+  // already typed while the fetch was in flight.
+  useSuggestedRecordNumber('next-request-number', open, applySuggestedNumber);
+
+  const resetForm = () => {
+    resetFields();
+    setHasAttemptedSubmit(false);
+    setError(null);
+  };
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (nextOpen) {
+      fields.setReceivedAt(formatBerlinDateTimeInput(new Date()));
+    } else {
+      resetForm();
+    }
+  };
+
   const { errors, summaryError, receivedAtError, formError, receivedAtDate } = checkRequestFields({
     idPrefix: 'request',
-    summary,
-    receivedAt,
+    summary: fields.summary,
+    receivedAt: fields.receivedAt,
     attempted: hasAttemptedSubmit,
     error,
   });
@@ -200,23 +321,7 @@ export function useCreateRequestForm(): CreateRequestForm {
     if (focusFirstInvalidField(errors)) return;
 
     try {
-      const input: CreateClientRequestInput = {
-        summary: summary.trim(),
-        ...(details.trim() ? { details: details.trim() } : {}),
-        ...(requestNumber.trim() ? { requestNumber: requestNumber.trim() } : {}),
-        ...(clientId ? { clientId } : {}),
-        ...(siteId ? { siteId } : {}),
-        ...(contactId ? { contactId } : {}),
-        ...(callerName.trim() ? { callerName: callerName.trim() } : {}),
-        ...(callerPhone.trim() ? { callerPhone: callerPhone.trim() } : {}),
-        ...(callerEmail.trim() ? { callerEmail: callerEmail.trim() } : {}),
-        ...(callerAddress.trim() ? { callerAddress: callerAddress.trim() } : {}),
-        category,
-        urgency,
-        source,
-        ...(receivedAtDate ? { receivedAt: receivedAtDate.toISOString() } : {}),
-        ...(assignedTo ? { assignedTo } : {}),
-      };
+      const input = createRequestInput(fields, receivedAtDate);
 
       const result = await runCreate(input);
       if (!result.success) {
@@ -236,36 +341,7 @@ export function useCreateRequestForm(): CreateRequestForm {
   return {
     open,
     handleOpenChange,
-    summary,
-    setSummary,
-    details,
-    setDetails,
-    requestNumber,
-    handleRequestNumberChange,
-    clientId,
-    handleClientChange,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    callerName,
-    setCallerName,
-    callerPhone,
-    setCallerPhone,
-    callerEmail,
-    setCallerEmail,
-    callerAddress,
-    setCallerAddress,
-    category,
-    setCategory,
-    urgency,
-    setUrgency,
-    source,
-    setSource,
-    receivedAt,
-    setReceivedAt,
-    assignedTo,
-    setAssignedTo,
+    ...fields,
     isLoading,
     summaryError,
     receivedAtError,

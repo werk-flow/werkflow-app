@@ -53,6 +53,11 @@ const openMissingTimeAccountsFormSchema = z.object({
   openedOn: text(10),
   reason: text(2000),
 });
+const correctTimeAccountOpeningDateFormSchema = z.object({
+  accountId: id,
+  openedOn: text(10),
+  reason: text(2000),
+});
 const submitTimeAccountAdjustmentFormSchema = z.object({
   accountId: id,
   expectedVersion: text(12),
@@ -272,6 +277,50 @@ export async function openMissingTimeAccounts(
   revalidatePath('/zeiterfassung/einstellungen');
   revalidatePath('/einstellungen/zeiterfassung');
   revalidatePath('/zeiterfassung/zeitkonto');
+  return { success: true };
+}
+
+/**
+ * Moves an account's opening date. The database function books the move as a
+ * reversal and a new opening with the old date, new date and reason, and
+ * refuses it while a closed period depends on either date.
+ */
+export async function correctTimeAccountOpeningDate(
+  formInput: FormData,
+): Promise<TimeAccountActionResult<'correctOpening'>> {
+  const formData = parseFormData(formInput, correctTimeAccountOpeningDateFormSchema);
+  if (!formData) return { success: false, error: 'invalid_input' };
+  const context = await requireAuth();
+  if (context.role !== 'admin') return { success: false, error: 'forbidden' };
+  const accountId = String(formData.get('accountId') ?? '');
+  const openedOn = String(formData.get('openedOn') ?? '');
+  const reason = String(formData.get('reason') ?? '');
+  if (!accountId || !isValidIsoDate(openedOn)) return { success: false, error: 'invalid_input' };
+  if (!reason.trim()) return { success: false, error: 'reason_required' };
+  const operationId = randomUUID();
+  const { error } = await createSupabaseAdminClient().rpc('correct_time_account_opening_date', {
+    p_organization_id: context.orgId,
+    p_account_id: accountId,
+    p_opened_on: openedOn,
+    p_reason: reason,
+    p_actor_id: context.userId,
+    p_operation_id: operationId,
+    p_request_hash: hashPayload({ accountId, openedOn, reason }),
+  });
+  if (error)
+    return {
+      success: false,
+      error: failureCode(
+        'correctOpening',
+        'correction_failed',
+        'correctTimeAccountOpeningDate: correct_time_account_opening_date failed',
+        error,
+      ),
+    };
+  revalidatePath('/zeiterfassung/einstellungen');
+  revalidatePath('/einstellungen/zeiterfassung');
+  revalidatePath('/zeiterfassung/zeitkonto');
+  revalidatePath('/zeiterfassung/perioden');
   return { success: true };
 }
 

@@ -14,34 +14,44 @@ type CreateProjectFormInput = {
   isActive: boolean;
 };
 
-/** Draft state of the create-project form, with the suggested project number and the job options. */
-export function useCreateProjectForm({
-  defaultClient,
-  jobs,
-  readOnlyClient,
-  isActive,
-}: CreateProjectFormInput) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [templateVersionId, setTemplateVersionId] = useState('');
-  const [clientId, setClientId] = useState<string>(defaultClient?.id ?? '');
-  const [siteId, setSiteId] = useState<string>('');
-  const [contactId, setContactId] = useState<string>('');
-  const [projectNumber, setProjectNumber] = useState('');
-  const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
-  const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
-  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+/** The running create call and the errors it shows once a submit was attempted. */
+function useCreateProjectSubmitState() {
   const { run: runSubmit, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
   const [contentError, setContentError] = useState<string | null>(null);
   const [projectNumberError, setProjectNumberError] = useState<string | null>(null);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
-  useSuggestedRecordNumber('next-project-number', isActive, (suggestion) =>
-    setProjectNumber((current) => current || suggestion),
-  );
+  const showContentError = hasAttemptedSubmit && contentError;
+  const showProjectNumberError = hasAttemptedSubmit && projectNumberError;
 
-  const jobSearch = useJobEntityOptions(
+  return {
+    isLoading,
+    runSubmit,
+    error,
+    setError,
+    contentError,
+    setContentError,
+    showContentError,
+    projectNumberError,
+    setProjectNumberError,
+    showProjectNumberError,
+    setHasAttemptedSubmit,
+  };
+}
+
+type CreateProjectJobSearchInput = {
+  clientId: string;
+  selectedJobIds: string[];
+  jobs: Job[];
+};
+
+/**
+ * The job choices, searched on the server, seeded with the page's selected
+ * jobs and its open unlinked jobs of the chosen customer (or without one).
+ */
+function useCreateProjectJobSearch({ clientId, selectedJobIds, jobs }: CreateProjectJobSearchInput) {
+  return useJobEntityOptions(
     { kind: 'jobs', purpose: 'project-jobs', clientId: clientId || undefined },
     selectedJobIds,
     jobs
@@ -61,6 +71,33 @@ export function useCreateProjectForm({
         status: job.status,
       })),
   );
+}
+
+/** Draft state of the create-project form, with the suggested project number and the job options. */
+export function useCreateProjectForm({
+  defaultClient,
+  jobs,
+  readOnlyClient,
+  isActive,
+}: CreateProjectFormInput) {
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [templateVersionId, setTemplateVersionId] = useState('');
+  const [clientId, setClientId] = useState<string>(defaultClient?.id ?? '');
+  const [siteId, setSiteId] = useState<string>('');
+  const [contactId, setContactId] = useState<string>('');
+  const [projectNumber, setProjectNumber] = useState('');
+  const [plannedStartDate, setPlannedStartDate] = useState<Date | undefined>();
+  const [plannedEndDate, setPlannedEndDate] = useState<Date | undefined>();
+  const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const submitState = useCreateProjectSubmitState();
+  const { setContentError, setProjectNumberError, setHasAttemptedSubmit } = submitState;
+
+  useSuggestedRecordNumber('next-project-number', isActive, (suggestion) =>
+    setProjectNumber((current) => current || suggestion),
+  );
+
+  const jobSearch = useCreateProjectJobSearch({ clientId, selectedJobIds, jobs });
 
   const handleClientChange = (newClientId: string) => {
     setClientId(newClientId);
@@ -98,11 +135,10 @@ export function useCreateProjectForm({
     setProjectNumberError(null);
   };
 
-  const showContentError = hasAttemptedSubmit && contentError;
-  const showProjectNumberError = hasAttemptedSubmit && projectNumberError;
-  const formDisabled = isLoading;
+  const formDisabled = submitState.isLoading;
 
   return {
+    ...submitState,
     name,
     setName,
     description,
@@ -125,17 +161,6 @@ export function useCreateProjectForm({
     selectedJobIds,
     setSelectedJobIds,
     jobSearch,
-    isLoading,
-    runSubmit,
-    error,
-    setError,
-    contentError,
-    setContentError,
-    showContentError,
-    projectNumberError,
-    setProjectNumberError,
-    showProjectNumberError,
-    setHasAttemptedSubmit,
     formDisabled,
     resetForm,
   };

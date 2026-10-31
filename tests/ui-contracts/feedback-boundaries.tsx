@@ -12,6 +12,7 @@ import { ServiceCaseEvidenceLink } from '@/components/service/service-case-evide
 import { BannerProvider } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { PendingApprovals } from '@/components/zeiterfassung/pending-approvals';
+import { OpeningDateCorrections } from '@/components/zeiterfassung/time-account-opening-corrections';
 import { TimeCorrectionRequests } from '@/components/zeiterfassung/time-correction-requests';
 import {
   parseRequestListQuery,
@@ -35,6 +36,7 @@ const FEEDBACK_FIXTURES = [
   'client-relations',
   'team-qualifications',
   'service-evidence-link',
+  'time-account-opening',
 ] as const;
 export type FeedbackFixtureName = (typeof FEEDBACK_FIXTURES)[number];
 
@@ -56,6 +58,12 @@ function useRouteProps<Props>(read: () => Props): Props {
 const readMaterialLines = () => structuredClone(window.uiContractMaterial.lines);
 const readClientRelations = () => structuredClone(window.uiContractClientRelations);
 const readQualifications = () => structuredClone(window.uiContractQualifications);
+const readTimeAccounts = () => structuredClone(window.uiContractTimeAccounts);
+
+function TimeAccountOpeningHost(): React.JSX.Element {
+  const accounts = useRouteProps(readTimeAccounts);
+  return <OpeningDateCorrections accounts={accounts} suggestedStartDate="2026-09-01" />;
+}
 
 const orphanClockIn: WorkSession = {
   clockIn: {
@@ -260,6 +268,8 @@ function FeedbackSurface({ name }: { name: FeedbackFixtureName }): React.JSX.Ele
       return <TeamQualificationHost />;
     case 'service-evidence-link':
       return <ServiceEvidenceHost />;
+    case 'time-account-opening':
+      return <TimeAccountOpeningHost />;
   }
 }
 

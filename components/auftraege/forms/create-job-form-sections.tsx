@@ -12,7 +12,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { TimeInput } from '@/components/ui/time-input';
 import { WorkTemplatePicker } from '@/components/arbeitsvorlagen/work-template-picker';
 import { formatSiteAddress } from '@/lib/clients/types';
-import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-multi-select';
@@ -158,7 +157,14 @@ export function CreateJobAssignmentFields({
       </Field>
 
       <Field label="Priorität" htmlFor="job-priority">
-        <Select value={priority} onValueChange={(v) => setPriority(v as JobPriority)} disabled={formDisabled}>
+        <Select
+          value={priority}
+          onValueChange={(value) => {
+            const option = JOB_PRIORITY_OPTIONS.find((candidate) => candidate.value === value);
+            if (option) setPriority(option.value);
+          }}
+          disabled={formDisabled}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -180,8 +186,8 @@ type CreateJobPlanningFieldsProps = {
   members: OrgMemberOption[];
 };
 
-/** The "Planung" group: date, time, duration, site, contact, location, assignees and effort. */
-export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFieldsProps) {
+/** Date, time and estimated duration of the "Planung" group. */
+function CreateJobScheduleFields({ form }: { form: CreateJobForm }) {
   const {
     plannedDate,
     setPlannedDate,
@@ -189,30 +195,11 @@ export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFiel
     setPlannedTime,
     estimatedHours,
     setEstimatedHours,
-    clientId,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    location,
-    setLocation,
-    selectedEmployees,
-    setSelectedEmployees,
-    setAssignmentTeamSourceId,
-    plannedWorkingHours,
-    setPlannedWorkingHours,
-    plannedWorkingTouched,
-    setPlannedWorkingTouched,
     formDisabled,
-    projectSelectionDisabled,
-    siteContactDisabled,
   } = form;
 
   return (
     <>
-      <Separator />
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planung</p>
-
       <Field label="Geplantes Datum" htmlFor="job-date">
         <DatePicker value={plannedDate} onChange={setPlannedDate} disabled={formDisabled} />
       </Field>
@@ -230,6 +217,69 @@ export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFiel
           disabled={formDisabled}
         />
       </Field>
+    </>
+  );
+}
+
+/** The planned working effort, prefilled from duration × assignees until edited. */
+function CreateJobPlannedWorkingField({ form }: { form: CreateJobForm }) {
+  const {
+    plannedWorkingHours,
+    setPlannedWorkingHours,
+    plannedWorkingTouched,
+    setPlannedWorkingTouched,
+    formDisabled,
+  } = form;
+
+  return (
+    <Field
+      label="Geplanter Arbeitsaufwand (Stunden)"
+      htmlFor="job-planned-working"
+      description={
+        !plannedWorkingTouched
+          ? 'Wird automatisch aus geschätzter Dauer × Mitarbeiter vorbelegt.'
+          : 'Manuell angepasst. Weitere Änderungen an Dauer oder Mitarbeitern überschreiben diesen Wert nicht.'
+      }
+    >
+      <DurationHoursInput
+        id="job-planned-working"
+        placeholder="z.B. 5"
+        value={plannedWorkingHours}
+        onChange={(value) => {
+          setPlannedWorkingTouched(true);
+          setPlannedWorkingHours(value);
+        }}
+        disabled={formDisabled}
+      />
+    </Field>
+  );
+}
+
+/** The "Planung" group: date, time, duration, site, contact, location, assignees and effort. */
+export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFieldsProps) {
+  const {
+    plannedDate,
+    clientId,
+    siteId,
+    setSiteId,
+    contactId,
+    setContactId,
+    location,
+    setLocation,
+    selectedEmployees,
+    setSelectedEmployees,
+    setAssignmentTeamSourceId,
+    formDisabled,
+    projectSelectionDisabled,
+    siteContactDisabled,
+  } = form;
+
+  return (
+    <>
+      <Separator />
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planung</p>
+
+      <CreateJobScheduleFields form={form} />
 
       <SiteContactFields
         clientId={clientId}
@@ -269,26 +319,7 @@ export function CreateJobPlanningFields({ form, members }: CreateJobPlanningFiel
         />
       </Field>
 
-      <Field
-        label="Geplanter Arbeitsaufwand (Stunden)"
-        htmlFor="job-planned-working"
-        description={
-          !plannedWorkingTouched
-            ? 'Wird automatisch aus geschätzter Dauer × Mitarbeiter vorbelegt.'
-            : 'Manuell angepasst. Weitere Änderungen an Dauer oder Mitarbeitern überschreiben diesen Wert nicht.'
-        }
-      >
-        <DurationHoursInput
-          id="job-planned-working"
-          placeholder="z.B. 5"
-          value={plannedWorkingHours}
-          onChange={(value) => {
-            setPlannedWorkingTouched(true);
-            setPlannedWorkingHours(value);
-          }}
-          disabled={formDisabled}
-        />
-      </Field>
+      <CreateJobPlannedWorkingField form={form} />
     </>
   );
 }

@@ -13,7 +13,6 @@ import { EmployeeMultiSelect, type OrgMemberOption } from '../shared/employee-mu
 import { ClientSelectWithCreate, type ClientSelectItem } from '../shared/client-select-with-create';
 import { SiteContactFields } from '../shared/site-contact-fields';
 import { formatSiteAddress } from '@/lib/clients/types';
-import type { JobPriority } from '@/lib/jobs/types';
 import { toLocalDateString } from '@/lib/utils';
 import { JOB_PRIORITY_OPTIONS } from './job-form-options';
 import { EditJobScheduleFields } from './edit-job-schedule';
@@ -130,7 +129,14 @@ export function EditJobAssignmentFields({ form, selectedClient }: EditJobAssignm
       </Field>
 
       <Field label="Priorität" htmlFor="edit-job-priority">
-        <Select value={priority} onValueChange={(v) => setPriority(v as JobPriority)} disabled={formDisabled}>
+        <Select
+          value={priority}
+          onValueChange={(v) => {
+            const option = JOB_PRIORITY_OPTIONS.find((candidate) => candidate.value === v);
+            if (option) setPriority(option.value);
+          }}
+          disabled={formDisabled}
+        >
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -153,28 +159,6 @@ type EditJobPlanningFieldsProps = {
 };
 
 export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsProps) {
-  const {
-    plannedDate,
-    clientId,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    location,
-    setLocation,
-    isLoadingAssignments,
-    assignmentsFailure,
-    selectedEmployees,
-    handleSelectedEmployeesChange,
-    setAssignmentTeamSourceId,
-    plannedWorkingTouched,
-    setPlannedWorkingTouched,
-    autoSyncPlannedWorking,
-    plannedWorkingHours,
-    setPlannedWorkingHours,
-    formDisabled,
-  } = form;
-
   return (
     <>
       <Separator />
@@ -182,6 +166,18 @@ export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsPr
 
       <EditJobScheduleFields form={form} />
 
+      <EditJobSiteFields form={form} />
+
+      <EditJobTeamFields form={form} members={members} />
+    </>
+  );
+}
+
+function EditJobSiteFields({ form }: { form: EditJobForm }) {
+  const { clientId, siteId, setSiteId, contactId, setContactId, location, setLocation, formDisabled } = form;
+
+  return (
+    <>
       <SiteContactFields
         clientId={clientId}
         siteId={siteId}
@@ -208,7 +204,28 @@ export function EditJobPlanningFields({ form, members }: EditJobPlanningFieldsPr
           disabled={formDisabled}
         />
       </Field>
+    </>
+  );
+}
 
+function EditJobTeamFields({ form, members }: EditJobPlanningFieldsProps) {
+  const {
+    plannedDate,
+    isLoadingAssignments,
+    assignmentsFailure,
+    selectedEmployees,
+    handleSelectedEmployeesChange,
+    setAssignmentTeamSourceId,
+    plannedWorkingTouched,
+    setPlannedWorkingTouched,
+    autoSyncPlannedWorking,
+    plannedWorkingHours,
+    setPlannedWorkingHours,
+    formDisabled,
+  } = form;
+
+  return (
+    <>
       <Field
         label="Mitarbeiter"
         htmlFor="edit-job-employees"

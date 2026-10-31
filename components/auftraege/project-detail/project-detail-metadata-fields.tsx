@@ -16,18 +16,37 @@ type ProjectDetailMetadataOptions = {
 };
 
 /** The "Details" fields of a project; inline edits adopt the saved project. */
-export function buildProjectDetailMetadataFields({
-  project,
-  liveProject,
-  liveDerivedStatus,
-  isAdminOrManager,
-  setLiveProject,
-}: ProjectDetailMetadataOptions): MetadataField[] {
+export function buildProjectDetailMetadataFields(options: ProjectDetailMetadataOptions): MetadataField[] {
+  const { liveProject, liveDerivedStatus } = options;
   return [
     {
       label: 'Projektnummer',
       value: <span className="font-mono text-xs">{liveProject.projectNumber}</span>,
     },
+    ...projectTextFields(options),
+    {
+      label: 'Status',
+      value: (
+        <Badge variant="secondary" className={PROJECT_STATUS_CLASSES[liveDerivedStatus.status]}>
+          {PROJECT_STATUS_LABELS[liveDerivedStatus.status]}
+        </Badge>
+      ),
+    },
+    ...projectPlannedDateFields(options),
+    {
+      label: 'Erstellt am',
+      value: formatBerlinDateTime(liveProject.createdAt),
+    },
+  ];
+}
+
+function projectTextFields({
+  project,
+  liveProject,
+  isAdminOrManager,
+  setLiveProject,
+}: ProjectDetailMetadataOptions): MetadataField[] {
+  return [
     {
       label: 'Titel',
       value: liveProject.name,
@@ -58,14 +77,16 @@ export function buildProjectDetailMetadataFields({
           }
         : undefined,
     },
-    {
-      label: 'Status',
-      value: (
-        <Badge variant="secondary" className={PROJECT_STATUS_CLASSES[liveDerivedStatus.status]}>
-          {PROJECT_STATUS_LABELS[liveDerivedStatus.status]}
-        </Badge>
-      ),
-    },
+  ];
+}
+
+function projectPlannedDateFields({
+  project,
+  liveProject,
+  isAdminOrManager,
+  setLiveProject,
+}: ProjectDetailMetadataOptions): MetadataField[] {
+  return [
     {
       label: 'Geplanter Beginn',
       value: formatGermanDate(liveProject.plannedStartDate, { empty: '—' }),
@@ -99,10 +120,6 @@ export function buildProjectDetailMetadataFields({
             nullable: true,
           }
         : undefined,
-    },
-    {
-      label: 'Erstellt am',
-      value: formatBerlinDateTime(liveProject.createdAt),
     },
   ];
 }
