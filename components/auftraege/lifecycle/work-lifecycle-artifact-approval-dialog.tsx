@@ -33,7 +33,8 @@ type ArtifactApprovalDependencyDialogProps = {
   onChanged: () => Promise<void>;
 };
 
-export function ArtifactApprovalDependencyDialog({
+/** State, approval read, validation and save of the approval link dialog. */
+function useArtifactApprovalDependencyForm({
   snapshot,
   dependency,
   onClose,
@@ -79,6 +80,30 @@ export function ArtifactApprovalDependencyDialog({
       onClose();
     });
   }
+  return {
+    actionId,
+    setActionId,
+    reason,
+    setReason,
+    error,
+    pending,
+    approvals,
+    options,
+    attempted,
+    fieldErrors,
+    submit,
+  };
+}
+
+export function ArtifactApprovalDependencyDialog({
+  snapshot,
+  dependency,
+  onClose,
+  onChanged,
+}: ArtifactApprovalDependencyDialogProps) {
+  const form = useArtifactApprovalDependencyForm({ snapshot, dependency, onClose, onChanged });
+  const { actionId, setActionId, reason, setReason, error, pending, approvals, options } = form;
+  const { attempted, fieldErrors, submit } = form;
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} pending={pending}>
       <DialogContent>

@@ -1,8 +1,4 @@
 {
-  "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": 1,
-  "components/auftraege/lifecycle/use-work-lifecycle-dependency-form.ts": 1,
-  "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": 1,
-  "components/auftraege/lifecycle/work-lifecycle-dependency-dialog.tsx": 2,
   "components/kalender/board/board-toolbar.tsx": 1,
   "components/kalender/board/plantafel.tsx": 1,
   "components/kalender/calendar-dialogs.tsx": 1,

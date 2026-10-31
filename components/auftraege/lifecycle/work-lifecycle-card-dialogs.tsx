@@ -173,31 +173,20 @@ function WorkLifecycleDependencyReasonDialogs({
   );
 }
 
-/** Renders whichever dialog the card currently has open. */
-export function WorkLifecycleCardDialogs({
+/** The blocker, parking and dependency editors, which save through their own forms. */
+function WorkLifecycleEditorDialogs({
   dialog,
   setDialog,
   snapshot,
-  confirmedSnapshot,
-  targetLabel,
   isManager,
   changed,
   changedRow,
-  setSnapshot,
-  transition,
-}: WorkLifecycleCardDialogsProps) {
+}: Pick<
+  WorkLifecycleCardDialogsProps,
+  'dialog' | 'setDialog' | 'snapshot' | 'isManager' | 'changed' | 'changedRow'
+>) {
   return (
     <>
-      {dialog?.type === 'transition' && (
-        <WorkTransitionDialog
-          snapshot={confirmedSnapshot}
-          targetLabel={targetLabel}
-          transition={dialog.state}
-          isManager={isManager}
-          onClose={() => setDialog(null)}
-          onTransition={transition}
-        />
-      )}
       {dialog?.type === 'blocker' && (
         <WorkBlockerDialog
           snapshot={snapshot}
@@ -238,6 +227,43 @@ export function WorkLifecycleCardDialogs({
           }
         />
       )}
+    </>
+  );
+}
+
+/** Renders whichever dialog the card currently has open. */
+export function WorkLifecycleCardDialogs({
+  dialog,
+  setDialog,
+  snapshot,
+  confirmedSnapshot,
+  targetLabel,
+  isManager,
+  changed,
+  changedRow,
+  setSnapshot,
+  transition,
+}: WorkLifecycleCardDialogsProps) {
+  return (
+    <>
+      {dialog?.type === 'transition' && (
+        <WorkTransitionDialog
+          snapshot={confirmedSnapshot}
+          targetLabel={targetLabel}
+          transition={dialog.state}
+          isManager={isManager}
+          onClose={() => setDialog(null)}
+          onTransition={transition}
+        />
+      )}
+      <WorkLifecycleEditorDialogs
+        dialog={dialog}
+        setDialog={setDialog}
+        snapshot={snapshot}
+        isManager={isManager}
+        changed={changed}
+        changedRow={changedRow}
+      />
       <WorkLifecycleBlockerReasonDialogs
         dialog={dialog}
         setDialog={setDialog}

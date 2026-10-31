@@ -47,23 +47,19 @@ type JobDetailMainColumnProps = {
   handleUnassign: (userId: string) => Promise<void>;
 };
 
-/** Left column: details, instructions, work evidence, customer and assigned employees. */
-export function JobDetailMainColumn({
+type JobDetailMainColumnOptionsInput = Pick<
+  JobDetailMainColumnProps,
+  'liveJob' | 'currentUserId' | 'members' | 'instructionItems' | 'timeEntries'
+>;
+
+/** The acting user and the instruction, evidence and time options the work evidence section offers. */
+function useJobDetailMainColumnOptions({
   liveJob,
-  isAdminOrManager,
-  canApproveWorkArtifacts,
   currentUserId,
   members,
-  metadataFields,
   instructionItems,
-  initialArtifacts,
-  documents,
   timeEntries,
-  setShowClientDialog,
-  openAssignDialog,
-  isUnassigning,
-  handleUnassign,
-}: JobDetailMainColumnProps) {
+}: JobDetailMainColumnOptionsInput) {
   const currentUserActor = useMemo(() => {
     const currentMember = members.find((member) => member.userId === currentUserId);
 
@@ -109,6 +105,72 @@ export function JobDetailMainColumn({
     [liveJob.id, timeEntries],
   );
 
+  return {
+    currentUserActor,
+    artifactEvidenceRequirements,
+    artifactInstructionOptions,
+    artifactTimeEntryOptions,
+  };
+}
+
+type JobDetailClientCardProps = {
+  client: JobWithDetails['client'];
+  isAdminOrManager: boolean;
+  setShowClientDialog: (open: boolean) => void;
+};
+
+/** The customer card, or the empty card that opens the customer dialog. */
+function JobDetailClientCard({ client, isAdminOrManager, setShowClientDialog }: JobDetailClientCardProps) {
+  return client ? (
+    <EntityLinkCard
+      title={client.name}
+      href={`/kunden/${client.id}`}
+      icon={<Building2 className="size-5" />}
+      badge={
+        <Badge variant="outline" className="text-xs">
+          {CLIENT_TYPE_LABELS[client.clientType]}
+        </Badge>
+      }
+      metadata={[
+        ...(client.email ? [{ label: 'E-Mail', value: client.email }] : []),
+        ...(client.phone ? [{ label: 'Telefon', value: client.phone }] : []),
+      ]}
+    />
+  ) : (
+    <EntityLinkCard
+      title=""
+      href=""
+      icon={<Building2 className="size-5" />}
+      emptyState={{ text: 'Kein Kunde zugewiesen' }}
+      onEmptyClick={isAdminOrManager ? () => setShowClientDialog(true) : undefined}
+    />
+  );
+}
+
+/** Left column: details, instructions, work evidence, customer and assigned employees. */
+export function JobDetailMainColumn({
+  liveJob,
+  isAdminOrManager,
+  canApproveWorkArtifacts,
+  currentUserId,
+  members,
+  metadataFields,
+  instructionItems,
+  initialArtifacts,
+  documents,
+  timeEntries,
+  setShowClientDialog,
+  openAssignDialog,
+  isUnassigning,
+  handleUnassign,
+}: JobDetailMainColumnProps) {
+  const {
+    currentUserActor,
+    artifactEvidenceRequirements,
+    artifactInstructionOptions,
+    artifactTimeEntryOptions,
+  } = useJobDetailMainColumnOptions({ liveJob, currentUserId, members, instructionItems, timeEntries });
+
   return (
     <div className="space-y-6">
       <MetadataSection title="Details" fields={metadataFields} isEditable={isAdminOrManager} />
@@ -144,30 +206,11 @@ export function JobDetailMainColumn({
 
       {isAdminOrManager && <ApplyWorkTemplateCard targetType="job" targetId={liveJob.id} />}
 
-      {liveJob.client ? (
-        <EntityLinkCard
-          title={liveJob.client.name}
-          href={`/kunden/${liveJob.client.id}`}
-          icon={<Building2 className="size-5" />}
-          badge={
-            <Badge variant="outline" className="text-xs">
-              {CLIENT_TYPE_LABELS[liveJob.client.clientType]}
-            </Badge>
-          }
-          metadata={[
-            ...(liveJob.client.email ? [{ label: 'E-Mail', value: liveJob.client.email }] : []),
-            ...(liveJob.client.phone ? [{ label: 'Telefon', value: liveJob.client.phone }] : []),
-          ]}
-        />
-      ) : (
-        <EntityLinkCard
-          title=""
-          href=""
-          icon={<Building2 className="size-5" />}
-          emptyState={{ text: 'Kein Kunde zugewiesen' }}
-          onEmptyClick={isAdminOrManager ? () => setShowClientDialog(true) : undefined}
-        />
-      )}
+      <JobDetailClientCard
+        client={liveJob.client}
+        isAdminOrManager={isAdminOrManager}
+        setShowClientDialog={setShowClientDialog}
+      />
 
       {/* Assigned Employees */}
       <JobDetailAssigneesCard
