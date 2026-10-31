@@ -124,17 +124,24 @@ function QualificationManagementRecordRow({
   );
 }
 
-function QualificationManagementRecordActions({
-  record,
-  definition,
-  isOptimistic,
-  recordList,
-  form,
-  anyBusy,
-  runAction,
-  settleRecord,
-}: QualificationManagementRecordActionsProps) {
-  const { showBanner } = useBanner();
+type RecordFormSetters = Pick<
+  QualificationManagementGrantFormState,
+  | 'setEmployeeRecordId'
+  | 'setCapabilityId'
+  | 'setValidFrom'
+  | 'setValidUntil'
+  | 'setIssuer'
+  | 'setRenewalDueDate'
+  | 'setOperationalNote'
+  | 'setConfirmed'
+  | 'setEvidenceState'
+  | 'setSupersedesId'
+  | 'setEditingRecordId'
+  | 'setGrantError'
+>;
+
+/** Fills the grant form with an entry to edit it. */
+function editRecordInForm(record: EmployeeCapabilityRecord, form: RecordFormSetters) {
   const {
     setEmployeeRecordId,
     setCapabilityId,
@@ -149,6 +156,113 @@ function QualificationManagementRecordActions({
     setEditingRecordId,
     setGrantError,
   } = form;
+  setEmployeeRecordId(record.employeeRecordId);
+  setCapabilityId(record.capabilityId);
+  setValidFrom(record.validFrom);
+  setValidUntil(record.validUntil ?? '');
+  setIssuer(record.issuer ?? '');
+  setRenewalDueDate(record.renewalDueDate ?? '');
+  setConfirmed(record.confirmationStatus === 'confirmed');
+  setEvidenceState(record.evidenceState);
+  setOperationalNote(record.operationalNote ?? '');
+  setSupersedesId(null);
+  setEditingRecordId(record.id);
+  setGrantError(null);
+}
+
+/** Fills the grant form with a renewal of a certification entry. */
+function renewRecordInForm(record: EmployeeCapabilityRecord, form: RecordFormSetters) {
+  const {
+    setEmployeeRecordId,
+    setCapabilityId,
+    setValidFrom,
+    setValidUntil,
+    setIssuer,
+    setRenewalDueDate,
+    setOperationalNote,
+    setConfirmed,
+    setEvidenceState,
+    setSupersedesId,
+    setEditingRecordId,
+    setGrantError,
+  } = form;
+  setEmployeeRecordId(record.employeeRecordId);
+  setCapabilityId(record.capabilityId);
+  setValidFrom(getBusinessTodayIso());
+  setValidUntil('');
+  setIssuer(record.issuer ?? '');
+  setRenewalDueDate('');
+  setOperationalNote(record.operationalNote ?? '');
+  setConfirmed(false);
+  setEvidenceState('pending');
+  setSupersedesId(record.id);
+  setEditingRecordId(null);
+  setGrantError(null);
+}
+
+type RecordConfirmationToggle = Pick<
+  QualificationManagementRecordActionsProps,
+  'record' | 'recordList' | 'runAction' | 'settleRecord'
+> & {
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+/** Flips the internal confirmation of an entry, echoed in the list until the server answers. */
+async function toggleRecordConfirmation({
+  record,
+  recordList,
+  runAction,
+  settleRecord,
+  showBanner,
+}: RecordConfirmationToggle) {
+  const confirmationStatus = record.confirmationStatus === 'confirmed' ? 'unconfirmed' : 'confirmed';
+  recordList.update(record.id, { ...record, confirmationStatus });
+  await runAction(`confirm:${record.id}`, async () => {
+    try {
+      const result = await updateEmployeeCapability({
+        recordId: record.id,
+        validFrom: record.validFrom,
+        validUntil: record.validUntil,
+        issuer: record.issuer,
+        renewalDueDate: record.renewalDueDate,
+        confirmationStatus,
+        evidenceState: record.evidenceState,
+        operationalNote: record.operationalNote,
+      });
+      if (!result.success) {
+        recordList.rollback(record.id);
+        showBanner({
+          variant: 'error',
+          message: 'Die Bestätigung konnte nicht geändert werden.',
+        });
+        return;
+      }
+      showBanner({
+        variant: 'success',
+        message: 'Die Bestätigung wurde geändert.',
+      });
+      settleRecord(record.id);
+    } catch {
+      recordList.rollback(record.id);
+      showBanner({
+        variant: 'error',
+        message: 'Die Bestätigung konnte nicht geändert werden.',
+      });
+    }
+  });
+}
+
+function QualificationManagementRecordActions({
+  record,
+  definition,
+  isOptimistic,
+  recordList,
+  form,
+  anyBusy,
+  runAction,
+  settleRecord,
+}: QualificationManagementRecordActionsProps) {
+  const { showBanner } = useBanner();
 
   return (
     <div className="flex gap-1">
@@ -157,18 +271,7 @@ function QualificationManagementRecordActions({
         size="sm"
         disabled={anyBusy || isOptimistic}
         onClick={() => {
-          setEmployeeRecordId(record.employeeRecordId);
-          setCapabilityId(record.capabilityId);
-          setValidFrom(record.validFrom);
-          setValidUntil(record.validUntil ?? '');
-          setIssuer(record.issuer ?? '');
-          setRenewalDueDate(record.renewalDueDate ?? '');
-          setConfirmed(record.confirmationStatus === 'confirmed');
-          setEvidenceState(record.evidenceState);
-          setOperationalNote(record.operationalNote ?? '');
-          setSupersedesId(null);
-          setEditingRecordId(record.id);
-          setGrantError(null);
+          editRecordInForm(record, form);
         }}
       >
         Bearbeiten
@@ -180,42 +283,7 @@ function QualificationManagementRecordActions({
             size="sm"
             disabled={anyBusy || isOptimistic}
             onClick={async () => {
-              const confirmationStatus =
-                record.confirmationStatus === 'confirmed' ? 'unconfirmed' : 'confirmed';
-              recordList.update(record.id, { ...record, confirmationStatus });
-              await runAction(`confirm:${record.id}`, async () => {
-                try {
-                  const result = await updateEmployeeCapability({
-                    recordId: record.id,
-                    validFrom: record.validFrom,
-                    validUntil: record.validUntil,
-                    issuer: record.issuer,
-                    renewalDueDate: record.renewalDueDate,
-                    confirmationStatus,
-                    evidenceState: record.evidenceState,
-                    operationalNote: record.operationalNote,
-                  });
-                  if (!result.success) {
-                    recordList.rollback(record.id);
-                    showBanner({
-                      variant: 'error',
-                      message: 'Die Bestätigung konnte nicht geändert werden.',
-                    });
-                    return;
-                  }
-                  showBanner({
-                    variant: 'success',
-                    message: 'Die Bestätigung wurde geändert.',
-                  });
-                  settleRecord(record.id);
-                } catch {
-                  recordList.rollback(record.id);
-                  showBanner({
-                    variant: 'error',
-                    message: 'Die Bestätigung konnte nicht geändert werden.',
-                  });
-                }
-              });
+              await toggleRecordConfirmation({ record, recordList, runAction, settleRecord, showBanner });
             }}
           >
             {record.confirmationStatus === 'confirmed' ? 'Bestätigung aufheben' : 'Bestätigen'}
@@ -225,18 +293,7 @@ function QualificationManagementRecordActions({
             size="sm"
             disabled={anyBusy || isOptimistic}
             onClick={() => {
-              setEmployeeRecordId(record.employeeRecordId);
-              setCapabilityId(record.capabilityId);
-              setValidFrom(getBusinessTodayIso());
-              setValidUntil('');
-              setIssuer(record.issuer ?? '');
-              setRenewalDueDate('');
-              setOperationalNote(record.operationalNote ?? '');
-              setConfirmed(false);
-              setEvidenceState('pending');
-              setSupersedesId(record.id);
-              setEditingRecordId(null);
-              setGrantError(null);
+              renewRecordInForm(record, form);
             }}
           >
             Erneuern

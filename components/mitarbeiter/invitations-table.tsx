@@ -176,6 +176,74 @@ function InviteCard({
   );
 }
 
+/** Desktop row of a draft invite until the server confirms it. */
+function PendingInviteRow({ invite }: { invite: Invite }) {
+  return (
+    <PendingRow
+      columns={INVITATION_COLUMNS}
+      label={PENDING_LABEL}
+      cells={{
+        email: <span className="font-medium">{invite.email}</span>,
+        role: <RoleBadge role={invite.invited_role} />,
+        status: (
+          <span
+            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_LABELS.pending.className}`}
+          >
+            {STATUS_LABELS.pending.label}
+          </span>
+        ),
+        actions: <span className="block size-8" />,
+      }}
+    />
+  );
+}
+
+// Desktop table row for a single invite
+function InviteTableRow({
+  invite,
+  busy,
+  waitForChange,
+}: {
+  invite: Invite;
+  busy: RowBusy;
+  waitForChange: () => Promise<void>;
+}) {
+  const { isExpired, displayStatus } = displayStatusFor(invite);
+
+  return (
+    <TableRow>
+      <TableCell className="font-medium">
+        <span className="flex items-center gap-2">
+          {invite.email}
+          <InlinePending active={busy.isBusy} />
+        </span>
+      </TableCell>
+      <TableCell>
+        <RoleBadge role={invite.invited_role} />
+      </TableCell>
+      <TableCell>
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${displayStatus.className}`}
+        >
+          {displayStatus.label}
+        </span>
+      </TableCell>
+      <TableCell className="text-muted-foreground">{formatBerlin(invite.created_at, 'date')}</TableCell>
+      <TableCell className="text-muted-foreground">{formatBerlin(invite.expires_at, 'date')}</TableCell>
+      <TableCell>
+        <InviteActionsMenu
+          inviteId={invite.id}
+          inviteEmail={invite.email}
+          status={invite.status}
+          isExpired={isExpired}
+          busy={busy}
+          waitForChange={waitForChange}
+        />
+      </TableCell>
+    </TableRow>
+  );
+}
+
 interface InvitationsTableProps {
   /** Server invites plus the optimistic rows of invites just sent. */
   rows: OptimisticListItem<Invite>[];
@@ -228,67 +296,18 @@ export function InvitationsTable({ rows }: InvitationsTableProps) {
         <Table>
           <ColumnsTableHeader columns={INVITATION_COLUMNS} />
           <TableBody>
-            {rows.map(({ item: invite, isOptimistic }) => {
-              if (isOptimistic) {
-                return (
-                  <PendingRow
-                    key={invite.id}
-                    columns={INVITATION_COLUMNS}
-                    label={PENDING_LABEL}
-                    cells={{
-                      email: <span className="font-medium">{invite.email}</span>,
-                      role: <RoleBadge role={invite.invited_role} />,
-                      status: (
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_LABELS.pending.className}`}
-                        >
-                          {STATUS_LABELS.pending.label}
-                        </span>
-                      ),
-                      actions: <span className="block size-8" />,
-                    }}
-                  />
-                );
-              }
-              const { isExpired, displayStatus } = displayStatusFor(invite);
-
-              return (
-                <TableRow key={invite.id}>
-                  <TableCell className="font-medium">
-                    <span className="flex items-center gap-2">
-                      {invite.email}
-                      <InlinePending active={isBusy(invite.id)} />
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <RoleBadge role={invite.invited_role} />
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${displayStatus.className}`}
-                    >
-                      {displayStatus.label}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatBerlin(invite.created_at, 'date')}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatBerlin(invite.expires_at, 'date')}
-                  </TableCell>
-                  <TableCell>
-                    <InviteActionsMenu
-                      inviteId={invite.id}
-                      inviteEmail={invite.email}
-                      status={invite.status}
-                      isExpired={isExpired}
-                      busy={rowBusy(invite.id)}
-                      waitForChange={waitForChange}
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            {rows.map(({ item: invite, isOptimistic }) =>
+              isOptimistic ? (
+                <PendingInviteRow key={invite.id} invite={invite} />
+              ) : (
+                <InviteTableRow
+                  key={invite.id}
+                  invite={invite}
+                  busy={rowBusy(invite.id)}
+                  waitForChange={waitForChange}
+                />
+              ),
+            )}
           </TableBody>
         </Table>
       </div>

@@ -76,30 +76,7 @@ export function InviteDialog() {
     resetForm();
     setOpen(false);
 
-    const result = await sendOrgInvite(invitedEmail, role).catch(() => null);
-    if (!result || !result.success) {
-      inviteCreations.publish({ kind: 'rollback', tempId });
-      const reason = describeFailure(
-        result?.error ?? 'unexpected_error',
-        SEND_INVITE_MESSAGES,
-        SHARED_FAILURE_MESSAGES.unexpected_error,
-      );
-      showBanner({
-        variant: 'error',
-        message: `Einladung an ${invitedEmail} konnte nicht gesendet werden: ${reason}`,
-      });
-      return;
-    }
-    inviteCreations.publish({
-      kind: 'commit',
-      tempId,
-      confirmed: { ...draft, id: result.inviteId },
-    });
-    showBanner({
-      variant: 'success',
-      message: `Einladung an ${invitedEmail} wurde gesendet.`,
-    });
-    router.refresh();
+    await sendInviteDraft({ invitedEmail, role, tempId, draft, showBanner, router });
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -128,39 +105,13 @@ export function InviteDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate>
           <div className="grid gap-4 py-4">
-            <Field
-              label="E-Mail-Adresse"
-              htmlFor="email"
-              required
-              error={hasAttemptedSubmit ? emailError : undefined}
-            >
-              <Input
-                type="text"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="mitarbeiter@firma.de"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </Field>
-            <Field
-              label="Rolle"
-              htmlFor="role"
-              description="Die Rolle, die der Mitarbeiter nach Annahme der Einladung erhält."
-            >
-              <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value as InviteRole)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Rolle auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INVITE_ROLE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            <InviteDialogFields
+              email={email}
+              setEmail={setEmail}
+              emailError={hasAttemptedSubmit ? emailError : undefined}
+              selectedRole={selectedRole}
+              setSelectedRole={setSelectedRole}
+            />
           </div>
           <DialogFooter>
             <Button type="submit">Einladung senden</Button>
@@ -168,5 +119,97 @@ export function InviteDialog() {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type InviteDraftSend = {
+  invitedEmail: string;
+  role: InviteRole;
+  tempId: string;
+  draft: Invite;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  router: ReturnType<typeof useRouter>;
+};
+
+/** Sends the invite after the dialog closed, then commits or rolls back its pending row. */
+async function sendInviteDraft({ invitedEmail, role, tempId, draft, showBanner, router }: InviteDraftSend) {
+  const result = await sendOrgInvite(invitedEmail, role).catch(() => null);
+  if (!result || !result.success) {
+    inviteCreations.publish({ kind: 'rollback', tempId });
+    const reason = describeFailure(
+      result?.error ?? 'unexpected_error',
+      SEND_INVITE_MESSAGES,
+      SHARED_FAILURE_MESSAGES.unexpected_error,
+    );
+    showBanner({
+      variant: 'error',
+      message: `Einladung an ${invitedEmail} konnte nicht gesendet werden: ${reason}`,
+    });
+    return;
+  }
+  inviteCreations.publish({
+    kind: 'commit',
+    tempId,
+    confirmed: { ...draft, id: result.inviteId },
+  });
+  showBanner({
+    variant: 'success',
+    message: `Einladung an ${invitedEmail} wurde gesendet.`,
+  });
+  router.refresh();
+}
+
+type InviteDialogFieldsProps = {
+  email: string;
+  setEmail: (email: string) => void;
+  emailError: string | undefined;
+  selectedRole: InviteRole;
+  setSelectedRole: (role: InviteRole) => void;
+};
+
+function InviteDialogFields({
+  email,
+  setEmail,
+  emailError,
+  selectedRole,
+  setSelectedRole,
+}: InviteDialogFieldsProps) {
+  return (
+    <>
+      <Field label="E-Mail-Adresse" htmlFor="email" required error={emailError}>
+        <Input
+          type="text"
+          inputMode="email"
+          autoComplete="email"
+          placeholder="mitarbeiter@firma.de"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </Field>
+      <Field
+        label="Rolle"
+        htmlFor="role"
+        description="Die Rolle, die der Mitarbeiter nach Annahme der Einladung erhält."
+      >
+        <Select
+          value={selectedRole}
+          onValueChange={(value) => {
+            const option = INVITE_ROLE_OPTIONS.find((candidate) => candidate.value === value);
+            if (option) setSelectedRole(option.value);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Rolle auswählen" />
+          </SelectTrigger>
+          <SelectContent>
+            {INVITE_ROLE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    </>
   );
 }
