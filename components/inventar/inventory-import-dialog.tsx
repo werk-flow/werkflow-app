@@ -15,9 +15,60 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import type { InventoryCategory, InventoryLocation } from '@/lib/inventory/types';
-import { IMPORT_COLUMNS } from '@/lib/inventory/csv-import';
+import { IMPORT_COLUMNS, type ImportColumnMapping } from '@/lib/inventory/csv-import';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { useInventoryCsvImport } from './use-inventory-csv-import';
+
+type ImportDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingItemCount: number;
+  locations: InventoryLocation[];
+  categories: InventoryCategory[];
+};
+
+/** One picker per import column: which CSV header fills it, or none. */
+function ImportColumnMappingFields({
+  headers,
+  mapping,
+  setMapping,
+  nameMappingError,
+}: {
+  headers: string[];
+  mapping: ImportColumnMapping;
+  setMapping: (mapping: ImportColumnMapping) => void;
+  nameMappingError: string | undefined;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {IMPORT_COLUMNS.map((column) => (
+        <Field
+          key={column.key}
+          label={column.label}
+          htmlFor={`inventory-import-${column.key}`}
+          required={column.key === 'name'}
+          error={column.key === 'name' ? nameMappingError : undefined}
+        >
+          <SearchableSelect
+            options={headers.map((header) => ({ value: header, label: header }))}
+            value={mapping[column.key] ?? ''}
+            onChange={(value) =>
+              setMapping({
+                ...mapping,
+                [column.key]: value || undefined,
+              })
+            }
+            placeholder="Nicht importieren"
+            searchPlaceholder="Spalte suchen …"
+            emptyMessage="Keine Spalte gefunden"
+            allowNone
+            noneLabel="Nicht importieren"
+          />
+        </Field>
+      ))}
+    </div>
+  );
+}
 
 export function ImportDialog({
   open,
@@ -25,13 +76,7 @@ export function ImportDialog({
   existingItemCount,
   locations,
   categories,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  existingItemCount: number;
-  locations: InventoryLocation[];
-  categories: InventoryCategory[];
-}) {
+}: ImportDialogProps) {
   const {
     headers,
     rows,
@@ -80,33 +125,12 @@ export function ImportDialog({
             </Field>
 
             {headers.length > 0 && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {IMPORT_COLUMNS.map((column) => (
-                  <Field
-                    key={column.key}
-                    label={column.label}
-                    htmlFor={`inventory-import-${column.key}`}
-                    required={column.key === 'name'}
-                    error={column.key === 'name' ? nameMappingError : undefined}
-                  >
-                    <SearchableSelect
-                      options={headers.map((header) => ({ value: header, label: header }))}
-                      value={mapping[column.key] ?? ''}
-                      onChange={(value) =>
-                        setMapping({
-                          ...mapping,
-                          [column.key]: value || undefined,
-                        })
-                      }
-                      placeholder="Nicht importieren"
-                      searchPlaceholder="Spalte suchen …"
-                      emptyMessage="Keine Spalte gefunden"
-                      allowNone
-                      noneLabel="Nicht importieren"
-                    />
-                  </Field>
-                ))}
-              </div>
+              <ImportColumnMappingFields
+                headers={headers}
+                mapping={mapping}
+                setMapping={setMapping}
+                nameMappingError={nameMappingError}
+              />
             )}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
