@@ -324,11 +324,6 @@
       "useResponsibilityConfigurationForm": 102
     },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
-    "components/shared/embedded-auftraege-lists.tsx": { "EmbeddedAuftraegeLists": 153 },
-    "components/shared/embedded-auftraege-section.tsx": { "EmbeddedAuftraegeSection": 108 },
-    "components/shared/metadata-section.tsx": { "MetadataSection": 166, "MetadataFieldRow": 176 },
-    "components/shared/use-embedded-auftraege-mutations.ts": { "useEmbeddedAuftraegeMutations": 121 },
-    "components/shared/use-embedded-auftraege-state.ts": { "useEmbeddedAuftraegeEntries": 126 },
     "components/time-activity-dialog.tsx": { "TimeActivityDialogForm": 178 },
     "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
     "components/ui/calendar.tsx": { "Calendar": 122 },
