@@ -116,6 +116,8 @@ function WorkArtifactCustomerDecision({
   );
 }
 
+type WorkArtifactLinkDisclosureProps = Pick<WorkArtifactActionPanelProps, 'editor' | 'links'>;
+
 function WorkArtifactLinkDisclosures({
   currentRevision,
   editor,
@@ -127,138 +129,161 @@ function WorkArtifactLinkDisclosures({
   WorkArtifactActionPanelProps,
   'currentRevision' | 'editor' | 'links' | 'documents' | 'timeEntryOptions' | 'evidenceRequirements'
 >) {
-  const { anyBusy, isBusy } = editor;
-  const {
-    documentId,
-    selectDocument,
-    documentError,
-    documentRelation,
-    setDocumentRelation,
-    timeSourceId,
-    selectTimeSource,
-    timeSourceError,
-    localFulfillments,
-    removedFulfillmentIds,
-    linkDocument,
-    linkTimeEntry,
-    fulfill,
-    removeFulfillment,
-  } = links;
   return (
     <>
       {documents.length > 0 && (
-        <FormDisclosure label="Dokument verknüpfen">
-          <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_180px_auto]">
-            <Field
-              label="Dokument auswählen"
-              hideLabel
-              htmlFor="artifact-link-document"
-              error={documentError}
-            >
-              <SearchableSelect
-                options={documents.map((document) => ({ value: document.id, label: document.displayName }))}
-                value={documentId}
-                onChange={selectDocument}
-                placeholder="Dokument wählen"
-                searchPlaceholder="Dokument suchen…"
-                emptyMessage="Kein Dokument gefunden"
-              />
-            </Field>
-            <Select
-              value={documentRelation}
-              onValueChange={(value) => setDocumentRelation(value as typeof documentRelation)}
-            >
-              <SelectTrigger aria-label="Dokumentbezug">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="supporting_evidence">Nachweis</SelectItem>
-                <SelectItem value="closure_proof">Abschlussnachweis</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              pending={isBusy('document')}
-              type="button"
-              variant="outline"
-              onClick={linkDocument}
-              disabled={anyBusy}
-            >
-              Verknüpfen
-            </Button>
-          </div>
-        </FormDisclosure>
+        <WorkArtifactDocumentLinkDisclosure editor={editor} links={links} documents={documents} />
       )}
       {timeEntryOptions.length > 0 && (
-        <FormDisclosure label="Zeiteintrag verknüpfen">
-          <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_auto]">
-            <Field
-              label="Zeiteintrag auswählen"
-              hideLabel
-              htmlFor="artifact-link-time-source"
-              error={timeSourceError}
-            >
-              <SearchableSelect
-                options={timeEntryOptions.map((entry) => ({ value: entry.id, label: entry.label }))}
-                value={timeSourceId}
-                onChange={selectTimeSource}
-                placeholder="Zeiteintrag wählen"
-                searchPlaceholder="Zeiteintrag suchen…"
-                emptyMessage="Kein Zeiteintrag gefunden"
-              />
-            </Field>
-            <Button
-              pending={isBusy('time')}
-              type="button"
-              variant="outline"
-              onClick={linkTimeEntry}
-              disabled={anyBusy}
-            >
-              Verknüpfen
-            </Button>
-          </div>
-        </FormDisclosure>
+        <WorkArtifactTimeLinkDisclosure editor={editor} links={links} timeEntryOptions={timeEntryOptions} />
       )}
       {evidenceRequirements.length > 0 && (
         <FormDisclosure label="Nachweiserwartung erfüllen">
           <div className="divide-y rounded-md border">
-            {evidenceRequirements.map((requirement) => {
-              const fulfillment = removedFulfillmentIds.has(requirement.id)
-                ? null
-                : (localFulfillments.get(requirement.id) ?? requirement.fulfillment ?? null);
-              // Row action: only this row's button is gated, the other rows stay usable.
-              const rowBusy = isBusy(`evidence:${requirement.id}`);
-              return (
-                <div key={requirement.id} className="flex items-center justify-between gap-3 p-3">
-                  <p className="text-sm">{requirement.description}</p>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <InlinePending active={rowBusy} />
-                    {fulfillment ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => removeFulfillment(requirement, fulfillment)}
-                        disabled={rowBusy}
-                      >
-                        Erfüllung entfernen
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() => fulfill(requirement.id)}
-                        disabled={rowBusy}
-                      >{`Mit Version ${currentRevision.revision_number} erfüllen`}</Button>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
+            {evidenceRequirements.map((requirement) => (
+              <WorkArtifactEvidenceRow
+                key={requirement.id}
+                requirement={requirement}
+                currentRevision={currentRevision}
+                editor={editor}
+                links={links}
+              />
+            ))}
           </div>
         </FormDisclosure>
       )}
     </>
+  );
+}
+
+function WorkArtifactDocumentLinkDisclosure({
+  editor,
+  links,
+  documents,
+}: WorkArtifactLinkDisclosureProps & Pick<WorkArtifactActionPanelProps, 'documents'>) {
+  const { anyBusy, isBusy } = editor;
+  const { documentId, selectDocument, documentError, documentRelation, setDocumentRelation, linkDocument } =
+    links;
+  return (
+    <FormDisclosure label="Dokument verknüpfen">
+      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_180px_auto]">
+        <Field label="Dokument auswählen" hideLabel htmlFor="artifact-link-document" error={documentError}>
+          <SearchableSelect
+            options={documents.map((document) => ({ value: document.id, label: document.displayName }))}
+            value={documentId}
+            onChange={selectDocument}
+            placeholder="Dokument wählen"
+            searchPlaceholder="Dokument suchen…"
+            emptyMessage="Kein Dokument gefunden"
+          />
+        </Field>
+        <Select
+          value={documentRelation}
+          onValueChange={(value) => {
+            if (value === 'supporting_evidence' || value === 'closure_proof') setDocumentRelation(value);
+          }}
+        >
+          <SelectTrigger aria-label="Dokumentbezug">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="supporting_evidence">Nachweis</SelectItem>
+            <SelectItem value="closure_proof">Abschlussnachweis</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          pending={isBusy('document')}
+          type="button"
+          variant="outline"
+          onClick={linkDocument}
+          disabled={anyBusy}
+        >
+          Verknüpfen
+        </Button>
+      </div>
+    </FormDisclosure>
+  );
+}
+
+function WorkArtifactTimeLinkDisclosure({
+  editor,
+  links,
+  timeEntryOptions,
+}: WorkArtifactLinkDisclosureProps & Pick<WorkArtifactActionPanelProps, 'timeEntryOptions'>) {
+  const { anyBusy, isBusy } = editor;
+  const { timeSourceId, selectTimeSource, timeSourceError, linkTimeEntry } = links;
+  return (
+    <FormDisclosure label="Zeiteintrag verknüpfen">
+      <div className="grid gap-3 rounded-md border p-4 sm:grid-cols-[1fr_auto]">
+        <Field
+          label="Zeiteintrag auswählen"
+          hideLabel
+          htmlFor="artifact-link-time-source"
+          error={timeSourceError}
+        >
+          <SearchableSelect
+            options={timeEntryOptions.map((entry) => ({ value: entry.id, label: entry.label }))}
+            value={timeSourceId}
+            onChange={selectTimeSource}
+            placeholder="Zeiteintrag wählen"
+            searchPlaceholder="Zeiteintrag suchen…"
+            emptyMessage="Kein Zeiteintrag gefunden"
+          />
+        </Field>
+        <Button
+          pending={isBusy('time')}
+          type="button"
+          variant="outline"
+          onClick={linkTimeEntry}
+          disabled={anyBusy}
+        >
+          Verknüpfen
+        </Button>
+      </div>
+    </FormDisclosure>
+  );
+}
+
+function WorkArtifactEvidenceRow({
+  requirement,
+  currentRevision,
+  editor,
+  links,
+}: WorkArtifactLinkDisclosureProps &
+  Pick<WorkArtifactActionPanelProps, 'currentRevision'> & { requirement: WorkArtifactEvidenceRequirement }) {
+  const { isBusy } = editor;
+  const { localFulfillments, removedFulfillmentIds, fulfill, removeFulfillment } = links;
+  const fulfillment = removedFulfillmentIds.has(requirement.id)
+    ? null
+    : (localFulfillments.get(requirement.id) ?? requirement.fulfillment ?? null);
+  // Row action: only this row's button is gated, the other rows stay usable.
+  const rowBusy = isBusy(`evidence:${requirement.id}`);
+  return (
+    <div className="flex items-center justify-between gap-3 p-3">
+      <p className="text-sm">{requirement.description}</p>
+      <span className="flex shrink-0 items-center gap-2">
+        <InlinePending active={rowBusy} />
+        {fulfillment ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => removeFulfillment(requirement, fulfillment)}
+            disabled={rowBusy}
+          >
+            Erfüllung entfernen
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => fulfill(requirement.id)}
+            disabled={rowBusy}
+          >{`Mit Version ${currentRevision.revision_number} erfüllen`}</Button>
+        )}
+      </span>
+    </div>
   );
 }
 
@@ -277,9 +302,8 @@ export function WorkArtifactActionPanel({
   timeEntryOptions,
   evidenceRequirements,
 }: WorkArtifactActionPanelProps) {
-  const { anyBusy, isBusy, setEditing } = editor;
+  const { anyBusy, isBusy } = editor;
   const { actionReason, setActionReason, actionReasonError, act, setVoid } = review;
-  const { exportArtifact } = links;
   const canVoid = Boolean(
     detail &&
       (isManager ||
@@ -287,73 +311,16 @@ export function WorkArtifactActionPanel({
   );
   return (
     <div className="space-y-4 border-t pt-4">
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" onClick={() => setEditing(true)} disabled={anyBusy}>
-          Neue Version
-        </Button>
-        {detail.status === 'draft' && (
-          <Button
-            pending={isBusy('review_requested')}
-            type="button"
-            onClick={() => act('review_requested')}
-            disabled={anyBusy}
-          >
-            Zur Prüfung einreichen
-          </Button>
-        )}
-        {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
-          <>
-            <Button
-              pending={isBusy('internal_approved')}
-              type="button"
-              onClick={() => act('internal_approved')}
-              disabled={anyBusy}
-            >
-              Intern freigeben
-            </Button>
-            <Button
-              pending={isBusy('correction_requested')}
-              type="button"
-              variant="outline"
-              onClick={() => act('correction_requested', actionReason)}
-              disabled={anyBusy}
-            >
-              Korrektur anfordern
-            </Button>
-          </>
-        )}
-        {detail.status === 'submitted' &&
-          (isManager ||
-            detail.actions.some(
-              (action) =>
-                action.revision_id === currentRevision.id &&
-                action.action_type === 'review_requested' &&
-                action.created_by === currentUserId,
-            )) && (
-            <Button
-              pending={isBusy('review_withdrawn')}
-              type="button"
-              variant="outline"
-              onClick={() => act('review_withdrawn')}
-              disabled={anyBusy}
-            >
-              Prüfung zurückziehen
-            </Button>
-          )}
-        {/* A project export is a project document write, which needs a manager. */}
-        {(isManager || !detail.project_id) && (
-          <Button
-            pending={isBusy('export')}
-            type="button"
-            variant="outline"
-            onClick={exportArtifact}
-            disabled={anyBusy}
-          >
-            <Download className="size-4" />
-            Export
-          </Button>
-        )}
-      </div>
+      <WorkArtifactReviewButtons
+        detail={detail}
+        currentRevision={currentRevision}
+        editor={editor}
+        review={review}
+        links={links}
+        isManager={isManager}
+        canApprove={canApprove}
+        currentUserId={currentUserId}
+      />
       <Field
         label="Begründung für Ablehnung, Korrektur, Vorbehalt oder Ungültigkeit"
         htmlFor="artifact-action-reason"
@@ -399,5 +366,104 @@ export function WorkArtifactActionPanel({
         </div>
       )}
     </div>
+  );
+}
+
+/** The status transitions and the export of the current revision. */
+function WorkArtifactReviewButtons({
+  detail,
+  currentRevision,
+  editor,
+  review,
+  links,
+  isManager,
+  canApprove,
+  currentUserId,
+}: Pick<
+  WorkArtifactActionPanelProps,
+  'detail' | 'currentRevision' | 'editor' | 'review' | 'links' | 'isManager' | 'canApprove' | 'currentUserId'
+>) {
+  const { anyBusy, isBusy, setEditing } = editor;
+  const { act } = review;
+  const { exportArtifact } = links;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="button" variant="outline" onClick={() => setEditing(true)} disabled={anyBusy}>
+        Neue Version
+      </Button>
+      {detail.status === 'draft' && (
+        <Button
+          pending={isBusy('review_requested')}
+          type="button"
+          onClick={() => act('review_requested')}
+          disabled={anyBusy}
+        >
+          Zur Prüfung einreichen
+        </Button>
+      )}
+      {detail.status === 'submitted' && canApprove && currentRevision.created_by !== currentUserId && (
+        <WorkArtifactApprovalButtons editor={editor} review={review} />
+      )}
+      {detail.status === 'submitted' &&
+        (isManager ||
+          detail.actions.some(
+            (action) =>
+              action.revision_id === currentRevision.id &&
+              action.action_type === 'review_requested' &&
+              action.created_by === currentUserId,
+          )) && (
+          <Button
+            pending={isBusy('review_withdrawn')}
+            type="button"
+            variant="outline"
+            onClick={() => act('review_withdrawn')}
+            disabled={anyBusy}
+          >
+            Prüfung zurückziehen
+          </Button>
+        )}
+      {/* A project export is a project document write, which needs a manager. */}
+      {(isManager || !detail.project_id) && (
+        <Button
+          pending={isBusy('export')}
+          type="button"
+          variant="outline"
+          onClick={exportArtifact}
+          disabled={anyBusy}
+        >
+          <Download className="size-4" />
+          Export
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function WorkArtifactApprovalButtons({
+  editor,
+  review,
+}: Pick<WorkArtifactActionPanelProps, 'editor' | 'review'>) {
+  const { anyBusy, isBusy } = editor;
+  const { actionReason, act } = review;
+  return (
+    <>
+      <Button
+        pending={isBusy('internal_approved')}
+        type="button"
+        onClick={() => act('internal_approved')}
+        disabled={anyBusy}
+      >
+        Intern freigeben
+      </Button>
+      <Button
+        pending={isBusy('correction_requested')}
+        type="button"
+        variant="outline"
+        onClick={() => act('correction_requested', actionReason)}
+        disabled={anyBusy}
+      >
+        Korrektur anfordern
+      </Button>
+    </>
   );
 }
