@@ -32,20 +32,29 @@ export function midnightStartWaitMs(now: Date): number {
   return time >= midnight - MIDNIGHT_START_WINDOW.leadMs && time < closesAt ? closesAt - time : 0;
 }
 
-/** Holds a browser group until the midnight window closes; the signal cancels the wait. */
-export async function waitOutsideMidnightWindow(input: {
+/**
+ * Holds a browser group until the midnight window closes; the signal cancels the wait. A CI job's
+ * timeout counts the wait as work, so in CI the group is blocked at once instead: the shard ends
+ * with a classified result, never a cancellation. Returns the block reason, if any.
+ */
+export async function holdOutsideMidnightWindow(input: {
   groupId: string;
+  ci: boolean;
   signal: AbortSignal;
   log: (line: string) => void;
   now?: () => Date;
-}): Promise<void> {
+}): Promise<string | undefined> {
   const now = input.now?.() ?? new Date();
   const waitMs = midnightStartWaitMs(now);
-  if (!waitMs) return;
-  input.log(
-    `${input.groupId}: Berlin time is inside the midnight start window (23:40 to 00:10), where a group's business date can change or its day is too young; waiting ${Math.ceil(waitMs / 60_000)} min until ${new Date(now.getTime() + waitMs).toISOString()} (00:10 Berlin).`,
-  );
+  if (!waitMs) return undefined;
+  const window =
+    "Berlin time is inside the midnight start window (23:40 to 00:10), where a group's business date can change or its day is too young";
+  const until = `${new Date(now.getTime() + waitMs).toISOString()} (00:10 Berlin)`;
+  if (input.ci)
+    return `harness, midnight start window: ${window}. A CI job's timeout would count the ${Math.ceil(waitMs / 60_000)} min wait, so the group did not run; rerun the failed job after ${until}.`;
+  input.log(`${input.groupId}: ${window}; waiting ${Math.ceil(waitMs / 60_000)} min until ${until}.`);
   await sleep(waitMs, undefined, { signal: input.signal });
+  return undefined;
 }
 
 /**
