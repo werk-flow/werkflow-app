@@ -813,9 +813,9 @@
         },
         "api:/api/time-tracking-state": {
           "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 4563, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "rows": { "reference": 0, "tolerance": 0 }
+          "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "rows": { "reference": 1, "tolerance": 0 }
         }
       },
       "source": {
@@ -896,6 +896,24 @@
           "to": { "reference": 696, "tolerance": 13 },
           "runKeys": ["2026-10-31T174358140Z-861d58"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "api:/api/time-tracking-state",
+          "from": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 4563, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 0, "tolerance": 0 }
+          },
+          "to": {
+            "requests": { "reference": 3, "tolerance": 0 },
+            "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "rows": { "reference": 1, "tolerance": 0 }
+          },
+          "runKeys": ["2026-10-31T192644664Z-7546e0"],
+          "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) keeps today's time after clock-out, so the state read after clock-out now returns today's row (1 instead of 0). Intended behavior of #107, which merged without a full run; requests and route renders are unchanged."
         }
       ]
     },

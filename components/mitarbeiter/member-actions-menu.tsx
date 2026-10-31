@@ -117,44 +117,13 @@ export function MemberActionsMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
-            <MoreHorizontal className="size-4" />
-            <span className="sr-only">Aktionen öffnen</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => router.push(`/mitarbeiter/${memberId}`)}>
-            <ExternalLink className="size-4" />
-            Details anzeigen
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          {availableRoles.length > 0 && (
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <UserCog className="size-4" />
-                Rolle ändern
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {availableRoles.map((role) => (
-                  <DropdownMenuItem
-                    key={role}
-                    onClick={() => void onRoleChange(memberId, role, memberFirstName, memberLastName)}
-                  >
-                    {ROLE_LABELS[role]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onClick={() => setShowRemoveDialog(true)}>
-            <UserMinus className="size-4" />
-            Entfernen
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <MemberActionsDropdown
+        isLoading={isLoading}
+        availableRoles={availableRoles}
+        onShowDetails={() => router.push(`/mitarbeiter/${memberId}`)}
+        onRoleSelect={(role) => void onRoleChange(memberId, role, memberFirstName, memberLastName)}
+        onRemove={() => setShowRemoveDialog(true)}
+      />
 
       <MemberRemoveConfirmDialog
         open={showRemoveDialog}
@@ -166,5 +135,59 @@ export function MemberActionsMenu({
         onRemove={handleRemove}
       />
     </>
+  );
+}
+
+type MemberActionsDropdownProps = {
+  isLoading: boolean;
+  availableRoles: OrgRole[];
+  onShowDetails: () => void;
+  onRoleSelect: (role: OrgRole) => void;
+  onRemove: () => void;
+};
+
+function MemberActionsDropdown({
+  isLoading,
+  availableRoles,
+  onShowDetails,
+  onRoleSelect,
+  onRemove,
+}: MemberActionsDropdownProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
+          <MoreHorizontal className="size-4" />
+          <span className="sr-only">Aktionen öffnen</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={onShowDetails}>
+          <ExternalLink className="size-4" />
+          Details anzeigen
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        {availableRoles.length > 0 && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <UserCog className="size-4" />
+              Rolle ändern
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent>
+              {availableRoles.map((role) => (
+                <DropdownMenuItem key={role} onClick={() => onRoleSelect(role)}>
+                  {ROLE_LABELS[role]}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={onRemove}>
+          <UserMinus className="size-4" />
+          Entfernen
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
