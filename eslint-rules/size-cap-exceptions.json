@@ -34,8 +34,6 @@
     "components/anfragen/use-create-request-form.ts": { "useCreateRequestForm": 146 },
     "components/anfragen/use-edit-request-form.ts": { "useEditRequestForm": 119 },
     "components/anfragen/use-request-detail-actions.ts": { "useRequestDetailActions": 148 },
-    "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
-    "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
     "components/auftraege/artifacts/use-work-artifact-customer-actions.ts": {
       "useWorkArtifactCustomerActions": 129
@@ -302,10 +300,6 @@
     "components/organization/organization-context.tsx": { "OrganizationProvider": 146 },
     "components/otp-form.tsx": { "OTPForm": 124 },
     "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 99 },
-    "components/realtime/realtime-provider.tsx": {
-      "RealtimeProvider": 125,
-      "RealtimeProvider > useEffect#1": 118
-    },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
@@ -335,7 +329,6 @@
     "components/shared/metadata-section.tsx": { "MetadataSection": 166, "MetadataFieldRow": 176 },
     "components/shared/use-embedded-auftraege-mutations.ts": { "useEmbeddedAuftraegeMutations": 121 },
     "components/shared/use-embedded-auftraege-state.ts": { "useEmbeddedAuftraegeEntries": 126 },
-    "components/sidebar/app-shell.tsx": { "SidebarContent": 94 },
     "components/time-activity-dialog.tsx": { "TimeActivityDialogForm": 178 },
     "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
     "components/ui/calendar.tsx": { "Calendar": 122 },
