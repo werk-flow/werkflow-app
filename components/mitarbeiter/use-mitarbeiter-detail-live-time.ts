@@ -138,7 +138,8 @@ export function useMitarbeiterDetailLiveTime({
     breakMode,
     autoBreakThresholdMinutes,
     autoBreakDurationMinutes,
-    todayTarget?.targetMinutes,
+    // An unknown target owes no overtime: every worked minute stays work, never capped at 8 h.
+    todayTarget?.targetMinutes ?? Number.POSITIVE_INFINITY,
   );
   const dailyPercentage = progressPercent(memberBreakdown.workMinutes, todayTargetMinutes);
 
