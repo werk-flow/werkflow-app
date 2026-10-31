@@ -41,28 +41,89 @@ interface DateSegmentKeyContext {
   resetBufferTimer: (onExpire?: () => void) => void;
 }
 
+function stepDateSegment(delta: 1 | -1, activeSegment: Segment, context: DateSegmentKeyContext): void {
+  const { day, month, year, applySegmentValue } = context;
+  const curDay = day ?? 1;
+  const curMonth = month ?? 1;
+  const curYear = year ?? new Date().getFullYear();
+
+  if (activeSegment === 'day') {
+    const maxDay = new Date(curYear, curMonth, 0).getDate();
+    const newDay = ((curDay - 1 + delta + maxDay) % maxDay) + 1;
+    applySegmentValue('day', newDay);
+  } else if (activeSegment === 'month') {
+    const newMonth = ((curMonth - 1 + delta + 12) % 12) + 1;
+    applySegmentValue('month', newMonth);
+  } else {
+    applySegmentValue('year', Math.max(1, curYear + delta));
+  }
+}
+
+function handleDateSegmentTab(
+  e: React.KeyboardEvent,
+  activeSegment: Segment,
+  context: DateSegmentKeyContext,
+): void {
+  const { advanceSegment, retreatSegment, clearBuffer } = context;
+  if (!e.shiftKey && activeSegment !== 'year') {
+    e.preventDefault();
+    advanceSegment();
+    return;
+  }
+  if (e.shiftKey && activeSegment !== 'day') {
+    e.preventDefault();
+    retreatSegment();
+    return;
+  }
+  context.setActiveSegment(null);
+  clearBuffer();
+}
+
+function typeDateSegmentDigit(digit: string, activeSegment: Segment, context: DateSegmentKeyContext): void {
+  const { inputBuffer, applySegmentValue, advanceSegment } = context;
+  const newBuffer = inputBuffer + digit;
+  const maxLen = SEGMENT_LENGTHS[activeSegment];
+  const maxVal = MAX_VALUES[activeSegment];
+
+  const numericVal = parseInt(newBuffer, 10);
+
+  if (newBuffer.length >= maxLen) {
+    const clamped = Math.min(numericVal, maxVal);
+    if (clamped > 0) applySegmentValue(activeSegment, clamped);
+    advanceSegment();
+    return;
+  }
+
+  if (activeSegment === 'day' && numericVal > 3) {
+    const clamped = Math.min(numericVal, maxVal);
+    if (clamped > 0) applySegmentValue(activeSegment, clamped);
+    advanceSegment();
+    return;
+  }
+
+  if (activeSegment === 'month' && numericVal > 1) {
+    const clamped = Math.min(numericVal, maxVal);
+    if (clamped > 0) applySegmentValue(activeSegment, clamped);
+    advanceSegment();
+    return;
+  }
+
+  context.setInputBuffer(newBuffer);
+  context.resetBufferTimer(
+    activeSegment === 'year' ? () => applySegmentValue('year', numericVal) : undefined,
+  );
+  if (activeSegment === 'year') return;
+  if (numericVal > 0) applySegmentValue(activeSegment, numericVal);
+}
+
 function handleDateSegmentKeyDown(e: React.KeyboardEvent, context: DateSegmentKeyContext): void {
-  const { disabled, activeSegment, day, month, year, inputBuffer } = context;
+  const { disabled, activeSegment, inputBuffer } = context;
   const { applySegmentValue, advanceSegment, retreatSegment, clearBuffer } = context;
   if (disabled || !activeSegment) return;
 
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     e.preventDefault();
-    const delta = e.key === 'ArrowUp' ? 1 : -1;
-    const curDay = day ?? 1;
-    const curMonth = month ?? 1;
-    const curYear = year ?? new Date().getFullYear();
-
-    if (activeSegment === 'day') {
-      const maxDay = new Date(curYear, curMonth, 0).getDate();
-      const newDay = ((curDay - 1 + delta + maxDay) % maxDay) + 1;
-      applySegmentValue('day', newDay);
-    } else if (activeSegment === 'month') {
-      const newMonth = ((curMonth - 1 + delta + 12) % 12) + 1;
-      applySegmentValue('month', newMonth);
-    } else {
-      applySegmentValue('year', Math.max(1, curYear + delta));
-    }
+    stepDateSegment(e.key === 'ArrowUp' ? 1 : -1, activeSegment, context);
     clearBuffer();
     return;
   }
@@ -80,57 +141,13 @@ function handleDateSegmentKeyDown(e: React.KeyboardEvent, context: DateSegmentKe
   }
 
   if (e.key === 'Tab') {
-    if (!e.shiftKey && activeSegment !== 'year') {
-      e.preventDefault();
-      advanceSegment();
-      return;
-    }
-    if (e.shiftKey && activeSegment !== 'day') {
-      e.preventDefault();
-      retreatSegment();
-      return;
-    }
-    context.setActiveSegment(null);
-    clearBuffer();
+    handleDateSegmentTab(e, activeSegment, context);
     return;
   }
 
   if (/^[0-9]$/.test(e.key)) {
     e.preventDefault();
-    const digit = e.key;
-    const newBuffer = inputBuffer + digit;
-    const maxLen = SEGMENT_LENGTHS[activeSegment];
-    const maxVal = MAX_VALUES[activeSegment];
-
-    const numericVal = parseInt(newBuffer, 10);
-
-    if (newBuffer.length >= maxLen) {
-      const clamped = Math.min(numericVal, maxVal);
-      if (clamped > 0) applySegmentValue(activeSegment, clamped);
-      advanceSegment();
-      return;
-    }
-
-    if (activeSegment === 'day' && numericVal > 3) {
-      const clamped = Math.min(numericVal, maxVal);
-      if (clamped > 0) applySegmentValue(activeSegment, clamped);
-      advanceSegment();
-      return;
-    }
-
-    if (activeSegment === 'month' && numericVal > 1) {
-      const clamped = Math.min(numericVal, maxVal);
-      if (clamped > 0) applySegmentValue(activeSegment, clamped);
-      advanceSegment();
-      return;
-    }
-
-    context.setInputBuffer(newBuffer);
-    context.resetBufferTimer(
-      activeSegment === 'year' ? () => applySegmentValue('year', numericVal) : undefined,
-    );
-    if (activeSegment === 'year') return;
-    if (numericVal > 0) applySegmentValue(activeSegment, numericVal);
+    typeDateSegmentDigit(e.key, activeSegment, context);
     return;
   }
 
@@ -147,39 +164,22 @@ function handleDateSegmentKeyDown(e: React.KeyboardEvent, context: DateSegmentKe
   }
 }
 
-/** Segment focus, typed-digit buffer and calendar popover state of the `DatePicker`. */
-export function useDatePickerSegments(
-  value: Date | undefined,
-  onChange: (date: Date | undefined) => void,
-  disabled: boolean,
+type SetState<T> = React.Dispatch<React.SetStateAction<T>>;
+
+/** The draft segments a picker starts from: the value's, else the 1st of January this year. */
+function draftSegmentsFor(date: Date | undefined): DateSegments {
+  return {
+    day: date?.getDate() ?? 1,
+    month: date ? date.getMonth() + 1 : 1,
+    year: date?.getFullYear() ?? new Date().getFullYear(),
+  };
+}
+
+/** Hook-named so it may take the timer ref; it calls no React hook. */
+function useDateSegmentBuffer(
+  setInputBuffer: SetState<string>,
+  bufferTimerRef: React.RefObject<ReturnType<typeof setTimeout> | null>,
 ) {
-  const [open, setOpen] = React.useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [activeSegment, setActiveSegment] = React.useState<Segment | null>(null);
-  const [isFocused, setIsFocused] = React.useState(false);
-  const [inputBuffer, setInputBuffer] = React.useState('');
-  const bufferTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const valueRef = React.useRef(value);
-  const draftSegmentsRef = React.useRef<DateSegments>({
-    day: value?.getDate() ?? 1,
-    month: value ? value.getMonth() + 1 : 1,
-    year: value?.getFullYear() ?? new Date().getFullYear(),
-  });
-  React.useEffect(() => {
-    valueRef.current = value;
-  }, [value]);
-  // A pending year commit must not reach `onChange` after the picker unmounts.
-  React.useEffect(
-    () => () => {
-      if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
-    },
-    [],
-  );
-
-  const day = value ? value.getDate() : undefined;
-  const month = value ? value.getMonth() + 1 : undefined;
-  const year = value ? value.getFullYear() : undefined;
-
   const clearBuffer = () => {
     setInputBuffer('');
     if (bufferTimerRef.current) {
@@ -197,45 +197,14 @@ export function useDatePickerSegments(
     }, 1000);
   };
 
-  const applySegmentValue = (segment: Segment, val: number) => {
-    const nextSegments = { ...draftSegmentsRef.current, [segment]: val };
-    draftSegmentsRef.current = nextSegments;
-    const result = buildDateFromSegments(nextSegments.day, nextSegments.month, nextSegments.year);
-    valueRef.current = result;
-    onChange(result);
-  };
+  return { clearBuffer, resetBufferTimer };
+}
 
-  const handleSegmentClick = (segment: Segment) => {
-    if (disabled) return;
-    setActiveSegment(segment);
-    setIsFocused(true);
-    clearBuffer();
-  };
-
-  const handleFocus = () => {
-    if (disabled) return;
-    const currentValue = valueRef.current;
-    draftSegmentsRef.current = {
-      day: currentValue?.getDate() ?? 1,
-      month: currentValue ? currentValue.getMonth() + 1 : 1,
-      year: currentValue?.getFullYear() ?? new Date().getFullYear(),
-    };
-    setIsFocused(true);
-    if (!activeSegment) setActiveSegment('day');
-  };
-
-  const handleBlur = (e: React.FocusEvent) => {
-    if (containerRef.current?.contains(e.relatedTarget as Node)) return;
-    if (open) return;
-    if (activeSegment === 'year' && inputBuffer) {
-      const bufferedYear = Number(inputBuffer);
-      if (bufferedYear > 0) applySegmentValue('year', bufferedYear);
-    }
-    setIsFocused(false);
-    setActiveSegment(null);
-    clearBuffer();
-  };
-
+function createDateSegmentNavigation(
+  activeSegment: Segment | null,
+  setActiveSegment: (segment: Segment | null) => void,
+  clearBuffer: () => void,
+) {
   const advanceSegment = () => {
     const idx = activeSegment ? SEGMENT_ORDER.indexOf(activeSegment) : -1;
     const nextSegment = SEGMENT_ORDER[idx + 1];
@@ -254,36 +223,169 @@ export function useDatePickerSegments(
     clearBuffer();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) =>
-    handleDateSegmentKeyDown(e, {
-      disabled,
-      activeSegment,
-      day,
-      month,
-      year,
-      inputBuffer,
-      applySegmentValue,
-      advanceSegment,
-      retreatSegment,
-      clearBuffer,
-      setActiveSegment,
-      setInputBuffer,
-      resetBufferTimer,
-    });
+  return { advanceSegment, retreatSegment };
+}
+
+interface DateSegmentFocusContext {
+  disabled: boolean;
+  open: boolean;
+  activeSegment: Segment | null;
+  inputBuffer: string;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  valueRef: React.RefObject<Date | undefined>;
+  draftSegmentsRef: React.RefObject<DateSegments>;
+  setActiveSegment: SetState<Segment | null>;
+  setIsFocused: SetState<boolean>;
+  clearBuffer: () => void;
+  applySegmentValue: (segment: Segment, val: number) => void;
+}
+
+/** Hook-named so it may take the refs; it calls no React hook. */
+function useDateSegmentFocusHandlers(context: DateSegmentFocusContext) {
+  const { disabled, open, activeSegment, inputBuffer, containerRef, valueRef, draftSegmentsRef } = context;
+  const { setActiveSegment, setIsFocused, clearBuffer, applySegmentValue } = context;
+
+  const handleSegmentClick = (segment: Segment) => {
+    if (disabled) return;
+    setActiveSegment(segment);
+    setIsFocused(true);
+    clearBuffer();
+  };
+
+  const handleFocus = () => {
+    if (disabled) return;
+    draftSegmentsRef.current = draftSegmentsFor(valueRef.current);
+    setIsFocused(true);
+    if (!activeSegment) setActiveSegment('day');
+  };
+
+  const handleBlur = (e: React.FocusEvent) => {
+    if (e.relatedTarget instanceof Node && containerRef.current?.contains(e.relatedTarget)) return;
+    if (open) return;
+    if (activeSegment === 'year' && inputBuffer) {
+      const bufferedYear = Number(inputBuffer);
+      if (bufferedYear > 0) applySegmentValue('year', bufferedYear);
+    }
+    setIsFocused(false);
+    setActiveSegment(null);
+    clearBuffer();
+  };
+
+  return { handleSegmentClick, handleFocus, handleBlur };
+}
+
+function createDateSegmentKeyDown(context: Omit<DateSegmentKeyContext, 'advanceSegment' | 'retreatSegment'>) {
+  const { advanceSegment, retreatSegment } = createDateSegmentNavigation(
+    context.activeSegment,
+    context.setActiveSegment,
+    context.clearBuffer,
+  );
+
+  return (e: React.KeyboardEvent) =>
+    handleDateSegmentKeyDown(e, { ...context, advanceSegment, retreatSegment });
+}
+
+/** Hook-named so it may take the refs; it calls no React hook. */
+function useDateSegmentDraftWrites({
+  draftSegmentsRef,
+  valueRef,
+  containerRef,
+  onChange,
+  setOpen,
+}: {
+  draftSegmentsRef: React.RefObject<DateSegments>;
+  valueRef: React.RefObject<Date | undefined>;
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  onChange: (date: Date | undefined) => void;
+  setOpen: SetState<boolean>;
+}) {
+  const applySegmentValue = (segment: Segment, val: number) => {
+    const nextSegments = { ...draftSegmentsRef.current, [segment]: val };
+    draftSegmentsRef.current = nextSegments;
+    const result = buildDateFromSegments(nextSegments.day, nextSegments.month, nextSegments.year);
+    valueRef.current = result;
+    onChange(result);
+  };
 
   const handleCalendarSelect = (date: Date | undefined) => {
     valueRef.current = date;
     if (date) {
-      draftSegmentsRef.current = {
-        day: date.getDate(),
-        month: date.getMonth() + 1,
-        year: date.getFullYear(),
-      };
+      draftSegmentsRef.current = draftSegmentsFor(date);
     }
     onChange(date);
     setOpen(false);
     containerRef.current?.focus();
   };
+
+  return { applySegmentValue, handleCalendarSelect };
+}
+
+/** Segment focus, typed-digit buffer and calendar popover state of the `DatePicker`. */
+export function useDatePickerSegments(
+  value: Date | undefined,
+  onChange: (date: Date | undefined) => void,
+  disabled: boolean,
+) {
+  const [open, setOpen] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [activeSegment, setActiveSegment] = React.useState<Segment | null>(null);
+  const [isFocused, setIsFocused] = React.useState(false);
+  const [inputBuffer, setInputBuffer] = React.useState('');
+  const bufferTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const valueRef = React.useRef(value);
+  const draftSegmentsRef = React.useRef<DateSegments>(draftSegmentsFor(value));
+  React.useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+  // A pending year commit must not reach `onChange` after the picker unmounts.
+  React.useEffect(
+    () => () => {
+      if (bufferTimerRef.current) clearTimeout(bufferTimerRef.current);
+    },
+    [],
+  );
+
+  const day = value ? value.getDate() : undefined;
+  const month = value ? value.getMonth() + 1 : undefined;
+  const year = value ? value.getFullYear() : undefined;
+
+  const { clearBuffer, resetBufferTimer } = useDateSegmentBuffer(setInputBuffer, bufferTimerRef);
+
+  const { applySegmentValue, handleCalendarSelect } = useDateSegmentDraftWrites({
+    draftSegmentsRef,
+    valueRef,
+    containerRef,
+    onChange,
+    setOpen,
+  });
+
+  const { handleSegmentClick, handleFocus, handleBlur } = useDateSegmentFocusHandlers({
+    disabled,
+    open,
+    activeSegment,
+    inputBuffer,
+    containerRef,
+    valueRef,
+    draftSegmentsRef,
+    setActiveSegment,
+    setIsFocused,
+    clearBuffer,
+    applySegmentValue,
+  });
+
+  const handleKeyDown = createDateSegmentKeyDown({
+    disabled,
+    activeSegment,
+    day,
+    month,
+    year,
+    inputBuffer,
+    applySegmentValue,
+    clearBuffer,
+    setActiveSegment,
+    setInputBuffer,
+    resetBufferTimer,
+  });
 
   return {
     open,
