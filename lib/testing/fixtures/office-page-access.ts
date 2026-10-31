@@ -5,15 +5,8 @@
 // id sees none of it. A Büro member of the owning organization opens the same
 // ids, so each refusal answers the role or the organization, not a missing row.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
-import type { ReactElement } from 'react';
-import {
-  CALLER_ID,
-  ORGANIZATION_A,
-  ORGANIZATION_B,
-  installActionWorld,
-  signInAs,
-} from './action-boundary-world';
+import { CALLER_ID, ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
+import { field, installPageWorld, refusal, render, type Render } from './page-render';
 
 const requestId = '6a000000-0000-4000-8000-000000000001';
 const clientId = '6a000000-0000-4000-8000-000000000002';
@@ -39,8 +32,7 @@ const emptyInventoryPage = {
   },
 };
 
-const navigation = { ...(await import('next/navigation')) };
-const world = installActionWorld({
+const world = await installPageWorld({
   client_requests: [
     {
       id: requestId,
@@ -101,17 +93,6 @@ const world = installActionWorld({
   ],
 });
 
-// The pages import client components, so the router hooks stay; a redirect and a not-found end the render.
-mock.module('next/navigation', () => ({
-  ...navigation,
-  redirect: (path: string): never => {
-    throw new Error(`redirect:${path}`);
-  },
-  notFound: (): never => {
-    throw new Error('notFound');
-  },
-}));
-
 const { default: AnfragenPage } = await import('@/app/(app)/anfragen/page');
 const { default: AnfrageDetailPage } = await import('@/app/(app)/anfragen/[requestId]/page');
 const { default: KundenDetailPage } = await import('@/app/(app)/kunden/[clientId]/page');
@@ -120,41 +101,6 @@ const { default: InventoryPage } = await import('@/app/(app)/inventar/page');
 const { default: JobDetailPage } = await import('@/app/(app)/auftraege/[jobNumber]/page');
 const { getJobByNumber } = await import('@/lib/jobs/actions');
 const { navItemsFor } = await import('@/components/sidebar/sidebar-nav-items');
-
-type Render = () => Promise<ReactElement> | ReactElement;
-type ServerComponent = (props: unknown) => Promise<ReactElement>;
-
-function isServerComponent(type: unknown): type is ServerComponent {
-  return typeof type === 'function' && type.constructor.name === 'AsyncFunction';
-}
-
-/** The value at `path` below `value`, or `undefined` where a step is missing. */
-function field(value: unknown, ...path: string[]): unknown {
-  return path.reduce<unknown>(
-    (current, key) =>
-      typeof current === 'object' && current !== null ? Reflect.get(current, key) : undefined,
-    value,
-  );
-}
-
-/** Runs the page and each async server component it returns, as the server renders them. */
-async function render(page: Render): Promise<ReactElement> {
-  let element = await page();
-  while (isServerComponent(element.type)) element = await element.type(element.props);
-  return element;
-}
-
-/** How the page refused: a redirect, a not-found, or a client-side route redirect. */
-async function refusal(page: Render): Promise<string> {
-  try {
-    const href = field(await render(page), 'props', 'href');
-    assert.equal(typeof href, 'string', 'the page rendered');
-    return `route-redirect:${String(href)}`;
-  } catch (error) {
-    if (error instanceof Error && /^(redirect:|notFound$)/.test(error.message)) return error.message;
-    throw error;
-  }
-}
 
 const searchParams = Promise.resolve({});
 const pages = {

@@ -98,13 +98,14 @@ function mockCachedReads(world: ActionWorld): void {
     uniqueCode: 'ABCDEF',
     joinedAt: '2026-01-01T00:00:00.000Z',
   });
+  const caller = () =>
+    world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' };
   mock.module('@/lib/data/cached', () => ({
     // Any tag name resolves to a string; `installActionWorld` replaces invalidation itself.
     CACHE_TAGS: new Proxy({}, { get: (_target, tag) => () => String(tag) }),
-    getAuthenticatedUser: async () =>
-      world.callerId === null ? null : { id: world.callerId, email: 'caller@example.test' },
+    getAuthenticatedUser: async () => caller(),
     getCachedMemberships: async () => world.memberships.map(asMembership),
-    getCachedUser: unusedRead('getCachedUser'),
+    getCachedUser: async () => ({ data: { user: caller() } }),
     getCachedPrestartMemberships: async () =>
       world.prestartOrganizationIds.map((orgId) => asMembership({ orgId, role: 'employee' })),
     getCachedMemberCount: unusedRead('getCachedMemberCount'),

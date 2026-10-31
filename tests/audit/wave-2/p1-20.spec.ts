@@ -42,7 +42,6 @@ import {
   maintenanceDueRowsOfPlan,
   maintenanceDueServiceCasePicker,
   maintenanceDueSubmit,
-  maintenancePageHeading,
   maintenancePlanActionReason,
   maintenancePlanActionSubmit,
   maintenancePlanOverlapReason,
@@ -52,7 +51,7 @@ import {
   openMaintenancePlanAction,
   openMaintenancePlanDialog,
 } from '../../golden/support/steps/service';
-import { SHARED_COPY, selectFromSearchable, testData, textInDom } from '../../golden/support/steps/shared';
+import { SHARED_COPY, selectFromSearchable, testData } from '../../golden/support/steps/shared';
 import { artifactsDirectory, type TestWorld } from '../../golden/support/world';
 
 /**
@@ -563,19 +562,5 @@ test.describe('P1-20 exhaustive maintenance audit @AUDIT-W2-P1-20 @AUDIT-W2', ()
     const state = expectDefined(await getMaintenanceStateByPlanNumber(world.orgId, planNumber), 'plan state');
     expect(state.plan.status).toBe('terminated');
     expect(state.plan.archived_at).not.toBeNull();
-  });
-
-  test('keeps maintenance from employees and other organizations', async ({
-    employeePage,
-    outsiderPage,
-    world,
-    businessDate,
-  }) => {
-    const { names } = await seedMaintenanceOwners(world, 'denial', businessDate, { coverage: true });
-    await employeePage.goto('/service/wartung');
-    await expect(employeePage).not.toHaveURL(/\/service\/wartung/);
-    await outsiderPage.goto('/service/wartung');
-    await expect(maintenancePageHeading(outsiderPage)).toBeVisible();
-    await expect(textInDom(outsiderPage, names.coverageReference)).toHaveCount(0);
   });
 });

@@ -141,6 +141,7 @@ List every residual exposure the owner accepted here until it closes.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit. Its constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.
+- The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception; `lib/security/dependency-exceptions.json` holds its reason and expiry.
 - Two provider facts are unverified: the R2 buckets' CORS rules (runtime tokens get `AccessDenied` on `GetBucketCors`; a check needs an R2 token with Admin Read) and the Vercel environment scopes (a check needs a token that reads the project's environment).
 
 ## Revocation boundaries

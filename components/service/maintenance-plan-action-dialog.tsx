@@ -20,6 +20,28 @@ import { setMaintenancePlanArchived, transitionMaintenancePlan } from '@/lib/mai
 import type { MaintenancePlanItem, MaintenancePlanStatus } from '@/lib/maintenance/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
+const PLAN_ACTION_ERROR_MESSAGES: Record<string, string> = {
+  maintenance_stale_version: 'Der Wartungsplan wurde inzwischen geändert. Bitte lade die Seite neu.',
+  maintenance_reason_required: 'Gib eine kurze Begründung ein.',
+  maintenance_plan_archive_requires_terminated:
+    'Der Wartungsplan muss zuerst beendet werden, bevor du ihn archivieren kannst.',
+  maintenance_plan_transition_not_allowed: 'Dieser Statuswechsel ist im aktuellen Zustand nicht möglich.',
+};
+
+type PlanTargetStatus = Exclude<MaintenancePlanStatus, 'draft'>;
+
+function planActionTitle(toStatus: PlanTargetStatus | undefined, archived: boolean | undefined): string {
+  return toStatus === 'active'
+    ? 'Wartungsplan aktivieren'
+    : toStatus === 'suspended'
+      ? 'Wartungsplan pausieren'
+      : toStatus === 'terminated'
+        ? 'Wartungsplan beenden'
+        : archived
+          ? 'Wartungsplan archivieren'
+          : 'Wartungsplan wiederherstellen';
+}
+
 export function MaintenancePlanActionDialog({
   open,
   onOpenChange,
@@ -31,7 +53,7 @@ export function MaintenancePlanActionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   plan: MaintenancePlanItem;
-  toStatus?: Exclude<MaintenancePlanStatus, 'draft'>;
+  toStatus?: PlanTargetStatus;
   archived?: boolean;
   /** Settled by the caller (a live-view refresh); without it the action's response renders the route. */
   onSaved?: () => void;
@@ -45,46 +67,25 @@ export function MaintenancePlanActionDialog({
     const nextReasonError = reason.trim().length < 3 ? 'Gib eine kurze Begründung ein.' : undefined;
     setReasonError(nextReasonError ?? null);
     if (focusFirstInvalidField({ 'maintenance-action-reason': nextReasonError })) return;
+    const input = {
+      planId: plan.id,
+      expectedVersion: plan.version,
+      reason,
+      idempotencyKey: idempotencyKey.current,
+    };
     const result = toStatus
-      ? await transitionMaintenancePlan({
-          planId: plan.id,
-          expectedVersion: plan.version,
-          toStatus,
-          reason,
-          idempotencyKey: idempotencyKey.current,
-        })
-      : await setMaintenancePlanArchived({
-          planId: plan.id,
-          expectedVersion: plan.version,
-          archived: archived ?? true,
-          reason,
-          idempotencyKey: idempotencyKey.current,
-        });
+      ? await transitionMaintenancePlan({ ...input, toStatus })
+      : await setMaintenancePlanArchived({ ...input, archived: archived ?? true });
     if (!result.success) {
-      const messages: Record<string, string> = {
-        maintenance_stale_version: 'Der Wartungsplan wurde inzwischen geändert. Bitte lade die Seite neu.',
-        maintenance_reason_required: 'Gib eine kurze Begründung ein.',
-        maintenance_plan_archive_requires_terminated:
-          'Der Wartungsplan muss zuerst beendet werden, bevor du ihn archivieren kannst.',
-        maintenance_plan_transition_not_allowed:
-          'Dieser Statuswechsel ist im aktuellen Zustand nicht möglich.',
-      };
-      setError(describeFailure(result.error, messages, 'Der Status konnte nicht geändert werden.'));
+      setError(
+        describeFailure(result.error, PLAN_ACTION_ERROR_MESSAGES, 'Der Status konnte nicht geändert werden.'),
+      );
       return;
     }
     onOpenChange(false);
     onSaved?.();
   });
-  const title =
-    toStatus === 'active'
-      ? 'Wartungsplan aktivieren'
-      : toStatus === 'suspended'
-        ? 'Wartungsplan pausieren'
-        : toStatus === 'terminated'
-          ? 'Wartungsplan beenden'
-          : archived
-            ? 'Wartungsplan archivieren'
-            : 'Wartungsplan wiederherstellen';
+  const title = planActionTitle(toStatus, archived);
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>

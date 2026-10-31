@@ -21,7 +21,7 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { WorkTemplateTargetType } from '@/lib/work-templates/types';
+import type { WorkTemplateApplicationPreview, WorkTemplateTargetType } from '@/lib/work-templates/types';
 
 import { useApplyWorkTemplate } from './use-apply-work-template';
 import { SectionTitle } from '@/components/shared/section-title';
@@ -57,20 +57,7 @@ export function ApplyWorkTemplateCard(props: ApplyWorkTemplateCardProps): ReactE
 
   return (
     <>
-      <div className="rounded-lg border bg-card p-4 sm:p-5">
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-          <div>
-            <SectionTitle icon={<ClipboardPlus className="size-4" />}>Arbeitsvorlage</SectionTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Ergänzt Aufgaben, Nachweise, Material und Qualifikationen ohne Bestand oder Kalender zu
-              verändern.
-            </p>
-          </div>
-          <Button type="button" variant="outline" onClick={openDialog}>
-            Vorlage anwenden
-          </Button>
-        </div>
-      </div>
+      <ApplyWorkTemplateIntro onOpen={openDialog} />
       <Dialog open={open} onOpenChange={setOpen} pending={isPending}>
         <DialogContent size="xl">
           <DialogHeader>
@@ -81,58 +68,20 @@ export function ApplyWorkTemplateCard(props: ApplyWorkTemplateCardProps): ReactE
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-4 py-1">
-            <Field label="Arbeitsvorlage" htmlFor="apply-work-template-version" required error={versionError}>
-              {optionsFailure ? (
-                // A failed read must not read as „no template published“.
-                <SectionError failure={optionsFailure} />
-              ) : options === null ? (
-                <Skeleton className="h-9" />
-              ) : (
-                <SearchableSelect
-                  options={options.map((option) => ({
-                    value: option.versionId,
-                    label: option.name,
-                    description: `Version ${option.versionNumber}`,
-                  }))}
-                  value={versionId}
-                  onChange={selectVersion}
-                  placeholder="Arbeitsvorlage wählen"
-                  searchPlaceholder="Arbeitsvorlagen suchen…"
-                  emptyMessage="Keine passende Arbeitsvorlage veröffentlicht"
-                />
-              )}
-            </Field>
-            {previewPending && (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <InlinePending active label="Vorschau wird geladen" />
-                Vorschau wird geladen…
-              </p>
-            )}
-            {preview && (
-              <div className="rounded-lg border bg-muted/20 p-4 text-sm">
-                <p className="font-medium">
-                  {preview.name} · Version {preview.versionNumber}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  {preview.itemCount} Aufgaben/Checklistenpunkte · {preview.evidenceCount} Nachweise ·{' '}
-                  {preview.materialCount} Materialpositionen · {preview.capabilityCount} Qualifikationen ·{' '}
-                  {preview.dependencyCount} Abhängigkeiten
-                </p>
-                {preview.hasSameVersionApplication && (
-                  <ErrorText className="mt-3">Diese Version wurde bereits angewendet.</ErrorText>
-                )}
-                {preview.hasExistingApplication && !preview.hasSameVersionApplication && (
-                  <label className="mt-3 flex items-start gap-2">
-                    <Checkbox
-                      checked={allowAdditional}
-                      onCheckedChange={(checked) => setAllowAdditional(checked === true)}
-                    />
-                    <span>Weitere Vorlage ergänzen. Vorhandene Planung bleibt bestehen.</span>
-                  </label>
-                )}
-              </div>
-            )}
-            {previewFailure && <SectionError failure={previewFailure} />}
+            <WorkTemplateVersionField
+              options={options}
+              optionsFailure={optionsFailure}
+              versionId={versionId}
+              versionError={versionError}
+              onSelect={selectVersion}
+            />
+            <WorkTemplatePreviewRegion
+              previewPending={previewPending}
+              preview={preview}
+              previewFailure={previewFailure}
+              allowAdditional={allowAdditional}
+              onAllowAdditionalChange={setAllowAdditional}
+            />
             <ErrorText>{error}</ErrorText>
           </DialogBody>
           <DialogFooter>
@@ -157,5 +106,124 @@ export function ApplyWorkTemplateCard(props: ApplyWorkTemplateCardProps): ReactE
         onConfirm={(approval) => submit(approval)}
       />
     </>
+  );
+}
+
+function ApplyWorkTemplateIntro({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div className="rounded-lg border bg-card p-4 sm:p-5">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+        <div>
+          <SectionTitle icon={<ClipboardPlus className="size-4" />}>Arbeitsvorlage</SectionTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ergänzt Aufgaben, Nachweise, Material und Qualifikationen ohne Bestand oder Kalender zu verändern.
+          </p>
+        </div>
+        <Button type="button" variant="outline" onClick={onOpen}>
+          Vorlage anwenden
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function WorkTemplateVersionField({
+  options,
+  optionsFailure,
+  versionId,
+  versionError,
+  onSelect,
+}: Pick<
+  ReturnType<typeof useApplyWorkTemplate>,
+  'options' | 'optionsFailure' | 'versionId' | 'versionError'
+> & { onSelect: (versionId: string) => void }) {
+  return (
+    <Field label="Arbeitsvorlage" htmlFor="apply-work-template-version" required error={versionError}>
+      {optionsFailure ? (
+        // A failed read must not read as „no template published“.
+        <SectionError failure={optionsFailure} />
+      ) : options === null ? (
+        <Skeleton className="h-9" />
+      ) : (
+        <SearchableSelect
+          options={options.map((option) => ({
+            value: option.versionId,
+            label: option.name,
+            description: `Version ${option.versionNumber}`,
+          }))}
+          value={versionId}
+          onChange={onSelect}
+          placeholder="Arbeitsvorlage wählen"
+          searchPlaceholder="Arbeitsvorlagen suchen…"
+          emptyMessage="Keine passende Arbeitsvorlage veröffentlicht"
+        />
+      )}
+    </Field>
+  );
+}
+
+/** The preview of the chosen version: loading, its summary, or its failed read. */
+function WorkTemplatePreviewRegion({
+  previewPending,
+  preview,
+  previewFailure,
+  allowAdditional,
+  onAllowAdditionalChange,
+}: Pick<
+  ReturnType<typeof useApplyWorkTemplate>,
+  'previewPending' | 'preview' | 'previewFailure' | 'allowAdditional'
+> & { onAllowAdditionalChange: (allowAdditional: boolean) => void }) {
+  return (
+    <>
+      {previewPending && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <InlinePending active label="Vorschau wird geladen" />
+          Vorschau wird geladen…
+        </p>
+      )}
+      {preview && (
+        <WorkTemplatePreviewSummary
+          preview={preview}
+          allowAdditional={allowAdditional}
+          onAllowAdditionalChange={onAllowAdditionalChange}
+        />
+      )}
+      {previewFailure && <SectionError failure={previewFailure} />}
+    </>
+  );
+}
+
+function WorkTemplatePreviewSummary({
+  preview,
+  allowAdditional,
+  onAllowAdditionalChange,
+}: {
+  preview: WorkTemplateApplicationPreview;
+  allowAdditional: boolean;
+  onAllowAdditionalChange: (allowAdditional: boolean) => void;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/20 p-4 text-sm">
+      <p className="font-medium">
+        {preview.name} · Version {preview.versionNumber}
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        {preview.itemCount} Aufgaben/Checklistenpunkte · {preview.evidenceCount} Nachweise ·{' '}
+        {preview.materialCount} Materialpositionen · {preview.capabilityCount} Qualifikationen ·{' '}
+        {preview.dependencyCount} Abhängigkeiten
+      </p>
+      {preview.hasSameVersionApplication && (
+        <ErrorText className="mt-3">Diese Version wurde bereits angewendet.</ErrorText>
+      )}
+      {preview.hasExistingApplication && !preview.hasSameVersionApplication && (
+        <label className="mt-3 flex items-start gap-2">
+          <Checkbox
+            checked={allowAdditional}
+            onCheckedChange={(checked) => onAllowAdditionalChange(checked === true)}
+          />
+          <span>Weitere Vorlage ergänzen. Vorhandene Planung bleibt bestehen.</span>
+        </label>
+      )}
+    </div>
   );
 }

@@ -255,6 +255,96 @@ function WorkContextSimpleGroupCard({
   );
 }
 
+type WorkContextGroupListProps = {
+  groups: ReturnType<typeof buildWorkContextGroups>;
+  getGroupProps: (rowId: string) => WorkContextGroupProps;
+  getJobProject: (job: Job) => ProjectWithDetails | null;
+};
+
+/** Desktop table of every group with its expandable document rows. */
+function WorkContextGroupTable({ groups, getGroupProps, getJobProject }: WorkContextGroupListProps) {
+  const { projectGroups, standaloneJobGroups, clientGroups, employeeGroups } = groups;
+
+  return (
+    <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
+      <Table>
+        <ColumnsTableHeader columns={WORK_CONTEXT_COLUMNS} />
+        <TableBody>
+          {projectGroups.map((group) => {
+            const rowId = `project:${group.project.id}`;
+            return <WorkContextProjectGroupRows key={rowId} group={group} {...getGroupProps(rowId)} />;
+          })}
+
+          {standaloneJobGroups.map((group) => {
+            const rowId = `job:${group.job.id}`;
+            return (
+              <WorkContextJobGroupRows
+                key={rowId}
+                group={group}
+                project={getJobProject(group.job)}
+                {...getGroupProps(rowId)}
+              />
+            );
+          })}
+
+          {[...clientGroups, ...employeeGroups].map((group) => {
+            const rowId = `${group.typeLabel}:${group.id}`;
+            return <WorkContextSimpleGroupRows key={rowId} group={group} {...getGroupProps(rowId)} />;
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/** Mobile cards of every group with their expandable document cards. */
+function WorkContextGroupCards({ groups, getGroupProps, getJobProject }: WorkContextGroupListProps) {
+  const { projectGroups, standaloneJobGroups, clientGroups, employeeGroups } = groups;
+
+  return (
+    <div className="space-y-3 md:hidden">
+      {projectGroups.map((group) => {
+        const rowId = `project:${group.project.id}`;
+        return <WorkContextProjectGroupCard key={rowId} group={group} {...getGroupProps(rowId)} />;
+      })}
+
+      {standaloneJobGroups.map((group) => {
+        const rowId = `job:${group.job.id}`;
+        return (
+          <WorkContextJobGroupCard
+            key={rowId}
+            group={group}
+            project={getJobProject(group.job)}
+            {...getGroupProps(rowId)}
+          />
+        );
+      })}
+
+      {[...clientGroups, ...employeeGroups].map((group) => {
+        const rowId = `${group.typeLabel}:${group.id}`;
+        return <WorkContextSimpleGroupCard key={rowId} group={group} {...getGroupProps(rowId)} />;
+      })}
+    </div>
+  );
+}
+
+/** The set of expanded group rows and its toggle. */
+function useExpandedRowIds() {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpanded(id: string, event?: MouseEvent<HTMLButtonElement>): void {
+    event?.stopPropagation();
+    setExpandedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  return { expandedIds, toggleExpanded };
+}
+
 export function DocumentWorkContextView({
   documents,
   jobs,
@@ -271,28 +361,19 @@ export function DocumentWorkContextView({
   onCopyDocument,
   onDeleteDocument,
 }: DocumentWorkContextViewProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const { expandedIds, toggleExpanded } = useExpandedRowIds();
   const projectById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-  const { projectGroups, standaloneJobGroups, clientGroups, employeeGroups } = useMemo(
+  const groups = useMemo(
     () => buildWorkContextGroups({ documents, jobs, projects, clients, employees }),
     [clients, documents, employees, jobs, projects],
   );
+  const { projectGroups, standaloneJobGroups, clientGroups, employeeGroups } = groups;
 
   const hasGroups =
     projectGroups.length > 0 ||
     standaloneJobGroups.length > 0 ||
     clientGroups.length > 0 ||
     employeeGroups.length > 0;
-
-  function toggleExpanded(id: string, event?: MouseEvent<HTMLButtonElement>): void {
-    event?.stopPropagation();
-    setExpandedIds((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   function getHandlers(document: OrganizationDocument): DocumentActionHandlers {
     return getDocumentHandlers({
@@ -333,58 +414,9 @@ export function DocumentWorkContextView({
 
   return (
     <>
-      <div className="hidden overflow-hidden rounded-lg border bg-card md:block">
-        <Table>
-          <ColumnsTableHeader columns={WORK_CONTEXT_COLUMNS} />
-          <TableBody>
-            {projectGroups.map((group) => {
-              const rowId = `project:${group.project.id}`;
-              return <WorkContextProjectGroupRows key={rowId} group={group} {...getGroupProps(rowId)} />;
-            })}
+      <WorkContextGroupTable groups={groups} getGroupProps={getGroupProps} getJobProject={getJobProject} />
 
-            {standaloneJobGroups.map((group) => {
-              const rowId = `job:${group.job.id}`;
-              return (
-                <WorkContextJobGroupRows
-                  key={rowId}
-                  group={group}
-                  project={getJobProject(group.job)}
-                  {...getGroupProps(rowId)}
-                />
-              );
-            })}
-
-            {[...clientGroups, ...employeeGroups].map((group) => {
-              const rowId = `${group.typeLabel}:${group.id}`;
-              return <WorkContextSimpleGroupRows key={rowId} group={group} {...getGroupProps(rowId)} />;
-            })}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="space-y-3 md:hidden">
-        {projectGroups.map((group) => {
-          const rowId = `project:${group.project.id}`;
-          return <WorkContextProjectGroupCard key={rowId} group={group} {...getGroupProps(rowId)} />;
-        })}
-
-        {standaloneJobGroups.map((group) => {
-          const rowId = `job:${group.job.id}`;
-          return (
-            <WorkContextJobGroupCard
-              key={rowId}
-              group={group}
-              project={getJobProject(group.job)}
-              {...getGroupProps(rowId)}
-            />
-          );
-        })}
-
-        {[...clientGroups, ...employeeGroups].map((group) => {
-          const rowId = `${group.typeLabel}:${group.id}`;
-          return <WorkContextSimpleGroupCard key={rowId} group={group} {...getGroupProps(rowId)} />;
-        })}
-      </div>
+      <WorkContextGroupCards groups={groups} getGroupProps={getGroupProps} getJobProject={getJobProject} />
     </>
   );
 }

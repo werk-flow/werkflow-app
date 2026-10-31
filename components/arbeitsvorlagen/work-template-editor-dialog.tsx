@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import { History, Plus, Save, Send } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -17,22 +17,13 @@ import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { usePendingTask } from '@/hooks/use-server-action';
 import type { InventoryLocation } from '@/lib/inventory/types';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { formatBerlinDateTime } from '@/lib/utils';
-import {
-  createNextWorkTemplateDraft,
-  publishWorkTemplate,
-  saveWorkTemplateDraft,
-} from '@/lib/work-templates/actions';
 import type { WorkTemplateDetail, WorkTemplateDraft } from '@/lib/work-templates/types';
-import { describeFailure } from '@/lib/action-messages';
-import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
-import { useWorkTemplateEditorOptions } from './use-work-template-editor-options';
+import { useWorkTemplateEditor } from './use-work-template-editor';
 import { CapabilitiesEditor } from './work-template-capabilities-editor';
-import { ERROR_MESSAGES, withWorkTemplateSortOrders } from './work-template-editor-shared';
 import { ItemsEditor } from './work-template-items-editor';
 import { MaterialsEditor } from './work-template-materials-editor';
 
@@ -49,112 +40,8 @@ export function TemplateEditorDialog({
   capabilities: CapabilityDefinition[];
   onChanged: (message: string) => Promise<void>;
 }): ReactElement {
-  const [draft, setDraft] = useState<WorkTemplateDraft | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [nameError, setNameError] = useState<string | null>(null);
-  // One gate per footer button so the spinner sits on the button that was pressed.
-  const { run: runSave, isPending: isSaving } = usePendingTask();
-  const { run: runPublish, isPending: isPublishing } = usePendingTask();
-  const { run: runNextDraft, isPending: isCreatingNextDraft } = usePendingTask();
-  const isPending = isSaving || isPublishing || isCreatingNextDraft;
-  const {
-    activeDraft,
-    createdInventoryItems,
-    capabilityItemOptions,
-    optionBusy,
-    patchDraft,
-    resetResolvedOptionIds,
-    createInventoryItem,
-    createCapabilityOption,
-  } = useWorkTemplateEditorOptions({ detail, draft, setDraft, capabilities });
-  const editable = Boolean(detail?.draftVersionId);
-
-  function update(next: WorkTemplateDraft) {
-    setDraft(next);
-    setError(null);
-    if (next.name.trim()) setNameError(null);
-  }
-  function close(open: boolean) {
-    if (!open) {
-      setDraft(null);
-      resetResolvedOptionIds();
-      setError(null);
-      setNameError(null);
-    }
-    onOpenChange(open);
-  }
-  // The name is the one required field; a missing name is marked before any request.
-  function hasInvalidName(): boolean {
-    const message = activeDraft?.name.trim() ? undefined : 'Bitte gib einen Namen ein.';
-    setNameError(message ?? null);
-    return focusFirstInvalidField({ 'template-name': message });
-  }
-  function save() {
-    if (!detail || !activeDraft) return;
-    if (hasInvalidName()) return;
-    void runSave(async () => {
-      const result = await saveWorkTemplateDraft({
-        templateId: detail.id,
-        draft: withWorkTemplateSortOrders(activeDraft),
-      }).catch(() => null);
-      if (!result?.success) {
-        setError(
-          result
-            ? describeFailure(result.error, ERROR_MESSAGES, 'Der Entwurf konnte nicht gespeichert werden.')
-            : 'Der Entwurf konnte nicht gespeichert werden.',
-        );
-        return;
-      }
-      await onChanged('Entwurf gespeichert.');
-    });
-  }
-  function publish() {
-    if (!detail) return;
-    if (hasInvalidName()) return;
-    void runPublish(async () => {
-      if (draft && activeDraft) {
-        const saveResult = await saveWorkTemplateDraft({
-          templateId: detail.id,
-          draft: withWorkTemplateSortOrders(activeDraft),
-        }).catch(() => null);
-        if (!saveResult?.success) {
-          setError(
-            saveResult
-              ? describeFailure(
-                  saveResult.error,
-                  ERROR_MESSAGES,
-                  'Der Entwurf konnte nicht gespeichert werden.',
-                )
-              : 'Der Entwurf konnte nicht gespeichert werden.',
-          );
-          return;
-        }
-      }
-      const result = await publishWorkTemplate(detail.id).catch(() => null);
-      if (!result?.success) {
-        setError(
-          result
-            ? describeFailure(result.error, ERROR_MESSAGES, 'Die Version konnte nicht veröffentlicht werden.')
-            : 'Die Version konnte nicht veröffentlicht werden.',
-        );
-        return;
-      }
-      close(false);
-      await onChanged(`Version ${detail.versionNumber} wurde veröffentlicht.`);
-    });
-  }
-  function createNextDraft() {
-    if (!detail) return;
-    void runNextDraft(async () => {
-      const result = await createNextWorkTemplateDraft(detail.id).catch(() => null);
-      if (!result?.success) {
-        setError('Die nächste Version konnte nicht angelegt werden.');
-        return;
-      }
-      close(false);
-      await onChanged('Ein neuer Entwurf wurde angelegt.');
-    });
-  }
+  const editor = useWorkTemplateEditor({ detail, capabilities, onOpenChange, onChanged });
+  const { activeDraft, editable, isPending, update, close } = editor;
   if (!detail || !activeDraft)
     return (
       <Dialog open={false}>
@@ -170,7 +57,7 @@ export function TemplateEditorDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            save();
+            editor.save();
           }}
           className="contents"
         >
@@ -187,44 +74,27 @@ export function TemplateEditorDialog({
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="space-y-6 py-1">
-            <WorkTemplateBasicsSection
+            <WorkTemplateDraftEditors
               draft={activeDraft}
               editable={editable}
-              nameError={nameError}
+              nameError={editor.nameError}
               onChange={update}
-            />
-            <ItemsEditor draft={activeDraft} editable={editable} onChange={update} />
-            <MaterialsEditor
-              draft={activeDraft}
-              editable={editable}
-              onChange={update}
-              onPatch={patchDraft}
-              createdItems={createdInventoryItems}
+              editor={editor}
               inventoryLocations={inventoryLocations}
-              onCreateItem={createInventoryItem}
-              isItemPending={optionBusy.isBusy}
-            />
-            <CapabilitiesEditor
-              draft={activeDraft}
-              editable={editable}
-              onChange={update}
-              capabilities={capabilityItemOptions}
-              onCreateCapability={createCapabilityOption}
-              isCapabilityPending={optionBusy.isBusy}
             />
             <WorkTemplateHistorySection history={detail.history} />
-            <ErrorText>{error}</ErrorText>
+            <ErrorText>{editor.error}</ErrorText>
           </DialogBody>
           <TemplateEditorFooter
             editable={editable}
             isPending={isPending}
-            isSaving={isSaving}
-            isPublishing={isPublishing}
-            isCreatingNextDraft={isCreatingNextDraft}
-            isOptionPending={optionBusy.anyBusy}
+            isSaving={editor.isSaving}
+            isPublishing={editor.isPublishing}
+            isCreatingNextDraft={editor.isCreatingNextDraft}
+            isOptionPending={editor.optionBusy.anyBusy}
             onClose={() => close(false)}
-            onPublish={publish}
-            onCreateNextDraft={createNextDraft}
+            onPublish={editor.publish}
+            onCreateNextDraft={editor.createNextDraft}
           />
         </form>
       </DialogContent>
@@ -261,6 +131,60 @@ function WorkTemplateBasicsSection({
         />
       </Field>
     </section>
+  );
+}
+
+function WorkTemplateDraftEditors({
+  draft,
+  editable,
+  nameError,
+  onChange,
+  editor,
+  inventoryLocations,
+}: {
+  draft: WorkTemplateDraft;
+  editable: boolean;
+  nameError: string | null;
+  onChange: (draft: WorkTemplateDraft) => void;
+  editor: Pick<
+    ReturnType<typeof useWorkTemplateEditor>,
+    | 'patchDraft'
+    | 'createdInventoryItems'
+    | 'createInventoryItem'
+    | 'capabilityItemOptions'
+    | 'createCapabilityOption'
+    | 'optionBusy'
+  >;
+  inventoryLocations: InventoryLocation[];
+}) {
+  return (
+    <>
+      <WorkTemplateBasicsSection
+        draft={draft}
+        editable={editable}
+        nameError={nameError}
+        onChange={onChange}
+      />
+      <ItemsEditor draft={draft} editable={editable} onChange={onChange} />
+      <MaterialsEditor
+        draft={draft}
+        editable={editable}
+        onChange={onChange}
+        onPatch={editor.patchDraft}
+        createdItems={editor.createdInventoryItems}
+        inventoryLocations={inventoryLocations}
+        onCreateItem={editor.createInventoryItem}
+        isItemPending={editor.optionBusy.isBusy}
+      />
+      <CapabilitiesEditor
+        draft={draft}
+        editable={editable}
+        onChange={onChange}
+        capabilities={editor.capabilityItemOptions}
+        onCreateCapability={editor.createCapabilityOption}
+        isCapabilityPending={editor.optionBusy.isBusy}
+      />
+    </>
   );
 }
 

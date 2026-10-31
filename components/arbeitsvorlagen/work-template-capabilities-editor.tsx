@@ -18,12 +18,14 @@ import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
-import type { CapabilityDefinition, CapabilityKind } from '@/lib/qualifications/types';
+import { CAPABILITY_KINDS, type CapabilityDefinition, type CapabilityKind } from '@/lib/qualifications/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { cn } from '@/lib/utils';
 import type { WorkTemplateDraft } from '@/lib/work-templates/types';
 
 import { newId, type CreateCapabilityInput } from './work-template-editor-shared';
+
+type WorkTemplateCapabilityLineDraft = WorkTemplateDraft['capabilities'][number];
 
 export function CapabilitiesEditor({
   draft,
@@ -68,91 +70,139 @@ export function CapabilitiesEditor({
           </Button>
         )}
       </div>
-      {draft.capabilities.map((line) => {
-        const pending = isCapabilityPending(line.capabilityId);
-        return (
-          <div
-            key={line.id}
-            className={cn(
-              'grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end',
-              pending && 'opacity-70',
-            )}
-            aria-busy={pending || undefined}
-            data-testid="work-template-capability"
-            data-row-id={line.id}
-          >
-            <Field
-              label={
-                <span className="inline-flex items-center gap-2">
-                  Qualifikation
-                  <InlinePending active={pending} label="Qualifikation wird erstellt" />
-                </span>
-              }
-              htmlFor={`capability-${line.id}`}
-            >
-              <SelectWithCreate
-                id={`capability-${line.id}`}
-                items={capabilities}
-                getOption={(item) => ({
-                  value: item.id,
-                  label: item.name,
-                  description: item.kind === 'skill' ? 'Fähigkeit' : 'Zertifizierung',
-                })}
-                value={line.capabilityId}
-                onValueChange={(value) =>
-                  onChange({
-                    ...draft,
-                    capabilities: draft.capabilities.map((item) =>
-                      item.id === line.id ? { ...item, capabilityId: value } : item,
-                    ),
-                  })
-                }
-                createLabel="Neue Qualifikation erstellen"
-                disabled={!editable}
-                renderCreateDialog={({ open, onOpenChange }) => (
-                  <CreateCapabilityDialog
-                    open={open}
-                    onOpenChange={onOpenChange}
-                    onSubmit={(input) => onCreateCapability(line.id, input)}
-                  />
-                )}
-              />
-            </Field>
-            <label className="flex items-center gap-2">
-              <Checkbox
-                checked={line.requireConfirmation}
-                disabled={!editable}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...draft,
-                    capabilities: draft.capabilities.map((item) =>
-                      item.id === line.id ? { ...item, requireConfirmation: checked === true } : item,
-                    ),
-                  })
-                }
-              />
-              Bestätigung nötig
-            </label>
-            {editable && (
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                onClick={() =>
-                  onChange({
-                    ...draft,
-                    capabilities: draft.capabilities.filter((item) => item.id !== line.id),
-                  })
-                }
-                aria-label="Qualifikation löschen"
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            )}
-          </div>
-        );
-      })}
+      {draft.capabilities.map((line) => (
+        <WorkTemplateCapabilityLine
+          key={line.id}
+          line={line}
+          pending={isCapabilityPending(line.capabilityId)}
+          draft={draft}
+          editable={editable}
+          onChange={onChange}
+          capabilities={capabilities}
+          onCreateCapability={onCreateCapability}
+        />
+      ))}
     </section>
+  );
+}
+
+function WorkTemplateCapabilityLine({
+  line,
+  pending,
+  draft,
+  editable,
+  onChange,
+  capabilities,
+  onCreateCapability,
+}: {
+  line: WorkTemplateCapabilityLineDraft;
+  pending: boolean;
+  draft: WorkTemplateDraft;
+  editable: boolean;
+  onChange: (draft: WorkTemplateDraft) => void;
+  capabilities: CapabilityDefinition[];
+  onCreateCapability: (lineId: string, input: CreateCapabilityInput) => void;
+}) {
+  function updateLine(update: (item: WorkTemplateCapabilityLineDraft) => WorkTemplateCapabilityLineDraft) {
+    onChange({
+      ...draft,
+      capabilities: draft.capabilities.map((item) => (item.id === line.id ? update(item) : item)),
+    });
+  }
+  return (
+    <div
+      className={cn(
+        'grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end',
+        pending && 'opacity-70',
+      )}
+      aria-busy={pending || undefined}
+      data-testid="work-template-capability"
+      data-row-id={line.id}
+    >
+      <CapabilityPickerField
+        line={line}
+        pending={pending}
+        editable={editable}
+        capabilities={capabilities}
+        onSelect={(value) => updateLine((item) => ({ ...item, capabilityId: value }))}
+        onCreateCapability={onCreateCapability}
+      />
+      <label className="flex items-center gap-2">
+        <Checkbox
+          checked={line.requireConfirmation}
+          disabled={!editable}
+          onCheckedChange={(checked) =>
+            updateLine((item) => ({ ...item, requireConfirmation: checked === true }))
+          }
+        />
+        Bestätigung nötig
+      </label>
+      {editable && (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={() =>
+            onChange({
+              ...draft,
+              capabilities: draft.capabilities.filter((item) => item.id !== line.id),
+            })
+          }
+          aria-label="Qualifikation löschen"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function CapabilityPickerField({
+  line,
+  pending,
+  editable,
+  capabilities,
+  onSelect,
+  onCreateCapability,
+}: {
+  line: WorkTemplateCapabilityLineDraft;
+  pending: boolean;
+  editable: boolean;
+  capabilities: CapabilityDefinition[];
+  onSelect: (capabilityId: string) => void;
+  onCreateCapability: (lineId: string, input: CreateCapabilityInput) => void;
+}) {
+  return (
+    <Field
+      label={
+        <span className="inline-flex items-center gap-2">
+          Qualifikation
+          <InlinePending active={pending} label="Qualifikation wird erstellt" />
+        </span>
+      }
+      htmlFor={`capability-${line.id}`}
+    >
+      <SelectWithCreate
+        id={`capability-${line.id}`}
+        items={capabilities}
+        getOption={(item) => ({
+          value: item.id,
+          label: item.name,
+          description: item.kind === 'skill' ? 'Fähigkeit' : 'Zertifizierung',
+        })}
+        value={line.capabilityId}
+        onValueChange={onSelect}
+        createLabel="Neue Qualifikation erstellen"
+        disabled={!editable}
+        renderCreateDialog={({ open, onOpenChange }) => (
+          <CreateCapabilityDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            onSubmit={(input) => onCreateCapability(line.id, input)}
+          />
+        )}
+      />
+    </Field>
   );
 }
 
@@ -201,7 +251,13 @@ function CreateCapabilityDialog({
               />
             </Field>
             <Field label="Art" htmlFor="quick-capability-kind">
-              <Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}>
+              <Select
+                value={kind}
+                onValueChange={(value) => {
+                  const match = CAPABILITY_KINDS.find((candidate) => candidate === value);
+                  if (match) setKind(match);
+                }}
+              >
                 <SelectTrigger aria-label="Art der Qualifikation">
                   <SelectValue />
                 </SelectTrigger>
