@@ -874,7 +874,13 @@
           "file": "supabase/tests/organization_member_reads.sql",
           "kind": "sql",
           "description": "the member list read answers a member with the own organization's members only and refuses a caller who is not a member of the organization it names; no client role executes it",
-          "titles": ["% read the member list", "a client role executes get_org_members_for_user"]
+          "titles": [
+            "% read the member list",
+            "a client role executes get_org_members_for_user",
+            "the owner of A lists %, not the members of A",
+            "the field worker of A lists %, not the members of A",
+            "the owner of B lists %, not the members of B"
+          ]
         },
         {
           "file": "lib/personnel/lifecycle-actions.test.ts",
