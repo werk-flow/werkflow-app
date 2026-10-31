@@ -17,7 +17,6 @@
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
-    "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
     "app/(auth)/login/page.tsx": { "LoginPage": 106 },
     "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
