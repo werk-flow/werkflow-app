@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { cn, formatBerlinTime } from '@/lib/utils';
 import type { useWeeklyTimeData } from '@/hooks/use-weekly-time-data';
 import { WeeklyHoursChart } from './weekly-hours-chart';
+import { describeClockActivity, type ClockActivityTone } from '@/lib/time-tracking/clock-day-summary';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
 type ZeiterfassungDashboardStatusCardProps = Pick<
@@ -16,6 +17,20 @@ type ZeiterfassungDashboardStatusCardProps = Pick<
   liveBreakMinutes: number;
 };
 
+const ACTIVITY_TONE_CLASSES = {
+  active: {
+    circle: 'bg-success-soft',
+    icon: 'text-success-soft-foreground',
+    badge: 'bg-success-soft text-success-soft-foreground',
+  },
+  break: {
+    circle: 'bg-warning-soft',
+    icon: 'text-warning-soft-foreground',
+    badge: 'bg-warning-soft text-warning-soft-foreground',
+  },
+  idle: { circle: 'bg-muted', icon: 'text-muted-foreground', badge: 'bg-muted text-muted-foreground' },
+} as const satisfies Record<ClockActivityTone, { circle: string; icon: string; badge: string }>;
+
 // Working time status and the weekly chart
 export function ZeiterfassungDashboardStatusCard({
   effectiveState,
@@ -26,6 +41,7 @@ export function ZeiterfassungDashboardStatusCard({
   liveTotalMinutes,
   liveBreakMinutes,
 }: ZeiterfassungDashboardStatusCardProps) {
+  const activity = describeClockActivity(effectiveState);
   return (
     <Card>
       <CardContent className="p-4 space-y-4">
@@ -34,23 +50,10 @@ export function ZeiterfassungDashboardStatusCard({
             <div
               className={cn(
                 'flex h-10 w-10 items-center justify-center rounded-full',
-                effectiveState.status === 'working'
-                  ? 'bg-success-soft'
-                  : effectiveState.status === 'on_break'
-                    ? 'bg-warning-soft'
-                    : 'bg-muted',
+                ACTIVITY_TONE_CLASSES[activity.tone].circle,
               )}
             >
-              <Clock
-                className={cn(
-                  'h-5 w-5',
-                  effectiveState.status === 'working'
-                    ? 'text-success-soft-foreground'
-                    : effectiveState.status === 'on_break'
-                      ? 'text-warning-soft-foreground'
-                      : 'text-muted-foreground',
-                )}
-              />
+              <Clock className={cn('h-5 w-5', ACTIVITY_TONE_CLASSES[activity.tone].icon)} />
             </div>
             <div>
               <p className="font-medium">Arbeitszeit</p>
@@ -64,18 +67,10 @@ export function ZeiterfassungDashboardStatusCard({
           <span
             className={cn(
               'rounded-full px-3 py-1 text-xs font-medium',
-              effectiveState.status === 'working'
-                ? 'bg-success-soft text-success-soft-foreground'
-                : effectiveState.status === 'on_break'
-                  ? 'bg-warning-soft text-warning-soft-foreground'
-                  : 'bg-muted text-muted-foreground',
+              ACTIVITY_TONE_CLASSES[activity.tone].badge,
             )}
           >
-            {effectiveState.status === 'working'
-              ? 'arbeitet'
-              : effectiveState.status === 'on_break'
-                ? 'Pause'
-                : 'inaktiv'}
+            {activity.badge}
           </span>
         </div>
 
