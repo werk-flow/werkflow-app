@@ -136,9 +136,14 @@ $sql$, 'work_time_start_job_not_found');
 
 do $$
 begin
-  if (select break_mode::text || auto_break_duration_minutes || jsonb_array_length(break_policy_history)
+  if (select jsonb_build_object(
+        'break_mode', break_mode,
+        'auto_break_threshold_minutes', auto_break_threshold_minutes,
+        'auto_break_duration_minutes', auto_break_duration_minutes,
+        'break_policy_history', break_policy_history)
       from public.organization_settings
-      where organization_id = '26104154-0000-0000-0000-000000000010') <> 'manual301'
+      where organization_id = '26104154-0000-0000-0000-000000000010')
+    is distinct from (select expected from pg_temp.settings_call)
   then raise exception 'a refused save changed the settings'; end if;
   if exists (
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
