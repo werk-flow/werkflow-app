@@ -116,13 +116,6 @@
     "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
     "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 117 },
     "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 113 },
-    "components/auftraege/list/unified-auftraege-desktop-rows.tsx": { "ProjectRow": 111 },
-    "components/auftraege/list/unified-auftraege-mobile-cards.tsx": { "ProjectCard": 141 },
-    "components/auftraege/list/unified-auftraege-row-cells.tsx": {
-      "UnifiedAuftraegeJobRowCells": 82,
-      "UnifiedAuftraegeProjectRowCells": 110
-    },
-    "components/auftraege/list/unified-auftraege-table.tsx": { "UnifiedAuftraegeTable": 108 },
     "components/auftraege/list/use-auftraege-create-actions.ts": { "useAuftraegeCreateActions": 111 },
     "components/auftraege/list/use-auftraege-local-updates.ts": { "useAuftraegeLocalUpdates": 88 },
     "components/auftraege/list/use-auftraege-optimistic-list.ts": { "useAuftraegeOptimisticList": 93 },
