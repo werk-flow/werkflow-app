@@ -13,8 +13,6 @@
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
-    "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
-    "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
     "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
     "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
@@ -197,10 +195,6 @@
     "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
     "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/realtime/realtime-provider.tsx": {
-      "RealtimeProvider": 125,
-      "RealtimeProvider > useEffect#1": 118
-    },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
@@ -225,26 +219,6 @@
       "useResponsibilityConfigurationForm": 102
     },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
-    "components/shared/embedded-auftraege-lists.tsx": { "EmbeddedAuftraegeLists": 153 },
-    "components/shared/embedded-auftraege-section.tsx": { "EmbeddedAuftraegeSection": 108 },
-    "components/shared/metadata-section.tsx": { "MetadataSection": 166, "MetadataFieldRow": 176 },
-    "components/shared/use-embedded-auftraege-mutations.ts": { "useEmbeddedAuftraegeMutations": 121 },
-    "components/shared/use-embedded-auftraege-state.ts": { "useEmbeddedAuftraegeEntries": 126 },
-    "components/sidebar/app-shell.tsx": { "SidebarContent": 94 },
-    "components/ui/calendar.tsx": { "Calendar": 122 },
-    "components/ui/date-picker.tsx": { "DatePicker": 120 },
-    "components/ui/dialog.tsx": { "DialogContent": 84 },
-    "components/ui/duration-hours-input.tsx": { "DurationHoursInput": 87 },
-    "components/ui/month-picker.tsx": { "MonthPicker": 151 },
-    "components/ui/row-actions-menu.tsx": { "RowActionsMenu": 136 },
-    "components/ui/searchable-multi-select.tsx": { "SearchableMultiSelect": 124 },
-    "components/ui/searchable-select-popup.tsx": { "SearchableSelectPopup": 151 },
-    "components/ui/searchable-single-select.tsx": { "SearchableSelect": 120 },
-    "components/ui/time-input.tsx": { "TimeInput": 197 },
-    "components/ui/use-date-picker-segments.ts": {
-      "handleDateSegmentKeyDown": 93,
-      "useDatePickerSegments": 141
-    },
     "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
     "components/zeiterfassung/pending-approvals-cards.tsx": {
       "SessionRequestCard": 107,

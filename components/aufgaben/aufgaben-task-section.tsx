@@ -52,20 +52,7 @@ function groupAttentionTasks(tasks: AttentionTask[]) {
 }
 
 export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
-  const {
-    timeTasks,
-    vacationTasks,
-    requestTasks,
-    followUpTasks,
-    dispatchAcknowledgementTasks,
-    dispatchChallengeTasks,
-    parkingReviewTasks,
-    artifactReviewTasks,
-    artifactCorrectionTasks,
-    dueDefectTasks,
-    handoverTasks,
-    joinRequestTasks,
-  } = groupAttentionTasks(tasks);
+  const groups = groupAttentionTasks(tasks);
 
   return (
     <section className="space-y-4" aria-labelledby="aufgaben-heading">
@@ -75,6 +62,21 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
 
       {tasks.length === 0 && <EmptyState size="compact" title="Keine offenen Aufgaben." />}
 
+      <TeamTaskGroups groups={groups} />
+      <WorkEvidenceTaskGroups groups={groups} />
+      <TimeAndCustomerTaskGroups groups={groups} />
+    </section>
+  );
+}
+
+type AttentionTaskGroups = ReturnType<typeof groupAttentionTasks>;
+
+function TeamTaskGroups({ groups }: { groups: AttentionTaskGroups }) {
+  const { joinRequestTasks, dispatchAcknowledgementTasks, dispatchChallengeTasks, parkingReviewTasks } =
+    groups;
+
+  return (
+    <>
       {joinRequestTasks.length > 0 && (
         <TaskGroup
           icon={<UserPlus className="size-4" />}
@@ -122,7 +124,15 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
           ))}
         </TaskGroup>
       )}
+    </>
+  );
+}
 
+function WorkEvidenceTaskGroups({ groups }: { groups: AttentionTaskGroups }) {
+  const { artifactReviewTasks, artifactCorrectionTasks, handoverTasks, dueDefectTasks } = groups;
+
+  return (
+    <>
       {(artifactReviewTasks.length > 0 || artifactCorrectionTasks.length > 0) && (
         <TaskGroup
           icon={<ClipboardCheck className="size-4" />}
@@ -158,7 +168,15 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
           ))}
         </TaskGroup>
       )}
+    </>
+  );
+}
 
+function TimeAndCustomerTaskGroups({ groups }: { groups: AttentionTaskGroups }) {
+  const { timeTasks, vacationTasks, requestTasks, followUpTasks } = groups;
+
+  return (
+    <>
       {timeTasks.length > 0 && (
         <TaskGroup icon={<Clock className="size-4" />} title="Zeitfreigaben" testId="attention-time-tasks">
           {timeTasks.map((task) => (
@@ -202,7 +220,7 @@ export function AufgabenTaskSection({ tasks }: { tasks: AttentionTask[] }) {
           ))}
         </TaskGroup>
       )}
-    </section>
+    </>
   );
 }
 

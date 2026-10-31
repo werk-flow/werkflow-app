@@ -103,6 +103,44 @@ const DIALOG_SIZE_CLASS = {
   window: 'sm:w-[min(80rem,calc(100vw-3rem))] sm:max-w-none',
 } as const;
 
+type DialogContentLayout = {
+  placement: DialogPlacement;
+  workspace: boolean;
+  size: keyof typeof DIALOG_SIZE_CLASS;
+  className: string | undefined;
+};
+
+function dialogContentClassName({ placement, workspace, size, className }: DialogContentLayout): string {
+  return cn(
+    // Mobile: full width at bottom like a sheet
+    'fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-4 border-t bg-background p-4 shadow-lg duration-200 wrap-anywhere',
+    // Never grow past the viewport. Plain dialogs scroll as a whole;
+    // a DialogBody child takes over scrolling (fixed header/footer).
+    'max-h-[calc(100dvh-3rem)] overflow-y-auto has-[[data-slot=dialog-body]]:overflow-hidden',
+    'data-[state=open]:animate-in data-[state=closed]:animate-out',
+    'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+    'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
+    'rounded-t-lg',
+    'sm:max-h-[90dvh] sm:rounded-lg sm:border sm:border-t',
+    workspace && 'h-[min(44rem,calc(100dvh-3rem))]',
+    placement === 'center'
+      ? [
+          // Desktop: centered modal
+          'sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:p-6',
+          DIALOG_SIZE_CLASS[size],
+          'sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]',
+          'sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]',
+          'sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
+        ]
+      : [
+          // Desktop: anchored above the clock button
+          'sm:inset-auto sm:bottom-24 sm:right-6 sm:w-96 sm:max-w-[calc(100vw-3rem)] sm:p-6',
+          'sm:data-[state=closed]:slide-out-to-bottom-2 sm:data-[state=open]:slide-in-from-bottom-2',
+        ],
+    className,
+  );
+}
+
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
@@ -154,34 +192,7 @@ const DialogContent = React.forwardRef<
         <DialogPrimitive.Content
           ref={ref}
           data-slot="dialog-content"
-          className={cn(
-            // Mobile: full width at bottom like a sheet
-            'fixed inset-x-0 bottom-0 z-50 flex w-full flex-col gap-4 border-t bg-background p-4 shadow-lg duration-200 wrap-anywhere',
-            // Never grow past the viewport. Plain dialogs scroll as a whole;
-            // a DialogBody child takes over scrolling (fixed header/footer).
-            'max-h-[calc(100dvh-3rem)] overflow-y-auto has-[[data-slot=dialog-body]]:overflow-hidden',
-            'data-[state=open]:animate-in data-[state=closed]:animate-out',
-            'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-            'data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom',
-            'rounded-t-lg',
-            'sm:max-h-[90dvh] sm:rounded-lg sm:border sm:border-t',
-            workspace && 'h-[min(44rem,calc(100dvh-3rem))]',
-            placement === 'center'
-              ? [
-                  // Desktop: centered modal
-                  'sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:p-6',
-                  DIALOG_SIZE_CLASS[size],
-                  'sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]',
-                  'sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]',
-                  'sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95',
-                ]
-              : [
-                  // Desktop: anchored above the clock button
-                  'sm:inset-auto sm:bottom-24 sm:right-6 sm:w-96 sm:max-w-[calc(100vw-3rem)] sm:p-6',
-                  'sm:data-[state=closed]:slide-out-to-bottom-2 sm:data-[state=open]:slide-in-from-bottom-2',
-                ],
-            className,
-          )}
+          className={dialogContentClassName({ placement, workspace, size, className })}
           {...props}
           {...returnFocus}
           // The refused dismissal is observable: assistive technology and the
