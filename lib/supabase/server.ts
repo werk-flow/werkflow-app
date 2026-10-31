@@ -22,7 +22,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
             name,
             value,
             ...options,
-            sameSite: options?.sameSite as 'lax' | 'strict' | 'none' | undefined,
+            sameSite: options?.sameSite,
           });
         } catch {
           // best-effort: a Server Component cannot write cookies; proxy.ts refreshes the session cookies instead.
@@ -34,7 +34,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient> {
             name,
             value: '',
             ...options,
-            sameSite: options?.sameSite as 'lax' | 'strict' | 'none' | undefined,
+            sameSite: options?.sameSite,
             maxAge: 0,
           });
         } catch {

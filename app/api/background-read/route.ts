@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 
 import type { ActionResult } from '@/lib/action-result';
-import { BACKGROUND_READS, isBackgroundReadKind, SELF_SERVICE_READS } from '@/lib/data/background-reads';
+import {
+  BACKGROUND_READS,
+  isBackgroundReadKind,
+  SELF_SERVICE_READS,
+  type BackgroundReadInput,
+  type BackgroundReadKind,
+  type BackgroundReadResult,
+} from '@/lib/data/background-reads';
 import { getAuthenticatedUser } from '@/lib/data/cached';
 import { withReadRequest } from '@/lib/data/read-request-cache';
 import { authenticateAndAuthorize } from '@/lib/jobs/auth';
+import type { z } from '@/lib/zod';
 
 const PRIVATE_HEADERS = { 'Cache-Control': 'private, no-store' };
 
@@ -25,6 +33,28 @@ function parseInput(raw: string | null): { value: unknown } | null {
   }
 }
 
+type ReadInputs = { [Kind in BackgroundReadKind]: BackgroundReadInput<Kind> };
+type ReadResults = { [Kind in BackgroundReadKind]: BackgroundReadResult<Kind> };
+
+/** The registry seen per kind, so one kind's parsed input reaches that kind's reader. */
+const READERS: {
+  [Kind in BackgroundReadKind]: {
+    input: z.ZodType<ReadInputs[Kind]>;
+    read: (input: ReadInputs[Kind]) => Promise<ReadResults[Kind]>;
+  };
+} = BACKGROUND_READS;
+
+/** A kind's parsed input with its reader bound to it, or null when the input does not parse. */
+function bindRead<Kind extends BackgroundReadKind>(
+  kind: Kind,
+  value: unknown,
+): { input: ReadInputs[Kind]; read: () => Promise<ActionResult> } | null {
+  const definition = READERS[kind];
+  const input = definition.input.safeParse(value);
+  if (!input.success) return null;
+  return { input: input.data, read: () => definition.read(input.data) };
+}
+
 /**
  * Background page reads leave the browser's serialized Server Action queue so
  * a user mutation never waits behind a read the user did not ask for. The
@@ -42,27 +72,25 @@ export async function GET(request: Request): Promise<NextResponse> {
     ) {
       return invalidInput();
     }
-    const definition = BACKGROUND_READS[kind];
     const rawInput = parseInput(query.get('input'));
     if (rawInput === null) return invalidInput();
-    const input = definition.input.safeParse(rawInput.value);
-    if (!input.success) return invalidInput();
-    // The typed registry pairs each schema with its reader; the union collapses here.
-    const read = definition.read as (value: unknown) => Promise<ActionResult>;
+    const bound = bindRead(kind, rawInput.value);
+    if (bound === null) return invalidInput();
+    const { input, read } = bound;
     const result = await withReadRequest(
       request,
       async () => {
         if (SELF_SERVICE_READS.has(kind)) {
           if (!(await getAuthenticatedUser())) return { success: false as const, error: 'not_authenticated' };
-          return read(input.data);
+          return read();
         }
         const auth = await authenticateAndAuthorize();
         if (!auth.success) return auth;
-        const requestedOrganization = 'organizationId' in input.data ? input.data.organizationId : undefined;
+        const requestedOrganization = 'organizationId' in input ? input.organizationId : undefined;
         if (requestedOrganization !== undefined && auth.context.orgId !== requestedOrganization) {
           return { success: false as const, error: 'organization_changed' };
         }
-        return read(input.data);
+        return read();
       },
       { priority: 'background' },
     );
