@@ -68,7 +68,10 @@ function ZeiterfassungTodayTargetNote({
    parts the working time is made of, once it holds more than work. */
 function ZeiterfassungTimeBreakdown({ totals }: { totals: ZeiterfassungLiveTotals }) {
   const { breakdown } = totals;
-  const parts = workTimeParts(breakdown.workMinutes, {
+  // The parts describe all of today's working time, overtime included, so a
+  // recorded drive keeps its minutes on a day past the target.
+  const workingMinutes = breakdown.workMinutes + breakdown.overtimeMinutes;
+  const parts = workTimeParts(workingMinutes, {
     travel: totals.liveTravelMinutes,
     standby: totals.liveStandbyMinutes,
     callout: totals.liveCalloutMinutes,
@@ -100,7 +103,7 @@ function ZeiterfassungTimeBreakdown({ totals }: { totals: ZeiterfassungLiveTotal
       </div>
       {parts.length > 0 ? (
         <p className="text-center text-muted-foreground" data-testid="today-work-parts">
-          Davon{' '}
+          {breakdown.overtimeMinutes > 0 ? `Gesamt ${formatDuration(workingMinutes)}, davon ` : 'Davon '}
           {parts.map((part, index) => (
             <span key={part.kind}>
               {index > 0 ? ' · ' : null}

@@ -68,6 +68,14 @@ describe('the parts of today’s working time', () => {
     ]);
   });
 
+  test('a day past its target keeps every recorded minute of travel in the parts', () => {
+    // 480 minutes of target plus 120 of overtime: the parts describe all 600.
+    expect(workTimeParts(480 + 120, { ...none, travel: 400 })).toEqual([
+      { kind: 'work', label: 'Arbeit', minutes: 200 },
+      { kind: 'travel', label: 'Fahrt', minutes: 400 },
+    ]);
+  });
+
   test('a day of work only shows no parts', () => {
     expect(workTimeParts(240, none)).toEqual([]);
   });

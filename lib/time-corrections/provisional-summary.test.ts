@@ -2,11 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { summarizePendingCorrections } from './provisional-summary';
 import type { TimeCorrectionFact, TimeCorrectionSnapshot } from './types';
 
-function fact(entryType: TimeCorrectionFact['entryType'], timestamp: string): TimeCorrectionFact {
+function fact(
+  entryType: TimeCorrectionFact['entryType'],
+  timestamp: string,
+  userId = 'user',
+): TimeCorrectionFact {
   return {
-    factId: `${entryType}-${timestamp}`,
+    factId: `${entryType}-${timestamp}-${userId}`,
     employeeRecordId: 'employee',
-    userId: 'user',
+    userId,
     entryType,
     timestamp,
     jobId: null,
@@ -72,5 +76,31 @@ describe('the pending corrections in sum', () => {
       ),
     ]);
     expect(summary.days).toEqual(['2026-10-26', '2026-10-27', '2026-10-28']);
+  });
+
+  test('count each person of a reassignment on their own intervals', () => {
+    // A works 09:00 to 12:00 local on 26.10.; B's 10:00 to 11:00 sits inside it.
+    const before = snapshot(
+      fact('clock_in', '2026-10-26T08:00:00.000Z', 'a'),
+      fact('clock_in', '2026-10-26T09:00:00.000Z', 'b'),
+      fact('clock_out', '2026-10-26T10:00:00.000Z', 'b'),
+      fact('clock_out', '2026-10-26T11:00:00.000Z', 'a'),
+    );
+    expect(summarizePendingCorrections([request(before, snapshot())]).beforeMinutes).toBe(240);
+
+    // A's interval from 26.10. to 30.10. spans B's interval on the 28th: the 29th stays A's day.
+    const spanning = snapshot(
+      fact('clock_in', '2026-10-26T08:00:00.000Z', 'a'),
+      fact('clock_in', '2026-10-28T08:00:00.000Z', 'b'),
+      fact('clock_out', '2026-10-28T09:00:00.000Z', 'b'),
+      fact('clock_out', '2026-10-30T08:00:00.000Z', 'a'),
+    );
+    expect(summarizePendingCorrections([request(spanning, snapshot())]).days).toEqual([
+      '2026-10-26',
+      '2026-10-27',
+      '2026-10-28',
+      '2026-10-29',
+      '2026-10-30',
+    ]);
   });
 });

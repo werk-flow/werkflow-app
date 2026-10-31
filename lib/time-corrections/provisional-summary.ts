@@ -1,6 +1,6 @@
 import { addLocalDays, formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import { correctionDayOwner } from './timeline-validation';
-import type { TimeCorrectionRequest, TimeCorrectionSnapshot } from './types';
+import type { TimeCorrectionFact, TimeCorrectionRequest, TimeCorrectionSnapshot } from './types';
 
 /** The pending corrections of one person in sum: how many, their minutes before and after, and their days. */
 export type ProvisionalTimeSummary = {
@@ -11,12 +11,26 @@ export type ProvisionalTimeSummary = {
   days: string[];
 };
 
+/**
+ * A snapshot's facts per person, each in time order. A reassignment keeps two
+ * people's facts in one snapshot; each person's intervals are their own.
+ */
+function factsByOwner(snapshot: TimeCorrectionSnapshot): TimeCorrectionFact[][] {
+  const owners = new Map<string, TimeCorrectionFact[]>();
+  for (const fact of snapshot.facts) owners.set(fact.userId, [...(owners.get(fact.userId) ?? []), fact]);
+  return [...owners.values()].map((facts) =>
+    facts.sort((left, right) => left.timestamp.localeCompare(right.timestamp)),
+  );
+}
+
 function snapshotMinutes(snapshot: TimeCorrectionSnapshot): number {
+  return factsByOwner(snapshot).reduce((total, facts) => total + ownerMinutes(facts), 0);
+}
+
+function ownerMinutes(facts: readonly TimeCorrectionFact[]): number {
   let activeStart: number | null = null;
   let minutes = 0;
-  for (const fact of [...snapshot.facts].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp),
-  )) {
+  for (const fact of facts) {
     const timestamp = Date.parse(fact.timestamp);
     if (fact.entryType === 'clock_in' || fact.entryType === 'break_end') {
       activeStart = timestamp;
@@ -34,11 +48,13 @@ function snapshotMinutes(snapshot: TimeCorrectionSnapshot): number {
  * across several midnights touches the days between them too.
  */
 function snapshotDays(snapshot: TimeCorrectionSnapshot): string[] {
+  return factsByOwner(snapshot).flatMap(ownerDays);
+}
+
+function ownerDays(facts: readonly TimeCorrectionFact[]): string[] {
   const days: string[] = [];
   let openDay: string | null = null;
-  for (const fact of [...snapshot.facts].sort((left, right) =>
-    left.timestamp.localeCompare(right.timestamp),
-  )) {
+  for (const fact of facts) {
     const day = formatBerlinLocalDate(correctionDayOwner(fact));
     for (let covered = openDay; covered !== null && covered < day; covered = addLocalDays(covered, 1))
       days.push(covered);
