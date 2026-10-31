@@ -17,13 +17,11 @@ import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
 import {
   MAINTENANCE_NEXT_DUE_BASES,
   MAINTENANCE_NEXT_DUE_BASIS_LABELS,
-  type MaintenanceNextDueBasis,
   type MaintenancePlanItem,
   type MaintenanceTemplateOption,
 } from '@/lib/maintenance/types';
 import type { ServiceCaseClientOption } from '@/lib/service-cases/types';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
-import type { MaintenancePlanFormState } from './maintenance-plan-form-state';
 import type { MaintenancePlanFormController } from './use-maintenance-plan-form';
 import { parseIsoLocalDate } from '@/lib/utils';
 
@@ -155,6 +153,59 @@ function MaintenanceTemplateField({
   );
 }
 
+type MaintenancePlanFormFieldsProps = Pick<MaintenancePlanFieldsProps, 'form' | 'setForm'>;
+
+/** How many days before and after its date a due item may be done. */
+function MaintenancePlanDueWindowFields({ form, setForm }: MaintenancePlanFormFieldsProps): ReactElement {
+  return (
+    <>
+      <Field label="Frühestens (Tage vorher)" htmlFor="maintenance-window-before">
+        <QuantityStepper
+          id="maintenance-window-before"
+          min={0}
+          value={form.dueWindowBeforeDays}
+          onChange={(dueWindowBeforeDays) => setForm((value) => ({ ...value, dueWindowBeforeDays }))}
+          unitLabel="Tage"
+        />
+      </Field>
+      <Field label="Spätestens (Tage danach)" htmlFor="maintenance-window-after">
+        <QuantityStepper
+          id="maintenance-window-after"
+          min={0}
+          value={form.dueWindowAfterDays}
+          onChange={(dueWindowAfterDays) => setForm((value) => ({ ...value, dueWindowAfterDays }))}
+          unitLabel="Tage"
+        />
+      </Field>
+    </>
+  );
+}
+
+function MaintenancePlanNextDueBasisField({ form, setForm }: MaintenancePlanFormFieldsProps): ReactElement {
+  return (
+    <Field label="Nächste Fälligkeit berechnen" htmlFor="maintenance-basis" className="sm:col-span-2">
+      <Select
+        value={form.nextDueBasis}
+        onValueChange={(value) => {
+          const nextDueBasis = MAINTENANCE_NEXT_DUE_BASES.find((basis) => basis === value);
+          if (nextDueBasis) setForm((current) => ({ ...current, nextDueBasis }));
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MAINTENANCE_NEXT_DUE_BASES.map((basis) => (
+            <SelectItem key={basis} value={basis}>
+              {MAINTENANCE_NEXT_DUE_BASIS_LABELS[basis]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
 /** Validity, first due date, interval, duration, due window and the next-due basis. */
 export function MaintenancePlanScheduleFields({
   form,
@@ -210,46 +261,8 @@ export function MaintenancePlanScheduleFields({
           unitLabel="Min."
         />
       </Field>
-      <Field label="Frühestens (Tage vorher)" htmlFor="maintenance-window-before">
-        <QuantityStepper
-          id="maintenance-window-before"
-          min={0}
-          value={form.dueWindowBeforeDays}
-          onChange={(dueWindowBeforeDays) => setForm((value) => ({ ...value, dueWindowBeforeDays }))}
-          unitLabel="Tage"
-        />
-      </Field>
-      <Field label="Spätestens (Tage danach)" htmlFor="maintenance-window-after">
-        <QuantityStepper
-          id="maintenance-window-after"
-          min={0}
-          value={form.dueWindowAfterDays}
-          onChange={(dueWindowAfterDays) => setForm((value) => ({ ...value, dueWindowAfterDays }))}
-          unitLabel="Tage"
-        />
-      </Field>
-      <Field label="Nächste Fälligkeit berechnen" htmlFor="maintenance-basis" className="sm:col-span-2">
-        <Select
-          value={form.nextDueBasis}
-          onValueChange={(nextDueBasis) =>
-            setForm((value) => ({
-              ...value,
-              nextDueBasis: nextDueBasis as MaintenanceNextDueBasis,
-            }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {MAINTENANCE_NEXT_DUE_BASES.map((basis) => (
-              <SelectItem key={basis} value={basis}>
-                {MAINTENANCE_NEXT_DUE_BASIS_LABELS[basis]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <MaintenancePlanDueWindowFields form={form} setForm={setForm} />
+      <MaintenancePlanNextDueBasisField form={form} setForm={setForm} />
     </>
   );
 }
@@ -365,12 +378,9 @@ export function MaintenancePlanNotesFields({
         <Field label="Startstatus" htmlFor="maintenance-status" className="sm:col-span-2">
           <Select
             value={form.status}
-            onValueChange={(status) =>
-              setForm((value) => ({
-                ...value,
-                status: status as MaintenancePlanFormState['status'],
-              }))
-            }
+            onValueChange={(status) => {
+              if (status === 'active' || status === 'draft') setForm((value) => ({ ...value, status }));
+            }}
           >
             <SelectTrigger>
               <SelectValue />

@@ -30,19 +30,12 @@ type ServiceCaseEvidenceLinkProps = {
   refresh: () => Promise<void>;
 };
 
-/**
- * Owns the evidence link of a service case. The chosen version shows in the
- * list in the first frame while the dialog stays pending; a refusal removes it
- * and shows the reason in the dialog. Success closes the dialog, confirms with
- * a banner and keeps the version listed until the live read lands.
- */
-export function ServiceCaseEvidenceLink({
+/** The dialog state and the evidence link write with its first-frame pending version. */
+function useEvidenceLink({
   serviceCase,
-  options,
-  isStale,
   invalidate,
   refresh,
-}: ServiceCaseEvidenceLinkProps): ReactElement {
+}: Pick<ServiceCaseEvidenceLinkProps, 'serviceCase' | 'invalidate' | 'refresh'>) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The version being linked, listed until the live read confirms or drops it.
@@ -80,6 +73,48 @@ export function ServiceCaseEvidenceLink({
       },
     },
   );
+  return { open, setOpen, error, setError, pendingOption, link };
+}
+
+function EvidenceList({
+  serviceCase,
+  pendingShown,
+}: {
+  serviceCase: ServiceCaseEvidenceLinkProps['serviceCase'];
+  pendingShown: ServiceCaseEvidenceOption | null;
+}): ReactElement {
+  return serviceCase.evidence.length || pendingShown ? (
+    <div className="mt-3 divide-y rounded-md border">
+      {serviceCase.evidence.map((evidence) => (
+        <EvidenceRow key={evidence.id} evidence={evidence} />
+      ))}
+      {pendingShown && <EvidenceRow evidence={pendingShown} pending />}
+    </div>
+  ) : serviceCase.jobId ? (
+    <EmptyState size="compact" className="mt-3" title="Noch kein Arbeitsnachweis verknüpft." />
+  ) : (
+    <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Auftrag zu.</p>
+  );
+}
+
+/**
+ * Owns the evidence link of a service case. The chosen version shows in the
+ * list in the first frame while the dialog stays pending; a refusal removes it
+ * and shows the reason in the dialog. Success closes the dialog, confirms with
+ * a banner and keeps the version listed until the live read lands.
+ */
+export function ServiceCaseEvidenceLink({
+  serviceCase,
+  options,
+  isStale,
+  invalidate,
+  refresh,
+}: ServiceCaseEvidenceLinkProps): ReactElement {
+  const { open, setOpen, error, setError, pendingOption, link } = useEvidenceLink({
+    serviceCase,
+    invalidate,
+    refresh,
+  });
   const busy = link.isPending || link.isSettling;
   const pendingShown =
     pendingOption && !serviceCase.evidence.some((item) => item.revisionId === pendingOption.revisionId)
@@ -111,18 +146,7 @@ export function ServiceCaseEvidenceLink({
           </Button>
         </span>
       </div>
-      {serviceCase.evidence.length || pendingShown ? (
-        <div className="mt-3 divide-y rounded-md border">
-          {serviceCase.evidence.map((evidence) => (
-            <EvidenceRow key={evidence.id} evidence={evidence} />
-          ))}
-          {pendingShown && <EvidenceRow evidence={pendingShown} pending />}
-        </div>
-      ) : serviceCase.jobId ? (
-        <EmptyState size="compact" className="mt-3" title="Noch kein Arbeitsnachweis verknüpft." />
-      ) : (
-        <p className="mt-3 text-sm text-muted-foreground">Ordne zuerst einen Auftrag zu.</p>
-      )}
+      <EvidenceList serviceCase={serviceCase} pendingShown={pendingShown} />
       {(open || link.isPending) && (
         <ServiceCaseEvidenceDialog
           open={open}

@@ -13,7 +13,7 @@ import { CLIENT_DELETE_ERROR_MESSAGES } from './use-client-deletion';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
-import { useLiveView } from '@/hooks/use-live-view';
+import { useLiveView, type LiveViewState } from '@/hooks/use-live-view';
 import { fetchCustomerPage } from '@/lib/clients/list-page';
 import { UsableContent } from '@/components/shared/usable-content';
 import { describeFailure } from '@/lib/action-messages';
@@ -66,21 +66,27 @@ export function KundenContent(props: KundenContentProps) {
   );
 }
 
-function KundenList({
+type KundenListProps = KundenContentProps & {
+  navigation: ReturnType<typeof useListNavigation>;
+  search: SearchControl;
+};
+
+/** The live page read plus the creations a read started after their save has settled. */
+type KundenLivePage = { clients: Client[]; total: number; settledCreations: string[] };
+
+/** The live page read, refreshed by a same-page route snapshot. */
+function useKundenLivePage({
   organizationId,
   clients: initialClients,
   page,
   total: initialTotal,
   searchQuery,
-  navigation,
-  search,
-}: KundenContentProps & { navigation: ReturnType<typeof useListNavigation>; search: SearchControl }) {
-  const { showBanner } = useBanner();
+}: KundenContentProps) {
   const confirmedCreations = useRef(new Set<string>());
-  const live = useLiveView({
+  const live = useLiveView<KundenLivePage>({
     tables: ['clients', 'client_contacts', 'client_sites'],
     coalesceWhileReading: true,
-    initialData: { clients: initialClients, total: initialTotal, settledCreations: [] as string[] },
+    initialData: { clients: initialClients, total: initialTotal, settledCreations: [] },
     read: async ({ signal }) => {
       const settledCreations = [...confirmedCreations.current];
       const data = await fetchCustomerPage({ organizationId, page, search: searchQuery }, signal);
@@ -96,8 +102,17 @@ function KundenList({
     previousSnapshot.current = initialClients;
     void refresh();
   }, [initialClients, refresh]);
-  const clients = live.data?.clients ?? initialClients;
-  const total = live.data?.total ?? initialTotal;
+  return { live, confirmedCreations };
+}
+
+/** The optimistic list with the creations the header dialog publishes. */
+function useKundenOptimisticClients(
+  organizationId: string,
+  clients: Client[],
+  live: LiveViewState<KundenLivePage>,
+  confirmedCreations: RefObject<Set<string>>,
+) {
+  const { refresh } = live;
   const list = useOptimisticList({
     items: clients,
     getId: getClientId,
@@ -123,7 +138,7 @@ function KundenList({
       commit(tempId, client);
       void refresh();
     },
-    [commit, refresh, organizationId, rollback],
+    [commit, refresh, organizationId, rollback, confirmedCreations],
   );
   const rollbackCreation = useCallback(
     (tempId: string) => {
@@ -144,30 +159,32 @@ function KundenList({
       confirmedCreations.current.delete(id);
       rollback(id);
     }
-  }, [live.data, rollback]);
-  const { run: runBusy, isBusy } = useBusyIds();
-  const filteredRows = list.items;
-  // The previous list instance's input had focus; keep the caret where the
-  // user is typing before the browser paints the remounted input.
+  }, [live.data, rollback, confirmedCreations]);
+  return list;
+}
+
+/** The previous list instance's input had focus; keep the caret where the user is typing. */
+function useRestoredSearchFocus(focusedRef: RefObject<boolean>) {
+  // Runs before the browser paints the remounted input.
   const searchInput = useRef<HTMLInputElement>(null);
-  const { focusedRef } = search;
   useLayoutEffect(() => {
     const input = searchInput.current;
     if (!focusedRef.current || !input) return;
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   }, [focusedRef]);
-  // Keep the edited row marked until its authoritative read finishes.
-  const handleClientSaved = useCallback(
-    (clientId: string) => {
-      void runBusy(clientId, refresh);
-    },
-    [runBusy, refresh],
-  );
+  return searchInput;
+}
 
-  // Delete: the row leaves at once and comes back with the error on failure.
-  const { remove } = list;
-  const handleDeleteClient = useCallback(
+/** Delete: the row leaves at once and comes back with the error on failure. */
+function useKundenClientDelete(
+  list: ReturnType<typeof useOptimisticList<Client>>,
+  invalidate: () => void,
+  refresh: () => Promise<void>,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+) {
+  const { remove, rollback } = list;
+  return useCallback(
     async (client: Client) => {
       invalidate();
       remove(client.id);
@@ -193,6 +210,69 @@ function KundenList({
     },
     [remove, rollback, refresh, invalidate, showBanner],
   );
+}
+
+/** The count, the search that keeps its focus across remounts, and the refresh. */
+function KundenListToolbar({
+  total,
+  search,
+  searchInput,
+  onRefresh,
+}: {
+  total: number;
+  search: SearchControl;
+  searchInput: RefObject<HTMLInputElement | null>;
+  onRefresh: () => Promise<void>;
+}) {
+  const { focusedRef } = search;
+  return (
+    <div className="mb-4 flex items-center justify-between gap-3">
+      <p className="shrink-0 text-sm text-muted-foreground">
+        {total} {total === 1 ? 'Kunde' : 'Kunden'}
+      </p>
+      <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+        <SearchInput
+          ref={searchInput}
+          wrapperClassName="w-full max-w-xs"
+          value={search.value}
+          onValueChange={search.onChange}
+          onFocus={() => {
+            focusedRef.current = true;
+          }}
+          onBlur={() => {
+            focusedRef.current = false;
+          }}
+          className="h-8"
+          placeholder="Kunde, Ansprechpartner, Einsatzort…"
+          aria-label="Kunden durchsuchen"
+        />
+        <RefreshButton label="Tabelle aktualisieren" onRefresh={onRefresh} />
+      </div>
+    </div>
+  );
+}
+
+function KundenList(props: KundenListProps) {
+  const { organizationId, clients: initialClients, page, total: initialTotal, searchQuery } = props;
+  const { navigation, search } = props;
+  const { showBanner } = useBanner();
+  const { live, confirmedCreations } = useKundenLivePage(props);
+  const { refresh } = live;
+  const clients = live.data?.clients ?? initialClients;
+  const total = live.data?.total ?? initialTotal;
+  const list = useKundenOptimisticClients(organizationId, clients, live, confirmedCreations);
+  const { invalidate } = live;
+  const { run: runBusy, isBusy } = useBusyIds();
+  const filteredRows = list.items;
+  const searchInput = useRestoredSearchFocus(search.focusedRef);
+  // Keep the edited row marked until its authoritative read finishes.
+  const handleClientSaved = useCallback(
+    (clientId: string) => {
+      void runBusy(clientId, refresh);
+    },
+    [runBusy, refresh],
+  );
+  const handleDeleteClient = useKundenClientDelete(list, invalidate, refresh, showBanner);
 
   return (
     <UsableContent name="kunden" count={filteredRows.length}>
@@ -201,29 +281,7 @@ function KundenList({
           Die Kundenliste konnte nicht aktualisiert werden. Bitte versuche es erneut.
         </p>
       )}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="shrink-0 text-sm text-muted-foreground">
-          {total} {total === 1 ? 'Kunde' : 'Kunden'}
-        </p>
-        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
-          <SearchInput
-            ref={searchInput}
-            wrapperClassName="w-full max-w-xs"
-            value={search.value}
-            onValueChange={search.onChange}
-            onFocus={() => {
-              focusedRef.current = true;
-            }}
-            onBlur={() => {
-              focusedRef.current = false;
-            }}
-            className="h-8"
-            placeholder="Kunde, Ansprechpartner, Einsatzort…"
-            aria-label="Kunden durchsuchen"
-          />
-          <RefreshButton label="Tabelle aktualisieren" onRefresh={refresh} />
-        </div>
-      </div>
+      <KundenListToolbar total={total} search={search} searchInput={searchInput} onRefresh={refresh} />
 
       <div inert={live.isStale || undefined}>
         <ClientsTable

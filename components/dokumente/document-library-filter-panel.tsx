@@ -3,8 +3,8 @@
 import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  DOCUMENT_CATEGORIES,
   DOCUMENT_CATEGORY_LABELS,
-  type DocumentCategory,
   type DocumentLibraryCategoryFilter,
   type DocumentLibraryLinkFilter,
   type DocumentLibraryView,
@@ -15,9 +15,9 @@ const categoryFilterOptions: Array<{
   label: string;
 }> = [
   { value: 'all', label: 'Alle Kategorien' },
-  ...Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value, label]) => ({
-    value: value as DocumentCategory,
-    label,
+  ...DOCUMENT_CATEGORIES.map((category) => ({
+    value: category,
+    label: DOCUMENT_CATEGORY_LABELS[category],
   })),
 ];
 
@@ -55,7 +55,10 @@ export function DocumentLibraryFilterPanel({
         <Field label="Kategorie">
           <Select
             value={category}
-            onValueChange={(value) => onCategoryChange(value as DocumentLibraryCategoryFilter)}
+            onValueChange={(value) => {
+              const option = categoryFilterOptions.find((candidate) => candidate.value === value);
+              if (option) onCategoryChange(option.value);
+            }}
             disabled={visibleView !== 'all'}
           >
             <SelectTrigger className="h-9 text-sm" aria-label="Kategorie filtern">
@@ -73,7 +76,10 @@ export function DocumentLibraryFilterPanel({
         <Field label="Verknüpfung">
           <Select
             value={linkFilter}
-            onValueChange={(value) => onLinkFilterChange(value as DocumentLibraryLinkFilter)}
+            onValueChange={(value) => {
+              const option = linkFilterOptions.find((candidate) => candidate.value === value);
+              if (option) onLinkFilterChange(option.value);
+            }}
             disabled={visibleView !== 'all'}
           >
             <SelectTrigger className="h-9 text-sm" aria-label="Verknüpfung filtern">

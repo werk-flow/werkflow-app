@@ -27,7 +27,6 @@ import {
   type EquipmentCategory,
   type EquipmentDetail,
   type EquipmentState,
-  type EquipmentSubtype,
 } from '@/lib/installed-equipment/types';
 import {
   EquipmentAssignmentFields,
@@ -58,17 +57,14 @@ type EquipmentFormDialogProps = {
   onSaved?: () => void;
 };
 
-// Stays in this file: the subtype Select is registered here as a bounded
-// runtime choice (lib/ui/select-registry.test.ts).
-function EquipmentClassificationFields({
+function EquipmentCategoryField({
   controller,
   mode,
 }: {
   controller: EquipmentFormController;
   mode: EquipmentFormMode;
 }): ReactElement {
-  const { form, setForm, updateField, fieldErrors, clientOption, parentOptions } = controller;
-  const subtypeOptions = EQUIPMENT_SUBTYPES_BY_CATEGORY[form.category];
+  const { form, setForm } = controller;
   // A successor takes the predecessor's parent (replace_installed_equipment), so a
   // replacement keeps the predecessor's component-or-not category class.
   const categoryOptions =
@@ -78,52 +74,80 @@ function EquipmentClassificationFields({
         )
       : EQUIPMENT_CATEGORIES;
   return (
+    <Field label="Kategorie" htmlFor="equipment-category">
+      <Select
+        value={form.category}
+        onValueChange={(value: EquipmentCategory) =>
+          setForm((current) => ({
+            ...current,
+            category: value,
+            subtype: null,
+            ...(value === 'system_component' ? {} : { parentEquipmentId: null }),
+          }))
+        }
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {categoryOptions.map((category) => (
+            <SelectItem key={category} value={category}>
+              {EQUIPMENT_CATEGORY_LABELS[category]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+// Stays in this file: the subtype Select is registered here as a bounded
+// runtime choice (lib/ui/select-registry.test.ts).
+function EquipmentSubtypeField({ controller }: { controller: EquipmentFormController }): ReactElement {
+  const { form, updateField } = controller;
+  const subtypeOptions = EQUIPMENT_SUBTYPES_BY_CATEGORY[form.category];
+  return (
+    <Field label="Untertyp" htmlFor="equipment-subtype">
+      <Select
+        value={form.subtype ?? 'none'}
+        onValueChange={(value) => {
+          if (value === 'none') {
+            updateField('subtype', null);
+            return;
+          }
+          const subtype = subtypeOptions.find((option) => option === value);
+          if (subtype) updateField('subtype', subtype);
+        }}
+        disabled={subtypeOptions.length === 0}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Nicht angegeben" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Nicht angegeben</SelectItem>
+          {subtypeOptions.map((subtype) => (
+            <SelectItem key={subtype} value={subtype}>
+              {EQUIPMENT_SUBTYPE_LABELS[subtype]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function EquipmentClassificationFields({
+  controller,
+  mode,
+}: {
+  controller: EquipmentFormController;
+  mode: EquipmentFormMode;
+}): ReactElement {
+  const { form, updateField, fieldErrors, clientOption, parentOptions } = controller;
+  return (
     <>
-      <Field label="Kategorie" htmlFor="equipment-category">
-        <Select
-          value={form.category}
-          onValueChange={(value: EquipmentCategory) =>
-            setForm((current) => ({
-              ...current,
-              category: value,
-              subtype: null,
-              ...(value === 'system_component' ? {} : { parentEquipmentId: null }),
-            }))
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {categoryOptions.map((category) => (
-              <SelectItem key={category} value={category}>
-                {EQUIPMENT_CATEGORY_LABELS[category]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Untertyp" htmlFor="equipment-subtype">
-        <Select
-          value={form.subtype ?? 'none'}
-          onValueChange={(value) =>
-            updateField('subtype', value === 'none' ? null : (value as EquipmentSubtype))
-          }
-          disabled={subtypeOptions.length === 0}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Nicht angegeben" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Nicht angegeben</SelectItem>
-            {subtypeOptions.map((subtype) => (
-              <SelectItem key={subtype} value={subtype}>
-                {EQUIPMENT_SUBTYPE_LABELS[subtype]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <EquipmentCategoryField controller={controller} mode={mode} />
+      <EquipmentSubtypeField controller={controller} />
       {form.category === 'system_component' && (
         <Field
           label="Übergeordnete Anlage"

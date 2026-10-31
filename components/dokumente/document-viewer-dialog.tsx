@@ -2,7 +2,7 @@
 
 import { formatBerlinDateTime as formatDate } from '@/lib/utils';
 import { formatFileSize } from '@/lib/documents/format';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { Download, ExternalLink, FileText, Info, Maximize2, Minimize2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -53,44 +53,36 @@ function DocumentPreviewError({ error, onRetry }: { error: string; onRetry: () =
   );
 }
 
-export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentViewerDialogProps) {
-  const { activeOrgId } = useOrganization();
-  const [preview, setPreview] = useState<{
-    documentId: string;
-    signedUrl: string | null;
-    error: string | null;
-  } | null>(null);
+type DocumentPreview = {
+  documentId: string;
+  signedUrl: string | null;
+  error: string | null;
+};
+
+/** Reads the preview URL of one document; a failed read resolves to the preview error. */
+async function readDocumentPreview(
+  documentId: string,
+  organizationId: string | null | undefined,
+  signal: AbortSignal,
+): Promise<DocumentPreview> {
+  const previewError = {
+    documentId,
+    signedUrl: null,
+    error: 'Die Vorschau konnte nicht geladen werden.',
+  };
+
+  // The background read never rejects; a failed read shows the error with its retry.
+  const result = await readInBackground(
+    'document-view-url',
+    { organizationId: organizationId ?? '', documentId },
+    signal,
+  );
+  return result.success ? { documentId, signedUrl: result.signedUrl, error: null } : previewError;
+}
+
+function useDocumentDownload(document: OrganizationDocument | null) {
   const { run: runDownload, isPending } = useServerAction(getDocumentSignedUrl);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [previewReloadCount, setPreviewReloadCount] = useState(0);
-
-  useEffect(() => {
-    if (!open || !document) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const previewError = {
-      documentId: document.id,
-      signedUrl: null,
-      error: 'Die Vorschau konnte nicht geladen werden.',
-    };
-
-    // The background read never rejects; a failed read shows the error with its retry.
-    void readInBackground(
-      'document-view-url',
-      { organizationId: activeOrgId ?? '', documentId: document.id },
-      controller.signal,
-    ).then((result) => {
-      if (controller.signal.aborted) return;
-      setPreview(
-        result.success ? { documentId: document.id, signedUrl: result.signedUrl, error: null } : previewError,
-      );
-    });
-
-    return () => controller.abort();
-  }, [activeOrgId, document, open, previewReloadCount]);
 
   // The download error sits beside its button; the preview pane keeps showing
   // the file (feedback canon: failure at the point of action).
@@ -112,17 +104,176 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
     })();
   }
 
+  return { isPending, downloadError, setDownloadError, handleDownload };
+}
+
+function useDocumentViewerState({ document, open }: Pick<DocumentViewerDialogProps, 'document' | 'open'>) {
+  const { activeOrgId } = useOrganization();
+  const [preview, setPreview] = useState<DocumentPreview | null>(null);
+  const download = useDocumentDownload(document);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [previewReloadCount, setPreviewReloadCount] = useState(0);
+
+  useEffect(() => {
+    if (!open || !document) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void readDocumentPreview(document.id, activeOrgId, controller.signal).then((nextPreview) => {
+      if (controller.signal.aborted) return;
+      setPreview(nextPreview);
+    });
+
+    return () => controller.abort();
+  }, [activeOrgId, document, open, previewReloadCount]);
+
+  function retryPreview() {
+    setPreview(null);
+    setPreviewReloadCount((count) => count + 1);
+  }
+
   const supportsPreview = document ? canPreviewImage(document) || canPreviewPdf(document) : false;
   const activePreview = document && preview?.documentId === document.id ? preview : null;
   const signedUrl = activePreview?.signedUrl ?? null;
   const error = activePreview?.error ?? null;
+
+  return { ...download, isExpanded, setIsExpanded, retryPreview, supportsPreview, signedUrl, error };
+}
+
+type DocumentViewerActionsProps = {
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
+  newTabUrl: string | null;
+  /** The download button, written in the dialog so its pending binding stays visible there. */
+  children: ReactNode;
+};
+
+function DocumentViewerActions({
+  isExpanded,
+  onToggleExpanded,
+  newTabUrl,
+  children,
+}: DocumentViewerActionsProps) {
+  return (
+    <div className="flex shrink-0 flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+        onClick={onToggleExpanded}
+      >
+        {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+        {isExpanded ? 'Kompakt' : 'Vollbild'}
+      </Button>
+      {newTabUrl && (
+        <Button type="button" variant="outline" size="sm" asChild>
+          <a
+            href={newTabUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+          >
+            <ExternalLink className="size-4" />
+            Neuer Tab
+          </a>
+        </Button>
+      )}
+      {children}
+    </div>
+  );
+}
+
+type DocumentPreviewPaneProps = {
+  document: OrganizationDocument;
+  error: string | null;
+  signedUrl: string | null;
+  onRetry: () => void;
+};
+
+/** The preview of one document: its error, a loading skeleton, the image or PDF, or a hint. */
+function DocumentPreviewPane({ document, error, signedUrl, onRetry }: DocumentPreviewPaneProps) {
+  if (error) return <DocumentPreviewError error={error} onRetry={onRetry} />;
+  if (!signedUrl) {
+    return (
+      <div className="flex h-full items-center justify-center p-6" role="status" aria-busy="true">
+        <span className="sr-only">Vorschau wird geladen.</span>
+        <Skeleton className="h-full max-h-[70dvh] w-full max-w-3xl bg-white/10" />
+      </div>
+    );
+  }
+  if (canPreviewImage(document)) {
+    return (
+      <div className="flex h-full items-center justify-center overflow-y-auto p-6">
+        {/* Signed private Storage URLs are short-lived, so next/image optimization is not useful here. */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it */}
+        <img
+          src={signedUrl}
+          alt={document.displayName}
+          className="max-h-full max-w-full object-contain shadow-2xl"
+        />
+      </div>
+    );
+  }
+  if (canPreviewPdf(document)) {
+    return (
+      <iframe
+        src={getPdfPreviewUrl(signedUrl)}
+        title={document.displayName}
+        className="h-full w-full bg-black/70"
+      />
+    );
+  }
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+      <FileText className="size-10 text-white/50" />
+      <p className="max-w-md text-sm text-white/70">
+        Für diesen Dateityp gibt es noch keine direkte Vorschau.
+      </p>
+    </div>
+  );
+}
+
+function DocumentViewerInfo({ document }: { document: OrganizationDocument }) {
+  return (
+    <aside className="hidden border-l border-white/10 bg-black p-4 text-sm text-white/80 xl:block">
+      <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/50">
+        <Info className="size-3.5" />
+        Dateiinformationen
+      </p>
+      <dl className="mt-3 space-y-3">
+        <div>
+          <dt className="text-white/50">Originaldatei</dt>
+          <dd className="mt-0.5 break-words font-medium">{document.originalFileName}</dd>
+        </div>
+        <div>
+          <dt className="text-white/50">Dateigröße</dt>
+          <dd className="mt-0.5">{formatFileSize(document.sizeBytes)}</dd>
+        </div>
+        <div>
+          <dt className="text-white/50">Hochgeladen</dt>
+          <dd className="mt-0.5">{formatDate(document.createdAt)}</dd>
+        </div>
+        <div>
+          <dt className="text-white/50">Geändert</dt>
+          <dd className="mt-0.5">{formatDate(document.updatedAt)}</dd>
+        </div>
+      </dl>
+    </aside>
+  );
+}
+
+export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentViewerDialogProps) {
+  const viewer = useDocumentViewerState({ document, open });
+  const { isExpanded, signedUrl } = viewer;
 
   return (
     // eslint-disable-next-line ui/dialog-pending-while-waiting -- the download button reads a signed link and writes nothing; closing the viewer while it prepares loses nothing
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) setDownloadError(null);
+        if (!nextOpen) viewer.setDownloadError(null);
         onOpenChange(nextOpen);
       }}
     >
@@ -142,113 +293,40 @@ export function DocumentViewerDialog({ document, open, onOpenChange }: DocumentV
                   : 'Vorschau für PDFs und Bilder.'}
               </DialogDescription>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <DocumentViewerActions
+              isExpanded={isExpanded}
+              onToggleExpanded={() => viewer.setIsExpanded((current) => !current)}
+              newTabUrl={signedUrl && viewer.supportsPreview ? signedUrl : null}
+            >
               <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                onClick={() => setIsExpanded((current) => !current)}
-              >
-                {isExpanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-                {isExpanded ? 'Kompakt' : 'Vollbild'}
-              </Button>
-              {signedUrl && supportsPreview && (
-                <Button type="button" variant="outline" size="sm" asChild>
-                  <a
-                    href={signedUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                  >
-                    <ExternalLink className="size-4" />
-                    Neuer Tab
-                  </a>
-                </Button>
-              )}
-              <Button
-                pending={isPending}
+                pending={viewer.isPending}
                 type="button"
                 size="sm"
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={handleDownload}
-                disabled={isPending}
+                onClick={viewer.handleDownload}
+                disabled={viewer.isPending}
               >
                 <Download className="size-4" />
                 Herunterladen
               </Button>
-            </div>
+            </DocumentViewerActions>
           </div>
-          <ErrorText className="text-viewer-error md:text-right">{downloadError}</ErrorText>
+          <ErrorText className="text-viewer-error md:text-right">{viewer.downloadError}</ErrorText>
         </DialogHeader>
 
         <div className="grid min-h-0 flex-1 bg-black xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="min-h-0 overflow-hidden bg-black/80">
-            {!document ? null : error ? (
-              <DocumentPreviewError
-                error={error}
-                onRetry={() => {
-                  setPreview(null);
-                  setPreviewReloadCount((count) => count + 1);
-                }}
+            {document ? (
+              <DocumentPreviewPane
+                document={document}
+                error={viewer.error}
+                signedUrl={signedUrl}
+                onRetry={viewer.retryPreview}
               />
-            ) : !signedUrl ? (
-              <div className="flex h-full items-center justify-center p-6" role="status" aria-busy="true">
-                <span className="sr-only">Vorschau wird geladen.</span>
-                <Skeleton className="h-full max-h-[70dvh] w-full max-w-3xl bg-white/10" />
-              </div>
-            ) : canPreviewImage(document) ? (
-              <div className="flex h-full items-center justify-center overflow-y-auto p-6">
-                {/* Signed private Storage URLs are short-lived, so next/image optimization is not useful here. */}
-                {/* eslint-disable-next-line @next/next/no-img-element -- short-lived signed private URL; next/image optimization cannot cache it */}
-                <img
-                  src={signedUrl}
-                  alt={document.displayName}
-                  className="max-h-full max-w-full object-contain shadow-2xl"
-                />
-              </div>
-            ) : canPreviewPdf(document) ? (
-              <iframe
-                src={getPdfPreviewUrl(signedUrl)}
-                title={document.displayName}
-                className="h-full w-full bg-black/70"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-                <FileText className="size-10 text-white/50" />
-                <p className="max-w-md text-sm text-white/70">
-                  Für diesen Dateityp gibt es noch keine direkte Vorschau.
-                </p>
-              </div>
-            )}
+            ) : null}
           </div>
 
-          {document && (
-            <aside className="hidden border-l border-white/10 bg-black p-4 text-sm text-white/80 xl:block">
-              <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/50">
-                <Info className="size-3.5" />
-                Dateiinformationen
-              </p>
-              <dl className="mt-3 space-y-3">
-                <div>
-                  <dt className="text-white/50">Originaldatei</dt>
-                  <dd className="mt-0.5 break-words font-medium">{document.originalFileName}</dd>
-                </div>
-                <div>
-                  <dt className="text-white/50">Dateigröße</dt>
-                  <dd className="mt-0.5">{formatFileSize(document.sizeBytes)}</dd>
-                </div>
-                <div>
-                  <dt className="text-white/50">Hochgeladen</dt>
-                  <dd className="mt-0.5">{formatDate(document.createdAt)}</dd>
-                </div>
-                <div>
-                  <dt className="text-white/50">Geändert</dt>
-                  <dd className="mt-0.5">{formatDate(document.updatedAt)}</dd>
-                </div>
-              </dl>
-            </aside>
-          )}
+          {document && <DocumentViewerInfo document={document} />}
         </div>
       </DialogContent>
     </Dialog>

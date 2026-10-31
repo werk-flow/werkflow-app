@@ -108,9 +108,11 @@ import { createJob } from '../../golden/support/steps/work';
 // P1-24a audit: the Plantafel, the day and the month view flow by flow.
 // Golden P1-24a owns
 // the reassignment with Undo, the live date move, the park dialog with
-// „Einplanen am …“, the horizon memory and the employee's own row. Every test
-// seeds its own visits; the weeks keep the tests apart: AUDIT-01, 03, 04 and 06
-// the first week, AUDIT-02 the second, AUDIT-05 the third.
+// „Einplanen am …“, the horizon memory and the employee's own row. The board
+// read's isolation runs below the browser (lib/calendar/board-http.test.ts,
+// lib/calendar/calendar-page-access.test.ts). Every test seeds its own visits;
+// the weeks keep the tests apart: AUDIT-01, 03 and 04 the first week, AUDIT-02
+// the second, AUDIT-05 the third.
 
 const OVERRIDE_REASON = 'Betrieblich abgestimmter P1-24a Audit-Einsatz.';
 
@@ -600,20 +602,5 @@ test.describe('P1-24a Plantafel, day and month audit @AUDIT-W3-P1-24A @AUDIT-W3'
     await monthCards(monthDay(adminPage, moveDay), movedVisit.title).click();
     await expect(cardPopoverAction(jobPopover(adminPage), 'showDetails')).toBeVisible();
     await dismissDialog(jobPopover(adminPage));
-  });
-
-  test('AUDIT-06 the board read narrows the employee to their own row and denies the outsider @P1-24A-06', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const monday = firstAuditMonday();
-    const boardRead = `/api/calendar-board?organizationId=${world.orgId}&fromDate=${monday}&toDate=${shiftIsoDate(monday, 5)}`;
-    const own = await employeePage.request.get(boardRead);
-    expect(own.status()).toBe(200);
-    const ownBody = (await own.json()) as { rows: Array<{ userId: string | null }> };
-    expect(ownBody.rows.map((row) => row.userId)).toEqual([world.users.employee.id]);
-    const foreign = await outsiderPage.request.get(boardRead);
-    expect(foreign.status()).toBe(403);
   });
 });

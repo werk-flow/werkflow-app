@@ -10,7 +10,6 @@ import { PageHeader } from '@/components/shared/page-header';
 import { PageBody, PageShell } from '@/components/shared/page-shell';
 import { getCachedMemberships, getCachedUser } from '@/lib/data/cached';
 import { getInventoryLocationOptions } from '@/lib/inventory/catalog-actions';
-import type { OrgRole } from '@/lib/roles';
 import { resolveActiveOrgId } from '@/lib/org/cookies';
 import { getQualificationWorkspace } from '@/lib/qualifications/workspace-actions';
 import { getWorkTemplates } from '@/lib/work-templates/actions';
@@ -58,9 +57,7 @@ export default async function WorkTemplatesPage(): Promise<ReactElement> {
     getCachedMemberships(user.id),
   ]);
   if (!activeOrgId) redirect('/login');
-  const currentUserRole = memberships.find((membership) => membership.orgId === activeOrgId)?.role as
-    | OrgRole
-    | undefined;
+  const currentUserRole = memberships.find((membership) => membership.orgId === activeOrgId)?.role;
   if (currentUserRole !== 'admin' && currentUserRole !== 'buero') redirect('/dashboard');
 
   return (

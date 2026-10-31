@@ -35,25 +35,105 @@ type ContextualDocumentRowActions = {
   handleTrash: (target: OrganizationDocument) => void;
 };
 
+function showRowFeedback(
+  { showBanner }: ContextualDocumentRowActionsOptions,
+  variant: 'success' | 'error',
+  message: string,
+): void {
+  showBanner({ variant, message });
+}
+
+// A thrown action (network, session) must not vanish behind `void`.
+function runRowTask(
+  options: ContextualDocumentRowActionsOptions,
+  documentId: string,
+  task: () => Promise<void>,
+  failureMessage: string,
+): void {
+  void options.runBusy(documentId, task).catch(() => showRowFeedback(options, 'error', failureMessage));
+}
+
+function unlinkRowDocument(
+  options: ContextualDocumentRowActionsOptions,
+  document: OrganizationDocument,
+  linkId: string,
+): void {
+  const { waitForDocuments, setRecentlyUploadedDocuments } = options;
+  const unlinkFailure = 'Die Verknüpfung konnte nicht entfernt werden.';
+  runRowTask(
+    options,
+    document.id,
+    async () => {
+      const result = await unlinkDocument({ linkId });
+      if (!result.success) {
+        showRowFeedback(options, 'error', unlinkFailure);
+        return;
+      }
+      setRecentlyUploadedDocuments((current) =>
+        current.filter((recentDocument) => recentDocument.id !== document.id),
+      );
+      showRowFeedback(
+        options,
+        'success',
+        'Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.',
+      );
+      await waitForDocuments();
+    },
+    unlinkFailure,
+  );
+}
+
+function trashRowDocument(options: ContextualDocumentRowActionsOptions, target: OrganizationDocument): void {
+  const { waitForDocuments, showBanner, setRecentlyUploadedDocuments } = options;
+  const trashFailure = 'Die Datei konnte nicht gelöscht werden.';
+  const restoreFailure = 'Die Datei konnte nicht wiederhergestellt werden.';
+  runRowTask(
+    options,
+    target.id,
+    async () => {
+      const result = await deleteDocument(target.id);
+      if (!result.success) {
+        showRowFeedback(options, 'error', trashFailure);
+        return;
+      }
+      setRecentlyUploadedDocuments((current) =>
+        current.filter((recentDocument) => recentDocument.id !== target.id),
+      );
+      showBanner({
+        variant: 'success',
+        message: 'Datei wurde in den Papierkorb verschoben.',
+        actionLabel: 'Rückgängig',
+        actionIcon: <Undo2 className="size-3.5" />,
+        onAction: () =>
+          runRowTask(
+            options,
+            target.id,
+            async () => {
+              const restored = await restoreDocument(target.id);
+              if (!restored.success) {
+                showRowFeedback(options, 'error', restoreFailure);
+                return;
+              }
+              showRowFeedback(options, 'success', 'Datei wurde wiederhergestellt.');
+              await waitForDocuments();
+            },
+            restoreFailure,
+          ),
+      });
+      await waitForDocuments();
+    },
+    trashFailure,
+  );
+}
+
 /** Rename, unlink and trash of one document row, each pending on its own row. */
-export function useContextualDocumentRowActions({
-  runBusy,
-  waitForDocuments,
-  showBanner,
-  setRecentlyUploadedDocuments,
-}: ContextualDocumentRowActionsOptions): ContextualDocumentRowActions {
+export function useContextualDocumentRowActions(
+  options: ContextualDocumentRowActionsOptions,
+): ContextualDocumentRowActions {
+  const { runBusy, waitForDocuments, setRecentlyUploadedDocuments } = options;
   const [renameDocument, setRenameDocument] = useState<OrganizationDocument | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
-
-  function showFeedback(variant: 'success' | 'error', message: string): void {
-    showBanner({ variant, message });
-  }
-
-  // A thrown action (network, session) must not vanish behind `void`.
-  function runRowTask(documentId: string, task: () => Promise<void>, failureMessage: string): void {
-    void runBusy(documentId, task).catch(() => showFeedback('error', failureMessage));
-  }
 
   function startRename(document: OrganizationDocument): void {
     setRenameError(null);
@@ -101,63 +181,11 @@ export function useContextualDocumentRowActions({
   }
 
   function handleUnlink(document: OrganizationDocument, linkId: string): void {
-    const unlinkFailure = 'Die Verknüpfung konnte nicht entfernt werden.';
-    runRowTask(
-      document.id,
-      async () => {
-        const result = await unlinkDocument({ linkId });
-        if (!result.success) {
-          showFeedback('error', unlinkFailure);
-          return;
-        }
-        setRecentlyUploadedDocuments((current) =>
-          current.filter((recentDocument) => recentDocument.id !== document.id),
-        );
-        showFeedback('success', 'Verknüpfung wurde entfernt. Die Datei bleibt in der Dokumentenablage.');
-        await waitForDocuments();
-      },
-      unlinkFailure,
-    );
+    unlinkRowDocument(options, document, linkId);
   }
 
   function handleTrash(target: OrganizationDocument): void {
-    const trashFailure = 'Die Datei konnte nicht gelöscht werden.';
-    const restoreFailure = 'Die Datei konnte nicht wiederhergestellt werden.';
-    runRowTask(
-      target.id,
-      async () => {
-        const result = await deleteDocument(target.id);
-        if (!result.success) {
-          showFeedback('error', trashFailure);
-          return;
-        }
-        setRecentlyUploadedDocuments((current) =>
-          current.filter((recentDocument) => recentDocument.id !== target.id),
-        );
-        showBanner({
-          variant: 'success',
-          message: 'Datei wurde in den Papierkorb verschoben.',
-          actionLabel: 'Rückgängig',
-          actionIcon: <Undo2 className="size-3.5" />,
-          onAction: () =>
-            runRowTask(
-              target.id,
-              async () => {
-                const restored = await restoreDocument(target.id);
-                if (!restored.success) {
-                  showFeedback('error', restoreFailure);
-                  return;
-                }
-                showFeedback('success', 'Datei wurde wiederhergestellt.');
-                await waitForDocuments();
-              },
-              restoreFailure,
-            ),
-        });
-        await waitForDocuments();
-      },
-      trashFailure,
-    );
+    trashRowDocument(options, target);
   }
 
   return {

@@ -14,23 +14,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Field } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ErrorText } from '@/components/ui/error-text';
 import { useBanner } from '@/components/ui/banner';
 import { createOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useServerAction } from '@/hooks/use-server-action';
 import { describeFailure } from '@/lib/action-messages';
 import { createClient, type CreateClientInput } from '@/lib/clients/actions';
-import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
+import type { Client, ClientType } from '@/lib/jobs/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-
-const CLIENT_TYPE_OPTIONS: { value: ClientType; label: string }[] = [
-  { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
-];
+import { ClientFormFields, type ClientFormValues } from './client-form-fields';
 
 const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Kunden zu verwalten.',
@@ -66,22 +58,55 @@ function draftClient(tempId: string, input: CreateClientInput): Client {
   };
 }
 
+function createClientInput(values: ClientFormValues): CreateClientInput {
+  const { name, clientType, email, phone, address, notes } = values;
+  return {
+    name: name.trim(),
+    clientType,
+    ...(email.trim() ? { email: email.trim() } : {}),
+    ...(phone.trim() ? { phone: phone.trim() } : {}),
+    ...(address.trim() ? { address: address.trim() } : {}),
+    ...(notes.trim() ? { notes: notes.trim() } : {}),
+  };
+}
+
+/**
+ * List page: the dialog has closed and the list shows the draft as a pending
+ * row; the server's answer commits or rolls it back (feedback canon).
+ */
+async function settleClientCreation(
+  tempId: string,
+  input: CreateClientInput,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+): Promise<void> {
+  const result = await createClient(input).catch(() => null);
+  if (!result || !result.success) {
+    clientCreations.publish({ kind: 'rollback', tempId });
+    const reason = describeCreateFailure(result?.error ?? 'unexpected_error');
+    showBanner({
+      variant: 'error',
+      message: `Kunde „${input.name}“ konnte nicht angelegt werden: ${reason}`,
+    });
+    return;
+  }
+  clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
+  showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
+  // No router.refresh(): createClient revalidates nothing, so the list page
+  // renders no route for this save. The list's post-save read and the route
+  // snapshot effect reconcile the confirmed row.
+}
+
 interface CreateClientDialogProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onClientCreated?: (client: Client) => void;
 }
 
-export function CreateClientDialog({
-  open: controlledOpen,
-  onOpenChange: controlledOnOpenChange,
-  onClientCreated,
-}: CreateClientDialogProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
-  const isControlled = controlledOpen !== undefined;
-  const open = isControlled ? controlledOpen : internalOpen;
-  const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
-
+/** The create form's state and its submit; `setOpen` closes the dialog. */
+function useCreateClientForm(
+  setOpen: (open: boolean) => void,
+  onClientCreated: ((client: Client) => void) | undefined,
+) {
   const [name, setName] = useState('');
   const [clientType, setClientType] = useState<ClientType>('privat');
   const [email, setEmail] = useState('');
@@ -103,14 +128,7 @@ export function CreateClientDialog({
     setNameError(nextNameError ?? null);
     if (focusFirstInvalidField({ 'client-name': nextNameError })) return;
 
-    const input: CreateClientInput = {
-      name: name.trim(),
-      clientType,
-      ...(email.trim() ? { email: email.trim() } : {}),
-      ...(phone.trim() ? { phone: phone.trim() } : {}),
-      ...(address.trim() ? { address: address.trim() } : {}),
-      ...(notes.trim() ? { notes: notes.trim() } : {}),
-    };
+    const input = createClientInput({ name, clientType, email, phone, address, notes });
 
     if (onClientCreated) {
       // Select-with-create: the caller needs the confirmed record to select
@@ -138,22 +156,7 @@ export function CreateClientDialog({
     clientCreations.publish({ kind: 'insert', tempId, draft: draftClient(tempId, input) });
     resetForm();
     setOpen(false);
-
-    const result = await createClient(input).catch(() => null);
-    if (!result || !result.success) {
-      clientCreations.publish({ kind: 'rollback', tempId });
-      const reason = describeCreateFailure(result?.error ?? 'unexpected_error');
-      showBanner({
-        variant: 'error',
-        message: `Kunde „${input.name}“ konnte nicht angelegt werden: ${reason}`,
-      });
-      return;
-    }
-    clientCreations.publish({ kind: 'commit', tempId, confirmed: result.client });
-    showBanner({ variant: 'success', message: 'Kunde erfolgreich erstellt!' });
-    // No router.refresh(): createClient revalidates nothing, so the list page
-    // renders no route for this save. The list's post-save read and the route
-    // snapshot effect reconcile the confirmed row.
+    await settleClientCreation(tempId, input, showBanner);
   };
 
   const resetForm = () => {
@@ -167,15 +170,40 @@ export function CreateClientDialog({
     setNameError(null);
   };
 
+  return {
+    values: { name, clientType, email, phone, address, notes },
+    setters: { setName, setClientType, setEmail, setPhone, setAddress, setNotes },
+    isLoading,
+    error,
+    setError,
+    nameError,
+    setNameError,
+    showNameError: hasAttemptedSubmit && nameError,
+    handleSubmit,
+    resetForm,
+  };
+}
+
+export function CreateClientDialog({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  onClientCreated,
+}: CreateClientDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = isControlled ? (v: boolean) => controlledOnOpenChange?.(v) : setInternalOpen;
+
+  const form = useCreateClientForm(setOpen, onClientCreated);
+  const { values, setters, isLoading, error, nameError } = form;
+
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
-      resetForm();
-      setError(null);
+      form.resetForm();
+      form.setError(null);
     }
   };
-
-  const showNameError = hasAttemptedSubmit && nameError;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isLoading}>
@@ -199,75 +227,26 @@ export function CreateClientDialog({
           onSubmit={(e) => {
             e.stopPropagation();
             // handleSubmit reports its own failures in the dialog or a banner.
-            void handleSubmit(e);
+            void form.handleSubmit(e);
           }}
           noValidate
         >
           <div className="grid gap-4 py-4">
-            <Field label="Name" htmlFor="client-name" required error={showNameError || undefined}>
-              <Input
-                placeholder="Kundenname"
-                value={name}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  if (nameError) setNameError(null);
-                }}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Typ" htmlFor="client-type">
-              <Select
-                value={clientType}
-                onValueChange={(value) => setClientType(value as ClientType)}
-                disabled={isLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Typ auswählen" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLIENT_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="E-Mail" htmlFor="client-email">
-              <Input
-                type="text"
-                inputMode="email"
-                placeholder="kunde@beispiel.de"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Telefon" htmlFor="client-phone">
-              <Input
-                type="tel"
-                placeholder="+49 123 456789"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Adresse" htmlFor="client-address">
-              <Input
-                placeholder="Straße, PLZ Ort"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
-            <Field label="Notizen" htmlFor="client-notes">
-              <Textarea
-                placeholder="Optionale Notizen zum Kunden…"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                disabled={isLoading}
-              />
-            </Field>
+            <ClientFormFields
+              idPrefix="client"
+              values={values}
+              nameError={form.showNameError || undefined}
+              disabled={isLoading}
+              onNameChange={(value) => {
+                setters.setName(value);
+                if (nameError) form.setNameError(null);
+              }}
+              onClientTypeChange={setters.setClientType}
+              onEmailChange={setters.setEmail}
+              onPhoneChange={setters.setPhone}
+              onAddressChange={setters.setAddress}
+              onNotesChange={setters.setNotes}
+            />
             <ErrorText>{error}</ErrorText>
           </div>
           <DialogFooter>

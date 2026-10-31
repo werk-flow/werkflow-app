@@ -69,39 +69,10 @@ export function CustomerTimelineSection({
 }: CustomerTimelineSectionProps) {
   return (
     <section className="space-y-3" aria-labelledby="timeline-heading">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 id="timeline-heading" className="flex items-center gap-2 text-sm font-semibold">
-            <History className="size-4 text-muted-foreground" />
-            Kundenhistorie
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Verknüpfte Quelldatensätze und nachvollziehbare Änderungen – keine Kopien.
-          </p>
-        </div>
-        <div role="group" className="flex items-center gap-1" aria-label="Kundenhistorie filtern">
-          <Filter className="mr-1 size-3.5 text-muted-foreground" />
-          {(
-            [
-              ['all', 'Alle'],
-              ['work', 'Arbeit'],
-              ['documents', 'Dokumente'],
-              ['internal', 'Intern'],
-            ] as const
-          ).map(([value, label]) => (
-            <Button
-              key={value}
-              variant={timelineFilter === value ? 'secondary' : 'ghost'}
-              size="sm"
-              className="h-8"
-              aria-pressed={timelineFilter === value}
-              onClick={() => onTimelineFilterChange(value)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <CustomerTimelineHeader
+        timelineFilter={timelineFilter}
+        onTimelineFilterChange={onTimelineFilterChange}
+      />
 
       {visibleTimeline.length === 0 ? (
         <p className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
@@ -109,49 +80,9 @@ export function CustomerTimelineSection({
         </p>
       ) : (
         <ol className="divide-y rounded-lg border bg-card" data-testid="customer-timeline">
-          {visibleTimeline.map((item) => {
-            const followUpSource = sourceForTimelineItem(item);
-            return (
-              <li key={item.stableKey} className="flex gap-3 px-4 py-3" data-timeline-key={item.stableKey}>
-                <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-medium">{TIMELINE_LABELS[item.kind]}</p>
-                    <time className="text-xs tabular-nums text-muted-foreground" dateTime={item.occurredAt}>
-                      {formatBerlinDateTime(item.occurredAt)}
-                    </time>
-                  </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground">{item.reference}</p>
-                  {item.detail && <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {item.actorName ?? 'Nicht erfasst'}
-                    {item.currentStateOnly ? ' · aktueller Quelldatensatz' : ''}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-3">
-                    {item.sourceHref && item.sourceAvailable ? (
-                      <Link
-                        href={item.sourceHref}
-                        className="inline-flex items-center gap-1 text-xs text-primary-text hover:underline"
-                      >
-                        Quelle öffnen <ExternalLink className="size-3" />
-                      </Link>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Quelle nicht mehr verfügbar</span>
-                    )}
-                    {followUpSource && (
-                      <PlainButton
-                        type="button"
-                        className="text-xs text-primary-text hover:underline"
-                        onClick={() => onFollowUp(followUpSource)}
-                      >
-                        Hierzu nachfassen
-                      </PlainButton>
-                    )}
-                  </div>
-                </div>
-              </li>
-            );
-          })}
+          {visibleTimeline.map((item) => (
+            <CustomerTimelineEntry key={item.stableKey} item={item} onFollowUp={onFollowUp} />
+          ))}
         </ol>
       )}
       {olderTimelineCursor && (
@@ -174,5 +105,98 @@ export function CustomerTimelineSection({
         </div>
       )}
     </section>
+  );
+}
+
+/** The section heading and the filter buttons of the customer history. */
+function CustomerTimelineHeader({
+  timelineFilter,
+  onTimelineFilterChange,
+}: Pick<CustomerTimelineSectionProps, 'timelineFilter' | 'onTimelineFilterChange'>) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h3 id="timeline-heading" className="flex items-center gap-2 text-sm font-semibold">
+          <History className="size-4 text-muted-foreground" />
+          Kundenhistorie
+        </h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Verknüpfte Quelldatensätze und nachvollziehbare Änderungen – keine Kopien.
+        </p>
+      </div>
+      <div role="group" className="flex items-center gap-1" aria-label="Kundenhistorie filtern">
+        <Filter className="mr-1 size-3.5 text-muted-foreground" />
+        {(
+          [
+            ['all', 'Alle'],
+            ['work', 'Arbeit'],
+            ['documents', 'Dokumente'],
+            ['internal', 'Intern'],
+          ] as const
+        ).map(([value, label]) => (
+          <Button
+            key={value}
+            variant={timelineFilter === value ? 'secondary' : 'ghost'}
+            size="sm"
+            className="h-8"
+            aria-pressed={timelineFilter === value}
+            onClick={() => onTimelineFilterChange(value)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One history entry with its source link and its follow-up action. */
+function CustomerTimelineEntry({
+  item,
+  onFollowUp,
+}: {
+  item: TimelineItem;
+  onFollowUp: (source: FollowUpSource) => void;
+}) {
+  const followUpSource = sourceForTimelineItem(item);
+  return (
+    <li className="flex gap-3 px-4 py-3" data-timeline-key={item.stableKey}>
+      <Clock3 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium">{TIMELINE_LABELS[item.kind]}</p>
+          <time className="text-xs tabular-nums text-muted-foreground" dateTime={item.occurredAt}>
+            {formatBerlinDateTime(item.occurredAt)}
+          </time>
+        </div>
+        <p className="mt-0.5 text-sm text-muted-foreground">{item.reference}</p>
+        {item.detail && <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>}
+        <p className="mt-1 text-xs text-muted-foreground">
+          {item.actorName ?? 'Nicht erfasst'}
+          {item.currentStateOnly ? ' · aktueller Quelldatensatz' : ''}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          {item.sourceHref && item.sourceAvailable ? (
+            <Link
+              href={item.sourceHref}
+              className="inline-flex items-center gap-1 text-xs text-primary-text hover:underline"
+            >
+              Quelle öffnen <ExternalLink className="size-3" />
+            </Link>
+          ) : (
+            <span className="text-xs text-muted-foreground">Quelle nicht mehr verfügbar</span>
+          )}
+          {followUpSource && (
+            <PlainButton
+              type="button"
+              className="text-xs text-primary-text hover:underline"
+              onClick={() => onFollowUp(followUpSource)}
+            >
+              Hierzu nachfassen
+            </PlainButton>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }
