@@ -38,12 +38,6 @@ function orTerm(term: string): (row: Row) => boolean {
   return (row) => compare(...comparable(row[column], value));
 }
 
-/** A dotted column on a seeded embedded array filters that embed, never its parent row (PostgREST). */
-function filtersEmbed(row: Row, column: string): boolean {
-  const dot = column.indexOf('.');
-  return dot !== -1 && Array.isArray(row[column.slice(0, dot)]);
-}
-
 class InMemoryQuery implements PromiseLike<QueryResult> {
   private operation: 'select' | 'update' | 'delete' | 'insert' | null = null;
   private payload: Row | Row[] = {};
@@ -52,6 +46,8 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   private headOnly = false;
   /** Embeds the select joins with `!inner`, by alias or table name. */
   private readonly innerEmbeds = new Set<string>();
+  /** Filters on a seeded embedded array: they drop its items, never its parent row (PostgREST). */
+  private readonly embedFilters = new Map<string, Array<(item: Row) => boolean>>();
 
   constructor(
     private readonly tables: InMemoryTables,
@@ -108,10 +104,24 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
     return this.where((row) => values.includes(row[column]));
   }
   gte(column: string, value: string): this {
-    return this.where((row) => filtersEmbed(row, column) || String(row[column]) >= value);
+    return this.compare(column, (field) => String(field) >= value);
   }
   lte(column: string, value: string): this {
-    return this.where((row) => filtersEmbed(row, column) || String(row[column]) <= value);
+    return this.compare(column, (field) => String(field) <= value);
+  }
+  /** A dotted column on a seeded embedded array filters that embed's items; any other column, the row. */
+  private compare(column: string, test: (field: unknown) => boolean): this {
+    const dot = column.indexOf('.');
+    if (dot !== -1) {
+      const embedded = column.slice(0, dot);
+      const field = column.slice(dot + 1);
+      this.filterEmbed(embedded, (item) => test(item[field]));
+      return this.where((row) => Array.isArray(row[embedded]) || test(row[column]));
+    }
+    return this.where((row) => test(row[column]));
+  }
+  private filterEmbed(embedded: string, keep: (item: Row) => boolean): void {
+    this.embedFilters.set(embedded, [...(this.embedFilters.get(embedded) ?? []), keep]);
   }
   lt(column: string, value: string): this {
     return this.where((row) => String(row[column]) < value);
@@ -152,8 +162,11 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
    * throws. A filter on a referenced table filters that embed, never the parent row.
    */
   or(filter: string, options?: { referencedTable?: string }): this {
-    if (options?.referencedTable) return this;
     const terms = filter.split(',').map(orTerm);
+    if (options?.referencedTable) {
+      this.filterEmbed(options.referencedTable, (item) => terms.some((term) => term(item)));
+      return this;
+    }
     return this.where((row) => terms.some((term) => term(row)));
   }
   single(): this {
@@ -182,6 +195,8 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
       if (this.operation === 'delete')
         this.tables[this.table] = rows.filter((row) => !affected.includes(row));
     }
+    if (this.operation === 'select' && this.embedFilters.size > 0)
+      affected = affected.map((row) => this.withFilteredEmbeds(row));
     if (this.headOnly) return { data: null, error: null, count: affected.length };
     if (this.cardinality === 'many') return { data: affected, error: null, count: affected.length };
     if (this.cardinality === 'single' && affected.length !== 1)
@@ -192,6 +207,17 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
         count: null,
       };
     return { data: affected[0] ?? null, error: null, count: null };
+  }
+
+  /** A copy of a selected row whose embedded arrays keep only the items every embed filter keeps. */
+  private withFilteredEmbeds(row: Row): Row {
+    const copy: Row = { ...row };
+    for (const [embedded, filters] of this.embedFilters) {
+      const items = row[embedded];
+      if (Array.isArray(items))
+        copy[embedded] = items.filter((item: Row) => filters.every((keep) => keep(item)));
+    }
+    return copy;
   }
 
   then<Fulfilled = QueryResult, Rejected = never>(
