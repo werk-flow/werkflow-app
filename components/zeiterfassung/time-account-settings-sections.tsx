@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
@@ -25,25 +26,23 @@ import { formatGermanDate } from '@/lib/utils';
 
 type SettingsEmployee = TimeAccountSettingsData['employees'][number];
 type MissingAccount = TimeAccountSettingsData['missingAccounts'][number];
-function EmployeeTimePolicyAssignment({
+type PersonCells = Parameters<typeof PersonRow>[0]['cells'];
+
+/** The non-default policies: a click on one assigns it. */
+function PolicyChoiceButtons({
+  formId,
   employee,
   policies,
-  today,
-  layout,
+  isPending,
+  pendingValue,
 }: {
+  formId: string;
   employee: SettingsEmployee;
   policies: TimeAccountSettingsData['policies'];
-  today: string;
-  layout: PersonLayout;
+  isPending: boolean;
+  pendingValue: string | null;
 }) {
-  const { handleSubmit, handleKeyDown, isPending, pendingValue, error } = useTimeAccountForm({
-    action: 'assignPolicy',
-    serverAction: assignEmployeeTimePolicy,
-    fallback: 'assignment_failed',
-    successMessage: () => 'Die Regel ist zugewiesen.',
-  });
-  const formId = `policy-assignment-${layout}-${employee.employeeRecordId}`;
-  const choices = (
+  return (
     <div className="flex flex-wrap gap-2" role="group" aria-label={`Regel für ${employee.employeeName}`}>
       {policies
         .filter((policy) => !policy.isDefault)
@@ -63,6 +62,67 @@ function EmployeeTimePolicyAssignment({
           </TimeAccountSubmitButton>
         ))}
     </div>
+  );
+}
+
+/** The table row takes the bare controls; a card labels each one and puts the rules last. */
+function policyAssignmentCells(
+  layout: PersonLayout,
+  { choices, validFrom, reason }: { choices: ReactNode; validFrom: ReactNode; reason: ReactNode },
+): PersonCells {
+  return layout === 'row'
+    ? [
+        { key: 'policy', content: choices },
+        { key: 'validFrom', content: validFrom },
+        { key: 'reason', content: reason },
+      ]
+    : [
+        {
+          key: 'validFrom',
+          content: (
+            <Field label="Gültig ab" required>
+              {validFrom}
+            </Field>
+          ),
+        },
+        {
+          key: 'reason',
+          content: (
+            <Field label="Grund" required>
+              {reason}
+            </Field>
+          ),
+        },
+        { key: 'policy', content: choices },
+      ];
+}
+
+function EmployeeTimePolicyAssignment({
+  employee,
+  policies,
+  today,
+  layout,
+}: {
+  employee: SettingsEmployee;
+  policies: TimeAccountSettingsData['policies'];
+  today: string;
+  layout: PersonLayout;
+}) {
+  const { handleSubmit, handleKeyDown, isPending, pendingValue, error } = useTimeAccountForm({
+    action: 'assignPolicy',
+    serverAction: assignEmployeeTimePolicy,
+    fallback: 'assignment_failed',
+    successMessage: () => 'Die Regel ist zugewiesen.',
+  });
+  const formId = `policy-assignment-${layout}-${employee.employeeRecordId}`;
+  const choices = (
+    <PolicyChoiceButtons
+      formId={formId}
+      employee={employee}
+      policies={policies}
+      isPending={isPending}
+      pendingValue={pendingValue}
+    />
   );
   const validFrom = (
     <TimeAccountDateField
@@ -92,33 +152,7 @@ function EmployeeTimePolicyAssignment({
           <input type="hidden" name="employeeRecordId" value={employee.employeeRecordId} />
         </form>
       }
-      cells={
-        layout === 'row'
-          ? [
-              { key: 'policy', content: choices },
-              { key: 'validFrom', content: validFrom },
-              { key: 'reason', content: reason },
-            ]
-          : [
-              {
-                key: 'validFrom',
-                content: (
-                  <Field label="Gültig ab" required>
-                    {validFrom}
-                  </Field>
-                ),
-              },
-              {
-                key: 'reason',
-                content: (
-                  <Field label="Grund" required>
-                    {reason}
-                  </Field>
-                ),
-              },
-              { key: 'policy', content: choices },
-            ]
-      }
+      cells={policyAssignmentCells(layout, { choices, validFrom, reason })}
       error={error}
     />
   );
@@ -169,6 +203,52 @@ export function EmployeeTimePolicyAssignmentCard({
       </CardContent>
     </Card>
   );
+}
+
+/** The table row takes the bare controls and right-aligns the submit; a card labels each control. */
+function openAccountCells(
+  layout: PersonLayout,
+  {
+    openingMinutes,
+    openedOn,
+    reason,
+    submit,
+  }: { openingMinutes: ReactNode; openedOn: ReactNode; reason: ReactNode; submit: ReactNode },
+): PersonCells {
+  return layout === 'row'
+    ? [
+        { key: 'openingMinutes', content: openingMinutes },
+        { key: 'openedOn', content: openedOn },
+        { key: 'reason', content: reason },
+        { key: 'submit', content: <div className="flex justify-end">{submit}</div> },
+      ]
+    : [
+        {
+          key: 'openingMinutes',
+          content: (
+            <Field label="Anfangssaldo (Minuten)" required>
+              {openingMinutes}
+            </Field>
+          ),
+        },
+        {
+          key: 'openedOn',
+          content: (
+            <Field label="Eröffnungsdatum" required>
+              {openedOn}
+            </Field>
+          ),
+        },
+        {
+          key: 'reason',
+          content: (
+            <Field label="Grund" required>
+              {reason}
+            </Field>
+          ),
+        },
+        { key: 'submit', content: submit },
+      ];
 }
 
 function MissingTimeAccount({
@@ -237,42 +317,7 @@ function MissingTimeAccount({
           <input type="hidden" name="employeeRecordId" value={employee.employeeRecordId} />
         </form>
       }
-      cells={
-        layout === 'row'
-          ? [
-              { key: 'openingMinutes', content: openingMinutes },
-              { key: 'openedOn', content: openedOn },
-              { key: 'reason', content: reason },
-              { key: 'submit', content: <div className="flex justify-end">{submit}</div> },
-            ]
-          : [
-              {
-                key: 'openingMinutes',
-                content: (
-                  <Field label="Anfangssaldo (Minuten)" required>
-                    {openingMinutes}
-                  </Field>
-                ),
-              },
-              {
-                key: 'openedOn',
-                content: (
-                  <Field label="Eröffnungsdatum" required>
-                    {openedOn}
-                  </Field>
-                ),
-              },
-              {
-                key: 'reason',
-                content: (
-                  <Field label="Grund" required>
-                    {reason}
-                  </Field>
-                ),
-              },
-              { key: 'submit', content: submit },
-            ]
-      }
+      cells={openAccountCells(layout, { openingMinutes, openedOn, reason, submit })}
       error={error}
     />
   );

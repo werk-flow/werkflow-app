@@ -23,7 +23,7 @@ export function combinePendingApprovalItems(
   const allItems: PendingApprovalItem[] = [
     ...sessions.map((s) => ({ type: 'session' as const, data: s })),
     ...changeRequests.map((r) => ({
-      type: r.changeType as 'edit' | 'delete',
+      type: r.changeType,
       data: r,
     })),
   ].sort((a, b) => {
@@ -55,6 +55,44 @@ type PendingApprovalsListProps = {
   currentUserId: string;
 };
 
+function PendingApprovalsSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i} className="py-0">
+          <CardContent className="flex items-center justify-between p-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-8" />
+              <Skeleton className="h-8 w-8" />
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+// Info banner explaining the new behavior
+function PendingApprovalsInfoBanner() {
+  return (
+    <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground mb-3">
+      <p>
+        <strong>Hinweis:</strong> Anträge sind bereits in den Kalendern und Arbeitszeiten der Mitarbeiter
+        sichtbar (als „ausstehend“ markiert).
+      </p>
+      <p className="mt-1">
+        <span className="text-success-text">✓ Genehmigen</span> = Eintrag wird bestätigt und bleibt erhalten.
+        <span className="ml-3 text-destructive">✗ Ablehnen</span> = Eintrag wird entfernt und rückgängig
+        gemacht.
+      </p>
+    </div>
+  );
+}
+
 // Render content based on state
 export function PendingApprovalsList({
   isInitialLoading,
@@ -68,24 +106,7 @@ export function PendingApprovalsList({
   currentUserId,
 }: PendingApprovalsListProps) {
   if (isInitialLoading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i} className="py-0">
-            <CardContent className="flex items-center justify-between p-4">
-              <div className="space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-48" />
-              </div>
-              <div className="flex gap-2">
-                <Skeleton className="h-8 w-8" />
-                <Skeleton className="h-8 w-8" />
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    );
+    return <PendingApprovalsSkeleton />;
   }
 
   // Show error only if we have no items (initial load failed)
@@ -104,24 +125,9 @@ export function PendingApprovalsList({
     );
   }
 
-  // Info banner explaining the new behavior
-  const infoBanner = (
-    <div className="rounded-lg border border-warning/40 bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground mb-3">
-      <p>
-        <strong>Hinweis:</strong> Anträge sind bereits in den Kalendern und Arbeitszeiten der Mitarbeiter
-        sichtbar (als „ausstehend“ markiert).
-      </p>
-      <p className="mt-1">
-        <span className="text-success-text">✓ Genehmigen</span> = Eintrag wird bestätigt und bleibt erhalten.
-        <span className="ml-3 text-destructive">✗ Ablehnen</span> = Eintrag wird entfernt und rückgängig
-        gemacht.
-      </p>
-    </div>
-  );
-
   return (
     <div className="space-y-3">
-      {infoBanner}
+      <PendingApprovalsInfoBanner />
       {allItems.map((item) => {
         if (item.type === 'session') {
           return (
