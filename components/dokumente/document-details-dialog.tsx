@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatFileSize } from '@/lib/documents/format';
 import {
+  DOCUMENT_CATEGORIES,
   DOCUMENT_CATEGORY_LABELS,
   type DocumentCategory,
   type OrganizationDocument,
@@ -54,7 +55,10 @@ function DocumentDetailsMetadata({
         <div className="mt-1">
           <Select
             value={document.category}
-            onValueChange={(value) => onUpdateCategory(document, value as DocumentCategory)}
+            onValueChange={(value) => {
+              const category = DOCUMENT_CATEGORIES.find((candidate) => candidate === value);
+              if (category) onUpdateCategory(document, category);
+            }}
             disabled={categoryDisabled}
           >
             <SelectTrigger className="w-full" aria-label="Kategorie der Datei">
@@ -130,6 +134,109 @@ type DocumentDetailsVersionsProps = {
   onRetryDetails: () => void;
 };
 
+type DocumentDetailsVersionsHeaderProps = Pick<
+  DocumentDetailsVersionsProps,
+  'document' | 'isBusy' | 'isTrashView' | 'versionInputRef' | 'onVersionUpload'
+>;
+
+function DocumentDetailsVersionsHeader({
+  document,
+  isBusy,
+  isTrashView,
+  versionInputRef,
+  onVersionUpload,
+}: DocumentDetailsVersionsHeaderProps) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versionen</p>
+      {!isTrashView && ['contract', 'invoice', 'offer', 'report'].includes(document.category) && (
+        <>
+          <Button
+            pending={isBusy}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => versionInputRef.current?.click()}
+            disabled={isBusy}
+          >
+            Neue Version
+          </Button>
+          <input
+            ref={versionInputRef}
+            type="file"
+            className="hidden"
+            onChange={(event) => onVersionUpload(event.target.files)}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+type DocumentDetailsOlderVersionsProps = Pick<
+  DocumentDetailsVersionsProps,
+  'details' | 'isLoading' | 'isItemBusy' | 'onDownloadVersion' | 'onRetryDetails'
+>;
+
+function DocumentDetailsOlderVersions({
+  details,
+  isLoading,
+  isItemBusy,
+  onDownloadVersion,
+  onRetryDetails,
+}: DocumentDetailsOlderVersionsProps) {
+  if (isLoading) {
+    return (
+      <div className="divide-y" role="status" aria-busy="true">
+        <span className="sr-only">Versionen werden geladen.</span>
+        {Array.from({ length: 2 }, (_, index) => (
+          <div key={index} className="space-y-1.5 px-3 py-2">
+            <Skeleton className="h-4 w-40 max-w-full" />
+            <Skeleton className="h-3 w-56 max-w-full" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (details?.versions.length) {
+    return (
+      <div className="divide-y">
+        {details.versions.map((version) => (
+          <div key={version.id} className="flex items-center justify-between gap-3 px-3 py-2">
+            <div className="min-w-0 wrap-anywhere">
+              <p className="font-medium">Version {version.versionNumber}</p>
+              <p className="text-xs text-muted-foreground">
+                {version.originalFileName} · {formatFileSize(version.sizeBytes)} ·{' '}
+                {formatDate(version.createdAt)}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onDownloadVersion(version.id)}
+              pending={isItemBusy(version.id)}
+            >
+              <Download className="size-4" />
+              Download
+            </Button>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (details) {
+    return (
+      <EmptyState size="compact" className="px-3 py-2" title="Noch keine älteren Versionen vorhanden." />
+    );
+  }
+  return (
+    <SectionError className="m-2" onRetry={onRetryDetails}>
+      Die Dateidetails konnten nicht geladen werden.
+    </SectionError>
+  );
+}
+
 function DocumentDetailsVersions({
   document,
   details,
@@ -145,29 +252,13 @@ function DocumentDetailsVersions({
 }: DocumentDetailsVersionsProps) {
   return (
     <div>
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versionen</p>
-        {!isTrashView && ['contract', 'invoice', 'offer', 'report'].includes(document.category) && (
-          <>
-            <Button
-              pending={isBusy}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => versionInputRef.current?.click()}
-              disabled={isBusy}
-            >
-              Neue Version
-            </Button>
-            <input
-              ref={versionInputRef}
-              type="file"
-              className="hidden"
-              onChange={(event) => onVersionUpload(event.target.files)}
-            />
-          </>
-        )}
-      </div>
+      <DocumentDetailsVersionsHeader
+        document={document}
+        isBusy={isBusy}
+        isTrashView={isTrashView}
+        versionInputRef={versionInputRef}
+        onVersionUpload={onVersionUpload}
+      />
       <div className="mt-2 rounded-md border">
         <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
           <div className="min-w-0 wrap-anywhere">
@@ -188,47 +279,13 @@ function DocumentDetailsVersions({
             Download
           </Button>
         </div>
-        {isLoading ? (
-          <div className="divide-y" role="status" aria-busy="true">
-            <span className="sr-only">Versionen werden geladen.</span>
-            {Array.from({ length: 2 }, (_, index) => (
-              <div key={index} className="space-y-1.5 px-3 py-2">
-                <Skeleton className="h-4 w-40 max-w-full" />
-                <Skeleton className="h-3 w-56 max-w-full" />
-              </div>
-            ))}
-          </div>
-        ) : details?.versions.length ? (
-          <div className="divide-y">
-            {details.versions.map((version) => (
-              <div key={version.id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="min-w-0 wrap-anywhere">
-                  <p className="font-medium">Version {version.versionNumber}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {version.originalFileName} · {formatFileSize(version.sizeBytes)} ·{' '}
-                    {formatDate(version.createdAt)}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => onDownloadVersion(version.id)}
-                  pending={isItemBusy(version.id)}
-                >
-                  <Download className="size-4" />
-                  Download
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : details ? (
-          <EmptyState size="compact" className="px-3 py-2" title="Noch keine älteren Versionen vorhanden." />
-        ) : (
-          <SectionError className="m-2" onRetry={onRetryDetails}>
-            Die Dateidetails konnten nicht geladen werden.
-          </SectionError>
-        )}
+        <DocumentDetailsOlderVersions
+          details={details}
+          isLoading={isLoading}
+          isItemBusy={isItemBusy}
+          onDownloadVersion={onDownloadVersion}
+          onRetryDetails={onRetryDetails}
+        />
       </div>
     </div>
   );

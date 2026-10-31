@@ -35,25 +35,7 @@ export type DocumentLocationTarget = {
   targetFolderId: string | null;
 };
 
-/**
- * Folder, view and search navigation of the library. The target view shows
- * its skeleton at once (`pendingNavigation`) while the route transition loads.
- * The transition itself comes from `document-library-content.tsx`, the
- * library's named `useTransition` exception.
- */
-export function useDocumentLibraryNavigation({
-  view,
-  initialSearchQuery,
-  category,
-  linkFilter,
-  currentFolderId,
-  page,
-  folderPage,
-  isMutating,
-  isNavigationPending,
-  startNavigationTransition,
-  clearSelection,
-}: {
+type DocumentLibraryNavigationOptions = {
   view: DocumentLibraryView;
   initialSearchQuery: string;
   category: DocumentLibraryCategoryFilter;
@@ -65,8 +47,15 @@ export function useDocumentLibraryNavigation({
   isNavigationPending: boolean;
   startNavigationTransition: TransitionStartFunction;
   clearSelection: () => void;
-}) {
-  const router = useRouter();
+};
+
+type SearchUpdate = {
+  nextSearchQuery?: string;
+  nextCategory?: DocumentLibraryCategoryFilter;
+  nextLinkFilter?: DocumentLibraryLinkFilter;
+};
+
+function useSearchQueryFollowingUrl(initialSearchQuery: string) {
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   // The field follows the URL only when the URL's query changes. A filter,
   // folder or page navigation keeps the query, and its late commit must not
@@ -76,6 +65,22 @@ export function useDocumentLibraryNavigation({
     setShownUrlSearchQuery(initialSearchQuery);
     setSearchQuery(initialSearchQuery);
   }
+  return { searchQuery, setSearchQuery };
+}
+
+/** The navigation whose skeleton shows until the route props arrive, and the search location asked for last. */
+function usePendingDocumentNavigation({
+  view,
+  initialSearchQuery,
+  category,
+  linkFilter,
+  currentFolderId,
+  page,
+  folderPage,
+}: Pick<
+  DocumentLibraryNavigationOptions,
+  'view' | 'initialSearchQuery' | 'category' | 'linkFilter' | 'currentFolderId' | 'page' | 'folderPage'
+>) {
   const [pendingNavigation, setPendingNavigation] = useState<PendingDocumentNavigation>(null);
   // The latest search location asked for. A second change while the first is
   // still loading builds on it, not on the route props it would revert.
@@ -102,6 +107,23 @@ export function useDocumentLibraryNavigation({
 
     return () => window.clearTimeout(timeoutId);
   }, [pendingNavigation]);
+
+  return { pendingNavigation, setPendingNavigation, requestedSearchLocationRef: requestedSearchLocation };
+}
+
+/**
+ * Folder, view and search navigation of the library. The target view shows
+ * its skeleton at once (`pendingNavigation`) while the route transition loads.
+ * The transition itself comes from `document-library-content.tsx`, the
+ * library's named `useTransition` exception.
+ */
+export function useDocumentLibraryNavigation(options: DocumentLibraryNavigationOptions) {
+  const { view, initialSearchQuery, category, linkFilter, currentFolderId } = options;
+  const { isMutating, isNavigationPending, startNavigationTransition, clearSelection } = options;
+  const router = useRouter();
+  const { searchQuery, setSearchQuery } = useSearchQueryFollowingUrl(initialSearchQuery);
+  const { pendingNavigation, setPendingNavigation, requestedSearchLocationRef } =
+    usePendingDocumentNavigation(options);
 
   function navigateToDocumentLocation({ href, targetView, targetFolderId }: DocumentLocationTarget) {
     if (isMutating || isNavigationPending) {
@@ -131,23 +153,15 @@ export function useDocumentLibraryNavigation({
     });
   }
 
-  function updateSearch({
-    nextSearchQuery = searchQuery,
-    nextCategory,
-    nextLinkFilter,
-  }: {
-    nextSearchQuery?: string;
-    nextCategory?: DocumentLibraryCategoryFilter;
-    nextLinkFilter?: DocumentLibraryLinkFilter;
-  } = {}) {
-    const requested = requestedSearchLocation.current;
+  function updateSearch({ nextSearchQuery = searchQuery, nextCategory, nextLinkFilter }: SearchUpdate = {}) {
+    const requested = requestedSearchLocationRef.current;
     const next: SearchLocation = {
       searchQuery: nextSearchQuery.trim(),
       category: nextCategory ?? requested.category,
       linkFilter: nextLinkFilter ?? requested.linkFilter,
     };
     if (isSameSearchLocation(next, requested)) return;
-    requestedSearchLocation.current = next;
+    requestedSearchLocationRef.current = next;
     // Returning to the shown location leaves the route props unchanged, so a
     // pending skeleton would never clear.
     const returnsToShownLocation = isSameSearchLocation(next, {
