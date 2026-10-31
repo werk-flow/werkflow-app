@@ -18,6 +18,45 @@ const CREATE_FAILURE_MESSAGES: Readonly<Record<string, string>> = {
 };
 const CREATE_FAILURE_FALLBACK = 'Die Personalakte konnte nicht angelegt werden.';
 
+type PersonnelRecordFields = {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  entryDate: string;
+  notes: string;
+};
+
+/** The create input: trimmed values, an empty optional field left out. */
+function newPersonnelRecordInput({
+  firstName,
+  lastName,
+  employeeNumber,
+  entryDate,
+  notes,
+}: PersonnelRecordFields) {
+  return {
+    ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
+    lastName: lastName.trim(),
+    ...(employeeNumber.trim() ? { employeeNumber: employeeNumber.trim() } : {}),
+    ...(entryDate ? { entryDate } : {}),
+    ...(notes.trim() ? { notes: notes.trim() } : {}),
+  };
+}
+
+/** Fills the suggested personnel number while the dialog is open; the ref marks a typed number. */
+function useSuggestedPersonnelNumber(open: boolean, setEmployeeNumber: (suggestion: string) => void) {
+  // Guards for the async number suggestion: a suggestion must never overwrite
+  // a number the user has already typed (see the P1-02 dialogs for the same
+  // pattern; CodeRabbit caught the unguarded variant as a real defect).
+  const numberTouchedRef = useRef(false);
+
+  useSuggestedRecordNumber('next-personnel-number', open, (suggestion) => {
+    if (!numberTouchedRef.current) setEmployeeNumber(suggestion);
+  });
+
+  return numberTouchedRef;
+}
+
 /** Open state, fields, number suggestion and save of the create-personnel dialog. */
 export function useCreatePersonnelDialogForm() {
   const router = useRouter();
@@ -31,15 +70,7 @@ export function useCreatePersonnelDialogForm() {
   const { run: runSave, isPending: isSaving } = useServerAction(createPersonnelRecord);
   const [error, setError] = useState<string | null>(null);
   const [lastNameError, setLastNameError] = useState<string | null>(null);
-
-  // Guards for the async number suggestion: a suggestion must never overwrite
-  // a number the user has already typed (see the P1-02 dialogs for the same
-  // pattern; CodeRabbit caught the unguarded variant as a real defect).
-  const numberTouchedRef = useRef(false);
-
-  useSuggestedRecordNumber('next-personnel-number', open, (suggestion) => {
-    if (!numberTouchedRef.current) setEmployeeNumber(suggestion);
-  });
+  const numberTouchedRef = useSuggestedPersonnelNumber(open, setEmployeeNumber);
 
   const resetForm = () => {
     setFirstName('');
@@ -67,13 +98,9 @@ export function useCreatePersonnelDialogForm() {
     if (focusFirstInvalidField({ 'personnel-last-name': nextLastNameError })) return;
 
     // A rejected Server Action shows the fallback and releases the dialog.
-    const result = await runSave({
-      ...(firstName.trim() ? { firstName: firstName.trim() } : {}),
-      lastName: lastName.trim(),
-      ...(employeeNumber.trim() ? { employeeNumber: employeeNumber.trim() } : {}),
-      ...(entryDate ? { entryDate } : {}),
-      ...(notes.trim() ? { notes: notes.trim() } : {}),
-    }).catch(() => null);
+    const result = await runSave(
+      newPersonnelRecordInput({ firstName, lastName, employeeNumber, entryDate, notes }),
+    ).catch(() => null);
     if (!result) {
       setError(CREATE_FAILURE_FALLBACK);
       return;

@@ -48,7 +48,8 @@ interface PersonnelInviteDialogProps {
  * regular organization invite and remembers it on the record, so redeeming the
  * invite links the login instead of creating a duplicate record.
  */
-export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteDialogProps) {
+/** Open state, fields, validation and send of the personnel invite dialog. */
+function usePersonnelInviteForm(recordId: string) {
   const router = useRouter();
   const { showBanner } = useBanner();
   const [open, setOpen] = useState(false);
@@ -97,6 +98,36 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
     }
   };
 
+  return {
+    open,
+    email,
+    setEmail,
+    role,
+    setRole,
+    isSending,
+    error,
+    setError,
+    shownEmailError,
+    handleOpenChange,
+    handleSubmit,
+  };
+}
+
+export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteDialogProps) {
+  const {
+    open,
+    email,
+    setEmail,
+    role,
+    setRole,
+    isSending,
+    error,
+    setError,
+    shownEmailError,
+    handleOpenChange,
+    handleSubmit,
+  } = usePersonnelInviteForm(recordId);
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isSending}>
       <DialogTrigger asChild>
@@ -131,7 +162,10 @@ export function PersonnelInviteDialog({ recordId, personName }: PersonnelInviteD
             <Field label="Rolle" htmlFor="personnel-invite-role">
               <Select
                 value={role}
-                onValueChange={(value) => setRole(value as InviteRole)}
+                onValueChange={(value) => {
+                  const nextRole = INVITE_ROLE_OPTIONS.find((option) => option.value === value);
+                  if (nextRole) setRole(nextRole.value);
+                }}
                 disabled={isSending}
               >
                 <SelectTrigger>

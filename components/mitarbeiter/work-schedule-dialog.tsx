@@ -19,6 +19,51 @@ import { formatDuration } from '@/lib/time-tracking/helpers';
 import { toLocalDateString } from '@/lib/utils';
 import { useWorkScheduleForm, type WorkScheduleFormInput } from './use-work-schedule-form';
 
+type WorkScheduleDayHoursFieldsProps = Pick<
+  ReturnType<typeof useWorkScheduleForm>,
+  'dayHours' | 'setDayHours' | 'dayErrors' | 'weeklyMinutes' | 'isSaving'
+>;
+
+function WorkScheduleDayHoursFields({
+  dayHours,
+  setDayHours,
+  dayErrors,
+  weeklyMinutes,
+  isSaving,
+}: WorkScheduleDayHoursFieldsProps) {
+  return (
+    <fieldset className="grid gap-2">
+      <legend className="text-sm font-medium">Arbeitsstunden pro Wochentag</legend>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+        {WEEKDAY_LABELS.map((label, index) => (
+          <Field
+            key={label}
+            label={<span className="text-xs font-normal text-muted-foreground">{label}</span>}
+            htmlFor={`schedule-day-${index}`}
+            error={dayErrors[index]}
+            className="gap-1"
+          >
+            <Input
+              inputMode="decimal"
+              value={dayHours[index]}
+              onChange={(e) => {
+                const next = [...dayHours];
+                next[index] = e.target.value;
+                setDayHours(next);
+              }}
+              disabled={isSaving}
+            />
+          </Field>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        0 bedeutet: kein Arbeitstag.
+        {weeklyMinutes !== null && ` Summe: ${formatDuration(weeklyMinutes)} pro Woche.`}
+      </p>
+    </fieldset>
+  );
+}
+
 export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkScheduleFormInput) {
   const {
     validFrom,
@@ -54,35 +99,13 @@ export function WorkScheduleDialog({ recordId, schedule, onClose }: WorkSchedule
                 disabled={isSaving}
               />
             </Field>
-            <fieldset className="grid gap-2">
-              <legend className="text-sm font-medium">Arbeitsstunden pro Wochentag</legend>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
-                {WEEKDAY_LABELS.map((label, index) => (
-                  <Field
-                    key={label}
-                    label={<span className="text-xs font-normal text-muted-foreground">{label}</span>}
-                    htmlFor={`schedule-day-${index}`}
-                    error={dayErrors[index]}
-                    className="gap-1"
-                  >
-                    <Input
-                      inputMode="decimal"
-                      value={dayHours[index]}
-                      onChange={(e) => {
-                        const next = [...dayHours];
-                        next[index] = e.target.value;
-                        setDayHours(next);
-                      }}
-                      disabled={isSaving}
-                    />
-                  </Field>
-                ))}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                0 bedeutet: kein Arbeitstag.
-                {weeklyMinutes !== null && ` Summe: ${formatDuration(weeklyMinutes)} pro Woche.`}
-              </p>
-            </fieldset>
+            <WorkScheduleDayHoursFields
+              dayHours={dayHours}
+              setDayHours={setDayHours}
+              dayErrors={dayErrors}
+              weeklyMinutes={weeklyMinutes}
+              isSaving={isSaving}
+            />
             <Field label="Notiz" htmlFor="schedule-note">
               <Input
                 placeholder="z. B. Elternzeit-Teilzeit"
