@@ -53,39 +53,11 @@ export function ParkConfirmationDialog({
   };
 
   const displayName = identifier ? `${identifier} – ${title}` : title;
-  const isAutoParkDateRemoval = mode === 'auto-park-date-removal';
-
-  const dialogTitle = isAutoParkDateRemoval
-    ? 'Datum entfernen?'
-    : variant === 'job'
-      ? 'Auftrag parken?'
-      : 'Projekt parken?';
-
-  const description = isAutoParkDateRemoval ? (
-    <>
-      Wenn du das geplante Datum von <span className="font-medium text-foreground">{displayName}</span>{' '}
-      entfernst, bleibt der Arbeitsstand unverändert.
-    </>
-  ) : variant === 'job' ? (
-    <>
-      Der Auftrag <span className="font-medium text-foreground">{displayName}</span> wird in den Parkplatz
-      verschoben.
-    </>
-  ) : (
-    <>
-      Das Projekt <span className="font-medium text-foreground">{displayName}</span> und alle zugehörigen
-      Aufträge werden in den Parkplatz verschoben.
-    </>
+  const { dialogTitle, description, warningText, confirmLabel, loadingLabel } = parkConfirmationCopy(
+    variant,
+    mode,
+    displayName,
   );
-
-  const warningText = isAutoParkDateRemoval
-    ? 'Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben ebenfalls unverändert.'
-    : variant === 'job'
-      ? 'Das geplante Datum und die Uhrzeit werden entfernt.'
-      : 'Alle geplanten Daten und Uhrzeiten der zugehörigen Aufträge werden entfernt.';
-
-  const confirmLabel = isAutoParkDateRemoval ? 'Datum entfernen' : 'Parken';
-  const loadingLabel = isAutoParkDateRemoval ? 'Wird gespeichert…' : 'Wird geparkt…';
 
   return (
     <AlertDialog
@@ -128,4 +100,47 @@ export function ParkConfirmationDialog({
       </AlertDialogContent>
     </AlertDialog>
   );
+}
+
+/** The title, sentences and button labels of the dialog for its variant and mode. */
+function parkConfirmationCopy(
+  variant: ParkConfirmationDialogProps['variant'],
+  mode: NonNullable<ParkConfirmationDialogProps['mode']>,
+  displayName: string,
+) {
+  const isAutoParkDateRemoval = mode === 'auto-park-date-removal';
+
+  const dialogTitle = isAutoParkDateRemoval
+    ? 'Datum entfernen?'
+    : variant === 'job'
+      ? 'Auftrag parken?'
+      : 'Projekt parken?';
+
+  const description = isAutoParkDateRemoval ? (
+    <>
+      Wenn du das geplante Datum von <span className="font-medium text-foreground">{displayName}</span>{' '}
+      entfernst, bleibt der Arbeitsstand unverändert.
+    </>
+  ) : variant === 'job' ? (
+    <>
+      Der Auftrag <span className="font-medium text-foreground">{displayName}</span> wird in den Parkplatz
+      verschoben.
+    </>
+  ) : (
+    <>
+      Das Projekt <span className="font-medium text-foreground">{displayName}</span> und alle zugehörigen
+      Aufträge werden in den Parkplatz verschoben.
+    </>
+  );
+
+  const warningText = isAutoParkDateRemoval
+    ? 'Parkplatz, Uhrzeit, Dauer und zugewiesene Mitarbeiter bleiben ebenfalls unverändert.'
+    : variant === 'job'
+      ? 'Das geplante Datum und die Uhrzeit werden entfernt.'
+      : 'Alle geplanten Daten und Uhrzeiten der zugehörigen Aufträge werden entfernt.';
+
+  const confirmLabel = isAutoParkDateRemoval ? 'Datum entfernen' : 'Parken';
+  const loadingLabel = isAutoParkDateRemoval ? 'Wird gespeichert…' : 'Wird geparkt…';
+
+  return { dialogTitle, description, warningText, confirmLabel, loadingLabel };
 }

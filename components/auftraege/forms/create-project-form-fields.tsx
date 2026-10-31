@@ -17,11 +17,8 @@ type CreateProjectFormFieldsProps = {
   readOnlyClient: boolean | undefined;
 };
 
-export function CreateProjectFormFields({
-  form,
-  defaultClient,
-  readOnlyClient,
-}: CreateProjectFormFieldsProps) {
+/** Number, title, description and work template. */
+function CreateProjectBasicsFields({ form }: { form: CreateProjectForm }) {
   const {
     name,
     setName,
@@ -31,20 +28,6 @@ export function CreateProjectFormFields({
     setProjectNumber,
     templateVersionId,
     setTemplateVersionId,
-    clientId,
-    handleClientChange,
-    readOnlyClientLabel,
-    siteId,
-    setSiteId,
-    contactId,
-    setContactId,
-    plannedStartDate,
-    setPlannedStartDate,
-    plannedEndDate,
-    setPlannedEndDate,
-    selectedJobIds,
-    setSelectedJobIds,
-    jobSearch,
     contentError,
     setContentError,
     showContentError,
@@ -108,28 +91,25 @@ export function CreateProjectFormFields({
         onChange={setTemplateVersionId}
         disabled={formDisabled}
       />
+    </>
+  );
+}
 
-      <Field label="Kunde" htmlFor="create-project-client">
-        <ClientSelectWithCreate
-          selectedClient={defaultClient}
-          value={clientId}
-          onValueChange={handleClientChange}
-          disabled={formDisabled}
-          readOnly={readOnlyClient}
-          readOnlyLabel={readOnlyClientLabel}
-        />
-      </Field>
+/** The "Planung" group: planned start and end, and the jobs to link. */
+function CreateProjectPlanningFields({ form }: { form: CreateProjectForm }) {
+  const {
+    plannedStartDate,
+    setPlannedStartDate,
+    plannedEndDate,
+    setPlannedEndDate,
+    selectedJobIds,
+    setSelectedJobIds,
+    jobSearch,
+    formDisabled,
+  } = form;
 
-      <SiteContactFields
-        clientId={clientId}
-        siteId={siteId}
-        contactId={contactId}
-        onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
-        onContactChange={setContactId}
-        disabled={formDisabled}
-        idPrefix="create-project"
-      />
-
+  return (
+    <>
       <Separator />
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Planung</p>
 
@@ -159,6 +139,52 @@ export function CreateProjectFormFields({
           disabled={formDisabled}
         />
       </Field>
+    </>
+  );
+}
+
+export function CreateProjectFormFields({
+  form,
+  defaultClient,
+  readOnlyClient,
+}: CreateProjectFormFieldsProps) {
+  const {
+    clientId,
+    handleClientChange,
+    readOnlyClientLabel,
+    siteId,
+    setSiteId,
+    contactId,
+    setContactId,
+    formDisabled,
+  } = form;
+
+  return (
+    <>
+      <CreateProjectBasicsFields form={form} />
+
+      <Field label="Kunde" htmlFor="create-project-client">
+        <ClientSelectWithCreate
+          selectedClient={defaultClient}
+          value={clientId}
+          onValueChange={handleClientChange}
+          disabled={formDisabled}
+          readOnly={readOnlyClient}
+          readOnlyLabel={readOnlyClientLabel}
+        />
+      </Field>
+
+      <SiteContactFields
+        clientId={clientId}
+        siteId={siteId}
+        contactId={contactId}
+        onSiteChange={(nextSiteId) => setSiteId(nextSiteId)}
+        onContactChange={setContactId}
+        disabled={formDisabled}
+        idPrefix="create-project"
+      />
+
+      <CreateProjectPlanningFields form={form} />
     </>
   );
 }

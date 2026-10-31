@@ -24,15 +24,8 @@ interface FilterBarProps {
   lockedClientLabel?: string | undefined;
 }
 
-export function FilterBar({
-  searchQuery,
-  onSearchChange,
-  filters,
-  onFiltersChange,
-  members,
-  lockedEmployeeLabel,
-  lockedClientLabel,
-}: FilterBarProps) {
+/** The open state of the filter panel and sheet, and the debounced search that follows the URL. */
+function useFilterBarState(searchQuery: string, onSearchChange: (query: string) => void) {
   const [localSearch, setLocalSearch] = useState(searchQuery);
   const [panelOpen, setPanelOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -60,6 +53,51 @@ export function FilterBar({
       onSearchChange(value);
     }, 300);
   };
+
+  const handleSearchValueChange = (value: string) => {
+    if (value) {
+      handleSearchInput(value);
+      return;
+    }
+    if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    setLocalSearch('');
+    onSearchChange('');
+  };
+
+  return { localSearch, panelOpen, setPanelOpen, sheetOpen, setSheetOpen, handleSearchValueChange };
+}
+
+/** Opens the filter panel or sheet, with the count of active filters. */
+function FilterBarToggleButton({ activeCount, onClick }: { activeCount: number; onClick: () => void }) {
+  return (
+    <Button
+      variant={activeCount > 0 ? 'default' : 'outline'}
+      size="sm"
+      className="h-9 gap-1.5 shrink-0"
+      onClick={onClick}
+    >
+      <SlidersHorizontal className="size-4" />
+      <span className="sr-only sm:not-sr-only">Filter</span>
+      {activeCount > 0 && (
+        <span className="flex size-5 items-center justify-center rounded-full bg-primary-foreground text-xs font-bold text-primary">
+          {activeCount}
+        </span>
+      )}
+    </Button>
+  );
+}
+
+export function FilterBar({
+  searchQuery,
+  onSearchChange,
+  filters,
+  onFiltersChange,
+  members,
+  lockedEmployeeLabel,
+  lockedClientLabel,
+}: FilterBarProps) {
+  const { localSearch, panelOpen, setPanelOpen, sheetOpen, setSheetOpen, handleSearchValueChange } =
+    useFilterBarState(searchQuery, onSearchChange);
 
   const activeCount = countActiveFilters(filters);
 
@@ -100,30 +138,9 @@ export function FilterBar({
           placeholder="Suche nach Titel, Nummer, Kunde, Ort…"
           aria-label="Aufträge durchsuchen"
           value={localSearch}
-          onValueChange={(value) => {
-            if (value) {
-              handleSearchInput(value);
-              return;
-            }
-            if (debounceRef.current !== null) clearTimeout(debounceRef.current);
-            setLocalSearch('');
-            onSearchChange('');
-          }}
+          onValueChange={handleSearchValueChange}
         />
-        <Button
-          variant={activeCount > 0 ? 'default' : 'outline'}
-          size="sm"
-          className="h-9 gap-1.5 shrink-0"
-          onClick={handleFilterToggle}
-        >
-          <SlidersHorizontal className="size-4" />
-          <span className="sr-only sm:not-sr-only">Filter</span>
-          {activeCount > 0 && (
-            <span className="flex size-5 items-center justify-center rounded-full bg-primary-foreground text-xs font-bold text-primary">
-              {activeCount}
-            </span>
-          )}
-        </Button>
+        <FilterBarToggleButton activeCount={activeCount} onClick={handleFilterToggle} />
       </div>
 
       {/* Desktop filter panel */}
