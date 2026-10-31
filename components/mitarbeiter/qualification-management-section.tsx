@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, type ComponentProps } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
@@ -21,19 +21,11 @@ import { useQualificationManagementGrantForm } from './use-qualification-managem
 
 const getCapabilityRecordId = (record: EmployeeCapabilityRecord) => record.id;
 
-export function QualificationManagementSection({
-  capabilities,
-  employeeCapabilities,
-  employees,
-  apprenticeWarningEnabled,
-  isAdmin,
-}: Pick<
-  QualificationWorkspace,
-  'capabilities' | 'employeeCapabilities' | 'employees' | 'apprenticeWarningEnabled' | 'isAdmin'
->) {
-  const router = useRouter();
-  const busy = useBusyIds();
-
+/** The lookups and picker options the section reads from the workspace. */
+function useQualificationManagementLookups(
+  capabilities: QualificationWorkspace['capabilities'],
+  employees: QualificationWorkspace['employees'],
+) {
   const definitionById = useMemo(
     () => new Map(capabilities.map((capability) => [capability.id, capability])),
     [capabilities],
@@ -61,6 +53,52 @@ export function QualificationManagementSection({
     [activeCapabilities],
   );
 
+  return { definitionById, employeeById, activeCapabilities, employeeOptions, capabilityOptions };
+}
+
+function QualificationManagementVocabulary({
+  activeCapabilities,
+  anyBusy,
+  runAction,
+  refresh,
+}: ComponentProps<typeof QualificationManagementDefinitionList>) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-sm font-semibold">Organisationsvokabular</h2>
+        <p className="text-sm text-muted-foreground">
+          Lege nur Begriffe an, die ihr in der täglichen Planung verwendet. WerkFlow liefert keine rechtliche
+          Bewertung.
+        </p>
+      </div>
+      <QualificationManagementDefinitionForm anyBusy={anyBusy} runAction={runAction} refresh={refresh} />
+
+      <QualificationManagementDefinitionList
+        activeCapabilities={activeCapabilities}
+        anyBusy={anyBusy}
+        runAction={runAction}
+        refresh={refresh}
+      />
+    </section>
+  );
+}
+
+export function QualificationManagementSection({
+  capabilities,
+  employeeCapabilities,
+  employees,
+  apprenticeWarningEnabled,
+  isAdmin,
+}: Pick<
+  QualificationWorkspace,
+  'capabilities' | 'employeeCapabilities' | 'employees' | 'apprenticeWarningEnabled' | 'isAdmin'
+>) {
+  const router = useRouter();
+  const busy = useBusyIds();
+
+  const { definitionById, employeeById, activeCapabilities, employeeOptions, capabilityOptions } =
+    useQualificationManagementLookups(capabilities, employees);
+
   const refresh = () => router.refresh();
 
   // A saved or toggled entry shows in the first frame; a refusal restores the
@@ -84,27 +122,12 @@ export function QualificationManagementSection({
 
   return (
     <div className="@container/qualifications space-y-6">
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-sm font-semibold">Organisationsvokabular</h2>
-          <p className="text-sm text-muted-foreground">
-            Lege nur Begriffe an, die ihr in der täglichen Planung verwendet. WerkFlow liefert keine
-            rechtliche Bewertung.
-          </p>
-        </div>
-        <QualificationManagementDefinitionForm
-          anyBusy={busy.anyBusy}
-          runAction={busy.run}
-          refresh={refresh}
-        />
-
-        <QualificationManagementDefinitionList
-          activeCapabilities={activeCapabilities}
-          anyBusy={busy.anyBusy}
-          runAction={busy.run}
-          refresh={refresh}
-        />
-      </section>
+      <QualificationManagementVocabulary
+        activeCapabilities={activeCapabilities}
+        anyBusy={busy.anyBusy}
+        runAction={busy.run}
+        refresh={refresh}
+      />
 
       <QualificationManagementGrantForm
         form={grantForm}
