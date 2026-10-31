@@ -391,7 +391,6 @@
     "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {
       "ZeiterfassungDashboardStatusCard": 82
     },
-    "hooks/use-live-view.ts": { "useLiveView": 192 },
     "lib/customer-relationships/actions.ts": {
       "buildTimelineRecordQueries": 105,
       "buildTimelineLinkAndEventQueries": 104,

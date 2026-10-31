@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 import {
   useRealtimeSubscribe,
   type RealtimeChangeEvent,
@@ -147,17 +156,312 @@ function createMarkedScheduler(run: () => void, marker: LiveReadMarker): Trailin
   };
 }
 
-export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T> {
+type ReadGuardRefs = {
+  generationRef: RefObject<number>;
+  floorGenerationRef: RefObject<number>;
+  dataGenerationRef: RefObject<number>;
+  statusGenerationRef: RefObject<number>;
+  readControllerRef: RefObject<AbortController | null>;
+};
+
+type ReaderRefs<T> = {
+  readRef: RefObject<UseLiveViewOptions<T>['read']>;
+  enabledRef: RefObject<boolean>;
+  invalidatedAtRef: RefObject<number>;
+  hasDataRef: RefObject<boolean>;
+  liveRead: LiveReadMarker;
+};
+
+type ReadStateSetters<T> = {
+  setData: Dispatch<SetStateAction<T | undefined>>;
+  setIsRefreshing: Dispatch<SetStateAction<boolean>>;
+  setIsStale: Dispatch<SetStateAction<boolean>>;
+  setError: Dispatch<SetStateAction<string | null>>;
+  setHasSettled: Dispatch<SetStateAction<boolean>>;
+};
+
+type DataSetters<T> = Omit<ReadStateSetters<T>, 'setIsRefreshing'>;
+
+/** One generation-guarded read: the contract above decides what each result may commit. */
+async function runGuardedRead<T>(
+  guards: ReadGuardRefs,
+  reader: ReaderRefs<T>,
+  setters: ReadStateSetters<T>,
+): Promise<void> {
+  const { generationRef, floorGenerationRef, dataGenerationRef, statusGenerationRef, readControllerRef } =
+    guards;
+  const { readRef, enabledRef, invalidatedAtRef, hasDataRef, liveRead } = reader;
+  const { setData, setIsRefreshing, setIsStale, setError, setHasSettled } = setters;
+  if (!enabledRef.current) return;
+  const generation = ++generationRef.current;
+  readControllerRef.current?.abort();
+  const controller = new AbortController();
+  readControllerRef.current = controller;
+  liveRead.reading(true);
+  setIsRefreshing(true);
+  const obsolete = () => generation <= floorGenerationRef.current;
+  try {
+    const result = await readRef.current({
+      invalidatedAt: invalidatedAtRef.current,
+      signal: controller.signal,
+    });
+    if (obsolete()) return;
+    // A read cancelled by a newer one reports the abort as a failure when
+    // its transport honours the signal (the clock GET); that is not a
+    // failed read and must not flash an error before the newer read lands.
+    // A reader that ignored the abort and still returned data is applied.
+    if (!result.ok && controller.signal.aborted) return;
+    const newestCompleted = generation > statusGenerationRef.current;
+    if (newestCompleted) statusGenerationRef.current = generation;
+    if (result.ok) {
+      if (generation > dataGenerationRef.current) {
+        dataGenerationRef.current = generation;
+        hasDataRef.current = true;
+        setData(result.data);
+      }
+      if (newestCompleted) {
+        setIsStale(false);
+        setError(null);
+      }
+    } else if (newestCompleted) {
+      // Keep-last-known: existing data stays visible, marked stale.
+      setIsStale(hasDataRef.current);
+      setError(result.error ?? null);
+    }
+  } catch (readError) {
+    if (obsolete() || controller.signal.aborted || generation <= statusGenerationRef.current) return;
+    statusGenerationRef.current = generation;
+    logError('live_view.read_failed', readError);
+    setIsStale(hasDataRef.current);
+    // A thrown read carries no structured reason; clear any previous one so
+    // surfaces fall back to their own generic message instead of rendering
+    // an outdated error.
+    setError(null);
+  } finally {
+    if (readControllerRef.current === controller) readControllerRef.current = null;
+    if (generation === generationRef.current) {
+      liveRead.reading(false);
+      setIsRefreshing(false);
+      setHasSettled(true);
+    }
+  }
+}
+
+/**
+ * What the reset effect does on this run. `initialData` only suppresses the
+ * very first read; a resetKey change always reads fresh.
+ */
+function nextResetStep(
+  lastResetKeyRef: RefObject<string | null | undefined>,
+  resetKey: string | null,
+  hasInitialData: boolean,
+): 'reset' | 'skip' | 'read' {
+  const isFirstRun = lastResetKeyRef.current === undefined;
+  const resetChanged = !isFirstRun && lastResetKeyRef.current !== resetKey;
+  lastResetKeyRef.current = resetKey;
+  if (resetChanged) return 'reset';
+  return isFirstRun && hasInitialData ? 'skip' : 'read';
+}
+
+/** A scope change drops the data and its status; the next read starts from loading. */
+function discardViewData<T>(hasDataRef: RefObject<boolean>, setters: DataSetters<T>): void {
+  hasDataRef.current = false;
+  setters.setData(undefined);
+  setters.setIsStale(false);
+  setters.setError(null);
+  setters.setHasSettled(false);
+}
+
+/** The optimistic local echo: new data, settled and fresh. */
+function applyLocalEcho<T>(
+  updater: (previous: T | undefined) => T | undefined,
+  hasDataRef: RefObject<boolean>,
+  setters: DataSetters<T>,
+): void {
+  setters.setData((previous) => {
+    const next = updater(previous);
+    hasDataRef.current = next !== undefined;
+    return next;
+  });
+  setters.setIsStale(false);
+  setters.setError(null);
+  setters.setHasSettled(true);
+}
+
+/** Every read so far becomes obsolete, the one in flight aborts and a queued one is dropped. */
+function discardReads(
+  supersedeReads: () => void,
+  readControllerRef: RefObject<AbortController | null>,
+  clearTimer: () => void,
+): void {
+  supersedeReads();
+  readControllerRef.current?.abort();
+  readControllerRef.current = null;
+  clearTimer();
+}
+
+/** Callbacks that never change identity read the latest reader, filter and enabled flag. */
+function useLatestOptions<T>(
+  refs: Pick<ReaderRefs<T>, 'readRef' | 'enabledRef'> & {
+    eventFilterRef: RefObject<UseLiveViewOptions<T>['eventFilter']>;
+  },
+  options: {
+    read: UseLiveViewOptions<T>['read'];
+    eventFilter: UseLiveViewOptions<T>['eventFilter'];
+    enabled: boolean;
+  },
+): void {
+  const { readRef, eventFilterRef, enabledRef } = refs;
+  const { read, eventFilter, enabled } = options;
+  useEffect(() => {
+    readRef.current = read;
+    eventFilterRef.current = eventFilter;
+    enabledRef.current = enabled;
+  });
+}
+
+type SchedulingRefs = {
+  enabledRef: RefObject<boolean>;
+  invalidatedAtRef: RefObject<number>;
+  suspendedRef: RefObject<boolean>;
+  pendingWhileSuspendedRef: RefObject<boolean>;
+  schedulerRef: RefObject<TrailingScheduler | null>;
+  eventFilterRef: RefObject<((event: RealtimeChangeEvent) => boolean) | undefined>;
+};
+
+type SchedulingInputs = {
+  runRead: () => Promise<void>;
+  liveRead: LiveReadMarker;
+  clearTimer: () => void;
+  suspended: boolean;
+};
+
+type SubscriptionInputs = {
+  subscribe: ReturnType<typeof useRealtimeSubscribe>;
+  tables: readonly RealtimeTable[];
+  enabled: boolean;
+  serverData: boolean;
+};
+
+/**
+ * Events schedule one debounced read through the shared scheduler. While
+ * suspended they queue; leaving the suspension fires exactly one catch-up read.
+ */
+function useEventReads(
+  refs: SchedulingRefs,
+  inputs: SchedulingInputs,
+  subscription: SubscriptionInputs,
+): void {
   const {
+    enabledRef,
+    invalidatedAtRef,
+    suspendedRef,
+    pendingWhileSuspendedRef,
+    schedulerRef,
+    eventFilterRef,
+  } = refs;
+  const { runRead, liveRead, clearTimer, suspended } = inputs;
+  const { subscribe, tables, enabled, serverData } = subscription;
+
+  const scheduleRead = useCallback(
+    (recordInvalidation = true) => {
+      if (!enabledRef.current) return;
+      if (recordInvalidation) invalidatedAtRef.current = performance.now();
+      if (suspendedRef.current) {
+        pendingWhileSuspendedRef.current = true;
+        return;
+      }
+      schedulerRef.current ??= createMarkedScheduler(() => void runRead(), liveRead);
+      schedulerRef.current.schedule();
+    },
+    [runRead, pendingWhileSuspendedRef, liveRead, enabledRef, invalidatedAtRef, suspendedRef, schedulerRef],
+  );
+
+  // Suspension boundary: entering drops a pending timer into the queue flag;
+  // leaving fires exactly one catch-up read.
+  useEffect(() => {
+    suspendedRef.current = suspended;
+    if (suspended) {
+      if (schedulerRef.current?.cancel()) {
+        pendingWhileSuspendedRef.current = true;
+      }
+      return;
+    }
+    if (pendingWhileSuspendedRef.current) {
+      pendingWhileSuspendedRef.current = false;
+      scheduleRead(false);
+    }
+  }, [suspended, clearTimer, scheduleRead, pendingWhileSuspendedRef, suspendedRef, schedulerRef]);
+
+  useRealtimeTables({
+    subscribe,
     tables,
-    read,
-    initialData,
-    enabled = true,
-    eventFilter,
-    suspend = false,
-    coalesceWhileReading = false,
-    resetKey = null,
-  } = options;
+    enabled,
+    serverData,
+    onEvent: (event: RealtimeChangeEvent) => {
+      if (shouldScheduleRealtimeRefresh(event, eventFilterRef.current)) scheduleRead();
+    },
+  });
+}
+
+/**
+ * Leaving a scope (disable, reset, unmount) discards its reads; `refresh`
+ * reads now, bypassing the debounce and the suspension.
+ */
+function useScopeTeardown(
+  refs: {
+    readControllerRef: RefObject<AbortController | null>;
+    pendingWhileSuspendedRef: RefObject<boolean>;
+  },
+  actions: { clearTimer: () => void; supersedeReads: () => void; runRead: () => Promise<void> },
+  scope: { enabled: boolean; resetKey: string | null },
+): () => Promise<void> {
+  const { readControllerRef, pendingWhileSuspendedRef } = refs;
+  const { clearTimer, supersedeReads, runRead } = actions;
+  const { enabled, resetKey } = scope;
+
+  useEffect(() => {
+    return () => discardReads(supersedeReads, readControllerRef, clearTimer);
+  }, [clearTimer, enabled, resetKey, supersedeReads, readControllerRef]);
+
+  return useCallback(async () => {
+    clearTimer();
+    pendingWhileSuspendedRef.current = false;
+    await runRead();
+  }, [clearTimer, runRead, pendingWhileSuspendedRef]);
+}
+
+/** The returned view keeps its identity until a value in it changes. */
+function useViewState<T>(
+  state: Pick<LiveViewState<T>, 'data' | 'isStale' | 'error'> & {
+    enabled: boolean;
+    hasSettled: boolean;
+    isRefreshing: boolean;
+  },
+  actions: Pick<LiveViewState<T>, 'refresh' | 'invalidate'> & {
+    setDataExternally: LiveViewState<T>['setData'];
+  },
+): LiveViewState<T> {
+  const { data, enabled, hasSettled, isRefreshing, isStale, error } = state;
+  const { refresh, invalidate, setDataExternally } = actions;
+  return useMemo<LiveViewState<T>>(
+    () => ({
+      data,
+      isLoading: enabled && !hasSettled,
+      isRefreshing: enabled && isRefreshing,
+      isStale,
+      error,
+      refresh,
+      invalidate,
+      setData: setDataExternally,
+    }),
+    [data, enabled, hasSettled, isRefreshing, isStale, error, refresh, invalidate, setDataExternally],
+  );
+}
+
+export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T> {
+  const { tables, read, initialData, eventFilter, enabled = true, suspend = false } = options;
+  const { coalesceWhileReading = false, resetKey = null } = options;
 
   const subscribe = useRealtimeSubscribe();
   const anyDialogOpen = useAnyDialogOpen();
@@ -189,11 +493,7 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
   const enabledRef = useRef(enabled);
   const invalidatedAtRef = useRef(0);
 
-  useEffect(() => {
-    readRef.current = read;
-    eventFilterRef.current = eventFilter;
-    enabledRef.current = enabled;
-  });
+  useLatestOptions({ readRef, eventFilterRef, enabledRef }, { read, eventFilter, enabled });
 
   const clearTimer = useCallback(() => {
     schedulerRef.current?.cancel();
@@ -206,176 +506,58 @@ export function useLiveView<T>(options: UseLiveViewOptions<T>): LiveViewState<T>
     liveRead.reading(false);
   }, [liveRead]);
 
-  const runRead = useCallback(async (): Promise<void> => {
-    if (!enabledRef.current) return;
-    const generation = ++generationRef.current;
-    readControllerRef.current?.abort();
-    const controller = new AbortController();
-    readControllerRef.current = controller;
-    liveRead.reading(true);
-    setIsRefreshing(true);
-    const obsolete = () => generation <= floorGenerationRef.current;
-    try {
-      const result = await readRef.current({
-        invalidatedAt: invalidatedAtRef.current,
-        signal: controller.signal,
-      });
-      if (obsolete()) return;
-      // A read cancelled by a newer one reports the abort as a failure when
-      // its transport honours the signal (the clock GET); that is not a
-      // failed read and must not flash an error before the newer read lands.
-      // A reader that ignored the abort and still returned data is applied.
-      if (!result.ok && controller.signal.aborted) return;
-      const newestCompleted = generation > statusGenerationRef.current;
-      if (newestCompleted) statusGenerationRef.current = generation;
-      if (result.ok) {
-        if (generation > dataGenerationRef.current) {
-          dataGenerationRef.current = generation;
-          hasDataRef.current = true;
-          setData(result.data);
-        }
-        if (newestCompleted) {
-          setIsStale(false);
-          setError(null);
-        }
-      } else if (newestCompleted) {
-        // Keep-last-known: existing data stays visible, marked stale.
-        setIsStale(hasDataRef.current);
-        setError(result.error ?? null);
-      }
-    } catch (readError) {
-      if (obsolete() || controller.signal.aborted || generation <= statusGenerationRef.current) return;
-      statusGenerationRef.current = generation;
-      logError('live_view.read_failed', readError);
-      setIsStale(hasDataRef.current);
-      // A thrown read carries no structured reason; clear any previous one so
-      // surfaces fall back to their own generic message instead of rendering
-      // an outdated error.
-      setError(null);
-    } finally {
-      if (readControllerRef.current === controller) readControllerRef.current = null;
-      if (generation === generationRef.current) {
-        liveRead.reading(false);
-        setIsRefreshing(false);
-        setHasSettled(true);
-      }
-    }
-  }, [liveRead]);
-
-  const scheduleRead = useCallback(
-    (recordInvalidation = true) => {
-      if (!enabledRef.current) return;
-      if (recordInvalidation) invalidatedAtRef.current = performance.now();
-      if (suspendedRef.current) {
-        pendingWhileSuspendedRef.current = true;
-        return;
-      }
-      schedulerRef.current ??= createMarkedScheduler(() => void runRead(), liveRead);
-      schedulerRef.current.schedule();
-    },
-    [runRead, pendingWhileSuspendedRef, liveRead],
+  const runRead = useCallback(
+    () =>
+      runGuardedRead(
+        { generationRef, floorGenerationRef, dataGenerationRef, statusGenerationRef, readControllerRef },
+        { readRef, enabledRef, invalidatedAtRef, hasDataRef, liveRead },
+        { setData, setIsRefreshing, setIsStale, setError, setHasSettled },
+      ),
+    [liveRead],
   );
 
-  // Suspension boundary: entering drops a pending timer into the queue flag;
-  // leaving fires exactly one catch-up read.
-  useEffect(() => {
-    suspendedRef.current = suspended;
-    if (suspended) {
-      if (schedulerRef.current?.cancel()) {
-        pendingWhileSuspendedRef.current = true;
-      }
-      return;
-    }
-    if (pendingWhileSuspendedRef.current) {
-      pendingWhileSuspendedRef.current = false;
-      scheduleRead(false);
-    }
-  }, [suspended, clearTimer, scheduleRead, pendingWhileSuspendedRef]);
+  useEventReads(
+    { enabledRef, invalidatedAtRef, suspendedRef, pendingWhileSuspendedRef, schedulerRef, eventFilterRef },
+    { runRead, liveRead, clearTimer, suspended },
+    { subscribe, tables, enabled, serverData: initialData !== undefined },
+  );
 
-  useRealtimeTables({
-    subscribe,
-    tables,
-    enabled,
-    serverData: initialData !== undefined,
-    onEvent: (event: RealtimeChangeEvent) => {
-      if (shouldScheduleRealtimeRefresh(event, eventFilterRef.current)) scheduleRead();
-    },
-  });
-
-  // Initial read, reset handling, and enable transitions. `initialData` only
-  // suppresses the very first read; a resetKey change always reads fresh.
+  // Initial read, reset handling, and enable transitions.
   const lastResetKeyRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
     if (!enabled) return;
-    const isFirstRun = lastResetKeyRef.current === undefined;
-    const resetChanged = !isFirstRun && lastResetKeyRef.current !== resetKey;
-    lastResetKeyRef.current = resetKey;
-
-    if (resetChanged) {
+    const step = nextResetStep(lastResetKeyRef, resetKey, initialData !== undefined);
+    if (step === 'reset') {
       supersedeReads();
       clearTimer();
       pendingWhileSuspendedRef.current = false;
-      hasDataRef.current = false;
-      setData(undefined);
-      setIsStale(false);
-      setError(null);
-      setHasSettled(false);
-      void runRead();
-      return;
+      discardViewData(hasDataRef, { setData, setIsStale, setError, setHasSettled });
     }
-
-    if (isFirstRun && initialData !== undefined) return;
-    void runRead();
+    if (step !== 'skip') void runRead();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initialData is mount-time data only (freshness contract rule 3)
   }, [enabled, resetKey, clearTimer, runRead, supersedeReads]);
 
-  useEffect(() => {
-    return () => {
-      supersedeReads();
-      readControllerRef.current?.abort();
-      readControllerRef.current = null;
-      clearTimer();
-    };
-  }, [clearTimer, enabled, resetKey, supersedeReads]);
-
-  const refresh = useCallback(async () => {
-    clearTimer();
-    pendingWhileSuspendedRef.current = false;
-    await runRead();
-  }, [clearTimer, runRead, pendingWhileSuspendedRef]);
+  const refresh = useScopeTeardown(
+    { readControllerRef, pendingWhileSuspendedRef },
+    { clearTimer, supersedeReads, runRead },
+    { enabled, resetKey },
+  );
 
   const invalidate = useCallback(() => {
-    supersedeReads();
-    readControllerRef.current?.abort();
-    readControllerRef.current = null;
-    clearTimer();
+    discardReads(supersedeReads, readControllerRef, clearTimer);
     // A discarded in-flight read can no longer clear this flag (its
     // generation no longer matches), so settle it here.
     setIsRefreshing(false);
   }, [clearTimer, supersedeReads]);
 
-  const setDataExternally = useCallback((updater: (previous: T | undefined) => T | undefined) => {
-    setData((previous) => {
-      const next = updater(previous);
-      hasDataRef.current = next !== undefined;
-      return next;
-    });
-    setIsStale(false);
-    setError(null);
-    setHasSettled(true);
-  }, []);
+  const setDataExternally = useCallback(
+    (updater: (previous: T | undefined) => T | undefined) =>
+      applyLocalEcho(updater, hasDataRef, { setData, setIsStale, setError, setHasSettled }),
+    [],
+  );
 
-  return useMemo<LiveViewState<T>>(
-    () => ({
-      data,
-      isLoading: enabled && !hasSettled,
-      isRefreshing: enabled && isRefreshing,
-      isStale,
-      error,
-      refresh,
-      invalidate,
-      setData: setDataExternally,
-    }),
-    [data, enabled, hasSettled, isRefreshing, isStale, error, refresh, invalidate, setDataExternally],
+  return useViewState(
+    { data, enabled, hasSettled, isRefreshing, isStale, error },
+    { refresh, invalidate, setDataExternally },
   );
 }
