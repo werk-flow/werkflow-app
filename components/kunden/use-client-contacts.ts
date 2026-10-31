@@ -17,6 +17,7 @@ import {
   getRelationId,
   type ContactDialogState,
 } from './client-relation-drafts';
+import { toggleRelationActive } from './toggle-relation-active';
 import type { RelationRowTasks } from './use-relation-row-tasks';
 
 interface ClientContactsState {
@@ -29,6 +30,34 @@ interface ClientContactsState {
   openContactEditor: (contact: ClientContact) => void;
   saveContact: () => void;
   toggleContactActive: (contact: ClientContact) => void;
+}
+
+/** A new contact's dialog; the first active contact starts as the primary one. */
+function newContactDialogState(isPrimary: boolean): ContactDialogState {
+  return {
+    contactId: null,
+    draft: {
+      ...EMPTY_CONTACT,
+      isPrimary,
+    },
+    error: null,
+  };
+}
+
+/** The dialog of a stored contact, its draft filled from the contact. */
+function contactEditorDialogState(contact: ClientContact): ContactDialogState {
+  return {
+    contactId: contact.id,
+    draft: {
+      name: contact.name,
+      role: contact.role ?? '',
+      email: contact.email ?? '',
+      phone: contact.phone ?? '',
+      notes: contact.notes ?? '',
+      isPrimary: contact.isPrimary,
+    },
+    error: null,
+  };
 }
 
 /** The optimistic contact list of one customer with its dialog and row actions. */
@@ -44,7 +73,7 @@ export function useClientContacts({
   setSectionError: (error: string | null) => void;
 }): ClientContactsState {
   const router = useRouter();
-  const { runRowTask, settleRow } = rowTasks;
+  const { settleRow } = rowTasks;
   const contactList = useOptimisticList({ items: contacts, getId: getRelationId });
   const waitForContacts = useSettleOnChange(contacts);
   const { showBanner } = useBanner();
@@ -55,29 +84,11 @@ export function useClientContacts({
   const inactiveContacts = shownContacts.filter((contact) => !contact.isActive);
 
   function openNewContact(): void {
-    setContactDialog({
-      contactId: null,
-      draft: {
-        ...EMPTY_CONTACT,
-        isPrimary: activeContacts.length === 0,
-      },
-      error: null,
-    });
+    setContactDialog(newContactDialogState(activeContacts.length === 0));
   }
 
   function openContactEditor(contact: ClientContact): void {
-    setContactDialog({
-      contactId: contact.id,
-      draft: {
-        name: contact.name,
-        role: contact.role ?? '',
-        email: contact.email ?? '',
-        phone: contact.phone ?? '',
-        notes: contact.notes ?? '',
-        isPrimary: contact.isPrimary,
-      },
-      error: null,
-    });
+    setContactDialog(contactEditorDialogState(contact));
   }
 
   function saveContact(): void {
@@ -116,18 +127,12 @@ export function useClientContacts({
   }
 
   function toggleContactActive(contact: ClientContact): void {
-    setSectionError(null);
-    contactList.update(contact.id, { ...contact, isActive: !contact.isActive });
-    void runRowTask(contact.id, async () => {
-      const result = await updateClientContact(contact.id, {
-        isActive: !contact.isActive,
-      }).catch(() => ({ success: false as const, error: 'unexpected_error' }));
-      if (!result.success) {
-        contactList.rollback(contact.id);
-        setSectionError(clientRelationErrorMessage(result.error));
-        return;
-      }
-      await settleRow(contactList, contact.id, waitForContacts);
+    toggleRelationActive(contact, {
+      list: contactList,
+      rowTasks,
+      waitForRows: waitForContacts,
+      setSectionError,
+      saveIsActive: (contactId, isActive) => updateClientContact(contactId, { isActive }),
     });
   }
 
