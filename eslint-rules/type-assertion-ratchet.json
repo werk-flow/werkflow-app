@@ -14,7 +14,6 @@
   "components/auftraege/forms/create-job-form-sections.tsx": 1,
   "components/auftraege/forms/edit-job-form-fields.tsx": 1,
   "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": 2,
-  "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": 1,
   "components/auftraege/list/filter-bar-fields.tsx": 1,
   "components/inventar/inventory-item-form-fields.tsx": 1,
   "components/inventar/inventory-location-dialog.tsx": 1,

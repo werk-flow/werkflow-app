@@ -10,7 +10,6 @@
   },
   "functions": {
     "app/(app)/anfragen/[requestId]/page.tsx": { "AnfrageDetailPage": 183 },
-    "app/(app)/auftraege/[jobNumber]/page.tsx": { "JobDetailData": 141 },
     "app/(app)/auftraege/projekt/[projectNumber]/[jobNumber]/page.tsx": { "NestedJobDetailData": 149 },
     "app/(app)/auftraege/projekt/[projectNumber]/loading.tsx": { "ProjectDetailLoading": 85 },
     "app/(app)/auftraege/projekt/[projectNumber]/page.tsx": { "ProjectDetailData": 156 },
@@ -81,16 +80,6 @@
       "createJobInstructionRowActions": 91
     },
     "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
-    "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
-    "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
-    "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
-    "components/auftraege/job-detail/job-dispatch-section.tsx": { "JobDispatchSection": 100 },
-    "components/auftraege/job-detail/job-qualification-add-form.tsx": { "JobQualificationAddForm": 85 },
-    "components/auftraege/job-detail/job-qualification-section.tsx": { "JobQualificationSection": 105 },
-    "components/auftraege/job-detail/use-job-detail-assignments.ts": { "useJobDetailAssignments": 122 },
-    "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": {
-      "buildJobDetailPlanningFields": 134
-    },
     "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
     "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
     "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
