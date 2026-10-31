@@ -356,11 +356,6 @@
       "useManualEntrySubmit": 138,
       "useManualEntrySubmit > handleSubmit": 98
     },
-    "components/zeiterfassung/sickness-section-report-dialog.tsx": {
-      "OwnSicknessReportFields": 94,
-      "OwnSicknessReportDialog": 107
-    },
-    "components/zeiterfassung/sickness-section.tsx": { "SicknessSection": 109 },
     "components/zeiterfassung/time-account-settings-forms.tsx": { "AdjustmentRequestForm": 125 },
     "components/zeiterfassung/time-account-settings-sections.tsx": {
       "EmployeeTimePolicyAssignment": 97,
