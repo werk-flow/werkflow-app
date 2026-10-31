@@ -1,7 +1,7 @@
 'use client';
 
 import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
-import { getNonNegativeElapsedMs, liveMinutes } from '@/lib/time-tracking/helpers';
+import { getNonNegativeElapsedMs, liveMinutes, todayRunningSince } from '@/lib/time-tracking/helpers';
 import type { LiveClockState } from '@/lib/time-tracking/types';
 
 function formatLiveTime(baseMinutes: number, runningSince: string | null, nowMs: number): string {
@@ -44,9 +44,11 @@ export function useZeiterfassungLiveTime(effectiveState: LiveClockState): {
       nowMs,
     };
   }
+  // Today counts a running activity from midnight at the earliest.
+  const todaySince = todayRunningSince(runningSince, nowMs);
   return {
-    liveTime: formatLiveTime(effectiveState.todayMinutes, runningSince, nowMs),
-    liveTotalMinutes: liveMinutes(effectiveState.todayMinutes, runningSince, nowMs),
+    liveTime: formatLiveTime(effectiveState.todayMinutes, todaySince, nowMs),
+    liveTotalMinutes: liveMinutes(effectiveState.todayMinutes, todaySince, nowMs),
     nowMs,
   };
 }
