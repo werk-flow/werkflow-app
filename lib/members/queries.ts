@@ -33,7 +33,7 @@ export async function getOrgMembersForUser(organizationId: string, userId: strin
     return { success: false, error: 'load_failed' };
   }
 
-  return { success: true, members: (data ?? []) as OrgMemberInfo[] };
+  return { success: true, members: data ?? [] };
 }
 
 type ProfileNameMap = Record<string, { firstName: string | null; lastName: string | null }>;

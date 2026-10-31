@@ -57,6 +57,86 @@ function useOverlayExpiry<Item>(
   setOverlay((current) => expireOptimisticOverlay(current, serverItems, getId));
 }
 
+type OverlayMap<Item> = ReadonlyMap<string, OptimisticOverlayEntry<Item>>;
+
+/** The server list with the overlay applied, inserts placed by `compare` or appended. */
+function mergeOverlayItems<Item>(
+  serverItems: readonly Item[],
+  overlay: OverlayMap<Item>,
+  getId: (item: Item) => string,
+  compare: ((a: Item, b: Item) => number) | undefined,
+): OptimisticListItem<Item>[] {
+  const merged: OptimisticListItem<Item>[] = [];
+  for (const item of serverItems) {
+    const id = getId(item);
+    const entry = overlay.get(id);
+    if (entry?.kind === 'remove') continue;
+    if (entry?.kind === 'update') {
+      merged.push({ item: entry.item, isOptimistic: true, tempId: null });
+      continue;
+    }
+    merged.push({ item, isOptimistic: false, tempId: null });
+  }
+  for (const [id, entry] of overlay) {
+    if (entry.kind !== 'insert') continue;
+    if (serverItems.some((item) => getId(item) === id)) continue;
+    merged.push({ item: entry.item, isOptimistic: true, tempId: entry.tempId });
+  }
+  if (compare) merged.sort((a, b) => compare(a.item, b.item));
+  return merged;
+}
+
+/** An update keeps the first pre-image, so a rollback restores the server row. */
+function overlayWithUpdate<Item>(
+  current: OverlayMap<Item>,
+  id: string,
+  next: Item,
+  serverItems: readonly Item[],
+  getId: (item: Item) => string,
+): OverlayMap<Item> {
+  const existing = current.get(id);
+  const previous =
+    existing?.kind === 'update' || existing?.kind === 'remove'
+      ? existing.previous
+      : serverItems.find((item) => getId(item) === id);
+  if (previous === undefined) return current;
+  return new Map(current).set(id, { kind: 'update', item: next, previous });
+}
+
+/** A removed insert simply leaves; any other row keeps its pre-image for a rollback. */
+function overlayWithRemove<Item>(
+  current: OverlayMap<Item>,
+  id: string,
+  serverItems: readonly Item[],
+  getId: (item: Item) => string,
+): OverlayMap<Item> {
+  const existing = current.get(id);
+  if (existing?.kind === 'insert') {
+    const next = new Map(current);
+    next.delete(id);
+    return next;
+  }
+  const previous =
+    existing?.kind === 'update' ? existing.previous : serverItems.find((item) => getId(item) === id);
+  if (previous === undefined) return current;
+  return new Map(current).set(id, { kind: 'remove', previous });
+}
+
+/** The overlay without the entry under `id`; the same map when it holds none. */
+function overlayWithout<Item>(current: OverlayMap<Item>, id: string): OverlayMap<Item> {
+  if (!current.has(id)) return current;
+  const next = new Map(current);
+  next.delete(id);
+  return next;
+}
+
+/** The entry under `id` marked as confirmed by the server; the same map when there is nothing to mark. */
+function overlayWithSettled<Item>(current: OverlayMap<Item>, id: string): OverlayMap<Item> {
+  const entry = current.get(id);
+  if (!entry || entry.settled) return current;
+  return new Map(current).set(id, { ...entry, settled: true });
+}
+
 export function useOptimisticList<Item>({
   items: serverItems,
   getId,
@@ -97,58 +177,21 @@ export function useOptimisticList<Item>({
     return () => markUnconfirmedLayer(holder, false);
   }, [hasPending]);
 
-  const items = useMemo(() => {
-    const merged: OptimisticListItem<Item>[] = [];
-    for (const item of serverItems) {
-      const id = getId(item);
-      const entry = overlay.get(id);
-      if (entry?.kind === 'remove') continue;
-      if (entry?.kind === 'update') {
-        merged.push({ item: entry.item, isOptimistic: true, tempId: null });
-        continue;
-      }
-      merged.push({ item, isOptimistic: false, tempId: null });
-    }
-    for (const [id, entry] of overlay) {
-      if (entry.kind !== 'insert') continue;
-      if (serverItems.some((item) => getId(item) === id)) continue;
-      merged.push({ item: entry.item, isOptimistic: true, tempId: entry.tempId });
-    }
-    if (compare) merged.sort((a, b) => compare(a.item, b.item));
-    return merged;
-  }, [serverItems, overlay, getId, compare]);
+  const items = useMemo(
+    () => mergeOverlayItems(serverItems, overlay, getId, compare),
+    [serverItems, overlay, getId, compare],
+  );
 
   const insert = useCallback((tempId: string, draft: Item) => {
     setOverlay((current) => new Map(current).set(tempId, { kind: 'insert', item: draft, tempId }));
   }, []);
 
   const update = useCallback((id: string, next: Item) => {
-    setOverlay((current) => {
-      const existing = current.get(id);
-      const previous =
-        existing?.kind === 'update' || existing?.kind === 'remove'
-          ? existing.previous
-          : serverItemsRef.current.find((item) => getIdRef.current(item) === id);
-      if (previous === undefined) return current;
-      return new Map(current).set(id, { kind: 'update', item: next, previous });
-    });
+    setOverlay((current) => overlayWithUpdate(current, id, next, serverItemsRef.current, getIdRef.current));
   }, []);
 
   const remove = useCallback((id: string) => {
-    setOverlay((current) => {
-      const existing = current.get(id);
-      if (existing?.kind === 'insert') {
-        const next = new Map(current);
-        next.delete(id);
-        return next;
-      }
-      const previous =
-        existing?.kind === 'update'
-          ? existing.previous
-          : serverItemsRef.current.find((item) => getIdRef.current(item) === id);
-      if (previous === undefined) return current;
-      return new Map(current).set(id, { kind: 'remove', previous });
-    });
+    setOverlay((current) => overlayWithRemove(current, id, serverItemsRef.current, getIdRef.current));
   }, []);
 
   const commit = useCallback((tempId: string, confirmed: Item) => {
@@ -162,20 +205,11 @@ export function useOptimisticList<Item>({
   }, []);
 
   const rollback = useCallback((id: string) => {
-    setOverlay((current) => {
-      if (!current.has(id)) return current;
-      const next = new Map(current);
-      next.delete(id);
-      return next;
-    });
+    setOverlay((current) => overlayWithout(current, id));
   }, []);
 
   const settle = useCallback((id: string) => {
-    setOverlay((current) => {
-      const entry = current.get(id);
-      if (!entry || entry.settled) return current;
-      return new Map(current).set(id, { ...entry, settled: true });
-    });
+    setOverlay((current) => overlayWithSettled(current, id));
   }, []);
 
   const isOptimistic = useCallback((id: string) => overlay.has(id), [overlay]);
