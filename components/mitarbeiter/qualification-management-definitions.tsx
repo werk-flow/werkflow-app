@@ -14,6 +14,7 @@ import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createCapability, retireCapabilityDefinition } from '@/lib/qualifications/actions';
 import {
+  CAPABILITY_KINDS,
   getCapabilityKindLabel,
   type CapabilityKind,
   type QualificationWorkspace,
@@ -21,6 +22,107 @@ import {
 import { parseDecimalInput } from '@/lib/ui/decimal';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { describeFailure } from '@/lib/action-messages';
+
+type DefinitionFieldErrors = {
+  name?: string | undefined;
+  warningDays?: string | undefined;
+};
+
+type DefinitionCreation = {
+  kind: CapabilityKind;
+  definitionName: string;
+  warningDays: string;
+  setDefinitionName: (name: string) => void;
+  setDefinitionError: (error: string | null) => void;
+  setDefinitionFieldErrors: (errors: DefinitionFieldErrors) => void;
+  runAction: ReturnType<typeof useBusyIds>['run'];
+  refresh: () => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+/** Validates the definition form and creates the capability. */
+async function createDefinition({
+  kind,
+  definitionName,
+  warningDays,
+  setDefinitionName,
+  setDefinitionError,
+  setDefinitionFieldErrors,
+  runAction,
+  refresh,
+  showBanner,
+}: DefinitionCreation) {
+  setDefinitionError(null);
+  const expiryWarningDays = kind === 'certification' ? parseDecimalInput(warningDays) : 0;
+  const nextFieldErrors = {
+    name: definitionName.trim() ? undefined : 'Bitte gib einen Namen an.',
+    warningDays:
+      !Number.isInteger(expiryWarningDays) || expiryWarningDays < 0 || expiryWarningDays > 365
+        ? 'Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.'
+        : undefined,
+  };
+  setDefinitionFieldErrors(nextFieldErrors);
+  const invalid = focusFirstInvalidField({
+    'capability-name': nextFieldErrors.name,
+    'capability-warning-days': nextFieldErrors.warningDays,
+  });
+  if (invalid) return;
+  await runAction('create-definition', async () => {
+    try {
+      const result = await createCapability({
+        kind,
+        name: definitionName,
+        expiryWarningDays,
+      });
+      if (!result.success) {
+        setDefinitionError(
+          describeFailure(
+            result.error,
+            { duplicate_name: 'Dieser Begriff ist bereits vorhanden.' },
+            'Der Begriff konnte nicht angelegt werden.',
+          ),
+        );
+        return;
+      }
+      setDefinitionName('');
+      showBanner({
+        variant: 'success',
+        message: 'Der Begriff wurde angelegt.',
+      });
+      refresh();
+    } catch {
+      setDefinitionError('Der Begriff konnte nicht angelegt werden.');
+    }
+  });
+}
+
+function CapabilityKindField({
+  kind,
+  setKind,
+}: {
+  kind: CapabilityKind;
+  setKind: (kind: CapabilityKind) => void;
+}) {
+  return (
+    <Field label="Art" htmlFor="capability-kind" className="min-w-0 gap-1.5">
+      <Select
+        value={kind}
+        onValueChange={(value) => {
+          const match = CAPABILITY_KINDS.find((candidate) => candidate === value);
+          if (match) setKind(match);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="skill">Fähigkeit</SelectItem>
+          <SelectItem value="certification">Zertifizierung</SelectItem>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
 
 type QualificationManagementDefinitionFormProps = {
   anyBusy: boolean;
@@ -38,26 +140,13 @@ export function QualificationManagementDefinitionForm({
   const [definitionName, setDefinitionName] = useState('');
   const [warningDays, setWarningDays] = useState('30');
   const [definitionError, setDefinitionError] = useState<string | null>(null);
-  const [definitionFieldErrors, setDefinitionFieldErrors] = useState<{
-    name?: string | undefined;
-    warningDays?: string | undefined;
-  }>({});
+  const [definitionFieldErrors, setDefinitionFieldErrors] = useState<DefinitionFieldErrors>({});
 
   return (
     // The four columns follow the section's width, not the screen's: beside the
     // sidebar a tablet screen leaves too little room for them.
     <Card className="grid grid-cols-1 gap-3 p-4 @xl/qualifications:grid-cols-[180px_minmax(0,1fr)_180px_auto]">
-      <Field label="Art" htmlFor="capability-kind" className="min-w-0 gap-1.5">
-        <Select value={kind} onValueChange={(value) => setKind(value as CapabilityKind)}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="skill">Fähigkeit</SelectItem>
-            <SelectItem value="certification">Zertifizierung</SelectItem>
-          </SelectContent>
-        </Select>
-      </Field>
+      <CapabilityKindField kind={kind} setKind={setKind} />
       <Field
         label="Name"
         htmlFor="capability-name"
@@ -88,50 +177,19 @@ export function QualificationManagementDefinitionForm({
       <Button
         className="self-end"
         disabled={anyBusy}
-        onClick={async () => {
-          setDefinitionError(null);
-          const expiryWarningDays = kind === 'certification' ? parseDecimalInput(warningDays) : 0;
-          const nextFieldErrors = {
-            name: definitionName.trim() ? undefined : 'Bitte gib einen Namen an.',
-            warningDays:
-              !Number.isInteger(expiryWarningDays) || expiryWarningDays < 0 || expiryWarningDays > 365
-                ? 'Bitte gib eine ganze Zahl zwischen 0 und 365 Tagen ein.'
-                : undefined,
-          };
-          setDefinitionFieldErrors(nextFieldErrors);
-          const invalid = focusFirstInvalidField({
-            'capability-name': nextFieldErrors.name,
-            'capability-warning-days': nextFieldErrors.warningDays,
-          });
-          if (invalid) return;
-          await runAction('create-definition', async () => {
-            try {
-              const result = await createCapability({
-                kind,
-                name: definitionName,
-                expiryWarningDays,
-              });
-              if (!result.success) {
-                setDefinitionError(
-                  describeFailure(
-                    result.error,
-                    { duplicate_name: 'Dieser Begriff ist bereits vorhanden.' },
-                    'Der Begriff konnte nicht angelegt werden.',
-                  ),
-                );
-                return;
-              }
-              setDefinitionName('');
-              showBanner({
-                variant: 'success',
-                message: 'Der Begriff wurde angelegt.',
-              });
-              refresh();
-            } catch {
-              setDefinitionError('Der Begriff konnte nicht angelegt werden.');
-            }
-          });
-        }}
+        onClick={() =>
+          createDefinition({
+            kind,
+            definitionName,
+            warningDays,
+            setDefinitionName,
+            setDefinitionError,
+            setDefinitionFieldErrors,
+            runAction,
+            refresh,
+            showBanner,
+          })
+        }
       >
         <Plus className="size-4" />
         Anlegen

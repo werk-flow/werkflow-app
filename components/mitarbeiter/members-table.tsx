@@ -132,6 +132,105 @@ export function MembersTableSkeleton({ count, showActions }: { count: number; sh
   );
 }
 
+type MemberStatusProps = Pick<MemberRowProps, 'status' | 'isStatusLoading' | 'canViewStatus' | 'target'>;
+
+/** The mobile card's status line; a skeleton while the first status read runs. */
+function MemberCardStatus({ status, isStatusLoading, canViewStatus, target }: MemberStatusProps) {
+  return isStatusLoading && !status ? (
+    <Skeleton className="h-[18px] w-40" />
+  ) : (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+      <StatusBadge
+        status={status?.status}
+        isClockedIn={status?.isClockedIn ?? false}
+        isPending={status?.isPending ?? false}
+        canViewStatus={canViewStatus}
+      />
+      <HoursDisplay
+        status={status?.status}
+        isClockedIn={status?.isClockedIn ?? false}
+        statusStartedAt={status?.statusStartedAt ?? null}
+        workMinutes={status?.workMinutes ?? 0}
+        canViewStatus={canViewStatus}
+        target={target}
+      />
+    </div>
+  );
+}
+
+/** The desktop row's status and hours cells; skeletons while the first status read runs. */
+function MemberStatusCells({ status, isStatusLoading, canViewStatus, target }: MemberStatusProps) {
+  const showStatusSkeleton = isStatusLoading && !status;
+
+  return (
+    <>
+      <TableCell className="px-4">
+        {showStatusSkeleton ? (
+          STATUS_SKELETON
+        ) : (
+          <StatusBadge
+            status={status?.status}
+            isClockedIn={status?.isClockedIn ?? false}
+            isPending={status?.isPending ?? false}
+            canViewStatus={canViewStatus}
+          />
+        )}
+      </TableCell>
+      <TableCell className="px-4">
+        {showStatusSkeleton ? (
+          PROGRESS_SKELETON
+        ) : (
+          <HoursDisplay
+            status={status?.status}
+            isClockedIn={status?.isClockedIn ?? false}
+            statusStartedAt={status?.statusStartedAt ?? null}
+            workMinutes={status?.workMinutes ?? 0}
+            canViewStatus={canViewStatus}
+            target={target}
+          />
+        )}
+      </TableCell>
+    </>
+  );
+}
+
+type MemberRowMenuProps = Pick<
+  MemberRowProps,
+  | 'member'
+  | 'memberName'
+  | 'currentUserId'
+  | 'currentUserRole'
+  | 'removalBlockedMessage'
+  | 'isBusy'
+  | 'onRoleChange'
+>;
+
+/** The row's actions menu for one member, on the card and in the table. */
+function MemberRowMenu({
+  member,
+  memberName,
+  currentUserId,
+  currentUserRole,
+  removalBlockedMessage,
+  isBusy,
+  onRoleChange,
+}: MemberRowMenuProps) {
+  return (
+    <MemberActionsMenu
+      memberId={member.user_id}
+      memberName={memberName}
+      memberFirstName={member.first_name}
+      memberLastName={member.last_name}
+      memberRole={member.role}
+      currentUserId={currentUserId}
+      currentUserRole={currentUserRole}
+      removalBlockedMessage={removalBlockedMessage}
+      isBusy={isBusy}
+      onRoleChange={onRoleChange}
+    />
+  );
+}
+
 // Mobile card component for a single member
 function MemberCard({
   member,
@@ -172,26 +271,12 @@ function MemberCard({
             <AccessStateBadge state={getAccessState(personnel.record, personnel.hasPendingInvite)} />
           </div>
         ) : null}
-        {isStatusLoading && !status ? (
-          <Skeleton className="h-[18px] w-40" />
-        ) : (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            <StatusBadge
-              status={status?.status}
-              isClockedIn={status?.isClockedIn ?? false}
-              isPending={status?.isPending ?? false}
-              canViewStatus={canViewStatus}
-            />
-            <HoursDisplay
-              status={status?.status}
-              isClockedIn={status?.isClockedIn ?? false}
-              statusStartedAt={status?.statusStartedAt ?? null}
-              workMinutes={status?.workMinutes ?? 0}
-              canViewStatus={canViewStatus}
-              target={target}
-            />
-          </div>
-        )}
+        <MemberCardStatus
+          status={status}
+          isStatusLoading={isStatusLoading}
+          canViewStatus={canViewStatus}
+          target={target}
+        />
         <div className="text-xs text-muted-foreground">
           <span className="block truncate">{member.email}</span>
           <span>Beigetreten: {formatBerlin(member.joined_at, 'shortYearDate')}</span>
@@ -199,12 +284,9 @@ function MemberCard({
       </div>
       {canManageMembers && (
         <ListRowActions>
-          <MemberActionsMenu
-            memberId={member.user_id}
+          <MemberRowMenu
+            member={member}
             memberName={memberName}
-            memberFirstName={member.first_name}
-            memberLastName={member.last_name}
-            memberRole={member.role}
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             removalBlockedMessage={removalBlockedMessage}
@@ -234,7 +316,6 @@ function MemberTableRow({
   removalBlockedMessage,
 }: MemberRowProps) {
   const router = useRouter();
-  const showStatusSkeleton = isStatusLoading && !status;
 
   return (
     <TableRow
@@ -264,41 +345,18 @@ function MemberTableRow({
           {ROLE_LABELS[member.role]}
         </span>
       </TableCell>
-      <TableCell className="px-4">
-        {showStatusSkeleton ? (
-          STATUS_SKELETON
-        ) : (
-          <StatusBadge
-            status={status?.status}
-            isClockedIn={status?.isClockedIn ?? false}
-            isPending={status?.isPending ?? false}
-            canViewStatus={canViewStatus}
-          />
-        )}
-      </TableCell>
-      <TableCell className="px-4">
-        {showStatusSkeleton ? (
-          PROGRESS_SKELETON
-        ) : (
-          <HoursDisplay
-            status={status?.status}
-            isClockedIn={status?.isClockedIn ?? false}
-            statusStartedAt={status?.statusStartedAt ?? null}
-            workMinutes={status?.workMinutes ?? 0}
-            canViewStatus={canViewStatus}
-            target={target}
-          />
-        )}
-      </TableCell>
+      <MemberStatusCells
+        status={status}
+        isStatusLoading={isStatusLoading}
+        canViewStatus={canViewStatus}
+        target={target}
+      />
       <TableCell className="text-muted-foreground">{formatBerlin(member.joined_at, 'date')}</TableCell>
       {canManageMembers && (
         <TableCell onClick={(e) => e.stopPropagation()}>
-          <MemberActionsMenu
-            memberId={member.user_id}
+          <MemberRowMenu
+            member={member}
             memberName={memberName}
-            memberFirstName={member.first_name}
-            memberLastName={member.last_name}
-            memberRole={member.role}
             currentUserId={currentUserId}
             currentUserRole={currentUserRole}
             removalBlockedMessage={removalBlockedMessage}
@@ -309,6 +367,60 @@ function MemberTableRow({
       )}
     </TableRow>
   );
+}
+
+type MemberRowContext = {
+  canManageMembers: boolean;
+  currentUserId: string;
+  currentUserRole: OrgRole;
+  onRoleChange: RoleChangeHandler;
+  statusMap: Record<string, MemberStatus>;
+  isStatusLoading: boolean;
+  isStatusUnavailable: boolean;
+  busyMemberIds: ReadonlySet<string> | undefined;
+  targetsByUserId: Record<string, DailyTarget> | undefined;
+  personnelByUserId: Record<string, PersonnelListEntry> | undefined;
+  removalBlockedByUserId: Record<string, string>;
+};
+
+/** The props of one member's card or table row: its name, status visibility and row data. */
+function memberRowPropsFor(
+  member: OrgMember,
+  {
+    canManageMembers,
+    currentUserId,
+    currentUserRole,
+    onRoleChange,
+    statusMap,
+    isStatusLoading,
+    isStatusUnavailable,
+    busyMemberIds,
+    targetsByUserId,
+    personnelByUserId,
+    removalBlockedByUserId,
+  }: MemberRowContext,
+): MemberRowProps {
+  const memberName =
+    member.first_name || member.last_name ? `${member.first_name} ${member.last_name}`.trim() : member.email;
+  const canViewStatus =
+    canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
+    !(isStatusUnavailable && !statusMap[member.user_id]);
+
+  return {
+    member,
+    memberName,
+    canManageMembers,
+    canViewStatus,
+    currentUserId,
+    currentUserRole,
+    onRoleChange,
+    status: statusMap[member.user_id],
+    isStatusLoading,
+    isBusy: busyMemberIds?.has(member.user_id) ?? false,
+    target: targetsByUserId?.[member.user_id],
+    personnel: personnelByUserId?.[member.user_id],
+    removalBlockedMessage: removalBlockedByUserId[member.user_id],
+  };
 }
 
 export function MembersTable({
@@ -325,6 +437,19 @@ export function MembersTable({
   removalBlockedByUserId = {},
 }: MembersTableProps) {
   const canManageMembers = currentUserRole === 'admin' || currentUserRole === 'buero';
+  const rowContext: MemberRowContext = {
+    canManageMembers,
+    currentUserId,
+    currentUserRole,
+    onRoleChange,
+    statusMap,
+    isStatusLoading,
+    isStatusUnavailable,
+    busyMemberIds,
+    targetsByUserId,
+    personnelByUserId,
+    removalBlockedByUserId,
+  };
 
   // No loading prop on purpose: the list never turns into a skeleton over data
   // it already has (feedback canon); `MembersTableSkeleton` serves loading.tsx.
@@ -343,34 +468,9 @@ export function MembersTable({
     <>
       {/* Mobile view - Card layout */}
       <div className="space-y-2 md:hidden">
-        {members.map((member) => {
-          const memberName =
-            member.first_name || member.last_name
-              ? `${member.first_name} ${member.last_name}`.trim()
-              : member.email;
-          const canViewStatus =
-            canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
-            !(isStatusUnavailable && !statusMap[member.user_id]);
-
-          return (
-            <MemberCard
-              key={member.user_id}
-              member={member}
-              memberName={memberName}
-              canManageMembers={canManageMembers}
-              canViewStatus={canViewStatus}
-              currentUserId={currentUserId}
-              currentUserRole={currentUserRole}
-              onRoleChange={onRoleChange}
-              status={statusMap[member.user_id]}
-              isStatusLoading={isStatusLoading}
-              isBusy={busyMemberIds?.has(member.user_id) ?? false}
-              target={targetsByUserId?.[member.user_id]}
-              personnel={personnelByUserId?.[member.user_id]}
-              removalBlockedMessage={removalBlockedByUserId[member.user_id]}
-            />
-          );
-        })}
+        {members.map((member) => (
+          <MemberCard key={member.user_id} {...memberRowPropsFor(member, rowContext)} />
+        ))}
       </div>
 
       {/* Desktop view - Table layout */}
@@ -378,34 +478,9 @@ export function MembersTable({
         <Table>
           <ColumnsTableHeader columns={memberColumns(canManageMembers)} />
           <TableBody>
-            {members.map((member) => {
-              const memberName =
-                member.first_name || member.last_name
-                  ? `${member.first_name} ${member.last_name}`.trim()
-                  : member.email;
-              const canViewStatus =
-                canViewMemberStatus(currentUserRole, currentUserId, member.user_id, member.role) &&
-                !(isStatusUnavailable && !statusMap[member.user_id]);
-
-              return (
-                <MemberTableRow
-                  key={member.user_id}
-                  member={member}
-                  memberName={memberName}
-                  canManageMembers={canManageMembers}
-                  canViewStatus={canViewStatus}
-                  currentUserId={currentUserId}
-                  currentUserRole={currentUserRole}
-                  onRoleChange={onRoleChange}
-                  status={statusMap[member.user_id]}
-                  isStatusLoading={isStatusLoading}
-                  isBusy={busyMemberIds?.has(member.user_id) ?? false}
-                  target={targetsByUserId?.[member.user_id]}
-                  personnel={personnelByUserId?.[member.user_id]}
-                  removalBlockedMessage={removalBlockedByUserId[member.user_id]}
-                />
-              );
-            })}
+            {members.map((member) => (
+              <MemberTableRow key={member.user_id} {...memberRowPropsFor(member, rowContext)} />
+            ))}
           </TableBody>
         </Table>
       </div>
