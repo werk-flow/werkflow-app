@@ -62,6 +62,26 @@ test('a review refused because the responsibility ended says so and never confir
   await expect(approve).toHaveCount(0);
 });
 
+test('after a responsibility refusal the view refreshes by itself and drops the session', async ({
+  page,
+}) => {
+  const approve = page.getByTitle('Genehmigen - Eintrag bleibt erhalten', { exact: true });
+  await expect(approve).toBeVisible();
+  await approve.click();
+  await expectHeldWrite(page, 'review-entries');
+
+  // The responsibility ended: the read after the refusal no longer lists the session.
+  await page.evaluate(() => {
+    window.uiContractTimeApprovals.sessions = [];
+  });
+  await answerHeldWrite(page, 'not_responsible');
+  await expect(page.getByRole('alert')).toHaveText(
+    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  // No refresh click: the view reads again by itself.
+  await expect(approve).toHaveCount(0);
+});
+
 test('a refused change request comes back with the reason and never confirms', async ({ page }) => {
   const approve = page.getByTitle('Genehmigen - Änderung wird bestätigt', { exact: true });
   await expect(approve).toBeVisible();
