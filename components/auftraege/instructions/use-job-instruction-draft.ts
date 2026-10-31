@@ -24,6 +24,71 @@ type JobInstructionDraftOptions = {
   showErrorBanner: (message: string) => void;
 };
 
+/** A manager's empty draft row; a viewer who is no manager has none. */
+function emptyDraftFor(isAdminOrManager: boolean): DraftInstructionItem | null {
+  return isAdminOrManager ? { draftId: generateDraftId(), content: '' } : null;
+}
+
+function createInstructionItemFor(owner: InstructionListOwner, content: string) {
+  return owner.projectId !== undefined
+    ? createProjectInstructionItem({ projectId: owner.projectId, content })
+    : createJobInstructionItem({ jobId: owner.jobId, content });
+}
+
+/** The row shown for a draft while its create is pending. */
+function optimisticInstructionItem({
+  optimisticId,
+  owner,
+  content,
+  sortOrder,
+  currentUserActor,
+}: {
+  optimisticId: string;
+  owner: InstructionListOwner;
+  content: string;
+  sortOrder: number;
+  currentUserActor: JobInstructionActor | null;
+}): RenderedInstructionItem {
+  return {
+    id: optimisticId,
+    organizationId: '',
+    jobId: owner.jobId ?? null,
+    projectId: owner.projectId ?? null,
+    itemKind: 'checklist',
+    requirementState: 'required',
+    groupLabel: null,
+    notes: null,
+    templateApplicationId: null,
+    sourceTemplateItemId: null,
+    content,
+    sortOrder,
+    isCompleted: false,
+    completionVersion: 0,
+    createdBy: currentUserActor?.userId ?? '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastStatusChangedBy: null,
+    lastStatusChangedAt: null,
+    creator: currentUserActor,
+    lastStatusChangedByProfile: null,
+    evidenceRequirements: [],
+    predecessors: [],
+    isOptimistic: true,
+  };
+}
+
+/** A fresh draft holding the failed create's text, ahead of anything typed meanwhile. */
+function restoredDraft(
+  failedContent: string,
+  currentDraft: DraftInstructionItem | null,
+): DraftInstructionItem {
+  const typedMeanwhile = currentDraft?.content.trim() ? currentDraft.content : '';
+  return {
+    draftId: generateDraftId(),
+    content: typedMeanwhile ? `${failedContent}\n${typedMeanwhile}` : failedContent,
+  };
+}
+
 /** The always-present empty draft row of a manager and its optimistic create. */
 export function useJobInstructionDraft({
   owner,
@@ -34,14 +99,7 @@ export function useJobInstructionDraft({
   showErrorBanner,
 }: JobInstructionDraftOptions) {
   const { items, setItems, appendItem, syncItemsFromServer } = itemList;
-  const [draft, setDraft] = useState<DraftInstructionItem | null>(
-    isAdminOrManager
-      ? {
-          draftId: generateDraftId(),
-          content: '',
-        }
-      : null,
-  );
+  const [draft, setDraft] = useState(emptyDraftFor(isAdminOrManager));
   const [focusedDraftId, setFocusedDraftId] = useState<string | null>(null);
   const draftTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -51,7 +109,7 @@ export function useJobInstructionDraft({
   const [draftRoleIsManager, setDraftRoleIsManager] = useState(isAdminOrManager);
   if (isAdminOrManager !== draftRoleIsManager) {
     setDraftRoleIsManager(isAdminOrManager);
-    setDraft(isAdminOrManager ? { draftId: generateDraftId(), content: '' } : null);
+    setDraft(emptyDraftFor(isAdminOrManager));
   }
 
   useEffect(() => {
@@ -81,34 +139,15 @@ export function useJobInstructionDraft({
 
     const draftSnapshot = draft;
     const optimisticId = `optimistic-${draftSnapshot.draftId}`;
-    const optimisticItem: RenderedInstructionItem = {
-      id: optimisticId,
-      organizationId: '',
-      jobId: owner.jobId ?? null,
-      projectId: owner.projectId ?? null,
-      itemKind: 'checklist',
-      requirementState: 'required',
-      groupLabel: null,
-      notes: null,
-      templateApplicationId: null,
-      sourceTemplateItemId: null,
-      content: draftSnapshot.content,
-      sortOrder: items.length,
-      isCompleted: false,
-      completionVersion: 0,
-      createdBy: currentUserActor?.userId ?? '',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      lastStatusChangedBy: null,
-      lastStatusChangedAt: null,
-      creator: currentUserActor,
-      lastStatusChangedByProfile: null,
-      evidenceRequirements: [],
-      predecessors: [],
-      isOptimistic: true,
-    };
-
-    appendItem(optimisticItem);
+    appendItem(
+      optimisticInstructionItem({
+        optimisticId,
+        owner,
+        content: draftSnapshot.content,
+        sortOrder: items.length,
+        currentUserActor,
+      }),
+    );
 
     const nextDraftId = generateDraftId();
     setDraft({
@@ -120,9 +159,7 @@ export function useJobInstructionDraft({
     let errorMessage: string | null = null;
     try {
       const result = await runOnRow(optimisticId, () =>
-        owner.projectId !== undefined
-          ? createProjectInstructionItem({ projectId: owner.projectId, content: draftSnapshot.content })
-          : createJobInstructionItem({ jobId: owner.jobId, content: draftSnapshot.content }),
+        createInstructionItemFor(owner, draftSnapshot.content),
       );
       if (result.success) {
         // A sync during the create may already have brought the saved row.
@@ -141,13 +178,7 @@ export function useJobInstructionDraft({
     // Roll the optimistic row back and hand the typed text back to the draft,
     // ahead of anything typed into the new draft while the create was pending.
     setItems((currentItems) => currentItems.filter((item) => item.id !== optimisticId));
-    setDraft((currentDraft) => {
-      const typedMeanwhile = currentDraft?.content.trim() ? currentDraft.content : '';
-      return {
-        draftId: generateDraftId(),
-        content: typedMeanwhile ? `${draftSnapshot.content}\n${typedMeanwhile}` : draftSnapshot.content,
-      };
-    });
+    setDraft((currentDraft) => restoredDraft(draftSnapshot.content, currentDraft));
     showErrorBanner(errorMessage);
     await syncItemsFromServer();
   }
