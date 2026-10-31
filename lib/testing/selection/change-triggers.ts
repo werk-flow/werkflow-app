@@ -93,23 +93,9 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     ],
     movesIn: 'werk-flow/werkflow-planning#39',
   },
-  'golden:p1-24a': {
-    tests: ['the employee sees the week as their own row only'],
-    movesIn: 'werk-flow/werkflow-planning#38',
-  },
-  'audit:wave-1:a1-kalender': {
-    tests: ['A1-21/A1-24: Kalenderansichten und getrennte Plan-/Arbeitszeitfilter'],
-    movesIn: 'werk-flow/werkflow-planning#38',
-  },
   'audit:wave-1:a1-zeiten': {
     tests: ['A1-32: Nur Admin ändert Pausenregel und abgeschlossene Historie bleibt stabil'],
     movesIn: 'werk-flow/werkflow-planning#39',
-  },
-  'audit:wave-1:a6': {
-    tests: [
-      'A6-T7: Personal ohne Login ist manager-sichtbar verplant; Handwerker sehen genau ihre Termine [P1-11-F05]',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#38',
   },
   'audit:wave-2:p1-22': {
     tests: [

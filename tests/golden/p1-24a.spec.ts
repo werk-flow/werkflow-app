@@ -43,8 +43,7 @@ import {
 import { SHARED_COPY, textInDom, typeIntoDatePickerById } from './support/steps/shared';
 
 // Each scenario owns its job and occurrence; any test can run alone. Audit
-// P1-24a keeps the refusals, the other drop kinds, the day and month views and
-// the board read's isolation.
+// P1-24a keeps the refusals, the other drop kinds and the day and month views.
 
 /** Next week's Tuesday and Wednesday, inside the dispatch overview's 14-day window. */
 function visitDates(): { visitDate: string; movedDate: string } {
