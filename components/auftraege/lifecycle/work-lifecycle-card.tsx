@@ -13,6 +13,7 @@ import { loadDocument } from '@/lib/navigation/document-load';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { transitionWorkExecution } from '@/lib/work-lifecycle/actions';
 import {
+  getAllowedWorkTransitions,
   getWorkNextAction,
   type WorkExecutionState,
   type WorkLifecycleSnapshot,
@@ -242,6 +243,7 @@ export function WorkLifecycleCard({
       )}
       <WorkLifecycleCardSections
         snapshot={snapshot}
+        transitions={getAllowedWorkTransitions(snapshot.executionState, isManager)}
         view={view}
         refresh={refresh}
         isManager={isManager}

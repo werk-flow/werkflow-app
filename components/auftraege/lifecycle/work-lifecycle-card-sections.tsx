@@ -7,12 +7,7 @@ import { LockKeyhole } from 'lucide-react';
 import type { LiveViewState } from '@/hooks/use-live-view';
 import { Button } from '@/components/ui/button';
 import { InlinePending } from '@/components/ui/inline-pending';
-import {
-  getAllowedWorkTransitions,
-  type WorkBlocker,
-  type WorkExecutionState,
-  type WorkLifecycleSnapshot,
-} from '@/lib/work-lifecycle/types';
+import type { WorkBlocker, WorkExecutionState, WorkLifecycleSnapshot } from '@/lib/work-lifecycle/types';
 import {
   WorkLifecycleBlockersSection,
   WorkLifecycleResolvedBlockers,
@@ -46,6 +41,7 @@ export function WorkLifecycleRemoteUpdateHint({
 
 type WorkLifecycleCardSectionsProps = {
   snapshot: WorkLifecycleSnapshot;
+  transitions: readonly WorkExecutionState[];
   view: WorkLifecycleView;
   refresh: LiveViewState<WorkLifecycleSnapshot>['refresh'];
   isManager: boolean;
@@ -65,6 +61,7 @@ type WorkLifecycleCardSectionsProps = {
 /** The card's actions, readiness, open items and history, marked stale while the snapshot is behind. */
 export function WorkLifecycleCardSections({
   snapshot,
+  transitions,
   view,
   refresh,
   isManager,
@@ -84,7 +81,7 @@ export function WorkLifecycleCardSections({
     <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
       <WorkLifecycleTransitionActions
         snapshot={snapshot}
-        transitions={getAllowedWorkTransitions(snapshot.executionState, isManager)}
+        transitions={transitions}
         isManager={isManager}
         fieldMode={fieldMode}
         hasPendingDispatch={hasPendingDispatch}
