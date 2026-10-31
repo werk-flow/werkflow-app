@@ -6,7 +6,19 @@ import { ClockAlert } from 'lucide-react';
 import { SectionError } from '@/components/ui/section-error';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { readInBackground } from '@/lib/data/background-read-client';
+import type { ProvisionalTimeSummary as ProvisionalTimeSummaryData } from '@/lib/time-corrections/provisional-summary';
 import { formatSignedDuration } from '@/lib/time-tracking/helpers';
+import { formatBerlin } from '@/lib/utils';
+
+const dayList = new Intl.ListFormat('de', { type: 'conjunction' });
+
+/** „Eine Korrektur für Mo., 26.10. wartet auf eine Entscheidung.“, naming every day it changes. */
+function pendingSentence({ count, days }: ProvisionalTimeSummaryData): string {
+  const subject = count === 1 ? 'Eine Korrektur' : `${count} Korrekturen`;
+  const forDays =
+    days.length > 0 ? ` für ${dayList.format(days.map((day) => formatBerlin(day, 'weekdayDayMonth')))}` : '';
+  return `${subject}${forDays} ${count === 1 ? 'wartet' : 'warten'} auf eine Entscheidung.`;
+}
 
 export function ProvisionalTimeSummary({
   organizationId,
@@ -15,21 +27,9 @@ export function ProvisionalTimeSummary({
   organizationId: string;
   userId: string;
 }) {
-  const view = useLiveView<{
-    count: number;
-    beforeMinutes: number;
-    proposedMinutes: number;
-  }>({
+  const view = useLiveView<ProvisionalTimeSummaryData>({
     tables: ['time_correction_requests'],
-    read: async ({
-      signal,
-    }): Promise<
-      LiveViewResult<{
-        count: number;
-        beforeMinutes: number;
-        proposedMinutes: number;
-      }>
-    > => {
+    read: async ({ signal }): Promise<LiveViewResult<ProvisionalTimeSummaryData>> => {
       const result = await readInBackground('provisional-time-summary', { organizationId, userId }, signal);
       return result.success ? { ok: true, data: result } : { ok: false };
     },
@@ -54,8 +54,7 @@ export function ProvisionalTimeSummary({
         <div>
           <p className="font-medium">Vorgemerkte Zeit: {formatSignedDuration(delta)}</p>
           <p className="text-muted-foreground">
-            {summary.count === 1 ? 'Eine Korrektur wartet' : `${summary.count} Korrekturen warten`} auf eine
-            Entscheidung. Diese Änderung ist noch nicht in den freigegebenen Summen enthalten.
+            {pendingSentence(summary)} Diese Änderung ist noch nicht in den freigegebenen Summen enthalten.
           </p>
         </div>
       </div>

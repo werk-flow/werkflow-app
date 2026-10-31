@@ -15,11 +15,11 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { SICKNESS_TYPE_LABELS, type SicknessAbsenceType, type SicknessReport } from '@/lib/sickness/types';
+import type { SicknessReport } from '@/lib/sickness/types';
 import { cn, toLocalDateString } from '@/lib/utils';
 
+import { SicknessAbsenceTypeSelect } from './sickness-absence-type-select';
 import {
   useSicknessReportCorrectionForm,
   type SicknessReportCorrectionForm,
@@ -45,22 +45,7 @@ export function CorrectSicknessDialog({
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
             <Field label="Art" htmlFor="correct-sickness-type">
-              <Select
-                value={absenceType}
-                onValueChange={(value) => setAbsenceType(value as SicknessAbsenceType)}
-                disabled={isSaving}
-              >
-                <SelectTrigger aria-label="Art">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(SICKNESS_TYPE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SicknessAbsenceTypeSelect value={absenceType} onChange={setAbsenceType} disabled={isSaving} />
             </Field>
 
             <SicknessReportCorrectionPeriodFields form={form} />

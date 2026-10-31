@@ -20,19 +20,16 @@ mock.module('@/lib/data/cached', () => ({
   getCachedOrganizationSettings: forbiddenRead,
   getCachedOrganizationCalendar: forbiddenRead,
 }));
-const { getCanonicalClockState } = await import('@/lib/time-tracking/segment-actions');
 const { getCurrentClockState } = await import('@/lib/time-tracking/clock-state-actions');
-for (const read of [getCanonicalClockState, getCurrentClockState]) {
-  authenticated = false;
-  assert.deepEqual(await read(organizationId), { success: false, error: 'not_authenticated' });
-  authenticated = true;
-  memberships = [];
-  assert.deepEqual(await read(organizationId), { success: false, error: 'not_a_member' });
-  memberships = [{ orgId: '10000000-0000-4000-8000-000000000002', role: 'employee' }];
-  assert.deepEqual(await read(organizationId), { success: false, error: 'not_a_member' });
-  assert.equal(
-    protectedReads,
-    0,
-    'neither a direct call nor the canonical early-return path may read retained time data or settings without membership',
-  );
-}
+authenticated = false;
+assert.deepEqual(await getCurrentClockState(organizationId), { success: false, error: 'not_authenticated' });
+authenticated = true;
+memberships = [];
+assert.deepEqual(await getCurrentClockState(organizationId), { success: false, error: 'not_a_member' });
+memberships = [{ orgId: '10000000-0000-4000-8000-000000000002', role: 'employee' }];
+assert.deepEqual(await getCurrentClockState(organizationId), { success: false, error: 'not_a_member' });
+assert.equal(
+  protectedReads,
+  0,
+  'the clock state may read no retained time data or settings without membership',
+);

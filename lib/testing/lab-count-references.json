@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 732572, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -202,6 +202,24 @@
           "fromDigest": "fbae0779adf69b8adf2a9922b3842cc570d480deb93c45cccf1148481c409c68",
           "toDigest": "550ec4c31d4864dcee725c5e6a22fac305c7ecbffdb192c66b5d0a3779687e3f",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 732572, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-31T174358140Z-861d58"],
+          "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. The lab also counts lazily loaded chunks. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -226,7 +244,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 31, "tolerance": 1 },
-        "componentRenders": { "reference": 512, "tolerance": 10 }
+        "componentRenders": { "reference": 536, "tolerance": 10 }
       },
       "payloads": {
         "prefetch:/auftraege": {
@@ -312,6 +330,14 @@
           "fromDigest": "ec97ceb24219f93c09ca7e85b36cede0ed7315807f24cefe8e4e91244c479830",
           "toDigest": "a85a5531c186713490c285d344aa6640fcea14033c031ea7f203d388984768a2",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 512, "tolerance": 10 },
+          "to": { "reference": 536, "tolerance": 10 },
+          "runKeys": ["2026-10-31T174358140Z-861d58"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail and work pack splits (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -336,7 +362,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 1, "tolerance": 0 },
         "backendRequests": { "reference": 52, "tolerance": 1 },
-        "componentRenders": { "reference": 465, "tolerance": 9 }
+        "componentRenders": { "reference": 493, "tolerance": 9 }
       },
       "payloads": {
         "action:/auftraege/[jobNumber]": {
@@ -434,6 +460,14 @@
           "fromDigest": "12915a46b78a3c78b2dae442c16d04c914420bfa7a5bae0bdb47686012a441c8",
           "toDigest": "aae44ad46c9b694f007e5f09e05a706b81166d6f6af848a00737d325d6caaad2",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 465, "tolerance": 9 },
+          "to": { "reference": 493, "tolerance": 9 },
+          "runKeys": ["2026-10-31T174358140Z-861d58"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The work pack split (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -566,7 +600,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 22, "tolerance": 1 },
-        "componentRenders": { "reference": 683, "tolerance": 13 }
+        "componentRenders": { "reference": 708, "tolerance": 13 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -652,6 +686,14 @@
           "fromDigest": "b575038851a76b0144ff0f2f2e830b0761415167a60cd1e769787d9f28f8b568",
           "toDigest": "3fcf7815e92f90b025a46697601384c7ee0d62dca9cc9552581b8c3bdca9c7bd",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 683, "tolerance": 13 },
+          "to": { "reference": 708, "tolerance": 13 },
+          "runKeys": ["2026-10-31T174358140Z-861d58"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -760,7 +802,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 18, "tolerance": 1 },
-        "componentRenders": { "reference": 671, "tolerance": 13 }
+        "componentRenders": { "reference": 696, "tolerance": 13 }
       },
       "payloads": {
         "action:/dashboard": {
@@ -846,6 +888,14 @@
           "fromDigest": "c4ce0b10115fb686b4a895e31393517e6dd1dc8e1accde6435d59c57378945ea",
           "toDigest": "6bfa1480d7d32a5684360ee2f450592781f5752a71db05e9caf1832e7feeb73c",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 671, "tolerance": 13 },
+          "to": { "reference": 696, "tolerance": 13 },
+          "runKeys": ["2026-10-31T174358140Z-861d58"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -870,7 +920,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 90, "tolerance": 1 },
-        "componentRenders": { "reference": 10096, "tolerance": 201 }
+        "componentRenders": { "reference": 10433, "tolerance": 201 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -916,8 +966,8 @@
           "rows": null
         },
         "script": {
-          "requests": { "reference": 39, "tolerance": 1 },
-          "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "requests": { "reference": 38, "tolerance": 1 },
+          "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1048,6 +1098,32 @@
           "to": { "reference": 53, "tolerance": 1 },
           "runKeys": ["2026-10-30T215330529Z-9e87a6"],
           "reason": null
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 10096, "tolerance": 201 },
+          "to": { "reference": 10433, "tolerance": 201 },
+          "runKeys": ["2026-10-31T174522133Z-e2d261"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127), the shared UI and sidebar split (#125) and the live-view hook split (#113) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 39, "tolerance": 1 },
+            "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 38, "tolerance": 1 },
+            "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
+          "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start, which this step opens. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. This local run measures 652,990; CI's builds measure about 654,800 (runs 41227836236 and 41227929297, Browser 8, on #115 and #131), above the old ceiling. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged."
         }
       ]
     },
@@ -1072,7 +1148,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1571, "tolerance": 31 }
+        "componentRenders": { "reference": 1634, "tolerance": 31 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1206,6 +1282,14 @@
           "fromDigest": "ae55a4203023b4aabea1c0c64f17a497aab0430bc5f2b8366a4f1a440a273034",
           "toDigest": "6c03d2ad1f413ee819bdbd1208f6f4944ebfeea262a42bb4fed9a218ec7dd565",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 1571, "tolerance": 31 },
+          "to": { "reference": 1634, "tolerance": 31 },
+          "runKeys": ["2026-10-31T174522133Z-e2d261"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail split (#124) and the Auftrag split (#127) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1230,7 +1314,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 799, "tolerance": 15 }
+        "componentRenders": { "reference": 827, "tolerance": 15 }
       },
       "payloads": {},
       "source": {
@@ -1290,6 +1374,14 @@
           "fromDigest": "3a7fce31e7f18fff30fc5f375b85eea36e5bd87b32f42b50aa66067d7c8960c4",
           "toDigest": "4a5fcc50e80d21f56d8caa548a6c61e69df0782327326c54948d9ed960d86960",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 799, "tolerance": 15 },
+          "to": { "reference": 827, "tolerance": 15 },
+          "runKeys": ["2026-10-31T174522133Z-e2d261"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127) and the job detail split (#124) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1412,7 +1504,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 44, "tolerance": 1 },
-        "componentRenders": { "reference": 5085, "tolerance": 101 }
+        "componentRenders": { "reference": 5274, "tolerance": 101 }
       },
       "payloads": {
         "action:/auftraege": {
@@ -1510,6 +1602,14 @@
           "fromDigest": "ca07276c5cd1402ce3d0d28db215c175c6320ae9d75b0793cdf383cfafbf34d5",
           "toDigest": "e7647ca92db8a09218bb8f699b6ad7b9436121be30e426b6b81f91f8be4edc4c",
           "reason": "The spec now waits for the suggested job number before it types one (fillJobNumber). The wait and both fills happen before recordLabStep resets the network count, so the measured submit counts the same requests. Then: tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 5085, "tolerance": 101 },
+          "to": { "reference": 5274, "tolerance": 101 },
+          "runKeys": ["2026-10-31T174522133Z-e2d261"],
+          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag form split (#127) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1938,7 +2038,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2054,6 +2154,24 @@
           },
           "runKeys": ["2026-10-30T215330529Z-9e87a6"],
           "reason": "werkflow-app#98 moved the time-entry validation (lib/time-tracking/validation.ts) out of an (app) layout chunk into the /zeiterfassung route chunk: before #98 (fa4faae4) layout chunk 0u25amz-dd_w_.js (5983 B gzip) carried it, after (bda6adb7) no layout chunk does. Every page loads less (lab.office.cold-start script bytes -4061 in this run); this step prefetches /zeiterfassung from the task list, so its four route chunks grew from 24964 to 26624 B gzip in the CI builds. Moved, not added."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
+          "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) adds code to the /zeiterfassung route chunks, which the task list prefetches during this step; it is the only merge between c7328f71, where this step passed, and 58f44164. Same mechanism as the #98 accept. A product feature, not a split: E0 and werk-flow/werkflow-planning#212 may win the bytes back."
         }
       ]
     },
