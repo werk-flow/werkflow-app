@@ -13,10 +13,6 @@
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
-    "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
-    "app/(auth)/login/page.tsx": { "LoginPage": 106 },
-    "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
-    "app/(auth)/signup/signup-form.tsx": { "SignupForm": 146 },
     "components/aufgaben/aufgaben-task-section.tsx": { "AufgabenTaskSection": 141 },
     "components/aufgaben/use-aufgaben-overview.ts": { "useAufgabenOverview": 110 },
     "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
@@ -239,9 +235,6 @@
     "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
     "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/organization/organization-context.tsx": { "OrganizationProvider": 146 },
-    "components/otp-form.tsx": { "OTPForm": 124 },
-    "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 99 },
     "components/realtime/realtime-provider.tsx": {
       "RealtimeProvider": 125,
       "RealtimeProvider > useEffect#1": 118
