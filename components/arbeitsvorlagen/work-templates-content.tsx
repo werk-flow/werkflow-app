@@ -18,16 +18,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useBanner } from '@/components/ui/banner';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
-import { useOptimisticList } from '@/hooks/use-optimistic-list';
+import { useOptimisticList, type OptimisticListItem } from '@/hooks/use-optimistic-list';
 import { readInBackground } from '@/lib/data/background-read-client';
 import type { InventoryLocation } from '@/lib/inventory/types';
 import type { CapabilityDefinition } from '@/lib/qualifications/types';
 import { cn } from '@/lib/utils';
 import { createWorkTemplate, setWorkTemplateArchived } from '@/lib/work-templates/actions';
-import type {
-  WorkTemplateDetail,
-  WorkTemplateSummary,
-  WorkTemplateTargetType,
+import {
+  WORK_TEMPLATE_TARGET_TYPES,
+  type WorkTemplateDetail,
+  type WorkTemplateSummary,
 } from '@/lib/work-templates/types';
 
 import { CreateTemplateDialog } from './create-work-template-dialog';
@@ -40,12 +40,48 @@ type Props = {
   capabilities: CapabilityDefinition[];
 };
 
-type TargetFilter = 'all' | WorkTemplateTargetType;
-type StatusFilter = 'active' | 'draft' | 'published' | 'archived';
+const TARGET_FILTERS = ['all', ...WORK_TEMPLATE_TARGET_TYPES] as const;
+const STATUS_FILTERS = ['active', 'draft', 'published', 'archived'] as const;
+type TargetFilter = (typeof TARGET_FILTERS)[number];
+type StatusFilter = (typeof STATUS_FILTERS)[number];
 
 // Mirrors the server list order (`updated_at desc`), so an optimistic draft lands at the top.
 function byUpdatedAtDesc(a: WorkTemplateSummary, b: WorkTemplateSummary): number {
   return b.updatedAt.localeCompare(a.updatedAt);
+}
+
+function matchesTemplateFilters(
+  template: WorkTemplateSummary,
+  search: string,
+  targetFilter: TargetFilter,
+  statusFilter: StatusFilter,
+): boolean {
+  const query = search.trim().toLocaleLowerCase('de');
+  if (query && !`${template.name} ${template.description ?? ''}`.toLocaleLowerCase('de').includes(query))
+    return false;
+  if (targetFilter !== 'all' && template.targetType !== targetFilter) return false;
+  if (statusFilter === 'active' && template.archivedAt) return false;
+  if (statusFilter === 'archived' && !template.archivedAt) return false;
+  if (statusFilter === 'draft' && (template.status !== 'draft' || template.archivedAt)) return false;
+  if (statusFilter === 'published' && (!template.currentPublishedVersionId || template.archivedAt))
+    return false;
+  return true;
+}
+
+/** The summary row a just-submitted template shows until the server confirms it. */
+function optimisticTemplate(tempId: string, input: CreateTemplateInput): WorkTemplateSummary {
+  return {
+    id: tempId,
+    targetType: input.targetType,
+    archivedAt: null,
+    draftVersionId: null,
+    currentPublishedVersionId: null,
+    name: input.name.trim(),
+    description: input.description.trim() || null,
+    versionNumber: 1,
+    status: 'draft',
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function WorkTemplatesContent({
@@ -59,6 +95,65 @@ export function WorkTemplatesContent({
   // The create button lives in the page header outside the data boundary.
   const { open: createOpen, setOpen: setCreateOpen } = usePageAction();
   const [editing, setEditing] = useState<WorkTemplateDetail | null>(null);
+  const { view, reload, list, busy, showBanner, openEditor, changeArchive, createTemplate } =
+    useWorkTemplateRecords(initialTemplates, setEditing);
+
+  const filtered = useMemo(
+    () =>
+      list.items.filter(({ item: template }) =>
+        matchesTemplateFilters(template, search, targetFilter, statusFilter),
+      ),
+    [search, statusFilter, targetFilter, list.items],
+  );
+
+  return (
+    <div className="space-y-6">
+      <WorkTemplateFilters
+        search={search}
+        onSearchChange={setSearch}
+        targetFilter={targetFilter}
+        onTargetFilterChange={setTargetFilter}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+      />
+
+      <StaleRegion stale={view.isStale} onRetry={reload}>
+        <WorkTemplateList
+          hasTemplates={list.items.length > 0}
+          filtered={filtered}
+          isBusy={busy.isBusy}
+          onCreate={() => setCreateOpen(true)}
+          onOpen={openEditor}
+          onChangeArchive={changeArchive}
+        />
+      </StaleRegion>
+
+      <CreateTemplateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreate={(input) => void createTemplate(input)}
+      />
+      <TemplateEditorDialog
+        detail={editing}
+        onOpenChange={(open) => {
+          if (!open) setEditing(null);
+        }}
+        inventoryLocations={inventoryLocations}
+        capabilities={capabilities}
+        onChanged={async (message) => {
+          await reload();
+          showBanner({ variant: 'success', message });
+        }}
+      />
+    </div>
+  );
+}
+
+/** The template list read live, with the row actions that open, archive and create templates. */
+function useWorkTemplateRecords(
+  initialTemplates: WorkTemplateSummary[],
+  onEdit: (detail: WorkTemplateDetail) => void,
+) {
   // Row-scoped pending: opening or archiving one template leaves the other rows usable.
   const busy = useBusyIds();
   const { run: runCreate } = useServerAction(createWorkTemplate);
@@ -77,26 +172,6 @@ export function WorkTemplatesContent({
   const reload = view.refresh;
   const list = useOptimisticList({ items: templates, getId, compare: byUpdatedAtDesc });
 
-  const filtered = useMemo(
-    () =>
-      list.items.filter(({ item: template }) => {
-        const query = search.trim().toLocaleLowerCase('de');
-        if (
-          query &&
-          !`${template.name} ${template.description ?? ''}`.toLocaleLowerCase('de').includes(query)
-        )
-          return false;
-        if (targetFilter !== 'all' && template.targetType !== targetFilter) return false;
-        if (statusFilter === 'active' && template.archivedAt) return false;
-        if (statusFilter === 'archived' && !template.archivedAt) return false;
-        if (statusFilter === 'draft' && (template.status !== 'draft' || template.archivedAt)) return false;
-        if (statusFilter === 'published' && (!template.currentPublishedVersionId || template.archivedAt))
-          return false;
-        return true;
-      }),
-    [search, statusFilter, targetFilter, list.items],
-  );
-
   function openEditor(templateId: string) {
     void busy.run(templateId, async () => {
       const result = await readInBackground('work-template-detail', { templateId });
@@ -104,7 +179,7 @@ export function WorkTemplatesContent({
         showBanner({ variant: 'error', message: 'Die Arbeitsvorlage konnte nicht geladen werden.' });
         return;
       }
-      setEditing(result.data);
+      onEdit(result.data);
     });
   }
 
@@ -127,18 +202,7 @@ export function WorkTemplatesContent({
   // The dialog has already closed; the new draft shows as a dimmed row until the live view carries it.
   async function createTemplate(input: CreateTemplateInput): Promise<void> {
     const tempId = newId();
-    const draft: WorkTemplateSummary = {
-      id: tempId,
-      targetType: input.targetType,
-      archivedAt: null,
-      draftVersionId: null,
-      currentPublishedVersionId: null,
-      name: input.name.trim(),
-      description: input.description.trim() || null,
-      versionNumber: 1,
-      status: 'draft',
-      updatedAt: new Date().toISOString(),
-    };
+    const draft = optimisticTemplate(tempId, input);
     view.invalidate();
     list.insert(tempId, draft);
     const result = await runCreate(input).catch(() => null);
@@ -159,69 +223,58 @@ export function WorkTemplatesContent({
     openEditor(result.data.templateId);
   }
 
+  return { view, reload, list, busy, showBanner, openEditor, changeArchive, createTemplate };
+}
+
+function WorkTemplateList({
+  hasTemplates,
+  filtered,
+  isBusy,
+  onCreate,
+  onOpen,
+  onChangeArchive,
+}: {
+  hasTemplates: boolean;
+  filtered: OptimisticListItem<WorkTemplateSummary>[];
+  isBusy: (templateId: string) => boolean;
+  onCreate: () => void;
+  onOpen: (templateId: string) => void;
+  onChangeArchive: (template: WorkTemplateSummary) => void;
+}) {
+  if (!hasTemplates)
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="Noch keine Arbeitsvorlagen"
+        description="Lege eine Vorlage für einen wiederkehrenden Auftrag oder ein Projekt an. WerkFlow bringt keine fertigen Standardvorlagen mit."
+        action={
+          <Button onClick={onCreate}>
+            <Plus className="size-4" />
+            Erste Vorlage erstellen
+          </Button>
+        }
+      />
+    );
+  if (filtered.length === 0)
+    return (
+      <EmptyState
+        icon={ClipboardList}
+        title="Keine Arbeitsvorlagen gefunden"
+        description="Keine Arbeitsvorlage passt zu Suche und Filtern."
+      />
+    );
   return (
-    <div className="space-y-6">
-      <WorkTemplateFilters
-        search={search}
-        onSearchChange={setSearch}
-        targetFilter={targetFilter}
-        onTargetFilterChange={setTargetFilter}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-      />
-
-      <StaleRegion stale={view.isStale} onRetry={reload}>
-        {list.items.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title="Noch keine Arbeitsvorlagen"
-            description="Lege eine Vorlage für einen wiederkehrenden Auftrag oder ein Projekt an. WerkFlow bringt keine fertigen Standardvorlagen mit."
-            action={
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="size-4" />
-                Erste Vorlage erstellen
-              </Button>
-            }
-          />
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title="Keine Arbeitsvorlagen gefunden"
-            description="Keine Arbeitsvorlage passt zu Suche und Filtern."
-          />
-        ) : (
-          <div className="space-y-3">
-            {filtered.map(({ item: template, isOptimistic }) => (
-              <WorkTemplateRow
-                key={template.id}
-                template={template}
-                isOptimistic={isOptimistic}
-                pending={isOptimistic || busy.isBusy(template.id)}
-                onOpen={openEditor}
-                onChangeArchive={changeArchive}
-              />
-            ))}
-          </div>
-        )}
-      </StaleRegion>
-
-      <CreateTemplateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        onCreate={(input) => void createTemplate(input)}
-      />
-      <TemplateEditorDialog
-        detail={editing}
-        onOpenChange={(open) => {
-          if (!open) setEditing(null);
-        }}
-        inventoryLocations={inventoryLocations}
-        capabilities={capabilities}
-        onChanged={async (message) => {
-          await reload();
-          showBanner({ variant: 'success', message });
-        }}
-      />
+    <div className="space-y-3">
+      {filtered.map(({ item: template, isOptimistic }) => (
+        <WorkTemplateRow
+          key={template.id}
+          template={template}
+          isOptimistic={isOptimistic}
+          pending={isOptimistic || isBusy(template.id)}
+          onOpen={onOpen}
+          onChangeArchive={onChangeArchive}
+        />
+      ))}
     </div>
   );
 }
@@ -251,7 +304,13 @@ function WorkTemplateFilters({
           aria-label="Arbeitsvorlagen suchen"
         />
       </Field>
-      <Select value={targetFilter} onValueChange={(value) => onTargetFilterChange(value as TargetFilter)}>
+      <Select
+        value={targetFilter}
+        onValueChange={(value) => {
+          const filter = TARGET_FILTERS.find((candidate) => candidate === value);
+          if (filter) onTargetFilterChange(filter);
+        }}
+      >
         <SelectTrigger aria-label="Ziel filtern">
           <SelectValue />
         </SelectTrigger>
@@ -261,7 +320,13 @@ function WorkTemplateFilters({
           <SelectItem value="project">Nur Projekte</SelectItem>
         </SelectContent>
       </Select>
-      <Select value={statusFilter} onValueChange={(value) => onStatusFilterChange(value as StatusFilter)}>
+      <Select
+        value={statusFilter}
+        onValueChange={(value) => {
+          const filter = STATUS_FILTERS.find((candidate) => candidate === value);
+          if (filter) onStatusFilterChange(filter);
+        }}
+      >
         <SelectTrigger aria-label="Status filtern">
           <SelectValue />
         </SelectTrigger>

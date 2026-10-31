@@ -22,7 +22,7 @@ import { Input } from '@/components/ui/input';
 import { QuantityStepper } from '@/components/ui/quantity-stepper';
 import { SelectWithCreate } from '@/components/ui/select-with-create';
 import { Textarea } from '@/components/ui/textarea';
-import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import type { InventoryLocation } from '@/lib/inventory/types';
 import type { JobEntityOption } from '@/lib/jobs/option-types';
 import { formatDecimalDe, parseDecimalInput } from '@/lib/ui/decimal';
@@ -34,6 +34,8 @@ import {
   type CreateInventoryItemInput,
   type CreatedInventoryItem,
 } from './work-template-editor-shared';
+
+type WorkTemplateMaterialLineDraft = WorkTemplateDraft['materials'][number];
 
 function createdOption(item: CreatedInventoryItem): JobEntityOption {
   return {
@@ -115,6 +117,37 @@ export function MaterialsEditor({
   );
 }
 
+/** The line with this article chosen; it takes the article's billable default when the option knows it. */
+function withArticle(
+  line: WorkTemplateMaterialLineDraft,
+  itemId: string,
+  items: JobEntityOption[],
+): WorkTemplateMaterialLineDraft {
+  return {
+    ...line,
+    itemId,
+    isBillable: items.find((option) => option.value === itemId)?.isBillable ?? line.isBillable,
+  };
+}
+
+/**
+ * The article options of one line. The catalog is searched on the server one page at a time; an
+ * article created here is known locally until the server confirms it.
+ */
+function useMaterialLineArticles(line: WorkTemplateMaterialLineDraft, createdItems: CreatedInventoryItem[]) {
+  const created = createdItems.map(createdOption);
+  const search = useJobEntityOptions(
+    { kind: 'inventory-items' },
+    line.itemId && !createdItems.some((item) => item.id === line.itemId) ? [line.itemId] : [],
+  );
+  const items = [
+    ...search.options,
+    ...created.filter((option) => !search.options.some((known) => known.value === option.value)),
+  ];
+  const chosen = items.find((option) => option.value === line.itemId);
+  return { search, items, chosen };
+}
+
 function WorkTemplateMaterialLine({
   line,
   pending,
@@ -126,7 +159,7 @@ function WorkTemplateMaterialLine({
   inventoryLocations,
   onCreateItem,
 }: {
-  line: WorkTemplateDraft['materials'][number];
+  line: WorkTemplateMaterialLineDraft;
   pending: boolean;
   draft: WorkTemplateDraft;
   editable: boolean;
@@ -136,18 +169,13 @@ function WorkTemplateMaterialLine({
   inventoryLocations: InventoryLocation[];
   onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void;
 }) {
-  // The catalog is searched on the server one page at a time; an article
-  // created here is known locally until the server confirms it.
-  const created = createdItems.map(createdOption);
-  const search = useJobEntityOptions(
-    { kind: 'inventory-items' },
-    line.itemId && !createdItems.some((item) => item.id === line.itemId) ? [line.itemId] : [],
-  );
-  const items = [
-    ...search.options,
-    ...created.filter((option) => !search.options.some((known) => known.value === option.value)),
-  ];
-  const chosen = items.find((option) => option.value === line.itemId);
+  const { search, items, chosen } = useMaterialLineArticles(line, createdItems);
+  function updateLine(update: (item: WorkTemplateMaterialLineDraft) => WorkTemplateMaterialLineDraft) {
+    onChange({
+      ...draft,
+      materials: draft.materials.map((item) => (item.id === line.id ? update(item) : item)),
+    });
+  }
   return (
     <Card
       className={cn('gap-3 py-4', pending && 'opacity-70')}
@@ -156,129 +184,178 @@ function WorkTemplateMaterialLine({
       data-row-id={line.id}
     >
       <CardContent className="grid gap-3 sm:grid-cols-2">
-        <Field
-          label={
-            <span className="inline-flex items-center gap-2">
-              Artikel
-              <InlinePending active={pending} label="Artikel wird erstellt" />
-            </span>
-          }
-          htmlFor={`material-item-${line.id}`}
-        >
-          <SelectWithCreate
-            id={`material-item-${line.id}`}
-            items={items}
-            getOption={(item) => item}
-            onSearchChange={search.onSearchChange}
-            loading={search.loading}
-            loadFailure={search.loadFailure}
-            onLoadMore={search.onLoadMore}
-            value={line.itemId}
-            onValueChange={(value) =>
-              onChange({
-                ...draft,
-                materials: draft.materials.map((item) =>
-                  item.id === line.id
-                    ? {
-                        ...item,
-                        itemId: value,
-                        isBillable:
-                          items.find((option) => option.value === value)?.isBillable ?? item.isBillable,
-                      }
-                    : item,
-                ),
-              })
-            }
-            createLabel="Neuen Artikel erstellen"
-            disabled={!editable}
-            renderCreateDialog={({ open, onOpenChange }) => (
-              <CreateMaterialDialog
-                open={open}
-                onOpenChange={onOpenChange}
-                onSubmit={(input) => onCreateItem(line.id, input)}
-              />
-            )}
-          />
-        </Field>
-        <Field label="Bevorzugtes Lager" htmlFor={`material-location-${line.id}`}>
-          <LocationSelectWithCreate
-            id={`material-location-${line.id}`}
-            locations={inventoryLocations}
-            value={line.preferredLocationId ?? ''}
-            onValueChange={(value) =>
-              onPatch((current) => ({
-                ...current,
-                materials: current.materials.map((item) =>
-                  item.id === line.id ? { ...item, preferredLocationId: value || null } : item,
-                ),
-              }))
-            }
-            allowNone
-            disabled={!editable}
-          />
-        </Field>
+        <MaterialArticleField
+          line={line}
+          pending={pending}
+          editable={editable}
+          items={items}
+          search={search}
+          onSelect={(value) => updateLine((item) => withArticle(item, value, items))}
+          onCreateItem={onCreateItem}
+        />
+        <MaterialLocationField
+          line={line}
+          editable={editable}
+          inventoryLocations={inventoryLocations}
+          onPatch={onPatch}
+        />
         <Field label="Geplante Menge" htmlFor={`quantity-${line.id}`}>
           <PlannedQuantityStepper
             id={`quantity-${line.id}`}
             quantity={line.plannedQuantity}
             disabled={!editable}
-            onQuantityChange={(plannedQuantity) =>
-              onChange({
-                ...draft,
-                materials: draft.materials.map((item) =>
-                  item.id === line.id ? { ...item, plannedQuantity } : item,
-                ),
-              })
-            }
+            onQuantityChange={(plannedQuantity) => updateLine((item) => ({ ...item, plannedQuantity }))}
             unitLabel={chosen?.unit}
           />
         </Field>
-        <div className="flex items-end justify-between gap-3">
-          <label className="flex h-11 items-center gap-2">
-            <Checkbox
-              checked={line.isBillable}
-              disabled={!editable}
-              onCheckedChange={(checked) =>
-                onChange({
-                  ...draft,
-                  materials: draft.materials.map((item) =>
-                    item.id === line.id ? { ...item, isBillable: checked === true } : item,
-                  ),
-                })
-              }
-            />
-            Abrechenbar
-          </label>
-          {editable && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={() =>
-                onChange({ ...draft, materials: draft.materials.filter((item) => item.id !== line.id) })
-              }
-              aria-label="Material löschen"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          )}
-        </div>
-        <Field label="Notiz" htmlFor={`material-notes-${line.id}`} className="sm:col-span-2">
-          <Textarea
-            value={line.notes ?? ''}
-            disabled={!editable}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                materials: draft.materials.map((item) =>
-                  item.id === line.id ? { ...item, notes: event.target.value || null } : item,
-                ),
-              })
-            }
-          />
-        </Field>
+        <MaterialLineActions
+          isBillable={line.isBillable}
+          editable={editable}
+          onBillableChange={(isBillable) => updateLine((item) => ({ ...item, isBillable }))}
+          onRemove={() =>
+            onChange({ ...draft, materials: draft.materials.filter((item) => item.id !== line.id) })
+          }
+        />
+        <MaterialNotesField
+          line={line}
+          editable={editable}
+          onNotesChange={(notes) => updateLine((item) => ({ ...item, notes }))}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+function MaterialArticleField({
+  line,
+  pending,
+  editable,
+  items,
+  search,
+  onSelect,
+  onCreateItem,
+}: {
+  line: WorkTemplateMaterialLineDraft;
+  pending: boolean;
+  editable: boolean;
+  items: JobEntityOption[];
+  search: JobEntityOptionsState;
+  onSelect: (itemId: string) => void;
+  onCreateItem: (lineId: string, input: CreateInventoryItemInput) => void;
+}) {
+  return (
+    <Field
+      label={
+        <span className="inline-flex items-center gap-2">
+          Artikel
+          <InlinePending active={pending} label="Artikel wird erstellt" />
+        </span>
+      }
+      htmlFor={`material-item-${line.id}`}
+    >
+      <SelectWithCreate
+        id={`material-item-${line.id}`}
+        items={items}
+        getOption={(item) => item}
+        onSearchChange={search.onSearchChange}
+        loading={search.loading}
+        loadFailure={search.loadFailure}
+        onLoadMore={search.onLoadMore}
+        value={line.itemId}
+        onValueChange={onSelect}
+        createLabel="Neuen Artikel erstellen"
+        disabled={!editable}
+        renderCreateDialog={({ open, onOpenChange }) => (
+          <CreateMaterialDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            onSubmit={(input) => onCreateItem(line.id, input)}
+          />
+        )}
+      />
+    </Field>
+  );
+}
+
+function MaterialLocationField({
+  line,
+  editable,
+  inventoryLocations,
+  onPatch,
+}: {
+  line: WorkTemplateMaterialLineDraft;
+  editable: boolean;
+  inventoryLocations: InventoryLocation[];
+  onPatch: (patch: (current: WorkTemplateDraft) => WorkTemplateDraft) => void;
+}) {
+  return (
+    <Field label="Bevorzugtes Lager" htmlFor={`material-location-${line.id}`}>
+      <LocationSelectWithCreate
+        id={`material-location-${line.id}`}
+        locations={inventoryLocations}
+        value={line.preferredLocationId ?? ''}
+        onValueChange={(value) =>
+          onPatch((current) => ({
+            ...current,
+            materials: current.materials.map((item) =>
+              item.id === line.id ? { ...item, preferredLocationId: value || null } : item,
+            ),
+          }))
+        }
+        allowNone
+        disabled={!editable}
+      />
+    </Field>
+  );
+}
+
+function MaterialLineActions({
+  isBillable,
+  editable,
+  onBillableChange,
+  onRemove,
+}: {
+  isBillable: boolean;
+  editable: boolean;
+  onBillableChange: (isBillable: boolean) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-end justify-between gap-3">
+      <label className="flex h-11 items-center gap-2">
+        <Checkbox
+          checked={isBillable}
+          disabled={!editable}
+          onCheckedChange={(checked) => onBillableChange(checked === true)}
+        />
+        Abrechenbar
+      </label>
+      {editable && (
+        <Button type="button" size="icon" variant="ghost" onClick={onRemove} aria-label="Material löschen">
+          <Trash2 className="size-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function MaterialNotesField({
+  line,
+  editable,
+  onNotesChange,
+}: {
+  line: WorkTemplateMaterialLineDraft;
+  editable: boolean;
+  onNotesChange: (notes: string | null) => void;
+}) {
+  return (
+    <Field label="Notiz" htmlFor={`material-notes-${line.id}`} className="sm:col-span-2">
+      <Textarea
+        value={line.notes ?? ''}
+        disabled={!editable}
+        onChange={(event) => onNotesChange(event.target.value || null)}
+      />
+    </Field>
   );
 }
 

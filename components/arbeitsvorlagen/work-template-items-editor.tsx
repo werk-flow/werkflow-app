@@ -11,11 +11,52 @@ import { Label } from '@/components/ui/label';
 import { SearchableMultiSelect } from '@/components/ui/searchable-select';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { WorkTemplateDraft } from '@/lib/work-templates/types';
+import { DOCUMENT_CATEGORIES } from '@/lib/documents/types';
+import {
+  WORK_TEMPLATE_ITEM_KINDS,
+  WORK_TEMPLATE_REQUIREMENT_STATES,
+  type WorkTemplateDraft,
+} from '@/lib/work-templates/types';
 
 import { move, newId } from './work-template-editor-shared';
 
 type WorkTemplateItemDraft = WorkTemplateDraft['items'][number];
+type WorkTemplateEvidenceDraft = WorkTemplateDraft['evidence'][number];
+
+/** The draft without the item and the evidence and dependencies that name it. */
+function withoutItem(draft: WorkTemplateDraft, id: string): WorkTemplateDraft {
+  return {
+    ...draft,
+    items: draft.items.filter((item) => item.id !== id),
+    evidence: draft.evidence.filter((item) => item.templateItemId !== id),
+    dependencies: draft.dependencies.filter(
+      (item) => item.predecessorItemId !== id && item.dependentItemId !== id,
+    ),
+  };
+}
+
+/** The draft with exactly these predecessors for one item; a kept dependency keeps its id. */
+function withPredecessors(
+  draft: WorkTemplateDraft,
+  dependentItemId: string,
+  predecessorItemIds: string[],
+): WorkTemplateDraft {
+  const existing = new Map(
+    draft.dependencies
+      .filter((entry) => entry.dependentItemId === dependentItemId)
+      .map((entry) => [entry.predecessorItemId, entry]),
+  );
+  return {
+    ...draft,
+    dependencies: [
+      ...draft.dependencies.filter((entry) => entry.dependentItemId !== dependentItemId),
+      ...predecessorItemIds.map(
+        (predecessorItemId) =>
+          existing.get(predecessorItemId) ?? { id: newId(), predecessorItemId, dependentItemId },
+      ),
+    ],
+  };
+}
 
 export function ItemsEditor({
   draft,
@@ -51,31 +92,10 @@ export function ItemsEditor({
     });
   }
   function removeItem(id: string) {
-    onChange({
-      ...draft,
-      items: draft.items.filter((item) => item.id !== id),
-      evidence: draft.evidence.filter((item) => item.templateItemId !== id),
-      dependencies: draft.dependencies.filter(
-        (item) => item.predecessorItemId !== id && item.dependentItemId !== id,
-      ),
-    });
+    onChange(withoutItem(draft, id));
   }
   function replacePredecessors(dependentItemId: string, predecessorItemIds: string[]): void {
-    const existing = new Map(
-      draft.dependencies
-        .filter((entry) => entry.dependentItemId === dependentItemId)
-        .map((entry) => [entry.predecessorItemId, entry]),
-    );
-    onChange({
-      ...draft,
-      dependencies: [
-        ...draft.dependencies.filter((entry) => entry.dependentItemId !== dependentItemId),
-        ...predecessorItemIds.map(
-          (predecessorItemId) =>
-            existing.get(predecessorItemId) ?? { id: newId(), predecessorItemId, dependentItemId },
-        ),
-      ],
-    });
+    onChange(withPredecessors(draft, dependentItemId, predecessorItemIds));
   }
   return (
     <section className="space-y-3">
@@ -132,9 +152,6 @@ function WorkTemplateItemCard({
   onRemoveItem: (id: string) => void;
   onReplacePredecessors: (dependentItemId: string, predecessorItemIds: string[]) => void;
 }) {
-  const predecessorIds = draft.dependencies
-    .filter((entry) => entry.dependentItemId === item.id)
-    .map((entry) => entry.predecessorItemId);
   return (
     <Card className="gap-3 py-4" data-testid="work-template-item" data-row-id={item.id}>
       <CardContent className="space-y-3">
@@ -146,73 +163,18 @@ function WorkTemplateItemCard({
               onChange={(event) => patchItem(index, { content: event.target.value })}
             />
           </Field>
-          <Field label="Art" htmlFor={`kind-${item.id}`}>
-            <Select
-              value={item.itemKind}
-              disabled={!editable}
-              onValueChange={(value) => patchItem(index, { itemKind: value as 'task' | 'checklist' })}
-            >
-              <SelectTrigger id={`kind-${item.id}`} aria-label={`Art für ${item.content || 'Eintrag'}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="task">Aufgabe</SelectItem>
-                <SelectItem value="checklist">Checkliste</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Verbindlichkeit" htmlFor={`requirement-${item.id}`}>
-            <Select
-              value={item.requirementState}
-              disabled={!editable}
-              onValueChange={(value) =>
-                patchItem(index, { requirementState: value as 'required' | 'optional' })
-              }
-            >
-              <SelectTrigger
-                id={`requirement-${item.id}`}
-                aria-label={`Verbindlichkeit für ${item.content || 'Eintrag'}`}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="required">Erforderlich</SelectItem>
-                <SelectItem value="optional">Optional</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
+          <WorkTemplateItemClassification
+            item={item}
+            editable={editable}
+            onPatch={(patch) => patchItem(index, patch)}
+          />
           {editable && (
-            <div className="flex items-end gap-1">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                disabled={index === 0}
-                onClick={() => onChange({ ...draft, items: move(draft.items, index, -1) })}
-                aria-label="Eintrag nach oben"
-              >
-                <ArrowUp className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                disabled={index === draft.items.length - 1}
-                onClick={() => onChange({ ...draft, items: move(draft.items, index, 1) })}
-                aria-label="Eintrag nach unten"
-              >
-                <ArrowDown className="size-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                onClick={() => removeItem(item.id)}
-                aria-label="Eintrag löschen"
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
+            <WorkTemplateItemOrderButtons
+              isFirst={index === 0}
+              isLast={index === draft.items.length - 1}
+              onMove={(direction) => onChange({ ...draft, items: move(draft.items, index, direction) })}
+              onRemove={() => removeItem(item.id)}
+            />
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -224,20 +186,12 @@ function WorkTemplateItemCard({
               placeholder="z. B. Inbetriebnahme"
             />
           </Field>
-          <Field label="Voraussetzungen">
-            <SearchableMultiSelect
-              ariaLabel={`Voraussetzungen für ${item.content || 'Eintrag'}`}
-              options={draft.items
-                .filter((other) => other.id !== item.id)
-                .map((other) => ({ value: other.id, label: other.content || 'Unbenannter Eintrag' }))}
-              selectedIds={predecessorIds}
-              onSelectionChange={(ids) => replacePredecessors(item.id, ids)}
-              placeholder="Keine Voraussetzungen"
-              searchPlaceholder="Eintrag suchen…"
-              emptyMessage="Kein anderer Eintrag"
-              disabled={!editable}
-            />
-          </Field>
+          <WorkTemplateItemPredecessorsField
+            item={item}
+            draft={draft}
+            editable={editable}
+            onReplacePredecessors={replacePredecessors}
+          />
         </div>
         <Field label="Hinweise" htmlFor={`notes-${item.id}`}>
           <Textarea
@@ -249,6 +203,134 @@ function WorkTemplateItemCard({
         <WorkTemplateEvidenceEditor item={item} draft={draft} editable={editable} onChange={onChange} />
       </CardContent>
     </Card>
+  );
+}
+
+function WorkTemplateItemPredecessorsField({
+  item,
+  draft,
+  editable,
+  onReplacePredecessors: replacePredecessors,
+}: {
+  item: WorkTemplateItemDraft;
+  draft: WorkTemplateDraft;
+  editable: boolean;
+  onReplacePredecessors: (dependentItemId: string, predecessorItemIds: string[]) => void;
+}) {
+  const predecessorIds = draft.dependencies
+    .filter((entry) => entry.dependentItemId === item.id)
+    .map((entry) => entry.predecessorItemId);
+  return (
+    <Field label="Voraussetzungen">
+      <SearchableMultiSelect
+        ariaLabel={`Voraussetzungen für ${item.content || 'Eintrag'}`}
+        options={draft.items
+          .filter((other) => other.id !== item.id)
+          .map((other) => ({ value: other.id, label: other.content || 'Unbenannter Eintrag' }))}
+        selectedIds={predecessorIds}
+        onSelectionChange={(ids) => replacePredecessors(item.id, ids)}
+        placeholder="Keine Voraussetzungen"
+        searchPlaceholder="Eintrag suchen…"
+        emptyMessage="Kein anderer Eintrag"
+        disabled={!editable}
+      />
+    </Field>
+  );
+}
+
+function WorkTemplateItemClassification({
+  item,
+  editable,
+  onPatch,
+}: {
+  item: WorkTemplateItemDraft;
+  editable: boolean;
+  onPatch: (patch: Partial<WorkTemplateItemDraft>) => void;
+}) {
+  return (
+    <>
+      <Field label="Art" htmlFor={`kind-${item.id}`}>
+        <Select
+          value={item.itemKind}
+          disabled={!editable}
+          onValueChange={(value) => {
+            const itemKind = WORK_TEMPLATE_ITEM_KINDS.find((candidate) => candidate === value);
+            if (itemKind) onPatch({ itemKind });
+          }}
+        >
+          <SelectTrigger id={`kind-${item.id}`} aria-label={`Art für ${item.content || 'Eintrag'}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="task">Aufgabe</SelectItem>
+            <SelectItem value="checklist">Checkliste</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Verbindlichkeit" htmlFor={`requirement-${item.id}`}>
+        <Select
+          value={item.requirementState}
+          disabled={!editable}
+          onValueChange={(value) => {
+            const requirementState = WORK_TEMPLATE_REQUIREMENT_STATES.find(
+              (candidate) => candidate === value,
+            );
+            if (requirementState) onPatch({ requirementState });
+          }}
+        >
+          <SelectTrigger
+            id={`requirement-${item.id}`}
+            aria-label={`Verbindlichkeit für ${item.content || 'Eintrag'}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="required">Erforderlich</SelectItem>
+            <SelectItem value="optional">Optional</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+    </>
+  );
+}
+
+function WorkTemplateItemOrderButtons({
+  isFirst,
+  isLast,
+  onMove,
+  onRemove,
+}: {
+  isFirst: boolean;
+  isLast: boolean;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="flex items-end gap-1">
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        disabled={isFirst}
+        onClick={() => onMove(-1)}
+        aria-label="Eintrag nach oben"
+      >
+        <ArrowUp className="size-4" />
+      </Button>
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        disabled={isLast}
+        onClick={() => onMove(1)}
+        aria-label="Eintrag nach unten"
+      >
+        <ArrowDown className="size-4" />
+      </Button>
+      <Button type="button" size="icon" variant="ghost" onClick={onRemove} aria-label="Eintrag löschen">
+        <Trash2 className="size-4" />
+      </Button>
+    </div>
   );
 }
 
@@ -295,65 +377,80 @@ function WorkTemplateEvidenceEditor({
         )}
       </div>
       {evidence.map((entry) => (
-        <div key={entry.id} className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
-          <Input
-            aria-label="Nachweisbeschreibung"
-            value={entry.description}
-            disabled={!editable}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                evidence: draft.evidence.map((current) =>
-                  current.id === entry.id ? { ...current, description: event.target.value } : current,
-                ),
-              })
-            }
-            placeholder="z. B. Foto der Dichtheitsprüfung"
-          />
-          <Select
-            value={entry.documentCategory}
-            disabled={!editable}
-            onValueChange={(value) =>
-              onChange({
-                ...draft,
-                evidence: draft.evidence.map((current) =>
-                  current.id === entry.id
-                    ? { ...current, documentCategory: value as typeof entry.documentCategory }
-                    : current,
-                ),
-              })
-            }
-          >
-            <SelectTrigger aria-label="Dokumentkategorie">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="photo">Foto</SelectItem>
-              <SelectItem value="report">Bericht</SelectItem>
-              <SelectItem value="contract">Vertrag</SelectItem>
-              <SelectItem value="offer">Angebot</SelectItem>
-              <SelectItem value="invoice">Rechnung</SelectItem>
-              <SelectItem value="other">Sonstiges</SelectItem>
-            </SelectContent>
-          </Select>
-          {editable && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={() =>
-                onChange({
-                  ...draft,
-                  evidence: draft.evidence.filter((current) => current.id !== entry.id),
-                })
-              }
-              aria-label="Nachweiserwartung löschen"
-            >
-              <Trash2 className="size-4" />
-            </Button>
-          )}
-        </div>
+        <WorkTemplateEvidenceRow
+          key={entry.id}
+          entry={entry}
+          draft={draft}
+          editable={editable}
+          onChange={onChange}
+        />
       ))}
+    </div>
+  );
+}
+
+function WorkTemplateEvidenceRow({
+  entry,
+  draft,
+  editable,
+  onChange,
+}: {
+  entry: WorkTemplateEvidenceDraft;
+  draft: WorkTemplateDraft;
+  editable: boolean;
+  onChange: (draft: WorkTemplateDraft) => void;
+}) {
+  function updateEntry(update: (current: WorkTemplateEvidenceDraft) => WorkTemplateEvidenceDraft) {
+    onChange({
+      ...draft,
+      evidence: draft.evidence.map((current) => (current.id === entry.id ? update(current) : current)),
+    });
+  }
+  return (
+    <div className="grid gap-2 sm:grid-cols-[1fr_160px_auto]">
+      <Input
+        aria-label="Nachweisbeschreibung"
+        value={entry.description}
+        disabled={!editable}
+        onChange={(event) => updateEntry((current) => ({ ...current, description: event.target.value }))}
+        placeholder="z. B. Foto der Dichtheitsprüfung"
+      />
+      <Select
+        value={entry.documentCategory}
+        disabled={!editable}
+        onValueChange={(value) => {
+          const documentCategory = DOCUMENT_CATEGORIES.find((candidate) => candidate === value);
+          if (documentCategory) updateEntry((current) => ({ ...current, documentCategory }));
+        }}
+      >
+        <SelectTrigger aria-label="Dokumentkategorie">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="photo">Foto</SelectItem>
+          <SelectItem value="report">Bericht</SelectItem>
+          <SelectItem value="contract">Vertrag</SelectItem>
+          <SelectItem value="offer">Angebot</SelectItem>
+          <SelectItem value="invoice">Rechnung</SelectItem>
+          <SelectItem value="other">Sonstiges</SelectItem>
+        </SelectContent>
+      </Select>
+      {editable && (
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          onClick={() =>
+            onChange({
+              ...draft,
+              evidence: draft.evidence.filter((current) => current.id !== entry.id),
+            })
+          }
+          aria-label="Nachweiserwartung löschen"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      )}
     </div>
   );
 }
