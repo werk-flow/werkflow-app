@@ -24,6 +24,31 @@ import {
 } from './inventory-item-form-fields';
 import { parseDecimalInput } from '@/lib/ui/decimal';
 
+type ItemDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  form: ItemFormState;
+  setForm: (form: ItemFormState) => void;
+  categories: InventoryCategory[];
+  suppliers: Array<{ id: string; name: string }>;
+  locations: InventoryLocation[];
+  isSaving: boolean;
+  error: string | null;
+  onSave: () => void;
+};
+
+/** The item form's errors, keyed by control id in visual order. */
+function itemFieldErrors(form: ItemFormState, initialQuantity: number) {
+  return {
+    'inventory-item-name': form.name.trim() ? undefined : 'Bitte gib einen Namen ein.',
+    'inventory-item-initial-location':
+      !form.id && initialQuantity > 0 && !form.initialLocationId
+        ? 'Wähle ein Lager für den Startbestand.'
+        : undefined,
+    ...getItemNumberFieldErrors(form),
+  };
+}
+
 export function ItemDialog({
   open,
   onOpenChange,
@@ -35,18 +60,7 @@ export function ItemDialog({
   isSaving,
   error,
   onSave,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  form: ItemFormState;
-  setForm: (form: ItemFormState) => void;
-  categories: InventoryCategory[];
-  suppliers: Array<{ id: string; name: string }>;
-  locations: InventoryLocation[];
-  isSaving: boolean;
-  error: string | null;
-  onSave: () => void;
-}) {
+}: ItemDialogProps) {
   const initialQuantity = parseDecimalInput(form.initialQuantity);
   const [attempted, setAttempted] = useState(false);
   // A reopened dialog starts without the previous attempt's errors (adjust state on prop change).
@@ -55,14 +69,7 @@ export function ItemDialog({
     setWasOpen(open);
     if (open) setAttempted(false);
   }
-  const fieldErrors = {
-    'inventory-item-name': form.name.trim() ? undefined : 'Bitte gib einen Namen ein.',
-    'inventory-item-initial-location':
-      !form.id && initialQuantity > 0 && !form.initialLocationId
-        ? 'Wähle ein Lager für den Startbestand.'
-        : undefined,
-    ...getItemNumberFieldErrors(form),
-  };
+  const fieldErrors = itemFieldErrors(form, initialQuantity);
   const shownErrors: Partial<typeof fieldErrors> = attempted ? fieldErrors : {};
 
   return (
