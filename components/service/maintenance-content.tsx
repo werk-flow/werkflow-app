@@ -88,139 +88,151 @@ function isMaintenanceList(value: string): value is MaintenanceList {
   return Object.hasOwn(MAINTENANCE_PAGE_PARAMS, value);
 }
 
-/** One committed query: its live read, the three lists with their page controls, and the dialogs. */
-function MaintenanceWorkspaceView({
-  initial,
-  catalogs,
-  query,
-  tab,
-  onTabChange,
-  busy,
-  onPageChange,
-}: {
-  initial: MaintenanceWorkspace;
-  catalogs: MaintenanceCatalogs | null;
+type MaintenanceCoverage = MaintenanceWorkspace['coverages'][number];
+
+/** The record each workspace dialog is open for, or null while it is closed. */
+function useMaintenanceDialogTargets() {
+  const [coverageDocuments, setCoverageDocuments] = useState<MaintenanceCoverage | null>(null);
+  const [coverageFollowUp, setCoverageFollowUp] = useState<MaintenanceCoverage | null>(null);
+  const [editPlan, setEditPlan] = useState<MaintenancePlanItem | null>(null);
+  const [planAction, setPlanAction] = useState<PlanAction | null>(null);
+  const [dueAction, setDueAction] = useState<DueAction | null>(null);
+  return {
+    coverageDocuments,
+    setCoverageDocuments,
+    coverageFollowUp,
+    setCoverageFollowUp,
+    editPlan,
+    setEditPlan,
+    planAction,
+    setPlanAction,
+    dueAction,
+    setDueAction,
+  };
+}
+
+type MaintenanceDialogTargets = ReturnType<typeof useMaintenanceDialogTargets>;
+
+type MaintenanceTabsProps = {
+  workspace: MaintenanceWorkspace;
   query: MaintenanceWorkspaceQuery;
   tab: MaintenanceList;
   onTabChange: (tab: MaintenanceList) => void;
   busy: boolean;
   onPageChange: (list: MaintenanceList, page: number) => void;
-}): ReactElement {
-  const { activeOrgId } = useOrganization();
-  const [coverageDocuments, setCoverageDocuments] = useState<
-    MaintenanceWorkspace['coverages'][number] | null
-  >(null);
-  const [coverageFollowUp, setCoverageFollowUp] = useState<MaintenanceWorkspace['coverages'][number] | null>(
-    null,
-  );
-  const [editPlan, setEditPlan] = useState<MaintenancePlanItem | null>(null);
-  const [planAction, setPlanAction] = useState<PlanAction | null>(null);
-  const [dueAction, setDueAction] = useState<DueAction | null>(null);
-  // Reads over GET, outside the Server Action queue the dialogs' saves use,
-  // through the reader of the first render.
-  const live = useLiveView({
-    tables: ['maintenance_coverages', 'maintenance_plans', 'maintenance_due_work'],
-    initialData: initial,
-    coalesceWhileReading: true,
-    read: async ({ signal }) => {
-      if (!activeOrgId) return { ok: false as const };
-      const result = await readInBackground(
-        'maintenance-workspace',
-        { ...query, organizationId: activeOrgId },
-        signal,
-      );
-      return result.success
-        ? { ok: true as const, data: result.workspace }
-        : { ok: false as const, error: result.error };
-    },
-  });
-  const workspace = live.data ?? initial;
-  const { showBanner } = useBanner();
-  // Row- and card-scoped settle window after a dialog action: the touched
-  // plan or due row shows the indicator until the live read lands.
-  const settling = useBusyIds();
-  const settleOn = (id: string) => () => void settling.run(id, live.refresh);
-  const liveRefresh = live.refresh;
-  const liveInvalidate = live.invalidate;
-  const { pendingPlans, pendingCoverages } = useMaintenancePendingCreates({
-    workspace,
-    liveRefresh,
-    liveInvalidate,
-    showBanner,
-  });
-  const { totals } = workspace;
+  isBusy: (id: string) => boolean;
+  pendingPlans: ReturnType<typeof useMaintenancePendingCreates>['pendingPlans'];
+  pendingCoverages: ReturnType<typeof useMaintenancePendingCreates>['pendingCoverages'];
+  targets: MaintenanceDialogTargets;
+};
 
+function MaintenanceTabList({ totals }: { totals: MaintenanceWorkspace['totals'] }): ReactElement {
+  return (
+    <TabsList aria-label="Wartungsbereiche">
+      <TabsTrigger value="due">
+        Fälligkeiten <span className="text-xs text-muted-foreground">{totals.due.total}</span>
+      </TabsTrigger>
+      <TabsTrigger value="plans">
+        Pläne <span className="text-xs text-muted-foreground">{totals.plans.total}</span>
+      </TabsTrigger>
+      <TabsTrigger value="coverages">
+        Abdeckungen <span className="text-xs text-muted-foreground">{totals.coverages.total}</span>
+      </TabsTrigger>
+    </TabsList>
+  );
+}
+
+/** The three lists, each with its count in the tab and its page controls. */
+function MaintenanceTabs({
+  workspace,
+  query,
+  tab,
+  onTabChange,
+  busy,
+  onPageChange,
+  isBusy,
+  pendingPlans,
+  pendingCoverages,
+  targets,
+}: MaintenanceTabsProps): ReactElement {
+  const { totals } = workspace;
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        if (isMaintenanceList(value)) onTabChange(value);
+      }}
+      className="gap-4"
+    >
+      <MaintenanceTabList totals={totals} />
+      <TabsContent value="due" className="space-y-3">
+        <MaintenanceDueList
+          openDue={workspace.dueWork}
+          hasAnyDue={totals.due.hasAny}
+          isBusy={isBusy}
+          onDueActionClick={targets.setDueAction}
+        />
+        <ListPagination
+          label="Fälligkeiten"
+          page={query.duePage}
+          total={totals.due.total}
+          busy={busy}
+          onPageChange={(page) => onPageChange('due', page)}
+        />
+      </TabsContent>
+      <TabsContent value="plans" className="space-y-3">
+        <MaintenancePlanCards
+          plans={workspace.plans}
+          hasAnyPlan={totals.plans.hasAny}
+          pendingPlans={pendingPlans}
+          isBusy={isBusy}
+          onEditClick={targets.setEditPlan}
+          onActionClick={targets.setPlanAction}
+        />
+        <ListPagination
+          label="Wartungspläne"
+          page={query.planPage}
+          total={totals.plans.total}
+          busy={busy}
+          onPageChange={(page) => onPageChange('plans', page)}
+        />
+      </TabsContent>
+      <TabsContent value="coverages" className="space-y-3">
+        <MaintenanceCoverageList
+          coverages={workspace.coverages}
+          hasAnyCoverage={totals.coverages.hasAny}
+          pendingCoverages={pendingCoverages}
+          onFollowUpClick={targets.setCoverageFollowUp}
+          onDocumentsClick={targets.setCoverageDocuments}
+        />
+        <ListPagination
+          label="Abdeckungen"
+          page={query.coveragePage}
+          total={totals.coverages.total}
+          busy={busy}
+          onPageChange={(page) => onPageChange('coverages', page)}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+/** The dialog of the chosen record, mounted while its target is set. */
+function MaintenanceWorkspaceDialogs({
+  targets,
+  currentActorId,
+  catalogs,
+  settleOn,
+}: {
+  targets: MaintenanceDialogTargets;
+  currentActorId: MaintenanceWorkspace['currentActorId'];
+  catalogs: MaintenanceCatalogs | null;
+  settleOn: (id: string) => () => void;
+}): ReactElement {
+  const { coverageDocuments, setCoverageDocuments, coverageFollowUp, setCoverageFollowUp } = targets;
+  const { editPlan, setEditPlan, planAction, setPlanAction, dueAction, setDueAction } = targets;
   return (
     <>
-      <StaleRegion stale={live.isStale} onRetry={live.refresh}>
-        <Tabs
-          value={tab}
-          onValueChange={(value) => {
-            if (isMaintenanceList(value)) onTabChange(value);
-          }}
-          className="gap-4"
-        >
-          <TabsList aria-label="Wartungsbereiche">
-            <TabsTrigger value="due">
-              Fälligkeiten <span className="text-xs text-muted-foreground">{totals.due.total}</span>
-            </TabsTrigger>
-            <TabsTrigger value="plans">
-              Pläne <span className="text-xs text-muted-foreground">{totals.plans.total}</span>
-            </TabsTrigger>
-            <TabsTrigger value="coverages">
-              Abdeckungen <span className="text-xs text-muted-foreground">{totals.coverages.total}</span>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="due" className="space-y-3">
-            <MaintenanceDueList
-              openDue={workspace.dueWork}
-              hasAnyDue={totals.due.hasAny}
-              isBusy={settling.isBusy}
-              onDueActionClick={setDueAction}
-            />
-            <ListPagination
-              label="Fälligkeiten"
-              page={query.duePage}
-              total={totals.due.total}
-              busy={busy}
-              onPageChange={(page) => onPageChange('due', page)}
-            />
-          </TabsContent>
-          <TabsContent value="plans" className="space-y-3">
-            <MaintenancePlanCards
-              plans={workspace.plans}
-              hasAnyPlan={totals.plans.hasAny}
-              pendingPlans={pendingPlans}
-              isBusy={settling.isBusy}
-              onEditClick={setEditPlan}
-              onActionClick={setPlanAction}
-            />
-            <ListPagination
-              label="Wartungspläne"
-              page={query.planPage}
-              total={totals.plans.total}
-              busy={busy}
-              onPageChange={(page) => onPageChange('plans', page)}
-            />
-          </TabsContent>
-          <TabsContent value="coverages" className="space-y-3">
-            <MaintenanceCoverageList
-              coverages={workspace.coverages}
-              hasAnyCoverage={totals.coverages.hasAny}
-              pendingCoverages={pendingCoverages}
-              onFollowUpClick={setCoverageFollowUp}
-              onDocumentsClick={setCoverageDocuments}
-            />
-            <ListPagination
-              label="Abdeckungen"
-              page={query.coveragePage}
-              total={totals.coverages.total}
-              busy={busy}
-              onPageChange={(page) => onPageChange('coverages', page)}
-            />
-          </TabsContent>
-        </Tabs>
-      </StaleRegion>
       {coverageDocuments && (
         <MaintenanceCoverageDocumentsDialog
           open
@@ -237,7 +249,7 @@ function MaintenanceWorkspaceView({
             if (!open) setCoverageFollowUp(null);
           }}
           coverage={coverageFollowUp}
-          currentActorId={workspace.currentActorId}
+          currentActorId={currentActorId}
           owners={catalogs?.followUpOwners ?? null}
         />
       )}
@@ -274,6 +286,85 @@ function MaintenanceWorkspaceView({
           onSaved={settleOn(dueAction.due.id)}
         />
       )}
+    </>
+  );
+}
+
+/** One committed query: its live read, the three lists with their page controls, and the dialogs. */
+function MaintenanceWorkspaceView({
+  initial,
+  catalogs,
+  query,
+  tab,
+  onTabChange,
+  busy,
+  onPageChange,
+}: {
+  initial: MaintenanceWorkspace;
+  catalogs: MaintenanceCatalogs | null;
+  query: MaintenanceWorkspaceQuery;
+  tab: MaintenanceList;
+  onTabChange: (tab: MaintenanceList) => void;
+  busy: boolean;
+  onPageChange: (list: MaintenanceList, page: number) => void;
+}): ReactElement {
+  const { activeOrgId } = useOrganization();
+  const targets = useMaintenanceDialogTargets();
+  // Reads over GET, outside the Server Action queue the dialogs' saves use,
+  // through the reader of the first render.
+  const live = useLiveView({
+    tables: ['maintenance_coverages', 'maintenance_plans', 'maintenance_due_work'],
+    initialData: initial,
+    coalesceWhileReading: true,
+    read: async ({ signal }) => {
+      if (!activeOrgId) return { ok: false as const };
+      const result = await readInBackground(
+        'maintenance-workspace',
+        { ...query, organizationId: activeOrgId },
+        signal,
+      );
+      return result.success
+        ? { ok: true as const, data: result.workspace }
+        : { ok: false as const, error: result.error };
+    },
+  });
+  const workspace = live.data ?? initial;
+  const { showBanner } = useBanner();
+  // Row- and card-scoped settle window after a dialog action: the touched
+  // plan or due row shows the indicator until the live read lands.
+  const settling = useBusyIds();
+  const settleOn = (id: string) => () => void settling.run(id, live.refresh);
+  const liveRefresh = live.refresh;
+  const liveInvalidate = live.invalidate;
+  const { pendingPlans, pendingCoverages } = useMaintenancePendingCreates({
+    workspace,
+    liveRefresh,
+    liveInvalidate,
+    showBanner,
+  });
+
+  return (
+    <>
+      <StaleRegion stale={live.isStale} onRetry={live.refresh}>
+        <MaintenanceTabs
+          workspace={workspace}
+          query={query}
+          tab={tab}
+          onTabChange={onTabChange}
+          busy={busy}
+          onPageChange={onPageChange}
+          isBusy={settling.isBusy}
+          pendingPlans={pendingPlans}
+          pendingCoverages={pendingCoverages}
+          targets={targets}
+        />
+      </StaleRegion>
+      <MaintenanceWorkspaceDialogs
+        targets={targets}
+        currentActorId={workspace.currentActorId}
+        catalogs={catalogs}
+        settleOn={settleOn}
+      />
     </>
   );
 }

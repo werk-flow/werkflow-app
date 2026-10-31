@@ -93,6 +93,58 @@ export type DueAction = {
   defaultAction: 'create_visit' | 'schedule' | 'complete';
 };
 
+/** The next step of one due row, held while its last action settles. */
+function MaintenanceDueRowActions({
+  due,
+  isBusy,
+  onDueActionClick,
+}: {
+  due: MaintenanceDueItem;
+  isBusy: (id: string) => boolean;
+  onDueActionClick: (action: DueAction) => void;
+}): ReactElement {
+  return (
+    <fieldset
+      disabled={isBusy(due.id)}
+      className="flex min-w-0 flex-wrap items-center gap-2 @3xl/maintenance:justify-end"
+    >
+      <InlinePending active={isBusy(due.id)} label="Änderungen werden übernommen" />
+      {due.status === 'open' ? (
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => onDueActionClick({ due, defaultAction: 'create_visit' })}
+        >
+          Auftrag anlegen
+        </Button>
+      ) : !due.planningOccurrenceId ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => onDueActionClick({ due, defaultAction: 'schedule' })}
+        >
+          Termin planen
+        </Button>
+      ) : (
+        <Button type="button" size="sm" onClick={() => onDueActionClick({ due, defaultAction: 'complete' })}>
+          Abschließen
+        </Button>
+      )}
+      {due.status === 'visit_created' && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => onDueActionClick({ due, defaultAction: 'complete' })}
+        >
+          Weitere Aktionen
+        </Button>
+      )}
+    </fieldset>
+  );
+}
+
 export function MaintenanceDueList({
   openDue,
   hasAnyDue,
@@ -152,48 +204,7 @@ export function MaintenanceDueList({
                 {due.jobNumber ? ` · Auftrag ${due.jobNumber}` : ''}
               </span>
             </span>
-            <fieldset
-              disabled={isBusy(due.id)}
-              className="flex min-w-0 flex-wrap items-center gap-2 @3xl/maintenance:justify-end"
-            >
-              <InlinePending active={isBusy(due.id)} label="Änderungen werden übernommen" />
-              {due.status === 'open' ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => onDueActionClick({ due, defaultAction: 'create_visit' })}
-                >
-                  Auftrag anlegen
-                </Button>
-              ) : !due.planningOccurrenceId ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onDueActionClick({ due, defaultAction: 'schedule' })}
-                >
-                  Termin planen
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => onDueActionClick({ due, defaultAction: 'complete' })}
-                >
-                  Abschließen
-                </Button>
-              )}
-              {due.status === 'visit_created' && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => onDueActionClick({ due, defaultAction: 'complete' })}
-                >
-                  Weitere Aktionen
-                </Button>
-              )}
-            </fieldset>
+            <MaintenanceDueRowActions due={due} isBusy={isBusy} onDueActionClick={onDueActionClick} />
           </ListRow>
         ))}
       </div>
@@ -202,6 +213,67 @@ export function MaintenanceDueList({
 }
 
 type MaintenanceCoverage = MaintenanceWorkspace['coverages'][number];
+
+function MaintenancePendingCoverageRow({ draft }: { draft: MaintenanceCoveragePendingDraft }): ReactElement {
+  return (
+    <div
+      {...unconfirmedMarker(true)}
+      role="status"
+      aria-label="Wird gespeichert"
+      data-pending-row=""
+      className={cn(COVERAGE_ROW_CLASS, 'opacity-70')}
+    >
+      <span className="flex min-w-0 items-center gap-2 break-words">
+        <InlinePending active />
+        <span className="min-w-0">
+          <span className="block font-medium">Abdeckung wird gespeichert</span>
+          <span className="text-xs text-muted-foreground">{draft.reference ?? 'Keine Referenz'}</span>
+        </span>
+      </span>
+      <span className="min-w-0 break-words text-sm">
+        <span className="block">{draft.clientName}</span>
+        <span className="text-xs text-muted-foreground">{draft.siteName}</span>
+      </span>
+    </div>
+  );
+}
+
+function MaintenanceCoverageRow({
+  coverage,
+  onFollowUpClick,
+  onDocumentsClick,
+}: {
+  coverage: MaintenanceCoverage;
+  onFollowUpClick: (coverage: MaintenanceCoverage) => void;
+  onDocumentsClick: (coverage: MaintenanceCoverage) => void;
+}): ReactElement {
+  return (
+    <div data-testid="maintenance-coverage-row" className={COVERAGE_ROW_CLASS}>
+      <span className="min-w-0 break-words">
+        <span className="block font-medium">{coverage.coverageNumber}</span>
+        <span className="text-xs text-muted-foreground">
+          {coverage.reference ?? 'Keine Referenz'} · {MAINTENANCE_COVERAGE_STATUS_LABELS[coverage.status]}
+        </span>
+      </span>
+      <span className="min-w-0 break-words text-sm">
+        <span className="block">{coverage.clientName}</span>
+        <span className="text-xs text-muted-foreground">{coverage.siteName}</span>
+      </span>
+      <span className="min-w-0 break-words text-sm">
+        <span className="block">{MAINTENANCE_RENEWAL_SIGNAL_LABELS[coverage.renewalSignal]}</span>
+        <span className="text-xs text-muted-foreground">{formatMaintenanceDate(coverage.reviewDueDate)}</span>
+      </span>
+      <span className="flex min-w-0 flex-wrap gap-2 @3xl/maintenance:justify-end">
+        <Button type="button" size="sm" variant="outline" onClick={() => onFollowUpClick(coverage)}>
+          Wiedervorlage
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={() => onDocumentsClick(coverage)}>
+          Dokumente
+        </Button>
+      </span>
+    </div>
+  );
+}
 
 export function MaintenanceCoverageList({
   coverages,
@@ -248,55 +320,15 @@ export function MaintenanceCoverageList({
       </div>
       <div className="divide-y">
         {pendingCoverages.map((draft) => (
-          <div
-            key={draft.id}
-            {...unconfirmedMarker(true)}
-            role="status"
-            aria-label="Wird gespeichert"
-            data-pending-row=""
-            className={cn(COVERAGE_ROW_CLASS, 'opacity-70')}
-          >
-            <span className="flex min-w-0 items-center gap-2 break-words">
-              <InlinePending active />
-              <span className="min-w-0">
-                <span className="block font-medium">Abdeckung wird gespeichert</span>
-                <span className="text-xs text-muted-foreground">{draft.reference ?? 'Keine Referenz'}</span>
-              </span>
-            </span>
-            <span className="min-w-0 break-words text-sm">
-              <span className="block">{draft.clientName}</span>
-              <span className="text-xs text-muted-foreground">{draft.siteName}</span>
-            </span>
-          </div>
+          <MaintenancePendingCoverageRow key={draft.id} draft={draft} />
         ))}
         {coverages.map((coverage) => (
-          <div key={coverage.id} data-testid="maintenance-coverage-row" className={COVERAGE_ROW_CLASS}>
-            <span className="min-w-0 break-words">
-              <span className="block font-medium">{coverage.coverageNumber}</span>
-              <span className="text-xs text-muted-foreground">
-                {coverage.reference ?? 'Keine Referenz'} ·{' '}
-                {MAINTENANCE_COVERAGE_STATUS_LABELS[coverage.status]}
-              </span>
-            </span>
-            <span className="min-w-0 break-words text-sm">
-              <span className="block">{coverage.clientName}</span>
-              <span className="text-xs text-muted-foreground">{coverage.siteName}</span>
-            </span>
-            <span className="min-w-0 break-words text-sm">
-              <span className="block">{MAINTENANCE_RENEWAL_SIGNAL_LABELS[coverage.renewalSignal]}</span>
-              <span className="text-xs text-muted-foreground">
-                {formatMaintenanceDate(coverage.reviewDueDate)}
-              </span>
-            </span>
-            <span className="flex min-w-0 flex-wrap gap-2 @3xl/maintenance:justify-end">
-              <Button type="button" size="sm" variant="outline" onClick={() => onFollowUpClick(coverage)}>
-                Wiedervorlage
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => onDocumentsClick(coverage)}>
-                Dokumente
-              </Button>
-            </span>
-          </div>
+          <MaintenanceCoverageRow
+            key={coverage.id}
+            coverage={coverage}
+            onFollowUpClick={onFollowUpClick}
+            onDocumentsClick={onDocumentsClick}
+          />
         ))}
       </div>
     </div>

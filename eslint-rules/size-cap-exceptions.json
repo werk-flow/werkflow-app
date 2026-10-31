@@ -382,19 +382,6 @@
       "RealtimeProvider": 125,
       "RealtimeProvider > useEffect#1": 118
     },
-    "components/service/maintenance-content.tsx": { "MaintenanceWorkspaceView": 183 },
-    "components/service/maintenance-coverage-dialog.tsx": { "MaintenanceCoverageDialog": 151 },
-    "components/service/maintenance-coverage-follow-up-dialog.tsx": {
-      "MaintenanceCoverageFollowUpDialog": 109
-    },
-    "components/service/maintenance-due-action-dialog.tsx": { "MaintenanceDueActionDialog": 96 },
-    "components/service/maintenance-lists.tsx": { "MaintenanceDueList": 106, "MaintenanceCoverageList": 98 },
-    "components/service/maintenance-plan-action-dialog.tsx": { "MaintenancePlanActionDialog": 101 },
-    "components/service/maintenance-plan-cards.tsx": {
-      "MaintenancePlanCards": 164,
-      "MaintenancePlanCards > map#2": 94
-    },
-    "components/service/maintenance-plan-form-sections.tsx": { "MaintenancePlanScheduleFields": 97 },
     "components/service/service-case-detail-content.tsx": { "ServiceCaseDetailContent": 136 },
     "components/service/service-case-detail-dialogs.tsx": { "RelationDialog": 126, "FollowUpDialog": 108 },
     "components/service/service-case-detail-sections.tsx": { "ServiceCaseDetailSidebar": 89 },
