@@ -12,6 +12,34 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type SicknessReportCorrectionForm = ReturnType<typeof useSicknessReportCorrectionForm>;
 
+type SicknessCorrectionOutcome = {
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  setError: (error: string | null) => void;
+  onClose: (saved: boolean) => void;
+};
+
+/** Confirms a saved correction, or shows why it was refused. */
+function showCorrectionOutcome(
+  result: Awaited<ReturnType<typeof correctSicknessReport>>,
+  { showBanner, setError, onClose }: SicknessCorrectionOutcome,
+) {
+  if (result.success) {
+    showBanner({
+      variant: 'success',
+      message: 'Die Krankmeldung wurde korrigiert.',
+    });
+    onClose(true);
+  } else {
+    setError(
+      describeFailure(
+        result.error,
+        SICKNESS_ERROR_MESSAGES,
+        'Die Korrektur konnte nicht gespeichert werden.',
+      ),
+    );
+  }
+}
+
 export function useSicknessReportCorrectionForm(report: SicknessReport, onClose: (saved: boolean) => void) {
   const { showBanner } = useBanner();
   const [absenceType, setAbsenceType] = useState<SicknessAbsenceType>(report.absenceType);
@@ -57,21 +85,7 @@ export function useSicknessReportCorrectionForm(report: SicknessReport, onClose:
         dayPortion: halfDay && isSingleDay ? 'half_day' : 'full',
         reason: reason.trim(),
       });
-      if (result.success) {
-        showBanner({
-          variant: 'success',
-          message: 'Die Krankmeldung wurde korrigiert.',
-        });
-        onClose(true);
-      } else {
-        setError(
-          describeFailure(
-            result.error,
-            SICKNESS_ERROR_MESSAGES,
-            'Die Korrektur konnte nicht gespeichert werden.',
-          ),
-        );
-      }
+      showCorrectionOutcome(result, { showBanner, setError, onClose });
     } catch (submitError) {
       logError('Error correcting sickness report:', submitError);
       setError('Die Korrektur konnte nicht gespeichert werden.');

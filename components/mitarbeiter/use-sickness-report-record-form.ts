@@ -13,6 +13,36 @@ import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 export type SicknessReportRecordForm = ReturnType<typeof useSicknessReportRecordForm>;
 
+type SicknessRecordOutcome = {
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  setOverlapHint: (overlapHint: boolean) => void;
+  setError: (error: string | null) => void;
+  onClose: (saved: boolean) => void;
+};
+
+/** Confirms a recorded report, or shows why it was refused. */
+function showRecordOutcome(
+  result: Awaited<ReturnType<typeof recordSicknessForMember>>,
+  { showBanner, setOverlapHint, setError, onClose }: SicknessRecordOutcome,
+) {
+  if (result.success) {
+    showBanner({
+      variant: 'success',
+      message: 'Die Krankmeldung wurde erfasst.',
+    });
+    if (result.vacationOverlap) {
+      // Saved; the hint must be acknowledged, never raced by a timer.
+      setOverlapHint(true);
+    } else {
+      onClose(true);
+    }
+  } else {
+    setError(
+      describeFailure(result.error, SICKNESS_ERROR_MESSAGES, 'Die Meldung konnte nicht gespeichert werden.'),
+    );
+  }
+}
+
 export function useSicknessReportRecordForm(recordId: string, onClose: (saved: boolean) => void) {
   const todayIso = getBusinessTodayIso();
   const { showBanner } = useBanner();
@@ -59,26 +89,7 @@ export function useSicknessReportRecordForm(recordId: string, onClose: (saved: b
         dayPortion: halfDay && isSingleDay ? 'half_day' : 'full',
         evidenceRequired,
       });
-      if (result.success) {
-        showBanner({
-          variant: 'success',
-          message: 'Die Krankmeldung wurde erfasst.',
-        });
-        if (result.vacationOverlap) {
-          // Saved; the hint must be acknowledged, never raced by a timer.
-          setOverlapHint(true);
-        } else {
-          onClose(true);
-        }
-      } else {
-        setError(
-          describeFailure(
-            result.error,
-            SICKNESS_ERROR_MESSAGES,
-            'Die Meldung konnte nicht gespeichert werden.',
-          ),
-        );
-      }
+      showRecordOutcome(result, { showBanner, setOverlapHint, setError, onClose });
     } catch (submitError) {
       logError('Error recording sickness:', submitError);
       setError('Die Meldung konnte nicht gespeichert werden.');

@@ -12,6 +12,48 @@ import { useBusinessDayRefresh } from '@/hooks/use-business-day-refresh';
 import { getCapabilityKindLabel, type OwnQualificationProfile } from '@/lib/qualifications/types';
 import { formatBerlin } from '@/lib/utils';
 
+type OwnQualificationCardProps = OwnQualificationProfile['capabilities'][number] & {
+  today: string;
+  formatDate: (value: string) => string;
+};
+
+function OwnQualificationCard({ definition, record, today, formatDate }: OwnQualificationCardProps) {
+  const expired = Boolean(record.validUntil && record.validUntil < today);
+  const future = record.validFrom > today;
+  return (
+    <Card className="gap-2 p-4" data-testid="own-qualification-card" data-capability-name={definition.name}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-medium">{definition.name}</h3>
+          <p className="text-xs text-muted-foreground">{getCapabilityKindLabel(definition.kind)}</p>
+        </div>
+        <Badge variant={expired ? 'destructive' : future ? 'secondary' : 'outline'}>
+          {expired ? 'Abgelaufen' : future ? 'Noch nicht gültig' : 'Gültig'}
+        </Badge>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Gültig ab {formatDate(record.validFrom)}
+        {record.validUntil ? ' bis ' + formatDate(record.validUntil) : ''}
+      </p>
+      {definition.kind === 'certification' && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          <Badge variant="secondary">
+            {record.confirmationStatus === 'confirmed' ? 'Intern bestätigt' : 'Intern nicht bestätigt'}
+          </Badge>
+          <Badge variant="secondary">
+            Nachweis:{' '}
+            {record.evidenceState === 'received'
+              ? 'erhalten'
+              : record.evidenceState === 'pending'
+                ? 'ausstehend'
+                : 'nicht erforderlich'}
+          </Badge>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export function OwnQualificationOverview({ profile }: { profile: OwnQualificationProfile | null }) {
   const router = useRouter();
   const refreshAtBusinessDayChange = useCallback(() => router.refresh(), [router]);
@@ -58,51 +100,15 @@ export function OwnQualificationOverview({ profile }: { profile: OwnQualificatio
           <EmptyState size="compact" title="Noch keine Qualifikationen hinterlegt." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {profile.capabilities.map(({ definition, record }) => {
-              const expired = Boolean(record.validUntil && record.validUntil < today);
-              const future = record.validFrom > today;
-              return (
-                <Card
-                  key={record.id}
-                  className="gap-2 p-4"
-                  data-testid="own-qualification-card"
-                  data-capability-name={definition.name}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-medium">{definition.name}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {getCapabilityKindLabel(definition.kind)}
-                      </p>
-                    </div>
-                    <Badge variant={expired ? 'destructive' : future ? 'secondary' : 'outline'}>
-                      {expired ? 'Abgelaufen' : future ? 'Noch nicht gültig' : 'Gültig'}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Gültig ab {formatDate(record.validFrom)}
-                    {record.validUntil ? ' bis ' + formatDate(record.validUntil) : ''}
-                  </p>
-                  {definition.kind === 'certification' && (
-                    <div className="flex flex-wrap gap-2 text-xs">
-                      <Badge variant="secondary">
-                        {record.confirmationStatus === 'confirmed'
-                          ? 'Intern bestätigt'
-                          : 'Intern nicht bestätigt'}
-                      </Badge>
-                      <Badge variant="secondary">
-                        Nachweis:{' '}
-                        {record.evidenceState === 'received'
-                          ? 'erhalten'
-                          : record.evidenceState === 'pending'
-                            ? 'ausstehend'
-                            : 'nicht erforderlich'}
-                      </Badge>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
+            {profile.capabilities.map(({ definition, record }) => (
+              <OwnQualificationCard
+                key={record.id}
+                definition={definition}
+                record={record}
+                today={today}
+                formatDate={formatDate}
+              />
+            ))}
           </div>
         )}
       </section>

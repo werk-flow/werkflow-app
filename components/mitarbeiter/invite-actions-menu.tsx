@@ -104,32 +104,98 @@ export function InviteActionsMenu({
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
-            <MoreHorizontal className="size-4" />
-            <span className="sr-only">Aktionen öffnen</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {canCancel && (
-            <DropdownMenuItem
-              onClick={() => setShowCancelDialog(true)}
-              className="text-destructive focus:text-destructive"
-            >
-              <XCircle className="size-4 text-destructive" />
-              Stornieren
-            </DropdownMenuItem>
-          )}
-          {canDelete && (
-            <DropdownMenuItem variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-              <Trash2 className="size-4" />
-              Löschen
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <InviteActionsDropdown
+        isLoading={isLoading}
+        canCancel={canCancel}
+        canDelete={canDelete}
+        onCancel={() => setShowCancelDialog(true)}
+        onDelete={() => setShowDeleteDialog(true)}
+      />
 
+      <InviteConfirmDialogs
+        inviteEmail={inviteEmail}
+        error={error}
+        setError={setError}
+        isLoading={isLoading}
+        showCancelDialog={showCancelDialog}
+        setShowCancelDialog={setShowCancelDialog}
+        showDeleteDialog={showDeleteDialog}
+        setShowDeleteDialog={setShowDeleteDialog}
+        onCancel={handleCancel}
+        onDelete={handleDelete}
+      />
+    </>
+  );
+}
+
+type InviteActionsDropdownProps = {
+  isLoading: boolean;
+  canCancel: boolean;
+  canDelete: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+};
+
+function InviteActionsDropdown({
+  isLoading,
+  canCancel,
+  canDelete,
+  onCancel,
+  onDelete,
+}: InviteActionsDropdownProps) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button pending={isLoading} variant="ghost" size="sm" className="h-8 w-8 p-0" disabled={isLoading}>
+          <MoreHorizontal className="size-4" />
+          <span className="sr-only">Aktionen öffnen</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {canCancel && (
+          <DropdownMenuItem onClick={onCancel} className="text-destructive focus:text-destructive">
+            <XCircle className="size-4 text-destructive" />
+            Stornieren
+          </DropdownMenuItem>
+        )}
+        {canDelete && (
+          <DropdownMenuItem variant="destructive" onClick={onDelete}>
+            <Trash2 className="size-4" />
+            Löschen
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+type InviteConfirmDialogsProps = {
+  inviteEmail: string;
+  error: string | null;
+  setError: (error: string | null) => void;
+  isLoading: boolean;
+  showCancelDialog: boolean;
+  setShowCancelDialog: (open: boolean) => void;
+  showDeleteDialog: boolean;
+  setShowDeleteDialog: (open: boolean) => void;
+  onCancel: () => Promise<void>;
+  onDelete: () => Promise<void>;
+};
+
+function InviteConfirmDialogs({
+  inviteEmail,
+  error,
+  setError,
+  isLoading,
+  showCancelDialog,
+  setShowCancelDialog,
+  showDeleteDialog,
+  setShowDeleteDialog,
+  onCancel,
+  onDelete,
+}: InviteConfirmDialogsProps) {
+  return (
+    <>
       {/* Cancel Confirmation Dialog */}
       <InviteCancelConfirmDialog
         open={showCancelDialog}
@@ -140,7 +206,7 @@ export function InviteActionsMenu({
         inviteEmail={inviteEmail}
         error={error}
         isLoading={isLoading}
-        onConfirm={handleCancel}
+        onConfirm={onCancel}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -153,7 +219,7 @@ export function InviteActionsMenu({
         inviteEmail={inviteEmail}
         error={error}
         isLoading={isLoading}
-        onConfirm={handleDelete}
+        onConfirm={onDelete}
       />
     </>
   );
