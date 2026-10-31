@@ -91,26 +91,6 @@
     "components/auftraege/job-detail/use-job-detail-metadata-fields.tsx": {
       "buildJobDetailPlanningFields": 134
     },
-    "components/auftraege/lifecycle/work-lifecycle-artifact-approval-dialog.tsx": {
-      "ArtifactApprovalDependencyDialog": 104
-    },
-    "components/auftraege/lifecycle/work-lifecycle-blocker-dialog.tsx": { "WorkBlockerDialog": 85 },
-    "components/auftraege/lifecycle/work-lifecycle-blockers-section.tsx": {
-      "WorkLifecycleBlockersSection": 93
-    },
-    "components/auftraege/lifecycle/work-lifecycle-card-dialogs.tsx": { "WorkLifecycleCardDialogs": 96 },
-    "components/auftraege/lifecycle/work-lifecycle-card.tsx": {
-      "useWorkLifecycleCardState": 108,
-      "WorkLifecycleCard": 132
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependencies-section.tsx": {
-      "WorkLifecycleDependenciesSection": 90
-    },
-    "components/auftraege/lifecycle/work-lifecycle-dependency-dialog.tsx": { "WorkDependencyDialog": 125 },
-    "components/auftraege/lifecycle/work-lifecycle-transition-actions.tsx": {
-      "WorkLifecycleTransitionActions": 95
-    },
-    "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
     "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
     "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
     "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },

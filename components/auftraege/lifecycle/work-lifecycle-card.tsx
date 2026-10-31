@@ -1,15 +1,11 @@
 'use client';
 
-import { StaleRegion } from '@/components/shared/stale-region';
 import { useMemo, useState, type ReactElement } from 'react';
-import { LockKeyhole } from 'lucide-react';
 
 import { useLiveView } from '@/hooks/use-live-view';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useBanner } from '@/components/ui/banner';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { InlinePending } from '@/components/ui/inline-pending';
 import { SectionError } from '@/components/ui/section-error';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { isFieldWorkPackReadOnly } from '@/lib/jobs/field-work-pack';
@@ -17,22 +13,15 @@ import { loadDocument } from '@/lib/navigation/document-load';
 import { readInBackground } from '@/lib/data/background-read-client';
 import { transitionWorkExecution } from '@/lib/work-lifecycle/actions';
 import {
-  getAllowedWorkTransitions,
   getWorkNextAction,
   type WorkExecutionState,
   type WorkLifecycleSnapshot,
 } from '@/lib/work-lifecycle/types';
-import {
-  WorkLifecycleBlockersSection,
-  WorkLifecycleResolvedBlockers,
-} from './work-lifecycle-blockers-section';
 import { WorkLifecycleCardDialogs } from './work-lifecycle-card-dialogs';
-import { WorkLifecycleDependenciesSection } from './work-lifecycle-dependencies-section';
+import { WorkLifecycleCardSections, WorkLifecycleRemoteUpdateHint } from './work-lifecycle-card-sections';
 import type { WorkLifecycleDialogState, WorkTransitionInput } from './work-lifecycle-dialog-state';
-import { WorkLifecycleGatesAndHistory } from './work-lifecycle-gates-history';
 import { workLifecycleErrorMessage } from './work-lifecycle-messages';
-import { WorkLifecycleReadinessSection, WorkLifecycleStatusHeader } from './work-lifecycle-status';
-import { WorkLifecycleTransitionActions } from './work-lifecycle-transition-actions';
+import { WorkLifecycleStatusHeader } from './work-lifecycle-status';
 
 type WorkLifecycleCardProps = {
   initialSnapshot: WorkLifecycleSnapshot;
@@ -53,19 +42,20 @@ export function WorkLifecycleLoadError(): ReactElement {
   );
 }
 
-/** The live snapshot, the open dialog, the optimistic execution state and the writes that follow them. */
-function useWorkLifecycleCardState({
+/**
+ * The card's live snapshot. An open dialog suspends the reads; a change that
+ * arrives under it records that dialog for the in-card hint.
+ */
+function useWorkLifecycleLiveView({
   initialSnapshot,
-  fieldMode,
-}: Pick<WorkLifecycleCardProps, 'initialSnapshot'> & { fieldMode: boolean }) {
-  const [dialog, setDialog] = useState<WorkLifecycleDialogState | null>(null);
-  // Holds the dialog the remote change arrived under: identity comparison
-  // hides the hint automatically once that dialog closes (the queued
-  // catch-up read runs then anyway), with no state cleanup effect.
-  const [remoteUpdateDialog, setRemoteUpdateDialog] = useState<WorkLifecycleDialogState | null>(null);
-  const { showBanner } = useBanner();
-  const rowBusy = useBusyIds();
-  const view = useLiveView<WorkLifecycleSnapshot>({
+  dialog,
+  setRemoteUpdateDialog,
+}: {
+  initialSnapshot: WorkLifecycleSnapshot;
+  dialog: WorkLifecycleDialogState | null;
+  setRemoteUpdateDialog: (dialog: WorkLifecycleDialogState | null) => void;
+}) {
+  return useLiveView<WorkLifecycleSnapshot>({
     tables: [
       initialSnapshot.targetType === 'job' ? 'jobs' : 'projects',
       'work_blockers',
@@ -105,6 +95,21 @@ function useWorkLifecycleCardState({
       return true;
     },
   });
+}
+
+/** The live snapshot, the open dialog, the optimistic execution state and the writes that follow them. */
+function useWorkLifecycleCardState({
+  initialSnapshot,
+  fieldMode,
+}: Pick<WorkLifecycleCardProps, 'initialSnapshot'> & { fieldMode: boolean }) {
+  const [dialog, setDialog] = useState<WorkLifecycleDialogState | null>(null);
+  // Holds the dialog the remote change arrived under: identity comparison
+  // hides the hint automatically once that dialog closes (the queued
+  // catch-up read runs then anyway), with no state cleanup effect.
+  const [remoteUpdateDialog, setRemoteUpdateDialog] = useState<WorkLifecycleDialogState | null>(null);
+  const { showBanner } = useBanner();
+  const rowBusy = useBusyIds();
+  const view = useWorkLifecycleLiveView({ initialSnapshot, dialog, setRemoteUpdateDialog });
   // The state the user just chose, shown until the server confirms or refuses it.
   const [pendingState, setPendingState] = useState<WorkExecutionState | null>(null);
   const confirmedSnapshot = view.data ?? initialSnapshot;
@@ -179,30 +184,8 @@ function useWorkLifecycleCardState({
   };
 }
 
-export function WorkLifecycleCard({
-  initialSnapshot,
-  targetLabel,
-  isManager,
-  fieldMode = false,
-  hasPendingDispatch = false,
-  readOnly = false,
-}: WorkLifecycleCardProps): ReactElement {
-  const {
-    dialog,
-    setDialog,
-    setRemoteUpdateDialog,
-    rowBusy,
-    view,
-    pendingState,
-    confirmedSnapshot,
-    snapshot,
-    setSnapshot,
-    refresh,
-    showRemoteUpdateHint,
-    changed,
-    changedRow,
-    transition,
-  } = useWorkLifecycleCardState({ initialSnapshot, fieldMode });
+/** The counts and readiness the card header and its actions read from one snapshot. */
+function workLifecycleCardSummary(snapshot: WorkLifecycleSnapshot) {
   const parking = snapshot.blockers.find((blocker) => blocker.kind === 'parking');
   const blockingCount = snapshot.blockers.filter((blocker) => blocker.kind === 'blocker').length;
   const unmetDependencies = snapshot.dependencies.filter(
@@ -211,6 +194,21 @@ export function WorkLifecycleCard({
   const canStart = !parking && blockingCount === 0 && snapshot.gates.openStartDependencies === 0;
   const startReadinessKnown = canStart && !snapshot.readinessLoadFailed;
   const nextAction = getWorkNextAction(snapshot);
+  return { parking, blockingCount, unmetDependencies, canStart, startReadinessKnown, nextAction };
+}
+
+export function WorkLifecycleCard({
+  initialSnapshot,
+  targetLabel,
+  isManager,
+  fieldMode = false,
+  hasPendingDispatch = false,
+  readOnly = false,
+}: WorkLifecycleCardProps): ReactElement {
+  const state = useWorkLifecycleCardState({ initialSnapshot, fieldMode });
+  const { dialog, setDialog, setRemoteUpdateDialog, rowBusy, view, pendingState, snapshot, refresh } = state;
+  const { parking, blockingCount, unmetDependencies, canStart, startReadinessKnown, nextAction } =
+    workLifecycleCardSummary(snapshot);
   const ownerNames = useMemo(
     () => new Map(snapshot.ownerOptions.map((owner) => [owner.value, owner.label])),
     [snapshot.ownerOptions],
@@ -233,81 +231,43 @@ export function WorkLifecycleCard({
         parking={parking}
         blockingCount={blockingCount}
       />
-      {showRemoteUpdateHint && (
-        <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-sm">
-          <span>Während der Eingabe hat sich der Arbeitsstand geändert.</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={view.isRefreshing}
-            onClick={() => {
-              setRemoteUpdateDialog(null);
-              void refresh();
-            }}
-          >
-            <InlinePending active={view.isRefreshing} label="Wird aktualisiert" />
-            Aktualisieren
-          </Button>
-        </div>
+      {state.showRemoteUpdateHint && (
+        <WorkLifecycleRemoteUpdateHint
+          view={view}
+          onRefresh={() => {
+            setRemoteUpdateDialog(null);
+            void refresh();
+          }}
+        />
       )}
-      <StaleRegion stale={view.isStale} onRetry={refresh} className="flex flex-col gap-4">
-        <WorkLifecycleTransitionActions
-          snapshot={snapshot}
-          transitions={getAllowedWorkTransitions(snapshot.executionState, isManager)}
-          isManager={isManager}
-          fieldMode={fieldMode}
-          hasPendingDispatch={hasPendingDispatch}
-          readOnly={readOnly}
-          canStart={canStart}
-          parking={parking}
-          pendingState={pendingState}
-          setDialog={setDialog}
-        />
-        <WorkLifecycleReadinessSection
-          snapshot={snapshot}
-          onRetry={() => void refresh()}
-          retryPending={view.isRefreshing}
-        />
-        <div id="offene-punkte" className="grid scroll-mt-28 gap-4 lg:grid-cols-2">
-          <WorkLifecycleBlockersSection
-            snapshot={snapshot}
-            isManager={isManager}
-            readOnly={readOnly}
-            ownerNames={ownerNames}
-            ownOwnerId={ownOwnerId}
-            rowBusy={rowBusy}
-            setDialog={setDialog}
-          />
-          <WorkLifecycleDependenciesSection
-            snapshot={snapshot}
-            isManager={isManager}
-            rowBusy={rowBusy}
-            setDialog={setDialog}
-          />
-        </div>
-        {isManager && snapshot.resolvedBlockers.length > 0 && (
-          <WorkLifecycleResolvedBlockers snapshot={snapshot} setDialog={setDialog} />
-        )}
-        <WorkLifecycleGatesAndHistory snapshot={snapshot} />
-        {unmetDependencies > 0 && (
-          <p className="flex items-center gap-2 text-sm text-warning-text">
-            <LockKeyhole className="size-4" />
-            {unmetDependencies} offene Voraussetzung(en) beeinflussen die nächste Änderung.
-          </p>
-        )}
-      </StaleRegion>
+      <WorkLifecycleCardSections
+        snapshot={snapshot}
+        view={view}
+        refresh={refresh}
+        isManager={isManager}
+        fieldMode={fieldMode}
+        hasPendingDispatch={hasPendingDispatch}
+        readOnly={readOnly}
+        canStart={canStart}
+        parking={parking}
+        unmetDependencies={unmetDependencies}
+        pendingState={pendingState}
+        ownerNames={ownerNames}
+        ownOwnerId={ownOwnerId}
+        rowBusy={rowBusy}
+        setDialog={setDialog}
+      />
       <WorkLifecycleCardDialogs
         dialog={dialog}
         setDialog={setDialog}
         snapshot={snapshot}
-        confirmedSnapshot={confirmedSnapshot}
+        confirmedSnapshot={state.confirmedSnapshot}
         targetLabel={targetLabel}
         isManager={isManager}
-        changed={changed}
-        changedRow={changedRow}
-        setSnapshot={setSnapshot}
-        transition={transition}
+        changed={state.changed}
+        changedRow={state.changedRow}
+        setSnapshot={state.setSnapshot}
+        transition={state.transition}
       />
     </Card>
   );
