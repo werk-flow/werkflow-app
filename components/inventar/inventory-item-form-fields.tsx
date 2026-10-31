@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import type {
   InventoryCategory,
-  InventoryItemType,
   InventoryLocation,
   InventoryUnitOption,
 } from '@/lib/inventory/types';
@@ -21,6 +20,7 @@ import {
   formatInventoryQuantity,
   getInventoryUnitLabel,
   INVENTORY_ITEM_TYPE_LABELS,
+  INVENTORY_ITEM_TYPES,
   INVENTORY_UNIT_OPTIONS,
 } from '@/lib/inventory/types';
 import { getItemNumberFieldErrors, NONE_VALUE, type ItemFormState } from './inventory-form-state';
@@ -58,7 +58,10 @@ export function ItemMasterDataFields({
       <Field label="Typ" htmlFor="inventory-item-type">
         <Select
           value={form.itemType}
-          onValueChange={(value) => setForm({ ...form, itemType: value as InventoryItemType })}
+          onValueChange={(value) => {
+            const itemType = INVENTORY_ITEM_TYPES.find((type) => type === value);
+            if (itemType) setForm({ ...form, itemType });
+          }}
         >
           <SelectTrigger>
             <SelectValue />

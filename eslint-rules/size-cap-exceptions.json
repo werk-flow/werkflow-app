@@ -225,7 +225,6 @@
     "components/inventar/job-material-line-row.tsx": { "MaterialLineRow": 127 },
     "components/inventar/job-material-selection-dialog.tsx": { "MaterialSelectionDialog": 132 },
     "components/inventar/job-materials-section.tsx": { "JobMaterialsSection": 128 },
-    "components/inventar/location-select-with-create.tsx": { "CreateLocationDialog": 100 },
     "components/inventar/use-inventory-editing.ts": { "useInventoryItemEditor": 86 },
     "components/inventar/use-job-material-dialog.ts": { "useJobMaterialDialog": 159 },
     "components/inventar/use-job-material-mutations.ts": { "useJobMaterialMutations": 117 },

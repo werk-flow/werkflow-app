@@ -14,12 +14,10 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { InventoryLocationType } from '@/lib/inventory/types';
-import { INVENTORY_LOCATION_TYPE_LABELS } from '@/lib/inventory/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import type { LocationFormState } from './inventory-form-state';
+import { LocationTypeSelect } from './location-type-select';
 
 // Create-only dialog: it closes on submit and the Lager tab shows the pending
 // card, so it carries no pending state; a refused create reopens it with the error.
@@ -68,21 +66,10 @@ export function LocationDialog({
             <Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
           </Field>
           <Field label="Typ" htmlFor="inventory-location-type">
-            <Select
+            <LocationTypeSelect
               value={form.locationType}
-              onValueChange={(value) => setForm({ ...form, locationType: value as InventoryLocationType })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(INVENTORY_LOCATION_TYPE_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onValueChange={(locationType) => setForm({ ...form, locationType })}
+            />
           </Field>
           <Field label="Beschreibung" htmlFor="inventory-location-description">
             <Textarea
