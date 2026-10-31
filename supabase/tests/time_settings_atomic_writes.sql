@@ -1,8 +1,8 @@
 -- Saving the break rule writes the settings and ends the open breaks in one
 -- transaction (migration 20261004154000_apply_time_tracking_settings_atomically.sql):
 -- a refused break end leaves the settings unchanged, a stale snapshot, a
--- foreign organization and a non-admin are refused, and only the service role
--- executes the function.
+-- foreign organization, a field worker and a Büro member are refused, a save
+-- leaves a completed day as it was, and only the service role executes the function.
 begin;
 
 insert into auth.users (
@@ -17,7 +17,10 @@ insert into auth.users (
  '{"first_name":"Employee","last_name":"Settings"}', now(), now()),
 ('26104154-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000000',
  'authenticated', 'authenticated', 'time-settings-foreign@example.test', '', now(), '{}',
- '{"first_name":"Foreign","last_name":"Settings"}', now(), now());
+ '{"first_name":"Foreign","last_name":"Settings"}', now(), now()),
+('26104154-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'time-settings-buero@example.test', '', now(), '{}',
+ '{"first_name":"Buero","last_name":"Settings"}', now(), now());
 
 insert into public.organizations (id, name, admin_id, unique_code) values
 ('26104154-0000-0000-0000-000000000010', 'Time settings SQL',
@@ -25,7 +28,18 @@ insert into public.organizations (id, name, admin_id, unique_code) values
 ('26104154-0000-0000-0000-000000000011', 'Foreign time settings SQL',
   '26104154-0000-0000-0000-000000000003', 'TSETSQL2');
 insert into public.organization_members (organization_id, user_id, role) values
-('26104154-0000-0000-0000-000000000010', '26104154-0000-0000-0000-000000000002', 'employee');
+('26104154-0000-0000-0000-000000000010', '26104154-0000-0000-0000-000000000002', 'employee'),
+('26104154-0000-0000-0000-000000000010', '26104154-0000-0000-0000-000000000004', 'buero');
+-- A completed, approved day longer than the automatic threshold: no save rewrites it.
+insert into public.time_entries (id, organization_id, user_id, entry_type, timestamp, is_manual, status) values
+('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'clock_in', '2026-09-30T06:00:00Z', true, 'approved'),
+('26104154-0000-0000-0000-0000000000c2', '26104154-0000-0000-0000-000000000010',
+  '26104154-0000-0000-0000-000000000002', 'clock_out', '2026-09-30T14:00:00Z', true, 'approved');
+create table pg_temp.completed_day as
+select to_jsonb(entry) as entry from public.time_entries entry
+where organization_id = '26104154-0000-0000-0000-000000000010';
+grant select on pg_temp.completed_day to service_role;
 -- A job of the other organization: the work-start trigger refuses a break end on it.
 insert into public.jobs (id, organization_id, title, job_number, created_by) values
 ('26104154-0000-0000-0000-0000000000aa', '26104154-0000-0000-0000-000000000011', 'Foreign job',
@@ -62,6 +76,11 @@ set local role service_role;
 
 select pg_temp.expect_refusal('a member who is not the admin', $sql$
   select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000002',
+    '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
+    'automatic', 360, 45, (select history from pg_temp.settings_call), '[]')
+$sql$, 'not_authorized');
+select pg_temp.expect_refusal('a Büro member', $sql$
+  select public.update_time_tracking_settings('26104154-0000-0000-0000-000000000004',
     '26104154-0000-0000-0000-000000000010', (select expected from pg_temp.settings_call),
     'automatic', 360, 45, (select history from pg_temp.settings_call), '[]')
 $sql$, 'not_authorized');
@@ -123,6 +142,7 @@ begin
   then raise exception 'a refused save changed the settings'; end if;
   if exists (
     select 1 from public.time_entries where organization_id = '26104154-0000-0000-0000-000000000010'
+      and id not in ('26104154-0000-0000-0000-0000000000c1', '26104154-0000-0000-0000-0000000000c2')
   ) then raise exception 'a refused save ended a break'; end if;
 
   perform public.update_time_tracking_settings('26104154-0000-0000-0000-000000000001',
@@ -139,6 +159,12 @@ begin
         and entry_type = 'break_end' and status = 'approved' and not is_manual and job_id is null
         and timestamp = now()) <> 1
   then raise exception 'a clean save did not end the open break'; end if;
+  if exists (
+    select entry from pg_temp.completed_day
+    except
+    select to_jsonb(entry) from public.time_entries entry
+    where organization_id = '26104154-0000-0000-0000-000000000010'
+  ) then raise exception 'a saved break rule rewrote a completed day'; end if;
 
   -- The first save of an organization without a settings row creates it; a
   -- second save from the same empty snapshot refuses instead of overwriting.

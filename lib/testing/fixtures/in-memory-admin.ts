@@ -38,8 +38,9 @@ function orTerm(term: string): (row: Row) => boolean {
 }
 
 class InMemoryQuery implements PromiseLike<QueryResult> {
-  private operation: 'select' | 'update' | 'delete' | 'insert' | null = null;
+  private operation: 'select' | 'update' | 'delete' | 'insert' | 'upsert' | null = null;
   private payload: Row | Row[] = {};
+  private conflictColumns: string[] = [];
   private predicates: Array<(row: Row) => boolean> = [];
   private cardinality: 'many' | 'single' | 'maybeSingle' = 'many';
   private headOnly = false;
@@ -68,6 +69,13 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
   insert(payload: Row | Row[]): this {
     this.operation = 'insert';
     this.payload = payload;
+    return this;
+  }
+  /** Updates the row whose `onConflict` columns match each payload row, or inserts it. */
+  upsert(payload: Row | Row[], options: { onConflict: string }): this {
+    this.operation = 'upsert';
+    this.payload = payload;
+    this.conflictColumns = options.onConflict.split(',');
     return this;
   }
   private where(predicate: (row: Row) => boolean): this {
@@ -153,6 +161,17 @@ class InMemoryQuery implements PromiseLike<QueryResult> {
         ...row,
       }));
       this.tables[this.table] = [...rows, ...affected];
+    } else if (this.operation === 'upsert') {
+      affected = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((payload) => {
+        const existing = rows.find((row) =>
+          this.conflictColumns.every((column) => row[column] === payload[column]),
+        );
+        if (existing) return Object.assign(existing, payload);
+        const inserted = { id: crypto.randomUUID(), ...this.columnDefaults(), ...payload };
+        rows.push(inserted);
+        return inserted;
+      });
+      this.tables[this.table] = rows;
     } else {
       affected = rows.filter((row) => this.predicates.every((predicate) => predicate(row)));
       if (this.operation === 'update') for (const row of affected) Object.assign(row, this.payload);
