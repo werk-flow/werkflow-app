@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useClientRead } from '@/hooks/use-client-read';
@@ -51,16 +51,7 @@ export function useWorkArtifactEditor({
   const [correctionReason, setCorrectionReason] = useState('');
   const [correctionReasonError, setCorrectionReasonError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // The artifact to read: the opened one, or the one a save created. Every
-  // `load` reads again; the last detail stays visible while it runs.
-  const [readTarget, setReadTarget] = useState({ id: artifactId, revision: 0 });
-  // A newly opened artifact is read at once, unless a save already reads it.
-  const [openedArtifactId, setOpenedArtifactId] = useState(artifactId);
-  if (artifactId !== openedArtifactId) {
-    setOpenedArtifactId(artifactId);
-    if (artifactId !== null && artifactId !== readTarget.id)
-      setReadTarget((current) => ({ id: artifactId, revision: current.revision }));
-  }
+  const [readTarget, setReadTarget] = useWorkArtifactReadTarget(artifactId);
   // Keyed by the button that was clicked (or `evidence:<requirementId>` per
   // evidence row) so only that control spins; `anyBusy` still gates the rest
   // of the dialog because most flows reload the shared detail afterwards.
@@ -78,6 +69,79 @@ export function useWorkArtifactEditor({
     setContent(contentFromDetail(artifact));
   }, []);
 
+  const { artifactRead, loading, load } = useWorkArtifactRead({ readTarget, setReadTarget, applyDetail });
+
+  const currentRevision = detail?.revisions.find((entry) => entry.id === detail.current_revision_id) ?? null;
+  const requiresCorrectionReason = Boolean(
+    detail && (detail.status !== 'draft' || detail.actions.length > 0),
+  );
+  const measurementLines = content.measurementLines ?? [];
+
+  function patchContent(patch: Partial<WorkArtifactContentDraft>) {
+    setContent((current) => ({ ...current, ...patch }));
+  }
+
+  const handleMutationFailure = mutationFailureHandler({ detail, load, setError });
+
+  return {
+    detail,
+    loading,
+    loadFailure: artifactRead.failure,
+    editing,
+    setEditing,
+    kind,
+    setKind,
+    visibility,
+    setVisibility,
+    title,
+    setTitle,
+    capturedAt,
+    setCapturedAt,
+    content,
+    correctionReason,
+    setCorrectionReason,
+    correctionReasonError,
+    setCorrectionReasonError,
+    error,
+    setError,
+    runArtifactTask,
+    isBusy,
+    anyBusy,
+    load,
+    applyDetail,
+    currentRevision,
+    requiresCorrectionReason,
+    measurementLines,
+    patchContent,
+    handleMutationFailure,
+  };
+}
+
+type WorkArtifactReadTarget = { id: string | null; revision: number };
+
+/** The artifact to read; a newly opened artifact becomes the target during render. */
+function useWorkArtifactReadTarget(artifactId: string | null) {
+  // The artifact to read: the opened one, or the one a save created. Every
+  // `load` reads again; the last detail stays visible while it runs.
+  const [readTarget, setReadTarget] = useState<WorkArtifactReadTarget>({ id: artifactId, revision: 0 });
+  // A newly opened artifact is read at once, unless a save already reads it.
+  const [openedArtifactId, setOpenedArtifactId] = useState(artifactId);
+  if (artifactId !== openedArtifactId) {
+    setOpenedArtifactId(artifactId);
+    if (artifactId !== null && artifactId !== readTarget.id)
+      setReadTarget((current) => ({ id: artifactId, revision: current.revision }));
+  }
+  return [readTarget, setReadTarget] as const;
+}
+
+type WorkArtifactReadOptions = {
+  readTarget: WorkArtifactReadTarget;
+  setReadTarget: Dispatch<SetStateAction<WorkArtifactReadTarget>>;
+  applyDetail: (artifact: WorkArtifactDetail) => void;
+};
+
+/** The artifact read, the adoption of each answer into the draft, and the reload a mutation awaits. */
+function useWorkArtifactRead({ readTarget, setReadTarget, applyDetail }: WorkArtifactReadOptions) {
   const targetId = readTarget.id;
   const artifactRead = useClientRead({
     read: (signal) => readInBackground('work-artifact-detail', { artifactId: targetId ?? '' }, signal),
@@ -119,17 +183,18 @@ export function useWorkArtifactEditor({
     });
   }
 
-  const currentRevision = detail?.revisions.find((entry) => entry.id === detail.current_revision_id) ?? null;
-  const requiresCorrectionReason = Boolean(
-    detail && (detail.status !== 'draft' || detail.actions.length > 0),
-  );
-  const measurementLines = content.measurementLines ?? [];
+  return { artifactRead, loading, load };
+}
 
-  function patchContent(patch: Partial<WorkArtifactContentDraft>) {
-    setContent((current) => ({ ...current, ...patch }));
-  }
+type MutationFailureContext = {
+  detail: WorkArtifactDetail | null;
+  load: (id: string) => Promise<void>;
+  setError: (message: string | null) => void;
+};
 
-  async function handleMutationFailure(
+/** Shows a failed mutation's sentence and returns whether it failed; a stale write reloads unless the draft must stay. */
+function mutationFailureHandler({ detail, load, setError }: MutationFailureContext) {
+  return async function handleMutationFailure(
     result: ActionResult,
     message: string,
     reloadOnConflict = true,
@@ -147,39 +212,6 @@ export function useWorkArtifactEditor({
     // A shared code (a failed read, a missing permission) names its cause; the rest keep the action's sentence.
     setError(describeFailure(result.error, {}, message));
     return true;
-  }
-
-  return {
-    detail,
-    loading,
-    loadFailure: artifactRead.failure,
-    editing,
-    setEditing,
-    kind,
-    setKind,
-    visibility,
-    setVisibility,
-    title,
-    setTitle,
-    capturedAt,
-    setCapturedAt,
-    content,
-    correctionReason,
-    setCorrectionReason,
-    correctionReasonError,
-    setCorrectionReasonError,
-    error,
-    setError,
-    runArtifactTask,
-    isBusy,
-    anyBusy,
-    load,
-    applyDetail,
-    currentRevision,
-    requiresCorrectionReason,
-    measurementLines,
-    patchContent,
-    handleMutationFailure,
   };
 }
 

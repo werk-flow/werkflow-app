@@ -14,42 +14,6 @@
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
     "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
     "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
-    "app/(auth)/login/login-form.tsx": { "LoginForm": 100 },
-    "app/(auth)/login/page.tsx": { "LoginPage": 106 },
-    "app/(auth)/reset-password/reset-password-form.tsx": { "ResetPasswordForm": 133 },
-    "app/(auth)/signup/signup-form.tsx": { "SignupForm": 146 },
-    "components/auftraege/artifacts/signature-pad.tsx": { "SignaturePad": 143 },
-    "components/auftraege/artifacts/use-work-artifact-customer-actions.ts": {
-      "useWorkArtifactCustomerActions": 129
-    },
-    "components/auftraege/artifacts/use-work-artifact-editor.ts": { "useWorkArtifactEditor": 132 },
-    "components/auftraege/artifacts/use-work-artifact-links.ts": { "useWorkArtifactLinks": 151 },
-    "components/auftraege/artifacts/work-artifact-action-panel.tsx": {
-      "WorkArtifactLinkDisclosures": 144,
-      "WorkArtifactActionPanel": 138
-    },
-    "components/auftraege/artifacts/work-artifact-detail.tsx": { "ArtifactDetail": 142 },
-    "components/auftraege/artifacts/work-artifact-form.tsx": { "ArtifactForm": 118 },
-    "components/auftraege/artifacts/work-artifact-kind-fields.tsx": {
-      "WorkArtifactMeasurementFields": 123,
-      "WorkArtifactDefectFields": 83
-    },
-    "components/auftraege/artifacts/work-artifacts-section.tsx": {
-      "WorkArtifactsSection": 139,
-      "WorkArtifactDialog": 197
-    },
-    "components/auftraege/handover/use-work-handover-review.ts": { "useWorkHandoverReview": 123 },
-    "components/auftraege/handover/work-handover-actions.ts": { "createWorkHandoverActions": 162 },
-    "components/auftraege/handover/work-handover-release-review.tsx": { "WorkHandoverReleaseReview": 122 },
-    "components/auftraege/instructions/job-instruction-item-details-dialog.tsx": {
-      "InstructionItemDetailsDialog": 104
-    },
-    "components/auftraege/instructions/job-instruction-item-row.tsx": { "JobInstructionItemRow": 141 },
-    "components/auftraege/instructions/job-instruction-items-card.tsx": { "JobInstructionItemsCard": 120 },
-    "components/auftraege/instructions/job-instruction-row-actions.ts": {
-      "createJobInstructionRowActions": 91
-    },
-    "components/auftraege/instructions/use-job-instruction-draft.ts": { "useJobInstructionDraft": 110 },
     "components/auftraege/job-detail/job-detail-columns.tsx": { "JobDetailMainColumn": 122 },
     "components/auftraege/job-detail/job-detail-content.tsx": { "JobDetailContent": 162 },
     "components/auftraege/job-detail/job-detail-relation-dialogs.tsx": { "JobDetailRelationDialogs": 113 },
@@ -88,9 +52,6 @@
     "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
     "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
     "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
-    "components/clock-action-list.tsx": { "ClockActionList": 172 },
-    "components/clock-fab.tsx": { "ClockFAB": 133 },
-    "components/clock-state-provider.tsx": { "ClockStateProvider": 125 },
     "components/inventar/inventory-content.tsx": {
       "InventoryContent": 148,
       "InventoryTable": 92,
@@ -113,8 +74,6 @@
     "components/inventar/use-inventory-editing.ts": { "useInventoryItemEditor": 86 },
     "components/inventar/use-job-material-dialog.ts": { "useJobMaterialDialog": 159 },
     "components/inventar/use-job-material-mutations.ts": { "useJobMaterialMutations": 117 },
-    "components/job-picker-modal-options.tsx": { "JobPickerOptionList": 96 },
-    "components/job-picker-modal.tsx": { "JobPickerModal": 168 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
@@ -169,7 +128,6 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/manual-entry-form-content.tsx": { "ManualEntryFormContent": 121 },
     "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
     "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
     "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
@@ -238,9 +196,6 @@
     "components/mitarbeiter/use-team-management-team-edits.ts": { "useTeamManagementTeamEdits": 113 },
     "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/organization/organization-context.tsx": { "OrganizationProvider": 146 },
-    "components/otp-form.tsx": { "OTPForm": 124 },
-    "components/password/new-password-fields-form.tsx": { "NewPasswordFieldsForm": 99 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },
@@ -265,12 +220,6 @@
       "useResponsibilityConfigurationForm": 102
     },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
-    "components/time-activity-dialog.tsx": { "TimeActivityDialogForm": 178 },
-    "components/time-activity-fields.tsx": { "TimeActivityQualifierFields": 95 },
-    "components/use-manual-entry-form-submit.ts": {
-      "useManualEntrySubmit": 138,
-      "useManualEntrySubmit > handleSubmit": 98
-    },
     "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
     "components/zeiterfassung/pending-approvals-cards.tsx": {
       "SessionRequestCard": 107,

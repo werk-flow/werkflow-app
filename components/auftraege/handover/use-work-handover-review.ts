@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
+import type { RealtimeTable } from '@/components/realtime/realtime-provider';
 import { useRouterRefresh } from '@/components/ui/refresh-button';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { describeFailure } from '@/lib/action-messages';
@@ -37,6 +38,70 @@ const ERROR_MESSAGES = {
   work_handover_action_failed: 'Die Übergabe konnte nicht gespeichert werden.',
 } satisfies Record<string, string>;
 
+// Server props are the authority. A release, a withdrawal or a changed
+// closing check in another session reloads them; the reset in the hook keeps
+// the reviewer's selection unless the package itself changed.
+const HANDOVER_REALTIME_TABLES: readonly RealtimeTable[] = [
+  'work_handover_packages',
+  'jobs',
+  'projects',
+  'work_blockers',
+  'work_dependencies',
+  'work_artifacts',
+  'job_instruction_items',
+  'job_instruction_item_evidence_fulfillments',
+];
+
+type WorkHandoverPreview = {
+  releaseId: string;
+  requestId: string;
+  documentId: string;
+  documentLinkId: string;
+  contentHash: string;
+  packageVersion: number;
+};
+
+/** One key over every authoritative workspace prop the review resets from. */
+function workspaceAuthorityIdentityOf(initialWorkspace: WorkHandoverWorkspace): string {
+  return JSON.stringify({
+    targetId: initialWorkspace.targetId,
+    executionVersion: initialWorkspace.executionVersion,
+    packageState: initialWorkspace.packageState,
+    packageVersion: initialWorkspace.packageVersion,
+    selectedSourceKeys: initialWorkspace.selectedSourceKeys,
+  });
+}
+
+function overrideableGatesOf(gateSnapshot: WorkHandoverWorkspace['gateSnapshot']) {
+  return OVERRIDEABLE_GATES.flatMap(([key, label]) => {
+    const count = gateCount(gateSnapshot, key);
+    return count > 0 ? [{ key, label, count }] : [];
+  });
+}
+
+function warningGateLabelsOf(gateSnapshot: WorkHandoverWorkspace['gateSnapshot']) {
+  return WARNING_GATES.flatMap(([key, label]) => (gateCount(gateSnapshot, key) > 0 ? [label] : []));
+}
+
+/** The per-operation feedback readers and writers over the current render's feedback state. */
+function handoverFeedbackHelpers(
+  feedback: HandoverFeedback | null,
+  setFeedback: (next: HandoverFeedback | null) => void,
+  refreshRoute: () => void,
+) {
+  const feedbackFor = (...operations: HandoverOperation[]): HandoverFeedback | null =>
+    feedback && operations.includes(feedback.operation) ? feedback : null;
+  const succeed = (operation: HandoverOperation, message: string): void =>
+    setFeedback({ operation, tone: 'success', message });
+  const fail = (operation: HandoverOperation, message: string): void =>
+    setFeedback({ operation, tone: 'error', message });
+  const failWithCode = (operation: HandoverOperation, code: string): void => {
+    fail(operation, describeFailure(code, ERROR_MESSAGES, ERROR_MESSAGES.work_handover_action_failed));
+    if (code.includes('stale')) refreshRoute();
+  };
+  return { feedbackFor, succeed, fail, failWithCode };
+}
+
 /** The reviewer's selection, reasons, preview and per-operation feedback over the authoritative workspace props. */
 export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
   const { refresh: refreshRoute, isPending: isRefreshing } = useRouterRefresh();
@@ -51,38 +116,11 @@ export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
   const [reopenReason, setReopenReason] = useState('');
   // The action whose click was refused for a missing reason; its fields show the error.
   const [attempted, setAttempted] = useState<'release' | 'withdraw' | 'correction' | null>(null);
-  const [preview, setPreview] = useState<{
-    releaseId: string;
-    requestId: string;
-    documentId: string;
-    documentLinkId: string;
-    contentHash: string;
-    packageVersion: number;
-  } | null>(null);
+  const [preview, setPreview] = useState<WorkHandoverPreview | null>(null);
   const [feedback, setFeedback] = useState<HandoverFeedback | null>(null);
   const { run: runHandoverTask, isBusy, anyBusy } = useBusyIds<HandoverOperation>();
-  // Server props are the authority. A release, a withdrawal or a changed
-  // closing check in another session reloads them; the reset below keeps the
-  // reviewer's selection unless the package itself changed.
-  useRealtimeRouterRefresh({
-    tables: [
-      'work_handover_packages',
-      'jobs',
-      'projects',
-      'work_blockers',
-      'work_dependencies',
-      'work_artifacts',
-      'job_instruction_items',
-      'job_instruction_item_evidence_fulfillments',
-    ],
-  });
-  const workspaceAuthorityIdentity = JSON.stringify({
-    targetId: initialWorkspace.targetId,
-    executionVersion: initialWorkspace.executionVersion,
-    packageState: initialWorkspace.packageState,
-    packageVersion: initialWorkspace.packageVersion,
-    selectedSourceKeys: initialWorkspace.selectedSourceKeys,
-  });
+  useRealtimeRouterRefresh({ tables: HANDOVER_REALTIME_TABLES });
+  const workspaceAuthorityIdentity = workspaceAuthorityIdentityOf(initialWorkspace);
   // Adopted during render, never in an effect (realtime-and-caching checklist).
   const [adoptedIdentity, setAdoptedIdentity] = useState(workspaceAuthorityIdentity);
   if (workspaceAuthorityIdentity !== adoptedIdentity) {
@@ -106,18 +144,11 @@ export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
   }
   const selectedKeySet = useMemo(() => new Set(selectedKeys), [selectedKeys]);
   const overrideable = useMemo(
-    () =>
-      OVERRIDEABLE_GATES.flatMap(([key, label]) => {
-        const count = gateCount(initialWorkspace.gateSnapshot, key);
-        return count > 0 ? [{ key, label, count }] : [];
-      }),
+    () => overrideableGatesOf(initialWorkspace.gateSnapshot),
     [initialWorkspace.gateSnapshot],
   );
   const warnings = useMemo(
-    () =>
-      WARNING_GATES.flatMap(([key, label]) =>
-        gateCount(initialWorkspace.gateSnapshot, key) > 0 ? [label] : [],
-      ),
+    () => warningGateLabelsOf(initialWorkspace.gateSnapshot),
     [initialWorkspace.gateSnapshot],
   );
   const activeClocks = gateCount(initialWorkspace.gateSnapshot, 'activeJobClocks');
@@ -128,17 +159,6 @@ export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
   const canEdit =
     initialWorkspace.executionState === 'execution_complete' && initialWorkspace.packageState !== 'released';
   const canPreview = canEdit && packageVersion > 0 && !dirty && selectedKeys.length > 0;
-
-  const feedbackFor = (...operations: HandoverOperation[]): HandoverFeedback | null =>
-    feedback && operations.includes(feedback.operation) ? feedback : null;
-  const succeed = (operation: HandoverOperation, message: string): void =>
-    setFeedback({ operation, tone: 'success', message });
-  const fail = (operation: HandoverOperation, message: string): void =>
-    setFeedback({ operation, tone: 'error', message });
-  const failWithCode = (operation: HandoverOperation, code: string): void => {
-    fail(operation, describeFailure(code, ERROR_MESSAGES, ERROR_MESSAGES.work_handover_action_failed));
-    if (code.includes('stale')) refreshRoute();
-  };
 
   return {
     refreshRoute,
@@ -169,10 +189,7 @@ export function useWorkHandoverReview(initialWorkspace: WorkHandoverWorkspace) {
     packageVersion,
     canEdit,
     canPreview,
-    feedbackFor,
-    succeed,
-    fail,
-    failWithCode,
+    ...handoverFeedbackHelpers(feedback, setFeedback, refreshRoute),
   };
 }
 

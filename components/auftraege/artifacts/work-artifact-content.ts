@@ -66,12 +66,18 @@ export function iso(value: string): string | undefined {
   return value ? new Date(value).toISOString() : undefined;
 }
 
-export function compact<T extends Record<string, unknown>>(
-  value: T,
-): { [Key in keyof T]: Exclude<T[Key], undefined> } {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, entry]) => entry !== '' && entry !== undefined),
-  ) as { [Key in keyof T]: Exclude<T[Key], undefined> };
+/** `Value` without `undefined`: what a `!== undefined` check narrows a generic value to. */
+type Defined<Value> = Value & (NonNullable<unknown> | null);
+
+export function compact<T extends object>(value: T): { [Key in keyof T]?: Defined<T[Key]> } {
+  const result: { [Key in keyof T]?: Defined<T[Key]> } = {};
+  for (const key in value) {
+    if (!Object.hasOwn(value, key)) continue;
+    const entry = value[key];
+    if (entry === '' || entry === undefined) continue;
+    result[key] = entry;
+  }
+  return result;
 }
 
 export function contentFromDetail(detail: WorkArtifactDetail): WorkArtifactContentInput {
