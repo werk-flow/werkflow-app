@@ -4,7 +4,6 @@
     "components/kalender/": "Calendar render behaviour is recorded: split only with a recalibration run."
   },
   "modules": {
-    "lib/attention/actions.ts": 1440,
     "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/customer-relationships/actions.ts": 1427,
     "lib/security/server-action-authorization.test.ts": 959
@@ -507,19 +506,6 @@
       "ZeiterfassungDashboardStatusCard": 82
     },
     "hooks/use-live-view.ts": { "useLiveView": 192 },
-    "lib/attention/actions.ts": {
-      "deriveFollowUpTasks": 95,
-      "deriveDispatchAcknowledgementTasks": 137,
-      "deriveDispatchChallengeTasks": 142,
-      "deriveParkingReviewTasks": 159,
-      "deriveSicknessNotifications": 148,
-      "persistNotificationReadMarker": 96
-    },
-    "lib/attention/work-tasks.ts": {
-      "toWorkArtifactTasks": 82,
-      "deriveWorkArtifactTasks": 92,
-      "deriveWorkHandoverTasks": 95
-    },
     "lib/customer-relationships/actions.ts": {
       "buildTimelineRecordQueries": 105,
       "buildTimelineLinkAndEventQueries": 104,
@@ -539,9 +525,6 @@
       "readPlanItems": 95,
       "readMaintenanceWorkspace": 118
     },
-    "lib/responsibilities/actions.ts": { "previewResponsibilityConfiguration": 90 },
-    "lib/responsibilities/resolution.ts": { "resolveEffectiveResponsibility": 102 },
-    "lib/responsibilities/server.ts": { "loadResponsibilityRuntimeState": 137 },
     "lib/service-cases/actions.ts": { "loadClientOption": 113, "getServiceCaseDetailByNumber": 115 },
     "lib/service-cases/list-page-server.ts": { "hydrateListItems": 126 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
