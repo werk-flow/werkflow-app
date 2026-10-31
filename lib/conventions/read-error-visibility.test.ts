@@ -44,9 +44,9 @@ const ALLOWED_BEST_EFFORT: Readonly<Record<string, string>> = {
     'Best effort: the suffix only avoids a duplicate folder name; a duplicate is legal and visible.',
   'lib/time-tracking/open-session-orgs.ts::getOpenSessionOrgsForUserOnDay::orgs':
     'The open sessions themselves are read strictly; only their organization names fall back to „Unbekannte Organisation“.',
-  'lib/time-tracking/clock-state-actions.ts::getClockJobInfo::projectData':
+  'lib/time-tracking/canonical-clock-state.ts::readClockJobInfo::projectData':
     'Label of the running clock card: the job row fails closed; a failed project name shows the job without it.',
-  'lib/time-tracking/clock-state-actions.ts::getClockJobInfo::clientData':
+  'lib/time-tracking/canonical-clock-state.ts::readClockJobInfo::clientData':
     'Label of the running clock card: the job row fails closed; a failed customer name shows the job without it.',
   'lib/org/delete-action.ts::deleteOrganization::remainingMemberships':
     'Write action, after the committed delete: a failed read leaves no active organization, and the next request resolves one.',
