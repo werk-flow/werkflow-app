@@ -25,6 +25,70 @@ const loginSchema = z.object({
 
 type LoginValues = z.infer<typeof loginSchema>;
 
+/** Signs in, resends the verification code to an unconfirmed address, and redeems an invite. */
+async function submitLogin({
+  supabase,
+  router,
+  values,
+  inviteCode,
+  setFormError,
+}: {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  router: ReturnType<typeof useRouter>;
+  values: LoginValues;
+  inviteCode: string;
+  setFormError: (message: string | null) => void;
+}): Promise<void> {
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: values.email,
+      password: values.password,
+    });
+
+    if (error) {
+      const errorMessage = error.message?.toLowerCase() ?? '';
+      if (errorMessage.includes('email not confirmed') || errorMessage.includes('email_not_confirmed')) {
+        const { error: resendError } = await supabase.auth.resend({
+          type: 'signup',
+          email: values.email,
+        });
+
+        if (!resendError && (await openVerificationStep(router, values.email, inviteCode))) {
+          router.refresh();
+          return untilPageLeaves();
+        }
+        setFormError('E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.');
+        return;
+      }
+
+      setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');
+      return;
+    }
+
+    if (data.session) {
+      await fetch('/auth/callback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          event: 'SIGNED_IN',
+          session: data.session,
+        }),
+      });
+
+      if (inviteCode && (await redeemOtpInvite(supabase, inviteCode))) return untilPageLeaves();
+    }
+
+    router.replace('/');
+    router.refresh();
+    return untilPageLeaves();
+  } catch {
+    // A rejected request (network) must not leave the button spinning.
+    setFormError('Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
+  }
+}
+
 interface LoginFormProps {
   successMessage?: string | undefined;
   inviteCode?: string;
@@ -47,56 +111,7 @@ export function LoginForm({ successMessage, inviteCode = '' }: LoginFormProps) {
   const handleSubmit = form.handleSubmit(async (values) => {
     setFormError(null);
 
-    await runSubmit(async () => {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: values.email,
-          password: values.password,
-        });
-
-        if (error) {
-          const errorMessage = error.message?.toLowerCase() ?? '';
-          if (errorMessage.includes('email not confirmed') || errorMessage.includes('email_not_confirmed')) {
-            const { error: resendError } = await supabase.auth.resend({
-              type: 'signup',
-              email: values.email,
-            });
-
-            if (!resendError && (await openVerificationStep(router, values.email, inviteCode))) {
-              router.refresh();
-              return untilPageLeaves();
-            }
-            setFormError('E-Mail nicht verifiziert. Bitte überprüfe dein Postfach oder versuche es erneut.');
-            return;
-          }
-
-          setFormError('Anmeldung fehlgeschlagen. Bitte überprüfe deine Zugangsdaten.');
-          return;
-        }
-
-        if (data.session) {
-          await fetch('/auth/callback', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              event: 'SIGNED_IN',
-              session: data.session,
-            }),
-          });
-
-          if (inviteCode && (await redeemOtpInvite(supabase, inviteCode))) return untilPageLeaves();
-        }
-
-        router.replace('/');
-        router.refresh();
-        return untilPageLeaves();
-      } catch {
-        // A rejected request (network) must not leave the button spinning.
-        setFormError('Anmeldung fehlgeschlagen. Bitte versuche es erneut.');
-      }
-    });
+    await runSubmit(() => submitLogin({ supabase, router, values, inviteCode, setFormError }));
   });
 
   return (
