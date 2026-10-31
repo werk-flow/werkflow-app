@@ -390,7 +390,6 @@
     "components/zeiterfassung/zeiterfassung-dashboard-status-card.tsx": {
       "ZeiterfassungDashboardStatusCard": 82
     },
-    "hooks/use-live-view.ts": { "useLiveView": 192 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },

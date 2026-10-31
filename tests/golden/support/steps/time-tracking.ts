@@ -169,6 +169,9 @@ export const TIME_ACCOUNT_COPY = {
   createExceptionPolicy: 'Neue Ausnahmeregel anlegen',
   openingDate: 'Eröffnungsdatum',
   openAccount: 'Konto eröffnen',
+  newOpeningDate: 'Neues Eröffnungsdatum',
+  correctOpeningDate: 'Datum korrigieren',
+  openingDateLocked: 'Ein abgeschlossener Monat hängt von diesem Datum ab.',
   allAccountsOpen: 'Alle Zeitkonten sind eröffnet.',
   confirmDefaultMapping: 'Standardzuordnung bestätigen',
   bueroMayRequest: 'Büro-Nutzer können Korrekturen',
@@ -890,6 +893,32 @@ export function openAccountButton(settings: Locator, employeeName: string): Loca
   return openingBalanceRow(settings, employeeName).getByRole('button', {
     name: TIME_ACCOUNT_COPY.openAccount,
   });
+}
+
+function openingCorrectionReasonLabel(employeeName: string): string {
+  return `Korrekturgrund des Eröffnungsdatums für ${employeeName}`;
+}
+
+/** Corrects the opening date of one person's opened time account with a reason. */
+export async function correctOpeningDate(
+  settings: Locator,
+  employeeName: string,
+  input: { openedOn: string; reason: string },
+): Promise<void> {
+  const row = confirmed(
+    settings
+      .getByRole('row')
+      .filter({ has: settings.page().getByLabel(openingCorrectionReasonLabel(employeeName)) }),
+  );
+  await typeIntoDatePicker(row, TIME_ACCOUNT_COPY.newOpeningDate, datePickerDigits(input.openedOn));
+  await row.getByLabel(openingCorrectionReasonLabel(employeeName)).fill(input.reason);
+  await row.getByRole('button', { name: TIME_ACCOUNT_COPY.correctOpeningDate }).click();
+}
+
+/** The history line of one opening date correction, dates as `YYYY-MM-DD`. */
+export function openingDateCorrectionText(previous: string, corrected: string, reason: string): string {
+  const german = (date: string): string => date.split('-').reverse().join('.');
+  return `Korrigiert von ${german(previous)} auf ${german(corrected)} · ${reason}`;
 }
 
 /** Confirms the default payroll mapping. */
