@@ -141,14 +141,6 @@
     "components/auftraege/shared/qualification-warning-dialog.tsx": {
       "QualificationWarningDialogContent": 115
     },
-    "components/auftraege/work-pack/field-work-pack-context-sources.tsx": {
-      "FieldWorkPackContextSources": 81
-    },
-    "components/auftraege/work-pack/field-work-pack-data.ts": { "loadFieldWorkPackData": 88 },
-    "components/auftraege/work-pack/field-work-pack-overview.tsx": { "FieldWorkPackOverview": 145 },
-    "components/auftraege/work-pack/field-work-pack-page.tsx": { "FieldWorkPackPage": 102 },
-    "components/auftraege/work-pack/field-work-pack-record-sources.tsx": { "FieldWorkPackRecordSources": 91 },
-    "components/auftraege/work-pack/field-work-pack-time-section.tsx": { "FieldWorkPackTimeSection": 138 },
     "components/clock-action-list.tsx": { "ClockActionList": 172 },
     "components/clock-fab.tsx": { "ClockFAB": 133 },
     "components/clock-state-provider.tsx": { "ClockStateProvider": 125 },

@@ -49,19 +49,129 @@ function FieldWorkPackTimeSessions({ sessions }: { sessions: ReturnType<typeof c
   );
 }
 
-export function FieldWorkPackTimeSection({
+type ClockState = ReturnType<typeof useClockState>;
+
+type FieldWorkPackClockChange = Pick<ClockState, 'clockIn' | 'clockOut' | 'switchJob'> & {
+  jobId: string;
+  isClockedIntoThisJob: boolean | undefined;
+  isClockedIntoAnotherJob: boolean | undefined;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  openActivityDialog: () => void;
+};
+
+/** Clocks the worker out of, over to, or into this job, and reports the outcome. */
+async function changeFieldWorkPackClock({
+  jobId,
+  isClockedIntoThisJob,
+  isClockedIntoAnotherJob,
+  clockIn,
+  clockOut,
+  switchJob,
+  showBanner,
+  openActivityDialog,
+}: FieldWorkPackClockChange): Promise<void> {
+  const result = isClockedIntoThisJob
+    ? await clockOut()
+    : isClockedIntoAnotherJob
+      ? await switchJob(jobId)
+      : await clockIn(jobId);
+  if (!result.success) {
+    showBanner({
+      variant: 'error',
+      message:
+        'Die Zeiterfassung konnte nicht geändert werden. Bitte prüfe den aktuellen Stand und versuche es erneut.',
+    });
+    return;
+  }
+  if (result.outcome === 'recovery_required') {
+    openActivityDialog();
+    showBanner({
+      variant: 'info',
+      message: 'Die Erfassung ist ungewöhnlich lang. Bitte prüfe sie, bevor du sie beendest oder fortsetzt.',
+    });
+    return;
+  }
+  // transitionTimeActivity's response renders the route with the new entries.
+  showBanner({
+    variant: 'success',
+    message: isClockedIntoThisJob
+      ? 'Die Arbeitszeit wurde beendet.'
+      : isClockedIntoAnotherJob
+        ? 'Die Zeiterfassung läuft jetzt für diesen Auftrag.'
+        : 'Die Arbeitszeit wurde für diesen Auftrag gestartet.',
+  });
+}
+
+/** The section's title and, unless read-only, its clock controls. */
+function FieldWorkPackTimeHeader({
+  readOnly,
+  isClockBusy,
+  clockUnavailable,
+  isClockedIntoThisJob,
+  isClockedIntoAnotherJob,
+  onChangeClock,
+  onChooseActivity,
+}: {
+  readOnly: boolean;
+  isClockBusy: boolean;
+  clockUnavailable: boolean;
+  isClockedIntoThisJob: boolean | undefined;
+  isClockedIntoAnotherJob: boolean | undefined;
+  onChangeClock: () => void;
+  onChooseActivity: () => void;
+}): ReactElement {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <SectionTitle as="h2" id="field-time-heading" icon={<Clock3 className="size-4" />}>
+          Meine Zeit
+        </SectionTitle>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Zeiten bleiben von Planung und Material getrennt. Der erste Start kann den Arbeitsstand beginnen.
+        </p>
+      </div>
+      {!readOnly && (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="min-h-11"
+            pending={isClockBusy}
+            disabled={clockUnavailable}
+            onClick={onChangeClock}
+          >
+            {isClockedIntoThisJob ? <LogOut className="size-4" /> : <LogIn className="size-4" />}
+            {isClockedIntoThisJob
+              ? 'Arbeitszeit beenden'
+              : isClockedIntoAnotherJob
+                ? 'Zu diesem Auftrag wechseln'
+                : 'Arbeitszeit starten'}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={isClockBusy || clockUnavailable}
+            onClick={onChooseActivity}
+          >
+            <Clock3 className="size-4" />
+            Aktivität wählen
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The clock state, retries and this job's sessions behind the time section. */
+function useFieldWorkPackTimeState({
   jobId,
   currentUserId,
   entries,
-  loadError,
-  readOnly,
 }: {
   jobId: string;
   currentUserId: string;
   entries: TimeEntry[];
-  loadError: boolean;
-  readOnly: boolean;
-}): ReactElement {
+}) {
   const { showBanner } = useBanner();
   const {
     state,
@@ -87,39 +197,68 @@ export function FieldWorkPackTimeSection({
   const isClockedIntoThisJob = state?.isClockedIn && state.activeJobId === jobId;
   const isClockedIntoAnotherJob = state?.isClockedIn && state.activeJobId !== jobId;
 
-  async function changeClock(): Promise<void> {
-    const result = isClockedIntoThisJob
-      ? await clockOut()
-      : isClockedIntoAnotherJob
-        ? await switchJob(jobId)
-        : await clockIn(jobId);
-    if (!result.success) {
-      showBanner({
-        variant: 'error',
-        message:
-          'Die Zeiterfassung konnte nicht geändert werden. Bitte prüfe den aktuellen Stand und versuche es erneut.',
-      });
-      return;
-    }
-    if (result.outcome === 'recovery_required') {
-      setActivityDialogOpen(true);
-      showBanner({
-        variant: 'info',
-        message:
-          'Die Erfassung ist ungewöhnlich lang. Bitte prüfe sie, bevor du sie beendest oder fortsetzt.',
-      });
-      return;
-    }
-    // transitionTimeActivity's response renders the route with the new entries.
-    showBanner({
-      variant: 'success',
-      message: isClockedIntoThisJob
-        ? 'Die Arbeitszeit wurde beendet.'
-        : isClockedIntoAnotherJob
-          ? 'Die Zeiterfassung läuft jetzt für diesen Auftrag.'
-          : 'Die Arbeitszeit wurde für diesen Auftrag gestartet.',
+  function changeClock(): Promise<void> {
+    return changeFieldWorkPackClock({
+      jobId,
+      isClockedIntoThisJob,
+      isClockedIntoAnotherJob,
+      clockIn,
+      clockOut,
+      switchJob,
+      showBanner,
+      openActivityDialog: () => setActivityDialogOpen(true),
     });
   }
+
+  return {
+    state,
+    statusError,
+    refreshStatus,
+    runStatusRetry,
+    isRetryingStatus,
+    refreshRoute,
+    isRefreshing,
+    runClockChange,
+    isClockBusy,
+    activityDialogOpen,
+    setActivityDialogOpen,
+    sessions,
+    isClockedIntoThisJob,
+    isClockedIntoAnotherJob,
+    changeClock,
+  };
+}
+
+export function FieldWorkPackTimeSection({
+  jobId,
+  currentUserId,
+  entries,
+  loadError,
+  readOnly,
+}: {
+  jobId: string;
+  currentUserId: string;
+  entries: TimeEntry[];
+  loadError: boolean;
+  readOnly: boolean;
+}): ReactElement {
+  const {
+    state,
+    statusError,
+    refreshStatus,
+    runStatusRetry,
+    isRetryingStatus,
+    refreshRoute,
+    isRefreshing,
+    runClockChange,
+    isClockBusy,
+    activityDialogOpen,
+    setActivityDialogOpen,
+    sessions,
+    isClockedIntoThisJob,
+    isClockedIntoAnotherJob,
+    changeClock,
+  } = useFieldWorkPackTimeState({ jobId, currentUserId, entries });
 
   return (
     <section
@@ -135,44 +274,15 @@ export function FieldWorkPackTimeSection({
           preferredJobId={jobId}
         />
       )}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <SectionTitle as="h2" id="field-time-heading" icon={<Clock3 className="size-4" />}>
-            Meine Zeit
-          </SectionTitle>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Zeiten bleiben von Planung und Material getrennt. Der erste Start kann den Arbeitsstand beginnen.
-          </p>
-        </div>
-        {!readOnly && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              className="min-h-11"
-              pending={isClockBusy}
-              disabled={Boolean(statusError) || !state?.organizationId}
-              onClick={() => void runClockChange(changeClock)}
-            >
-              {isClockedIntoThisJob ? <LogOut className="size-4" /> : <LogIn className="size-4" />}
-              {isClockedIntoThisJob
-                ? 'Arbeitszeit beenden'
-                : isClockedIntoAnotherJob
-                  ? 'Zu diesem Auftrag wechseln'
-                  : 'Arbeitszeit starten'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11"
-              disabled={isClockBusy || Boolean(statusError) || !state?.organizationId}
-              onClick={() => setActivityDialogOpen(true)}
-            >
-              <Clock3 className="size-4" />
-              Aktivität wählen
-            </Button>
-          </div>
-        )}
-      </div>
+      <FieldWorkPackTimeHeader
+        readOnly={readOnly}
+        isClockBusy={isClockBusy}
+        clockUnavailable={Boolean(statusError) || !state?.organizationId}
+        isClockedIntoThisJob={isClockedIntoThisJob}
+        isClockedIntoAnotherJob={isClockedIntoAnotherJob}
+        onChangeClock={() => void runClockChange(changeClock)}
+        onChooseActivity={() => setActivityDialogOpen(true)}
+      />
 
       {statusError && (
         <SectionError

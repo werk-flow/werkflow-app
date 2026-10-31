@@ -25,11 +25,6 @@ function formatDurationOrNull(minutes: number | null): string | null {
 export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): ReactElement {
   const { showBanner } = useBanner();
   const overviewRef = useRef<HTMLElement>(null);
-  const phone = job.contactPhone ?? job.customerPhone;
-  const telephoneHref = phone
-    ? `${phone.trimStart().startsWith('+') ? '+' : ''}${phone.replace(/\D/g, '')}`
-    : null;
-  const duration = formatDurationOrNull(job.plannedWorkingMinutes);
 
   useRealtimeRouterRefresh({
     tables: [
@@ -83,47 +78,7 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
         </Badge>
       </div>
 
-      <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 sm:gap-4">
-        <div className="space-y-3">
-          <div className="flex gap-3">
-            <CalendarClock className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Termin</p>
-              <p className="mt-0.5 text-sm font-medium tabular-nums">{formatSchedule(job)}</p>
-              {duration && <p className="text-xs text-muted-foreground">Geplant: {duration}</p>}
-            </div>
-          </div>
-          <div className="flex gap-3" data-testid="field-work-pack-contact">
-            <UserRound className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kontakt</p>
-              <p className="mt-0.5 text-sm font-medium">
-                {job.contactName ?? job.customerName ?? 'Nicht hinterlegt'}
-              </p>
-              {job.contactRole && <p className="text-xs text-muted-foreground">{job.contactRole}</p>}
-              {job.contactName && job.customerName && (
-                <p className="text-xs text-muted-foreground">{job.customerName}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex gap-3">
-            <MapPin className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
-              <p className="mt-0.5 text-sm font-medium">{job.siteName ?? 'Einsatzort'}</p>
-              <p className="text-sm text-muted-foreground">{job.siteAddress ?? 'Keine Adresse hinterlegt'}</p>
-              {job.accessNotes && (
-                <p className="mt-1 text-sm">
-                  <span className="font-medium">Zugang:</span> {job.accessNotes}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <FieldWorkPackOverviewFacts job={job} />
 
       {job.requestedOutcome && (
         <div className="mt-3 border-t pt-3 sm:mt-4 sm:pt-4">
@@ -132,46 +87,111 @@ export function FieldWorkPackOverview({ job }: { job: FieldWorkPackJob }): React
         </div>
       )}
 
-      <div className="mt-3 flex gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
-        {phone && (
-          <Button asChild className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4">
+      <FieldWorkPackOverviewActions job={job} onCopyAddress={() => void copyAddress()} />
+    </section>
+  );
+}
+
+/** Schedule, contact and site of the job. */
+function FieldWorkPackOverviewFacts({ job }: { job: FieldWorkPackJob }): ReactElement {
+  const duration = formatDurationOrNull(job.plannedWorkingMinutes);
+  return (
+    <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 sm:gap-4">
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <CalendarClock className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Termin</p>
+            <p className="mt-0.5 text-sm font-medium tabular-nums">{formatSchedule(job)}</p>
+            {duration && <p className="text-xs text-muted-foreground">Geplant: {duration}</p>}
+          </div>
+        </div>
+        <div className="flex gap-3" data-testid="field-work-pack-contact">
+          <UserRound className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Kontakt</p>
+            <p className="mt-0.5 text-sm font-medium">
+              {job.contactName ?? job.customerName ?? 'Nicht hinterlegt'}
+            </p>
+            {job.contactRole && <p className="text-xs text-muted-foreground">{job.contactRole}</p>}
+            {job.contactName && job.customerName && (
+              <p className="text-xs text-muted-foreground">{job.customerName}</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex gap-3">
+          <MapPin className="mt-0.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <div className="min-w-0">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Einsatzort</p>
+            <p className="mt-0.5 text-sm font-medium">{job.siteName ?? 'Einsatzort'}</p>
+            <p className="text-sm text-muted-foreground">{job.siteAddress ?? 'Keine Adresse hinterlegt'}</p>
+            {job.accessNotes && (
+              <p className="mt-1 text-sm">
+                <span className="font-medium">Zugang:</span> {job.accessNotes}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Call, route and copy-address actions for the job's contact and site. */
+function FieldWorkPackOverviewActions({
+  job,
+  onCopyAddress,
+}: {
+  job: FieldWorkPackJob;
+  onCopyAddress: () => void;
+}): ReactElement {
+  const phone = job.contactPhone ?? job.customerPhone;
+  const telephoneHref = phone
+    ? `${phone.trimStart().startsWith('+') ? '+' : ''}${phone.replace(/\D/g, '')}`
+    : null;
+  return (
+    <div className="mt-3 flex gap-2 border-t pt-3 sm:mt-4 sm:pt-4">
+      {phone && (
+        <Button asChild className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4">
+          <a
+            href={`tel:${telephoneHref}`}
+            aria-label={`${job.contactName ?? job.customerName ?? 'Kontakt'} anrufen`}
+          >
+            <Phone className="size-4" />
+            Anrufen
+          </a>
+        </Button>
+      )}
+      {job.siteAddress && (
+        <>
+          <Button
+            asChild
+            variant={phone ? 'outline' : 'default'}
+            className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+          >
             <a
-              href={`tel:${telephoneHref}`}
-              aria-label={`${job.contactName ?? job.customerName ?? 'Kontakt'} anrufen`}
+              href={`geo:0,0?q=${encodeURIComponent(job.siteAddress)}`}
+              aria-label={`Navigation zu ${job.siteAddress} öffnen`}
             >
-              <Phone className="size-4" />
-              Anrufen
+              <Navigation className="size-4" />
+              Route
             </a>
           </Button>
-        )}
-        {job.siteAddress && (
-          <>
-            <Button
-              asChild
-              variant={phone ? 'outline' : 'default'}
-              className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
-            >
-              <a
-                href={`geo:0,0?q=${encodeURIComponent(job.siteAddress)}`}
-                aria-label={`Navigation zu ${job.siteAddress} öffnen`}
-              >
-                <Navigation className="size-4" />
-                Route
-              </a>
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
-              aria-label="Adresse kopieren"
-              onClick={() => void copyAddress()}
-            >
-              <ClipboardCopy className="size-4" />
-              Adresse
-            </Button>
-          </>
-        )}
-      </div>
-    </section>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 min-w-0 flex-1 px-2 sm:flex-none sm:px-4"
+            aria-label="Adresse kopieren"
+            onClick={onCopyAddress}
+          >
+            <ClipboardCopy className="size-4" />
+            Adresse
+          </Button>
+        </>
+      )}
+    </div>
   );
 }
