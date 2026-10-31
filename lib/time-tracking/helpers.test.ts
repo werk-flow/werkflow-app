@@ -7,6 +7,7 @@ import {
   formatDuration,
   formatSignedDuration,
   liveMinutes,
+  todayRunningSince,
 } from './helpers';
 
 describe('canManageEntries: who edits or deletes an entry directly', () => {
@@ -101,5 +102,20 @@ describe('canApproveEntries: the one approval predicate of the server and every 
 
   test('a caller without a time_approval holder approves nothing, whatever the role', () => {
     expect(canApproveEntries(null, 'employee-user', 'employee')).toBe(false);
+  });
+});
+
+describe('todayRunningSince', () => {
+  // 31.10.2026 10:00 in Berlin (winter time); its midnight is 30.10. 23:00 UTC.
+  const now = Date.parse('2026-10-31T09:00:00.000Z');
+
+  test('counts an activity that began before midnight from midnight', () => {
+    expect(todayRunningSince('2026-10-30T20:00:00.000Z', now)).toBe('2026-10-30T23:00:00.000Z');
+  });
+
+  test('keeps a start of today, nothing running, and an unreadable start', () => {
+    expect(todayRunningSince('2026-10-31T06:00:00.000Z', now)).toBe('2026-10-31T06:00:00.000Z');
+    expect(todayRunningSince(null, now)).toBeNull();
+    expect(todayRunningSince('not a time', now)).toBe('not a time');
   });
 });
