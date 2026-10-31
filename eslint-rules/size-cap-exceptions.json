@@ -328,44 +328,6 @@
       "RealtimeProvider": 125,
       "RealtimeProvider > useEffect#1": 118
     },
-    "components/service/equipment-detail-content.tsx": {
-      "EquipmentStateForm": 84,
-      "EquipmentDetailContent": 123
-    },
-    "components/service/equipment-form-dialog.tsx": { "EquipmentClassificationFields": 107 },
-    "components/service/equipment-list-content.tsx": { "EquipmentTable": 90, "EquipmentListResults": 81 },
-    "components/service/equipment-source-dialog.tsx": { "EquipmentSourceDialog": 178 },
-    "components/service/equipment-work-link-dialog.tsx": { "EquipmentWorkLinkDialog": 122 },
-    "components/service/maintenance-content.tsx": { "MaintenanceWorkspaceView": 183 },
-    "components/service/maintenance-coverage-dialog.tsx": { "MaintenanceCoverageDialog": 151 },
-    "components/service/maintenance-coverage-follow-up-dialog.tsx": {
-      "MaintenanceCoverageFollowUpDialog": 109
-    },
-    "components/service/maintenance-due-action-dialog.tsx": { "MaintenanceDueActionDialog": 96 },
-    "components/service/maintenance-lists.tsx": { "MaintenanceDueList": 106, "MaintenanceCoverageList": 98 },
-    "components/service/maintenance-plan-action-dialog.tsx": { "MaintenancePlanActionDialog": 101 },
-    "components/service/maintenance-plan-cards.tsx": {
-      "MaintenancePlanCards": 164,
-      "MaintenancePlanCards > map#2": 94
-    },
-    "components/service/maintenance-plan-form-sections.tsx": { "MaintenancePlanScheduleFields": 97 },
-    "components/service/service-case-detail-content.tsx": { "ServiceCaseDetailContent": 136 },
-    "components/service/service-case-detail-dialogs.tsx": { "RelationDialog": 126, "FollowUpDialog": 108 },
-    "components/service/service-case-detail-sections.tsx": { "ServiceCaseDetailSidebar": 89 },
-    "components/service/service-case-evidence-link.tsx": { "ServiceCaseEvidenceLink": 97 },
-    "components/service/service-case-form-sections.tsx": { "ServiceCaseTriageFields": 105 },
-    "components/service/service-case-list-content.tsx": {
-      "ServiceCaseTable": 86,
-      "ServiceCaseListResults": 85
-    },
-    "components/service/use-equipment-form.ts": {
-      "useEquipmentForm": 131,
-      "useEquipmentForm > handleSubmit": 87
-    },
-    "components/service/use-maintenance-coverage-form.ts": { "useMaintenanceCoverageForm": 112 },
-    "components/service/use-maintenance-due-action.ts": { "useMaintenanceDueAction": 83 },
-    "components/service/use-maintenance-plan-form.ts": { "useMaintenancePlanForm": 93 },
-    "components/service/use-service-case-form.ts": { "useServiceCaseForm": 132 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/email-change-new-email-step.ts": { "createNewEmailStepHandlers": 110 },

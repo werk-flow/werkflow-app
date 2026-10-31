@@ -26,9 +26,8 @@ import {
   MAINTENANCE_SCOPE_OUTCOMES,
   MAINTENANCE_SCOPE_OUTCOME_LABELS,
   type MaintenanceDueItem,
-  type MaintenanceScopeOutcome,
 } from '@/lib/maintenance/types';
-import { useJobEntityOptions } from '@/hooks/use-job-entity-options';
+import { useJobEntityOptions, type JobEntityOptionsState } from '@/hooks/use-job-entity-options';
 import { formatBerlinLocalDate } from '@/lib/date-time/berlin';
 import type { MaintenanceDueActionKind } from './maintenance-due-action-state';
 import { useMaintenanceDueAction, type MaintenanceDueActionController } from './use-maintenance-due-action';
@@ -38,6 +37,21 @@ const EVIDENCE_LIST_CLASS = 'max-h-40 space-y-2 overflow-y-auto rounded-md borde
 const EVIDENCE_ROW_CLASS = 'flex items-center gap-2 text-sm';
 
 type DueActionFieldsProps = { controller: MaintenanceDueActionController };
+
+// Every action kind once, so a Select value outside the union is never set.
+const DUE_ACTION_KINDS = {
+  create_visit: true,
+  schedule: true,
+  complete: true,
+  link_service_case: true,
+  skipped: true,
+  cancelled: true,
+  superseded: true,
+} satisfies Record<MaintenanceDueActionKind, true>;
+
+function isDueActionKind(value: string): value is MaintenanceDueActionKind {
+  return Object.hasOwn(DUE_ACTION_KINDS, value);
+}
 
 function DueActionSelect({
   controller,
@@ -51,7 +65,9 @@ function DueActionSelect({
     <Field label="Aktion" htmlFor="due-action">
       <Select
         value={controller.action}
-        onValueChange={(value) => controller.setAction(value as MaintenanceDueActionKind)}
+        onValueChange={(value) => {
+          if (isDueActionKind(value)) controller.setAction(value);
+        }}
       >
         <SelectTrigger>
           <SelectValue />
@@ -102,7 +118,10 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
         <Field label="Ergebnis" htmlFor="due-outcome">
           <Select
             value={scopeOutcome}
-            onValueChange={(value) => setScopeOutcome(value as MaintenanceScopeOutcome)}
+            onValueChange={(value) => {
+              const outcome = MAINTENANCE_SCOPE_OUTCOMES.find((candidate) => candidate === value);
+              if (outcome) setScopeOutcome(outcome);
+            }}
           >
             <SelectTrigger>
               <SelectValue />
@@ -167,6 +186,46 @@ function DueCompletionFields({ controller }: DueActionFieldsProps): ReactElement
   );
 }
 
+function DueServiceCaseField({
+  controller,
+  caseSearch,
+}: DueActionFieldsProps & { caseSearch: JobEntityOptionsState }): ReactElement {
+  return (
+    <Field
+      label="Servicefall"
+      htmlFor="maintenance-service-case"
+      required
+      error={controller.fieldErrors.serviceCaseId}
+    >
+      <SearchableSelect
+        value={controller.serviceCaseId}
+        onChange={controller.setServiceCaseId}
+        options={caseSearch.options}
+        onSearchChange={caseSearch.onSearchChange}
+        loading={caseSearch.loading}
+        loadFailure={caseSearch.loadFailure}
+        onLoadMore={caseSearch.onLoadMore}
+        placeholder="Servicefall suchen"
+        emptyMessage="Kein passender Servicefall gefunden"
+      />
+    </Field>
+  );
+}
+
+function DueReasonField({ controller }: DueActionFieldsProps): ReactElement {
+  const { reasonRequired } = controller;
+  return (
+    <Field
+      label={reasonRequired ? 'Begründung' : 'Notiz (optional)'}
+      htmlFor="due-reason"
+      required={reasonRequired}
+      error={controller.fieldErrors.reason}
+    >
+      <Textarea value={controller.reason} onChange={(event) => controller.setReason(event.target.value)} />
+    </Field>
+  );
+}
+
 export function MaintenanceDueActionDialog({
   open,
   onOpenChange,
@@ -191,7 +250,7 @@ export function MaintenanceDueActionDialog({
     plannedDurationMinutes,
     onSaved,
   });
-  const { action, fieldErrors, isPending, showReason, reasonRequired } = controller;
+  const { action, isPending, showReason } = controller;
   // The service cases of the due item's customer and site, searched on the server.
   const caseSearch = useJobEntityOptions(
     { kind: 'service-cases', clientId: due.clientId, siteId: due.siteId },
@@ -212,38 +271,9 @@ export function MaintenanceDueActionDialog({
           {action === 'schedule' && <DueScheduleFields controller={controller} />}
           {action === 'complete' && <DueCompletionFields controller={controller} />}
           {action === 'link_service_case' && (
-            <Field
-              label="Servicefall"
-              htmlFor="maintenance-service-case"
-              required
-              error={fieldErrors.serviceCaseId}
-            >
-              <SearchableSelect
-                value={controller.serviceCaseId}
-                onChange={controller.setServiceCaseId}
-                options={caseSearch.options}
-                onSearchChange={caseSearch.onSearchChange}
-                loading={caseSearch.loading}
-                loadFailure={caseSearch.loadFailure}
-                onLoadMore={caseSearch.onLoadMore}
-                placeholder="Servicefall suchen"
-                emptyMessage="Kein passender Servicefall gefunden"
-              />
-            </Field>
+            <DueServiceCaseField controller={controller} caseSearch={caseSearch} />
           )}
-          {showReason && (
-            <Field
-              label={reasonRequired ? 'Begründung' : 'Notiz (optional)'}
-              htmlFor="due-reason"
-              required={reasonRequired}
-              error={fieldErrors.reason}
-            >
-              <Textarea
-                value={controller.reason}
-                onChange={(event) => controller.setReason(event.target.value)}
-              />
-            </Field>
-          )}
+          {showReason && <DueReasonField controller={controller} />}
         </div>
         <ErrorText>{controller.error}</ErrorText>
         <DialogFooter>
