@@ -176,15 +176,6 @@
     "components/dokumente/document-move-destination-dialog.tsx": { "MoveDestinationDialog": 124 },
     "components/dokumente/document-upload-dialog.tsx": { "DocumentUploadDialog": 170 },
     "components/dokumente/document-viewer-dialog.tsx": { "DocumentViewerDialog": 187 },
-    "components/dokumente/use-document-library-drop-targets.ts": { "useDocumentLibraryDropTargets": 127 },
-    "components/dokumente/use-document-library-navigation.ts": { "useDocumentLibraryNavigation": 115 },
-    "components/dokumente/use-document-library-selection.ts": { "useDocumentLibrarySelection": 136 },
-    "components/dokumente/use-document-library-table-rectangle-selection.ts": {
-      "useDocumentLibraryTableRectangleSelection": 105
-    },
-    "components/dokumente/use-document-library-table-row-drag.ts": { "useDocumentLibraryTableRowDrag": 152 },
-    "components/dokumente/use-document-library-upload.ts": { "useDocumentLibraryUpload": 94 },
-    "components/dokumente/use-document-library.ts": { "useDocumentLibrary": 135 },
     "components/inventar/inventory-content.tsx": {
       "InventoryContent": 148,
       "InventoryTable": 92,
