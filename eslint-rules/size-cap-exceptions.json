@@ -10,7 +10,6 @@
   "functions": {
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
-    "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
@@ -93,38 +92,6 @@
       "useResponsibilityConfigurationForm": 102
     },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
-    "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
-    "components/zeiterfassung/pending-approvals-cards.tsx": {
-      "SessionRequestCard": 107,
-      "ChangeRequestCard": 102
-    },
-    "components/zeiterfassung/pending-approvals-list.tsx": { "PendingApprovalsList": 86 },
-    "components/zeiterfassung/pending-approvals.tsx": { "PendingApprovals": 125 },
-    "components/zeiterfassung/sickness-section-report-dialog.tsx": {
-      "OwnSicknessReportFields": 94,
-      "OwnSicknessReportDialog": 107
-    },
-    "components/zeiterfassung/sickness-section.tsx": { "SicknessSection": 109 },
-    "components/zeiterfassung/time-account-settings-forms.tsx": { "AdjustmentRequestForm": 125 },
-    "components/zeiterfassung/time-account-settings-sections.tsx": {
-      "EmployeeTimePolicyAssignment": 97,
-      "MissingTimeAccount": 105
-    },
-    "components/zeiterfassung/time-correction-dialog-fields.tsx": { "TimeCorrectionDialogFields": 106 },
-    "components/zeiterfassung/time-correction-dialog.tsx": { "TimeCorrectionDialog": 85 },
-    "components/zeiterfassung/time-correction-requests-card.tsx": { "TimeCorrectionRequestCard": 132 },
-    "components/zeiterfassung/time-correction-requests.tsx": { "TimeCorrectionRequests": 128 },
-    "components/zeiterfassung/time-progress-ring.tsx": { "TimeProgressRing": 103 },
-    "components/zeiterfassung/use-time-correction-dialog.ts": {
-      "useTimeCorrectionDialogSession": 86,
-      "useTimeCorrectionDialogForm": 128
-    },
-    "components/zeiterfassung/use-time-correction-requests.ts": { "useTimeCorrectionRequestActions": 137 },
-    "components/zeiterfassung/use-vacation-approvals.ts": { "useVacationApprovalDecisions": 83 },
-    "components/zeiterfassung/vacation-approvals.tsx": { "VacationApprovals": 86 },
-    "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
-    "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
-    "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
