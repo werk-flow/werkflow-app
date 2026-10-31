@@ -104,15 +104,6 @@
       "WorkLifecycleTransitionActions": 95
     },
     "components/auftraege/lifecycle/work-lifecycle-transition-dialog.tsx": { "WorkTransitionDialog": 102 },
-    "components/auftraege/list/auftraege-content.tsx": { "AuftraegeContent": 156 },
-    "components/auftraege/list/auftraege-list-sections.tsx": { "AuftraegeSectionTable": 100 },
-    "components/auftraege/list/filter-bar.tsx": { "FilterBar": 118 },
-    "components/auftraege/list/job-actions-menu.tsx": { "JobActionsMenu": 117 },
-    "components/auftraege/list/project-actions-menu.tsx": { "ProjectActionsMenu": 113 },
-    "components/auftraege/list/use-auftraege-create-actions.ts": { "useAuftraegeCreateActions": 111 },
-    "components/auftraege/list/use-auftraege-local-updates.ts": { "useAuftraegeLocalUpdates": 88 },
-    "components/auftraege/list/use-auftraege-optimistic-list.ts": { "useAuftraegeOptimisticList": 93 },
-    "components/auftraege/list/use-auftraege-row-actions.ts": { "useAuftraegeRowActions": 100 },
     "components/auftraege/project-detail/project-detail-content.tsx": {
       "useProjectDetailState": 96,
       "ProjectDetailContent": 150
