@@ -2,7 +2,7 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo, useState } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, type Control, type UseFormReturn } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -14,6 +14,7 @@ import {
   getPasswordRequirements,
   getPasswordStrengthLevel,
   passwordWithConfirmationSchema,
+  type PasswordRequirementFlags,
   type PasswordWithConfirmationValues,
 } from '@/lib/validation/password';
 
@@ -30,6 +31,73 @@ type NewPasswordFieldsFormProps = {
   backLabel?: string;
   className?: string;
 };
+
+function NewPasswordField({
+  form,
+  strengthLevel,
+  requirements,
+  clearValidationError,
+}: {
+  form: UseFormReturn<PasswordWithConfirmationValues>;
+  strengthLevel: number;
+  requirements: PasswordRequirementFlags;
+  clearValidationError: () => void;
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name="password"
+      render={({ field, fieldState }) => (
+        // The checklist shows each unmet requirement while typing; a submit marks the field too.
+        <Field
+          label="Neues Passwort"
+          required
+          error={form.formState.isSubmitted ? fieldState.error?.message : undefined}
+        >
+          <PasswordInput
+            {...field}
+            autoComplete="new-password"
+            placeholder="Neues Passwort"
+            onChange={(event) => {
+              clearValidationError();
+              field.onChange(event);
+            }}
+          />
+          <PasswordStrengthMeter className="mt-2" level={strengthLevel} />
+          <PasswordRequirements className="mt-2" requirements={requirements} />
+        </Field>
+      )}
+    />
+  );
+}
+
+function ConfirmPasswordField({
+  control,
+  clearValidationError,
+}: {
+  control: Control<PasswordWithConfirmationValues>;
+  clearValidationError: () => void;
+}) {
+  return (
+    <FormField
+      control={control}
+      name="confirmPassword"
+      render={({ field, fieldState }) => (
+        <Field label="Passwort bestätigen" required error={fieldState.error?.message}>
+          <PasswordInput
+            {...field}
+            autoComplete="new-password"
+            placeholder="Passwort wiederholen"
+            onChange={(event) => {
+              clearValidationError();
+              field.onChange(event);
+            }}
+          />
+        </Field>
+      )}
+    />
+  );
+}
 
 export function NewPasswordFieldsForm({
   formError,
@@ -82,48 +150,14 @@ export function NewPasswordFieldsForm({
   return (
     <Form {...form}>
       <form className={className} onSubmit={handleSubmit}>
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field, fieldState }) => (
-            // The checklist shows each unmet requirement while typing; a submit marks the field too.
-            <Field
-              label="Neues Passwort"
-              required
-              error={form.formState.isSubmitted ? fieldState.error?.message : undefined}
-            >
-              <PasswordInput
-                {...field}
-                autoComplete="new-password"
-                placeholder="Neues Passwort"
-                onChange={(event) => {
-                  clearValidationError();
-                  field.onChange(event);
-                }}
-              />
-              <PasswordStrengthMeter className="mt-2" level={strengthLevel} />
-              <PasswordRequirements className="mt-2" requirements={requirements} />
-            </Field>
-          )}
+        <NewPasswordField
+          form={form}
+          strengthLevel={strengthLevel}
+          requirements={requirements}
+          clearValidationError={clearValidationError}
         />
 
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field, fieldState }) => (
-            <Field label="Passwort bestätigen" required error={fieldState.error?.message}>
-              <PasswordInput
-                {...field}
-                autoComplete="new-password"
-                placeholder="Passwort wiederholen"
-                onChange={(event) => {
-                  clearValidationError();
-                  field.onChange(event);
-                }}
-              />
-            </Field>
-          )}
-        />
+        <ConfirmPasswordField control={form.control} clearValidationError={clearValidationError} />
 
         <ErrorText>{displayError}</ErrorText>
 

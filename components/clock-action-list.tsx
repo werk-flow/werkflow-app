@@ -14,6 +14,7 @@ import {
 import { JobPickerModal } from '@/components/job-picker-modal';
 import { useClockState } from '@/components/clock-state-provider';
 import { TimeActivityDialog } from '@/components/time-activity-dialog';
+import { TimeActivityStatusNotice } from '@/components/time-activity-fields';
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
@@ -40,49 +41,16 @@ const ICONS: Record<ClockActionIcon, typeof Play> = {
   more: SlidersHorizontal,
 };
 
-/**
- * The state-aware list of next clock actions (registry: "Clock next actions").
- * One tap per transition, the job carried along; the rare activity kinds and
- * qualifiers sit behind "Weitere Aktivitäten …", which opens the full
- * `TimeActivityDialog`. The clock button's sheet and the Zeiterfassung
- * dashboard render this same list.
- */
-export function ClockActionList({
-  organizationId,
-  onSettled,
-  onPendingChange,
-  initialPickerMode = null,
-  className,
-}: {
-  organizationId: string;
-  /** Called after a transition the list performed was accepted; containers close on it. */
-  onSettled?: () => void;
-  /** Reports the running transition, so a hosting dialog stays open until it answers. */
-  onPendingChange?: ((pending: boolean) => void) | undefined;
-  /** Open the job picker at once, for a hot key whose action is a job choice. */
-  initialPickerMode?: ClockPickerMode | null;
-  className?: string;
-}) {
-  const {
-    state,
-    isReady,
-    isPending,
-    statusError,
-    refresh,
-    transitionActivity,
-    recoverAndContinue,
-    clockOut,
-  } = useClockState();
+/** Runs one clock transition at a time and reports its answer: inline, as a banner, or by settling. */
+function useClockTransitionRunner(
+  onSettled: (() => void) | undefined,
+  onPendingChange: ((pending: boolean) => void) | undefined,
+) {
   const { showBanner } = useBanner();
   const { run, isPending: isRunning } = usePendingTask();
   useReportPending(isRunning, onPendingChange);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pickerMode, setPickerMode] = useState<ClockPickerMode | null>(initialPickerMode);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const recovery = Boolean(state?.recoveryReason);
-  const actions = deriveClockActions(state);
-  const busy = !isReady || isPending || isRunning;
 
   function handleResult(result: TimeTransitionResult, fallback: string): boolean {
     if (!result.success) {
@@ -121,6 +89,25 @@ export function ClockActionList({
       }
     });
   }
+
+  return { isRunning, pendingId, error, setError, perform };
+}
+
+/** What a tap on a next action does: a transition, the job picker, or the full activity dialog. */
+function useClockActionChoices({
+  clock: { state, transitionActivity, recoverAndContinue, clockOut },
+  initialPickerMode,
+  perform,
+  setError,
+}: {
+  clock: ReturnType<typeof useClockState>;
+  initialPickerMode: ClockPickerMode | null;
+  perform: (id: string, task: () => Promise<TimeTransitionResult>, fallback: string) => void;
+  setError: (error: string | null) => void;
+}) {
+  const [pickerMode, setPickerMode] = useState<ClockPickerMode | null>(initialPickerMode);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const recovery = Boolean(state?.recoveryReason);
 
   function activate(action: ClockAction): void {
     switch (action.kind) {
@@ -162,50 +149,48 @@ export function ClockActionList({
     );
   }
 
+  return { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob };
+}
+
+/**
+ * The state-aware list of next clock actions (registry: "Clock next actions").
+ * One tap per transition, the job carried along; the rare activity kinds and
+ * qualifiers sit behind "Weitere Aktivitäten …", which opens the full
+ * `TimeActivityDialog`. The clock button's sheet and the Zeiterfassung
+ * dashboard render this same list.
+ */
+export function ClockActionList({
+  organizationId,
+  onSettled,
+  onPendingChange,
+  initialPickerMode = null,
+  className,
+}: {
+  organizationId: string;
+  /** Called after a transition the list performed was accepted; containers close on it. */
+  onSettled?: () => void;
+  /** Reports the running transition, so a hosting dialog stays open until it answers. */
+  onPendingChange?: ((pending: boolean) => void) | undefined;
+  /** Open the job picker at once, for a hot key whose action is a job choice. */
+  initialPickerMode?: ClockPickerMode | null;
+  className?: string;
+}) {
+  const clock = useClockState();
+  const { state, isReady, isPending, statusError, refresh } = clock;
+  const { isRunning, pendingId, error, setError, perform } = useClockTransitionRunner(
+    onSettled,
+    onPendingChange,
+  );
+  const { pickerMode, setPickerMode, moreOpen, setMoreOpen, recovery, activate, confirmPickedJob } =
+    useClockActionChoices({ clock, initialPickerMode, perform, setError });
+  const actions = deriveClockActions(state);
+  const busy = !isReady || isPending || isRunning;
+
   return (
     <div className={cn('space-y-3', className)}>
-      {recovery && (
-        <div className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
-          <p className="font-medium">Ungewöhnlich lange Erfassung</p>
-          <p className="mt-1">
-            Prüfe den Stand. Jede Aktion unten setzt die Erfassung bewusst fort; „Erfassung beenden“ schließt
-            sie.
-          </p>
-        </div>
-      )}
-      <div className="flex flex-col gap-2" role="group" aria-label="Nächste Aktion">
-        {actions.map((action, index) => {
-          const Icon = ICONS[action.icon];
-          const isPrimary = index === 0 && action.kind !== 'more';
-          return (
-            <Button
-              key={action.id}
-              type="button"
-              variant={isPrimary ? 'default' : action.kind === 'more' ? 'ghost' : 'outline'}
-              className={cn(
-                'h-auto min-h-12 w-full justify-start gap-3 px-4 text-left text-base whitespace-normal',
-                action.kind === 'more' && 'text-muted-foreground',
-              )}
-              disabled={busy}
-              pending={pendingId === action.id}
-              onClick={() => activate(action)}
-            >
-              <Icon className="size-5" />
-              <span className="min-w-0 flex-1 truncate">{action.label}</span>
-            </Button>
-          );
-        })}
-      </div>
-      {!isReady && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {statusError ? 'Der Zeitstatus konnte nicht sicher geladen werden.' : 'Zeitstatus wird geladen…'}
-        </p>
-      )}
-      {statusError && (
-        <Button type="button" variant="outline" onClick={() => void refresh()}>
-          Erneut laden
-        </Button>
-      )}
+      {recovery && <ClockRecoveryNotice />}
+      <ClockActionButtons actions={actions} busy={busy} pendingId={pendingId} onActivate={activate} />
+      <TimeActivityStatusNotice isReady={isReady} statusError={statusError} onRetry={() => void refresh()} />
       <ErrorText>{error}</ErrorText>
 
       <JobPickerModal
@@ -225,6 +210,56 @@ export function ClockActionList({
         organizationId={organizationId}
         preferredJobId={state?.activeJobId ?? state?.resumeActivity?.jobId ?? null}
       />
+    </div>
+  );
+}
+
+function ClockRecoveryNotice() {
+  return (
+    <div className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
+      <p className="font-medium">Ungewöhnlich lange Erfassung</p>
+      <p className="mt-1">
+        Prüfe den Stand. Jede Aktion unten setzt die Erfassung bewusst fort; „Erfassung beenden“ schließt sie.
+      </p>
+    </div>
+  );
+}
+
+/** One button per next action; the first real action is the primary one. */
+function ClockActionButtons({
+  actions,
+  busy,
+  pendingId,
+  onActivate,
+}: {
+  actions: ClockAction[];
+  busy: boolean;
+  pendingId: string | null;
+  onActivate: (action: ClockAction) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2" role="group" aria-label="Nächste Aktion">
+      {actions.map((action, index) => {
+        const Icon = ICONS[action.icon];
+        const isPrimary = index === 0 && action.kind !== 'more';
+        return (
+          <Button
+            key={action.id}
+            type="button"
+            variant={isPrimary ? 'default' : action.kind === 'more' ? 'ghost' : 'outline'}
+            className={cn(
+              'h-auto min-h-12 w-full justify-start gap-3 px-4 text-left text-base whitespace-normal',
+              action.kind === 'more' && 'text-muted-foreground',
+            )}
+            disabled={busy}
+            pending={pendingId === action.id}
+            onClick={() => onActivate(action)}
+          >
+            <Icon className="size-5" />
+            <span className="min-w-0 flex-1 truncate">{action.label}</span>
+          </Button>
+        );
+      })}
     </div>
   );
 }

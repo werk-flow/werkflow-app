@@ -25,7 +25,8 @@ type FormFieldContextValue<
   name: TName;
 };
 
-const FormFieldContext = React.createContext<FormFieldContextValue>({} as FormFieldContextValue);
+// Outside a `FormField` the context holds no name.
+const FormFieldContext = React.createContext<Partial<FormFieldContextValue>>({});
 
 const FormField = <
   TFieldValues extends FieldValues = FieldValues,
@@ -44,8 +45,9 @@ const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext);
   const itemContext = React.useContext(FormItemContext);
   const { getFieldState } = useFormContext();
-  const formState = useFormState({ name: fieldContext.name });
-  const fieldState = getFieldState(fieldContext.name, formState);
+  const formState = useFormState(fieldContext.name === undefined ? {} : { name: fieldContext.name });
+  // react-hook-form reads an empty path like a missing one: no field state.
+  const fieldState = getFieldState(fieldContext.name ?? '', formState);
 
   if (!fieldContext) {
     throw new Error('useFormField should be used within <FormField>');
@@ -67,7 +69,8 @@ type FormItemContextValue = {
   id: string;
 };
 
-const FormItemContext = React.createContext<FormItemContextValue>({} as FormItemContextValue);
+// Outside a `FormItem` the context holds no id.
+const FormItemContext = React.createContext<Partial<FormItemContextValue>>({});
 
 function FormItem({ className, ...props }: React.ComponentProps<'div'>) {
   const id = React.useId();

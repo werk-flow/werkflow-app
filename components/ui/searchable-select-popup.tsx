@@ -259,6 +259,124 @@ export function SearchableOptionLabel({ option }: { option: SearchableSelectOpti
   );
 }
 
+function SearchableSelectSearchField({
+  inputRef,
+  search,
+  setSearch,
+  onSearchChange,
+  searchPlaceholder,
+}: Pick<SearchableSelectPopupState, 'inputRef' | 'search' | 'setSearch'> &
+  Pick<SearchableSelectBaseProps, 'onSearchChange'> & { searchPlaceholder: string }) {
+  return (
+    <div className="border-b px-3 py-2">
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          type="text"
+          aria-label={searchPlaceholder}
+          placeholder={searchPlaceholder}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            onSearchChange?.(e.target.value);
+          }}
+          className="h-8 w-full rounded-md border bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
+        />
+        {search && (
+          <button
+            type="button"
+            aria-label="Suche leeren"
+            onClick={() => {
+              setSearch('');
+              onSearchChange?.('');
+              inputRef.current?.focus();
+            }}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SearchableSelectActionRow({
+  action,
+  triggerRef,
+  setOpen,
+}: Pick<SearchableSelectPopupState, 'triggerRef' | 'setOpen'> & {
+  action: NonNullable<SearchableSelectBaseProps['action']>;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // The action opens a dialog while this popup closes: focus sits on
+        // the select's trigger first, so the dialog returns it there.
+        triggerRef.current?.focus();
+        action.onClick();
+        setOpen(false);
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-primary-text hover:bg-accent transition-colors"
+    >
+      {action.icon}
+      {action.label}
+    </button>
+  );
+}
+
+/** The loading, failure and load-more rows under the listbox. */
+function SearchableSelectStatusRows({
+  loading,
+  loadFailure,
+  onLoadMore,
+}: Pick<SearchableSelectBaseProps, 'loadFailure' | 'onLoadMore'> & { loading: boolean }) {
+  return (
+    <>
+      {loading && (
+        <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
+          Auswahl wird geladen…
+        </p>
+      )}
+      {loadFailure && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <p role="alert" className="min-w-0 text-sm text-destructive">
+            {loadFailure.message}
+          </p>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={loadFailure.retry}
+            className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
+          >
+            Erneut laden
+          </button>
+        </div>
+      )}
+      {onLoadMore && (
+        <button
+          type="button"
+          disabled={loading}
+          onClick={onLoadMore}
+          className="w-full rounded-md px-3 py-2 text-sm text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-50"
+        >
+          Weitere Ergebnisse laden
+        </button>
+      )}
+    </>
+  );
+}
+
+const POPUP_CONTENT_CLASS = cn(
+  'z-[120] flex max-h-[min(320px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] flex-col rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
+  'data-[state=open]:animate-in data-[state=closed]:animate-out',
+  'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+  'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+  'data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2',
+);
+
 /**
  * Body-portaled popup: search field, optional action, `beforeList` row, the
  * listbox holding `children` as options, then status rows and load-more.
@@ -297,13 +415,7 @@ export function SearchableSelectPopup({
         sideOffset={4}
         collisionPadding={8}
         avoidCollisions
-        className={cn(
-          'z-[120] flex max-h-[min(320px,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[var(--radix-popover-trigger-width)] flex-col rounded-md border bg-popover p-0 text-popover-foreground shadow-md outline-none',
-          'data-[state=open]:animate-in data-[state=closed]:animate-out',
-          'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
-          'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
-          'data-[side=bottom]:slide-in-from-top-2 data-[side=top]:slide-in-from-bottom-2',
-        )}
+        className={POPUP_CONTENT_CLASS}
         onOpenAutoFocus={(e) => e.preventDefault()}
         onKeyDown={(event) =>
           handleSelectKeyDown(
@@ -319,54 +431,15 @@ export function SearchableSelectPopup({
           )
         }
       >
-        <div className="border-b px-3 py-2">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              ref={inputRef}
-              type="text"
-              aria-label={searchPlaceholder}
-              placeholder={searchPlaceholder}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                onSearchChange?.(e.target.value);
-              }}
-              className="h-8 w-full rounded-md border bg-muted/50 pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 transition-colors"
-            />
-            {search && (
-              <button
-                type="button"
-                aria-label="Suche leeren"
-                onClick={() => {
-                  setSearch('');
-                  onSearchChange?.('');
-                  inputRef.current?.focus();
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="size-3" />
-              </button>
-            )}
-          </div>
-        </div>
+        <SearchableSelectSearchField
+          inputRef={inputRef}
+          search={search}
+          setSearch={setSearch}
+          onSearchChange={onSearchChange}
+          searchPlaceholder={searchPlaceholder}
+        />
 
-        {action && (
-          <button
-            type="button"
-            onClick={() => {
-              // The action opens a dialog while this popup closes: focus sits on
-              // the select's trigger first, so the dialog returns it there.
-              triggerRef.current?.focus();
-              action.onClick();
-              setOpen(false);
-            }}
-            className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium text-primary-text hover:bg-accent transition-colors"
-          >
-            {action.icon}
-            {action.label}
-          </button>
-        )}
+        {action && <SearchableSelectActionRow action={action} triggerRef={triggerRef} setOpen={setOpen} />}
 
         {beforeList}
 
@@ -387,36 +460,7 @@ export function SearchableSelectPopup({
           )}
         </div>
         {/* Status rows and the load-more control sit beside the listbox, so its children stay options. */}
-        {loading && (
-          <p role="status" className="px-3 py-2 text-sm text-muted-foreground">
-            Auswahl wird geladen…
-          </p>
-        )}
-        {loadFailure && (
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
-            <p role="alert" className="min-w-0 text-sm text-destructive">
-              {loadFailure.message}
-            </p>
-            <button
-              type="button"
-              disabled={loading}
-              onClick={loadFailure.retry}
-              className="shrink-0 rounded-md px-2 py-1 text-sm font-medium text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 disabled:opacity-50"
-            >
-              Erneut laden
-            </button>
-          </div>
-        )}
-        {onLoadMore && (
-          <button
-            type="button"
-            disabled={loading}
-            onClick={onLoadMore}
-            className="w-full rounded-md px-3 py-2 text-sm text-primary-text outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-50"
-          >
-            Weitere Ergebnisse laden
-          </button>
-        )}
+        <SearchableSelectStatusRows loading={loading} loadFailure={loadFailure} onLoadMore={onLoadMore} />
       </PopoverPrimitive.Content>
     </PopoverPrimitive.Portal>
   );

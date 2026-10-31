@@ -25,6 +25,18 @@ import { cn } from '@/lib/utils';
 import { type StockDialogState } from './inventory-form-state';
 import { LocationSelectWithCreate } from './location-select-with-create';
 
+type StockAdjustmentDialogProps = {
+  state: StockDialogState;
+  setState: (state: StockDialogState) => void;
+  locations: InventoryLocation[];
+  isSaving: boolean;
+  error: string | null;
+  onSave: () => void;
+};
+
+/** An open adjustment: the item, the Lager, the direction and the entered values. */
+type OpenStockDialogState = NonNullable<StockDialogState>;
+
 export function StockAdjustmentDialog({
   state,
   setState,
@@ -32,14 +44,7 @@ export function StockAdjustmentDialog({
   isSaving,
   error,
   onSave,
-}: {
-  state: StockDialogState;
-  setState: (state: StockDialogState) => void;
-  locations: InventoryLocation[];
-  isSaving: boolean;
-  error: string | null;
-  onSave: () => void;
-}) {
+}: StockAdjustmentDialogProps) {
   const quantity = state ? parseDecimalInput(state.quantity) : 0;
   const selectedLocation = state ? locations.find((location) => location.id === state.locationId) : null;
   const [attempted, setAttempted] = useState(false);
@@ -77,76 +82,15 @@ export function StockAdjustmentDialog({
         >
           <DialogBody className="space-y-4">
             {state && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label id="inventory-stock-action-label">Aktion</Label>
-                  <div
-                    className="grid grid-cols-2 gap-2"
-                    role="group"
-                    aria-labelledby="inventory-stock-action-label"
-                  >
-                    <Button
-                      type="button"
-                      variant={state.direction === 'add' ? 'default' : 'outline'}
-                      onClick={() => setState({ ...state, direction: 'add' })}
-                    >
-                      Hinzufügen
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={state.direction === 'remove' ? 'default' : 'outline'}
-                      onClick={() => setState({ ...state, direction: 'remove' })}
-                    >
-                      Entnehmen
-                    </Button>
-                  </div>
-                </div>
-                <Field label="Lager" htmlFor="inventory-stock-location" required error={locationError}>
-                  <LocationSelectWithCreate
-                    locations={locations}
-                    value={state.locationId}
-                    onValueChange={(value) => setState({ ...state, locationId: value })}
-                    placeholder="Lager wählen oder erstellen"
-                  />
-                </Field>
-                <Field
-                  label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
-                  htmlFor="inventory-stock-quantity"
-                  required
-                  error={quantityError}
-                >
-                  <QuantityStepper
-                    value={state.quantity}
-                    onChange={(value) => setState({ ...state, quantity: value })}
-                    unitLabel={getInventoryUnitLabel(state.item.unit)}
-                    min={0}
-                  />
-                </Field>
-                <Field label="Grund" htmlFor="inventory-stock-reason">
-                  <Textarea
-                    value={state.reason}
-                    onChange={(event) => setState({ ...state, reason: event.target.value })}
-                  />
-                </Field>
-                <p
-                  className={cn(
-                    'rounded-md px-3 py-2 text-sm',
-                    state.direction === 'add'
-                      ? 'bg-success-soft text-success-soft-foreground'
-                      : 'bg-destructive-soft text-destructive-soft-foreground',
-                  )}
-                >
-                  {state.direction === 'add'
-                    ? `Diese Aktion fügt ${formatInventoryQuantity(
-                        quantity,
-                        state.item.unit,
-                      )} ${selectedLocation ? `zu ${selectedLocation.name}` : 'zum Inventar'} hinzu.`
-                    : `Diese Aktion zieht ${formatInventoryQuantity(
-                        quantity,
-                        state.item.unit,
-                      )} ${selectedLocation ? `aus ${selectedLocation.name}` : 'aus dem Inventar'} ab.`}
-                </p>
-              </div>
+              <StockAdjustmentFields
+                state={state}
+                setState={setState}
+                locations={locations}
+                quantity={quantity}
+                selectedLocation={selectedLocation}
+                locationError={locationError}
+                quantityError={quantityError}
+              />
             )}
             <ErrorText>{error}</ErrorText>
           </DialogBody>
@@ -161,5 +105,108 @@ export function StockAdjustmentDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The direction, Lager, quantity and reason of an open adjustment, with its effect. */
+function StockAdjustmentFields({
+  state,
+  setState,
+  locations,
+  quantity,
+  selectedLocation,
+  locationError,
+  quantityError,
+}: {
+  state: OpenStockDialogState;
+  setState: (state: StockDialogState) => void;
+  locations: InventoryLocation[];
+  quantity: number;
+  selectedLocation: InventoryLocation | null | undefined;
+  locationError: string | undefined;
+  quantityError: string | undefined;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label id="inventory-stock-action-label">Aktion</Label>
+        <div className="grid grid-cols-2 gap-2" role="group" aria-labelledby="inventory-stock-action-label">
+          <Button
+            type="button"
+            variant={state.direction === 'add' ? 'default' : 'outline'}
+            onClick={() => setState({ ...state, direction: 'add' })}
+          >
+            Hinzufügen
+          </Button>
+          <Button
+            type="button"
+            variant={state.direction === 'remove' ? 'default' : 'outline'}
+            onClick={() => setState({ ...state, direction: 'remove' })}
+          >
+            Entnehmen
+          </Button>
+        </div>
+      </div>
+      <Field label="Lager" htmlFor="inventory-stock-location" required error={locationError}>
+        <LocationSelectWithCreate
+          locations={locations}
+          value={state.locationId}
+          onValueChange={(value) => setState({ ...state, locationId: value })}
+          placeholder="Lager wählen oder erstellen"
+        />
+      </Field>
+      <Field
+        label={`Menge (${getInventoryUnitLabel(state.item.unit)})`}
+        htmlFor="inventory-stock-quantity"
+        required
+        error={quantityError}
+      >
+        <QuantityStepper
+          value={state.quantity}
+          onChange={(value) => setState({ ...state, quantity: value })}
+          unitLabel={getInventoryUnitLabel(state.item.unit)}
+          min={0}
+        />
+      </Field>
+      <Field label="Grund" htmlFor="inventory-stock-reason">
+        <Textarea
+          value={state.reason}
+          onChange={(event) => setState({ ...state, reason: event.target.value })}
+        />
+      </Field>
+      <StockEffectNote state={state} quantity={quantity} selectedLocation={selectedLocation} />
+    </div>
+  );
+}
+
+/** What the booking will do, in words, before it is saved. */
+function StockEffectNote({
+  state,
+  quantity,
+  selectedLocation,
+}: {
+  state: OpenStockDialogState;
+  quantity: number;
+  selectedLocation: InventoryLocation | null | undefined;
+}) {
+  return (
+    <p
+      className={cn(
+        'rounded-md px-3 py-2 text-sm',
+        state.direction === 'add'
+          ? 'bg-success-soft text-success-soft-foreground'
+          : 'bg-destructive-soft text-destructive-soft-foreground',
+      )}
+    >
+      {state.direction === 'add'
+        ? `Diese Aktion fügt ${formatInventoryQuantity(
+            quantity,
+            state.item.unit,
+          )} ${selectedLocation ? `zu ${selectedLocation.name}` : 'zum Inventar'} hinzu.`
+        : `Diese Aktion zieht ${formatInventoryQuantity(
+            quantity,
+            state.item.unit,
+          )} ${selectedLocation ? `aus ${selectedLocation.name}` : 'aus dem Inventar'} ab.`}
+    </p>
   );
 }

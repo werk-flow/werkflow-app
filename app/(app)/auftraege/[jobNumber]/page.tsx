@@ -25,16 +25,13 @@ interface JobDetailPageProps {
   params: Promise<{ jobNumber: string }>;
 }
 
-async function JobDetailData({ jobNumber }: { jobNumber: string }) {
-  const { user, membership } = await resolvePageMembership();
-  if (!membership) redirect('/auftraege');
+type ServerSupabase = Awaited<ReturnType<typeof createSupabaseServerClient>>;
 
-  const activeOrgId = membership.orgId;
-  const isAdminOrManager = isManagerRole(membership.role);
-  if (!isAdminOrManager) {
-    return <FieldWorkPackPage jobNumber={jobNumber} currentUserId={user.id} />;
-  }
-  const supabase = await createSupabaseServerClient();
+/** Starts every read of the manager job page at once; the job-scoped ones wait for the job. */
+function loadJobDetailReads(
+  supabase: ServerSupabase,
+  { jobNumber, activeOrgId, userId }: { jobNumber: string; activeOrgId: string; userId: string },
+) {
   const jobResultPromise = getJobByNumber(decodeURIComponent(jobNumber));
   const instructionItemsResultPromise = jobResultPromise.then((result) =>
     result.success ? getJobInstructionItems(result.job.id) : null,
@@ -55,7 +52,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const approvalHolderPromise = getEffectiveResponsibilityHolderForActor({
     organizationId: activeOrgId,
     responsibility: 'work_artifact_approval',
-    actorUserId: user.id,
+    actorUserId: userId,
   });
   const handoverWorkspacePromise = jobResultPromise.then((result) =>
     result.success ? getWorkHandoverWorkspace({ targetType: 'job', targetId: result.job.id }) : null,
@@ -73,6 +70,56 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       : null,
   );
 
+  return Promise.all([
+    jobResultPromise,
+    getOrgMembersForUser(activeOrgId, userId),
+    instructionItemsResultPromise,
+    documentsResultPromise,
+    materialLinesResultPromise,
+    inventoryOptionsResultPromise,
+    lifecycleResultPromise,
+    artifactsResultPromise,
+    approvalHolderPromise,
+    handoverWorkspacePromise,
+    originRequestPromise,
+  ]);
+}
+
+type JobDetailReads = Awaited<ReturnType<typeof loadJobDetailReads>>;
+type OriginRequestRead = JobDetailReads[10];
+
+/** Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden. */
+function handoverWorkspaceFrom(handoverWorkspaceResult: JobDetailReads[9]) {
+  return handoverWorkspaceResult?.success
+    ? handoverWorkspaceResult.workspace
+    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
+      ? 'not_reviewer'
+      : null;
+}
+
+function originRequestLink(originRequest: OriginRequestRead) {
+  if (originRequest?.error) return 'failed';
+  const originRequestRow = originRequest?.data ?? null;
+  return originRequestRow
+    ? {
+        label: originRequestRow.request_number
+          ? `Anfrage ${originRequestRow.request_number}`
+          : `Anfrage „${originRequestRow.summary}“`,
+        href: `/anfragen/${originRequestRow.id}`,
+      }
+    : null;
+}
+
+async function JobDetailData({ jobNumber }: { jobNumber: string }) {
+  const { user, membership } = await resolvePageMembership();
+  if (!membership) redirect('/auftraege');
+
+  const activeOrgId = membership.orgId;
+  const isAdminOrManager = isManagerRole(membership.role);
+  if (!isAdminOrManager) {
+    return <FieldWorkPackPage jobNumber={jobNumber} currentUserId={user.id} />;
+  }
+  const supabase = await createSupabaseServerClient();
   const [
     result,
     membersResult,
@@ -85,19 +132,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
     approvalHolder,
     handoverWorkspaceResult,
     originRequest,
-  ] = await Promise.all([
-    jobResultPromise,
-    getOrgMembersForUser(activeOrgId, user.id),
-    instructionItemsResultPromise,
-    documentsResultPromise,
-    materialLinesResultPromise,
-    inventoryOptionsResultPromise,
-    lifecycleResultPromise,
-    artifactsResultPromise,
-    approvalHolderPromise,
-    handoverWorkspacePromise,
-    originRequestPromise,
-  ]);
+  ] = await loadJobDetailReads(supabase, { jobNumber, activeOrgId, userId: user.id });
 
   // A missing or forbidden job leaves the page; a failed read must not look like one.
   if (!result.success && (result.error === 'fetch_failed' || result.error === 'unexpected_error')) {
@@ -138,18 +173,12 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
   const materialLines = materialLinesResult?.success ? materialLinesResult.lines : null;
   const inventoryItems = inventoryOptionsResult.success ? inventoryOptionsResult.items : null;
   const inventoryLocations = inventoryOptionsResult.success ? inventoryOptionsResult.locations : null;
-  // Only a holder of the handover review may read the workspace; for everyone else the summary stays hidden.
-  const handoverWorkspace = handoverWorkspaceResult?.success
-    ? handoverWorkspaceResult.workspace
-    : handoverWorkspaceResult?.error === 'work_handover_not_authorized'
-      ? 'not_reviewer'
-      : null;
+  const handoverWorkspace = handoverWorkspaceFrom(handoverWorkspaceResult);
   if (job.project?.projectNumber) {
     redirect(jobDetailHref(job, job.project));
   }
 
   if (originRequest?.error) logError('Job detail: origin request read failed', originRequest.error);
-  const originRequestRow = originRequest?.data ?? null;
 
   return (
     <JobDetailContent
@@ -164,18 +193,7 @@ async function JobDetailData({ jobNumber }: { jobNumber: string }) {
       inventoryItems={inventoryItems}
       inventoryLocations={inventoryLocations}
       currentUserId={user.id}
-      originRequest={
-        originRequest?.error
-          ? 'failed'
-          : originRequestRow
-            ? {
-                label: originRequestRow.request_number
-                  ? `Anfrage ${originRequestRow.request_number}`
-                  : `Anfrage „${originRequestRow.summary}“`,
-                href: `/anfragen/${originRequestRow.id}`,
-              }
-            : null
-      }
+      originRequest={originRequestLink(originRequest)}
       lifecycleSnapshot={lifecycleResult?.success ? lifecycleResult.snapshot : null}
       handoverWorkspace={handoverWorkspace}
     />

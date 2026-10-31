@@ -23,6 +23,112 @@ type JobDetailRelationDialogsProps = {
   suppressRefreshRef: RefObject<boolean>;
 };
 
+type SaveJobDetailClientInput = Pick<
+  JobDetailRelationDialogsProps,
+  'liveJob' | 'parentProject' | 'applyLiveJobPatch' | 'setShowClientDialog'
+> & {
+  clientId: string;
+  setClientSaveError: (error: string | null) => void;
+};
+
+/** Saves the customer on the parent project, or else on the job; the dialog closes only on success. */
+async function saveJobDetailClient({
+  clientId,
+  liveJob,
+  parentProject,
+  applyLiveJobPatch,
+  setClientSaveError,
+  setShowClientDialog,
+}: SaveJobDetailClientInput) {
+  // The dialog stays open with the failure on any rejected or thrown save.
+  try {
+    if (parentProject?.id) {
+      const result = await updateProject(parentProject.id, { clientId });
+      if (!result.success) {
+        setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+        return;
+      }
+    } else {
+      const result = await updateJob(liveJob.id, { clientId });
+      if (!result.success && result.error !== 'no_changes') {
+        setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+        return;
+      }
+      if (result.success) {
+        // The customer card comes with the rendered route; only a removal is known here.
+        applyLiveJobPatch({ ...result.job, ...(result.job.clientId ? {} : { client: null }) });
+      }
+    }
+  } catch {
+    setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
+    return;
+  }
+  setShowClientDialog(false);
+}
+
+type SaveJobDetailProjectInput = Pick<
+  JobDetailRelationDialogsProps,
+  'liveJob' | 'applyLiveJobPatch' | 'suppressRefreshRef' | 'setShowProjectDialog'
+> & {
+  chosenProject: JobEntityOption;
+  setProjectSaveError: (error: string | null) => void;
+  replaceRoute: (href: string) => void;
+};
+
+/** Moves the job into the chosen project, then follows its new project URL. */
+async function saveJobDetailProject({
+  chosenProject,
+  liveJob,
+  applyLiveJobPatch,
+  suppressRefreshRef,
+  setProjectSaveError,
+  setShowProjectDialog,
+  replaceRoute,
+}: SaveJobDetailProjectInput) {
+  suppressRefreshRef.current = true;
+  let result: Awaited<ReturnType<typeof updateJob>>;
+  try {
+    result = await updateJob(liveJob.id, { projectId: chosenProject.value });
+  } catch {
+    suppressRefreshRef.current = false;
+    setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
+    return;
+  }
+  if (!result.success && result.error !== 'no_changes') {
+    // The dialog stays open and the failure is visible (no silent close).
+    suppressRefreshRef.current = false;
+    setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
+    return;
+  }
+  setShowProjectDialog(false);
+
+  if (result.success) {
+    applyLiveJobPatch({
+      ...result.job,
+      project:
+        result.job.projectId === chosenProject.value
+          ? {
+              id: chosenProject.value,
+              name: projectNameOfOption(chosenProject),
+              projectNumber: chosenProject.number ?? null,
+            }
+          : null,
+    });
+  }
+
+  const nextJobNumber = result.success ? result.job.jobNumber : liveJob.jobNumber;
+  // The dialog only opens for a job without a project and saves a selected one.
+  if (!nextJobNumber || !chosenProject.number) {
+    // updateJob's response already rendered the route.
+    suppressRefreshRef.current = false;
+    return;
+  }
+
+  replaceRoute(
+    `/auftraege/projekt/${encodeURIComponent(chosenProject.number)}/${encodeURIComponent(nextJobNumber)}`,
+  );
+}
+
 /** The two dialogs that link the job to a customer or a project, with their saves. */
 export function JobDetailRelationDialogs({
   liveJob,
@@ -44,80 +150,31 @@ export function JobDetailRelationDialogs({
   // updateProject's and updateJob's responses render the route, so no refresh follows a save.
   const handleClientSave = async (clientId: string) => {
     setClientSaveError(null);
-    void runClientUpdateTask(async () => {
-      // The dialog stays open with the failure on any rejected or thrown save.
-      try {
-        if (parentProject?.id) {
-          const result = await updateProject(parentProject.id, { clientId });
-          if (!result.success) {
-            setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
-            return;
-          }
-        } else {
-          const result = await updateJob(liveJob.id, { clientId });
-          if (!result.success && result.error !== 'no_changes') {
-            setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
-            return;
-          }
-          if (result.success) {
-            // The customer card comes with the rendered route; only a removal is known here.
-            applyLiveJobPatch({ ...result.job, ...(result.job.clientId ? {} : { client: null }) });
-          }
-        }
-      } catch {
-        setClientSaveError('Der Kunde konnte nicht gespeichert werden.');
-        return;
-      }
-      setShowClientDialog(false);
-    });
+    void runClientUpdateTask(() =>
+      saveJobDetailClient({
+        clientId,
+        liveJob,
+        parentProject,
+        applyLiveJobPatch,
+        setClientSaveError,
+        setShowClientDialog,
+      }),
+    );
   };
 
   const handleProjectSave = async (chosenProject: JobEntityOption) => {
     setProjectSaveError(null);
-    void runProjectUpdateTask(async () => {
-      suppressRefreshRef.current = true;
-      let result: Awaited<ReturnType<typeof updateJob>>;
-      try {
-        result = await updateJob(liveJob.id, { projectId: chosenProject.value });
-      } catch {
-        suppressRefreshRef.current = false;
-        setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
-        return;
-      }
-      if (!result.success && result.error !== 'no_changes') {
-        // The dialog stays open and the failure is visible (no silent close).
-        suppressRefreshRef.current = false;
-        setProjectSaveError('Das Projekt konnte nicht gespeichert werden.');
-        return;
-      }
-      setShowProjectDialog(false);
-
-      if (result.success) {
-        applyLiveJobPatch({
-          ...result.job,
-          project:
-            result.job.projectId === chosenProject.value
-              ? {
-                  id: chosenProject.value,
-                  name: projectNameOfOption(chosenProject),
-                  projectNumber: chosenProject.number ?? null,
-                }
-              : null,
-        });
-      }
-
-      const nextJobNumber = result.success ? result.job.jobNumber : liveJob.jobNumber;
-      // The dialog only opens for a job without a project and saves a selected one.
-      if (!nextJobNumber || !chosenProject.number) {
-        // updateJob's response already rendered the route.
-        suppressRefreshRef.current = false;
-        return;
-      }
-
-      router.replace(
-        `/auftraege/projekt/${encodeURIComponent(chosenProject.number)}/${encodeURIComponent(nextJobNumber)}`,
-      );
-    });
+    void runProjectUpdateTask(() =>
+      saveJobDetailProject({
+        chosenProject,
+        liveJob,
+        applyLiveJobPatch,
+        suppressRefreshRef,
+        setProjectSaveError,
+        setShowProjectDialog,
+        replaceRoute: (href) => router.replace(href),
+      }),
+    );
   };
 
   return (

@@ -44,10 +44,7 @@ export function JobInstructionItemRow({
   focusDraft,
   setDetailsItem,
 }: JobInstructionItemRowProps) {
-  const { editingValues, setEditingValues, itemTextareaRefs, handleSaveExistingItem } = editing;
-  const { handleToggleItem } = rowActions;
   const itemIndex = items.findIndex((currentItem) => currentItem.id === item.id);
-  const editingValue = editingValues[item.id] ?? item.content;
   const isRowBusy = isBusy(item.id);
   const creatorLabel = `Erstellt von ${getActorName(item.creator)} · ${formatBerlinDateTime(item.createdAt)}`;
   const statusLabel = item.lastStatusChangedAt
@@ -66,69 +63,16 @@ export function JobInstructionItemRow({
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <PlainButton
-          type="button"
-          onClick={() => {
-            if (!readOnly) void handleToggleItem(item);
-          }}
-          disabled={readOnly || isRowBusy}
-          aria-busy={isRowBusy}
-          aria-label={
-            readOnly
-              ? item.isCompleted
-                ? 'Punkt erledigt'
-                : 'Punkt offen'
-              : item.isCompleted
-                ? 'Punkt als offen markieren'
-                : 'Punkt als erledigt markieren'
-          }
-          className={cn(
-            'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors sm:size-8',
-            readOnly && 'cursor-default opacity-70',
-            item.isCompleted
-              ? 'border-primary bg-primary text-primary-foreground'
-              : 'border-muted-foreground/40 bg-background text-transparent',
-          )}
-        >
-          <Check className="size-3" />
-        </PlainButton>
+        <JobInstructionItemToggle
+          item={item}
+          readOnly={readOnly}
+          isRowBusy={isRowBusy}
+          rowActions={rowActions}
+        />
 
         <div className="min-w-0 flex-1">
           {isAdminOrManager ? (
-            <Textarea
-              ref={(element) => {
-                if (!element) {
-                  itemTextareaRefs.current.delete(item.id);
-                  return;
-                }
-
-                itemTextareaRefs.current.set(item.id, element);
-                resizeTextareaElement(element);
-              }}
-              value={editingValue}
-              onChange={(event) => {
-                resizeTextareaElement(event.currentTarget);
-                setEditingValues((current) => ({
-                  ...current,
-                  [item.id]: event.target.value,
-                }));
-              }}
-              onBlur={() => {
-                void handleSaveExistingItem(item);
-              }}
-              onKeyDown={async (event) => {
-                if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
-
-                event.preventDefault();
-                if (event.shiftKey) return;
-                const didSave = await handleSaveExistingItem(item);
-                if (didSave) {
-                  focusDraft();
-                }
-              }}
-              aria-label="Arbeitsanweisungs-Punkt bearbeiten"
-              className="field-sizing-fixed min-h-0 min-w-0 w-full max-w-full resize-none overflow-hidden border-0 !bg-transparent px-0 py-1 whitespace-pre-wrap break-words shadow-none focus-visible:ring-0 dark:!bg-transparent"
-            />
+            <JobInstructionItemEditor item={item} editing={editing} focusDraft={focusDraft} />
           ) : (
             <p className="py-1 text-sm leading-6 whitespace-pre-wrap break-words">{item.content}</p>
           )}
@@ -153,29 +97,116 @@ export function JobInstructionItemRow({
           {(item.groupLabel ||
             item.requirementState === 'optional' ||
             item.predecessors.length > 0 ||
-            item.evidenceRequirements.length > 0) && (
-            <div className="mt-2 space-y-1 rounded-md bg-muted/35 px-2.5 py-2 text-xs text-muted-foreground">
-              <p>
-                {[
-                  item.groupLabel,
-                  item.itemKind === 'task' ? 'Aufgabe' : 'Checkliste',
-                  item.requirementState === 'optional' ? 'Optional' : 'Erforderlich',
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-              {item.predecessors.length > 0 && (
-                <p>Voraussetzung: {item.predecessors.map((entry) => entry.content).join(', ')}</p>
-              )}
-              {item.evidenceRequirements.map((evidence) => (
-                <p key={evidence.id}>
-                  {evidence.fulfillment ? 'Nachweis erfüllt' : 'Nachweis erwartet'}: {evidence.description}
-                </p>
-              ))}
-            </div>
-          )}
+            item.evidenceRequirements.length > 0) && <JobInstructionItemDetailsSummary item={item} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function JobInstructionItemToggle({
+  item,
+  readOnly,
+  isRowBusy,
+  rowActions,
+}: Pick<JobInstructionItemRowProps, 'item' | 'readOnly' | 'rowActions'> & { isRowBusy: boolean }) {
+  const { handleToggleItem } = rowActions;
+  return (
+    <PlainButton
+      type="button"
+      onClick={() => {
+        if (!readOnly) void handleToggleItem(item);
+      }}
+      disabled={readOnly || isRowBusy}
+      aria-busy={isRowBusy}
+      aria-label={
+        readOnly
+          ? item.isCompleted
+            ? 'Punkt erledigt'
+            : 'Punkt offen'
+          : item.isCompleted
+            ? 'Punkt als offen markieren'
+            : 'Punkt als erledigt markieren'
+      }
+      className={cn(
+        'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors sm:size-8',
+        readOnly && 'cursor-default opacity-70',
+        item.isCompleted
+          ? 'border-primary bg-primary text-primary-foreground'
+          : 'border-muted-foreground/40 bg-background text-transparent',
+      )}
+    >
+      <Check className="size-3" />
+    </PlainButton>
+  );
+}
+
+function JobInstructionItemEditor({
+  item,
+  editing,
+  focusDraft,
+}: Pick<JobInstructionItemRowProps, 'item' | 'editing' | 'focusDraft'>) {
+  const { editingValues, setEditingValues, itemTextareaRefs, handleSaveExistingItem } = editing;
+  const editingValue = editingValues[item.id] ?? item.content;
+  return (
+    <Textarea
+      ref={(element) => {
+        if (!element) {
+          itemTextareaRefs.current.delete(item.id);
+          return;
+        }
+
+        itemTextareaRefs.current.set(item.id, element);
+        resizeTextareaElement(element);
+      }}
+      value={editingValue}
+      onChange={(event) => {
+        resizeTextareaElement(event.currentTarget);
+        setEditingValues((current) => ({
+          ...current,
+          [item.id]: event.target.value,
+        }));
+      }}
+      onBlur={() => {
+        void handleSaveExistingItem(item);
+      }}
+      onKeyDown={async (event) => {
+        if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+
+        event.preventDefault();
+        if (event.shiftKey) return;
+        const didSave = await handleSaveExistingItem(item);
+        if (didSave) {
+          focusDraft();
+        }
+      }}
+      aria-label="Arbeitsanweisungs-Punkt bearbeiten"
+      className="field-sizing-fixed min-h-0 min-w-0 w-full max-w-full resize-none overflow-hidden border-0 !bg-transparent px-0 py-1 whitespace-pre-wrap break-words shadow-none focus-visible:ring-0 dark:!bg-transparent"
+    />
+  );
+}
+
+/** Group, kind, requirement, prerequisites and expected evidence of one row. */
+function JobInstructionItemDetailsSummary({ item }: Pick<JobInstructionItemRowProps, 'item'>) {
+  return (
+    <div className="mt-2 space-y-1 rounded-md bg-muted/35 px-2.5 py-2 text-xs text-muted-foreground">
+      <p>
+        {[
+          item.groupLabel,
+          item.itemKind === 'task' ? 'Aufgabe' : 'Checkliste',
+          item.requirementState === 'optional' ? 'Optional' : 'Erforderlich',
+        ]
+          .filter(Boolean)
+          .join(' · ')}
+      </p>
+      {item.predecessors.length > 0 && (
+        <p>Voraussetzung: {item.predecessors.map((entry) => entry.content).join(', ')}</p>
+      )}
+      {item.evidenceRequirements.map((evidence) => (
+        <p key={evidence.id}>
+          {evidence.fulfillment ? 'Nachweis erfüllt' : 'Nachweis erwartet'}: {evidence.description}
+        </p>
+      ))}
     </div>
   );
 }

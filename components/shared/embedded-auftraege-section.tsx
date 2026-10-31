@@ -44,42 +44,30 @@ interface EmbeddedAuftraegeSectionProps {
   visibleColumns: AuftraegeColumnId[];
 }
 
-export function EmbeddedAuftraegeSection({
-  jobs: initialJobs,
-  projects: initialProjects,
-  clientMap,
-  jobAssignmentMap: initialJobAssignmentMap = {},
-  members,
+interface CreateControlsInput {
+  isAdminOrManager: boolean;
+  hideProjectCreation: boolean | undefined;
+  members: OrgMemberOption[];
+  defaultClient: ClientSelectItem | undefined;
+  defaultEmployeeIds: string[] | undefined;
+  readOnlyClient: boolean | undefined;
+  entries: ReturnType<typeof useEmbeddedAuftraegeEntries>;
+  mutations: ReturnType<typeof useEmbeddedAuftraegeMutations>;
+}
+
+/** The create button and its job or project dialog, both only for admin and office. */
+function buildCreateControls({
   isAdminOrManager,
-  lockedEmployeeLabel,
-  lockedClientLabel,
-  hideClientColumn,
+  hideProjectCreation,
+  members,
   defaultClient,
   defaultEmployeeIds,
   readOnlyClient,
-  hideProjectCreation,
-  hideEmptyProjects = false,
-  emptyTitle = 'Keine Aufträge',
-  emptyDescription = 'Es sind keine Aufträge vorhanden.',
-  visibleColumns,
-}: EmbeddedAuftraegeSectionProps) {
-  const listState = useEmbeddedAuftraegeListState();
-  const entries = useEmbeddedAuftraegeEntries(listState, {
-    initialJobs,
-    initialProjects,
-    clientMap,
-    initialJobAssignmentMap,
-    hideEmptyProjects,
-    visibleColumns,
-  });
+  entries,
+  mutations,
+}: CreateControlsInput) {
   const { createDialogOpen, setCreateDialogOpen, jobs } = entries;
-  const mutations = useEmbeddedAuftraegeMutations(
-    entries.setJobs,
-    entries.setRawProjects,
-    entries.setJobAssignmentMap,
-  );
   const { handleJobCreated, handleProjectCreated } = mutations;
-  const sortHandlers = useEmbeddedAuftraegeSortHandlers(listState);
 
   const createButton = isAdminOrManager ? (
     hideProjectCreation ? (
@@ -122,6 +110,55 @@ export function EmbeddedAuftraegeSection({
       )}
     </>
   ) : null;
+
+  return { createButton, createDialogs };
+}
+
+export function EmbeddedAuftraegeSection({
+  jobs: initialJobs,
+  projects: initialProjects,
+  clientMap,
+  jobAssignmentMap: initialJobAssignmentMap = {},
+  members,
+  isAdminOrManager,
+  lockedEmployeeLabel,
+  lockedClientLabel,
+  hideClientColumn,
+  defaultClient,
+  defaultEmployeeIds,
+  readOnlyClient,
+  hideProjectCreation,
+  hideEmptyProjects = false,
+  emptyTitle = 'Keine Aufträge',
+  emptyDescription = 'Es sind keine Aufträge vorhanden.',
+  visibleColumns,
+}: EmbeddedAuftraegeSectionProps) {
+  const listState = useEmbeddedAuftraegeListState();
+  const entries = useEmbeddedAuftraegeEntries(listState, {
+    initialJobs,
+    initialProjects,
+    clientMap,
+    initialJobAssignmentMap,
+    hideEmptyProjects,
+    visibleColumns,
+  });
+  const mutations = useEmbeddedAuftraegeMutations(
+    entries.setJobs,
+    entries.setRawProjects,
+    entries.setJobAssignmentMap,
+  );
+  const sortHandlers = useEmbeddedAuftraegeSortHandlers(listState);
+
+  const { createButton, createDialogs } = buildCreateControls({
+    isAdminOrManager,
+    hideProjectCreation,
+    members,
+    defaultClient,
+    defaultEmployeeIds,
+    readOnlyClient,
+    entries,
+    mutations,
+  });
 
   if (entries.unifiedEntries.length === 0) {
     return (
