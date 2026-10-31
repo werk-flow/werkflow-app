@@ -72,6 +72,10 @@ export type UpdateClientRequestInput = Partial<
 // converted and closed requests keep their captured history read-only.
 const EDITABLE_STATUSES = ['offen', 'in_klaerung'] as const;
 
+function isEditableStatus(status: string): boolean {
+  return EDITABLE_STATUSES.some((editable) => editable === status);
+}
+
 // Boundary schemas: the arguments arrive from the network unchecked. Blank ids
 // keep their meaning (no reference); blank summaries reach `summary_required`.
 const requestFieldsSchema = z.object({
@@ -277,7 +281,7 @@ export async function updateClientRequest(
     const { orgId, userId, admin } = auth.context;
     const { request } = auth;
 
-    if (!EDITABLE_STATUSES.includes(request.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!isEditableStatus(request.status)) {
       return { success: false, error: 'request_not_editable' };
     }
 
@@ -376,7 +380,7 @@ export async function promoteCallerToClient(
     const { orgId, userId, admin } = auth.context;
     const { request } = auth;
 
-    if (!EDITABLE_STATUSES.includes(request.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!isEditableStatus(request.status)) {
       return { success: false, error: 'request_not_editable' };
     }
     if (request.clientId) {
@@ -430,7 +434,7 @@ export async function closeClientRequest(
     if (!auth.success) return auth;
     const { orgId, userId, admin } = auth.context;
 
-    if (!EDITABLE_STATUSES.includes(auth.request.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!isEditableStatus(auth.request.status)) {
       return { success: false, error: 'request_not_editable' };
     }
 
@@ -512,7 +516,7 @@ export async function convertRequestToJob(
     const { orgId, userId, admin } = auth.context;
     const { request } = auth;
 
-    if (!EDITABLE_STATUSES.includes(request.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!isEditableStatus(request.status)) {
       return { success: false, error: 'already_converted' };
     }
 
@@ -578,7 +582,7 @@ export async function convertRequestToProject(
     const { orgId, userId, admin } = auth.context;
     const { request } = auth;
 
-    if (!EDITABLE_STATUSES.includes(request.status as (typeof EDITABLE_STATUSES)[number])) {
+    if (!isEditableStatus(request.status)) {
       return { success: false, error: 'already_converted' };
     }
 
@@ -641,7 +645,7 @@ export async function getNextRequestNumber(): Promise<ActionResult<{ requestNumb
       return { success: false, error: 'generation_failed' };
     }
 
-    return { success: true, requestNumber: data as string };
+    return { success: true, requestNumber: data };
   } catch (error) {
     logError('Unexpected error in getNextRequestNumber:', error);
     return { success: false, error: 'unexpected_error' };

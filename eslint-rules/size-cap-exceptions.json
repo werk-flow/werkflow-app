@@ -5,7 +5,6 @@
   },
   "modules": {
     "lib/conventions/server-action-feedback.test.ts": 869,
-    "lib/customer-relationships/actions.ts": 1427,
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
@@ -126,27 +125,6 @@
     "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
     "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
     "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
-    "lib/customer-relationships/actions.ts": {
-      "buildTimelineRecordQueries": 105,
-      "buildTimelineLinkAndEventQueries": 104,
-      "readTimelineSources": 81,
-      "addTimelineRecordItems": 133,
-      "addTimelineWorkAndEventItems": 127,
-      "loadFollowUpSourceReferences": 156
-    },
-    "lib/installed-equipment/actions.ts": { "loadEquipmentDetail": 126 },
-    "lib/installed-equipment/source-options-server.ts": { "readWorkSources": 97 },
-    "lib/maintenance/actions.ts": {
-      "createMaintenanceVisit": 152,
-      "getAssignedMaintenanceContextForJob": 150
-    },
-    "lib/maintenance/workspace-reads.ts": {
-      "loadMaintenanceCatalogs": 93,
-      "readPlanItems": 95,
-      "readMaintenanceWorkspace": 118
-    },
-    "lib/service-cases/actions.ts": { "loadClientOption": 113, "getServiceCaseDetailByNumber": 115 },
-    "lib/service-cases/list-page-server.ts": { "hydrateListItems": 126 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
