@@ -554,8 +554,8 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
 
     // Under the role default the admin's own entry stays the direct recovery
     // path, while Büro's own entry waits. That it never reaches Büro's own
-    // queue, and that the field worker has none, is proven at the actions
-    // (lib/responsibilities/approval-action-boundaries.test.ts).
+    // queue, and that the field worker gets no approval surface, is proven at the
+    // page and the actions (lib/responsibilities/approval-page-access.test.ts).
     await createOwnManualTimeEntry(adminPage, {
       memberName: adminName,
       dateDigits: yesterdayDigits,

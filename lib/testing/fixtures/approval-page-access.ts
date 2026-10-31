@@ -1,17 +1,21 @@
-// Actual time and vacation approval actions over the in-memory database, with
-// the real responsibility resolution at action time: a holder never sees or
-// decides an own entry or request (four eyes), a member who holds no approval
-// sees no queue entry and is refused the decision, a substitute approves
-// inside the delegation and is refused once it ended, a holder who lost the
-// responsibility is refused although an open card still shows the request,
-// and a member of another organization reviews nothing. The vacation queue
-// tells the approver that another absence overlaps, never which kind. Each
-// refusal is checked against a holder who reaches the database function for
-// the same entry or request.
+// Actual time and vacation approval actions and the real Zeiterfassung page
+// over the in-memory database, with the real responsibility resolution at
+// action time: the page opens the time and leave approval surfaces (the
+// pending entries and the correction review, the vacation requests) only for
+// their holders; a holder never sees or decides an own entry or request (four
+// eyes); a member who holds no approval sees no queue entry and is refused the
+// decision; a substitute approves inside the delegation and is refused once it
+// ended; a holder who lost the responsibility is refused although an open card
+// still shows the request; and a member of another organization reviews
+// nothing. The vacation queue tells the approver that another absence
+// overlaps, never which kind. Each refusal is checked against a holder who
+// reaches the database function for the same entry or request.
 import assert from 'node:assert/strict';
 import { mock, setSystemTime } from 'bun:test';
 import { EMPTY_HOLIDAY_CALENDAR } from '@/lib/personnel/targets';
-import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
+import { getDefaultTimeTrackingSettings } from '@/lib/time-tracking/settings';
+import { ORGANIZATION_A, ORGANIZATION_B, signInAs } from './action-boundary-world';
+import { field, installPageWorld, renderTree } from './page-render';
 
 const adminId = '6d000000-0000-4000-8000-000000000001';
 const bueroId = '6d000000-0000-4000-8000-000000000002';
@@ -65,7 +69,7 @@ const vacationRequest = (id: string, employeeRecordIdOfRequest: string) => ({
   created_at: '2026-10-13T09:00:00.000Z',
 });
 
-const world = installActionWorld({
+const world = await installPageWorld({
   organizations: [{ id: ORGANIZATION_A, admin_id: adminId }],
   organization_members: people.map(({ userId, role }, index) => ({
     id: `6d000000-0000-4000-8000-00000000005${index}`,
@@ -109,7 +113,23 @@ const cached = { ...(await import('@/lib/data/cached')) };
 mock.module('@/lib/data/cached', () => ({
   ...cached,
   getCachedOrganizationCalendar: async () => EMPTY_HOLIDAY_CALENDAR,
+  getCachedOrganizationSettings: async (organizationId: string) =>
+    getDefaultTimeTrackingSettings(organizationId),
 }));
+const { default: ZeiterfassungPage } = await import('@/app/(app)/zeiterfassung/page');
+
+/** Which approval surfaces the real Zeiterfassung page opens for the caller. */
+async function approvalSurfaces(): Promise<{ time: unknown; leave: unknown }> {
+  const tree = await renderTree(() =>
+    ZeiterfassungPage({ searchParams: Promise.resolve({ tab: 'approvals' }) }),
+  );
+  const content = tree.find((element) => field(element, 'props', 'canApproveTime') !== undefined);
+  assert.ok(content, 'the Zeiterfassung page rendered no content');
+  return {
+    time: field(content, 'props', 'canApproveTime'),
+    leave: field(content, 'props', 'canApproveLeave'),
+  };
+}
 // The decision function answers with the decided row; the database keeps it pending for the next case.
 world.rpc = ({ name, args }) => ({
   data:
@@ -177,10 +197,6 @@ async function expectDecision(
   }
 }
 
-function field(value: unknown, key: string): unknown {
-  return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined;
-}
-
 const review = (entryIds: string[], expected: string) =>
   expectDecision(() => reviewEntries(entryIds, 'approved'), 'review_time_entries', expected);
 const decideVacation = (requestId: string, expected: string) =>
@@ -209,9 +225,11 @@ const queuedRequestIds = async (): Promise<string[]> =>
 // Time approval by role default (A3-11): the field worker holds none; Büro
 // never sees or approves its own entry, and the admin approves it.
 actAs(employeeId, 'employee');
+assert.deepEqual(await approvalSurfaces(), { time: false, leave: false });
 assert.deepEqual(await queuedTimeUsers(), []);
 await review(bueroEntries, 'not_responsible');
 actAs(bueroId, 'buero');
+assert.deepEqual(await approvalSurfaces(), { time: true, leave: true });
 assert.deepEqual(await queuedTimeUsers(), [employeeId]);
 await review(bueroEntries, 'self_approval_not_allowed');
 actAs(adminId, 'admin');
@@ -223,10 +241,12 @@ await review(bueroEntries, 'decided');
 // nothing and is refused; the admin approves the field worker's entry.
 selectHolders('time_approval', [adminRecordId, employeeRecordId]);
 actAs(employeeId, 'employee');
+assert.deepEqual(await approvalSurfaces(), { time: true, leave: false });
 assert.deepEqual(await queuedTimeUsers(), [bueroId]);
 await review(employeeEntries, 'self_approval_not_allowed');
 await review(bueroEntries, 'decided');
 actAs(bueroId, 'buero');
+assert.deepEqual(await approvalSurfaces(), { time: false, leave: true });
 assert.deepEqual(await queuedTimeUsers(), []);
 await review(employeeEntries, 'not_responsible');
 actAs(adminId, 'admin');

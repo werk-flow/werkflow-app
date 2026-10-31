@@ -45,12 +45,18 @@ test('a review refused because the responsibility ended says so and never confir
   await expectHeldWrite(page, 'review-entries');
   await expect(page.getByRole('alert')).toHaveCount(0);
 
+  // The responsibility ended: the follow-up read no longer lists the session.
+  await page.evaluate(() => {
+    window.uiContractTimeApprovals.sessions = [];
+  });
   await answerHeldWrite(page, 'not_responsible');
   // The refusal is the only message: no confirmation banner beside it.
   await expect(page.getByRole('alert')).toHaveText(
     'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
   );
   await expect(page.getByRole('alert')).toHaveCount(1);
+  // The authoritative read removes the card the refusal brought back.
+  await expect(approve).toHaveCount(0);
 });
 
 test('a refused change request comes back with the reason and never confirms', async ({ page }) => {

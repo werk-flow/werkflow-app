@@ -116,8 +116,8 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
   });
 
   // That a holder never sees or approves an own entry, and that a member
-  // without the responsibility sees no queue, is proven at the actions
-  // (lib/responsibilities/approval-action-boundaries.test.ts).
+  // without the responsibility gets no approval surface, is proven at the
+  // page and the actions (lib/responsibilities/approval-page-access.test.ts).
   test('Der eigene Eintrag eines Verantwortlichen wartet auf die zweite verantwortliche Person', async ({
     adminPage,
     businessDate,
@@ -144,8 +144,8 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
   });
 
   // The ended substitution's refusal at action time is proven at the action
-  // (lib/responsibilities/approval-action-boundaries.test.ts) and its message
-  // in the approvals contract (tests/ui-contracts/time-approvals.spec.ts).
+  // (lib/responsibilities/approval-page-access.test.ts), its message and the
+  // dropped card in the approvals contract (tests/ui-contracts/time-approvals.spec.ts).
   test('Eine Vertretung aus den Einstellungen gibt im Fenster die Freigabe und lässt sich beenden', async ({
     adminPage,
     bueroPage,

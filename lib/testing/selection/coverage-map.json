@@ -953,12 +953,12 @@
           ]
         },
         {
-          "file": "lib/responsibilities/approval-action-boundaries.test.ts",
+          "file": "lib/responsibilities/approval-page-access.test.ts",
           "kind": "unit",
           "titles": [
-            "time and vacation approvals keep four eyes and resolve the holder at action time"
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
           ],
-          "description": "the real queue and review: a holder never sees or approves an own entry, Büro without the responsibility sees no queue and is refused, the field worker under the role default holds none, a substitute approves inside the window and is refused once it ended; each refusal against a holder who reaches the review function"
+          "description": "the real Zeiterfassung page opens the pending entries and the correction review for time-approval holders only; the real queue and review: a holder never sees or approves an own entry, Büro without the responsibility sees no queue and is refused, the field worker under the role default holds none, a substitute approves inside the window and is refused once it ended; each refusal against a holder who reaches the review function"
         },
         {
           "file": "lib/responsibilities/action-boundaries.test.ts",
@@ -1016,10 +1016,10 @@
           ]
         },
         {
-          "file": "lib/responsibilities/approval-action-boundaries.test.ts",
+          "file": "lib/responsibilities/approval-page-access.test.ts",
           "kind": "unit",
           "titles": [
-            "time and vacation approvals keep four eyes and resolve the holder at action time"
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
           ],
           "description": "the approver queue marks the overlapping sickness as an absence overlap and carries no absence kind"
         }
@@ -1111,10 +1111,10 @@
           ]
         },
         {
-          "file": "lib/responsibilities/approval-action-boundaries.test.ts",
+          "file": "lib/responsibilities/approval-page-access.test.ts",
           "kind": "unit",
           "titles": [
-            "time and vacation approvals keep four eyes and resolve the holder at action time"
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
           ],
           "description": "leave approval by role default: Büro never sees or decides an own request and the admin decides it; a holder who loses leave approval is refused at action time although the card still shows the request"
         }
