@@ -64,6 +64,31 @@ export type MaintenancePlanFormController = {
   submit: () => void;
 };
 
+/** The create's outcome for the caller's banner; it never rejects. */
+function planSubmissionResult(
+  created: ReturnType<typeof createMaintenancePlan>,
+): MaintenancePlanCreateSubmission['result'] {
+  return created.then(
+    (outcome) =>
+      outcome.success
+        ? { success: true as const }
+        : {
+            success: false as const,
+            error: outcome.error,
+            message: describeFailure(
+              outcome.error,
+              MAINTENANCE_PLAN_ERROR_MESSAGES,
+              GENERIC_MAINTENANCE_PLAN_ERROR,
+            ),
+          },
+    () => ({
+      success: false as const,
+      error: 'unexpected_error',
+      message: GENERIC_MAINTENANCE_PLAN_ERROR,
+    }),
+  );
+}
+
 /** Form state and the create/revise submit of the maintenance plan dialog. */
 export function useMaintenancePlanForm({
   onOpenChange,
@@ -133,25 +158,7 @@ export function useMaintenancePlanForm({
           intervalMonths: Number(form.intervalMonths),
           status: form.status,
         },
-        result: createResult.then(
-          (created) =>
-            created.success
-              ? { success: true as const }
-              : {
-                  success: false as const,
-                  error: created.error,
-                  message: describeFailure(
-                    created.error,
-                    MAINTENANCE_PLAN_ERROR_MESSAGES,
-                    GENERIC_MAINTENANCE_PLAN_ERROR,
-                  ),
-                },
-          () => ({
-            success: false as const,
-            error: 'unexpected_error',
-            message: GENERIC_MAINTENANCE_PLAN_ERROR,
-          }),
-        ),
+        result: planSubmissionResult(createResult),
       });
       // The pending list and this dialog observe the same request. Keep the
       // form mounted until the server accepts it so a correctable domain

@@ -4,8 +4,10 @@ import { Badge } from '@/components/ui/badge';
 import { MetadataSaveError, type MetadataField } from '@/components/shared/metadata-section';
 import { describeFailure } from '@/lib/action-messages';
 import { updateClient, type UpdateClientInput } from '@/lib/clients/actions';
-import { CLIENT_TYPE_LABELS, type Client, type ClientType } from '@/lib/jobs/types';
+import { CLIENT_TYPE_LABELS, type Client } from '@/lib/jobs/types';
+import { Constants } from '@/lib/supabase/database.types';
 import { formatGermanDate } from '@/lib/utils';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
 const CLIENT_SAVE_ERROR_MESSAGES: Record<string, string> = {
   not_authorized: 'Du bist nicht berechtigt, Kunden zu bearbeiten.',
@@ -14,29 +16,16 @@ const CLIENT_SAVE_ERROR_MESSAGES: Record<string, string> = {
   customer_number_taken: 'Diese Kundennummer ist bereits vergeben.',
 };
 
-/** The editable master-data rows of the customer detail page. */
-export function buildClientMetadataFields(client: Client): MetadataField[] {
-  const clientTypeOptions: { value: string; label: string }[] = [
-    { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
-    { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
-  ];
+type SaveClientField = (input: UpdateClientInput) => Promise<void>;
 
-  // A rejected save must surface in the field (MetadataSection catches the
-  // throw); a discarded result would close the editor over unsaved data.
-  const saveClientField = async (input: UpdateClientInput): Promise<void> => {
-    const result = await updateClient(client.id, input);
-    if (!result.success) {
-      throw new MetadataSaveError(
-        describeFailure(
-          result.error,
-          CLIENT_SAVE_ERROR_MESSAGES,
-          'Die Änderung konnte nicht gespeichert werden.',
-        ),
-      );
-    }
-  };
+const clientTypeOptions: { value: string; label: string }[] = [
+  { value: 'privat', label: CLIENT_TYPE_LABELS.privat },
+  { value: 'gewerblich', label: CLIENT_TYPE_LABELS.gewerblich },
+];
 
-  const metadataFields: MetadataField[] = [
+/** The name, type and customer number rows. */
+function clientIdentityFields(client: Client, saveClientField: SaveClientField): MetadataField[] {
+  return [
     {
       label: 'Name',
       value: client.name,
@@ -56,7 +45,10 @@ export function buildClientMetadataFields(client: Client): MetadataField[] {
       editableConfig: {
         type: 'select',
         currentValue: client.clientType,
-        onSave: (v) => saveClientField({ clientType: v as ClientType }),
+        onSave: (v) =>
+          saveClientField({
+            clientType: constrainedValue(Constants.public.Enums.client_type, v, 'client type'),
+          }),
         options: clientTypeOptions,
       },
     },
@@ -70,6 +62,12 @@ export function buildClientMetadataFields(client: Client): MetadataField[] {
         placeholder: 'z. B. K-1001',
       },
     },
+  ];
+}
+
+/** The contact, address and note rows. */
+function clientContactFields(client: Client, saveClientField: SaveClientField): MetadataField[] {
+  return [
     {
       label: 'E-Mail',
       value: client.email || '—',
@@ -110,11 +108,32 @@ export function buildClientMetadataFields(client: Client): MetadataField[] {
         placeholder: 'Interne Notizen',
       },
     },
+  ];
+}
+
+/** The editable master-data rows of the customer detail page. */
+export function buildClientMetadataFields(client: Client): MetadataField[] {
+  // A rejected save must surface in the field (MetadataSection catches the
+  // throw); a discarded result would close the editor over unsaved data.
+  const saveClientField: SaveClientField = async (input) => {
+    const result = await updateClient(client.id, input);
+    if (!result.success) {
+      throw new MetadataSaveError(
+        describeFailure(
+          result.error,
+          CLIENT_SAVE_ERROR_MESSAGES,
+          'Die Änderung konnte nicht gespeichert werden.',
+        ),
+      );
+    }
+  };
+
+  return [
+    ...clientIdentityFields(client, saveClientField),
+    ...clientContactFields(client, saveClientField),
     {
       label: 'Erstellt am',
       value: formatGermanDate(client.createdAt),
     },
   ];
-
-  return metadataFields;
 }

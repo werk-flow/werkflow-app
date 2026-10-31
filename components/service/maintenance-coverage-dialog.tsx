@@ -38,6 +38,86 @@ export type MaintenanceCoverageCreateSubmission = {
   /** Never rejects; a failure carries the German message for the caller's banner. */
   result: Promise<{ success: true } | (ActionFailure & { message: string })>;
 };
+
+type CoverageForm = ReturnType<typeof useMaintenanceCoverageForm>;
+
+/** The customer, then one of its active sites. */
+function CoverageAssignmentFields({ form }: { form: CoverageForm }): ReactElement {
+  const { clientId, setClientId, siteId, setSiteId, client, clientOption, clientError, siteError } = form;
+  return (
+    <>
+      <Field label="Kunde" htmlFor="coverage-client" required error={clientError}>
+        <ClientSelectWithCreate
+          value={clientId}
+          onValueChange={(value) => {
+            setClientId(value);
+            setSiteId('');
+          }}
+        />
+      </Field>
+      <Field label="Einsatzort" htmlFor="coverage-site" required error={siteError}>
+        <SearchableSelect
+          value={siteId}
+          onChange={setSiteId}
+          options={(client?.sites ?? [])
+            .filter((site) => site.isActive)
+            .map((site) => ({ value: site.id, label: site.name, description: site.address }))}
+          disabled={!clientId}
+          loading={clientOption.loading}
+          loadFailure={clientOption.loadFailure}
+          placeholder="Einsatzort wählen"
+          searchPlaceholder="Einsatzort suchen…"
+          emptyMessage="Kein Einsatzort gefunden"
+        />
+      </Field>
+    </>
+  );
+}
+
+function CoverageDateFields({ form }: { form: CoverageForm }): ReactElement {
+  const { validFrom, setValidFrom, validUntil, setValidUntil, noticeDate, setNoticeDate } = form;
+  const { renewalDate, setRenewalDate, reviewDueDate, setReviewDueDate } = form;
+  return (
+    <>
+      <Field label="Gültig ab" htmlFor="coverage-valid-from">
+        <DatePicker
+          ariaLabel="Gültig ab"
+          value={parseIsoLocalDate(validFrom)}
+          onChange={(value) => setValidFrom(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+      <Field label="Gültig bis" htmlFor="coverage-valid-until">
+        <DatePicker
+          ariaLabel="Gültig bis"
+          value={parseIsoLocalDate(validUntil)}
+          onChange={(value) => setValidUntil(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+      <Field label="Kündigungsfrist prüfen am" htmlFor="coverage-notice">
+        <DatePicker
+          ariaLabel="Kündigungsfrist prüfen am"
+          value={parseIsoLocalDate(noticeDate)}
+          onChange={(value) => setNoticeDate(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+      <Field label="Verlängerung am" htmlFor="coverage-renewal">
+        <DatePicker
+          ariaLabel="Verlängerung am"
+          value={parseIsoLocalDate(renewalDate)}
+          onChange={(value) => setRenewalDate(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+      <Field label="Interne Wiedervorlage" htmlFor="coverage-review" className="sm:col-span-2">
+        <DatePicker
+          ariaLabel="Interne Wiedervorlage"
+          value={parseIsoLocalDate(reviewDueDate)}
+          onChange={(value) => setReviewDueDate(value ? formatBerlinLocalDate(value) : '')}
+        />
+      </Field>
+    </>
+  );
+}
+
 export function MaintenanceCoverageDialog({
   open,
   onOpenChange,
@@ -51,35 +131,9 @@ export function MaintenanceCoverageDialog({
    */
   onSubmitted?: (submission: MaintenanceCoverageCreateSubmission) => void;
 }): ReactElement {
-  const {
-    clientId,
-    setClientId,
-    siteId,
-    setSiteId,
-    reference,
-    setReference,
-    description,
-    setDescription,
-    validFrom,
-    setValidFrom,
-    validUntil,
-    setValidUntil,
-    noticeDate,
-    setNoticeDate,
-    renewalDate,
-    setRenewalDate,
-    reviewDueDate,
-    setReviewDueDate,
-    operationalNote,
-    setOperationalNote,
-    error,
-    isPending,
-    client,
-    clientOption,
-    clientError,
-    siteError,
-    submit,
-  } = useMaintenanceCoverageForm({ onOpenChange, onSubmitted });
+  const form = useMaintenanceCoverageForm({ onOpenChange, onSubmitted });
+  const { reference, setReference, description, setDescription, operationalNote, setOperationalNote } = form;
+  const { error, isPending, submit } = form;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
@@ -102,30 +156,7 @@ export function MaintenanceCoverageDialog({
         >
           <DialogBody>
             <div className="grid gap-4 py-2 sm:grid-cols-2">
-              <Field label="Kunde" htmlFor="coverage-client" required error={clientError}>
-                <ClientSelectWithCreate
-                  value={clientId}
-                  onValueChange={(value) => {
-                    setClientId(value);
-                    setSiteId('');
-                  }}
-                />
-              </Field>
-              <Field label="Einsatzort" htmlFor="coverage-site" required error={siteError}>
-                <SearchableSelect
-                  value={siteId}
-                  onChange={setSiteId}
-                  options={(client?.sites ?? [])
-                    .filter((site) => site.isActive)
-                    .map((site) => ({ value: site.id, label: site.name, description: site.address }))}
-                  disabled={!clientId}
-                  loading={clientOption.loading}
-                  loadFailure={clientOption.loadFailure}
-                  placeholder="Einsatzort wählen"
-                  searchPlaceholder="Einsatzort suchen…"
-                  emptyMessage="Kein Einsatzort gefunden"
-                />
-              </Field>
+              <CoverageAssignmentFields form={form} />
               <Field
                 label="Vertrags- oder Referenznummer (optional)"
                 htmlFor="coverage-reference"
@@ -136,41 +167,7 @@ export function MaintenanceCoverageDialog({
               <Field label="Beschreibung (optional)" htmlFor="coverage-description" className="sm:col-span-2">
                 <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
               </Field>
-              <Field label="Gültig ab" htmlFor="coverage-valid-from">
-                <DatePicker
-                  ariaLabel="Gültig ab"
-                  value={parseIsoLocalDate(validFrom)}
-                  onChange={(value) => setValidFrom(value ? formatBerlinLocalDate(value) : '')}
-                />
-              </Field>
-              <Field label="Gültig bis" htmlFor="coverage-valid-until">
-                <DatePicker
-                  ariaLabel="Gültig bis"
-                  value={parseIsoLocalDate(validUntil)}
-                  onChange={(value) => setValidUntil(value ? formatBerlinLocalDate(value) : '')}
-                />
-              </Field>
-              <Field label="Kündigungsfrist prüfen am" htmlFor="coverage-notice">
-                <DatePicker
-                  ariaLabel="Kündigungsfrist prüfen am"
-                  value={parseIsoLocalDate(noticeDate)}
-                  onChange={(value) => setNoticeDate(value ? formatBerlinLocalDate(value) : '')}
-                />
-              </Field>
-              <Field label="Verlängerung am" htmlFor="coverage-renewal">
-                <DatePicker
-                  ariaLabel="Verlängerung am"
-                  value={parseIsoLocalDate(renewalDate)}
-                  onChange={(value) => setRenewalDate(value ? formatBerlinLocalDate(value) : '')}
-                />
-              </Field>
-              <Field label="Interne Wiedervorlage" htmlFor="coverage-review" className="sm:col-span-2">
-                <DatePicker
-                  ariaLabel="Interne Wiedervorlage"
-                  value={parseIsoLocalDate(reviewDueDate)}
-                  onChange={(value) => setReviewDueDate(value ? formatBerlinLocalDate(value) : '')}
-                />
-              </Field>
+              <CoverageDateFields form={form} />
               <Field label="Operativer Hinweis" htmlFor="coverage-note" className="sm:col-span-2">
                 <Textarea
                   value={operationalNote}

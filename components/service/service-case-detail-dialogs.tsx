@@ -42,18 +42,16 @@ const RELATION_ERRORS: Record<string, string> = {
   service_case_relation_cycle: 'Diese Verknüpfung würde einen widersprüchlichen Kreis erzeugen.',
 };
 
-export function RelationDialog({
-  workspace,
-  open,
-  onOpenChange,
-  onSaved,
-}: {
+type RelationDialogProps = {
   workspace: ServiceCaseDetailWorkspace;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Called after success so the section settles through the live read. */
   onSaved: () => void;
-}): ReactElement {
+};
+
+/** The related case, the relation and its reason, with the case search and the link. */
+function useRelationForm({ workspace, onOpenChange, onSaved }: Omit<RelationDialogProps, 'open'>) {
   const [relatedId, setRelatedId] = useState('');
   const [relationType, setRelationType] = useState<ServiceCaseRelationType>('related');
   const [reason, setReason] = useState('');
@@ -87,6 +85,89 @@ export function RelationDialog({
     'relation-case': relatedId ? undefined : 'Bitte wähle einen Servicefall.',
     'relation-reason': reason.trim().length < 3 ? REASON_MIN_3_MESSAGE : undefined,
   };
+  return {
+    relatedId,
+    setRelatedId,
+    relationType,
+    setRelationType,
+    reason,
+    setReason,
+    error,
+    caseSearch,
+    caseOptions,
+    run,
+    isPending,
+    attempted,
+    setAttempted,
+    fieldErrors,
+  };
+}
+
+function RelationCaseField({ form }: { form: ReturnType<typeof useRelationForm> }): ReactElement {
+  const { relatedId, setRelatedId, caseOptions, caseSearch, attempted, fieldErrors } = form;
+  return (
+    <Field
+      label="Servicefall"
+      htmlFor="relation-case"
+      required
+      error={attempted ? fieldErrors['relation-case'] : undefined}
+    >
+      <SearchableSelect
+        value={relatedId}
+        onChange={setRelatedId}
+        options={caseOptions}
+        onSearchChange={caseSearch.onSearchChange}
+        loading={caseSearch.loading}
+        loadFailure={caseSearch.loadFailure}
+        onLoadMore={caseSearch.onLoadMore}
+        placeholder="Servicefall suchen"
+        searchPlaceholder="Fallnummer oder Kurzbeschreibung…"
+        emptyMessage="Kein weiterer Servicefall dieses Kunden gefunden"
+      />
+    </Field>
+  );
+}
+
+function RelationTypeField({
+  value,
+  onChange,
+}: {
+  value: ServiceCaseRelationType;
+  onChange: (relationType: ServiceCaseRelationType) => void;
+}): ReactElement {
+  return (
+    <Field label="Beziehung" htmlFor="relation-type">
+      <Select
+        value={value}
+        onValueChange={(selected) => {
+          const relationType = SERVICE_CASE_RELATION_TYPES.find((candidate) => candidate === selected);
+          if (relationType) onChange(relationType);
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SERVICE_CASE_RELATION_TYPES.map((relationType) => (
+            <SelectItem key={relationType} value={relationType}>
+              {SERVICE_CASE_RELATION_LABELS[relationType]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+export function RelationDialog({
+  workspace,
+  open,
+  onOpenChange,
+  onSaved,
+}: RelationDialogProps): ReactElement {
+  const form = useRelationForm({ workspace, onOpenChange, onSaved });
+  const { relationType, setRelationType, reason, setReason, error, isPending, run } = form;
+  const { attempted, setAttempted, fieldErrors } = form;
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>
@@ -110,42 +191,8 @@ export function RelationDialog({
         >
           <DialogBody>
             <div className="space-y-4 py-2">
-              <Field
-                label="Servicefall"
-                htmlFor="relation-case"
-                required
-                error={attempted ? fieldErrors['relation-case'] : undefined}
-              >
-                <SearchableSelect
-                  value={relatedId}
-                  onChange={setRelatedId}
-                  options={caseOptions}
-                  onSearchChange={caseSearch.onSearchChange}
-                  loading={caseSearch.loading}
-                  loadFailure={caseSearch.loadFailure}
-                  onLoadMore={caseSearch.onLoadMore}
-                  placeholder="Servicefall suchen"
-                  searchPlaceholder="Fallnummer oder Kurzbeschreibung…"
-                  emptyMessage="Kein weiterer Servicefall dieses Kunden gefunden"
-                />
-              </Field>
-              <Field label="Beziehung" htmlFor="relation-type">
-                <Select
-                  value={relationType}
-                  onValueChange={(value) => setRelationType(value as ServiceCaseRelationType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SERVICE_CASE_RELATION_TYPES.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {SERVICE_CASE_RELATION_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+              <RelationCaseField form={form} />
+              <RelationTypeField value={relationType} onChange={setRelationType} />
               <Field
                 label="Begründung"
                 htmlFor="relation-reason"
@@ -251,15 +298,14 @@ export function ServiceCaseEvidenceDialog({
   );
 }
 
-export function FollowUpDialog({
-  workspace,
-  open,
-  onOpenChange,
-}: {
+type FollowUpDialogProps = {
   workspace: ServiceCaseDetailWorkspace;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}): ReactElement {
+};
+
+/** The follow-up's fields, their errors after a first submit, and the create. */
+function useServiceCaseFollowUpForm({ workspace, onOpenChange }: Omit<FollowUpDialogProps, 'open'>) {
   const currentOwner = workspace.followUpOwners.find((owner) => owner.userId === workspace.currentActorId);
   const [title, setTitle] = useState(`Servicefall ${workspace.serviceCase.caseNumber} nachfassen`);
   const [note, setNote] = useState('');
@@ -304,6 +350,28 @@ export function FollowUpDialog({
     if (focusFirstInvalidField(errors)) return;
     void run();
   }
+  return {
+    title,
+    setTitle,
+    note,
+    setNote,
+    ownerUserId,
+    setOwnerUserId,
+    dueAt,
+    setDueAt,
+    error,
+    isPending,
+    titleError,
+    ownerError,
+    dueError,
+    submit,
+  };
+}
+
+export function FollowUpDialog({ workspace, open, onOpenChange }: FollowUpDialogProps): ReactElement {
+  const form = useServiceCaseFollowUpForm({ workspace, onOpenChange });
+  const { title, setTitle, note, setNote, ownerUserId, setOwnerUserId, dueAt, setDueAt } = form;
+  const { error, isPending, titleError, ownerError, dueError, submit } = form;
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
       <DialogContent>

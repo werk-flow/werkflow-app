@@ -176,12 +176,54 @@ function ClientCard({
   );
 }
 
+/** One committed customer on the desktop table; it navigates to the detail page. */
+function ClientTableRow({
+  client,
+  isBusy,
+  onSaved,
+  onDelete,
+}: {
+  client: Client;
+  isBusy: boolean;
+  onSaved: (clientId: string) => void;
+  onDelete: (client: Client) => Promise<void>;
+}) {
+  const router = useRouter();
+
+  return (
+    <TableRow
+      interactive
+      onClick={() => router.push(`/kunden/${client.id}`)}
+      {...rowIntentPrefetch(() => router.prefetch(`/kunden/${client.id}`))}
+    >
+      <TableCell className="font-medium">
+        <span className="flex items-center gap-2">
+          <Link
+            href={`/kunden/${client.id}`}
+            className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(event) => event.stopPropagation()}
+          >
+            {client.name}
+          </Link>
+          <InlinePending active={isBusy} />
+        </span>
+      </TableCell>
+      <TableCell className="px-4">
+        <ClientTypeBadge clientType={client.clientType} />
+      </TableCell>
+      <TableCell>{client.email || '—'}</TableCell>
+      <TableCell>{client.phone || '—'}</TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <ClientActionsMenu client={client} isBusy={isBusy} onSaved={onSaved} onDelete={onDelete} />
+      </TableCell>
+    </TableRow>
+  );
+}
+
 // No loading prop on purpose: the list never turns into a skeleton over data
 // it already has (feedback canon); `ClientsTableSkeleton` serves loading.tsx.
 // A record the user just created rides along as an optimistic row.
 export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: ClientsTableProps) {
-  const router = useRouter();
-
   if (rows.length === 0) {
     return isFiltered ? (
       <EmptyState
@@ -238,38 +280,13 @@ export function ClientsTable({ rows, isBusy, onSaved, onDelete, isFiltered }: Cl
                   }}
                 />
               ) : (
-                <TableRow
+                <ClientTableRow
                   key={client.id}
-                  interactive
-                  onClick={() => router.push(`/kunden/${client.id}`)}
-                  {...rowIntentPrefetch(() => router.prefetch(`/kunden/${client.id}`))}
-                >
-                  <TableCell className="font-medium">
-                    <span className="flex items-center gap-2">
-                      <Link
-                        href={`/kunden/${client.id}`}
-                        className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        {client.name}
-                      </Link>
-                      <InlinePending active={isBusy(client.id)} />
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-4">
-                    <ClientTypeBadge clientType={client.clientType} />
-                  </TableCell>
-                  <TableCell>{client.email || '—'}</TableCell>
-                  <TableCell>{client.phone || '—'}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <ClientActionsMenu
-                      client={client}
-                      isBusy={isBusy(client.id)}
-                      onSaved={onSaved}
-                      onDelete={onDelete}
-                    />
-                  </TableCell>
-                </TableRow>
+                  client={client}
+                  isBusy={isBusy(client.id)}
+                  onSaved={onSaved}
+                  onDelete={onDelete}
+                />
               ),
             )}
           </TableBody>
