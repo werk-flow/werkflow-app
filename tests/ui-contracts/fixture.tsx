@@ -15,7 +15,7 @@ import { DocumentSearchFixture, ListNavigationFixture } from './list-navigation-
 import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
-import { mountHydrationFixture, type HydrationFixtureName } from './hydration-boundaries';
+import { mountHydrationFixture } from './hydration-boundaries';
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 
@@ -515,7 +515,12 @@ if (!root) throw new Error('UI contract fixture root is missing.');
 // The hydration contracts server-render their page into its own container.
 const hydrationRoot = document.getElementById('hydration-root');
 if (hydrationRoot)
-  mountHydrationFixture(hydrationRoot, hydrationRoot.dataset.fixture as HydrationFixtureName);
+  mountHydrationFixture(
+    hydrationRoot,
+    hydrationRoot.dataset.fixture === 'instruction-hydration'
+      ? 'instruction-hydration'
+      : 'auftraege-hydration',
+  );
 createRoot(root).render(
   hydrationRoot ? null : window.uiContractFixture === 'planning-options' ? (
     <PlanningOptionContractFixture />

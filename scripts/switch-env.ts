@@ -22,8 +22,12 @@ const BACKUP_FILES = {
   prod: '.env.live-backup',
 } as const;
 
-const target = process.argv[2] as keyof typeof BACKUP_FILES | undefined;
-if (!target || !(target in BACKUP_FILES)) {
+function isBackupTarget(value: string | undefined): value is keyof typeof BACKUP_FILES {
+  return value !== undefined && Object.hasOwn(BACKUP_FILES, value);
+}
+
+const target = process.argv[2];
+if (!isBackupTarget(target)) {
   console.error('Usage: bun scripts/switch-env.ts <local|dev|prod>');
   process.exit(1);
 }

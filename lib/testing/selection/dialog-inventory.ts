@@ -546,9 +546,14 @@ export type DialogAuditTarget = DialogAudit & { key: DialogKey; opener: DialogOp
 
 /** Every audit of every dialog, in inventory order. */
 export function dialogAuditTargets(): DialogAuditTarget[] {
-  return (Object.entries(DIALOG_INVENTORY) as [DialogKey, DialogInventoryEntry][]).flatMap(([key, entry]) =>
-    'audits' in entry
-      ? entry.audits.map((audit) => ({ ...audit, key, opener: audit.opener as DialogOpenerId }))
-      : [],
-  );
+  return Object.keys(DIALOG_INVENTORY)
+    .filter(isDialogKey)
+    .flatMap((key) => {
+      const entry = DIALOG_INVENTORY[key];
+      return 'audits' in entry ? entry.audits.map((audit) => ({ ...audit, key })) : [];
+    });
+}
+
+function isDialogKey(key: string): key is DialogKey {
+  return Object.hasOwn(DIALOG_INVENTORY, key);
 }

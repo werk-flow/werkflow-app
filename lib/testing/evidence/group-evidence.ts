@@ -115,22 +115,30 @@ function prefixMatcher(prefixes: readonly string[]): (file: string) => boolean {
 /** An unresolved local or computed import requires all repository inputs. */
 export const UNKNOWN_IMPORT_DEPENDENCY = '<unknown-import-dependency>';
 
-/** Static package imports are qualified through the globally selected lockfile. */
-export function sourceImportGraph(repositoryRoot: string, files: readonly string[]): Map<string, string[]> {
+/** How the repository's tsconfig resolves import names, and the files an import can reach. */
+type ImportResolution = {
+  available: ReadonlySet<string>;
+  /** Unsupported resolution can make a bare name a local module. */
+  unknownBareResolution: boolean;
+  aliases: readonly string[];
+  supportedRootAlias: boolean;
+};
+
+const tsconfigSchema = z.object({
+  extends: z.unknown().optional(),
+  compilerOptions: z
+    .object({
+      baseUrl: z.string().optional(),
+      paths: z.record(z.string(), z.array(z.string())).optional(),
+    })
+    .optional(),
+});
+
+function importResolution(repositoryRoot: string, files: readonly string[]): ImportResolution {
   const available = new Set(files);
-  const graph = new Map<string, string[]>();
   const configPath = resolve(repositoryRoot, 'tsconfig.json');
-  const configSchema = z.object({
-    extends: z.unknown().optional(),
-    compilerOptions: z
-      .object({
-        baseUrl: z.string().optional(),
-        paths: z.record(z.string(), z.array(z.string())).optional(),
-      })
-      .optional(),
-  });
   const config = existsSync(configPath) ? ts.readConfigFile(configPath, ts.sys.readFile) : undefined;
-  const parsedConfig = configSchema.safeParse(config?.config ?? {});
+  const parsedConfig = tsconfigSchema.safeParse(config?.config ?? {});
   // Unsupported resolution can make a bare name a local module. In that case
   // qualify broadly until its actual resolver is implemented and reviewed.
   const unknownBareResolution = Boolean(
@@ -145,92 +153,116 @@ export function sourceImportGraph(repositoryRoot: string, files: readonly string
   const rootAliasTarget = rootAlias?.length === 1 ? rootAlias[0] : undefined;
   const supportedRootAlias =
     !config || (rootAliasTarget !== undefined && ['./*', '*'].includes(rootAliasTarget));
-  function matchesAlias(name: string): boolean {
-    return aliases.some((alias) => {
-      const wildcard = alias.indexOf('*');
-      return wildcard < 0
-        ? name === alias
-        : name.startsWith(alias.slice(0, wildcard)) && name.endsWith(alias.slice(wildcard + 1));
-    });
+  return { available, unknownBareResolution, aliases, supportedRootAlias };
+}
+
+function matchesAlias(aliases: readonly string[], name: string): boolean {
+  return aliases.some((alias) => {
+    const wildcard = alias.indexOf('*');
+    return wildcard < 0
+      ? name === alias
+      : name.startsWith(alias.slice(0, wildcard)) && name.endsWith(alias.slice(wildcard + 1));
+  });
+}
+
+/** The files a local import base can name, in TypeScript's lookup order. */
+function importCandidates(base: string): string[] {
+  const candidates = [
+    base,
+    ...[
+      '.ts',
+      '.tsx',
+      '.mts',
+      '.cts',
+      '.js',
+      '.jsx',
+      '.mjs',
+      '.cjs',
+      '.json',
+      '/index.ts',
+      '/index.tsx',
+      '/index.js',
+    ].map((suffix) => `${base}${suffix}`),
+  ];
+  // TypeScript permits an emitted .js/.mjs/.cjs suffix to refer to source.
+  if (/\.[cm]?jsx?$/.test(base)) {
+    const replacement = base.endsWith('.mjs') ? ['.mts'] : base.endsWith('.cjs') ? ['.cts'] : ['.ts', '.tsx'];
+    candidates.push(...replacement.map((suffix) => base.replace(/\.[cm]?jsx?$/, suffix)));
   }
-  function resolveImport(importer: string, name: string): string | undefined {
-    if (!name.startsWith('.') && !name.startsWith('@/')) {
-      if (name.startsWith('node:')) return undefined;
-      return unknownBareResolution || matchesAlias(name) ? UNKNOWN_IMPORT_DEPENDENCY : undefined;
-    }
-    if (name.startsWith('@/') && !supportedRootAlias) return UNKNOWN_IMPORT_DEPENDENCY;
-    const base = posix.normalize(
-      name.startsWith('@/') ? name.slice(2) : `${dirname(importer).replaceAll('\\', '/')}/${name}`,
+  return candidates;
+}
+
+function resolveSourceImport(
+  resolution: ImportResolution,
+  importer: string,
+  name: string,
+): string | undefined {
+  if (!name.startsWith('.') && !name.startsWith('@/')) {
+    if (name.startsWith('node:')) return undefined;
+    return resolution.unknownBareResolution || matchesAlias(resolution.aliases, name)
+      ? UNKNOWN_IMPORT_DEPENDENCY
+      : undefined;
+  }
+  if (name.startsWith('@/') && !resolution.supportedRootAlias) return UNKNOWN_IMPORT_DEPENDENCY;
+  const base = posix.normalize(
+    name.startsWith('@/') ? name.slice(2) : `${dirname(importer).replaceAll('\\', '/')}/${name}`,
+  );
+  if (base === 'temporary-transcripts' || base.startsWith('temporary-transcripts/')) {
+    throw new Error(
+      `${importer} imports isolated research input ${name}. Move adopted implementation into its owning application module before using it.`,
     );
-    if (base === 'temporary-transcripts' || base.startsWith('temporary-transcripts/')) {
-      throw new Error(
-        `${importer} imports isolated research input ${name}. Move adopted implementation into its owning application module before using it.`,
-      );
-    }
-    const candidates = [
-      base,
-      ...[
-        '.ts',
-        '.tsx',
-        '.mts',
-        '.cts',
-        '.js',
-        '.jsx',
-        '.mjs',
-        '.cjs',
-        '.json',
-        '/index.ts',
-        '/index.tsx',
-        '/index.js',
-      ].map((suffix) => `${base}${suffix}`),
-    ];
-    // TypeScript permits an emitted .js/.mjs/.cjs suffix to refer to source.
-    if (/\.[cm]?jsx?$/.test(base)) {
-      const replacement = base.endsWith('.mjs')
-        ? ['.mts']
-        : base.endsWith('.cjs')
-          ? ['.cts']
-          : ['.ts', '.tsx'];
-      candidates.push(...replacement.map((suffix) => base.replace(/\.[cm]?jsx?$/, suffix)));
-    }
-    return candidates.find((candidate) => available.has(candidate)) ?? UNKNOWN_IMPORT_DEPENDENCY;
   }
+  return (
+    importCandidates(base).find((candidate) => resolution.available.has(candidate)) ??
+    UNKNOWN_IMPORT_DEPENDENCY
+  );
+}
+
+/** The module name expression of an import, export-from, `import()`, `require()` or `import =` site. */
+function importSite(node: ts.Node): { argument: ts.Expression | undefined } | undefined {
+  if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier)
+    return { argument: node.moduleSpecifier };
+  if (
+    ts.isCallExpression(node) &&
+    (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+      (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
+  )
+    return { argument: node.arguments[0] };
+  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference))
+    return { argument: node.moduleReference.expression };
+  return undefined;
+}
+
+function sourceFileImports(repositoryRoot: string, file: string, resolution: ImportResolution): string[] {
+  const source = ts.createSourceFile(
+    file,
+    readFileSync(resolve(repositoryRoot, file), 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const imports = new Set<string>();
+  function visit(node: ts.Node): void {
+    const site = importSite(node);
+    if (site) {
+      const { argument } = site;
+      if (argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))) {
+        const dependency = resolveSourceImport(resolution, file, argument.text);
+        if (dependency) imports.add(dependency);
+      } else imports.add(UNKNOWN_IMPORT_DEPENDENCY);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return [...imports];
+}
+
+/** Static package imports are qualified through the globally selected lockfile. */
+export function sourceImportGraph(repositoryRoot: string, files: readonly string[]): Map<string, string[]> {
+  const resolution = importResolution(repositoryRoot, files);
+  const graph = new Map<string, string[]>();
   for (const file of files) {
     if (!/\.[cm]?[jt]sx?$/.test(file) || !existsSync(resolve(repositoryRoot, file))) continue;
-    const source = ts.createSourceFile(
-      file,
-      readFileSync(resolve(repositoryRoot, file), 'utf8'),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const imports = new Set<string>();
-    function visit(node: ts.Node): void {
-      let argument: ts.Expression | undefined;
-      let importSite = false;
-      if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier) {
-        argument = node.moduleSpecifier;
-        importSite = true;
-      } else if (
-        ts.isCallExpression(node) &&
-        (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
-          (ts.isIdentifier(node.expression) && node.expression.text === 'require'))
-      ) {
-        argument = node.arguments[0];
-        importSite = true;
-      } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
-        argument = node.moduleReference.expression;
-        importSite = true;
-      }
-      if (importSite) {
-        if (argument && (ts.isStringLiteral(argument) || ts.isNoSubstitutionTemplateLiteral(argument))) {
-          const dependency = resolveImport(file, argument.text);
-          if (dependency) imports.add(dependency);
-        } else imports.add(UNKNOWN_IMPORT_DEPENDENCY);
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(source);
-    graph.set(file, [...imports]);
+    graph.set(file, sourceFileImports(repositoryRoot, file, resolution));
   }
   return graph;
 }
