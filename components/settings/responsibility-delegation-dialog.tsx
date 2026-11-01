@@ -42,26 +42,9 @@ export function DelegationDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const {
-    baseHolders,
-    delegatorId,
-    substituteId,
-    validFrom,
-    validUntil,
-    note,
-    isSaving,
-    saveError,
-    personErrors,
-    dateRangeError,
-    canSave,
-    selectDelegator,
-    selectSubstitute,
-    setValidFrom,
-    setValidUntil,
-    setNote,
-    handleOpenChange,
-    handleSave,
-  } = useResponsibilityDelegationForm({ data, responsibility, onOpenChange });
+  const form = useResponsibilityDelegationForm({ data, responsibility, onOpenChange });
+  const { validFrom, validUntil, note, isSaving, saveError, canSave, setNote, handleOpenChange, handleSave } =
+    form;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isSaving}>
@@ -74,60 +57,8 @@ export function DelegationDialog({
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSave} noValidate className="grid gap-4 sm:grid-cols-2">
-          <Field
-            label="Verantwortliche Person"
-            htmlFor={`${responsibility}-delegator`}
-            required
-            error={personErrors.delegator}
-            className="sm:col-span-2"
-          >
-            <SearchableSelect
-              options={baseHolders.map((holder) => ({
-                value: holder.employeeRecordId,
-                label: personName(data.people, holder.employeeRecordId),
-              }))}
-              value={delegatorId}
-              onChange={selectDelegator}
-              placeholder="Person wählen"
-              searchPlaceholder="Person suchen …"
-              emptyMessage="Keine Person gefunden"
-            />
-          </Field>
-          <Field
-            label="Vertretung"
-            htmlFor={`${responsibility}-substitute`}
-            required
-            error={personErrors.substitute}
-            className="sm:col-span-2"
-          >
-            <SearchableSelect
-              options={data.people
-                .filter((person) => person.employeeRecordId !== delegatorId)
-                .map((person) => ({
-                  value: person.employeeRecordId,
-                  label: formatResponsibilityPersonName(person),
-                }))}
-              value={substituteId}
-              onChange={selectSubstitute}
-              placeholder="Vertretung wählen"
-              searchPlaceholder="Person suchen …"
-              emptyMessage="Keine Person gefunden"
-            />
-          </Field>
-          <Field label="Gültig ab" htmlFor={`${responsibility}-valid-from`} required>
-            <DatePicker
-              ariaLabel="Gültig ab"
-              value={isoToDate(validFrom)}
-              onChange={(date) => date && setValidFrom(toLocalDateString(date))}
-            />
-          </Field>
-          <Field label="Gültig bis" htmlFor={`${responsibility}-valid-until`} required error={dateRangeError}>
-            <DatePicker
-              ariaLabel="Gültig bis"
-              value={isoToDate(validUntil)}
-              onChange={(date) => date && setValidUntil(toLocalDateString(date))}
-            />
-          </Field>
+          <DelegationPeopleFields data={data} responsibility={responsibility} form={form} />
+          <DelegationPeriodFields responsibility={responsibility} form={form} />
           <Field
             label="Hinweis (optional)"
             htmlFor={`${responsibility}-delegation-note`}
@@ -140,17 +71,7 @@ export function DelegationDialog({
               maxLength={500}
             />
           </Field>
-          {canSave ? (
-            <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
-              <p className="flex items-center gap-2 font-medium">
-                <CalendarClock className="size-4" /> Wirkung
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                Die Vertretung gilt einschließlich {formatDelegationDate(validFrom)} und{' '}
-                {formatDelegationDate(validUntil)}. Ab dem Folgetag endet der Zugriff automatisch.
-              </p>
-            </div>
-          ) : null}
+          {canSave ? <DelegationEffect validFrom={validFrom} validUntil={validUntil} /> : null}
           <ErrorText className="sm:col-span-2">{saveError}</ErrorText>
           <DialogFooter className="sm:col-span-2">
             <Button
@@ -168,5 +89,105 @@ export function DelegationDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type DelegationForm = ReturnType<typeof useResponsibilityDelegationForm>;
+
+function DelegationPeopleFields({
+  data,
+  responsibility,
+  form,
+}: {
+  data: ResponsibilitySettingsData;
+  responsibility: OrganizationResponsibility;
+  form: DelegationForm;
+}) {
+  const { baseHolders, delegatorId, substituteId, personErrors, selectDelegator, selectSubstitute } = form;
+  return (
+    <>
+      <Field
+        label="Verantwortliche Person"
+        htmlFor={`${responsibility}-delegator`}
+        required
+        error={personErrors.delegator}
+        className="sm:col-span-2"
+      >
+        <SearchableSelect
+          options={baseHolders.map((holder) => ({
+            value: holder.employeeRecordId,
+            label: personName(data.people, holder.employeeRecordId),
+          }))}
+          value={delegatorId}
+          onChange={selectDelegator}
+          placeholder="Person wählen"
+          searchPlaceholder="Person suchen …"
+          emptyMessage="Keine Person gefunden"
+        />
+      </Field>
+      <Field
+        label="Vertretung"
+        htmlFor={`${responsibility}-substitute`}
+        required
+        error={personErrors.substitute}
+        className="sm:col-span-2"
+      >
+        <SearchableSelect
+          options={data.people
+            .filter((person) => person.employeeRecordId !== delegatorId)
+            .map((person) => ({
+              value: person.employeeRecordId,
+              label: formatResponsibilityPersonName(person),
+            }))}
+          value={substituteId}
+          onChange={selectSubstitute}
+          placeholder="Vertretung wählen"
+          searchPlaceholder="Person suchen …"
+          emptyMessage="Keine Person gefunden"
+        />
+      </Field>
+    </>
+  );
+}
+
+function DelegationPeriodFields({
+  responsibility,
+  form,
+}: {
+  responsibility: OrganizationResponsibility;
+  form: DelegationForm;
+}) {
+  const { validFrom, validUntil, dateRangeError, setValidFrom, setValidUntil } = form;
+  return (
+    <>
+      <Field label="Gültig ab" htmlFor={`${responsibility}-valid-from`} required>
+        <DatePicker
+          ariaLabel="Gültig ab"
+          value={isoToDate(validFrom)}
+          onChange={(date) => date && setValidFrom(toLocalDateString(date))}
+        />
+      </Field>
+      <Field label="Gültig bis" htmlFor={`${responsibility}-valid-until`} required error={dateRangeError}>
+        <DatePicker
+          ariaLabel="Gültig bis"
+          value={isoToDate(validUntil)}
+          onChange={(date) => date && setValidUntil(toLocalDateString(date))}
+        />
+      </Field>
+    </>
+  );
+}
+
+function DelegationEffect({ validFrom, validUntil }: { validFrom: string; validUntil: string }) {
+  return (
+    <div className="rounded-md border bg-muted/30 p-3 text-sm sm:col-span-2">
+      <p className="flex items-center gap-2 font-medium">
+        <CalendarClock className="size-4" /> Wirkung
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        Die Vertretung gilt einschließlich {formatDelegationDate(validFrom)} und{' '}
+        {formatDelegationDate(validUntil)}. Ab dem Folgetag endet der Zugriff automatisch.
+      </p>
+    </div>
   );
 }
