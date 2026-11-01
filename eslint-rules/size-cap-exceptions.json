@@ -67,9 +67,6 @@
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 129 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
-    "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
-    "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
-    "lib/testing/performance-calibration.ts": { "draftPerformanceBaselines": 98 },
     "lib/testing/spec-support/spec-independence.ts": { "specIndependenceProblems": 82 }
   }
 }
