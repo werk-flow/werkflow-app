@@ -142,6 +142,63 @@ function WeeklyHoursChartLegend() {
   );
 }
 
+function WeeklyHoursChartHeader({
+  weekLabel,
+  weeklyTargetMinutes,
+}: {
+  weekLabel: { dateRange: string; kw: string };
+  weeklyTargetMinutes: number | null;
+}) {
+  return (
+    <div className="mb-6 flex items-baseline justify-between gap-2 text-xs font-medium tabular-nums text-muted-foreground">
+      <span>{weekLabel.dateRange}</span>
+      <span className="flex items-baseline gap-3">
+        {weeklyTargetMinutes !== null && <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>}
+        <span>{weekLabel.kw}</span>
+      </span>
+    </div>
+  );
+}
+
+/* Y-axis labels and horizontal grid lines */
+function WeeklyHoursChartGrid({
+  gridLines,
+  minutesToPx,
+}: {
+  gridLines: number[];
+  minutesToPx: (mins: number) => number;
+}) {
+  return (
+    <>
+      {/* Y-axis labels – absolutely positioned from bottom, centered on the gridline.
+         `bottom` sets the element's bottom edge, so translateY(50%) shifts it down
+         by half its own height, placing its vertical center on the line. */}
+      {gridLines.map((h) => (
+        <span
+          key={`label-${h}`}
+          className="absolute left-0 z-20 translate-y-1/2 text-xs leading-none tabular-nums text-muted-foreground"
+          style={{ bottom: LABEL_AREA + minutesToPx(h * 60) }}
+        >
+          {h}h
+        </span>
+      ))}
+
+      {/* Horizontal grid lines – same coordinate system as labels */}
+      {gridLines.map((h) => (
+        <div
+          key={`grid-${h}`}
+          className="pointer-events-none absolute z-10 border-t border-dashed border-muted-foreground/15"
+          style={{
+            bottom: LABEL_AREA + minutesToPx(h * 60),
+            left: 28,
+            right: 0,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 export function WeeklyHoursChart({
   weekData,
   todayIndex,
@@ -205,43 +262,13 @@ export function WeeklyHoursChart({
   return (
     <div className={cn('isolate w-full overflow-hidden', className)}>
       {weekLabel && (
-        <div className="mb-6 flex items-baseline justify-between gap-2 text-xs font-medium tabular-nums text-muted-foreground">
-          <span>{weekLabel.dateRange}</span>
-          <span className="flex items-baseline gap-3">
-            {weeklyTargetMinutes !== null && <span>Soll: {formatDuration(weeklyTargetMinutes)}</span>}
-            <span>{weekLabel.kw}</span>
-          </span>
-        </div>
+        <WeeklyHoursChartHeader weekLabel={weekLabel} weeklyTargetMinutes={weeklyTargetMinutes} />
       )}
 
       {/* Chart wrapper: position relative so all children use the same coordinate space.
           The bar area occupies the top BAR_HEIGHT px, the label area the bottom LABEL_AREA px. */}
       <div className="relative" style={{ height: BAR_HEIGHT + LABEL_AREA }}>
-        {/* Y-axis labels – absolutely positioned from bottom, centered on the gridline.
-           `bottom` sets the element's bottom edge, so translateY(50%) shifts it down
-           by half its own height, placing its vertical center on the line. */}
-        {gridLines.map((h) => (
-          <span
-            key={`label-${h}`}
-            className="absolute left-0 z-20 translate-y-1/2 text-xs leading-none tabular-nums text-muted-foreground"
-            style={{ bottom: LABEL_AREA + minutesToPx(h * 60) }}
-          >
-            {h}h
-          </span>
-        ))}
-
-        {/* Horizontal grid lines – same coordinate system as labels */}
-        {gridLines.map((h) => (
-          <div
-            key={`grid-${h}`}
-            className="pointer-events-none absolute z-10 border-t border-dashed border-muted-foreground/15"
-            style={{
-              bottom: LABEL_AREA + minutesToPx(h * 60),
-              left: 28,
-              right: 0,
-            }}
-          />
-        ))}
+        <WeeklyHoursChartGrid gridLines={gridLines} minutesToPx={minutesToPx} />
 
         <WeeklyHoursChartBars
           data={data}

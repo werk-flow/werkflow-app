@@ -16,14 +16,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { EMPLOYMENT_TYPES, EMPLOYMENT_TYPE_LABELS, type EmploymentType } from '@/lib/personnel/types';
+import { EMPLOYMENT_TYPES, EMPLOYMENT_TYPE_LABELS } from '@/lib/personnel/types';
 import { toLocalDateString } from '@/lib/utils';
 import {
   useEmploymentConditionForm,
   type EmploymentConditionFormInput,
 } from './use-employment-condition-form';
 
-export function EmploymentConditionDialog({ recordId, condition, onClose }: EmploymentConditionFormInput) {
+type EmploymentConditionForm = ReturnType<typeof useEmploymentConditionForm>;
+
+function EmploymentConditionFields({ form }: { form: EmploymentConditionForm }) {
   const {
     validFrom,
     setValidFrom,
@@ -38,8 +40,75 @@ export function EmploymentConditionDialog({ recordId, condition, onClose }: Empl
     isSaving,
     error,
     fieldErrors,
-    handleSubmit,
-  } = useEmploymentConditionForm({ recordId, condition, onClose });
+  } = form;
+
+  return (
+    <>
+      <Field label="Gültig ab" htmlFor="condition-valid-from" required error={fieldErrors.validFrom}>
+        <DatePicker
+          ariaLabel="Gültig ab"
+          value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
+          onChange={(date) => setValidFrom(date ? toLocalDateString(date) : '')}
+          disabled={isSaving}
+        />
+      </Field>
+      <Field label="Beschäftigungsart" htmlFor="condition-type" required>
+        <Select
+          value={employmentType}
+          onValueChange={(value) => {
+            const nextType = EMPLOYMENT_TYPES.find((type) => type === value);
+            if (nextType) setEmploymentType(nextType);
+          }}
+          disabled={isSaving}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {EMPLOYMENT_TYPES.map((type) => (
+              <SelectItem key={type} value={type}>
+                {EMPLOYMENT_TYPE_LABELS[type]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Wochenstunden" htmlFor="condition-weekly-hours" error={fieldErrors.weeklyHours}>
+          <Input
+            inputMode="decimal"
+            placeholder="z. B. 40"
+            value={weeklyHours}
+            onChange={(e) => setWeeklyHours(e.target.value)}
+            disabled={isSaving}
+          />
+        </Field>
+        <Field label="Urlaubstage/Jahr" htmlFor="condition-vacation-days" error={fieldErrors.vacationDays}>
+          <Input
+            inputMode="decimal"
+            placeholder="z. B. 30"
+            value={vacationDays}
+            onChange={(e) => setVacationDays(e.target.value)}
+            disabled={isSaving}
+          />
+        </Field>
+      </div>
+      <Field label="Notiz" htmlFor="condition-note">
+        <Textarea
+          placeholder="z. B. Probezeit bis 30.09."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          disabled={isSaving}
+        />
+      </Field>
+      <ErrorText>{error}</ErrorText>
+    </>
+  );
+}
+
+export function EmploymentConditionDialog({ recordId, condition, onClose }: EmploymentConditionFormInput) {
+  const form = useEmploymentConditionForm({ recordId, condition, onClose });
+  const { isSaving, handleSubmit } = form;
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose(false)} pending={isSaving}>
@@ -52,65 +121,7 @@ export function EmploymentConditionDialog({ recordId, condition, onClose }: Empl
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <Field label="Gültig ab" htmlFor="condition-valid-from" required error={fieldErrors.validFrom}>
-              <DatePicker
-                ariaLabel="Gültig ab"
-                value={validFrom ? new Date(`${validFrom}T00:00:00`) : undefined}
-                onChange={(date) => setValidFrom(date ? toLocalDateString(date) : '')}
-                disabled={isSaving}
-              />
-            </Field>
-            <Field label="Beschäftigungsart" htmlFor="condition-type" required>
-              <Select
-                value={employmentType}
-                onValueChange={(value) => setEmploymentType(value as EmploymentType)}
-                disabled={isSaving}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {EMPLOYMENT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {EMPLOYMENT_TYPE_LABELS[type]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Wochenstunden" htmlFor="condition-weekly-hours" error={fieldErrors.weeklyHours}>
-                <Input
-                  inputMode="decimal"
-                  placeholder="z. B. 40"
-                  value={weeklyHours}
-                  onChange={(e) => setWeeklyHours(e.target.value)}
-                  disabled={isSaving}
-                />
-              </Field>
-              <Field
-                label="Urlaubstage/Jahr"
-                htmlFor="condition-vacation-days"
-                error={fieldErrors.vacationDays}
-              >
-                <Input
-                  inputMode="decimal"
-                  placeholder="z. B. 30"
-                  value={vacationDays}
-                  onChange={(e) => setVacationDays(e.target.value)}
-                  disabled={isSaving}
-                />
-              </Field>
-            </div>
-            <Field label="Notiz" htmlFor="condition-note">
-              <Textarea
-                placeholder="z. B. Probezeit bis 30.09."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                disabled={isSaving}
-              />
-            </Field>
-            <ErrorText>{error}</ErrorText>
+            <EmploymentConditionFields form={form} />
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>

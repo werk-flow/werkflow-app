@@ -31,27 +31,14 @@ function NoConditionsYet() {
   );
 }
 
-interface EmploymentConditionsSectionProps {
-  recordId: string;
-  conditions: EmploymentCondition[];
-  canEdit: boolean;
-}
-
-export function EmploymentConditionsSection({
-  recordId,
-  conditions,
-  canEdit,
-}: EmploymentConditionsSectionProps) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
+/** The delete confirmation of one condition: its target, the delete and its failure. */
+function useEmploymentConditionDelete(
+  router: ReturnType<typeof useRouter>,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+) {
   const [deleteTarget, setDeleteTarget] = useState<EmploymentCondition | null>(null);
   const { run: runDelete, isPending: isDeleting } = useServerAction(deleteEmploymentCondition);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const current = getEffectiveCondition(conditions);
-  const sorted = [...conditions].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
-  const todayIso = getBusinessTodayIso();
 
   const handleDelete = async () => {
     if (!deleteTarget || isDeleting) return;
@@ -77,6 +64,30 @@ export function EmploymentConditionsSection({
       );
     }
   };
+
+  return { deleteTarget, setDeleteTarget, isDeleting, deleteError, setDeleteError, handleDelete };
+}
+
+interface EmploymentConditionsSectionProps {
+  recordId: string;
+  conditions: EmploymentCondition[];
+  canEdit: boolean;
+}
+
+export function EmploymentConditionsSection({
+  recordId,
+  conditions,
+  canEdit,
+}: EmploymentConditionsSectionProps) {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
+  const { deleteTarget, setDeleteTarget, isDeleting, deleteError, setDeleteError, handleDelete } =
+    useEmploymentConditionDelete(router, showBanner);
+
+  const current = getEffectiveCondition(conditions);
+  const sorted = [...conditions].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
+  const todayIso = getBusinessTodayIso();
 
   return (
     <div className="rounded-lg border bg-card p-3 sm:p-4">

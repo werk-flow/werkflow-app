@@ -13,6 +13,7 @@ import { useOptimisticChannel } from '@/hooks/use-optimistic-channel';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
 import { useServerAction } from '@/hooks/use-server-action';
+import type { RealtimeTable } from '@/lib/realtime/tables';
 import type { OrgRole } from '@/lib/roles';
 import type { PersonnelListEntry } from '@/lib/personnel/record-read-actions';
 import type { DailyTarget } from '@/lib/personnel/targets';
@@ -41,27 +42,34 @@ interface MitarbeiterTabsProps {
   qualificationWorkspace: QualificationWorkspace | null;
 }
 
+// Reload server-rendered records and break-policy props. Member status
+// refetches time entries itself, then recomputes when these props change.
+// The subscription keys on the joined names (hooks/use-realtime-tables.ts),
+// so a module constant subscribes exactly as the inline list did.
+const MITARBEITER_TABS_REFRESH_TABLES = [
+  'organization_invites',
+  'organization_join_requests',
+  'organization_settings',
+  'employee_records',
+  'employment_conditions',
+  'work_schedules',
+  'organization_closure_days',
+  'organization_responsibility_configurations',
+  'organization_responsibility_assignments',
+  'organization_responsibility_delegations',
+  'teams',
+  'team_memberships',
+  'organization_capabilities',
+  'employee_capabilities',
+  'organization_qualification_settings',
+] as const satisfies readonly RealtimeTable[];
+
 const getMemberId = (member: OrgMember) => member.user_id;
 const getInviteId = (invite: Invite) => invite.id;
 // The server lists invites newest first; a just-sent one lands on top.
 const compareInvitesNewestFirst = (a: Invite, b: Invite) => b.created_at.localeCompare(a.created_at);
 
-export function MitarbeiterTabs({
-  members: initialMembers,
-  invites: initialInvites,
-  joinRequests,
-  personnelEntries,
-  personnelProfileNames,
-  targetsByUserId,
-  removalBlockedByUserId,
-  currentUserId,
-  currentUserRole,
-  organizationId,
-  breakMode,
-  autoBreakThresholdMinutes,
-  autoBreakDurationMinutes,
-  qualificationWorkspace,
-}: MitarbeiterTabsProps) {
+function useMitarbeiterTabsLists(initialMembers: OrgMember[], initialInvites: Invite[]) {
   // Server props are the authority; the overlays hold a role change until the
   // refreshed list carries it and an invite just sent until the list has it.
   const memberList = useOptimisticList({ items: initialMembers, getId: getMemberId });
@@ -73,13 +81,10 @@ export function MitarbeiterTabs({
   useOptimisticChannel(inviteCreations, inviteList);
   const members = useMemo(() => memberList.items.map((row) => row.item), [memberList.items]);
   const invites = useMemo(() => inviteList.items.map((row) => row.item), [inviteList.items]);
-  const { handleRoleChange, busyIds } = useMitarbeiterTabsRoleChange({
-    members,
-    initialMembers,
-    updateMember: memberList.update,
-    rollbackMember: memberList.rollback,
-  });
+  return { memberList, inviteList, members, invites };
+}
 
+function useMitarbeiterPersonnelLookups(members: OrgMember[], personnelEntries: PersonnelListEntry[]) {
   // Get member IDs for status polling
   const memberIds = useMemo(() => members.map((m) => m.user_id), [members]);
 
@@ -98,7 +103,21 @@ export function MitarbeiterTabs({
       ),
     [personnelEntries],
   );
+  return { memberIds, personnelWithoutMembership, personnelByUserId };
+}
 
+type MitarbeiterMemberStatusOptions = Pick<
+  MitarbeiterTabsProps,
+  'organizationId' | 'breakMode' | 'autoBreakThresholdMinutes' | 'autoBreakDurationMinutes'
+> & { memberIds: string[] };
+
+function useMitarbeiterMemberStatus({
+  organizationId,
+  memberIds,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
+}: MitarbeiterMemberStatusOptions) {
   // Poll for member status (working status and hours)
   const {
     statusMap,
@@ -126,27 +145,110 @@ export function MitarbeiterTabs({
     return Object.values(statusMap).filter((status) => status.status === 'working').length;
   }, [statusMap, statusFailed]);
 
-  // Reload server-rendered records and break-policy props. Member status
-  // refetches time entries itself, then recomputes when these props change.
-  useRealtimeRouterRefresh({
-    tables: [
-      'organization_invites',
-      'organization_join_requests',
-      'organization_settings',
-      'employee_records',
-      'employment_conditions',
-      'work_schedules',
-      'organization_closure_days',
-      'organization_responsibility_configurations',
-      'organization_responsibility_assignments',
-      'organization_responsibility_delegations',
-      'teams',
-      'team_memberships',
-      'organization_capabilities',
-      'employee_capabilities',
-      'organization_qualification_settings',
-    ],
+  return {
+    statusMap,
+    isStatusLoading,
+    refetchStatus,
+    retryStatus,
+    isStatusRetryPending,
+    statusFailed,
+    activeWorkingCount,
+  };
+}
+
+type MitarbeiterMembersTabProps = Pick<
+  MitarbeiterTabsProps,
+  'currentUserId' | 'currentUserRole' | 'targetsByUserId' | 'removalBlockedByUserId' | 'personnelProfileNames'
+> & {
+  status: ReturnType<typeof useMitarbeiterMemberStatus>;
+  members: OrgMember[];
+  onRoleChange: ReturnType<typeof useMitarbeiterTabsRoleChange>['handleRoleChange'];
+  busyIds: ReturnType<typeof useMitarbeiterTabsRoleChange>['busyIds'];
+  personnelByUserId: Record<string, PersonnelListEntry>;
+  personnelWithoutMembership: PersonnelListEntry[];
+};
+
+function MitarbeiterMembersTab({
+  status,
+  members,
+  currentUserId,
+  currentUserRole,
+  onRoleChange,
+  busyIds,
+  targetsByUserId,
+  personnelByUserId,
+  removalBlockedByUserId,
+  personnelWithoutMembership,
+  personnelProfileNames,
+}: MitarbeiterMembersTabProps) {
+  const { statusMap, isStatusLoading, retryStatus, isStatusRetryPending, statusFailed } = status;
+
+  return (
+    <TabsContent value="members" className="mt-4">
+      {statusFailed ? (
+        <SectionError className="mb-4" onRetry={() => void retryStatus()} retryPending={isStatusRetryPending}>
+          Der Arbeitsstatus konnte nicht geladen werden. Wer gerade arbeitet, ist deshalb vielleicht nicht
+          aktuell.
+        </SectionError>
+      ) : null}
+      <MembersTable
+        members={members}
+        currentUserId={currentUserId}
+        currentUserRole={currentUserRole}
+        onRoleChange={onRoleChange}
+        statusMap={statusMap}
+        isStatusLoading={isStatusLoading}
+        isStatusUnavailable={statusFailed}
+        busyMemberIds={busyIds}
+        targetsByUserId={targetsByUserId}
+        personnelByUserId={personnelByUserId}
+        removalBlockedByUserId={removalBlockedByUserId}
+      />
+      <PersonnelRecordsSection entries={personnelWithoutMembership} profileNames={personnelProfileNames} />
+    </TabsContent>
+  );
+}
+
+export function MitarbeiterTabs({
+  members: initialMembers,
+  invites: initialInvites,
+  joinRequests,
+  personnelEntries,
+  personnelProfileNames,
+  targetsByUserId,
+  removalBlockedByUserId,
+  currentUserId,
+  currentUserRole,
+  organizationId,
+  breakMode,
+  autoBreakThresholdMinutes,
+  autoBreakDurationMinutes,
+  qualificationWorkspace,
+}: MitarbeiterTabsProps) {
+  const { memberList, inviteList, members, invites } = useMitarbeiterTabsLists(
+    initialMembers,
+    initialInvites,
+  );
+  const { handleRoleChange, busyIds } = useMitarbeiterTabsRoleChange({
+    members,
+    initialMembers,
+    updateMember: memberList.update,
+    rollbackMember: memberList.rollback,
   });
+
+  const { memberIds, personnelWithoutMembership, personnelByUserId } = useMitarbeiterPersonnelLookups(
+    members,
+    personnelEntries,
+  );
+  const status = useMitarbeiterMemberStatus({
+    organizationId,
+    memberIds,
+    breakMode,
+    autoBreakThresholdMinutes,
+    autoBreakDurationMinutes,
+  });
+
+  useRealtimeRouterRefresh({ tables: MITARBEITER_TABS_REFRESH_TABLES });
 
   // Count pending invites for the badge
   const pendingCount = invites.filter(
@@ -158,7 +260,7 @@ export function MitarbeiterTabs({
       <QuickStats
         organizationId={organizationId}
         totalMembers={members.length}
-        activeWorkingCount={activeWorkingCount}
+        activeWorkingCount={status.activeWorkingCount}
         isAdmin={currentUserRole === 'admin'}
       />
       <JoinRequestsSection requests={joinRequests} />
@@ -166,38 +268,22 @@ export function MitarbeiterTabs({
         <MitarbeiterTabsBar
           memberCount={members.length}
           pendingCount={pendingCount}
-          onRefreshStatus={refetchStatus}
+          onRefreshStatus={status.refetchStatus}
         />
 
-        <TabsContent value="members" className="mt-4">
-          {statusFailed ? (
-            <SectionError
-              className="mb-4"
-              onRetry={() => void retryStatus()}
-              retryPending={isStatusRetryPending}
-            >
-              Der Arbeitsstatus konnte nicht geladen werden. Wer gerade arbeitet, ist deshalb vielleicht nicht
-              aktuell.
-            </SectionError>
-          ) : null}
-          <MembersTable
-            members={members}
-            currentUserId={currentUserId}
-            currentUserRole={currentUserRole}
-            onRoleChange={handleRoleChange}
-            statusMap={statusMap}
-            isStatusLoading={isStatusLoading}
-            isStatusUnavailable={statusFailed}
-            busyMemberIds={busyIds}
-            targetsByUserId={targetsByUserId}
-            personnelByUserId={personnelByUserId}
-            removalBlockedByUserId={removalBlockedByUserId}
-          />
-          <PersonnelRecordsSection
-            entries={personnelWithoutMembership}
-            profileNames={personnelProfileNames}
-          />
-        </TabsContent>
+        <MitarbeiterMembersTab
+          status={status}
+          members={members}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          onRoleChange={handleRoleChange}
+          busyIds={busyIds}
+          targetsByUserId={targetsByUserId}
+          personnelByUserId={personnelByUserId}
+          removalBlockedByUserId={removalBlockedByUserId}
+          personnelWithoutMembership={personnelWithoutMembership}
+          personnelProfileNames={personnelProfileNames}
+        />
         <TabsContent value="invitations" className="mt-4">
           <InvitationsTable rows={inviteList.items} />
         </TabsContent>

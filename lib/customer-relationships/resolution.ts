@@ -1,3 +1,4 @@
+import { isJsonRecord } from '@/lib/supabase/json';
 import { isUuid } from '@/lib/validation/uuid';
 import type {
   CommunicationChannel,
@@ -16,7 +17,7 @@ type TimelineCursor = {
   stableKey: string;
 };
 
-const TIMELINE_KINDS = new Set<TimelineKind>([
+const TIMELINE_KINDS: readonly TimelineKind[] = [
   'customer_created',
   'contact_created',
   'site_created',
@@ -29,16 +30,21 @@ const TIMELINE_KINDS = new Set<TimelineKind>([
   'document_linked',
   'follow_up_event',
   'communication_preference_event',
-]);
+];
+
+function isTimelineKind(value: string): value is TimelineKind {
+  return TIMELINE_KINDS.some((kind) => kind === value);
+}
+
 const TIMELINE_TIMESTAMP_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export function isTimelineCursorSafe(cursor: Pick<TimelineCursor, 'occurredAt' | 'stableKey'>): boolean {
   const separatorIndex = cursor.stableKey.indexOf(':');
   if (separatorIndex <= 0) return false;
-  const kind = cursor.stableKey.slice(0, separatorIndex) as TimelineKind;
+  const kind = cursor.stableKey.slice(0, separatorIndex);
   const sourceId = cursor.stableKey.slice(separatorIndex + 1);
   return (
-    TIMELINE_KINDS.has(kind) &&
+    isTimelineKind(kind) &&
     isUuid(sourceId) &&
     TIMELINE_TIMESTAMP_PATTERN.test(cursor.occurredAt) &&
     Number.isFinite(Date.parse(cursor.occurredAt))
@@ -75,16 +81,14 @@ export function decodeTimelineCursor(value?: string | null): TimelineCursor | nu
   try {
     const normalized = value.replaceAll('-', '+').replaceAll('_', '/');
     const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
-    const parsed = JSON.parse(atob(padded)) as Partial<TimelineCursor>;
-    if (
-      parsed.version !== 1 ||
-      typeof parsed.occurredAt !== 'string' ||
-      typeof parsed.stableKey !== 'string' ||
-      !isTimelineCursorSafe(parsed as TimelineCursor)
-    ) {
+    const parsed: unknown = JSON.parse(atob(padded));
+    if (!isJsonRecord(parsed)) return null;
+    const { version, occurredAt, stableKey } = parsed;
+    if (version !== 1 || typeof occurredAt !== 'string' || typeof stableKey !== 'string') {
       return null;
     }
-    return parsed as TimelineCursor;
+    const cursor: TimelineCursor = { version, occurredAt, stableKey };
+    return isTimelineCursorSafe(cursor) ? cursor : null;
   } catch {
     return null;
   }

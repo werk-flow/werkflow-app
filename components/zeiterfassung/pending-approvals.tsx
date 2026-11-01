@@ -13,7 +13,7 @@ import { useBanner } from '@/components/ui/banner';
 import type { ActionResult } from '@/lib/action-result';
 import { describeBatchRefusal, describeFailure } from '@/lib/action-messages';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
-import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
 import { PendingApprovalsHeader } from './pending-approvals-header';
 import { combinePendingApprovalItems, PendingApprovalsList } from './pending-approvals-list';
 
@@ -105,42 +105,29 @@ async function readPendingApprovalData(
   }
 }
 
-export function PendingApprovals({
-  organizationId,
-  isAdmin,
-  currentUserRole,
-  currentUserId,
-}: PendingApprovalsProps) {
-  // Errors from approve/reject actions; read errors come from view.error.
-  const [actionError, setActionError] = useState<string | null>(null);
-  const { showBanner } = useBanner();
+type ReviewList = { remove: (id: string) => void; rollback: (id: string) => void };
 
-  const view = useLiveView<PendingApprovalData>({
-    tables: ['time_entries', 'entry_change_requests'],
-    read: ({ signal }) => readPendingApprovalData(organizationId, isAdmin, signal),
-    resetKey: `${organizationId}:${isAdmin ? 'admin' : 'manager'}`,
-  });
+type PendingApprovalReviewsInput = {
+  view: LiveViewState<PendingApprovalData>;
+  sessionList: ReviewList;
+  changeRequestList: ReviewList;
+  sessions: PendingSession[];
+  setActionError: (error: string | null) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
 
-  // A reviewed card leaves the list in the first frame. The overlay expires
-  // when the authoritative read no longer carries the item and rolls back when
-  // the server refuses, so the card returns together with the reason.
-  const sessionList = useOptimisticList({
-    items: view.data?.sessions ?? EMPTY_SESSIONS,
-    getId: getPendingItemId,
-  });
-  const changeRequestList = useOptimisticList({
-    items: view.data?.changeRequests ?? EMPTY_CHANGE_REQUESTS,
-    getId: getPendingItemId,
-  });
-  const sessions = sessionList.items.map((row) => row.item);
-  const changeRequests = changeRequestList.items.map((row) => row.item);
-  const isInitialLoading = view.isLoading;
-  const error = actionError ?? view.error;
-  const listError = view.isStale ? actionError : error;
-
+/** The approve and reject handlers of the list, built on every render as before. */
+function pendingApprovalReviews({
+  view,
+  sessionList,
+  changeRequestList,
+  sessions,
+  setActionError,
+  showBanner,
+}: PendingApprovalReviewsInput) {
   // Confirmation appears only after the server accepted the review.
   const review = async (
-    list: { remove: (id: string) => void; rollback: (id: string) => void },
+    list: ReviewList,
     ids: string[],
     write: () => Promise<ActionResult>,
     confirmation: string,
@@ -194,6 +181,69 @@ export function PendingApprovals({
       getApprovalErrorMessage,
     );
 
+  return { reviewPendingSession, approveAllSessions, reviewPendingChangeRequest };
+}
+
+/** An approve or reject failure above the list, while items exist. */
+function PendingApprovalsActionError({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  return (
+    <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
+      <ErrorText>{message}</ErrorText>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onDismiss}
+        aria-label="Fehlermeldung ausblenden"
+        className="h-auto p-1 text-destructive hover:text-destructive"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
+}
+
+export function PendingApprovals({
+  organizationId,
+  isAdmin,
+  currentUserRole,
+  currentUserId,
+}: PendingApprovalsProps) {
+  // Errors from approve/reject actions; read errors come from view.error.
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { showBanner } = useBanner();
+
+  const view = useLiveView<PendingApprovalData>({
+    tables: ['time_entries', 'entry_change_requests'],
+    read: ({ signal }) => readPendingApprovalData(organizationId, isAdmin, signal),
+    resetKey: `${organizationId}:${isAdmin ? 'admin' : 'manager'}`,
+  });
+
+  // A reviewed card leaves the list in the first frame. The overlay expires
+  // when the authoritative read no longer carries the item and rolls back when
+  // the server refuses, so the card returns together with the reason.
+  const sessionList = useOptimisticList({
+    items: view.data?.sessions ?? EMPTY_SESSIONS,
+    getId: getPendingItemId,
+  });
+  const changeRequestList = useOptimisticList({
+    items: view.data?.changeRequests ?? EMPTY_CHANGE_REQUESTS,
+    getId: getPendingItemId,
+  });
+  const sessions = sessionList.items.map((row) => row.item);
+  const changeRequests = changeRequestList.items.map((row) => row.item);
+  const isInitialLoading = view.isLoading;
+  const error = actionError ?? view.error;
+  const listError = view.isStale ? actionError : error;
+
+  const { reviewPendingSession, approveAllSessions, reviewPendingChangeRequest } = pendingApprovalReviews({
+    view,
+    sessionList,
+    changeRequestList,
+    sessions,
+    setActionError,
+    showBanner,
+  });
+
   const allItems = combinePendingApprovalItems(sessions, changeRequests);
 
   return (
@@ -215,18 +265,7 @@ export function PendingApprovals({
         {/* Inline error message for operation failures (when items exist); a
           failed refresh shows as the stale notice instead. */}
         {listError && allItems.length > 0 && (
-          <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive flex items-center justify-between">
-            <ErrorText>{listError}</ErrorText>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setActionError(null)}
-              aria-label="Fehlermeldung ausblenden"
-              className="h-auto p-1 text-destructive hover:text-destructive"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
+          <PendingApprovalsActionError message={listError} onDismiss={() => setActionError(null)} />
         )}
 
         <PendingApprovalsList

@@ -8,6 +8,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { SectionError } from '@/components/ui/section-error';
 import { ACCESS_STATE_LABELS, EMPLOYMENT_LIFECYCLE_LABELS } from '@/lib/personnel/lifecycle';
+import type { PersonnelLifecycleView } from '@/lib/personnel/lifecycle-actions';
 
 import { formatLifecycleDate } from './personnel-lifecycle-dates';
 import type { PersonnelLifecycleTransitions } from './use-personnel-lifecycle-transitions';
@@ -49,6 +50,26 @@ export function PersonnelLifecycleHeader({ lifecycle, canAdministerAccess }: Per
         </SectionError>
       ) : null}
     </>
+  );
+}
+
+function personnelEmploymentStatusText(employment: PersonnelLifecycleView['employment']): string {
+  return employment.scheduledState
+    ? `${EMPLOYMENT_LIFECYCLE_LABELS[employment.scheduledState]} ab ${formatLifecycleDate(employment.scheduledFor)}`
+    : employment.state
+      ? `Wirksam seit ${formatLifecycleDate(employment.effectiveOn)}`
+      : 'Eintritts- und Austrittsdaten bleiben bis zum ersten kontrollierten Übergang maßgeblich.';
+}
+
+function PersonnelLifecycleUnresolvedWork({ data }: { data: PersonnelLifecycleView }) {
+  return (
+    <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
+      <p className="font-medium">Vor einem Austritt prüfen</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {data.transitionInventory.activeJobs.length} aktive Auftragszuweisungen,{' '}
+        {data.transitionInventory.strandedResponsibilities.length} nicht ersetzte Verantwortungen.
+      </p>
+    </div>
   );
 }
 
@@ -118,11 +139,7 @@ export function PersonnelLifecycleStatusCards({
             </Badge>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            {data.employment.scheduledState
-              ? `${EMPLOYMENT_LIFECYCLE_LABELS[data.employment.scheduledState]} ab ${formatLifecycleDate(data.employment.scheduledFor)}`
-              : data.employment.state
-                ? `Wirksam seit ${formatLifecycleDate(data.employment.effectiveOn)}`
-                : 'Eintritts- und Austrittsdaten bleiben bis zum ersten kontrollierten Übergang maßgeblich.'}
+            {personnelEmploymentStatusText(data.employment)}
           </p>
           {canAdministerAccess ? (
             <Button
@@ -142,15 +159,7 @@ export function PersonnelLifecycleStatusCards({
         </div>
       </div>
 
-      {hasUnresolvedWork ? (
-        <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm">
-          <p className="font-medium">Vor einem Austritt prüfen</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {data.transitionInventory.activeJobs.length} aktive Auftragszuweisungen,{' '}
-            {data.transitionInventory.strandedResponsibilities.length} nicht ersetzte Verantwortungen.
-          </p>
-        </div>
-      ) : null}
+      {hasUnresolvedWork ? <PersonnelLifecycleUnresolvedWork data={data} /> : null}
     </>
   );
 }
