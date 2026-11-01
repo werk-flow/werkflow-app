@@ -1,4 +1,5 @@
 import { formatBerlinLocalDate } from '../../../../lib/date-time/berlin';
+import { isJsonRecord, jsonRecordOrEmpty } from '../../../../lib/supabase/json';
 import { createAdminClient } from './shared';
 
 export type PlanningDbState = {
@@ -47,7 +48,7 @@ export async function getPlanningState(
     if (error || !job) {
       throw new Error(`Planning job lookup failed: ${error?.message}`);
     }
-    jobId = job.id as string;
+    jobId = job.id;
   }
 
   let occurrenceQuery = admin
@@ -70,9 +71,9 @@ export async function getPlanningState(
     throw new Error('Planning occurrence lookup exceeded the 1000-row safety limit');
   }
 
-  const occurrenceIds = (occurrenceRows ?? []).map((row) => row.id as string);
+  const occurrenceIds = (occurrenceRows ?? []).map((row) => row.id);
   const seriesIds = [
-    ...new Set((occurrenceRows ?? []).flatMap((row) => (row.series_id ? [row.series_id as string] : []))),
+    ...new Set((occurrenceRows ?? []).flatMap((row) => (row.series_id ? [row.series_id] : []))),
   ];
   const [seriesResult, assignmentResult, assessmentResult, eventResult, timeResult] = await Promise.all([
     seriesIds.length
@@ -165,35 +166,34 @@ export async function getPlanningState(
     capacityConflictKinds: [
       ...new Set(
         assessmentSnapshots.flatMap((row) => {
-          const snapshot = row.capacitySnapshot as {
-            conflicts?: Array<{ kind?: string }>;
-          } | null;
-          return (snapshot?.conflicts ?? []).flatMap((conflict) => (conflict.kind ? [conflict.kind] : []));
+          const conflicts = jsonRecordOrEmpty(row.capacitySnapshot).conflicts;
+          return (Array.isArray(conflicts) ? conflicts : []).flatMap((conflict) => {
+            const kind = jsonRecordOrEmpty(conflict).kind;
+            return typeof kind === 'string' && kind ? [kind] : [];
+          });
         }),
       ),
     ].sort(),
     qualificationEvaluationCount: assessmentSnapshots.reduce((count, row) => {
-      const snapshot = row.qualificationSnapshot as {
-        evaluations?: unknown[];
-      } | null;
-      return count + (snapshot?.evaluations?.length ?? 0);
+      const evaluations = jsonRecordOrEmpty(row.qualificationSnapshot).evaluations;
+      return count + (Array.isArray(evaluations) ? evaluations.length : 0);
     }, 0),
     overrideReasons: (assessmentResult.data ?? []).flatMap((row) =>
-      row.override_reason ? [row.override_reason as string] : [],
+      row.override_reason ? [row.override_reason] : [],
     ),
-    eventTypes: (eventResult.data ?? []).map((row) => row.event_type as string),
+    eventTypes: (eventResult.data ?? []).map((row) => row.event_type),
     actualTimeCount: timeResult.count ?? 0,
     occurrences: (occurrenceRows ?? []).map((row) => ({
-      id: row.id as string,
-      seriesId: (row.series_id as string | null) ?? null,
-      originalStartLocal: (row.original_start_local as string | null) ?? null,
-      startAt: (row.start_at as string | null) ?? null,
-      endAt: (row.end_at as string | null) ?? null,
-      startDate: (row.start_date as string | null) ?? null,
-      endDateExclusive: (row.end_date_exclusive as string | null) ?? null,
-      status: row.status as string,
-      isException: row.is_exception as boolean,
-      legacySourceJobId: (row.legacy_source_job_id as string | null) ?? null,
+      id: row.id,
+      seriesId: row.series_id ?? null,
+      originalStartLocal: row.original_start_local ?? null,
+      startAt: row.start_at ?? null,
+      endAt: row.end_at ?? null,
+      startDate: row.start_date ?? null,
+      endDateExclusive: row.end_date_exclusive ?? null,
+      status: row.status,
+      isException: row.is_exception,
+      legacySourceJobId: row.legacy_source_job_id ?? null,
     })),
   };
 }
@@ -241,8 +241,8 @@ export async function getCalendarPreferencesFor(
     .eq('user_id', userId)
     .maybeSingle();
   if (error) throw new Error(`Calendar preference read failed: ${error.message}`);
-  const stored = (data?.preferences as { calendar?: unknown } | null)?.calendar;
-  return stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : null;
+  const stored = jsonRecordOrEmpty(data?.preferences).calendar;
+  return isJsonRecord(stored) ? stored : null;
 }
 
 /** The Berlin date an occurrence starts on: the all-day date or the timed instant's local date. */
