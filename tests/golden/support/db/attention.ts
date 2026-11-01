@@ -38,14 +38,14 @@ export async function getAttentionPatternStateForUser(
 
   return {
     readStates: (readStatesResult.data ?? []).map((row) => ({
-      sourceType: row.source_type as string,
-      sourceId: row.source_id as string,
-      stateVersion: row.state_version as string,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
+      stateVersion: row.state_version,
     })),
     events: (eventsResult.data ?? []).map((row) => ({
-      sourceType: row.source_type as string,
-      sourceId: row.source_id as string,
-      eventType: row.event_type as string,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
+      eventType: row.event_type,
     })),
   };
 }

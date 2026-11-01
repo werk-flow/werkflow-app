@@ -127,7 +127,7 @@ export async function pressKey(
       )
         ? 'control'
         : 'textbox';
-    return (element as HTMLElement).isContentEditable ? 'textbox' : 'other';
+    return element instanceof HTMLElement && element.isContentEditable ? 'textbox' : 'other';
   });
   if (focusedRole && TEXT_ENTRY_ROLES.has(focusedRole))
     throw new Error(
