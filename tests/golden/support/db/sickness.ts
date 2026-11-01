@@ -1,3 +1,4 @@
+import { toVacationDayPortion } from '../../../../lib/vacation/types';
 import { createAdminClient } from './shared';
 
 // P1-08: latest sickness report of a record plus its append-only event trail —
@@ -45,16 +46,16 @@ export async function getLatestSicknessReportState(
   }
 
   return {
-    id: data.id as string,
-    status: data.status as string,
-    absenceType: data.absence_type as string,
-    startDate: data.start_date as string,
-    endDate: (data.end_date as string | null) ?? null,
-    dayPortion: data.day_portion as string,
-    evidenceRequired: data.evidence_required as boolean,
-    evidenceStatus: data.evidence_status as string,
-    cancellationReason: (data.cancellation_reason as string | null) ?? null,
-    eventTypes: (events ?? []).map((event) => event.event_type as string),
+    id: data.id,
+    status: data.status,
+    absenceType: data.absence_type,
+    startDate: data.start_date,
+    endDate: data.end_date ?? null,
+    dayPortion: data.day_portion,
+    evidenceRequired: data.evidence_required,
+    evidenceStatus: data.evidence_status,
+    cancellationReason: data.cancellation_reason ?? null,
+    eventTypes: (events ?? []).map((event) => event.event_type),
   };
 }
 
@@ -126,15 +127,15 @@ export async function getAbsenceSpansForRecord(
   return [
     ...(vacationResult.data ?? []).map((row) => ({
       type: 'vacation' as const,
-      startDate: row.start_date as string,
-      endDate: row.end_date as string,
-      dayPortion: row.day_portion as 'full' | 'half_day',
+      startDate: row.start_date,
+      endDate: row.end_date,
+      dayPortion: toVacationDayPortion(row.day_portion),
     })),
     ...(sicknessResult.data ?? []).map((row) => ({
       type: 'sickness' as const,
-      startDate: row.start_date as string,
-      endDate: (row.end_date as string | null) ?? windowEndIso,
-      dayPortion: row.day_portion as 'full' | 'half_day',
+      startDate: row.start_date,
+      endDate: row.end_date ?? windowEndIso,
+      dayPortion: toVacationDayPortion(row.day_portion),
     })),
   ];
 }

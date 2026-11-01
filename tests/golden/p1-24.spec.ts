@@ -83,8 +83,7 @@ test.describe('P1-24 controlled people lifecycle @P1-24 @GG-07', () => {
       const document = expectDefined(
         released.protectedDocuments.find(
           (item) =>
-            item.employee_record_id === employeeRecordId &&
-            (item.documents as { display_name: string }).display_name === protectedFileName,
+            item.employee_record_id === employeeRecordId && item.documents.display_name === protectedFileName,
         ),
         'the uploaded protected document',
       );

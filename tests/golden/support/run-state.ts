@@ -3,7 +3,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import { z } from 'zod';
+
 import {
+  INCIDENT_CLASSES,
   PLAYWRIGHT_LANES,
   PLAYWRIGHT_SUITES,
   PLAYWRIGHT_TARGETS,
@@ -41,18 +44,21 @@ import {
   recoverInterruptedEvidence,
   type InterruptionRecovery,
 } from '../../../lib/testing/runner/interrupted-run-recovery';
+import { errorCode } from '../../../lib/testing/runner/error-code';
 import { artifactsDirectory, loadWorld, type TestWorld, worldFilePath } from './world';
 import { worldUserIds } from './seed';
 
-type ArchivedRunStatus =
-  | 'starting'
-  | 'running'
-  | 'passed'
-  | 'failed'
-  | 'timedout'
-  | 'interrupted'
-  | 'failed_retained'
-  | 'diagnostic_passed';
+const ARCHIVED_RUN_STATUSES = [
+  'starting',
+  'running',
+  'passed',
+  'failed',
+  'timedout',
+  'interrupted',
+  'failed_retained',
+  'diagnostic_passed',
+] as const;
+type ArchivedRunStatus = (typeof ARCHIVED_RUN_STATUSES)[number];
 
 export type RunFailure = {
   title: string;
@@ -124,6 +130,126 @@ export type RunManifest = {
     cleanedAt: string;
   }>;
 };
+
+/*
+ * A manifest file as RunManifest declares it. Loose objects keep keys this
+ * type does not name, so a rewrite through updateRunManifest drops nothing.
+ */
+const runManifestSchema: z.ZodType<RunManifest> = z.looseObject({
+  version: z.literal(1),
+  artifactLayout: z.literal('run-owned-v1').exactOptional(),
+  groupId: z.string().optional(),
+  groupFingerprint: z.string().optional(),
+  runKey: z.string(),
+  sourceRunKey: z.string().nullable(),
+  diagnosticWorld: z.enum(['retained', 'fresh']).optional(),
+  lane: z.enum(PLAYWRIGHT_LANES),
+  suite: z.enum(PLAYWRIGHT_SUITES),
+  target: z.enum(PLAYWRIGHT_TARGETS).exactOptional(),
+  grep: z.string().nullable(),
+  command: z.string(),
+  status: z.enum(ARCHIVED_RUN_STATUSES),
+  startedAt: z.string(),
+  completedAt: z.string().nullable(),
+  gitHead: z.string(),
+  sourceFingerprint: z.string(),
+  candidateFingerprint: z.string().optional(),
+  buildId: z.string().nullable(),
+  baseUrl: z.string(),
+  projectRef: z.string(),
+  r2Bucket: z.string(),
+  total: z.number(),
+  passed: z.number(),
+  failed: z.number(),
+  skipped: z.number(),
+  failures: z.array(
+    z.looseObject({
+      title: z.string(),
+      file: z.string().nullable(),
+      message: z.string(),
+      testId: z.string().exactOptional(),
+    }),
+  ),
+  world: z
+    .looseObject({ runId: z.string(), organizationIds: z.array(z.string()), userIds: z.array(z.string()) })
+    .nullable(),
+  retainedAt: z.string().nullable(),
+  cleanedAt: z.string().nullable(),
+  classification: z.enum(INCIDENT_CLASSES).nullable(),
+  classifiedAt: z.string().nullable(),
+  rootCause: z.string().nullable(),
+  prevention: z.string().nullable(),
+  rerunOverrideReason: z.string().nullable(),
+  campaignId: z.string().exactOptional(),
+  rerunGrantId: z.string().nullable().exactOptional(),
+  backendProvenance: z
+    .looseObject({
+      suite: z.enum(PLAYWRIGHT_SUITES),
+      target: z.enum(PLAYWRIGHT_TARGETS),
+      backendOrigin: z.string(),
+      r2Bucket: z.string(),
+      storageEndpoint: z.string().nullable(),
+    })
+    .exactOptional(),
+  selectedTestIds: z.array(z.string()).exactOptional(),
+  outcomes: z
+    .array(
+      z.looseObject({
+        id: z.string(),
+        status: z.enum(['passed', 'failed', 'skipped', 'timedOut', 'interrupted']),
+        durationMilliseconds: z.number(),
+      }),
+    )
+    .exactOptional(),
+  currentTestId: z.string().nullable().exactOptional(),
+  currentTestStartedAt: z.string().nullable().exactOptional(),
+  interruptionRecovery: z
+    .looseObject({
+      recoveredAt: z.string(),
+      reason: z.string(),
+      durationIsUpperBound: z.literal(true),
+      archive: z
+        .union([
+          z.looseObject({
+            attemptedAt: z.string(),
+            attemptReason: z.string(),
+            status: z.enum(['pending', 'complete']),
+          }),
+          z.looseObject({
+            attemptedAt: z.string(),
+            attemptReason: z.string(),
+            status: z.literal('failed'),
+            error: z.string(),
+          }),
+        ])
+        .exactOptional(),
+    })
+    .exactOptional(),
+  businessDate: z.string().optional(),
+  prunedAt: z.string().nullable().exactOptional(),
+  auditGroup: z.string().exactOptional(),
+  completedAuditGroups: z
+    .array(
+      z.looseObject({
+        group: z.string(),
+        runId: z.string(),
+        organizationIds: z.array(z.string()),
+        cleanedAt: z.string(),
+      }),
+    )
+    .exactOptional(),
+});
+
+/** The identities archiveRecoveryActiveState compares in an active world.json. */
+const activeWorldIdentitySchema = z.object({
+  runId: z.string(),
+  orgId: z.string(),
+  outsider: z.object({ orgId: z.string() }),
+});
+
+function readManifestFile(path: string): RunManifest {
+  return runManifestSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+}
 
 const REPOSITORY_ROOT = resolve(__dirname, '../../..');
 const RUN_ARCHIVE_ROOT = resolve(REPOSITORY_ROOT, '.agent-logs/playwright-runs');
@@ -203,10 +329,11 @@ function parseEnvironmentValue<T extends string>(
   name: string,
 ): T {
   if (!value) return fallback;
-  if (!allowed.includes(value as T)) {
+  const match = allowed.find((candidate) => candidate === value);
+  if (match === undefined) {
     throw new Error(`${name} must be one of ${allowed.join(', ')}.`);
   }
-  return value as T;
+  return match;
 }
 
 export function createRunManifest(input?: {
@@ -293,7 +420,7 @@ export function ensureRunManifest(): RunManifest {
 }
 
 export function readRunManifest(runKey: string): RunManifest {
-  return JSON.parse(readFileSync(manifestPath(runKey), 'utf8')) as RunManifest;
+  return readManifestFile(manifestPath(runKey));
 }
 
 export function updateRunManifest(
@@ -333,14 +460,12 @@ export function recoverInterruptedRun(runKey: string, reason: string): RunManife
         return next;
       }),
     archiveAndVerify: (recovered) => {
-      active = existsSync(recoveryManifestPath)
-        ? (JSON.parse(readFileSync(recoveryManifestPath, 'utf8')) as RunManifest)
-        : null;
+      active = existsSync(recoveryManifestPath) ? readManifestFile(recoveryManifestPath) : null;
       if (recovered.world && !recovered.cleanedAt) {
         if (active?.runKey === runKey) {
-          const world = JSON.parse(
-            readFileSync(resolve(recoveryStateDirectory, 'world.json'), 'utf8'),
-          ) as TestWorld;
+          const world = activeWorldIdentitySchema.parse(
+            JSON.parse(readFileSync(resolve(recoveryStateDirectory, 'world.json'), 'utf8')),
+          );
           archiveRecoveryActiveState(recovered, active, world, () => {
             activeIdentityVerified = true;
             archiveRunOutputs(runKey);
@@ -384,7 +509,7 @@ export function archiveActiveState(runKey = currentRunKey()): void {
   const source = ownedStateDirectory(manifest);
   const activePath = resolve(source, 'run-manifest.json');
   if (existsSync(activePath)) {
-    const active = JSON.parse(readFileSync(activePath, 'utf8')) as RunManifest;
+    const active = readManifestFile(activePath);
     if (active.runKey !== runKey)
       throw new Error('Active state belongs to another run. Refusing to archive it.');
   } else if (manifest.world && !manifest.cleanedAt) {
@@ -472,7 +597,7 @@ export function archiveRunOutputs(runKey = currentRunKey()): void {
  * read; a vanished or transiently locked file is skipped, every other error
  * still propagates.
  */
-const TRANSIENT_MANIFEST_READ_ERRORS = new Set(['ENOENT', 'EPERM', 'EBUSY']);
+const TRANSIENT_MANIFEST_READ_ERRORS: ReadonlySet<unknown> = new Set(['ENOENT', 'EPERM', 'EBUSY']);
 
 export function listRunManifests(): RunManifest[] {
   if (!existsSync(RUN_ARCHIVE_ROOT)) return [];
@@ -482,7 +607,7 @@ export function listRunManifests(): RunManifest[] {
     try {
       manifests.push(readRunManifest(entry.name));
     } catch (error) {
-      if (!TRANSIENT_MANIFEST_READ_ERRORS.has((error as NodeJS.ErrnoException).code ?? '')) throw error;
+      if (!TRANSIENT_MANIFEST_READ_ERRORS.has(errorCode(error))) throw error;
     }
   }
   return manifests.sort((left, right) => left.startedAt.localeCompare(right.startedAt));
