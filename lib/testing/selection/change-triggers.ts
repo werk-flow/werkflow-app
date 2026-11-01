@@ -67,20 +67,7 @@ const OUTSIDER_SESSION = /\boutsiderPage\b/;
  */
 export const ROLE_DENIAL_GROUPS: Readonly<
   Record<string, { readonly tests: readonly string[]; readonly movesIn: string }>
-> = {
-  'golden:p1-16': {
-    tests: ['an assigned field worker works through the pack and completes the job'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-18': {
-    tests: ['registers, links, corrects and replaces one site-owned asset @P1-18-journey'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-  'golden:p1-20': {
-    tests: ['plans maintenance and completes the first visit with exact evidence @P1-20-journey'],
-    movesIn: 'werk-flow/werkflow-planning#37',
-  },
-};
+> = {};
 
 /** How a change plan selects the browser group `id` with its spec `files`. */
 export function changeTrigger(repositoryRoot: string, id: string, files: readonly string[]): ChangeTrigger {

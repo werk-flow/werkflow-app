@@ -2591,9 +2591,9 @@
         {
           "file": "tests/audit/wave-2/p1-15.spec.ts",
           "kind": "browser",
-          "description": "`targets, roles, five structured kinds, validation, and outsider denial` — all five forms, draft/void, validation and the outsider page denial",
+          "description": "`targets, roles, five structured kinds, and validation` — all five forms, draft/void and validation",
           "titles": [
-            "targets, roles, five structured kinds, validation, and outsider denial"
+            "targets, roles, five structured kinds, and validation"
           ]
         },
         {
@@ -2602,6 +2602,14 @@
           "description": "artifact, revision and action rows are invisible to another organization",
           "titles": [
             "another organization reads % rows"
+          ]
+        },
+        {
+          "file": "lib/org/work-page-access.test.ts",
+          "kind": "unit",
+          "description": "another organization's member is sent away from the job page and the artifact reader refuses them",
+          "titles": [
+            "work and service pages refuse a field worker and never show another organization’s work, equipment or cases"
           ]
         }
       ],
@@ -2620,7 +2628,7 @@
         {
           "file": "tests/audit/wave-2/p1-16.spec.ts",
           "kind": "browser",
-          "description": "`role-aware standalone and project-child packs expose only practical field context` — project-child projection, privacy, order, touch targets, office views and the unassigned/outsider denials",
+          "description": "`role-aware standalone and project-child packs expose only practical field context` — project-child projection, privacy, order, touch targets and office views",
           "titles": [
             "role-aware standalone and project-child packs expose only practical field context"
           ]
@@ -2631,6 +2639,14 @@
           "description": "journey step `The pack opens with only the practical field context` — standalone first viewport",
           "titles": [
             "The pack opens with only the practical field context"
+          ]
+        },
+        {
+          "file": "lib/org/field-work-pack-access.test.ts",
+          "kind": "unit",
+          "description": "the real job pages give the assigned field worker the pack without internal notes, e-mail addresses, sibling jobs, serial numbers, warranty, prices or the maintenance contract, refuse an unassigned field worker and another organization, and give Büro and Admin the office view",
+          "titles": [
+            "the field work pack reaches only the assigned field worker and carries no office-only value"
           ]
         }
       ],
@@ -2662,6 +2678,14 @@
           "description": "`ordered instructions, interruption, reopening, and completion feedback remain authoritative` — ordered and dependent instructions and reopening",
           "titles": [
             "ordered instructions, interruption, reopening, and completion feedback remain authoritative"
+          ]
+        },
+        {
+          "file": "lib/org/field-work-pack-access.test.ts",
+          "kind": "unit",
+          "description": "a colleague's internal draft reaches neither the pack nor the field worker's artifact read, while Büro reads it",
+          "titles": [
+            "the field work pack reaches only the assigned field worker and carries no office-only value"
           ]
         }
       ],
