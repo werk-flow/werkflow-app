@@ -14,17 +14,20 @@ type Answer = number | Error | 'hang';
 
 function fakeFetch(answers: Record<string, Answer>): { fetcher: typeof fetch; requested: string[] } {
   const requested: string[] = [];
-  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    requested.push(`${init?.method ?? 'GET'} ${url}`);
-    const answer = Object.entries(answers).find(([fragment]) => url.includes(fragment))?.[1] ?? 200;
-    if (answer instanceof Error) throw answer;
-    if (answer === 'hang')
-      return new Promise<Response>((_, reject) =>
-        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
-      );
-    return new Response(null, { status: answer });
-  }) as typeof fetch;
+  const fetcher: typeof fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      requested.push(`${init?.method ?? 'GET'} ${url}`);
+      const answer = Object.entries(answers).find(([fragment]) => url.includes(fragment))?.[1] ?? 200;
+      if (answer instanceof Error) throw answer;
+      if (answer === 'hang')
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
+        );
+      return new Response(null, { status: answer });
+    },
+    { preconnect: fetch.preconnect },
+  );
   return { fetcher, requested };
 }
 

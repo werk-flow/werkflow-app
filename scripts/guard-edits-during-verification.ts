@@ -29,8 +29,8 @@ function liveLockOwner(): { operation: string; startedAt: string } | undefined {
   if (!existsSync(lockPath)) return undefined;
   try {
     const owner: unknown = JSON.parse(readFileSync(lockPath, 'utf8'));
-    if (!owner || typeof owner !== 'object') return undefined;
-    const { processId, operation, startedAt } = owner as Record<string, unknown>;
+    if (!isJsonRecord(owner)) return undefined;
+    const { processId, operation, startedAt } = owner;
     if (typeof processId !== 'number' || typeof operation !== 'string' || typeof startedAt !== 'string')
       return undefined;
     // Signal 0 only asks whether the process exists; a crashed run's lock must not block edits.

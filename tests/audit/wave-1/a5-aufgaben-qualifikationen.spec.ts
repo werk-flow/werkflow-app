@@ -195,14 +195,14 @@ async function getTeamStateByName(
     throw new Error('Team state lookup failed');
   }
   return {
-    id: team.id as string,
-    dissolvedAt: team.dissolved_at as string | null,
+    id: team.id,
+    dissolvedAt: team.dissolved_at,
     memberships: (membershipsResult.data ?? []).map((row) => ({
-      employeeRecordId: row.employee_record_id as string,
-      validFrom: row.valid_from as string,
-      validUntil: row.valid_until as string | null,
+      employeeRecordId: row.employee_record_id,
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
     })),
-    eventTypes: (eventsResult.data ?? []).map((row) => row.event_type as string),
+    eventTypes: (eventsResult.data ?? []).map((row) => row.event_type),
   };
 }
 

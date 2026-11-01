@@ -201,8 +201,8 @@ test.describe('A1 Aufträge, Lebenszyklus und Auftragsliste @AUDIT-W1-A1', () =>
     const orderedInstructions = jobInstructionEditorFields(adminPage);
     await expect(orderedInstructions).toHaveCount(2);
     expect(
-      await orderedInstructions.evaluateAll((inputs) =>
-        inputs.map((input) => (input as HTMLInputElement).value),
+      await orderedInstructions.evaluateAll<string[], void, HTMLInputElement | HTMLTextAreaElement>(
+        (inputs) => inputs.map((input) => input.value),
       ),
     ).toEqual([labelValves, pressureTest]);
 
