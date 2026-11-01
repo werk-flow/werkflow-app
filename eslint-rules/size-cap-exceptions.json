@@ -4,7 +4,6 @@
     "components/kalender/": "Calendar render behaviour is recorded: split only with a recalibration run."
   },
   "modules": {
-    "lib/conventions/server-action-feedback.test.ts": 869,
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
