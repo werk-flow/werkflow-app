@@ -10,6 +10,7 @@
  *   `addRevalidationHeader`).
  * A prefetch, a plain action and every other request render no route.
  */
+import { isJsonRecord } from '@/lib/supabase/json';
 
 export type RouteRequestKind = 'route-refresh' | 'action-render' | 'prefetch' | 'action' | 'other';
 
@@ -45,20 +46,22 @@ export function ratchetProblems(value: unknown): string[] {
   const problems: string[] = [];
   if (!value || typeof value !== 'object' || Array.isArray(value)) return ['the ratchet is not an object'];
   for (const [journey, saves] of Object.entries(value)) {
-    if (!saves || typeof saves !== 'object' || Array.isArray(saves)) {
+    if (!isJsonRecord(saves)) {
       problems.push(`${journey}: not an object of saves`);
       continue;
     }
-    for (const [save, entry] of Object.entries(saves as Record<string, unknown>)) {
-      const { renders, reason } = (entry ?? {}) as { renders?: unknown; reason?: unknown };
+    for (const [save, entry] of Object.entries(saves)) {
+      const renders = isJsonRecord(entry) ? entry.renders : undefined;
+      const reason = isJsonRecord(entry) ? entry.reason : undefined;
       const keys = Object.keys(entry ?? {});
-      if (!Number.isInteger(renders) || (renders as number) < 0)
+      if (typeof renders !== 'number' || !Number.isInteger(renders) || renders < 0)
         problems.push(`${journey}/${save}: renders must be a whole number`);
       if (keys.some((key) => key !== 'renders' && key !== 'reason'))
         problems.push(`${journey}/${save}: only renders and reason are allowed`);
       if (reason !== undefined && (typeof reason !== 'string' || !reason.trim()))
         problems.push(`${journey}/${save}: a reason is a sentence`);
-      if ((renders as number) > 1 && reason === undefined)
+      // Number() keeps the relational comparison's coercion: a count written as text is judged too.
+      if (Number(renders) > 1 && reason === undefined)
         problems.push(`${journey}/${save}: more than one route render needs a reviewed reason`);
     }
   }

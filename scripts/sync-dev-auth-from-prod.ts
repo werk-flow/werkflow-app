@@ -18,9 +18,7 @@
  * as expected divergences and never synced.
  */
 
-// Top-level await requires module context; this file has no imports/exports,
-// so declare it a module explicitly or Next's build-time typecheck fails.
-export {};
+import { isJsonRecord } from '../lib/supabase/json';
 
 const PROD_REF = 'jbgaqpdjauzoocplgdsn';
 const DEV_REF = 'mbkkzuqjbdvzelqvuzcn';
@@ -67,7 +65,9 @@ async function getAuthConfig(ref: string): Promise<Record<string, unknown>> {
   if (!response.ok) {
     throw new Error(`GET auth config for ${ref} failed: ${response.status} ${await response.text()}`);
   }
-  return (await response.json()) as Record<string, unknown>;
+  const config: unknown = await response.json();
+  if (!isJsonRecord(config)) throw new Error(`GET auth config for ${ref} returned no JSON object.`);
+  return config;
 }
 
 function displayValue(key: string, value: unknown): string {

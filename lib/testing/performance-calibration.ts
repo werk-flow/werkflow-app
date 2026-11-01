@@ -13,15 +13,20 @@ export type CalibrationRun = {
   observations: readonly ScenarioObservation[];
 };
 
-/** Creates a draft only. Application source and failed measurements never become automatic references. */
-export function draftPerformanceBaselines(input: {
+type CalibrationInput = {
   runs: readonly CalibrationRun[];
   scenarios: readonly MeasuredScenario[];
   existing: PerformanceBaselines;
   scenarioIds: readonly string[];
   reason: string;
   reviewedAt: string;
-}): PerformanceBaselines {
+};
+
+/** One sample of a scenario with the run that recorded it. */
+type CalibrationSample = { run: CalibrationRun; record: ScenarioObservation };
+
+/** Creates a draft only. Application source and failed measurements never become automatic references. */
+export function draftPerformanceBaselines(input: CalibrationInput): PerformanceBaselines {
   if (!input.reason.trim()) throw new Error('Calibration needs a concrete review reason.');
   if (!input.runs.length || input.runs.length > 3)
     throw new Error('Calibration accepts one to three declared fresh runs.');
@@ -33,82 +38,91 @@ export function draftPerformanceBaselines(input: {
       throw new Error(`Run ${run.runKey} is not successful, cleaned, fresh evidence for current inputs.`);
   }
   const added: PerformanceBaseline[] = [];
-  for (const id of [...new Set(input.scenarioIds)]) {
-    const scenario = input.scenarios.find((entry) => entry.id === id);
-    if (!scenario) throw new Error(`Unknown calibration scenario ${id}.`);
-    const evidence = input.runs.flatMap((run) =>
-      run.observations.filter((record) => record.scenarioId === id).map((record) => ({ run, record })),
-    );
-    const [first] = evidence;
-    if (evidence.length < 3 || evidence.length > 9 || !first)
-      throw new Error(`${id} needs three to nine declared successful samples; found ${evidence.length}.`);
-    if (new Set(evidence.map(({ run, record }) => `${run.runKey}/${record.sample}`)).size !== evidence.length)
-      throw new Error(`${id} contains duplicate sample identities.`);
-    for (const { record, run } of evidence) {
-      if (
-        record.status !== 'visible' ||
-        record.correctness !== 'observed' ||
-        record.responsiveness !== 'within_target' ||
-        record.measuredMs > scenario.budgetMs
-      )
-        throw new Error(`${id} contains failed or over-budget evidence.`);
-      if (
-        record.scenarioVersion !== scenario.version ||
-        record.measurementVersion !== MEASUREMENT_VERSION ||
-        record.budgetMs !== scenario.budgetMs ||
-        record.boundary !== scenario.boundary ||
-        record.profile !== scenario.profile
-      )
-        throw new Error(`${id} contains obsolete or altered measurement contracts.`);
-      if (
-        record.buildId !== run.buildId ||
-        record.buildId !== first.run.buildId ||
-        record.backend !== first.record.backend ||
-        !samePerformanceContext(record.context, first.record.context)
-      )
-        throw new Error(`${id} samples do not share a build, workload and measurement environment.`);
-    }
-    if (
-      input.existing.baselines.some(
-        (entry) =>
-          entry.scenarioId === id &&
-          entry.scenarioVersion === scenario.version &&
-          entry.backend === first.record.backend &&
-          samePerformanceContext(entry.context, first.record.context),
-      )
-    )
-      throw new Error(
-        `${id} already has a compatible reviewed reference; replacement requires an explicit reviewed file change.`,
-      );
-    const samples = evidence.map(({ record }) => comparableMs(record)).sort((left, right) => left - right);
-    const midpoint = Math.floor(samples.length / 2);
-    const [lower, upper] =
-      samples.length % 2
-        ? [samples[midpoint], samples[midpoint]]
-        : [samples[midpoint - 1], samples[midpoint]];
-    if (lower === undefined || upper === undefined)
-      throw new Error(`${id} has no samples for a median reference.`);
-    const referenceMs = (lower + upper) / 2;
-    added.push({
-      scenarioId: id,
-      scenarioVersion: scenario.version,
-      profile: scenario.profile,
-      backend: first.record.backend,
-      context: first.record.context,
-      referenceMs,
-      samples,
-      source: {
-        runKey: first.run.runKey,
-        runKeys: [...new Set(evidence.map(({ run }) => run.runKey))],
-        buildId: first.run.buildId,
-        recordedAt: (evidence.at(-1) ?? first).record.recordedAt,
-      },
-      review: { reason: input.reason, reviewedAt: input.reviewedAt },
-    });
-  }
+  for (const id of [...new Set(input.scenarioIds)]) added.push(draftScenarioBaseline(input, id));
   return {
     ...input.existing,
     measurementVersion: MEASUREMENT_VERSION,
     baselines: [...input.existing.baselines, ...added],
   };
+}
+
+/** The reviewed reference of one scenario: the median of its declared successful samples. */
+function draftScenarioBaseline(input: CalibrationInput, id: string): PerformanceBaseline {
+  const scenario = input.scenarios.find((entry) => entry.id === id);
+  if (!scenario) throw new Error(`Unknown calibration scenario ${id}.`);
+  const evidence = input.runs.flatMap((run) =>
+    run.observations.filter((record) => record.scenarioId === id).map((record) => ({ run, record })),
+  );
+  const [first] = evidence;
+  if (evidence.length < 3 || evidence.length > 9 || !first)
+    throw new Error(`${id} needs three to nine declared successful samples; found ${evidence.length}.`);
+  if (new Set(evidence.map(({ run, record }) => `${run.runKey}/${record.sample}`)).size !== evidence.length)
+    throw new Error(`${id} contains duplicate sample identities.`);
+  for (const sample of evidence) assertCalibrationSample(id, scenario, sample, first);
+  if (
+    input.existing.baselines.some(
+      (entry) =>
+        entry.scenarioId === id &&
+        entry.scenarioVersion === scenario.version &&
+        entry.backend === first.record.backend &&
+        samePerformanceContext(entry.context, first.record.context),
+    )
+  )
+    throw new Error(
+      `${id} already has a compatible reviewed reference; replacement requires an explicit reviewed file change.`,
+    );
+  const samples = evidence.map(({ record }) => comparableMs(record)).sort((left, right) => left - right);
+  const midpoint = Math.floor(samples.length / 2);
+  const [lower, upper] =
+    samples.length % 2 ? [samples[midpoint], samples[midpoint]] : [samples[midpoint - 1], samples[midpoint]];
+  if (lower === undefined || upper === undefined)
+    throw new Error(`${id} has no samples for a median reference.`);
+  const referenceMs = (lower + upper) / 2;
+  return {
+    scenarioId: id,
+    scenarioVersion: scenario.version,
+    profile: scenario.profile,
+    backend: first.record.backend,
+    context: first.record.context,
+    referenceMs,
+    samples,
+    source: {
+      runKey: first.run.runKey,
+      runKeys: [...new Set(evidence.map(({ run }) => run.runKey))],
+      buildId: first.run.buildId,
+      recordedAt: (evidence.at(-1) ?? first).record.recordedAt,
+    },
+    review: { reason: input.reason, reviewedAt: input.reviewedAt },
+  };
+}
+
+/** A sample qualifies when it passed, follows the current contract and shares the first sample's environment. */
+function assertCalibrationSample(
+  id: string,
+  scenario: MeasuredScenario,
+  { record, run }: CalibrationSample,
+  first: CalibrationSample,
+): void {
+  if (
+    record.status !== 'visible' ||
+    record.correctness !== 'observed' ||
+    record.responsiveness !== 'within_target' ||
+    record.measuredMs > scenario.budgetMs
+  )
+    throw new Error(`${id} contains failed or over-budget evidence.`);
+  if (
+    record.scenarioVersion !== scenario.version ||
+    record.measurementVersion !== MEASUREMENT_VERSION ||
+    record.budgetMs !== scenario.budgetMs ||
+    record.boundary !== scenario.boundary ||
+    record.profile !== scenario.profile
+  )
+    throw new Error(`${id} contains obsolete or altered measurement contracts.`);
+  if (
+    record.buildId !== run.buildId ||
+    record.buildId !== first.run.buildId ||
+    record.backend !== first.record.backend ||
+    !samePerformanceContext(record.context, first.record.context)
+  )
+    throw new Error(`${id} samples do not share a build, workload and measurement environment.`);
 }

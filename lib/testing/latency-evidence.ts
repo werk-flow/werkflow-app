@@ -232,6 +232,13 @@ function readArchiveLines(directory: string, name: string, problems: string[]): 
   }
 }
 
+/** What the scenario archive's lines add up to, per scenario id. */
+type ScenarioTally = {
+  samplesSeen: Map<string, Set<number>>;
+  cohorts: Map<string, ScenarioObservation[]>;
+  invalidScenarios: Set<string>;
+};
+
 function checkScenarioEvidence(
   input: {
     directory: string;
@@ -247,164 +254,21 @@ function checkScenarioEvidence(
   const baselines = input.baselines ?? readPerformanceBaselines();
   const scenarios = input.scenarios ?? MEASURED_SCENARIOS;
   const required = new Set(input.requiredScenarios ?? []);
-  const samplesSeen = new Map<string, Set<number>>();
-  const cohorts = new Map<string, ScenarioObservation[]>();
-  const invalidScenarios = new Set<string>();
-  for (const [index, line] of lines.entries()) {
-    const reference = `${SCENARIO_ARCHIVE}:${index + 1}`;
-    let observation: ScenarioObservation;
-    try {
-      observation = scenarioObservationSchema.parse(JSON.parse(line));
-    } catch {
-      result.problems.push(`${reference}: malformed scenario evidence.`);
-      continue;
-    }
-    result.scenarioMeasurements += 1;
-    const scenario = scenarios.find((entry) => entry.id === observation.scenarioId);
-    if (!scenario) {
-      result.problems.push(
-        `${reference}: unknown scenario ${observation.scenarioId}; register it before it can qualify.`,
-      );
-      continue;
-    }
-    const problemsBefore = result.problems.length;
-    const cohort = cohorts.get(scenario.id) ?? [];
-    cohort.push(observation);
-    cohorts.set(scenario.id, cohort);
-    const label = `${reference} (${observation.scenarioId} sample ${observation.sample})`;
-    if (observation.scenarioVersion !== scenario.version)
-      result.problems.push(
-        `${label}: obsolete scenario version ${observation.scenarioVersion}; the registry is at ${scenario.version}.`,
-      );
-    if (observation.measurementVersion !== MEASUREMENT_VERSION)
-      result.problems.push(
-        `${label}: measurement version ${observation.measurementVersion} is not the current ${MEASUREMENT_VERSION}.`,
-      );
-    if (observation.boundary !== scenario.boundary)
-      result.problems.push(
-        `${label}: boundary ${observation.boundary} is not the registered ${scenario.boundary}.`,
-      );
-    if (observation.budgetMs !== scenario.budgetMs)
-      result.problems.push(
-        `${label}: budget ${observation.budgetMs}ms is not the approved ${scenario.budgetMs}ms.`,
-      );
-    if (observation.profile !== scenario.profile)
-      result.problems.push(
-        `${label}: profile ${observation.profile} is not the registered ${scenario.profile}.`,
-      );
-    const seen = samplesSeen.get(scenario.id) ?? new Set<number>();
-    if (seen.has(observation.sample) || observation.sample > scenario.samples)
-      result.problems.push(
-        `${label}: unexpected duplicate or surplus sample; the scenario declares ${scenario.samples}.`,
-      );
-    seen.add(observation.sample);
-    samplesSeen.set(scenario.id, seen);
-    if (observation.status !== 'visible' || observation.correctness !== 'observed') {
-      result.problems.push(
-        `${label}: correctness was not confirmed; classify the original failure before accepting evidence.`,
-      );
-    }
-    if (
-      observation.boundary === CROSS_SESSION_BOUNDARY &&
-      (observation.signalDeliveryMs === undefined || observation.signalDeliveryMs > observation.measuredMs)
-    )
-      result.problems.push(
-        `${label}: a cross-session sample needs its signal delivery time within the measured interval.`,
-      );
-    if (observation.measuredMs > scenario.budgetMs || observation.responsiveness !== 'within_target') {
-      deadlineProblems.push(
-        `${label}: over budget, measured ${observation.measuredMs}ms against ${scenario.budgetMs}ms.`,
-      );
-      invalidScenarios.add(scenario.id);
-    }
-    if (result.problems.length !== problemsBefore) invalidScenarios.add(scenario.id);
-  }
-  for (const [id, observations] of cohorts) {
+  const tally: ScenarioTally = { samplesSeen: new Map(), cohorts: new Map(), invalidScenarios: new Set() };
+  for (const [index, line] of lines.entries())
+    checkScenarioLine({
+      reference: `${SCENARIO_ARCHIVE}:${index + 1}`,
+      line,
+      scenarios,
+      tally,
+      result,
+      deadlineProblems,
+    });
+  for (const [id, observations] of tally.cohorts) {
     const scenario = scenarios.find((entry) => entry.id === id);
     const first = observations[0];
     if (!scenario || !first) continue;
-    if (observations.length !== scenario.samples || samplesSeen.get(id)?.size !== scenario.samples) {
-      result.problems.push(
-        `${SCENARIO_ARCHIVE}: scenario ${id} needs exactly ${scenario.samples} distinct samples for median comparison.`,
-      );
-      invalidScenarios.add(id);
-    }
-    if (
-      !first.buildId ||
-      observations.some(
-        (entry) =>
-          entry.buildId !== first.buildId ||
-          entry.backend !== first.backend ||
-          !samePerformanceContext(entry.context, first.context),
-      )
-    ) {
-      result.problems.push(
-        `${SCENARIO_ARCHIVE}: scenario ${id} mixes build, backend or measurement context, or has no build identity.`,
-      );
-      invalidScenarios.add(id);
-    }
-    const sorted = observations
-      .map((entry) => (invalidScenarios.has(id) ? entry.measuredMs : comparableMs(entry)))
-      .sort((left, right) => left - right);
-    const midpoint = Math.floor(sorted.length / 2);
-    const [lower, upper] =
-      sorted.length % 2 ? [sorted[midpoint], sorted[midpoint]] : [sorted[midpoint - 1], sorted[midpoint]];
-    if (lower === undefined || upper === undefined) {
-      result.problems.push(`${SCENARIO_ARCHIVE}: scenario ${id} has no samples for median comparison.`);
-      invalidScenarios.add(id);
-      continue;
-    }
-    const measuredMs = (lower + upper) / 2;
-    const comparison: BaselineComparison = invalidScenarios.has(id)
-      ? {
-          status: 'unverified',
-          measuredMs,
-          reason: 'the complete sample set did not pass validation, correctness and every hard deadline',
-        }
-      : compareToBaseline({
-          measuredMs,
-          baseline: findBaseline({
-            baselines,
-            scenarioId: id,
-            scenarioVersion: scenario.version,
-            profile: scenario.profile,
-            backend: first.backend,
-            context: first.context,
-          }),
-          tolerance: baselines.tolerance,
-          measurementVersion:
-            baselines.measurementVersion === MEASUREMENT_VERSION
-              ? first.measurementVersion
-              : baselines.measurementVersion,
-        });
-    result.comparisons.push({
-      scenarioId: id,
-      sample: null,
-      basis: 'median',
-      samples: observations,
-      measuredMs,
-      budgetMs: scenario.budgetMs,
-      correctness: observations.every(
-        (entry) => entry.status === 'visible' && entry.correctness === 'observed',
-      )
-        ? 'observed'
-        : 'unconfirmed',
-      responsiveness: observations.every(
-        (entry) => entry.measuredMs <= scenario.budgetMs && entry.responsiveness === 'within_target',
-      )
-        ? 'within_target'
-        : 'unconfirmed',
-      comparison,
-    });
-    if (comparison.status === 'regressed') {
-      deadlineProblems.push(
-        `${SCENARIO_ARCHIVE} (${id} median): regressed to ${measuredMs}ms against the reviewed ${comparison.referenceMs}ms baseline (limit ${Math.round(comparison.limitMs)}ms).`,
-      );
-    } else if (comparison.status === 'unverified' && scenario.comparison === 'required') {
-      deadlineProblems.push(
-        `${SCENARIO_ARCHIVE} (${id} median): comparison is unverified (${comparison.reason}); a required scenario cannot pass without a reviewed baseline and valid samples.`,
-      );
-    }
+    compareScenarioCohort({ scenario, observations, first, baselines, tally, result, deadlineProblems });
   }
   for (const id of required) {
     const scenario = scenarios.find((entry) => entry.id === id);
@@ -412,10 +276,197 @@ function checkScenarioEvidence(
       result.problems.push(`Unknown required scenario ${id}.`);
       continue;
     }
-    const seen = samplesSeen.get(id)?.size ?? 0;
+    const seen = tally.samplesSeen.get(id)?.size ?? 0;
     if (seen !== scenario.samples)
       result.problems.push(
         `${SCENARIO_ARCHIVE}: required scenario ${id} recorded ${seen} of ${scenario.samples} samples.`,
       );
+  }
+}
+
+/** One archive line: parsed, matched to its registered scenario and checked against it. */
+function checkScenarioLine(input: {
+  reference: string;
+  line: string;
+  scenarios: readonly MeasuredScenario[];
+  tally: ScenarioTally;
+  result: LatencyEvidenceCheck;
+  deadlineProblems: string[];
+}): void {
+  const { reference, line, scenarios, tally, result, deadlineProblems } = input;
+  let observation: ScenarioObservation;
+  try {
+    observation = scenarioObservationSchema.parse(JSON.parse(line));
+  } catch {
+    result.problems.push(`${reference}: malformed scenario evidence.`);
+    return;
+  }
+  result.scenarioMeasurements += 1;
+  const scenario = scenarios.find((entry) => entry.id === observation.scenarioId);
+  if (!scenario) {
+    result.problems.push(
+      `${reference}: unknown scenario ${observation.scenarioId}; register it before it can qualify.`,
+    );
+    return;
+  }
+  const problemsBefore = result.problems.length;
+  const cohort = tally.cohorts.get(scenario.id) ?? [];
+  cohort.push(observation);
+  tally.cohorts.set(scenario.id, cohort);
+  const label = `${reference} (${observation.scenarioId} sample ${observation.sample})`;
+  if (observation.scenarioVersion !== scenario.version)
+    result.problems.push(
+      `${label}: obsolete scenario version ${observation.scenarioVersion}; the registry is at ${scenario.version}.`,
+    );
+  if (observation.measurementVersion !== MEASUREMENT_VERSION)
+    result.problems.push(
+      `${label}: measurement version ${observation.measurementVersion} is not the current ${MEASUREMENT_VERSION}.`,
+    );
+  if (observation.boundary !== scenario.boundary)
+    result.problems.push(
+      `${label}: boundary ${observation.boundary} is not the registered ${scenario.boundary}.`,
+    );
+  if (observation.budgetMs !== scenario.budgetMs)
+    result.problems.push(
+      `${label}: budget ${observation.budgetMs}ms is not the approved ${scenario.budgetMs}ms.`,
+    );
+  if (observation.profile !== scenario.profile)
+    result.problems.push(
+      `${label}: profile ${observation.profile} is not the registered ${scenario.profile}.`,
+    );
+  const seen = tally.samplesSeen.get(scenario.id) ?? new Set<number>();
+  if (seen.has(observation.sample) || observation.sample > scenario.samples)
+    result.problems.push(
+      `${label}: unexpected duplicate or surplus sample; the scenario declares ${scenario.samples}.`,
+    );
+  seen.add(observation.sample);
+  tally.samplesSeen.set(scenario.id, seen);
+  if (observation.status !== 'visible' || observation.correctness !== 'observed') {
+    result.problems.push(
+      `${label}: correctness was not confirmed; classify the original failure before accepting evidence.`,
+    );
+  }
+  if (
+    observation.boundary === CROSS_SESSION_BOUNDARY &&
+    (observation.signalDeliveryMs === undefined || observation.signalDeliveryMs > observation.measuredMs)
+  )
+    result.problems.push(
+      `${label}: a cross-session sample needs its signal delivery time within the measured interval.`,
+    );
+  if (observation.measuredMs > scenario.budgetMs || observation.responsiveness !== 'within_target') {
+    deadlineProblems.push(
+      `${label}: over budget, measured ${observation.measuredMs}ms against ${scenario.budgetMs}ms.`,
+    );
+    tally.invalidScenarios.add(scenario.id);
+  }
+  if (result.problems.length !== problemsBefore) tally.invalidScenarios.add(scenario.id);
+}
+
+/** One scenario's samples: validated as one set, then their median compared with the reviewed baseline. */
+function compareScenarioCohort(input: {
+  scenario: MeasuredScenario;
+  observations: ScenarioObservation[];
+  first: ScenarioObservation;
+  baselines: PerformanceBaselines;
+  tally: ScenarioTally;
+  result: LatencyEvidenceCheck;
+  deadlineProblems: string[];
+}): void {
+  const { scenario, observations, first, baselines, tally, result, deadlineProblems } = input;
+  const { id } = scenario;
+  const { invalidScenarios } = tally;
+  checkCohortSamples({ scenario, observations, first, tally, problems: result.problems });
+  const sorted = observations
+    .map((entry) => (invalidScenarios.has(id) ? entry.measuredMs : comparableMs(entry)))
+    .sort((left, right) => left - right);
+  const midpoint = Math.floor(sorted.length / 2);
+  const [lower, upper] =
+    sorted.length % 2 ? [sorted[midpoint], sorted[midpoint]] : [sorted[midpoint - 1], sorted[midpoint]];
+  if (lower === undefined || upper === undefined) {
+    result.problems.push(`${SCENARIO_ARCHIVE}: scenario ${id} has no samples for median comparison.`);
+    invalidScenarios.add(id);
+    return;
+  }
+  const measuredMs = (lower + upper) / 2;
+  const comparison: BaselineComparison = invalidScenarios.has(id)
+    ? {
+        status: 'unverified',
+        measuredMs,
+        reason: 'the complete sample set did not pass validation, correctness and every hard deadline',
+      }
+    : compareToBaseline({
+        measuredMs,
+        baseline: findBaseline({
+          baselines,
+          scenarioId: id,
+          scenarioVersion: scenario.version,
+          profile: scenario.profile,
+          backend: first.backend,
+          context: first.context,
+        }),
+        tolerance: baselines.tolerance,
+        measurementVersion:
+          baselines.measurementVersion === MEASUREMENT_VERSION
+            ? first.measurementVersion
+            : baselines.measurementVersion,
+      });
+  result.comparisons.push({
+    scenarioId: id,
+    sample: null,
+    basis: 'median',
+    samples: observations,
+    measuredMs,
+    budgetMs: scenario.budgetMs,
+    correctness: observations.every((entry) => entry.status === 'visible' && entry.correctness === 'observed')
+      ? 'observed'
+      : 'unconfirmed',
+    responsiveness: observations.every(
+      (entry) => entry.measuredMs <= scenario.budgetMs && entry.responsiveness === 'within_target',
+    )
+      ? 'within_target'
+      : 'unconfirmed',
+    comparison,
+  });
+  if (comparison.status === 'regressed') {
+    deadlineProblems.push(
+      `${SCENARIO_ARCHIVE} (${id} median): regressed to ${measuredMs}ms against the reviewed ${comparison.referenceMs}ms baseline (limit ${Math.round(comparison.limitMs)}ms).`,
+    );
+  } else if (comparison.status === 'unverified' && scenario.comparison === 'required') {
+    deadlineProblems.push(
+      `${SCENARIO_ARCHIVE} (${id} median): comparison is unverified (${comparison.reason}); a required scenario cannot pass without a reviewed baseline and valid samples.`,
+    );
+  }
+}
+
+/** A median compares only a complete set of distinct samples from one build, backend and context. */
+function checkCohortSamples(input: {
+  scenario: MeasuredScenario;
+  observations: ScenarioObservation[];
+  first: ScenarioObservation;
+  tally: ScenarioTally;
+  problems: string[];
+}): void {
+  const { scenario, observations, first, tally, problems } = input;
+  const { id } = scenario;
+  const { invalidScenarios } = tally;
+  if (observations.length !== scenario.samples || tally.samplesSeen.get(id)?.size !== scenario.samples) {
+    problems.push(
+      `${SCENARIO_ARCHIVE}: scenario ${id} needs exactly ${scenario.samples} distinct samples for median comparison.`,
+    );
+    invalidScenarios.add(id);
+  }
+  if (
+    !first.buildId ||
+    observations.some(
+      (entry) =>
+        entry.buildId !== first.buildId ||
+        entry.backend !== first.backend ||
+        !samePerformanceContext(entry.context, first.context),
+    )
+  ) {
+    problems.push(
+      `${SCENARIO_ARCHIVE}: scenario ${id} mixes build, backend or measurement context, or has no build identity.`,
+    );
+    invalidScenarios.add(id);
   }
 }

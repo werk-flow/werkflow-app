@@ -35,86 +35,89 @@ mock.module('@/lib/supabase/server', () => ({
     },
   }),
 }));
-mock.module('@/lib/supabase/admin', () => ({
-  createSupabaseAdminClient: () => ({
-    rpc: async (name: string, input: Record<string, unknown>) => {
-      protectedReads++;
-      assert.equal(name, 'list_customer_page');
-      assert.deepEqual(input, {
-        p_organization_id: organizationId,
-        p_search: 'Kontakt',
-        p_page: 2,
-        p_page_size: 50,
-      });
-      return {
-        data: {
-          ids: selectedIds,
-          total: 61,
-          clients: malformedRows
-            ? [{}]
-            : selectedIds.map(() => ({
-                id: row.id,
-                organizationId: foreignRows ? foreignOrg : organizationId,
-                name: row.name,
-                clientType: row.client_type,
-                customerNumber: row.customer_number,
-                email: row.email,
-                phone: row.phone,
-                address: row.address,
-                notes: row.notes,
-                createdAt: row.created_at,
-                updatedAt: row.updated_at,
-              })),
-        },
-        error: failSelection ? { message: 'private provider detail' } : null,
-      };
+/** The one customer-page read: the selected page of ids, the total and the hydrated rows. */
+async function listCustomerPage(name: string, input: Record<string, unknown>) {
+  protectedReads++;
+  assert.equal(name, 'list_customer_page');
+  assert.deepEqual(input, {
+    p_organization_id: organizationId,
+    p_search: 'Kontakt',
+    p_page: 2,
+    p_page_size: 50,
+  });
+  return {
+    data: {
+      ids: selectedIds,
+      total: 61,
+      clients: malformedRows
+        ? [{}]
+        : selectedIds.map(() => ({
+            id: row.id,
+            organizationId: foreignRows ? foreignOrg : organizationId,
+            name: row.name,
+            clientType: row.client_type,
+            customerNumber: row.customer_number,
+            email: row.email,
+            phone: row.phone,
+            address: row.address,
+            notes: row.notes,
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+          })),
     },
-    from: (table: string) => {
-      assert.notEqual(table, 'clients', 'customer hydration must not add a second network request');
-      const query = {
-        select: () => query,
-        not: () => query,
-        limit: () => query,
-        eq: (column: string, value: string) => {
-          if (table === 'clients') {
-            assert.equal(column, 'organization_id');
-            assert.equal(value, organizationId);
-          }
-          return query;
-        },
-        in: (column: string, values: string[]) => {
-          assert.equal(column, 'id');
-          assert.deepEqual(values, selectedIds);
-          return query;
-        },
-        then: (resolve: (result: { error: { message: string } | null; data: unknown[] }) => void) => {
-          if (table === 'clients') protectedReads++;
-          resolve({
-            error: table === 'clients' && malformedRows ? { message: 'private provider detail' } : null,
-            data:
-              table === 'clients'
-                ? [row]
-                : role
-                  ? [
-                      {
-                        organization_id: organizationId,
-                        role,
-                        joined_at: '2026-01-01',
-                        organizations: {
-                          id: organizationId,
-                          name: 'Fixture company',
-                          unique_code: 'fixture',
-                          employee_records: [],
-                        },
-                      },
-                    ]
-                  : [],
-          });
-        },
-      };
+    error: failSelection ? { message: 'private provider detail' } : null,
+  };
+}
+
+/** Every other table read; the clients table must stay unread. */
+function tableQuery(table: string) {
+  assert.notEqual(table, 'clients', 'customer hydration must not add a second network request');
+  const query = {
+    select: () => query,
+    not: () => query,
+    limit: () => query,
+    eq: (column: string, value: string) => {
+      if (table === 'clients') {
+        assert.equal(column, 'organization_id');
+        assert.equal(value, organizationId);
+      }
       return query;
     },
-  }),
+    in: (column: string, values: string[]) => {
+      assert.equal(column, 'id');
+      assert.deepEqual(values, selectedIds);
+      return query;
+    },
+    then: (resolve: (result: { error: { message: string } | null; data: unknown[] }) => void) => {
+      if (table === 'clients') protectedReads++;
+      resolve({
+        error: table === 'clients' && malformedRows ? { message: 'private provider detail' } : null,
+        data:
+          table === 'clients'
+            ? [row]
+            : role
+              ? [
+                  {
+                    organization_id: organizationId,
+                    role,
+                    joined_at: '2026-01-01',
+                    organizations: {
+                      id: organizationId,
+                      name: 'Fixture company',
+                      unique_code: 'fixture',
+                      employee_records: [],
+                    },
+                  },
+                ]
+              : [],
+      });
+    },
+  };
+  return query;
+}
+
+mock.module('@/lib/supabase/admin', () => ({
+  createSupabaseAdminClient: () => ({ rpc: listCustomerPage, from: tableQuery }),
 }));
 
 const { GET } = await import('@/app/api/customer-page/route');

@@ -65,9 +65,6 @@
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 129 },
-    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
-    "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },
-    "lib/testing/performance-calibration.ts": { "draftPerformanceBaselines": 98 }
+    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 }
   }
 }

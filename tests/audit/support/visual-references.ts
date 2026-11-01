@@ -12,6 +12,13 @@ import { clockInLauncher } from '../../golden/support/steps/time-tracking';
 // day numbers get stand-ins too; that week never holds today, so no now line
 // or today mark is drawn.
 
+declare global {
+  interface Window {
+    /** The stand-in observer of the current page, replaced when a capture installs a new one. */
+    __visualReferenceObserver?: MutationObserver;
+  }
+}
+
 export const DESKTOP = { width: 1440, height: 900 } as const;
 export const PHONE = { width: 375, height: 812 } as const;
 
@@ -112,8 +119,7 @@ async function normalizeText(
         }
       };
       visit(document.body);
-      const holder = window as unknown as { __visualReferenceObserver?: MutationObserver };
-      holder.__visualReferenceObserver?.disconnect();
+      window.__visualReferenceObserver?.disconnect();
       const observer = new MutationObserver((records) => {
         for (const record of records) {
           if (record.type === 'characterData') visit(record.target);
@@ -121,7 +127,7 @@ async function normalizeText(
         }
       });
       observer.observe(document.body, { subtree: true, childList: true, characterData: true });
-      holder.__visualReferenceObserver = observer;
+      window.__visualReferenceObserver = observer;
     },
     {
       exact: replacements,
