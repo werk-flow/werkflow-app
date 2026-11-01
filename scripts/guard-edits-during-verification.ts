@@ -11,6 +11,7 @@ import {
   sourceRewritingCommand,
   type GuardedToolCall,
 } from '../lib/testing/runner/edit-guard';
+import { isJsonRecord } from '../lib/supabase/json';
 
 /**
  * Pre-edit hook of the agent tools (.claude/settings.json, .codex/hooks.json).
@@ -51,7 +52,10 @@ function ignoredByGit(path: string): boolean {
 
 let call: GuardedToolCall & { cwd?: unknown };
 try {
-  call = JSON.parse(await Bun.stdin.text()) as GuardedToolCall & { cwd?: unknown };
+  const parsed: unknown = JSON.parse(await Bun.stdin.text());
+  // A call that is no JSON object cannot be decided, so it passes like every other such case.
+  if (!isJsonRecord(parsed)) process.exit(0);
+  call = parsed;
 } catch {
   process.exit(0);
 }
