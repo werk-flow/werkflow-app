@@ -185,6 +185,37 @@ export function lifecycleBadge(page: Page, badge: LifecycleBadge): Locator {
 }
 
 /**
+ * A whole open blocker row for getWorkNextAction, which reads only its kind and
+ * state; the other columns are inert placeholders.
+ */
+function openBlockerRow(kind: WorkBlocker['kind']): WorkBlocker {
+  return {
+    created_at: '',
+    created_by: null,
+    details: null,
+    id: '',
+    instruction_item_id: null,
+    is_legacy: false,
+    job_id: null,
+    kind,
+    legacy_source: null,
+    next_review_date: null,
+    organization_id: '',
+    parent_project_parking_blocker_id: null,
+    project_id: null,
+    reason: null,
+    resolution_note: null,
+    resolved_at: null,
+    resolved_by: null,
+    responsible_employee_record_id: null,
+    state: 'open',
+    updated_at: '',
+    updated_by: null,
+    version: 0,
+  };
+}
+
+/**
  * The next step the header names for this state, or for an open blocker or
  * parking, which the product puts first.
  */
@@ -193,7 +224,7 @@ export function lifecycleNextStep(
   state: WorkExecutionState,
   openBlocker?: WorkBlocker['kind'],
 ): Locator {
-  const blockers = openBlocker ? [{ kind: openBlocker, state: 'open' } as WorkBlocker] : [];
+  const blockers = openBlocker ? [openBlockerRow(openBlocker)] : [];
   const nextAction = getWorkNextAction({ executionState: state, blockers, dependencies: [] });
   return lifecycleHeader(page).getByText(`${LIFECYCLE_COPY.nextStepPrefix}${nextAction}`, { exact: true });
 }
@@ -744,8 +775,8 @@ export async function jobInstructionEditorRow(
   await expect
     .poll(
       async () => {
-        const values = await fields.evaluateAll((elements) =>
-          elements.map((element) => (element as HTMLTextAreaElement).value),
+        const values = await fields.evaluateAll((elements: HTMLTextAreaElement[]) =>
+          elements.map((element) => element.value),
         );
         index = values.indexOf(content);
         return index;
