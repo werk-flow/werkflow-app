@@ -46,7 +46,7 @@ insert into public.jobs (
   id, organization_id, job_number, title, status, execution_state, planned_date, planned_time, created_by
 ) values
 ('26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000010',
-  'UNPARK-J-3', 'Heizungstausch', 'nicht_bearbeitet', null, '2026-11-01', '08:00:00',
+  'UNPARK-J-3', 'Heizungstausch', 'nicht_bearbeitet', null, '2037-11-01', '08:00:00',
   '26104170-0000-0000-0000-000000000001');
 insert into public.job_assignments (job_id, user_id, assigned_by) values
 ('26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000001',
@@ -78,7 +78,7 @@ begin
   ] loop
     perform public.park_work_target('26104170-0000-0000-0000-000000000010',
       '26104170-0000-0000-0000-000000000001', 'job', v_job, 0, 'material', null,
-      v_responsible, '2026-11-15');
+      v_responsible, '2037-11-15');
   end loop;
   perform public.park_work_target('26104170-0000-0000-0000-000000000011',
     '26104170-0000-0000-0000-000000000003', 'job', '26104170-0000-0000-0000-000000000059', 0,
@@ -86,7 +86,7 @@ begin
     (select id from public.employee_records
      where organization_id = '26104170-0000-0000-0000-000000000011'
        and user_id = '26104170-0000-0000-0000-000000000003'),
-    '2026-11-15');
+    '2037-11-15');
   if (select count(*) from public.jobs where id in (
       '26104170-0000-0000-0000-000000000050', '26104170-0000-0000-0000-000000000051',
       '26104170-0000-0000-0000-000000000052', '26104170-0000-0000-0000-000000000059')
@@ -167,8 +167,8 @@ set local role service_role;
 select pg_temp.expect_refusal('unpark with a refused schedule step', $sql$
   select public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000050', 1,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-02", "planned_time": "08:00:00"}', true,
-    array['26104170-0000-0000-0000-000000000003'::uuid], '2026-11-02', '{}', '[]', '{}', 'fingerprint',
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-02", "planned_time": "08:00:00"}', true,
+    array['26104170-0000-0000-0000-000000000003'::uuid], '2037-11-02', '{}', '[]', '{}', 'fingerprint',
     null, null, false)
 $sql$, 'assignment user is not an organization member');
 select pg_temp.assert_parking_unchanged('the refused schedule step');
@@ -177,19 +177,19 @@ select pg_temp.assert_parking_unchanged('the refused schedule step');
 select pg_temp.expect_refusal('stale parking version', $sql$
   select public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000050', 0,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-02"}', false,
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-02"}', false,
     null, null, null, null, null, null, null, null, null)
 $sql$, 'work_blocker_stale_version');
 select pg_temp.expect_refusal('job of another organization', $sql$
   select public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000059', 1,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-02"}', false,
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-02"}', false,
     null, null, null, null, null, null, null, null, null)
 $sql$, 'job_not_found');
 select pg_temp.expect_refusal('actor outside the planning roles', $sql$
   select public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000002', '26104170-0000-0000-0000-000000000050', 1,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-02"}', false,
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-02"}', false,
     null, null, null, null, null, null, null, null, null)
 $sql$, 'work_parking_not_authorized');
 select pg_temp.expect_refusal('job edit outside the schedule columns', $sql$
@@ -208,10 +208,10 @@ begin
   v_job := public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000050', 1,
     'Im Kalender neu eingeplant',
-    '{"planned_date": "2026-11-02", "planned_time": "08:00:00", "status": "nicht_bearbeitet"}', true,
-    array['26104170-0000-0000-0000-000000000002'::uuid], '2026-11-02', '{}', '[]', '{}', 'fingerprint',
+    '{"planned_date": "2037-11-02", "planned_time": "08:00:00", "status": "nicht_bearbeitet"}', true,
+    array['26104170-0000-0000-0000-000000000002'::uuid], '2037-11-02', '{}', '[]', '{}', 'fingerprint',
     null, null, true);
-  if v_job.status <> 'nicht_bearbeitet' or v_job.planned_date <> '2026-11-02'
+  if v_job.status <> 'nicht_bearbeitet' or v_job.planned_date <> '2037-11-02'
     or v_job.planned_time <> '08:00:00'
   then raise exception 'the unpark into the schedule did not apply'; end if;
   if exists (
@@ -240,9 +240,9 @@ begin
   -- progress, whatever status the edit carried.
   v_job := public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000051', 1,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-03", "status": "nicht_bearbeitet"}', false,
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-03", "status": "nicht_bearbeitet"}', false,
     null, null, null, null, null, null, null, null, null);
-  if v_job.status <> 'in_bearbeitung' or v_job.planned_date <> '2026-11-03' then
+  if v_job.status <> 'in_bearbeitung' or v_job.planned_date <> '2037-11-03' then
     raise exception 'the edit overrode the status of the unpark';
   end if;
 
@@ -250,9 +250,9 @@ begin
   -- assignment replacement inserts nothing; the visit is still planned for both.
   v_job := public.unpark_job_into_schedule('26104170-0000-0000-0000-000000000010',
     '26104170-0000-0000-0000-000000000001', '26104170-0000-0000-0000-000000000052', 1,
-    'Im Kalender neu eingeplant', '{"planned_date": "2026-11-04", "planned_time": "09:00:00"}', true,
+    'Im Kalender neu eingeplant', '{"planned_date": "2037-11-04", "planned_time": "09:00:00"}', true,
     array['26104170-0000-0000-0000-000000000001'::uuid, '26104170-0000-0000-0000-000000000002'::uuid],
-    '2026-11-04', '{}', '[]', '{}', 'fingerprint', null, null, false);
+    '2037-11-04', '{}', '[]', '{}', 'fingerprint', null, null, false);
   if (select count(*) from public.planning_occurrence_assignments assignment
       join public.planning_occurrences occurrence on occurrence.id = assignment.occurrence_id
       where occurrence.legacy_source_job_id = '26104170-0000-0000-0000-000000000052'
