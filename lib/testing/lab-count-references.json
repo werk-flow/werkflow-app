@@ -1888,7 +1888,7 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 2, "tolerance": 0 },
         "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 966, "tolerance": 19 }
+        "componentRenders": { "reference": 1035, "tolerance": 19 }
       },
       "payloads": {
         "action:/zeiterfassung": {
@@ -1998,6 +1998,14 @@
           "fromDigest": "d9caa1bc41476c669938b6180e9e3465c8e009c6fe6a2c006d9be1cb9efb1567",
           "toDigest": "0b4fd73b80bf55727cf956371965fe08a888fef934c2581a6540fe07e141fcce",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "raise",
+          "target": "componentRenders",
+          "from": { "reference": 966, "tolerance": 19 },
+          "to": { "reference": 1035, "tolerance": 19 },
+          "runKeys": ["2026-11-01T070519609Z-6e2e24"],
+          "reason": "Debt splits merged after #141 (#137, #136, #109, #129): #129 splits components/zeiterfassung and the period page, which hold the time approval list, into smaller components that render separately (966 to 1035 renders, no extra reads). Behavior unchanged; owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
         }
       ]
     },
@@ -2056,7 +2064,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2190,6 +2198,24 @@
           },
           "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
           "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) adds code to the /zeiterfassung route chunks, which the task list prefetches during this step; it is the only merge between c7328f71, where this step passed, and 58f44164. Same mechanism as the #98 accept. A product feature, not a split: E0 and werk-flow/werkflow-planning#212 may win the bytes back."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-01T070519609Z-6e2e24"],
+          "reason": "Debt splits merged after #141: #129 splits the /zeiterfassung components that the task list prefetches (32185 to 32999 bytes, the same mechanism as the #107 accept in #140). Owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
         }
       ]
     },
