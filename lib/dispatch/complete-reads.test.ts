@@ -1,4 +1,6 @@
 import { expect, mock, test } from 'bun:test';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 import { ID_BATCH_SIZE, ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 
 // The board asks for the dispatch states of every occurrence in its window.
@@ -9,47 +11,52 @@ mock.module('server-only', () => ({}));
 const { loadOccurrenceDispatchStates } = await import('./server');
 
 type Row = Record<string, unknown>;
-type Admin = Parameters<typeof loadOccurrenceDispatchStates>[0];
 
-/** A PostgREST stand-in: 1,000 rows per response, every id list recorded. */
+/** A JSON answer of the fake PostgREST. */
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+/** A PostgREST stand-in behind a real client: 1,000 rows per response, every id list recorded. */
 function createFakeAdmin(tables: Record<string, Row[]>, failingTable?: string) {
   const listSizes: number[] = [];
   const pageStarts: Record<string, number[]> = {};
-  const admin = {
-    from: (table: string) => {
-      const predicates: Array<(row: Row) => boolean> = [];
-      let rangeStart = 0;
-      const query = {
-        select: () => query,
-        order: () => query,
-        eq: (column: string, value: unknown) => {
-          predicates.push((row) => row[column] === value);
-          return query;
-        },
-        in: (column: string, values: readonly string[]) => {
-          listSizes.push(values.length);
-          const wanted = new Set<unknown>(values);
-          predicates.push((row) => wanted.has(row[column]));
-          return query;
-        },
-        range: (from: number) => {
-          rangeStart = from;
-          return query;
-        },
-        then: (
-          resolve: (result: { data: Row[]; error: { message: string; code: string } | null }) => void,
-        ) => {
+  const admin = createClient<Database>('http://localhost:54321', 'test-only', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = new URL(
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+          );
+          const table = url.pathname.split('/').at(-1) ?? '';
+          const rangeStart = Number(url.searchParams.get('offset') ?? 0);
           (pageStarts[table] ??= []).push(rangeStart);
           if (table === failingTable)
-            return resolve({ data: [], error: { message: 'Controlled read failure', code: 'XX000' } });
-          const rows = (tables[table] ?? []).filter((row) => predicates.every((predicate) => predicate(row)));
-          resolve({ data: rows.slice(rangeStart, rangeStart + ROW_PAGE_SIZE), error: null });
+            return jsonResponse({ message: 'Controlled read failure', code: 'XX000' }, 500);
+          let rows = tables[table] ?? [];
+          for (const [column, filter] of url.searchParams) {
+            if (['select', 'order', 'offset', 'limit'].includes(column)) continue;
+            if (filter.startsWith('eq.')) {
+              const value = filter.slice(3);
+              rows = rows.filter((row) => row[column] === value);
+            } else if (filter.startsWith('in.(')) {
+              const values = filter
+                .slice(4, -1)
+                .split(',')
+                .map((value) => value.replaceAll('"', ''));
+              listSizes.push(values.length);
+              const wanted = new Set<unknown>(values);
+              rows = rows.filter((row) => wanted.has(row[column]));
+            } else throw new Error(`The fake PostgREST does not implement ${column}=${filter}.`);
+          }
+          return jsonResponse(rows.slice(rangeStart, rangeStart + ROW_PAGE_SIZE));
         },
-      };
-      return query;
+        { preconnect: fetch.preconnect },
+      ),
     },
-  };
-  return { admin: admin as unknown as Admin, listSizes, pageStarts };
+  });
+  return { admin, listSizes, pageStarts };
 }
 
 const organization_id = 'org';

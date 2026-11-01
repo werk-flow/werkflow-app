@@ -113,9 +113,35 @@ describe('P1-23 payroll export package', () => {
       manifest: { ...input.manifest, schemaVersion: 1 },
       valueRows: [{ ...valueRow, sourceSeconds: 3570, roundingDeltaSeconds: -30 }],
     });
-    const reversedManifest = Object.fromEntries(
-      Object.entries(input.manifest).reverse(),
-    ) as PayrollExportInput['manifest'];
+    const {
+      schemaVersion,
+      exportId,
+      exportVersion,
+      supersedesExportId,
+      organizationId,
+      periodStart,
+      periodEnd,
+      closeVersion,
+      mappingVersion,
+      generatorVersion,
+      generatedAt,
+      scope,
+    } = input.manifest;
+    // The same manifest with its keys in reverse order.
+    const reversedManifest: PayrollExportInput['manifest'] = {
+      scope,
+      generatedAt,
+      generatorVersion,
+      mappingVersion,
+      closeVersion,
+      periodEnd,
+      periodStart,
+      organizationId,
+      supersedesExportId,
+      exportVersion,
+      exportId,
+      schemaVersion,
+    };
     const second = buildPayrollExportPackage({
       ...input,
       manifest: reversedManifest,

@@ -8,6 +8,8 @@ import {
   WORK_EXECUTION_STATES,
   WORK_TRANSITIONS,
   workTransitionActionLabel,
+  type WorkBlocker,
+  type WorkDependency,
   type WorkLifecycleSnapshot,
 } from './types';
 
@@ -45,6 +47,56 @@ const snapshot = (overrides: Partial<WorkLifecycleSnapshot>): WorkLifecycleSnaps
   ownerOptions: [],
   predecessorOptions: { job: [], project: [], instruction: [], declared: [] },
   ...overrides,
+});
+
+/** An open blocker row of the job; the next action reads only its kind and state. */
+const openBlocker = (kind: WorkBlocker['kind']): WorkBlocker => ({
+  id: '00000000-0000-4000-8000-000000000005',
+  organization_id: '00000000-0000-4000-8000-000000000003',
+  job_id: '00000000-0000-4000-8000-000000000001',
+  project_id: null,
+  instruction_item_id: null,
+  parent_project_parking_blocker_id: null,
+  kind,
+  state: 'open',
+  reason: null,
+  details: null,
+  next_review_date: null,
+  responsible_employee_record_id: null,
+  resolution_note: null,
+  resolved_at: null,
+  resolved_by: null,
+  is_legacy: false,
+  legacy_source: null,
+  version: 1,
+  created_at: '2026-08-23T12:00:00Z',
+  created_by: null,
+  updated_at: '2026-08-23T12:00:00Z',
+  updated_by: null,
+});
+
+/** An unsatisfied prerequisite of the job; the next action reads only its effect and satisfaction. */
+const unsatisfiedDependency = (effect: WorkDependency['effect']): WorkDependency => ({
+  id: '00000000-0000-4000-8000-000000000006',
+  organization_id: '00000000-0000-4000-8000-000000000003',
+  dependent_job_id: '00000000-0000-4000-8000-000000000001',
+  dependent_project_id: null,
+  predecessor_job_id: null,
+  predecessor_project_id: null,
+  predecessor_instruction_item_id: null,
+  artifact_approval_action_id: null,
+  declared_kind: null,
+  description: null,
+  effect,
+  manual_state: null,
+  removed_at: null,
+  removed_by: null,
+  version: 1,
+  created_at: '2026-08-23T12:00:00Z',
+  created_by: null,
+  updated_at: '2026-08-23T12:00:00Z',
+  updated_by: null,
+  is_satisfied: false,
 });
 
 const databaseSnapshot = {
@@ -121,26 +173,21 @@ describe('work lifecycle', () => {
     expect(
       getWorkNextAction(
         snapshot({
-          blockers: [{ kind: 'parking', state: 'open' } as WorkLifecycleSnapshot['blockers'][number]],
+          blockers: [openBlocker('parking')],
         }),
       ),
     ).toBe('Parkgrund prüfen und Arbeit wieder einplanen');
     expect(
       getWorkNextAction(
         snapshot({
-          blockers: [{ kind: 'blocker', state: 'open' } as WorkLifecycleSnapshot['blockers'][number]],
+          blockers: [openBlocker('blocker')],
         }),
       ),
     ).toBe('Offene Blocker klären');
     expect(
       getWorkNextAction(
         snapshot({
-          dependencies: [
-            {
-              effect: 'blocks_start',
-              is_satisfied: false,
-            } as WorkLifecycleSnapshot['dependencies'][number],
-          ],
+          dependencies: [unsatisfiedDependency('blocks_start')],
         }),
       ),
     ).toBe('Voraussetzungen klären');
@@ -151,12 +198,7 @@ describe('work lifecycle', () => {
       getWorkNextAction(
         snapshot({
           executionState: 'interrupted',
-          dependencies: [
-            {
-              effect: 'warning',
-              is_satisfied: false,
-            } as WorkLifecycleSnapshot['dependencies'][number],
-          ],
+          dependencies: [unsatisfiedDependency('warning')],
         }),
       ),
     ).toBe('Arbeit fortsetzen');

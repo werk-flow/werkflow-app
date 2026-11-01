@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 import { ID_BATCH_SIZE, ROW_PAGE_SIZE } from '@/lib/supabase/query-batches';
 import { loadAssignmentEvaluation, loadCertificationExpiryNotifications } from './server';
 
@@ -6,51 +8,52 @@ import { loadAssignmentEvaluation, loadCertificationExpiryNotifications } from '
 // 500 rows, and the assignment evaluation sent up to 200 ids in one query
 // string and refused more than 500 capability or condition rows.
 type Row = Record<string, unknown>;
-type Admin = Parameters<typeof loadCertificationExpiryNotifications>[0]['admin'];
 
-/** A PostgREST stand-in: 1,000 rows per response, every id list recorded. */
+/** A PostgREST stand-in behind a real client: 1,000 rows per response, every id list recorded. */
 function createFakeAdmin(tables: Record<string, Row[]>) {
   const listSizes: number[] = [];
   const pageStarts: Record<string, number[]> = {};
-  const admin = {
-    from: (table: string) => {
-      const predicates: Array<(row: Row) => boolean> = [];
-      let rangeStart = 0;
-      const read = () => {
-        (pageStarts[table] ??= []).push(rangeStart);
-        const rows = (tables[table] ?? []).filter((row) => predicates.every((predicate) => predicate(row)));
-        return { data: rows.slice(rangeStart, rangeStart + ROW_PAGE_SIZE), error: null };
-      };
-      const query = {
-        select: () => query,
-        order: () => query,
-        not: () => query,
-        is: () => query,
-        lte: (column: string, value: string) => {
-          predicates.push((row) => String(row[column]) <= value);
-          return query;
+  const admin = createClient<Database>('http://localhost:54321', 'test-only', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: Object.assign(
+        async (input: Parameters<typeof fetch>[0]) => {
+          const url = new URL(
+            typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+          );
+          const table = url.pathname.split('/').at(-1) ?? '';
+          const rangeStart = Number(url.searchParams.get('offset') ?? 0);
+          (pageStarts[table] ??= []).push(rangeStart);
+          let rows = tables[table] ?? [];
+          for (const [column, filter] of url.searchParams) {
+            if (['select', 'order', 'offset', 'limit'].includes(column)) continue;
+            // Every seeded row passes the `is` and `not` filters, so they are not evaluated.
+            if (filter.startsWith('is.') || filter.startsWith('not.')) continue;
+            if (filter.startsWith('eq.')) {
+              const value = filter.slice(3);
+              rows = rows.filter((row) => row[column] === value);
+            } else if (filter.startsWith('lte.')) {
+              const value = filter.slice(4);
+              rows = rows.filter((row) => String(row[column]) <= value);
+            } else if (filter.startsWith('in.(')) {
+              const values = filter
+                .slice(4, -1)
+                .split(',')
+                .map((value) => value.replaceAll('"', ''));
+              listSizes.push(values.length);
+              const wanted = new Set<unknown>(values);
+              rows = rows.filter((row) => wanted.has(row[column]));
+            } else throw new Error(`The fake PostgREST does not implement ${column}=${filter}.`);
+          }
+          return new Response(JSON.stringify(rows.slice(rangeStart, rangeStart + ROW_PAGE_SIZE)), {
+            headers: { 'Content-Type': 'application/json' },
+          });
         },
-        eq: (column: string, value: unknown) => {
-          predicates.push((row) => row[column] === value);
-          return query;
-        },
-        in: (column: string, values: readonly string[]) => {
-          listSizes.push(values.length);
-          const wanted = new Set<unknown>(values);
-          predicates.push((row) => wanted.has(row[column]));
-          return query;
-        },
-        range: (from: number) => {
-          rangeStart = from;
-          return query;
-        },
-        maybeSingle: async () => ({ data: read().data[0] ?? null, error: null }),
-        then: (resolve: (result: { data: Row[]; error: null }) => void) => resolve(read()),
-      };
-      return query;
+        { preconnect: fetch.preconnect },
+      ),
     },
-  };
-  return { admin: admin as unknown as Admin, listSizes, pageStarts };
+  });
+  return { admin, listSizes, pageStarts };
 }
 
 const organization_id = 'org';

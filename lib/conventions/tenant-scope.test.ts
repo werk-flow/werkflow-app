@@ -302,8 +302,8 @@ function scanTenantScope(
   const originScope: OriginScope = moduleOriginScope(source);
 
   /** Records the annotation above `node`; returns a finding text when it is missing or malformed. */
-  const reviewedReason = (node: ts.Node, call: ts.CallExpression): string | undefined => {
-    const annotation = annotationAbove(source, lines, chainAnchor(node as ts.Expression), call);
+  const reviewedReason = (node: ts.Expression, call: ts.CallExpression): string | undefined => {
+    const annotation = annotationAbove(source, lines, chainAnchor(node), call);
     if (!annotation) return 'no tenant-scope annotation';
     const record = annotations.get(annotation.line);
     if (record) record.used = true;

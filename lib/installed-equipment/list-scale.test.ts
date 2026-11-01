@@ -174,8 +174,11 @@ test('a failed hydration read fails the page and is logged', async () => {
 });
 
 test('a malformed query is refused before any read', async () => {
-  const malformed = { ...query, category: 'boiler' } as unknown as EquipmentListQuery;
-  expect(await getInstalledEquipmentPage(malformed)).toEqual({
+  const malformed = { ...query, category: 'boiler' };
+  // The category is outside the parameter type; the reader still receives whatever the caller sends,
+  // so the call goes through Reflect.apply, which takes the arguments untyped as a client's request does.
+  const result: unknown = await Reflect.apply(getInstalledEquipmentPage, undefined, [malformed]);
+  expect(result).toEqual({
     success: false,
     error: 'installed_equipment_input_invalid',
   });

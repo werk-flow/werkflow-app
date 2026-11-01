@@ -32,12 +32,11 @@ function doublePaddedCards(file: string): string[] {
       const cardClass = classNameOf(node.openingElement);
       const cardKeepsPadding = !/(^|[\s'"`])(py-0|p-0)(?=[\s'"`]|$)/.test(cardClass);
       const firstChild = node.children.find(
-        (child) => ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child),
+        (child): child is ts.JsxElement | ts.JsxSelfClosingElement =>
+          ts.isJsxElement(child) || ts.isJsxSelfClosingElement(child),
       );
       if (cardKeepsPadding && firstChild) {
-        const opening = ts.isJsxElement(firstChild)
-          ? firstChild.openingElement
-          : (firstChild as ts.JsxSelfClosingElement);
+        const opening = ts.isJsxElement(firstChild) ? firstChild.openingElement : firstChild;
         const childClass = classNameOf(opening);
         if (opening.tagName.getText() === 'div' && /(^|[\s'"`])p-\d/.test(childClass))
           offenders.push(`${file}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`);

@@ -44,6 +44,8 @@ async function runScenario(): Promise<void> {
   };
   const attention = await import('@/lib/attention/actions');
 
+  // A value outside a parameter type goes through Reflect.apply, which takes the arguments untyped
+  // as a client's request does: a Server Action still receives whatever the client sends.
   const rejected: Array<[string, () => Promise<unknown>]> = [
     ['deleteDocument', () => documents.deleteDocument('not-a-uuid')],
     ['getDocumentDetails', () => documents.getDocumentDetails("' or 1=1")],
@@ -56,15 +58,20 @@ async function runScenario(): Promise<void> {
     [
       'updateDocumentCategory',
       () =>
-        documents.updateDocumentCategory({
-          documentId: missingId,
-          category: 'secret' as 'other',
-        }),
+        Reflect.apply(documents.updateDocumentCategory, undefined, [
+          {
+            documentId: missingId,
+            category: 'secret',
+          },
+        ]),
     ],
-    ['getDocumentLibrary', () => documents.getDocumentLibrary({ view: 'everything' as 'all' })],
+    [
+      'getDocumentLibrary',
+      () => Reflect.apply(documents.getDocumentLibrary, undefined, [{ view: 'everything' }]),
+    ],
     [
       'getDocumentVersionSignedUrl',
-      () => documents.getDocumentVersionSignedUrl(missingId, { download: 'yes' as unknown as boolean }),
+      () => Reflect.apply(documents.getDocumentVersionSignedUrl, undefined, [missingId, { download: 'yes' }]),
     ],
     [
       'createDocumentUploadTicket',
