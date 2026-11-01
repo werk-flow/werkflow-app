@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve } from 'node:path';
+import { isJsonRecord } from '../../supabase/json';
 
 /**
  * The decision of the agent edit guard (scripts/guard-edits-during-verification.ts):
@@ -22,8 +23,8 @@ function text(value: unknown): string | undefined {
 
 /** Every file a tool call writes: a file tool names one path, a patch names each file in its headers. */
 export function editedFiles(call: GuardedToolCall): string[] {
-  if (!call.tool_input || typeof call.tool_input !== 'object') return [];
-  const input = call.tool_input as Record<string, unknown>;
+  const input = call.tool_input;
+  if (!isJsonRecord(input)) return [];
   const files = [text(input.file_path), text(input.notebook_path), text(input.path)].filter(
     (file): file is string => file !== undefined,
   );
@@ -83,8 +84,8 @@ const SHARED_STATE_COMMANDS: readonly { pattern: RegExp; name: string; effect: s
  */
 export function shellCommand(call: GuardedToolCall): string | undefined {
   if (call.tool_name !== 'Bash') return undefined;
-  if (!call.tool_input || typeof call.tool_input !== 'object') return undefined;
-  const input = call.tool_input as Record<string, unknown>;
+  const input = call.tool_input;
+  if (!isJsonRecord(input)) return undefined;
   return text(input.command) ?? text(input.cmd);
 }
 

@@ -49,19 +49,22 @@ function recorderScript(): void {
     }
     return 'unnamed';
   };
+  const sourceNode = (source: unknown): Node | null =>
+    typeof source === 'object' && source !== null && 'node' in source && source.node instanceof Node
+      ? source.node
+      : null;
   try {
     new PerformanceObserver((list) => {
-      for (const entry of list.getEntries()) {
-        const shift = entry as PerformanceEntry & {
-          value: number;
-          hadRecentInput: boolean;
-          sources?: readonly { node: Node | null }[];
-        };
+      for (const shift of list.getEntries()) {
+        // Every layout-shift entry carries these fields (Layout Instability API).
+        if (!('value' in shift) || typeof shift.value !== 'number') continue;
+        if (!('hadRecentInput' in shift) || typeof shift.hadRecentInput !== 'boolean') continue;
+        const sources: unknown[] = 'sources' in shift && Array.isArray(shift.sources) ? shift.sources : [];
         state.shifts.push({
           value: shift.value,
           startTime: shift.startTime,
           hadRecentInput: shift.hadRecentInput,
-          regions: [...new Set((shift.sources ?? []).map((source) => regionOf(source.node)))],
+          regions: [...new Set(sources.map((source) => regionOf(sourceNode(source))))],
         });
       }
     }).observe({ type: 'layout-shift', buffered: true });

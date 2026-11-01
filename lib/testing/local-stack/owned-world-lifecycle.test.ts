@@ -70,7 +70,7 @@ test('archive failure preserves ownership and the cleanup error without sweeping
   );
   expect(retained).toBe(true);
   expect(result).toBeInstanceOf(AggregateError);
-  expect((result as AggregateError).errors).toEqual([cleanupFailure, archiveFailure]);
+  expect(result instanceof AggregateError ? result.errors : result).toEqual([cleanupFailure, archiveFailure]);
 });
 
 test('a failed cleanup journal stops before sweeping and does not claim a retained live world', async () => {

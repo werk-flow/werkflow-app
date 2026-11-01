@@ -42,11 +42,12 @@ const failed = {
   retainedAt: null,
   cleanedAt: '2026-09-06T10:01:00.000Z',
 };
+const noRecoveredRunKeys: string[] = [];
 const retry = {
   groupId: failed.groupId,
   target: 'local' as const,
   candidateFingerprint: failed.candidateFingerprint,
-  recoveredRunKeys: [] as string[],
+  recoveredRunKeys: noRecoveredRunKeys,
 };
 
 test('real freshness helper imports stay independent of scenario references', () => {

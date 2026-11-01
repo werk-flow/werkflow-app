@@ -121,7 +121,7 @@ function insideConfirmed(node: ts.Node): boolean {
     if (
       ts.isCallExpression(parent) &&
       calledName(parent) === 'confirmed' &&
-      parent.arguments.includes(current as ts.Expression)
+      parent.arguments.some((argument) => argument === current)
     )
       return true;
     if (ts.isFunctionLike(parent)) return false;
@@ -167,7 +167,7 @@ type LocatorFunction = {
 };
 
 function isAsyncOrTyped(node: ts.SignatureDeclaration): boolean {
-  const isAsync = (ts.getModifiers(node as ts.HasModifiers) ?? []).some(
+  const isAsync = ((ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined) ?? []).some(
     (modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword,
   );
   return isAsync || (node.type !== undefined && node.type.getText() !== 'Locator');
@@ -179,12 +179,12 @@ function locatorFunctions(source: ts.SourceFile): LocatorFunction[] {
     name: string,
     node: ts.Node,
     signature: ts.SignatureDeclaration,
-    body: ts.Node | undefined,
+    body: ts.ConciseBody | undefined,
   ) => {
     if (!body || isAsyncOrTyped(signature)) return;
     const returns: ts.Expression[] = [];
     const locals = new Map<string, ts.Expression>();
-    if (!ts.isBlock(body)) returns.push(body as ts.Expression);
+    if (!ts.isBlock(body)) returns.push(body);
     else {
       const visitReturns = (child: ts.Node): void => {
         if (ts.isFunctionLike(child)) return;
@@ -326,7 +326,7 @@ export function absenceFindings(file: string, text: string, recordFunctions: Rea
       const matcher = node.expression.name.text;
       const target = node.expression.expression;
       const negated = ts.isPropertyAccessExpression(target) && target.name.text === 'not';
-      const expectCall = negated ? (target as ts.PropertyAccessExpression).expression : target;
+      const expectCall = negated ? target.expression : target;
       const absence = negated
         ? NEGATED_PRESENCE_MATCHERS.has(matcher)
         : (matcher === 'toHaveCount' && node.arguments[0]?.getText(source) === '0') ||
