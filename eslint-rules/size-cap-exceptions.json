@@ -68,7 +68,6 @@
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
     "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 83 },
     "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 169 },
     "components/settings/profile-settings-form.tsx": { "ProfileSettingsForm": 87 },
