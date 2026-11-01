@@ -1,12 +1,11 @@
 'use client';
 
-import { DEFAULT_DAILY_TARGET_MINUTES } from '@/lib/personnel/targets';
 import { useMemo } from 'react';
 import { Progress } from '@/components/ui/progress';
 import { useMountedWallClockTick } from '@/hooks/use-wall-clock-tick';
 import { liveMinutes } from '@/lib/time-tracking/helpers';
 import { cn } from '@/lib/utils';
-import type { DailyTarget } from '@/lib/personnel/targets';
+import { getNoTargetReason, type DailyTarget } from '@/lib/personnel/targets';
 
 interface HoursDisplayProps {
   status?: 'clocked_out' | 'working' | 'on_break' | undefined;
@@ -15,7 +14,7 @@ interface HoursDisplayProps {
   workMinutes: number;
   /** Whether the viewer has permission to see this member's progress */
   canViewStatus?: boolean | undefined;
-  /** Resolved daily target (P1-04); without it the legacy 8h goal applies. */
+  /** Resolved daily target (P1-04); without it the progress is unknown, never measured against 8h. */
   target?: DailyTarget | undefined;
 }
 
@@ -50,23 +49,16 @@ export function HoursDisplay({
   const nowMs = useMountedWallClockTick(60_000, runningSince !== null);
   const totalMinutes = nowMs === null ? workMinutes : liveMinutes(workMinutes, runningSince, nowMs);
 
-  // Without a resolved target the labeled `default` target source applies.
-  const goalMinutes = target?.targetMinutes ?? DEFAULT_DAILY_TARGET_MINUTES;
+  const goalMinutes = target?.targetMinutes ?? 0;
   // Visible exception, not a silent assumption: mark unconfigured members.
   const goalHint =
     target?.source === 'default'
-      ? 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden'
+      ? 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden von Montag bis Freitag'
       : target?.source === 'derived'
         ? 'Ziel aus den Wochenstunden der Beschäftigung abgeleitet'
         : undefined;
-  const zeroTargetReason =
-    target && target.targetMinutes === 0
-      ? target.isHoliday
-        ? `Feiertag: ${target.holidayName}`
-        : target.isClosureDay
-          ? 'Betriebsruhe'
-          : 'Kein Arbeitstag laut Wochenplan'
-      : undefined;
+  // A target the page could not read is unknown, never an invented 8h day.
+  const noTargetReason = target ? getNoTargetReason(target) : 'Tagesziel nicht geladen';
 
   const percentage = useMemo(
     () => calculatePercentage(totalMinutes, goalMinutes),
@@ -94,16 +86,17 @@ export function HoursDisplay({
     );
   }
 
-  if (zeroTargetReason) {
+  if (noTargetReason) {
     return (
-      <div className="flex items-center gap-2 min-w-[100px]" title={zeroTargetReason}>
+      <div className="flex items-center gap-2 min-w-[100px]" title={noTargetReason}>
         <Progress
           value={0}
-          label={`Tagesfortschritt: ${zeroTargetReason}`}
+          label={`Tagesfortschritt: ${noTargetReason}`}
           className="h-2 flex-1 bg-muted/30"
           indicatorClassName="bg-muted-foreground/30"
         />
-        <span className="truncate text-xs font-medium text-muted-foreground">{zeroTargetReason}</span>
+        <span className="truncate text-xs font-medium text-muted-foreground">{noTargetReason}</span>
+        {target && <UnconfiguredMarker target={target} />}
       </div>
     );
   }
@@ -124,13 +117,23 @@ export function HoursDisplay({
       >
         {formatPercentage(percentage)}
       </span>
-      {target?.source === 'default' && (
-        <span
-          role="img"
-          aria-label="Kein Arbeitszeitmodell hinterlegt"
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
-        />
-      )}
+      {target && <UnconfiguredMarker target={target} />}
     </div>
+  );
+}
+
+/**
+ * Marks a member on the labeled default target, on days without a target
+ * too (the weekend), so missing configuration is never silent. Outside
+ * employment no configuration applies.
+ */
+function UnconfiguredMarker({ target }: { target: DailyTarget }) {
+  if (target.source !== 'default' || target.outsideEmployment) return null;
+  return (
+    <span
+      role="img"
+      aria-label="Kein Arbeitszeitmodell hinterlegt"
+      className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+    />
   );
 }

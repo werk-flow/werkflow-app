@@ -4,6 +4,7 @@ import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resol
 import {
   canApproveEntries,
   canManageEntries,
+  computeTimeBreakdown,
   formatDuration,
   formatSignedDuration,
   liveMinutes,
@@ -102,6 +103,18 @@ describe('canApproveEntries: the one approval predicate of the server and every 
 
   test('a caller without a time_approval holder approves nothing, whatever the role', () => {
     expect(canApproveEntries(null, 'employee-user', 'employee')).toBe(false);
+  });
+});
+
+describe('computeTimeBreakdown', () => {
+  test('an unknown target, passed as unbounded, keeps every worked minute as work and owes no overtime', () => {
+    expect(computeTimeBreakdown(630, 30, Number.POSITIVE_INFINITY)).toEqual({
+      workMinutes: 600,
+      breakMinutes: 30,
+      overtimeMinutes: 0,
+    });
+    // The 8-hour default it replaces would cap the day at 480 minutes of work.
+    expect(computeTimeBreakdown(630, 30).workMinutes).toBe(480);
   });
 });
 

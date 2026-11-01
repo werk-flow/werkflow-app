@@ -63,8 +63,13 @@ Noch keine Angaben zur Beschäftigung.
 Konditionen gelten ab ihrem Datum und ändern rückwirkend nichts an früheren Zeiträumen.
 Arbeitszeitmodell
 Wochenplan hinzufügen
-Kein Arbeitszeitmodell hinterlegt.
-Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden pro Tag – sichtbar als Hinweis, nicht als echte Vorgabe.
+56 Std.
+pro Woche
+Aktuell
+Gültig ab
+01.01.2026
+·
+Mo 8 Std. · Di 8 Std. · Mi 8 Std. · Do 8 Std. · Fr 8 Std. · Sa 8 Std. · So 8 Std.
 Krankmeldungen
 Krankmeldung erfassen
 Keine Krankmeldungen erfasst.

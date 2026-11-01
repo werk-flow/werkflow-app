@@ -38,7 +38,7 @@ async function resolveJobIdByNumber(
   if (error || !data) {
     throw new Error(`Job ${jobNumber} not found: ${error?.message}`);
   }
-  return data.id as string;
+  return data.id;
 }
 
 export async function getDispatchState(orgId: string, jobNumber: string): Promise<DispatchDbState> {
@@ -53,7 +53,7 @@ export async function getDispatchState(orgId: string, jobNumber: string): Promis
   if (occurrenceError || (occurrences?.length ?? 0) > 500) {
     throw new Error(`Dispatch occurrence lookup failed: ${occurrenceError?.message ?? 'overflow'}`);
   }
-  const occurrenceIds = (occurrences ?? []).map((row) => row.id as string);
+  const occurrenceIds = (occurrences ?? []).map((row) => row.id);
   let dispatchQuery = admin
     .from('planning_dispatches')
     .select('id, status, occurrence_id, job_id, current_revision_id, created_at')
@@ -67,7 +67,7 @@ export async function getDispatchState(orgId: string, jobNumber: string): Promis
   if (dispatchError || (dispatches?.length ?? 0) > 100) {
     throw new Error(`Dispatch lookup failed: ${dispatchError?.message ?? 'overflow'}`);
   }
-  const dispatchIds = (dispatches ?? []).map((row) => row.id as string);
+  const dispatchIds = (dispatches ?? []).map((row) => row.id);
   if (!dispatchIds.length) return { dispatches: [] };
 
   const [revisionsResult, recipientsResult, acksResult, eventsResult] = await Promise.all([
@@ -131,21 +131,21 @@ export async function getDispatchState(orgId: string, jobNumber: string): Promis
         currentRevisionNumber: dispatch.current_revision_id
           ? (revisionNumberById.get(dispatch.current_revision_id) ?? null)
           : null,
-        revisionChangeKinds: revisions.map((row) => row.change_kind as string),
+        revisionChangeKinds: revisions.map((row) => row.change_kind),
         currentRecipientRecordIds: (recipientsResult.data ?? [])
           .filter((row) => row.revision_id === dispatch.current_revision_id)
-          .map((row) => row.employee_record_id as string),
+          .map((row) => row.employee_record_id),
         acknowledgements: (acksResult.data ?? [])
           .filter((row) => revisions.some((revision) => revision.id === row.revision_id))
           .map((row) => ({
             revisionNumber: requireRevisionNumber(row.revision_id),
-            employeeRecordId: row.employee_record_id as string,
-            state: row.state as string,
-            challengeResolution: row.challenge_resolution as string | null,
+            employeeRecordId: row.employee_record_id,
+            state: row.state,
+            challengeResolution: row.challenge_resolution,
           })),
         eventTypes: (eventsResult.data ?? [])
           .filter((row) => row.dispatch_id === dispatch.id)
-          .map((row) => row.event_type as string),
+          .map((row) => row.event_type),
       };
     }),
   };
@@ -156,7 +156,7 @@ export async function getParkingState(
   jobNumber: string,
 ): Promise<{
   context: {
-    reason: string;
+    reason: string | null;
     note: string | null;
     responsibleEmployeeRecordId: string | null;
     nextReviewDate: string | null;
@@ -192,16 +192,14 @@ export async function getParkingState(
     context: contextResult.data
       ? {
           reason:
-            contextResult.data.reason === 'material'
-              ? 'warten_auf_material'
-              : (contextResult.data.reason as string),
-          note: contextResult.data.details as string | null,
-          responsibleEmployeeRecordId: contextResult.data.responsible_employee_record_id as string | null,
-          nextReviewDate: contextResult.data.next_review_date as string | null,
+            contextResult.data.reason === 'material' ? 'warten_auf_material' : contextResult.data.reason,
+          note: contextResult.data.details,
+          responsibleEmployeeRecordId: contextResult.data.responsible_employee_record_id,
+          nextReviewDate: contextResult.data.next_review_date,
         }
       : null,
     eventTypes: (eventsResult.data ?? []).map((row) =>
-      row.event_type === 'parked' ? 'context_set' : (row.event_type as string),
+      row.event_type === 'parked' ? 'context_set' : row.event_type,
     ),
   };
 }
@@ -227,7 +225,7 @@ export async function getCommitmentState(
   if (occurrenceError || (occurrences?.length ?? 0) > 500) {
     throw new Error(`Commitment occurrence lookup failed: ${occurrenceError?.message ?? 'overflow'}`);
   }
-  const occurrenceIds = (occurrences ?? []).map((row) => row.id as string);
+  const occurrenceIds = (occurrences ?? []).map((row) => row.id);
   if (!occurrenceIds.length) return [];
   const { data, error } = await admin
     .from('planning_customer_commitments')
@@ -240,8 +238,8 @@ export async function getCommitmentState(
     throw new Error(`Commitment lookup failed: ${error?.message ?? 'overflow'}`);
   }
   return (data ?? []).map((row) => ({
-    status: row.status as string,
-    committedDate: row.committed_date as string,
-    supersedesId: row.supersedes_id as string | null,
+    status: row.status,
+    committedDate: row.committed_date,
+    supersedesId: row.supersedes_id,
   }));
 }

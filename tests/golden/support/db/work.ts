@@ -128,7 +128,7 @@ export async function getWorkTemplateStateByName(orgId: string, name: string) {
     .maybeSingle();
   if (matchError || !matchedVersion)
     throw new Error(`No work template found for ${name}: ${matchError?.message}`);
-  const templateId = matchedVersion.template_id as string;
+  const templateId = matchedVersion.template_id;
   const { data: versions, error } = await admin
     .from('work_template_versions')
     .select('id, template_id, version_number, status, name, published_at')
@@ -137,7 +137,7 @@ export async function getWorkTemplateStateByName(orgId: string, name: string) {
     .order('version_number');
   if (error || !versions?.length)
     throw new Error(`No work template versions found for ${name}: ${error?.message}`);
-  const versionIds = versions.map((version) => version.id as string);
+  const versionIds = versions.map((version) => version.id);
   const [
     templateResult,
     itemsResult,
@@ -228,7 +228,7 @@ export async function getAppliedWorkTemplateState(
     .eq(numberColumn, targetNumber)
     .single();
   if (targetError || !target) throw new Error(`Applied target lookup failed: ${targetError?.message}`);
-  const targetId = target.id as string;
+  const targetId = target.id;
   const isJob = Boolean(input.jobNumber);
   const [
     applications,
@@ -302,8 +302,8 @@ export async function getAppliedWorkTemplateState(
       ? admin.from('jobs').select('id').eq('organization_id', orgId).eq('project_id', targetId)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  const instructionIds = (instructions.data ?? []).map((item) => item.id as string);
-  const requirementIds = (capabilities.data ?? []).map((item) => item.id as string);
+  const instructionIds = (instructions.data ?? []).map((item) => item.id);
+  const requirementIds = (capabilities.data ?? []).map((item) => item.id);
   const [evidence, dependencies, capabilityOrigins] = await Promise.all([
     instructionIds.length
       ? admin
@@ -414,7 +414,7 @@ export async function getJobProjectNumber(orgId: string, jobNumber: string): Pro
   if (projectError || !project) {
     throw new Error(`Project for ${jobNumber} missing: ${projectError?.message}`);
   }
-  return project.project_number as string;
+  return project.project_number;
 }
 
 export async function getProjectJobRelationState(
@@ -427,7 +427,7 @@ export async function getProjectJobRelationState(
   siteId: string | null;
   contactId: string | null;
   jobs: Array<{
-    jobNumber: string;
+    jobNumber: string | null;
     projectId: string | null;
     clientId: string | null;
     siteId: string | null;
@@ -452,16 +452,16 @@ export async function getProjectJobRelationState(
     .order('job_number');
   if (jobsError) throw new Error(`Project jobs could not be read: ${jobsError.message}`);
   return {
-    projectId: project.id as string,
-    clientId: (project.client_id as string | null) ?? null,
-    siteId: (project.site_id as string | null) ?? null,
-    contactId: (project.contact_id as string | null) ?? null,
+    projectId: project.id,
+    clientId: project.client_id,
+    siteId: project.site_id,
+    contactId: project.contact_id,
     jobs: (jobs ?? []).map((job) => ({
-      jobNumber: job.job_number as string,
-      projectId: (job.project_id as string | null) ?? null,
-      clientId: (job.client_id as string | null) ?? null,
-      siteId: (job.site_id as string | null) ?? null,
-      contactId: (job.contact_id as string | null) ?? null,
+      jobNumber: job.job_number,
+      projectId: job.project_id,
+      clientId: job.client_id,
+      siteId: job.site_id,
+      contactId: job.contact_id,
     })),
   };
 }
@@ -480,8 +480,8 @@ export async function getJobSiteContactState(
     throw new Error(`Job ${jobNumber} not found: ${error?.message}`);
   }
   return {
-    siteId: (data.site_id as string | null) ?? null,
-    contactId: (data.contact_id as string | null) ?? null,
+    siteId: data.site_id,
+    contactId: data.contact_id,
   };
 }
 

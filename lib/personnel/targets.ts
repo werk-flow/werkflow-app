@@ -1,7 +1,7 @@
 // P1-04 target-computation contract: the daily target for (person, date) is a
-// pure function of the schedule version effective on that date, the holiday /
-// closure state effective on that date, and the missing-configuration
-// exception. Nothing here is persisted — later corrections to configuration
+// pure function of the employment interval, the schedule version effective on
+// that date, the holiday / closure state effective on that date, and the
+// missing-configuration exception. Nothing here is persisted — later corrections to configuration
 // are traceable through their own histories, and historical days always
 // resolve against what was effective then.
 
@@ -19,9 +19,9 @@ import {
 } from '@/lib/personnel/holidays';
 
 /**
- * The legacy fixed daily goal (8h). With the labeled fallback cascade (owner
- * decision, P1-04) this value is only ever used as the visibly labeled
- * `default` source — never as a silent assumption.
+ * The fixed daily goal (8h) of the labeled `default` source (owner decision,
+ * P1-04): Montag–Freitag only, like the `derived` weekday spread, and never a
+ * silent assumption.
  */
 export const DEFAULT_DAILY_TARGET_MINUTES = 480;
 
@@ -31,8 +31,20 @@ type DailyTargetSource =
   // No schedule, but the effective employment condition has weekly hours:
   // spread across Montag–Freitag, labeled as derived.
   | 'derived'
-  // Neither exists: the legacy 8h default, visibly labeled as unconfigured.
+  // Neither exists: the 8h default on Montag–Freitag, visibly labeled as unconfigured.
   | 'default';
+
+/**
+ * The days a person is employed: the personnel record's entry and exit dates,
+ * both inclusive Berlin business dates, null when open. The employment
+ * lifecycle writes the exit date on an exit and a planned exit, so the
+ * record's exit date is the lifecycle exit; the Plantafel hatching and the
+ * period's people read the same two columns.
+ */
+export type EmploymentInterval = {
+  entryDate: string | null;
+  exitDate: string | null;
+};
 
 /**
  * Effective absence span feeding target resolution. Only EFFECTIVE absence
@@ -61,9 +73,11 @@ export type DailyTarget = {
   weekday: number;
   /** Effective target after holiday/closure zeroing and approved absence. */
   targetMinutes: number;
-  /** Target from the schedule/derivation before holiday/closure zeroing. */
+  /** Target from the schedule/derivation before holiday/closure zeroing; 0 outside employment. */
   baseTargetMinutes: number;
   source: DailyTargetSource;
+  /** Set when the date lies before the entry or after the exit date. */
+  outsideEmployment: 'before_entry' | 'after_exit' | null;
   isHoliday: boolean;
   holidayName: string | null;
   isClosureDay: boolean;
@@ -147,18 +161,31 @@ export type ResolveDailyTargetInput = {
   schedules: WorkSchedule[];
   conditions: EmploymentCondition[];
   calendar: OrganizationHolidayCalendar;
+  /** Required, so no reader can forget the entry and exit boundary. */
+  employment: EmploymentInterval;
   /** Approved absence spans for the person (P1-06). Optional and additive. */
   absences?: ApprovedAbsenceSpan[];
 };
+
+function resolveOutsideEmployment(
+  employment: EmploymentInterval,
+  dateIso: string,
+): DailyTarget['outsideEmployment'] {
+  if (employment.entryDate !== null && dateIso < employment.entryDate) return 'before_entry';
+  if (employment.exitDate !== null && dateIso > employment.exitDate) return 'after_exit';
+  return null;
+}
 
 export function resolveDailyTarget({
   dateIso,
   schedules,
   conditions,
   calendar,
+  employment,
   absences,
 }: ResolveDailyTargetInput): DailyTarget {
   const weekday = getWeekdayIndex(dateIso);
+  const outsideEmployment = resolveOutsideEmployment(employment, dateIso);
 
   let source: DailyTargetSource;
   let baseTargetMinutes: number;
@@ -176,12 +203,16 @@ export function resolveDailyTarget({
       // Spread across Montag–Freitag; weekends carry no derived target.
       baseTargetMinutes = weekday <= 4 ? Math.round((condition.weeklyHours * 60) / 5) : 0;
     } else {
-      // Legacy behavior, visibly labeled: 480 on every day exactly matches the
-      // pre-P1-04 overtime math, so nothing shifts for unconfigured members.
+      // Visibly labeled, Montag–Freitag like the derived spread (owner
+      // decision, werk-flow/werkflow-planning#131): an unconfigured person
+      // owes no weekend.
       source = 'default';
-      baseTargetMinutes = DEFAULT_DAILY_TARGET_MINUTES;
+      baseTargetMinutes = weekday <= 4 ? DEFAULT_DAILY_TARGET_MINUTES : 0;
     }
   }
+  // Outside employment the person owes nothing, so not even an informational
+  // absence treatment can bring a base target back.
+  if (outsideEmployment) baseTargetMinutes = 0;
 
   const region = resolveHolidayRegionOnDate(calendar, dateIso);
   const holidayName = region && isHolidayRegion(region) ? getHolidayName(region, dateIso) : null;
@@ -228,6 +259,7 @@ export function resolveDailyTarget({
     targetMinutes,
     baseTargetMinutes,
     source,
+    outsideEmployment,
     isHoliday,
     holidayName,
     isClosureDay,
@@ -281,14 +313,33 @@ export function getHolidayContextDays(
 /**
  * The label shown wherever a non-`schedule` source must be visible as an
  * exception rather than a silent assumption (spec: missing configuration is
- * never a silent eight-hour day).
+ * never a silent eight-hour day). Outside employment no configuration applies.
  */
 export function getTargetSourceHint(target: DailyTarget): string | null {
+  if (target.outsideEmployment) return null;
   if (target.source === 'derived') {
     return 'Aus den Wochenstunden der Beschäftigung abgeleitet – noch kein Arbeitszeitmodell hinterlegt.';
   }
   if (target.source === 'default') {
-    return 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden.';
+    return 'Kein Arbeitszeitmodell hinterlegt – Standardziel 8 Stunden von Montag bis Freitag.';
   }
   return null;
+}
+
+/**
+ * Why a day carries no target, in German, for the progress surfaces; null
+ * when it has one. The strongest reason wins: employment, then holiday and
+ * closure, then a full-day absence, then the weekday rule of the source.
+ */
+export function getNoTargetReason(target: DailyTarget): string | null {
+  if (target.targetMinutes > 0) return null;
+  if (target.outsideEmployment === 'before_entry') return 'Noch nicht eingetreten';
+  if (target.outsideEmployment === 'after_exit') return 'Ausgeschieden';
+  if (target.isHoliday) return `Feiertag: ${target.holidayName}`;
+  if (target.isClosureDay)
+    return target.closureLabel ? `Betriebsruhe (${target.closureLabel})` : 'Betriebsruhe';
+  if (target.absence?.type === 'vacation') return 'Urlaub';
+  if (target.absence?.type === 'sickness') return 'Krankmeldung';
+  if (target.source === 'schedule') return 'Kein Arbeitstag laut Wochenplan';
+  return 'Wochenende';
 }

@@ -131,6 +131,9 @@ type PendingVacationRow = Pick<
   'employee_record_id' | 'start_date' | 'end_date' | 'day_portion'
 >;
 
+/** An employee record with the entry and exit dates that bound its targets. */
+export type EmployedRecord = Pick<Tables<'employee_records'>, 'id' | 'entry_date' | 'exit_date'>;
+
 export type DailyTargetsByRecord = {
   /** Keyed by `${employeeRecordId}:${date}`. */
   targetByEmployeeDate: Map<string, DailyTarget>;
@@ -139,7 +142,7 @@ export type DailyTargetsByRecord = {
 
 /** Each person's target on each date, keyed by `${employeeRecordId}:${date}`. */
 function resolveTargetsByEmployeeDate(input: {
-  employeeRecordIds: string[];
+  employees: readonly EmployedRecord[];
   dates: string[];
   scheduleRows: Tables<'work_schedules'>[];
   conditionRows: Tables<'employment_conditions'>[];
@@ -163,7 +166,8 @@ function resolveTargetsByEmployeeDate(input: {
     conditionsByRecord.set(condition.employeeRecordId, conditions);
   }
   const targetByEmployeeDate = new Map<string, DailyTarget>();
-  for (const employeeRecordId of input.employeeRecordIds) {
+  for (const employee of input.employees) {
+    const employeeRecordId = employee.id;
     for (const date of input.dates) {
       targetByEmployeeDate.set(
         `${employeeRecordId}:${date}`,
@@ -172,6 +176,7 @@ function resolveTargetsByEmployeeDate(input: {
           schedules: schedulesByRecord.get(employeeRecordId) ?? [],
           conditions: conditionsByRecord.get(employeeRecordId) ?? [],
           calendar,
+          employment: { entryDate: employee.entry_date, exitDate: employee.exit_date },
           absences: [
             ...(vacationSpans.get(employeeRecordId) ?? []),
             ...(sicknessSpans.get(employeeRecordId) ?? []),
@@ -192,13 +197,14 @@ function resolveTargetsByEmployeeDate(input: {
 export async function loadDailyTargetsByRecord(input: {
   admin: AdminClient;
   orgId: string;
-  employeeRecordIds: string[];
+  employees: readonly EmployedRecord[];
   /** Sorted ISO dates; the first and last bound every read. */
   dates: string[];
 }): Promise<DailyTargetsByRecord | null> {
   const windowStart = input.dates[0];
   const windowEnd = input.dates.at(-1);
-  if (!windowStart || !windowEnd || input.employeeRecordIds.length === 0) {
+  const employeeRecordIds = input.employees.map((employee) => employee.id);
+  if (!windowStart || !windowEnd || employeeRecordIds.length === 0) {
     return { targetByEmployeeDate: new Map(), pendingVacation: [] };
   }
   // Id lists are organization-sized here (every row of the Plantafel); one
@@ -206,14 +212,14 @@ export async function loadDailyTargetsByRecord(input: {
   // 200 ids in one request answer 414 URI too long).
   const [schedulesResult, conditionsResult, calendar, vacationSpans, sicknessSpans, pendingVacationResult] =
     await Promise.all([
-      readInBatches(input.employeeRecordIds, (ids) =>
+      readInBatches(employeeRecordIds, (ids) =>
         input.admin
           .from('work_schedules')
           .select('*')
           .eq('organization_id', input.orgId)
           .in('employee_record_id', [...ids]),
       ),
-      readInBatches(input.employeeRecordIds, (ids) =>
+      readInBatches(employeeRecordIds, (ids) =>
         input.admin
           .from('employment_conditions')
           .select('*')
@@ -223,7 +229,7 @@ export async function loadDailyTargetsByRecord(input: {
       getCachedOrganizationCalendar(input.orgId),
       loadApprovedVacationSpansByRecord(input.orgId, windowStart, windowEnd),
       loadActiveSicknessSpansByRecord(input.orgId, windowStart, windowEnd),
-      readInBatches(input.employeeRecordIds, (ids) =>
+      readInBatches(employeeRecordIds, (ids) =>
         input.admin
           .from('vacation_requests')
           .select('employee_record_id, start_date, end_date, day_portion')
@@ -243,7 +249,7 @@ export async function loadDailyTargetsByRecord(input: {
   if (!vacationSpans || !sicknessSpans) return null;
 
   const targetByEmployeeDate = resolveTargetsByEmployeeDate({
-    employeeRecordIds: input.employeeRecordIds,
+    employees: input.employees,
     dates: input.dates,
     scheduleRows: schedulesResult.data ?? [],
     conditionRows: conditionsResult.data ?? [],
@@ -342,15 +348,27 @@ async function loadAssessmentContext(input: {
   const windowStartInstant = resolveBerlinWallTime(`${windowStart}T00:00`);
   const windowEndInstant = resolveBerlinWallTime(`${addLocalDays(windowEnd, 1)}T00:00`);
   if (!windowStartInstant || !windowEndInstant) return null;
-  const [recordsResult, targets, existingOccurrenceResult] = await Promise.all([
-    readInBatches(employeeRecordIds, (batch) =>
-      admin
-        .from('employee_records')
-        .select('id, user_id, first_name, last_name')
-        .eq('organization_id', input.orgId)
-        .in('id', [...batch]),
-    ),
-    loadDailyTargetsByRecord({ admin, orgId: input.orgId, employeeRecordIds, dates: uniqueDates }),
+  // The targets need each record's entry and exit dates, so they follow the
+  // record read while the occurrence read runs beside both.
+  const recordsAndTargets = readInBatches(employeeRecordIds, (batch) =>
+    admin
+      .from('employee_records')
+      .select('id, user_id, first_name, last_name, entry_date, exit_date')
+      .eq('organization_id', input.orgId)
+      .in('id', [...batch]),
+  ).then(async (recordsResult) => ({
+    recordsResult,
+    targets: recordsResult.error
+      ? null
+      : await loadDailyTargetsByRecord({
+          admin,
+          orgId: input.orgId,
+          employees: recordsResult.data,
+          dates: uniqueDates,
+        }),
+  }));
+  const [{ recordsResult, targets }, existingOccurrenceResult] = await Promise.all([
+    recordsAndTargets,
     readInBatches(employeeRecordIds, (batch) =>
       readCompleteRows<unknown, { message: string }>(
         (from, to) =>
