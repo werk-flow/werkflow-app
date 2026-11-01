@@ -1,23 +1,45 @@
 import { expect, test } from 'bun:test';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
+import type { Database } from '@/lib/supabase/database.types';
 import { readResumeActivity } from './resume-activity';
 
 type FakeResult = { data: Record<string, unknown> | null; error: { message: string } | null };
 
-// A minimal query chain: records the filters the reader applies and answers
-// with the canned result, so the test pins the rule (latest non-break segment
-// of the whole session) without a database.
+const RECORDED_METHODS = new Set(['from', 'select', 'eq', 'neq', 'order', 'limit']);
+
+// A real client over a canned PostgREST answer, behind a recorder of the
+// filters the reader applies, so the test pins the rule (latest non-break
+// segment of the whole session) without a database.
 function fakeAdmin(result: FakeResult) {
   const calls: Array<[string, unknown[]]> = [];
-  const chain: Record<string, (...args: unknown[]) => unknown> = {};
-  for (const method of ['from', 'select', 'eq', 'neq', 'order', 'limit']) {
-    chain[method] = (...args: unknown[]) => {
-      calls.push([method, args]);
-      return chain;
-    };
-  }
-  chain.maybeSingle = async () => result;
-  return { admin: chain as unknown as SupabaseClient, calls };
+  const client = createClient<Database>('http://localhost:54321', 'test-only', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: Object.assign(
+        async () =>
+          new Response(JSON.stringify(result.error ?? (result.data === null ? [] : [result.data])), {
+            status: result.error ? 500 : 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        { preconnect: fetch.preconnect },
+      ),
+    },
+  });
+  // Each builder the recorded methods return is recorded too; every method runs on the real builder.
+  const recorded = <Target extends object>(target: Target): Target =>
+    new Proxy(target, {
+      get(inner, property, receiver) {
+        const value: unknown = Reflect.get(inner, property, receiver);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          const next: unknown = Reflect.apply(value, inner, args);
+          if (typeof property !== 'string' || !RECORDED_METHODS.has(property)) return next;
+          calls.push([property, args]);
+          return typeof next === 'object' && next !== null ? recorded(next) : next;
+        };
+      },
+    });
+  return { admin: recorded(client), calls };
 }
 
 const workRow = {
