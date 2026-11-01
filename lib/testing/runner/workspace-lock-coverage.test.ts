@@ -2,6 +2,8 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { z } from 'zod';
+import { jsonRecordOrEmpty } from '@/lib/supabase/json';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 
@@ -44,8 +46,9 @@ function lockFindings(
 }
 
 const readRepositoryFile = (path: string): string => readFileSync(resolve(repositoryRoot, path), 'utf8');
-const packageScripts = (JSON.parse(readRepositoryFile('package.json')) as { scripts: Record<string, string> })
-  .scripts;
+const packageScripts = z
+  .object({ scripts: z.record(z.string(), z.string()) })
+  .parse(JSON.parse(readRepositoryFile('package.json'))).scripts;
 
 test('every package script that builds, tests or resets goes through the workspace lock', () => {
   expect(lockFindings(packageScripts, readRepositoryFile)).toEqual([]);
@@ -70,7 +73,7 @@ test('a planted raw command or an unlocked runner is named with the way out', ()
 });
 
 test('the hosted build stays plain next build, outside the local build receipt and lock', () => {
-  const vercel = JSON.parse(readRepositoryFile('vercel.json')) as { buildCommand?: unknown };
+  const vercel = jsonRecordOrEmpty(JSON.parse(readRepositoryFile('vercel.json')));
   expect(vercel.buildCommand).toBe('next build');
 });
 

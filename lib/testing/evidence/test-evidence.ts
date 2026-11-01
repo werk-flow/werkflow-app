@@ -73,10 +73,11 @@ export function validateDiagnosticProvenance(
     return [
       'Retained diagnostics require valid HTTP(S) backend origins for both runs. Configure the recorded backend before replay.',
     ];
-  return (Object.keys(requested) as Array<keyof BackendProvenance>)
-    .filter((key) => recorded[key] !== requested[key])
+  const recordedValues = new Map(Object.entries(recorded));
+  return Object.entries(requested)
+    .filter(([key, value]) => recordedValues.get(key) !== value)
     .map(
-      (key) =>
+      ([key]) =>
         `Retained diagnostic ${key} does not match this run. Restore the recorded environment and suite before replay.`,
     );
 }
