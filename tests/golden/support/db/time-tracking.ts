@@ -29,7 +29,7 @@ export async function getLatestManualTimeEntryState(
   if (!data) {
     throw new MissingTestFixtureError(`Pending time entry missing for ${userId}`);
   }
-  return { id: data.id as string, status: data.status as string };
+  return { id: data.id, status: data.status };
 }
 
 export async function getOrganizationTimeEntryCount(orgId: string): Promise<number> {
@@ -70,7 +70,7 @@ export async function getTimeCaptureState(orgId: string, userId: string) {
   if ((sessions?.length ?? 0) > rowLimit) {
     throw new Error(`Time-session lookup exceeded ${rowLimit} rows.`);
   }
-  const sessionIds = (sessions ?? []).map((session) => session.id as string);
+  const sessionIds = (sessions ?? []).map((session) => session.id);
   const [segmentsResult, operationsResult, eventsResult, legacyResult] = await Promise.all([
     sessionIds.length
       ? admin

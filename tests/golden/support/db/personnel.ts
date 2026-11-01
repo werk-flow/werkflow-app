@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { jsonRecordOrEmpty } from '../../../../lib/supabase/json';
+import { rpcArgs } from '../../../../lib/supabase/rpc-args';
 import { createAdminClient, persisted, type Persisted } from './shared';
 
 export type EmployeeRecordState = {
@@ -40,13 +42,13 @@ export async function getEmployeeRecordStateByUser(
   const [row] = data;
   if (!row) throw new Error(`No employee record found for user ${userId}`);
   return {
-    id: row.id as string,
-    userId: (row.user_id as string | null) ?? null,
-    employeeNumber: (row.employee_number as string | null) ?? null,
-    entryDate: (row.entry_date as string | null) ?? null,
-    exitDate: (row.exit_date as string | null) ?? null,
+    id: row.id,
+    userId: row.user_id ?? null,
+    employeeNumber: row.employee_number ?? null,
+    entryDate: row.entry_date ?? null,
+    exitDate: row.exit_date ?? null,
     recordCountForUser: data.length,
-    membershipJoinedAt: (membership?.joined_at as string | null) ?? null,
+    membershipJoinedAt: membership?.joined_at ?? null,
   };
 }
 
@@ -72,10 +74,10 @@ export async function getEmployeeRecordEventStates(
   }
 
   return (data ?? []).map((event) => ({
-    eventType: event.event_type as string,
-    eventPayload: (event.event_payload ?? {}) as Record<string, unknown>,
-    createdBy: (event.created_by as string | null) ?? null,
-    createdAt: event.created_at as string,
+    eventType: event.event_type,
+    eventPayload: jsonRecordOrEmpty(event.event_payload),
+    createdBy: event.created_by ?? null,
+    createdAt: event.created_at,
   }));
 }
 
@@ -112,11 +114,9 @@ export async function getLatestResponsibilityConfigurationState(
   }
 
   return {
-    id: configuration.id as string,
-    mode: configuration.mode as string,
-    holderEmployeeRecordIds: (assignments ?? [])
-      .map((assignment) => assignment.employee_record_id as string)
-      .sort(),
+    id: configuration.id,
+    mode: configuration.mode,
+    holderEmployeeRecordIds: (assignments ?? []).map((assignment) => assignment.employee_record_id).sort(),
   };
 }
 
@@ -578,18 +578,20 @@ export async function seedPersonnelOnboardingPlan(input: {
   targetStartDate: string | null;
 }): Promise<string> {
   const request = { employeeRecordId: input.employeeRecordId, name: input.name, operationId: randomUUID() };
-  const { data, error } = await createAdminClient().rpc('create_personnel_onboarding_plan', {
-    p_actor_id: input.actorUserId,
-    p_organization_id: input.organizationId,
-    p_employee_record_id: input.employeeRecordId,
-    // The function takes null for a plan without a template or a start date;
-    // the generated types name both arguments as text (as in the plan action).
-    p_template_version_id: input.templateVersionId as string,
-    p_name: input.name,
-    p_target_start_date: input.targetStartDate as string,
-    p_operation_id: request.operationId,
-    p_request_hash: createHash('sha256').update(JSON.stringify(request)).digest('hex'),
-  });
+  const { data, error } = await createAdminClient().rpc(
+    'create_personnel_onboarding_plan',
+    // The function takes null for a plan without a template or a start date (as in the plan action).
+    rpcArgs('create_personnel_onboarding_plan', {
+      p_actor_id: input.actorUserId,
+      p_organization_id: input.organizationId,
+      p_employee_record_id: input.employeeRecordId,
+      p_template_version_id: input.templateVersionId,
+      p_name: input.name,
+      p_target_start_date: input.targetStartDate,
+      p_operation_id: request.operationId,
+      p_request_hash: createHash('sha256').update(JSON.stringify(request)).digest('hex'),
+    }),
+  );
   if (error || !data) throw new Error(`Onboarding plan setup failed: ${error?.message}`);
   return data;
 }

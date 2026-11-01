@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { browserRunPaths, configuredRunKey } from '../../../lib/testing/runs/run-paths';
 import { withFileLock, writeJsonAtomically } from '../../../lib/testing/runner/file-lock';
 import { addOwnedTestEmail, preserveOwnedTestEmails } from '../../../lib/testing/test-email-ownership';
+import { z } from 'zod';
 
 export type TestRole = 'admin' | 'buero' | 'employee';
 
@@ -54,6 +55,36 @@ export type TestWorld = {
   };
 };
 
+// Loose objects keep any key a newer writer added, so a load-and-save round trip drops nothing.
+const testUserSchema = z.looseObject({
+  id: z.string(),
+  email: z.string(),
+  password: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+}) satisfies z.ZodType<TestUser>;
+
+const testWorldSchema = z.looseObject({
+  runId: z.string(),
+  seedStatus: z.enum(['seeding', 'ready']).exactOptional(),
+  additionalUserEmails: z.array(z.string()).exactOptional(),
+  auditGroup: z.string().exactOptional(),
+  orgId: z.string(),
+  orgName: z.string(),
+  users: z.looseObject({ admin: testUserSchema, buero: testUserSchema, employee: testUserSchema }),
+  invitee: testUserSchema,
+  removableEmployee: testUserSchema,
+  personnelInvitee: testUserSchema,
+  inventory: z.looseObject({
+    itemId: z.string(),
+    itemName: z.string(),
+    locationId: z.string(),
+    locationName: z.string(),
+    initialQuantity: z.number(),
+  }),
+  outsider: z.looseObject({ orgId: z.string(), orgName: z.string(), admin: testUserSchema }),
+}) satisfies z.ZodType<TestWorld>;
+
 export function artifactsDirectory(runKey = configuredRunKey()): string {
   return browserRunPaths(resolve(__dirname, '../../..'), runKey).activeState;
 }
@@ -84,5 +115,5 @@ export function registerTestUserEmail(label: string, runId: string): string {
 }
 
 export function loadWorld(): TestWorld {
-  return JSON.parse(readFileSync(worldFilePath(), 'utf8')) as TestWorld;
+  return testWorldSchema.parse(JSON.parse(readFileSync(worldFilePath(), 'utf8')));
 }
