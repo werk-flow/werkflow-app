@@ -640,7 +640,7 @@ export function moduleGuards(
 export function unguardedActions(
   file: string,
   source: ts.SourceFile,
-  actions = exportedActions(file, source),
+  actions: ExportedAction[] = exportedActions(file, source),
 ): string[] {
   const unguarded: string[] = [];
   // In identity-only mode the session identity is itself the guard; its
