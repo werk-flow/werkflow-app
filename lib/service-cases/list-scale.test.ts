@@ -172,7 +172,9 @@ test('a failed hydration read fails the page and is logged', async () => {
 test('a malformed query is refused before any read', async () => {
   // The client sends any value to a Server Action. A method's parameter is
   // bivariant, so the action fits a sender that passes an unchecked query.
-  const client: { send(query: unknown): ReturnType<typeof getServiceCasePage> } = { send: getServiceCasePage };
+  const client: { send(query: unknown): ReturnType<typeof getServiceCasePage> } = {
+    send: getServiceCasePage,
+  };
   const malformed = { ...query, status: 'archived' };
   expect(await client.send(malformed)).toEqual({ success: false, error: 'invalid_input' });
   expect(rpcCalls).toEqual([]);

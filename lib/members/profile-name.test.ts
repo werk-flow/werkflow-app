@@ -30,7 +30,9 @@ function clientAnswering(answer: (url: URL) => Promise<Response>): AssigneeAdmin
 function inMemoryAdmin(tables: InMemoryTables): AssigneeAdminClient {
   const memory = createInMemoryAdmin(tables);
   return clientAnswering(async (url) => {
-    const query = memory.from(url.pathname.replace('/rest/v1/', '')).select(url.searchParams.get('select') ?? '*');
+    const query = memory
+      .from(url.pathname.replace('/rest/v1/', ''))
+      .select(url.searchParams.get('select') ?? '*');
     for (const [column, filter] of url.searchParams) {
       if (column === 'select') continue;
       const [operator = '', ...rest] = filter.split('.');
