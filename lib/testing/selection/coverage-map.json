@@ -861,6 +861,34 @@
             "member % entry date is not the Berlin join date",
             "member % personnel record invented an exit date or employee number"
           ]
+        },
+        {
+          "file": "lib/org/personnel-page-access.test.ts",
+          "kind": "unit",
+          "description": "the real Mitarbeiter pages send a field worker to the dashboard in every organization where they are one, send another organization’s admin back from a person or a record without login, and list only the active organization’s people; Büro opens the same ids",
+          "titles": [
+            "Mitarbeiter pages refuse a field worker in every organization and never show another organization’s people"
+          ]
+        },
+        {
+          "file": "supabase/tests/organization_member_reads.sql",
+          "kind": "sql",
+          "description": "the member list read answers a member with the own organization's members only and refuses a caller who is not a member of the organization it names; no client role executes it",
+          "titles": [
+            "% read the member list",
+            "a client role executes get_org_members_for_user",
+            "the owner of A lists %, not the members of A",
+            "the field worker of A lists %, not the members of A",
+            "the owner of B lists %, not the members of B"
+          ]
+        },
+        {
+          "file": "lib/personnel/lifecycle-actions.test.ts",
+          "kind": "unit",
+          "description": "Büro lists a person’s standard personnel document but no Admin-only one, the admin lists both",
+          "titles": [
+            "personnel lifecycle actions refuse lower roles and other organizations, and self-service reads only the own record"
+          ]
         }
       ],
       "clauses": "Personalakte ohne Zugang; „Zugang einladen\" verknüpft; Entfernen ⇒ „Ausgeschieden\"; Status-Badges\nGolden beweist Einladung ohne Duplikat und den Erhalt der ausgeschiedenen Akte. `A3-R01` ergänzt die sechs Kombinationen aus Geplant/Aktiv/Ausgeschieden und Mit Zugang/Eingeladen/Ohne Zugang; bestehende Mitgliederzeilen erhielten die fehlenden sichtbaren Badges.",
@@ -907,12 +935,12 @@
         {
           "file": "tests/golden/p1-05.spec.ts",
           "kind": "browser",
-          "description": "covered:@P1-05 — preview before saving, a selected holder approves, four-eyes, substitution window and action-time denial",
+          "description": "covered:@P1-05 — preview before saving, a selected holder approves, the own entry of a holder waits for the second holder, a substitution set and ended in the settings",
           "titles": [
             "Die Vorschau zeigt die Wirkung, bevor die Verantwortung gespeichert wird",
             "Eine gezielt verantwortliche Person kann freigeben",
-            "Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip",
-            "Eine Vertretung gilt im Fenster und verliert die Freigabe nach dem Ende am Aktionspunkt"
+            "Der eigene Eintrag eines Verantwortlichen wartet auf die zweite verantwortliche Person",
+            "Eine Vertretung aus den Einstellungen gibt im Fenster die Freigabe und lässt sich beenden"
           ]
         },
         {
@@ -934,6 +962,30 @@
             "employee sees foreign or missing % rows",
             "colleague can read the employee's % rows",
             "admin cannot read the organization's % rows"
+          ]
+        },
+        {
+          "file": "lib/responsibilities/approval-page-access.test.ts",
+          "kind": "unit",
+          "titles": [
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
+          ],
+          "description": "the real Zeiterfassung page opens the pending entries and the correction review for time-approval holders only; the real queue and review: a holder never sees or approves an own entry, Büro without the responsibility sees no queue and is refused, the field worker under the role default holds none, a substitute approves inside the window and is refused once it ended; each refusal against a holder who reaches the review function"
+        },
+        {
+          "file": "lib/responsibilities/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "only the owner configures responsibilities and delegations; Admin, Büro and field worker are refused before any write, so Büro reads only",
+          "titles": [
+            "responsibility actions refuse everyone but the owner and a foreign organization’s ids"
+          ]
+        },
+        {
+          "file": "tests/ui-contracts/time-approvals.spec.ts",
+          "kind": "browser",
+          "description": "Component contract: a review refused because the responsibility ended tells the approver so and never confirms",
+          "titles": [
+            "a review refused because the responsibility ended says so and never confirms"
           ]
         }
       ],
@@ -974,6 +1026,14 @@
           "titles": [
             "Vertretung: die Aufmerksamkeit folgt der Delegation ohne Duplikate und endet mit ihr"
           ]
+        },
+        {
+          "file": "lib/responsibilities/approval-page-access.test.ts",
+          "kind": "unit",
+          "titles": [
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
+          ],
+          "description": "the approver queue marks the overlapping sickness as an absence overlap and carries no absence kind"
         }
       ],
       "clauses": "Urlaub beantragen/zurückziehen; Wochenende zählt nicht; Überschneidung blockiert\nGolden belegt Antrag/Rücknahme/Überschneidung; `A4-R01` ergänzt die authoritative Vorschau-Matrix, `A4-R02` den neutralen Überschneidungshinweis und den angefragten Auftragszeitraum.",
@@ -1061,6 +1121,14 @@
           "titles": [
             "Vertretung: die Aufmerksamkeit folgt der Delegation ohne Duplikate und endet mit ihr"
           ]
+        },
+        {
+          "file": "lib/responsibilities/approval-page-access.test.ts",
+          "kind": "unit",
+          "titles": [
+            "the approval surfaces open for holders only, keep four eyes and resolve the holder at action time"
+          ],
+          "description": "leave approval by role default: Büro never sees or decides an own request and the admin decides it; a holder who loses leave approval is refused at action time although the card still shows the request"
         }
       ],
       "clauses": "Halber Tag = 0,5; ohne Anspruch sichtbare Ausnahme; Vier-Augen\nGolden belegt 0,5 Tage, fehlenden Anspruch und Vier-Augen; `A4-R01` belegt die halbtägige Vorschau, `A4-R02` die range-begrenzten Auftragsfakten.",
@@ -1107,6 +1175,14 @@
             "an absence bar paints above the day cells: its label is the hit-test target at its center",
             "the phone list shows each absence under every day it covers"
           ]
+        },
+        {
+          "file": "lib/vacation/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "the vacation calendar gives a field worker only the own requests and a manager every request of the organization, never another organization’s",
+          "titles": [
+            "vacation actions refuse a lower role and a foreign organization's ids"
+          ]
         }
       ],
       "clauses": "Kalender: „Urlaub – Name\", „(angefragt)\" gestrichelt\n`A4-R03` belegt pending gestrichelt, approved sichtbar sowie Manager-alle/Beschäftigte-nur-eigene; Golden hält den neutralen Titel fest; die Komponentenverträge belegen, dass die Plantafel-Balken über den Tageszellen liegen und die Telefonliste jede Abwesenheit an jedem ihrer Tage zeigt.",
@@ -1137,6 +1213,14 @@
           "description": "covered:@P1-08 + new:A4-06/A4-R04",
           "titles": [
             "Eine Krankmeldung als Faktenkette: Selbstmeldung, Büro-Erfassung, Korrektur, Einstempeln, Privacy-Matrix und Stornierung"
+          ]
+        },
+        {
+          "file": "lib/sickness/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "the shared sickness calendar gives a field worker only the own absence and a manager every absence of the organization, and carries no absence kind",
+          "titles": [
+            "sickness actions refuse a lower role and a foreign organization’s ids"
           ]
         }
       ],
@@ -1407,6 +1491,14 @@
           "titles": [
             "A5-08"
           ]
+        },
+        {
+          "file": "lib/qualifications/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "only an admin switches the apprentice warning; Büro is refused",
+          "titles": [
+            "qualification actions refuse a lower role and a foreign organization’s ids"
+          ]
         }
       ],
       "clauses": "Azubi-Warnung admin-gesteuert, standardmäßig aus\n`A5-T3` beweist erstmals den unangehakten Standard („aus\") vor dem Einschalten und den Azubi-allein-Hinweis im Warnungsdialog; `A5-T4` beweist die Begleit-Negativprobe (Azubi + Person mit wirksamer Nicht-Azubi-Kondition ⇒ kein Dialog) und schaltet die Warnung per UI wieder aus. `@P1-09` hält die Büro-Sperre des Schalters.",
@@ -1475,6 +1567,14 @@
             "employee sees foreign or missing % rows",
             "colleague can read the employee's % rows",
             "admin cannot read the organization's % rows"
+          ]
+        },
+        {
+          "file": "lib/qualifications/action-boundaries.test.ts",
+          "kind": "unit",
+          "description": "the own overview lists only the field worker’s own team and qualification; every management action refuses the field worker before the database",
+          "titles": [
+            "qualification actions refuse a lower role and a foreign organization’s ids"
           ]
         }
       ],

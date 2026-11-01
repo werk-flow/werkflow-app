@@ -6,11 +6,7 @@ import {
 import { expect, test } from './support/fixtures';
 import { getEmployeeRecordStateByUser } from './support/db/personnel';
 import { getPendingInviteCode } from './support/db/shared';
-import {
-  expectRedirectedAway,
-  joinOrganizationViaInviteLink,
-  removeMemberFromDetail,
-} from './support/steps/organization';
+import { joinOrganizationViaInviteLink, removeMemberFromDetail } from './support/steps/organization';
 import {
   PERSONNEL_COPY,
   PERSONNEL_HISTORY_EVENTS,
@@ -25,7 +21,7 @@ import {
   sendInviteFromPersonnelRecord,
   versionBadge,
 } from './support/steps/personnel';
-import { expectVisibleAfterSave, visibleText, textInDom } from './support/steps/shared';
+import { expectVisibleAfterSave, visibleText } from './support/steps/shared';
 
 // P1-03 — Employee/personnel identity with date-effective employment
 // conditions (@P1-03). The journey: conditions stay distinguishable over time,
@@ -185,27 +181,5 @@ test.describe('P1-03 Personalidentität und Konditionen @P1-03', () => {
     await adminPage.goto('/mitarbeiter');
     await expectVisibleAfterSave(adminPage, removableName);
     await expect(visibleText(adminPage, EMPLOYMENT_STATE_LABELS.ausgeschieden)).toBeVisible();
-  });
-
-  test('Mitarbeiterrolle und fremde Organisation erreichen keine Personalakte', async ({
-    employeePage,
-    outsiderPage,
-    world,
-  }) => {
-    const adminRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.admin.id);
-    // Every member of this world carries the run's surname suffix; none of it may leak.
-    const worldSurname = world.users.admin.lastName;
-
-    await expectRedirectedAway(employeePage, '/mitarbeiter');
-    await employeePage.goto(`/mitarbeiter/${adminRecord.id}`);
-    await expect(employeePage).not.toHaveURL(new RegExp(adminRecord.id));
-    await expect(textInDom(employeePage, PERSONNEL_COPY.personnelSection)).toHaveCount(0);
-
-    await outsiderPage.goto('/mitarbeiter');
-    await expect(outsiderPage).toHaveURL(/\/mitarbeiter$/);
-    await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
-    await outsiderPage.goto(`/mitarbeiter/${adminRecord.id}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(adminRecord.id));
-    await expect(textInDom(outsiderPage, worldSurname)).toHaveCount(0);
   });
 });

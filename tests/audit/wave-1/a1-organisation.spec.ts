@@ -20,7 +20,6 @@ import {
   cancelInvitationFromRow,
   createAdditionalOrganization,
   createOrganizationInOnboarding,
-  expectRedirectedAway,
   invitationsTab,
   inviteMember,
   joinDialogDoneButton,
@@ -209,8 +208,10 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
         secondaryOrganizationName,
         { searchFirst: false },
       );
+      // The role belongs to the active organization; that the joined field
+      // worker reaches no office page there is proven below the browser
+      // (lib/org/personnel-page-access.test.ts).
       await expect(organizationSwitcher(employeePage, secondaryOrganizationName)).toBeEnabled();
-      await expectRedirectedAway(employeePage, '/kunden');
     });
 
     await test.step('Der Code einer Organisation eines anderen Admins wird abgelehnt', async () => {
@@ -347,14 +348,15 @@ test.describe('A1 Organisation, Rollen und Stempeluhr @AUDIT-W1-A1', () => {
     });
   });
 
+  // The field worker's refusal of the Mitarbeiter pages is proven below the
+  // browser (lib/org/personnel-page-access.test.ts), the role rules of each
+  // member action in lib/members/action-boundaries.test.ts.
   test('A1-04/A1-06: Handwerker-Oberfläche und konservative Rollenregeln', async ({
     adminPage,
     browser,
     bueroPage,
-    employeePage,
     world,
   }) => {
-    await expectRedirectedAway(employeePage, '/mitarbeiter');
     await adminPage.goto('/mitarbeiter');
     const adminOwnRow = memberRow(adminPage, world.users.admin.firstName);
     await expect(adminOwnRow).toBeVisible();

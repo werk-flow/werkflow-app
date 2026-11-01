@@ -14,10 +14,10 @@ import {
 import { datePickerDigits, testData, textInDom, visibleText } from '../../golden/support/steps/shared';
 
 // Golden P1-24 walks one employee's onboarding, release, receipts and access.
-// This audit keeps the future starter without login, the Büro role variant,
-// the planned employment transition and the outsider's route denial. Visibility
-// classes, outsider reads, replay and history are proven in
-// supabase/tests/p1_24_people_lifecycle.sql.
+// This audit keeps the future starter without login, the Büro role variant and
+// the planned employment transition. Visibility classes, outsider reads,
+// replay and history are proven in supabase/tests/p1_24_people_lifecycle.sql,
+// the outsider's refusal of the record page in lib/org/personnel-page-access.test.ts.
 
 const standardFileName = testData`personal-standard.txt`;
 const restrictedFileName = testData`admin-vertraulich.txt`;
@@ -66,11 +66,7 @@ test.describe('P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2', () => {
     await expect(accessControlButton(bueroLifecycle)).toHaveCount(0);
   });
 
-  test('records a planned employment transition and denies the outsider the record', async ({
-    adminPage,
-    outsiderPage,
-    world,
-  }) => {
+  test('records a planned employment transition', async ({ adminPage, world }) => {
     const entryDate = ownedBerlinDateAtOffset('p1-24', 126);
     const recordId = await seedNoLoginPersonnelRecord({
       organizationId: world.orgId,
@@ -96,8 +92,5 @@ test.describe('P1-24 lifecycle audit @AUDIT-W2-P1-24 @AUDIT-W2', () => {
         .filter((item) => item.employee_record_id === recordId)
         .map((item) => item.transition_kind),
     ).toEqual(['plan_start']);
-
-    await outsiderPage.goto(`/mitarbeiter/${recordId}`);
-    await expect(outsiderPage).not.toHaveURL(new RegExp(recordId));
   });
 });
