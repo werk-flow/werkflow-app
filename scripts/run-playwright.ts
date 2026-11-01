@@ -33,6 +33,8 @@ import {
 import { preparedGroupRun, readPreparedPlan } from '../lib/testing/runner/prepared-plan';
 
 import {
+  PLAYWRIGHT_LANES,
+  PLAYWRIGHT_SUITES,
   PLAYWRIGHT_TARGETS,
   RUNNABLE_LANES,
   defaultTargetForSuite,
@@ -40,9 +42,6 @@ import {
   focusedIterationAttemptsSinceLastPass,
   validateFocusedSelection,
   validateRunRequest,
-  type PlaywrightLane,
-  type PlaywrightSuite,
-  type PlaywrightTarget,
 } from '../lib/testing/runner/run-policy';
 import { runPlaywrightPreflight } from './playwright-preflight';
 import { loadEnvLocal } from '../tests/golden/support/env';
@@ -73,14 +72,14 @@ import {
 async function main(signal: AbortSignal): Promise<number> {
   signal.throwIfAborted();
   loadEnvLocal();
-  const lane = process.argv[2] as PlaywrightLane | undefined;
-  const suite = process.argv[3] as PlaywrightSuite | undefined;
-  if (!lane || !(RUNNABLE_LANES as readonly string[]).includes(lane)) {
+  const lane = RUNNABLE_LANES.find((candidate) => candidate === process.argv[2]);
+  const suite = PLAYWRIGHT_SUITES.find((candidate) => candidate === process.argv[3]);
+  if (!lane) {
     throw new Error(
       'Usage: bun scripts/run-playwright.ts <group|iteration|diagnostic> <golden|audit|canary> [--target local|cloud] [--group <id> | --grep <pattern> [--reuse-run <run-key>] | --fresh-for <run-key>]',
     );
   }
-  if (!suite || !['golden', 'audit', 'canary'].includes(suite)) {
+  if (!suite) {
     throw new Error('Suite must be golden, audit, or canary.');
   }
 
@@ -119,10 +118,11 @@ async function main(signal: AbortSignal): Promise<number> {
     lane === 'diagnostic' || Boolean(group?.timing.requiredScenarios?.length) ? '1' : '0';
   const reuseRunKey = argumentsByName['--reuse-run'] ?? null;
   const targetArgument = argumentsByName['--target'] ?? null;
-  if (targetArgument && !PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)) {
+  const requestedTarget = PLAYWRIGHT_TARGETS.find((candidate) => candidate === targetArgument);
+  if (targetArgument && !requestedTarget) {
     throw new Error(`--target must be one of ${PLAYWRIGHT_TARGETS.join(', ')}.`);
   }
-  const target = (targetArgument as PlaywrightTarget | null) ?? defaultTargetForSuite(suite);
+  const target = requestedTarget ?? defaultTargetForSuite(suite);
   const preparedRun =
     preparedPlan && group ? preparedGroupRun(preparedPlan, { groupId: group.id, suite, target }) : null;
   const grep = argumentsByName['--grep'] ?? null;
@@ -443,7 +443,9 @@ function recordRunnerFailure(error: unknown): void {
 }
 
 try {
-  const requestedOptions = parseRunnerArguments(process.argv[2] as PlaywrightLane, process.argv.slice(4));
+  // Only the group lane parses differently; main() refuses an unknown lane with its usage.
+  const requestedLane = PLAYWRIGHT_LANES.find((candidate) => candidate === process.argv[2]) ?? 'direct';
+  const requestedOptions = parseRunnerArguments(requestedLane, process.argv.slice(4));
   const localTarget = process.argv[3] !== 'canary' && requestedOptions['--target'] !== 'cloud';
   const operation = `Playwright ${process.argv.slice(2, 4).join(' ')}`;
   process.exitCode = await withWorkspaceTestLock({ operation }, async () => {

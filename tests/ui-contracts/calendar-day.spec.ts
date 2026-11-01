@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { isJsonRecord } from '@/lib/supabase/json';
 import {
   beginDragToPoint,
   card,
@@ -30,7 +31,11 @@ test('a resize waits for persistence and a rejected write restores the duration 
   await expect.poll(() => writeCount(page)).toBe(1);
   const call = await page.evaluate(() => window.calendarWriteContract.calls[0]);
   expect(call?.kind).toBe('planning');
-  const minutes = (call?.input as { estimatedDurationMinutes?: number }).estimatedDurationMinutes ?? 0;
+  const input = call?.input;
+  const minutes =
+    isJsonRecord(input) && typeof input.estimatedDurationMinutes === 'number'
+      ? input.estimatedDurationMinutes
+      : 0;
   expect(minutes).toBeGreaterThan(60);
   await expect(saving(page)).toHaveText('aktiv');
   await expectBanner(page, 'Änderung wird gespeichert');
@@ -110,11 +115,9 @@ test('a confirmed resize offers Undo whose returned failure is visible and relea
   await expectBanner(page, 'Termin dauert jetzt');
   await page.getByRole('button', { name: 'Rückgängig', exact: true }).click();
   await expect.poll(() => writeCount(page)).toBe(2);
-  expect(
-    (await page.evaluate(() => window.calendarWriteContract.calls[1]?.input)) as {
-      estimatedDurationMinutes?: number;
-    },
-  ).toMatchObject({ estimatedDurationMinutes: 60 });
+  expect(await page.evaluate(() => window.calendarWriteContract.calls[1]?.input)).toMatchObject({
+    estimatedDurationMinutes: 60,
+  });
   await expect(saving(page)).toHaveText('aktiv');
   await page.evaluate(() => window.calendarWriteContract.complete(1, 'failure'));
   await expectBanner(page, 'Rückgängig war nicht möglich');

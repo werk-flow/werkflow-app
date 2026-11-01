@@ -6,7 +6,7 @@ import { ListPagination } from '@/components/shared/list-pagination';
 import { parseListPage } from '@/lib/ui/list-pagination';
 import { DocumentLibraryToolbar } from '@/components/dokumente/document-library-toolbar';
 import { useDocumentLibraryNavigation } from '@/components/dokumente/use-document-library-navigation';
-import type { DocumentLibraryLinkFilter } from '@/lib/documents/types';
+import { DOCUMENT_LIBRARY_LINK_FILTERS } from '@/lib/documents/types';
 import { useSearchParams } from './list-navigation-service-boundaries';
 
 function ListControls(): React.JSX.Element {
@@ -41,11 +41,13 @@ export function ListNavigationFixture(): React.JSX.Element {
 /** The document library's search toolbar on its real navigation hook; the URL is the route state. */
 export function DocumentSearchFixture(): React.JSX.Element {
   const searchParams = useSearchParams();
+  const linkFilter =
+    DOCUMENT_LIBRARY_LINK_FILTERS.find((filter) => filter === searchParams.get('link')) ?? 'all';
   const navigation = useDocumentLibraryNavigation({
     view: 'all',
     initialSearchQuery: searchParams.get('q') ?? '',
     category: 'all',
-    linkFilter: (searchParams.get('link') ?? 'all') as DocumentLibraryLinkFilter,
+    linkFilter,
     currentFolderId: null,
     page: 1,
     folderPage: 1,
@@ -63,7 +65,7 @@ export function DocumentSearchFixture(): React.JSX.Element {
         visibleView="all"
         searchQuery={navigation.searchQuery}
         category="all"
-        linkFilter={(searchParams.get('link') ?? 'all') as DocumentLibraryLinkFilter}
+        linkFilter={linkFilter}
         viewSwitch={null}
         selectionActions={null}
         onSearchQueryChange={navigation.setSearchQuery}

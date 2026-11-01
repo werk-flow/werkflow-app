@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
+import { isJsonRecord } from '../../supabase/json';
 
 /**
  * A diagnostic replay starts a failed test from its beginning on the world the failed run left
@@ -70,7 +71,7 @@ export type TraceStages = {
 function traceEvent(line: string): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(line);
-    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+    return isJsonRecord(value) ? value : null;
   } catch {
     return null;
   }

@@ -11,6 +11,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { isJsonRecord } from '../lib/supabase/json';
 
 const accountId = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -43,7 +44,7 @@ async function tryEndpoint(label: string, jurisdiction: string | null): Promise<
     console.log(`[ok] ${label} endpoint: bucket "${bucketName}" reachable and listable.`);
     return true;
   } catch (error) {
-    const name = (error as { name?: string }).name ?? 'UnknownError';
+    const name = isJsonRecord(error) && typeof error.name === 'string' ? error.name : 'UnknownError';
     console.log(`[--] ${label} endpoint: not usable (${name}).`);
     return false;
   }

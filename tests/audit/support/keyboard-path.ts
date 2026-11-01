@@ -21,7 +21,7 @@ async function focusPosition(
       // that hands focus to its active item, so the item is the control.
       if (element.matches('[role="tablist"], [role="toolbar"], [role="menubar"], [role="radiogroup"]'))
         return false;
-      if ((element as HTMLButtonElement).disabled) return false;
+      if ('disabled' in element && element.disabled) return false;
       if (element.closest('[inert]')) return false;
       const box = element.getBoundingClientRect();
       return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';

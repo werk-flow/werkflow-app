@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { Component, isValidElement, type JSXElementConstructor, type ReactNode } from 'react';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
+/** A function component, not a class: a class component's prototype is a React `Component`. */
+function isFunctionComponent<Props>(
+  type: string | JSXElementConstructor<Props>,
+): type is (props: Props) => ReactNode | Promise<ReactNode> {
+  return typeof type === 'function' && !(type.prototype instanceof Component);
+}
 const leaves = new Map<string, (props: { children?: ReactNode }) => ReactNode>();
 for (const [modulePath, exportName] of [
   ['@/components/organization/organization-context', 'OrganizationProvider'],
@@ -49,12 +55,15 @@ mock.module('@/lib/time-tracking/clock-state-actions', () => ({
 
 const { default: AppLayout } = await import('@/app/(app)/layout');
 const root = AppLayout({ children: 'Authorized page content' });
-const providers = root.props.children as ReactElement<{ children: ReactNode }>;
+const providers: unknown = root.props.children;
+if (!isValidElement<{ children: ReactNode }>(providers))
+  throw new Error('The route layout must render its providers');
 assert.equal(typeof providers.type, 'function');
-const render = providers.type as (props: { children: ReactNode }) => Promise<ReactElement>;
-let rendered: ReactElement | undefined;
+const render = providers.type;
+if (!isFunctionComponent(render)) throw new Error('The route providers must be a function component');
+let rendered: ReactNode;
 let failure: unknown;
-void render(providers.props).then(
+void Promise.resolve(render(providers.props)).then(
   (result) => {
     rendered = result;
   },
@@ -68,14 +77,14 @@ assert.equal(failure, undefined);
 assert.equal(optionalReads, 0, 'Optional clock/job reads must not start in the route layout');
 assert.ok(rendered, 'Authorized route content must be returned while optional reads are unavailable');
 const propsByName = new Map<string, Record<string, unknown>>();
-function visit(node: ReactNode): void {
+function visit(node: unknown): void {
   if (Array.isArray(node)) {
     node.forEach(visit);
     return;
   }
   if (!isValidElement<Record<string, unknown>>(node)) return;
   for (const [name, component] of leaves) if (node.type === component) propsByName.set(name, node.props);
-  visit(node.props.children as ReactNode);
+  visit(node.props.children);
 }
 visit(rendered);
 const clockProviderProps = propsByName.get('ClockStateProvider');
