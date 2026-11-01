@@ -4,6 +4,7 @@ import {
   advisorResponseSchema,
   authConfigProblems,
 } from '../lib/security/supabase-project-checks';
+import { isJsonRecord } from '../lib/supabase/json';
 
 /**
  * `bun run auth:check` compares DEV's Auth configuration with the reviewed
@@ -27,8 +28,8 @@ async function readDev(path: string): Promise<unknown> {
 async function problemsFor(mode: string): Promise<string[]> {
   if (mode === 'auth') {
     const config = await readDev('config/auth');
-    if (!config || typeof config !== 'object') throw new Error('The Auth configuration is not an object.');
-    return authConfigProblems(config as Record<string, unknown>);
+    if (!isJsonRecord(config)) throw new Error('The Auth configuration is not an object.');
+    return authConfigProblems(config);
   }
   if (mode === 'advisors') {
     const [security, performance] = await Promise.all([

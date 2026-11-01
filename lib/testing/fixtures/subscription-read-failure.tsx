@@ -5,7 +5,7 @@
 // layout reads no subscription at all.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { isValidElement, type ReactNode } from 'react';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
 const userId = '20000000-0000-4000-8000-000000000002';
@@ -125,6 +125,7 @@ mock.module('@/lib/supabase/admin', () => ({
 
 const { default: AppLayout } = await import('@/app/(app)/layout');
 const { default: UpgradePage } = await import('@/app/upgrade/page');
+const { render } = await import('./page-render');
 
 function isSubscriptionFailure(error: unknown): boolean {
   return (
@@ -134,7 +135,7 @@ function isSubscriptionFailure(error: unknown): boolean {
   );
 }
 
-function propsOf(node: ReactNode, name: string): Record<string, unknown> | undefined {
+function propsOf(node: unknown, name: string): Record<string, unknown> | undefined {
   if (Array.isArray(node)) {
     for (const child of node) {
       const found = propsOf(child, name);
@@ -144,7 +145,7 @@ function propsOf(node: ReactNode, name: string): Record<string, unknown> | undef
   }
   if (!isValidElement<Record<string, unknown>>(node)) return undefined;
   if (node.type === leaves.get(name)) return node.props;
-  return propsOf(node.props.children as ReactNode, name);
+  return propsOf(node.props.children, name);
 }
 
 // Unknown subscription status: the upgrade page fails into the error page. It
@@ -155,9 +156,12 @@ assert.deepEqual(redirects, []);
 
 // The app layout renders the shell without reading the subscription.
 const root = AppLayout({ children: 'Authorized page content' });
-const providers = root.props.children as ReactElement<{ children: ReactNode }>;
-const renderProviders = providers.type as (props: { children: ReactNode }) => Promise<ReactElement>;
-const shell = await renderProviders(providers.props);
+const providers: unknown = root.props.children;
+assert.ok(
+  isValidElement<{ children: ReactNode }>(providers),
+  'the layout renders its providers inside Suspense',
+);
+const shell = await render(() => providers);
 assert.equal(propsOf(shell, 'AppShell')?.children, 'Authorized page content');
 assert.equal(reads.get('subscriptions'), 1, 'only the upgrade page read the subscription');
 assert.deepEqual(redirects, []);

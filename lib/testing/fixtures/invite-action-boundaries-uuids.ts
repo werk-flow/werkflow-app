@@ -111,8 +111,10 @@ world.rpc = ({ name, args }) => {
 // A malformed address or the admin role is refused before the caller is identified.
 world.callerId = null;
 assert.deepEqual(await sendOrgInvite('not-an-address'), { success: false, error: 'invalid_email' });
-// The admin role is outside the parameter type; a Server Action still receives whatever the client sends.
-assert.deepEqual(await sendOrgInvite('new@example.test', 'admin' as 'buero'), {
+// The admin role is outside the parameter type; a Server Action still receives whatever the client sends,
+// so the call goes through Reflect.apply, which takes the arguments untyped as a client's request does.
+const adminInvite: unknown = await Reflect.apply(sendOrgInvite, undefined, ['new@example.test', 'admin']);
+assert.deepEqual(adminInvite, {
   success: false,
   error: 'invalid_role',
 });

@@ -1,5 +1,6 @@
 import { expect, mock } from 'bun:test';
 import { resolve } from 'node:path';
+import { isJsonRecord } from '@/lib/supabase/json';
 
 // Run in a child process so replaced framework modules cannot leak into other tests.
 // Drives the real importInventoryRows against a fake service-role client. Each
@@ -76,7 +77,8 @@ mock.module(resolve(root, 'lib/supabase/admin.ts'), () => ({
     rpc: async (name: string, args: Row): Promise<RpcResult> => {
       if (name !== 'import_inventory_row') return { data: null, error: null };
       rowCalls.push(args);
-      const item = args.p_item as Row;
+      const item = args.p_item;
+      if (!isJsonRecord(item)) throw new Error('import_inventory_row was called without a p_item object');
       return outcomes[String(item.name)] ?? { data: 'imported', error: null };
     },
   }),

@@ -122,11 +122,11 @@ mock.module('@/lib/supabase/admin', () => ({
 const cached = await import('@/lib/data/cached');
 const { CachedReadError } = await import('@/lib/data/cached-read-failure');
 
-async function expectNoCachedFailure(input: {
+async function expectNoCachedFailure<Value>(input: {
   table: string;
   code: string;
-  read: () => Promise<unknown>;
-  check: (value: unknown) => void;
+  read: () => Promise<Value>;
+  check: (value: Value) => void;
 }): Promise<void> {
   const before = reads.get(input.table) ?? 0;
   const logsBefore = logged.length;
@@ -159,13 +159,13 @@ await expectNoCachedFailure({
   table: 'organization_settings',
   code: 'organization_settings_read_failed',
   read: () => cached.getCachedOrganizationSettings(organizationId),
-  check: (value) => assert.equal((value as { breakMode: string }).breakMode, 'automatic'),
+  check: (value) => assert.equal(value.breakMode, 'automatic'),
 });
 await expectNoCachedFailure({
   table: 'organization_closure_days',
   code: 'organization_calendar_read_failed',
   read: () => cached.getCachedOrganizationCalendar(organizationId),
-  check: (value) => assert.equal((value as { closureDays: unknown[] }).closureDays.length, 1),
+  check: (value) => assert.equal(value.closureDays.length, 1),
 });
 await expectNoCachedFailure({
   table: 'organization_user_preferences',
@@ -177,7 +177,7 @@ await expectNoCachedFailure({
   table: 'profiles',
   code: 'profile_read_failed',
   read: () => cached.getCachedUserProfile(userId, 'erika@example.invalid'),
-  check: (value) => assert.equal((value as { firstName: string }).firstName, 'Erika'),
+  check: (value) => assert.equal(value?.firstName, 'Erika'),
 });
 
 // A read-only view renders the default columns for the failed request only.

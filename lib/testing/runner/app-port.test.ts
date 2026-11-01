@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer, type AddressInfo, type Server } from 'node:net';
+import { createServer, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assertAppPortFree, workspaceAppOrigin, workspacePorts } from './app-port';
@@ -19,7 +19,10 @@ function close(server: Server): Promise<void> {
 
 test('a build is refused while an application serves the port, naming the holders and the way out', async () => {
   const server = await listen();
-  const { port } = server.address() as AddressInfo;
+  const address = server.address();
+  if (address === null || typeof address === 'string')
+    throw new Error('The test server listens on a TCP port.');
+  const { port } = address;
   try {
     const refusal = assertAppPortFree(port);
     await expect(refusal).rejects.toThrow(`Refused: port ${port} is serving an application`);
