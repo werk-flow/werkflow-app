@@ -38,6 +38,50 @@ test('a refused time-entry review comes back and says that nothing changed', asy
   expect(await page.evaluate(() => window.uiContractTimeApprovals.sessions)).toHaveLength(1);
 });
 
+test('a review refused because the responsibility ended says so and never confirms', async ({ page }) => {
+  const approve = page.getByTitle('Genehmigen - Eintrag bleibt erhalten', { exact: true });
+  await expect(approve).toBeVisible();
+  await approve.click();
+  await expectHeldWrite(page, 'review-entries');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+
+  await answerHeldWrite(page, 'not_responsible');
+  // The refusal is the only message: no confirmation banner beside it.
+  await expect(page.getByRole('alert')).toHaveText(
+    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  await expect(page.getByRole('alert')).toHaveCount(1);
+  // The refusal brings the card back while the session is still listed.
+  await expect(approve).toBeVisible();
+
+  // The responsibility ended: the next authoritative read no longer lists the session.
+  await page.evaluate(() => {
+    window.uiContractTimeApprovals.sessions = [];
+  });
+  await page.getByRole('button', { name: 'Anträge aktualisieren', exact: true }).click();
+  await expect(approve).toHaveCount(0);
+});
+
+test('after a responsibility refusal the view refreshes by itself and drops the session', async ({
+  page,
+}) => {
+  const approve = page.getByTitle('Genehmigen - Eintrag bleibt erhalten', { exact: true });
+  await expect(approve).toBeVisible();
+  await approve.click();
+  await expectHeldWrite(page, 'review-entries');
+
+  // The responsibility ended: the read after the refusal no longer lists the session.
+  await page.evaluate(() => {
+    window.uiContractTimeApprovals.sessions = [];
+  });
+  await answerHeldWrite(page, 'not_responsible');
+  await expect(page.getByRole('alert')).toHaveText(
+    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert. Es wurde nichts geändert.',
+  );
+  // No refresh click: the view reads again by itself.
+  await expect(approve).toHaveCount(0);
+});
+
 test('a refused change request comes back with the reason and never confirms', async ({ page }) => {
   const approve = page.getByTitle('Genehmigen - Änderung wird bestätigt', { exact: true });
   await expect(approve).toBeVisible();

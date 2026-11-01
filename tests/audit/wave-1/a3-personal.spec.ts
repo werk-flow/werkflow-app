@@ -62,12 +62,7 @@ import {
   weeklyScheduleText,
 } from '../../golden/support/steps/personnel';
 import { typeIntoDatePicker, visibleText } from '../../golden/support/steps/shared';
-import {
-  createOwnManualTimeEntry,
-  expectPendingTimeApprovalHidden,
-  expectTimeApprovalsUnavailable,
-  openTimeApprovals,
-} from '../../golden/support/steps/time-tracking';
+import { createOwnManualTimeEntry } from '../../golden/support/steps/time-tracking';
 import { showCalendarMonth } from '../../golden/support/steps/calendar';
 import {
   ZERO_OVERTIME_TODAY,
@@ -558,7 +553,9 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
     await expect(visibleText(employeePage, RESPONSIBILITY_COPY.substituteUntil)).toBeVisible();
 
     // Under the role default the admin's own entry stays the direct recovery
-    // path, while Büro's own entry waits and never reaches Büro's own list.
+    // path, while Büro's own entry waits. That it never reaches Büro's own
+    // queue, and that the field worker gets no approval surface, is proven at the
+    // page and the actions (lib/responsibilities/approval-page-access.test.ts).
     await createOwnManualTimeEntry(adminPage, {
       memberName: adminName,
       dateDigits: yesterdayDigits,
@@ -573,9 +570,6 @@ test.describe('Wave 1 Audit A3 Personal @AUDIT-W1-A3', () => {
       clockOutDigits: '0040',
     });
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
-    await expectTimeApprovalsUnavailable(employeePage);
-    await openTimeApprovals(bueroPage);
-    await expectPendingTimeApprovalHidden(bueroPage, world.users.buero.id);
 
     for (const managerPage of [adminPage, bueroPage]) {
       await managerPage.goto('/einstellungen/mitarbeiter');

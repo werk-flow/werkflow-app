@@ -88,6 +88,121 @@ function ClosureDayList({
   );
 }
 
+async function submitClosureDay({
+  runAddClosure,
+  closureDate,
+  closureLabel,
+  showBanner,
+  onAdded,
+}: {
+  runAddClosure: typeof addClosureDay;
+  closureDate: string;
+  closureLabel: string;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  onAdded: () => void;
+}): Promise<void> {
+  try {
+    const result = await runAddClosure({
+      closureDate,
+      label: closureLabel,
+    });
+    if (!result.success) {
+      showBanner({
+        message: describeFailure(result.error, CLOSURE_ERROR_MESSAGES, CLOSURE_ERROR_MESSAGES.create_failed),
+        variant: 'error',
+      });
+      return;
+    }
+    onAdded();
+    // The action's response renders the route with the new day.
+    showBanner({
+      message: 'Der Betriebsruhe-Tag wurde eingetragen.',
+      variant: 'success',
+    });
+  } catch {
+    showBanner({ message: CLOSURE_ERROR_MESSAGES.create_failed, variant: 'error' });
+  }
+}
+
+async function removeClosureDayWithFeedback(
+  closureDayId: string,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+): Promise<void> {
+  const result = await removeClosureDay(closureDayId);
+  if (!result.success) {
+    showBanner({
+      message: describeFailure(result.error, CLOSURE_ERROR_MESSAGES, CLOSURE_ERROR_MESSAGES.delete_failed),
+      variant: 'error',
+    });
+    return;
+  }
+  showBanner({
+    message: 'Der Betriebsruhe-Tag wurde entfernt.',
+    variant: 'success',
+  });
+}
+
+function ClosureDaysHeader() {
+  return (
+    <CardHeader>
+      <CardTitle>Betriebsruhe</CardTitle>
+      <CardDescription>
+        Trage betriebsfreie Tage ein (z. B. Betriebsferien oder Brückentage). An diesen Tagen ist die
+        Sollarbeitszeit 0. Vergangene Tage können nicht geändert werden.
+      </CardDescription>
+    </CardHeader>
+  );
+}
+
+function ClosureDayForm({
+  closureDate,
+  closureLabel,
+  closureDateError,
+  isAddingClosure,
+  onSubmit,
+  onDateChange,
+  onLabelChange,
+}: {
+  closureDate: string;
+  closureLabel: string;
+  closureDateError: string | null;
+  isAddingClosure: boolean;
+  onSubmit: (event: React.FormEvent) => Promise<void>;
+  onDateChange: (date: Date | undefined) => void;
+  onLabelChange: (label: string) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <Field label="Datum" htmlFor="closure-date" required error={closureDateError}>
+        <DatePicker
+          ariaLabel="Datum der Betriebsruhe"
+          value={closureDate ? new Date(`${closureDate}T00:00:00`) : undefined}
+          onChange={onDateChange}
+          disabled={isAddingClosure}
+        />
+      </Field>
+      <Field label="Bezeichnung (optional)" htmlFor="closure-label" className="flex-1">
+        <Input
+          placeholder="z. B. Betriebsferien"
+          value={closureLabel}
+          onChange={(e) => onLabelChange(e.target.value)}
+          disabled={isAddingClosure}
+        />
+      </Field>
+      <Button
+        pending={isAddingClosure}
+        type="submit"
+        variant="outline"
+        className="gap-1.5"
+        disabled={isAddingClosure}
+      >
+        <Plus className="size-4" />
+        Eintragen
+      </Button>
+    </form>
+  );
+}
+
 export function ClosureDaysCard({
   closureDays,
   canEditClosureDays,
@@ -111,55 +226,22 @@ export function ClosureDaysCard({
     const nextClosureDateError = closureDate ? undefined : CLOSURE_ERROR_MESSAGES.invalid_date;
     setClosureDateError(nextClosureDateError ?? null);
     if (focusFirstInvalidField({ 'closure-date': nextClosureDateError })) return;
-    try {
-      const result = await runAddClosure({
-        closureDate,
-        label: closureLabel,
-      });
-      if (!result.success) {
-        showBanner({
-          message: describeFailure(
-            result.error,
-            CLOSURE_ERROR_MESSAGES,
-            CLOSURE_ERROR_MESSAGES.create_failed,
-          ),
-          variant: 'error',
-        });
-        return;
-      }
-      setClosureDate('');
-      setClosureLabel('');
-      // The action's response renders the route with the new day.
-      showBanner({
-        message: 'Der Betriebsruhe-Tag wurde eingetragen.',
-        variant: 'success',
-      });
-    } catch {
-      showBanner({ message: CLOSURE_ERROR_MESSAGES.create_failed, variant: 'error' });
-    }
+    await submitClosureDay({
+      runAddClosure,
+      closureDate,
+      closureLabel,
+      showBanner,
+      onAdded: () => {
+        setClosureDate('');
+        setClosureLabel('');
+      },
+    });
   };
 
   const handleRemoveClosureDay = async (closureDayId: string) => {
     if (!canEditClosureDays || removingClosure.isBusy(closureDayId)) return;
     await removingClosure
-      .run(closureDayId, async () => {
-        const result = await removeClosureDay(closureDayId);
-        if (!result.success) {
-          showBanner({
-            message: describeFailure(
-              result.error,
-              CLOSURE_ERROR_MESSAGES,
-              CLOSURE_ERROR_MESSAGES.delete_failed,
-            ),
-            variant: 'error',
-          });
-          return;
-        }
-        showBanner({
-          message: 'Der Betriebsruhe-Tag wurde entfernt.',
-          variant: 'success',
-        });
-      })
+      .run(closureDayId, () => removeClosureDayWithFeedback(closureDayId, showBanner))
       .catch(() => {
         showBanner({ message: CLOSURE_ERROR_MESSAGES.delete_failed, variant: 'error' });
       });
@@ -167,13 +249,7 @@ export function ClosureDaysCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Betriebsruhe</CardTitle>
-        <CardDescription>
-          Trage betriebsfreie Tage ein (z. B. Betriebsferien oder Brückentage). An diesen Tagen ist die
-          Sollarbeitszeit 0. Vergangene Tage können nicht geändert werden.
-        </CardDescription>
-      </CardHeader>
+      <ClosureDaysHeader />
       <CardContent className="space-y-4 pb-6">
         {closureDays.length === 0 ? (
           <EmptyState size="compact" title="Keine Betriebsruhe-Tage eingetragen." />
@@ -188,37 +264,18 @@ export function ClosureDaysCard({
         )}
 
         {canEditClosureDays && (
-          <form onSubmit={handleAddClosureDay} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <Field label="Datum" htmlFor="closure-date" required error={closureDateError}>
-              <DatePicker
-                ariaLabel="Datum der Betriebsruhe"
-                value={closureDate ? new Date(`${closureDate}T00:00:00`) : undefined}
-                onChange={(date) => {
-                  setClosureDateError(null);
-                  setClosureDate(date ? toLocalDateString(date) : '');
-                }}
-                disabled={isAddingClosure}
-              />
-            </Field>
-            <Field label="Bezeichnung (optional)" htmlFor="closure-label" className="flex-1">
-              <Input
-                placeholder="z. B. Betriebsferien"
-                value={closureLabel}
-                onChange={(e) => setClosureLabel(e.target.value)}
-                disabled={isAddingClosure}
-              />
-            </Field>
-            <Button
-              pending={isAddingClosure}
-              type="submit"
-              variant="outline"
-              className="gap-1.5"
-              disabled={isAddingClosure}
-            >
-              <Plus className="size-4" />
-              Eintragen
-            </Button>
-          </form>
+          <ClosureDayForm
+            closureDate={closureDate}
+            closureLabel={closureLabel}
+            closureDateError={closureDateError}
+            isAddingClosure={isAddingClosure}
+            onSubmit={handleAddClosureDay}
+            onDateChange={(date) => {
+              setClosureDateError(null);
+              setClosureDate(date ? toLocalDateString(date) : '');
+            }}
+            onLabelChange={setClosureLabel}
+          />
         )}
       </CardContent>
     </Card>

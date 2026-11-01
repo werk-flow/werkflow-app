@@ -47,28 +47,78 @@ type NewEmailStepHandlers = {
 };
 
 /**
+ * After the new address is verified: refresh the session cookie, reread the
+ * profile and show the completed step.
+ */
+async function completeNewEmailChange(
+  {
+    supabase,
+    refreshProfile,
+    showBanner,
+    setFormError,
+    setCompletionState,
+    setCurrentOtpCode,
+    setNewEmailOtpCode,
+  }: Pick<
+    NewEmailStepContext,
+    | 'supabase'
+    | 'refreshProfile'
+    | 'showBanner'
+    | 'setFormError'
+    | 'setCompletionState'
+    | 'setCurrentOtpCode'
+    | 'setNewEmailOtpCode'
+  >,
+  completion: CompletionState,
+): Promise<void> {
+  const { data, error } = await supabase.auth.refreshSession();
+  if (error) {
+    setFormError(
+      'Die E-Mail-Adresse wurde aktualisiert, aber die Sitzung konnte nicht sofort aktualisiert werden. Bitte lade die Seite neu.',
+    );
+  }
+
+  if (data.session) {
+    await fetch('/auth/callback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        event: 'TOKEN_REFRESHED',
+        session: data.session,
+      }),
+    });
+  }
+  // The action's response renders the route; the profile context reads its own copy.
+  await refreshProfile();
+  setCompletionState(completion);
+  setCurrentOtpCode('');
+  setNewEmailOtpCode('');
+  showBanner({
+    message: 'Deine E-Mail-Adresse wurde erfolgreich aktualisiert.',
+    variant: 'success',
+  });
+}
+
+/**
  * The new-address half of the email-change wizard: saving the new address,
  * resending its code and verifying it. Rebuilt on every render like the
  * inline handlers it replaced, so it always reads the current state.
  */
-export function createNewEmailStepHandlers({
-  emailForm,
-  currentEmail,
-  pendingNewEmail,
-  newEmailOtpCode,
-  supabase,
-  refreshProfile,
-  showBanner,
-  setWizardState,
-  setFormError,
-  setCompletionState,
-  setCurrentOtpCode,
-  setNewEmailOtpCode,
-  runSaveNewEmail,
-  runResendNewEmailOtp,
-  runVerifyNewEmailOtp,
-  reportUnexpectedError,
-}: NewEmailStepContext): NewEmailStepHandlers {
+export function createNewEmailStepHandlers(context: NewEmailStepContext): NewEmailStepHandlers {
+  const {
+    emailForm,
+    currentEmail,
+    pendingNewEmail,
+    newEmailOtpCode,
+    setWizardState,
+    setFormError,
+    runSaveNewEmail,
+    runResendNewEmailOtp,
+    runVerifyNewEmailOtp,
+    reportUnexpectedError,
+  } = context;
   const handleSubmitNewEmail = emailForm.handleSubmit(async (values) => {
     const nextEmail = normalizeEmail(values.email);
     const activeEmail = normalizeEmail(currentEmail);
@@ -138,37 +188,7 @@ export function createNewEmailStepHandlers({
           return;
         }
 
-        const { data, error } = await supabase.auth.refreshSession();
-        if (error) {
-          setFormError(
-            'Die E-Mail-Adresse wurde aktualisiert, aber die Sitzung konnte nicht sofort aktualisiert werden. Bitte lade die Seite neu.',
-          );
-        }
-
-        if (data.session) {
-          await fetch('/auth/callback', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              event: 'TOKEN_REFRESHED',
-              session: data.session,
-            }),
-          });
-        }
-        // The action's response renders the route; the profile context reads its own copy.
-        await refreshProfile();
-        setCompletionState({
-          previousEmail,
-          newEmail: pendingNewEmail,
-        });
-        setCurrentOtpCode('');
-        setNewEmailOtpCode('');
-        showBanner({
-          message: 'Deine E-Mail-Adresse wurde erfolgreich aktualisiert.',
-          variant: 'success',
-        });
+        await completeNewEmailChange(context, { previousEmail, newEmail: pendingNewEmail });
       } catch {
         reportUnexpectedError();
       }

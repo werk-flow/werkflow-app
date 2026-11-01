@@ -18,6 +18,41 @@ import { Input } from '@/components/ui/input';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { usePendingTask } from '@/hooks/use-server-action';
 
+async function saveProfileSettings(
+  values: ProfileSettingsValues,
+  {
+    refreshProfile,
+    showBanner,
+  }: {
+    refreshProfile: () => Promise<void>;
+    showBanner: ReturnType<typeof useBanner>['showBanner'];
+  },
+): Promise<void> {
+  try {
+    const result = await updateProfileSettings(values);
+
+    if (!result.success) {
+      showBanner({
+        message: 'Dein Profil konnte nicht gespeichert werden.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    // The action's response renders the route; the profile context reads its own copy.
+    await refreshProfile();
+    showBanner({
+      message: 'Dein Profil wurde gespeichert.',
+      variant: 'success',
+    });
+  } catch {
+    showBanner({
+      message: 'Dein Profil konnte nicht gespeichert werden.',
+      variant: 'error',
+    });
+  }
+}
+
 export function ProfileSettingsForm() {
   const { profile, refreshProfile } = useUserProfile();
   const { showBanner } = useBanner();
@@ -39,31 +74,7 @@ export function ProfileSettingsForm() {
   }, [form, profile?.firstName, profile?.lastName]);
 
   const onSubmit = useSaveChangesSubmit(form, async (values) => {
-    await runSave(async () => {
-      try {
-        const result = await updateProfileSettings(values);
-
-        if (!result.success) {
-          showBanner({
-            message: 'Dein Profil konnte nicht gespeichert werden.',
-            variant: 'error',
-          });
-          return;
-        }
-
-        // The action's response renders the route; the profile context reads its own copy.
-        await refreshProfile();
-        showBanner({
-          message: 'Dein Profil wurde gespeichert.',
-          variant: 'success',
-        });
-      } catch {
-        showBanner({
-          message: 'Dein Profil konnte nicht gespeichert werden.',
-          variant: 'error',
-        });
-      }
-    });
+    await runSave(() => saveProfileSettings(values, { refreshProfile, showBanner }));
   });
 
   return (

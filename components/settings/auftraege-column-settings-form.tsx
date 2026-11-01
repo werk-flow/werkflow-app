@@ -92,15 +92,7 @@ export function AuftraegeColumnSettingsForm({
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Sichtbare Spalten
-            <InlinePending active={isSaving} label="Spaltenansicht wird gespeichert" />
-          </CardTitle>
-          <CardDescription>
-            Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle zeigen soll.
-          </CardDescription>
-        </CardHeader>
+        <ColumnSettingsHeader isSaving={isSaving} />
         <Form {...form}>
           <form onSubmit={onSubmit}>
             <CardContent className="space-y-5 pb-8">
@@ -108,46 +100,90 @@ export function AuftraegeColumnSettingsForm({
                 control={form.control}
                 name="visibleColumns"
                 render={({ field, fieldState }) => (
-                  <fieldset className="space-y-2">
-                    <legend className="text-sm font-medium">Tabellenspalten</legend>
-                    <p className="text-sm text-muted-foreground wrap-anywhere">
-                      Diese Auswahl gilt nur für dich innerhalb von {organizationName}.
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {AUFTRAEGE_TABLE_COLUMNS.map((column) => {
-                        const isChecked = field.value.includes(column.id);
-
-                        return (
-                          <label
-                            key={column.id}
-                            className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/30"
-                          >
-                            <Checkbox
-                              checked={isChecked}
-                              disabled={isSaving}
-                              onCheckedChange={(checked) => toggleColumn(column.id, checked === true)}
-                            />
-                            <span className="text-sm font-medium leading-none">{column.label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <ErrorText>{fieldState.error?.message}</ErrorText>
-                  </fieldset>
+                  <VisibleColumnsFieldset
+                    organizationName={organizationName}
+                    visibleColumns={field.value}
+                    errorMessage={fieldState.error?.message}
+                    isSaving={isSaving}
+                    onToggle={toggleColumn}
+                  />
                 )}
               />
             </CardContent>
-            <CardFooter className="flex flex-col items-start gap-3 border-t sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">
-                Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben weiterhin immer sichtbar.
-              </p>
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? 'Speichert…' : 'Ansicht speichern'}
-              </Button>
-            </CardFooter>
+            <ColumnSettingsFooter isSaving={isSaving} />
           </form>
         </Form>
       </Card>
     </div>
+  );
+}
+
+function VisibleColumnsFieldset({
+  organizationName,
+  visibleColumns,
+  errorMessage,
+  isSaving,
+  onToggle,
+}: {
+  organizationName: string;
+  visibleColumns: AuftraegeColumnId[];
+  errorMessage: string | undefined;
+  isSaving: boolean;
+  onToggle: (columnId: AuftraegeColumnId, checked: boolean) => void;
+}) {
+  return (
+    <fieldset className="space-y-2">
+      <legend className="text-sm font-medium">Tabellenspalten</legend>
+      <p className="text-sm text-muted-foreground wrap-anywhere">
+        Diese Auswahl gilt nur für dich innerhalb von {organizationName}.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {AUFTRAEGE_TABLE_COLUMNS.map((column) => {
+          const isChecked = visibleColumns.includes(column.id);
+
+          return (
+            <label
+              key={column.id}
+              className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-accent/30"
+            >
+              <Checkbox
+                checked={isChecked}
+                disabled={isSaving}
+                onCheckedChange={(checked) => onToggle(column.id, checked === true)}
+              />
+              <span className="text-sm font-medium leading-none">{column.label}</span>
+            </label>
+          );
+        })}
+      </div>
+      <ErrorText>{errorMessage}</ErrorText>
+    </fieldset>
+  );
+}
+
+function ColumnSettingsHeader({ isSaving }: { isSaving: boolean }) {
+  return (
+    <CardHeader>
+      <CardTitle className="flex items-center gap-2">
+        Sichtbare Spalten
+        <InlinePending active={isSaving} label="Spaltenansicht wird gespeichert" />
+      </CardTitle>
+      <CardDescription>
+        Entscheide pro Organisation selbst, welche Spalten deine Aufträge-Tabelle zeigen soll.
+      </CardDescription>
+    </CardHeader>
+  );
+}
+
+function ColumnSettingsFooter({ isSaving }: { isSaving: boolean }) {
+  return (
+    <CardFooter className="flex flex-col items-start gap-3 border-t sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground">
+        Aktionen, Aufklappen und andere strukturelle Bedienelemente bleiben weiterhin immer sichtbar.
+      </p>
+      <Button type="submit" disabled={isSaving}>
+        {isSaving ? 'Speichert…' : 'Ansicht speichern'}
+      </Button>
+    </CardFooter>
   );
 }
