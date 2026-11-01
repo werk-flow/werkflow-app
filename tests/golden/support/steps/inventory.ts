@@ -82,15 +82,15 @@ export function itemDialogPickerCreateAction(page: Page, picker: ItemDialogPicke
   return page.getByRole('button', { name: ITEM_DIALOG_PICKERS[picker].create, exact: true });
 }
 
+/** The /inventar views in tab order. */
+export const INVENTORY_VIEWS = ['items', 'locations', 'planned', 'movements'] as const;
+type InventoryView = (typeof INVENTORY_VIEWS)[number];
 const INVENTORY_TABS = {
   items: 'Alle Artikel',
   locations: 'Lager',
   planned: 'Geplant',
   movements: 'Bewegungen',
-} as const;
-type InventoryView = keyof typeof INVENTORY_TABS;
-/** The /inventar views in tab order. */
-export const INVENTORY_VIEWS = Object.keys(INVENTORY_TABS) as InventoryView[];
+} as const satisfies Record<InventoryView, string>;
 
 /** The row actions menu of an item on /inventar. */
 const INVENTORY_ROW_ACTIONS = {
