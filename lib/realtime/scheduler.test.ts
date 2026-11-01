@@ -15,7 +15,7 @@ function fakeClock() {
       return handle;
     },
     clearTimer: (handle: unknown) => {
-      timers.delete(handle as number);
+      if (typeof handle === 'number') timers.delete(handle);
     },
     advance(ms: number) {
       const target = time + ms;

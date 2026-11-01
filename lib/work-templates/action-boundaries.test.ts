@@ -132,7 +132,9 @@ if (ISOLATED) {
 
   test('a non-boolean archive flag is refused before the archive RPC', async () => {
     const archived: unknown = 'yes';
-    const result = await setWorkTemplateArchived(TEMPLATE_ID, archived as boolean);
+    // The flag is outside the parameter type; a Server Action still receives whatever the client sends,
+    // so the call goes through Reflect.apply, which takes the arguments untyped as a client's request does.
+    const result: unknown = await Reflect.apply(setWorkTemplateArchived, undefined, [TEMPLATE_ID, archived]);
     expect(result).toEqual({ success: false, error: 'validation_failed' });
     expect(authCalls).toBe(0);
     expect(rpcCalls).toEqual([]);
