@@ -102,11 +102,11 @@ export async function getRequestConversionState(
   }
 
   return {
-    status: data.status as string,
-    convertedJobId: (data.converted_job_id as string | null) ?? null,
-    convertedProjectId: (data.converted_project_id as string | null) ?? null,
-    convertedAt: (data.converted_at as string | null) ?? null,
-    convertedBy: (data.converted_by as string | null) ?? null,
+    status: data.status,
+    convertedJobId: data.converted_job_id,
+    convertedProjectId: data.converted_project_id,
+    convertedAt: data.converted_at,
+    convertedBy: data.converted_by,
   };
 }
 
@@ -155,24 +155,24 @@ export async function getRequestAuditState(
     throw new Error(`Request events could not be read: ${eventsError.message}`);
   }
   return {
-    id: data.id as string,
-    status: data.status as string,
-    clientId: (data.client_id as string | null) ?? null,
-    contactId: (data.contact_id as string | null) ?? null,
-    siteId: (data.site_id as string | null) ?? null,
-    callerName: (data.caller_name as string | null) ?? null,
-    callerPhone: (data.caller_phone as string | null) ?? null,
-    callerEmail: (data.caller_email as string | null) ?? null,
-    callerAddress: (data.caller_address as string | null) ?? null,
-    details: (data.details as string | null) ?? null,
-    category: data.category as string,
-    urgency: data.urgency as string,
-    source: data.source as string,
-    assignedTo: (data.assigned_to as string | null) ?? null,
-    receivedAt: data.received_at as string,
-    convertedProjectId: (data.converted_project_id as string | null) ?? null,
-    eventTypes: (events ?? []).map((event) => event.event_type as string),
-    eventActorIds: (events ?? []).map((event) => (event.created_by as string | null) ?? null),
+    id: data.id,
+    status: data.status,
+    clientId: data.client_id,
+    contactId: data.contact_id,
+    siteId: data.site_id,
+    callerName: data.caller_name,
+    callerPhone: data.caller_phone,
+    callerEmail: data.caller_email,
+    callerAddress: data.caller_address,
+    details: data.details,
+    category: data.category,
+    urgency: data.urgency,
+    source: data.source,
+    assignedTo: data.assigned_to,
+    receivedAt: data.received_at,
+    convertedProjectId: data.converted_project_id,
+    eventTypes: (events ?? []).map((event) => event.event_type),
+    eventActorIds: (events ?? []).map((event) => event.created_by),
   };
 }
 
@@ -228,15 +228,15 @@ export async function getConvertedRequestJobState(
     throw new Error(`Converted job side effects could not be read: ${countError.message}`);
   }
   return {
-    jobNumber: (job.job_number as string | null) ?? null,
-    title: job.title as string,
-    description: (job.description as string | null) ?? null,
-    clientId: (job.client_id as string | null) ?? null,
-    contactId: (job.contact_id as string | null) ?? null,
-    siteId: (job.site_id as string | null) ?? null,
-    priority: job.priority as string,
-    status: job.status as string,
-    plannedDate: (job.planned_date as string | null) ?? null,
+    jobNumber: job.job_number,
+    title: job.title,
+    description: job.description,
+    clientId: job.client_id,
+    contactId: job.contact_id,
+    siteId: job.site_id,
+    priority: job.priority,
+    status: job.status,
+    plannedDate: job.planned_date,
     planningCount: planningResult.count ?? 0,
     dispatchCount: dispatchResult.count ?? 0,
   };

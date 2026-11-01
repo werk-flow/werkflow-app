@@ -51,7 +51,7 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
 
     const { data: record, error: recordError } = await admin
       .from('employee_records')
-      .select('id')
+      .select('id, entry_date, exit_date')
       .eq('organization_id', orgId)
       .eq('user_id', input.userId)
       .maybeSingle();
@@ -76,6 +76,7 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
           schedules: [],
           conditions: [],
           calendar,
+          employment: { entryDate: null, exitDate: null },
         }),
       };
     }
@@ -112,6 +113,7 @@ export async function getWeeklyTargets(rawInput: { userId: string }): Promise<We
         schedules: (schedulesResult.data ?? []).map(toWorkSchedule),
         conditions: (conditionsResult.data ?? []).map(toEmploymentCondition),
         calendar,
+        employment: { entryDate: record.entry_date, exitDate: record.exit_date },
         // Vacation first: the resolver also prefers vacation attribution on
         // days covered by both span kinds.
         absences: [...(vacationSpans.get(record.id) ?? []), ...(sicknessSpans.get(record.id) ?? [])],
@@ -150,7 +152,7 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
           (from, to) =>
             admin
               .from('employee_records')
-              .select('id, user_id')
+              .select('id, user_id, entry_date, exit_date')
               .eq('organization_id', orgId)
               .not('user_id', 'is', null)
               .order('id')
@@ -202,6 +204,7 @@ export async function getTodayTargetsForMembers(): Promise<MemberTodayTargetsRes
         schedules: schedulesByRecord.get(record.id) ?? [],
         conditions: conditionsByRecord.get(record.id) ?? [],
         calendar,
+        employment: { entryDate: record.entry_date, exitDate: record.exit_date },
         absences: [...(vacationSpans.get(record.id) ?? []), ...(sicknessSpans.get(record.id) ?? [])],
       });
       if (!target) continue;

@@ -9,6 +9,7 @@ import {
   seedProject,
   seedPublishedWorkTemplate,
 } from '../../golden/support/db/work';
+import { giveEmployeesWorkSchedules } from '../../golden/support/db/personnel';
 import { seedRequest } from '../../golden/support/db/requests';
 import { seedInstalledEquipment, seedServiceCase } from '../../golden/support/db/service';
 import { seedOrganizationCertification } from '../../golden/support/db/qualifications';
@@ -105,6 +106,18 @@ async function seedVisualWorld(world: TestWorld): Promise<void> {
       .eq('user_id', user.id)
       .throwOnError();
   }
+  // Without a Wochenplan the labeled 8-hour default owes Monday to Friday
+  // only, so every target surface would read differently on a weekend run.
+  // Eight hours on all seven days keep the references independent of the
+  // run's weekday (werk-flow/werkflow-planning#131).
+  await giveEmployeesWorkSchedules({
+    organizationId: orgId,
+    actorUserId: actorId,
+    validFrom: '2026-01-01',
+    weekdayMinutes: 480,
+    weekendMinutes: 480,
+    note: 'Regelarbeitszeit',
+  });
   await admin
     .from('inventory_items')
     .update({ name: 'Kupferrohr 15 mm' })

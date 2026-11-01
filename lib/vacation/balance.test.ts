@@ -218,8 +218,8 @@ describe('countVacationDaysByYear', () => {
   });
 
   test('labeled default source consumes only Montag–Freitag', () => {
-    // No schedule, no condition: default 480 applies to all seven days for
-    // overtime continuity, but vacation must only cost weekdays.
+    // No schedule, no condition: the labeled default owes Montag–Freitag only,
+    // so the weekend of the range costs nothing (werk-flow/werkflow-planning#81).
     expect(
       countVacationDays(
         { startDate: '2026-08-03', endDate: '2026-08-09', dayPortion: 'full' },
@@ -279,6 +279,7 @@ describe('absence-extended resolveDailyTarget', () => {
     schedules: [makeSchedule('2026-01-01', FULL_TIME)],
     conditions: [],
     calendar: EMPTY_HOLIDAY_CALENDAR,
+    employment: { entryDate: null, exitDate: null },
   };
   const vacationSpan = {
     type: 'vacation' as const,
@@ -324,6 +325,7 @@ describe('absence-extended resolveDailyTarget', () => {
       schedules: [makeSchedule('2026-01-01', FULL_TIME)],
       conditions: [],
       calendar: BAVARIA_CALENDAR,
+      employment: { entryDate: null, exitDate: null },
       absences: [
         {
           type: 'vacation',

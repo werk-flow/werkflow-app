@@ -18,6 +18,8 @@ export type DayData = WeeklyTimeDataPoint;
 type WeekSnapshot = {
   weekData: WeeklyTimeDataPoint[];
   weekTargets: DailyTarget[] | undefined;
+  /** The targets read failed: `weekTargets` are the last known, possibly outdated. */
+  targetsStale: boolean;
   todayIndex: number;
   weekLabel: WeeklyTimeLabel;
 };
@@ -27,8 +29,15 @@ function weekSnapshotOf(
   weekData: WeeklyTimeDataPoint[],
   weekTargets: DailyTarget[] | undefined,
   monday: Date,
+  targetsStale = false,
 ): WeekSnapshot {
-  return { weekData, weekTargets, todayIndex: getTodayIndex(), weekLabel: computeWeekLabel(monday) };
+  return {
+    weekData,
+    weekTargets,
+    targetsStale,
+    todayIndex: getTodayIndex(),
+    weekLabel: computeWeekLabel(monday),
+  };
 }
 
 interface UseWeeklyTimeDataOptions {
@@ -109,12 +118,13 @@ export function useWeeklyTimeData({
         autoBreakDurationMinutes,
       });
       const weekData = buildWeeklyTimeData(result.entries || [], monday, settings, nextTargets);
-      return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday) };
+      return { ok: true, data: weekSnapshotOf(weekData, nextTargets, monday, !targetsResult.success) };
     },
     initialData: initialWeekData
       ? {
           weekData: initialWeekData,
           weekTargets: initialWeekTargets,
+          targetsStale: false,
           todayIndex: initialTodayIndex ?? getTodayIndex(),
           weekLabel: initialWeekLabel ?? computeWeekLabel(getWeekBounds().monday),
         }
@@ -126,6 +136,7 @@ export function useWeeklyTimeData({
   return {
     weekData: view.data?.weekData ?? [],
     weekTargets: view.data?.weekTargets,
+    targetsStale: view.data?.targetsStale ?? false,
     todayIndex: view.data?.todayIndex ?? getTodayIndex(),
     weekLabel: view.data?.weekLabel ?? computeWeekLabel(getWeekBounds().monday),
     isLoading: view.isLoading,
