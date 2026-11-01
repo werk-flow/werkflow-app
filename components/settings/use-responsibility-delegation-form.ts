@@ -37,6 +37,95 @@ type ResponsibilityDelegationForm = {
   handleSave: (event: React.FormEvent) => Promise<void>;
 };
 
+/** Choosing a person clears that field's error. */
+function personSelectors(
+  setDelegatorId: (value: string) => void,
+  setSubstituteId: (value: string) => void,
+  setPersonErrors: React.Dispatch<React.SetStateAction<DelegationPersonErrors>>,
+): Pick<ResponsibilityDelegationForm, 'selectDelegator' | 'selectSubstitute'> {
+  const selectDelegator = (value: string) => {
+    setDelegatorId(value);
+    setPersonErrors((current) => ({ ...current, delegator: undefined }));
+  };
+  const selectSubstitute = (value: string) => {
+    setSubstituteId(value);
+    setPersonErrors((current) => ({ ...current, substitute: undefined }));
+  };
+  return { selectDelegator, selectSubstitute };
+}
+
+type DelegationSaveContext = {
+  responsibility: OrganizationResponsibility;
+  delegatorId: string;
+  substituteId: string;
+  validFrom: string;
+  validUntil: string;
+  note: string;
+  isSaving: boolean;
+  dateRangeError: string | null;
+  runSave: typeof createResponsibilityDelegation;
+  setSaveError: (error: string | null) => void;
+  setPersonErrors: (errors: DelegationPersonErrors) => void;
+  handleOpenChange: (nextOpen: boolean) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+};
+
+/**
+ * The delegation dialog's submit: validation, then the save. Rebuilt on every
+ * render like the inline handler it replaced, so it always reads the current fields.
+ */
+function createDelegationSave({
+  responsibility,
+  delegatorId,
+  substituteId,
+  validFrom,
+  validUntil,
+  note,
+  isSaving,
+  dateRangeError,
+  runSave,
+  setSaveError,
+  setPersonErrors,
+  handleOpenChange,
+  showBanner,
+}: DelegationSaveContext): (event: React.FormEvent) => Promise<void> {
+  return async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (isSaving) return;
+    const nextPersonErrors = {
+      delegator: delegatorId ? undefined : 'Bitte wähle die verantwortliche Person aus.',
+      substitute: substituteId ? undefined : 'Bitte wähle eine Vertretung aus.',
+    };
+    setPersonErrors(nextPersonErrors);
+    const invalid = focusFirstInvalidField({
+      [`${responsibility}-delegator`]: nextPersonErrors.delegator,
+      [`${responsibility}-substitute`]: nextPersonErrors.substitute,
+      [`${responsibility}-valid-until`]: dateRangeError ?? undefined,
+    });
+    if (invalid) return;
+    setSaveError(null);
+    try {
+      const result = await runSave({
+        responsibility,
+        delegatorEmployeeRecordId: delegatorId,
+        substituteEmployeeRecordId: substituteId,
+        validFrom,
+        validUntil,
+        note,
+      });
+      if (!result.success) {
+        setSaveError(responsibilityErrorMessage(result.error));
+        return;
+      }
+      // The action's response renders the route with the new delegation.
+      handleOpenChange(false);
+      showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
+    } catch {
+      setSaveError(ERROR_MESSAGES.save_failed);
+    }
+  };
+}
+
 /** Field state, validation and submission of one responsibility's delegation dialog. */
 export function useResponsibilityDelegationForm({
   data,
@@ -77,50 +166,27 @@ export function useResponsibilityDelegationForm({
     onOpenChange(nextOpen);
   };
 
-  const selectDelegator = (value: string) => {
-    setDelegatorId(value);
-    setPersonErrors((current) => ({ ...current, delegator: undefined }));
-  };
-  const selectSubstitute = (value: string) => {
-    setSubstituteId(value);
-    setPersonErrors((current) => ({ ...current, substitute: undefined }));
-  };
+  const { selectDelegator, selectSubstitute } = personSelectors(
+    setDelegatorId,
+    setSubstituteId,
+    setPersonErrors,
+  );
 
-  const handleSave = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (isSaving) return;
-    const nextPersonErrors = {
-      delegator: delegatorId ? undefined : 'Bitte wähle die verantwortliche Person aus.',
-      substitute: substituteId ? undefined : 'Bitte wähle eine Vertretung aus.',
-    };
-    setPersonErrors(nextPersonErrors);
-    const invalid = focusFirstInvalidField({
-      [`${responsibility}-delegator`]: nextPersonErrors.delegator,
-      [`${responsibility}-substitute`]: nextPersonErrors.substitute,
-      [`${responsibility}-valid-until`]: dateRangeError ?? undefined,
-    });
-    if (invalid) return;
-    setSaveError(null);
-    try {
-      const result = await runSave({
-        responsibility,
-        delegatorEmployeeRecordId: delegatorId,
-        substituteEmployeeRecordId: substituteId,
-        validFrom,
-        validUntil,
-        note,
-      });
-      if (!result.success) {
-        setSaveError(responsibilityErrorMessage(result.error));
-        return;
-      }
-      // The action's response renders the route with the new delegation.
-      handleOpenChange(false);
-      showBanner({ message: 'Die Vertretung wurde eingetragen.', variant: 'success' });
-    } catch {
-      setSaveError(ERROR_MESSAGES.save_failed);
-    }
-  };
+  const handleSave = createDelegationSave({
+    responsibility,
+    delegatorId,
+    substituteId,
+    validFrom,
+    validUntil,
+    note,
+    isSaving,
+    dateRangeError,
+    runSave,
+    setSaveError,
+    setPersonErrors,
+    handleOpenChange,
+    showBanner,
+  });
 
   return {
     baseHolders,

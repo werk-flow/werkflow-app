@@ -4,9 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm, type UseFormReturn } from 'react-hook-form';
 
+import { createFlowHandlers } from '@/components/settings/email-change-flow-handlers';
 import { createNewEmailStepHandlers } from '@/components/settings/email-change-new-email-step';
 import {
-  applyResultError,
   deriveEmailChangeTimers,
   countdownEnd,
   newEmailSchema,
@@ -55,19 +55,8 @@ export type EmailChangeWizard = {
   handleResetFlow: () => Promise<void>;
 };
 
-/**
- * The whole email-change state machine: server wizard state, both codes, the
- * new-address form, the one-second clock and every step transition.
- */
-export function useEmailChangeWizard(initialState: EmailChangeWizardState): EmailChangeWizard {
-  const { profile, refreshProfile } = useUserProfile();
-  const { showBanner } = useBanner();
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
-  const [wizardState, setWizardState] = useState(initialState);
-  const [completionState, setCompletionState] = useState<CompletionState | null>(null);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [currentOtpCode, setCurrentOtpCode] = useState('');
-  const [newEmailOtpCode, setNewEmailOtpCode] = useState('');
+/** The pending state of every server call the wizard makes. */
+function useEmailChangeTasks() {
   const { run: runStart, isPending: isStarting } = useServerAction(requestCurrentEmailChangeOtp);
   const { run: runVerifyCurrentOtp, isPending: isCurrentOtpSubmitting } =
     useServerAction(verifyCurrentEmailChangeOtp);
@@ -78,8 +67,32 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
   const { run: runVerifyNewEmailOtp, isPending: isNewEmailOtpSubmitting } = usePendingTask();
   const { run: runResendNewEmailOtp, isPending: isNewEmailOtpResending } = usePendingTask();
   const { run: runReset, isPending: isResetting } = useServerAction(resetEmailChangeWizard);
-  const now = useWallClockTick(1000, true, countdownEnd(wizardState));
+  return {
+    runStart,
+    isStarting,
+    runVerifyCurrentOtp,
+    isCurrentOtpSubmitting,
+    runResendCurrentOtp,
+    isCurrentOtpResending,
+    runSaveNewEmail,
+    isSavingNewEmail,
+    runVerifyNewEmailOtp,
+    isNewEmailOtpSubmitting,
+    runResendNewEmailOtp,
+    isNewEmailOtpResending,
+    runReset,
+    isResetting,
+  };
+}
 
+/**
+ * The new-address form, and the adoption of a new server wizard state: it
+ * replaces the local wizard state and resets the form.
+ */
+function useNewEmailForm(
+  initialState: EmailChangeWizardState,
+  setWizardState: (state: EmailChangeWizardState) => void,
+): UseFormReturn<NewEmailValues> {
   const emailForm = useForm<NewEmailValues>({
     resolver: zodResolver(newEmailSchema),
     defaultValues: {
@@ -100,6 +113,26 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
     });
   }, [emailForm, initialState]);
 
+  return emailForm;
+}
+
+/**
+ * The whole email-change state machine: server wizard state, both codes, the
+ * new-address form, the one-second clock and every step transition.
+ */
+export function useEmailChangeWizard(initialState: EmailChangeWizardState): EmailChangeWizard {
+  const { profile, refreshProfile } = useUserProfile();
+  const { showBanner } = useBanner();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [wizardState, setWizardState] = useState(initialState);
+  const [completionState, setCompletionState] = useState<CompletionState | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [currentOtpCode, setCurrentOtpCode] = useState('');
+  const [newEmailOtpCode, setNewEmailOtpCode] = useState('');
+  const tasks = useEmailChangeTasks();
+  const now = useWallClockTick(1000, true, countdownEnd(wizardState));
+  const emailForm = useNewEmailForm(initialState, setWizardState);
+
   const currentEmail = profile?.email ?? wizardState.currentEmail ?? '';
   const pendingNewEmail = wizardState.newEmail;
   const timers = deriveEmailChangeTimers(wizardState, now);
@@ -114,92 +147,23 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
     setCompletionState(null);
   }
 
-  async function handleStartFlow(): Promise<void> {
-    setFormError(null);
-    setCompletionState(null);
-    setCurrentOtpCode('');
-
-    try {
-      const result = await runStart();
-      applyResultError(result, setWizardState, setFormError);
-    } catch {
-      reportUnexpectedError();
-    }
-  }
-
-  async function handleVerifyCurrentEmailCode(): Promise<void> {
-    setFormError(null);
-
-    if (currentOtpCode.replace(/\D/g, '').length !== 6) {
-      setFormError('Bitte gib den vollständigen sechsstelligen Code ein.');
-      return;
-    }
-
-    try {
-      const result = await runVerifyCurrentOtp(currentOtpCode);
-      applyResultError(result, setWizardState, setFormError);
-
-      if (result.success) {
-        setCurrentOtpCode('');
-      }
-    } catch {
-      reportUnexpectedError();
-    }
-  }
-
-  async function handleResendCurrentEmailCode(): Promise<void> {
-    setFormError(null);
-
-    try {
-      const result = await runResendCurrentOtp();
-      applyResultError(result, setWizardState, setFormError);
-    } catch {
-      reportUnexpectedError();
-    }
-  }
-
-  const { handleSubmitNewEmail, handleResendNewEmailCode, handleVerifyNewEmailCode } =
-    createNewEmailStepHandlers({
-      emailForm,
-      currentEmail,
-      pendingNewEmail,
-      newEmailOtpCode,
-      supabase,
-      refreshProfile,
-      showBanner,
-      setWizardState,
-      setFormError,
-      setCompletionState,
-      setCurrentOtpCode,
-      setNewEmailOtpCode,
-      runSaveNewEmail,
-      runResendNewEmailOtp,
-      runVerifyNewEmailOtp,
-      reportUnexpectedError,
-    });
-
-  async function handleResetFlow(): Promise<void> {
-    setFormError(null);
-
-    try {
-      const result = await runReset();
-      applyResultError(result, setWizardState, setFormError);
-
-      if (result.success) {
-        setCompletionState(null);
-        setCurrentOtpCode('');
-        setNewEmailOtpCode('');
-        emailForm.reset({ email: '' });
-        showBanner({
-          message:
-            'Die E-Mail-Änderung wurde abgebrochen. Deine bisherige E-Mail-Adresse bleibt unverändert.',
-          variant: 'success',
-        });
-      }
-    } catch {
-      reportUnexpectedError();
-    }
-  }
+  const stepContext = {
+    ...tasks,
+    emailForm,
+    currentEmail,
+    pendingNewEmail,
+    currentOtpCode,
+    newEmailOtpCode,
+    supabase,
+    refreshProfile,
+    showBanner,
+    setWizardState,
+    setFormError,
+    setCompletionState,
+    setCurrentOtpCode,
+    setNewEmailOtpCode,
+    reportUnexpectedError,
+  };
 
   return {
     wizardState,
@@ -209,24 +173,19 @@ export function useEmailChangeWizard(initialState: EmailChangeWizardState): Emai
     setCurrentOtpCode,
     newEmailOtpCode,
     setNewEmailOtpCode,
-    isStarting,
-    isCurrentOtpSubmitting,
-    isCurrentOtpResending,
-    isSavingNewEmail,
-    isNewEmailOtpSubmitting,
-    isNewEmailOtpResending,
-    isResetting,
+    isStarting: tasks.isStarting,
+    isCurrentOtpSubmitting: tasks.isCurrentOtpSubmitting,
+    isCurrentOtpResending: tasks.isCurrentOtpResending,
+    isSavingNewEmail: tasks.isSavingNewEmail,
+    isNewEmailOtpSubmitting: tasks.isNewEmailOtpSubmitting,
+    isNewEmailOtpResending: tasks.isNewEmailOtpResending,
+    isResetting: tasks.isResetting,
     emailForm,
     currentEmail,
     pendingNewEmail,
     timers,
     dismissCompletion,
-    handleStartFlow,
-    handleVerifyCurrentEmailCode,
-    handleResendCurrentEmailCode,
-    handleSubmitNewEmail,
-    handleResendNewEmailCode,
-    handleVerifyNewEmailCode,
-    handleResetFlow,
+    ...createFlowHandlers(stepContext),
+    ...createNewEmailStepHandlers(stepContext),
   };
 }

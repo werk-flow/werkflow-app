@@ -30,39 +30,27 @@ type ResponsibilityConfigurationForm = {
   handleSave: () => Promise<void>;
 };
 
-/** Mode, selected holders and the previewed effect of one responsibility's configuration dialog. */
-export function useResponsibilityConfigurationForm({
-  data,
+/** The chosen mode and holders and the preview of their effect; any change drops the preview. */
+function useHolderSelection({
+  initialMode,
+  baseHolderIds,
   responsibility,
-  onOpenChange,
+  showBanner,
 }: {
-  data: ResponsibilitySettingsData;
+  initialMode: ResponsibilityConfigurationMode;
+  baseHolderIds: string[];
   responsibility: OrganizationResponsibility;
-  onOpenChange: (open: boolean) => void;
-}): ResponsibilityConfigurationForm {
-  const { showBanner } = useBanner();
-  const current = data.effective[responsibility];
-  const baseHolderIds = useMemo(
-    () =>
-      current.holders
-        .filter((holder) => holder.source.kind !== 'delegation')
-        .map((holder) => holder.employeeRecordId),
-    [current.holders],
-  );
-  const [mode, setMode] = useState<ResponsibilityConfigurationMode>(current.mode);
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+}) {
+  const [mode, setMode] = useState<ResponsibilityConfigurationMode>(initialMode);
   const [selectedIds, setSelectedIds] = useState<string[]>(baseHolderIds);
   const [preview, setPreview] = useState<ResponsibilityPreview | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
-  const { run: runSave, isPending: isSaving } = useServerAction(applyResponsibilityConfiguration);
 
   const reset = () => {
-    setMode(current.mode);
+    setMode(initialMode);
     setSelectedIds(baseHolderIds);
     setPreview(null);
-  };
-  const handleOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) reset();
-    onOpenChange(nextOpen);
   };
 
   const changeMode = (nextMode: ResponsibilityConfigurationMode) => {
@@ -98,6 +86,37 @@ export function useResponsibilityConfigurationForm({
     } finally {
       setIsLoadingPreview(false);
     }
+  };
+
+  return { mode, selectedIds, preview, isLoadingPreview, reset, changeMode, togglePerson, handlePreview };
+}
+
+/** Mode, selected holders and the previewed effect of one responsibility's configuration dialog. */
+export function useResponsibilityConfigurationForm({
+  data,
+  responsibility,
+  onOpenChange,
+}: {
+  data: ResponsibilitySettingsData;
+  responsibility: OrganizationResponsibility;
+  onOpenChange: (open: boolean) => void;
+}): ResponsibilityConfigurationForm {
+  const { showBanner } = useBanner();
+  const current = data.effective[responsibility];
+  const baseHolderIds = useMemo(
+    () =>
+      current.holders
+        .filter((holder) => holder.source.kind !== 'delegation')
+        .map((holder) => holder.employeeRecordId),
+    [current.holders],
+  );
+  const { mode, selectedIds, preview, isLoadingPreview, reset, changeMode, togglePerson, handlePreview } =
+    useHolderSelection({ initialMode: current.mode, baseHolderIds, responsibility, showBanner });
+  const { run: runSave, isPending: isSaving } = useServerAction(applyResponsibilityConfiguration);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) reset();
+    onOpenChange(nextOpen);
   };
 
   const handleSave = async () => {

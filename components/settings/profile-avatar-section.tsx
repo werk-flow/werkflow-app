@@ -43,81 +43,16 @@ export function ProfileAvatarSection() {
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <CardTitle>Profilbild</CardTitle>
-          <CardDescription>
-            Lade ein Bild hoch und passe den Ausschnitt vor dem Speichern genau so an, wie es später in der
-            App erscheinen soll.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-center">
-          <Avatar className="size-24 ring-1 ring-border">
-            {profile?.avatarUrl ? (
-              <AvatarImage
-                src={profile.avatarUrl}
-                alt={`Profilbild von ${profile.firstName} ${profile.lastName}`}
-              />
-            ) : null}
-            <AvatarFallback className="bg-muted text-base font-semibold text-muted-foreground">
-              {initials || <User className="size-7" />}
-            </AvatarFallback>
-          </Avatar>
-
-          <div className="flex-1 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Unterstützt werden gängige Bildformate bis 5 MB. Vor dem Speichern kannst du dein Bild
-              zuschneiden und heranzoomen.
-            </p>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                type="button"
-                onClick={openFileDialog}
-                disabled={isRemoving}
-                pending={isUploading}
-                className="cursor-pointer"
-              >
-                {isUploading ? (
-                  'Wird hochgeladen…'
-                ) : (
-                  <>
-                    <ImagePlus className="mr-2 size-4" />
-                    {profile?.avatarPath ? 'Profilbild ändern' : 'Profilbild hochladen'}
-                  </>
-                )}
-              </Button>
-
-              {profile?.avatarPath ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleRemoveAvatar}
-                  disabled={isUploading}
-                  pending={isRemoving}
-                >
-                  {isRemoving ? (
-                    'Wird entfernt…'
-                  ) : (
-                    <>
-                      <Trash2 className="mr-2 size-4" />
-                      Profilbild entfernen
-                    </>
-                  )}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <input
-            ref={inputRef}
-            type="file"
-            accept={PROFILE_AVATAR_INPUT_ACCEPT}
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </CardContent>
-      </Card>
+      <ProfileAvatarCard
+        profile={profile}
+        initials={initials}
+        inputRef={inputRef}
+        isUploading={isUploading}
+        isRemoving={isRemoving}
+        openFileDialog={openFileDialog}
+        handleFileChange={handleFileChange}
+        handleRemoveAvatar={handleRemoveAvatar}
+      />
 
       <Dialog
         open={dialogOpen}
@@ -162,5 +97,126 @@ export function ProfileAvatarSection() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+type AvatarUpload = ReturnType<typeof useProfileAvatarUpload>;
+
+function ProfileAvatarButtons({
+  hasAvatar,
+  isUploading,
+  isRemoving,
+  openFileDialog,
+  handleRemoveAvatar,
+}: Pick<AvatarUpload, 'isUploading' | 'isRemoving' | 'openFileDialog' | 'handleRemoveAvatar'> & {
+  hasAvatar: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      <Button
+        type="button"
+        onClick={openFileDialog}
+        disabled={isRemoving}
+        pending={isUploading}
+        className="cursor-pointer"
+      >
+        {isUploading ? (
+          'Wird hochgeladen…'
+        ) : (
+          <>
+            <ImagePlus className="mr-2 size-4" />
+            {hasAvatar ? 'Profilbild ändern' : 'Profilbild hochladen'}
+          </>
+        )}
+      </Button>
+
+      {hasAvatar ? (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleRemoveAvatar}
+          disabled={isUploading}
+          pending={isRemoving}
+        >
+          {isRemoving ? (
+            'Wird entfernt…'
+          ) : (
+            <>
+              <Trash2 className="mr-2 size-4" />
+              Profilbild entfernen
+            </>
+          )}
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ProfileAvatarCard({
+  profile,
+  initials,
+  inputRef,
+  isUploading,
+  isRemoving,
+  openFileDialog,
+  handleFileChange,
+  handleRemoveAvatar,
+}: Pick<
+  AvatarUpload,
+  | 'profile'
+  | 'initials'
+  | 'inputRef'
+  | 'isUploading'
+  | 'isRemoving'
+  | 'openFileDialog'
+  | 'handleFileChange'
+  | 'handleRemoveAvatar'
+>) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Profilbild</CardTitle>
+        <CardDescription>
+          Lade ein Bild hoch und passe den Ausschnitt vor dem Speichern genau so an, wie es später in der App
+          erscheinen soll.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-center">
+        <Avatar className="size-24 ring-1 ring-border">
+          {profile?.avatarUrl ? (
+            <AvatarImage
+              src={profile.avatarUrl}
+              alt={`Profilbild von ${profile.firstName} ${profile.lastName}`}
+            />
+          ) : null}
+          <AvatarFallback className="bg-muted text-base font-semibold text-muted-foreground">
+            {initials || <User className="size-7" />}
+          </AvatarFallback>
+        </Avatar>
+
+        <div className="flex-1 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Unterstützt werden gängige Bildformate bis 5 MB. Vor dem Speichern kannst du dein Bild zuschneiden
+            und heranzoomen.
+          </p>
+
+          <ProfileAvatarButtons
+            hasAvatar={Boolean(profile?.avatarPath)}
+            isUploading={isUploading}
+            isRemoving={isRemoving}
+            openFileDialog={openFileDialog}
+            handleRemoveAvatar={handleRemoveAvatar}
+          />
+        </div>
+
+        <input
+          ref={inputRef}
+          type="file"
+          accept={PROFILE_AVATAR_INPUT_ACCEPT}
+          className="hidden"
+          onChange={handleFileChange}
+        />
+      </CardContent>
+    </Card>
   );
 }

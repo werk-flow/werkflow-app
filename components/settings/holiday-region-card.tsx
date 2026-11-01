@@ -23,6 +23,41 @@ const REGION_ERROR_MESSAGES = {
 
 const NO_REGION_VALUE = 'none';
 
+function HolidayRegionField({
+  disabled,
+  selectedRegion,
+  onChange,
+}: {
+  disabled: boolean;
+  selectedRegion: string;
+  onChange: (region: string) => void;
+}) {
+  return (
+    <Field
+      label="Bundesland"
+      htmlFor="holiday-region"
+      className="sm:max-w-sm"
+      description="Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten Kalenders, ersetzt aber keine rechtliche Prüfung."
+    >
+      <SearchableSelect
+        disabled={disabled}
+        options={[
+          { value: NO_REGION_VALUE, label: 'Kein Feiertagskalender' },
+          ...HOLIDAY_REGIONS.map((region) => ({
+            value: region,
+            label: HOLIDAY_REGION_LABELS[region],
+          })),
+        ]}
+        value={selectedRegion}
+        onChange={onChange}
+        placeholder="Bitte wählen"
+        searchPlaceholder="Bundesland suchen …"
+        emptyMessage="Kein Bundesland gefunden"
+      />
+    </Field>
+  );
+}
+
 export function HolidayRegionCard({
   holidayRegion,
   canEditRegion,
@@ -74,28 +109,11 @@ export function HolidayRegionCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pb-6">
-        <Field
-          label="Bundesland"
-          htmlFor="holiday-region"
-          className="sm:max-w-sm"
-          description="Die Auswahl gilt ab jetzt; frühere Zeiträume werden nicht rückwirkend geändert. WerkFlow zeigt die Wirkung des gewählten Kalenders, ersetzt aber keine rechtliche Prüfung."
-        >
-          <SearchableSelect
-            disabled={!canEditRegion || isSavingRegion}
-            options={[
-              { value: NO_REGION_VALUE, label: 'Kein Feiertagskalender' },
-              ...HOLIDAY_REGIONS.map((region) => ({
-                value: region,
-                label: HOLIDAY_REGION_LABELS[region],
-              })),
-            ]}
-            value={selectedRegion}
-            onChange={setSelectedRegion}
-            placeholder="Bitte wählen"
-            searchPlaceholder="Bundesland suchen …"
-            emptyMessage="Kein Bundesland gefunden"
-          />
-        </Field>
+        <HolidayRegionField
+          disabled={!canEditRegion || isSavingRegion}
+          selectedRegion={selectedRegion}
+          onChange={setSelectedRegion}
+        />
       </CardContent>
       <CardFooter className="flex flex-col items-start gap-3 border-t sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">

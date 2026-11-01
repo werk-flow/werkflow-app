@@ -27,14 +27,16 @@ import {
 import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
+import type { EffectiveResponsibilityHolder } from '@/lib/responsibilities/resolution';
 import type { ResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import {
   ORGANIZATION_RESPONSIBILITIES,
   RESPONSIBILITY_DESCRIPTIONS,
   RESPONSIBILITY_LABELS,
   type OrganizationResponsibility,
-  type ResponsibilityConfigurationMode,
+  type ResponsibilityPerson,
 } from '@/lib/responsibilities/types';
+import { Constants } from '@/lib/supabase/database.types';
 
 export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsData }) {
   useRealtimeRouterRefresh({
@@ -106,6 +108,37 @@ export function ResponsibilitySettings({ data }: { data: ResponsibilitySettingsD
   );
 }
 
+function CurrentHolderSection({
+  people,
+  holders,
+}: {
+  people: ResponsibilityPerson[];
+  holders: EffectiveResponsibilityHolder[];
+}) {
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
+      <ul className="grid gap-2">
+        {holders.length > 0 ? (
+          holders.map((holder) => (
+            <li
+              key={holder.employeeRecordId}
+              className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <span className="text-sm font-medium">{personName(people, holder.employeeRecordId)}</span>
+              <span className="text-xs text-muted-foreground">{holderSourceLabel(holder)}</span>
+            </li>
+          ))
+        ) : (
+          <li className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+            Aktuell ist keine aktive Person verfügbar. Bitte prüfe die Verantwortlichkeit.
+          </li>
+        )}
+      </ul>
+    </section>
+  );
+}
+
 function ResponsibilityCard({
   data,
   responsibility,
@@ -135,28 +168,7 @@ function ResponsibilityCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-5 wrap-anywhere">
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Aktuell verantwortlich</h3>
-          <ul className="grid gap-2">
-            {effective.holders.length > 0 ? (
-              effective.holders.map((holder) => (
-                <li
-                  key={holder.employeeRecordId}
-                  className="flex flex-col gap-1 rounded-md border px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <span className="text-sm font-medium">
-                    {personName(data.people, holder.employeeRecordId)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{holderSourceLabel(holder)}</span>
-                </li>
-              ))
-            ) : (
-              <li className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                Aktuell ist keine aktive Person verfügbar. Bitte prüfe die Verantwortlichkeit.
-              </li>
-            )}
-          </ul>
-        </section>
+        <CurrentHolderSection people={data.people} holders={effective.holders} />
 
         <section className="space-y-2">
           <h3 className="text-sm font-medium">Vertretungen</h3>
@@ -241,7 +253,12 @@ function ConfigurationDialog({
           <Field label="Verantwortliche Personen" htmlFor={`${responsibility}-mode`}>
             <Select
               value={mode}
-              onValueChange={(value) => changeMode(value as ResponsibilityConfigurationMode)}
+              onValueChange={(value) => {
+                const nextMode = Constants.public.Enums.responsibility_configuration_mode.find(
+                  (candidate) => candidate === value,
+                );
+                if (nextMode) changeMode(nextMode);
+              }}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -265,31 +282,53 @@ function ConfigurationDialog({
           {preview ? <ResponsibilityEffectPreview preview={preview} people={data.people} /> : null}
         </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => handleOpenChange(false)}
-            disabled={isSaving || isLoadingPreview}
-          >
-            Abbrechen
-          </Button>
-          {preview ? (
-            <Button pending={isSaving} type="button" disabled={isSaving} onClick={() => void handleSave()}>
-              Änderung bestätigen
-            </Button>
-          ) : (
-            <Button
-              pending={isLoadingPreview}
-              type="button"
-              disabled={isLoadingPreview}
-              onClick={() => void handlePreview()}
-            >
-              Wirkung prüfen
-            </Button>
-          )}
-        </DialogFooter>
+        <ConfigurationDialogFooter
+          hasPreview={preview !== null}
+          isSaving={isSaving}
+          isLoadingPreview={isLoadingPreview}
+          onCancel={() => handleOpenChange(false)}
+          onPreview={handlePreview}
+          onSave={handleSave}
+        />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ConfigurationDialogFooter({
+  hasPreview,
+  isSaving,
+  isLoadingPreview,
+  onCancel,
+  onPreview,
+  onSave,
+}: {
+  hasPreview: boolean;
+  isSaving: boolean;
+  isLoadingPreview: boolean;
+  onCancel: () => void;
+  onPreview: () => Promise<void>;
+  onSave: () => Promise<void>;
+}) {
+  return (
+    <DialogFooter>
+      <Button type="button" variant="outline" onClick={onCancel} disabled={isSaving || isLoadingPreview}>
+        Abbrechen
+      </Button>
+      {hasPreview ? (
+        <Button pending={isSaving} type="button" disabled={isSaving} onClick={() => void onSave()}>
+          Änderung bestätigen
+        </Button>
+      ) : (
+        <Button
+          pending={isLoadingPreview}
+          type="button"
+          disabled={isLoadingPreview}
+          onClick={() => void onPreview()}
+        >
+          Wirkung prüfen
+        </Button>
+      )}
+    </DialogFooter>
   );
 }
