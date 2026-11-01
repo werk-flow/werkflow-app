@@ -87,12 +87,10 @@ export function listApplicationSources(): string[] {
   return found.sort();
 }
 
+// A call counts by its callee's name only when the callee is a bare identifier:
+// `other.resolveActionContext()` is a method of another object, not the guard.
 function calledIdentifiers(node: ts.Node, collected: Set<string>): void {
-  if (ts.isCallExpression(node)) {
-    const callee = node.expression;
-    if (ts.isIdentifier(callee)) collected.add(callee.text);
-    else if (ts.isPropertyAccessExpression(callee)) collected.add(callee.name.text);
-  }
+  if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) collected.add(node.expression.text);
   ts.forEachChild(node, (child) => {
     // Defining a nested callback does not execute its identity check.
     if (!ts.isFunctionLike(child)) calledIdentifiers(child, collected);
@@ -280,10 +278,7 @@ function unwrapExpression(node: ts.Expression): ts.Expression {
 }
 
 function calleeName(call: ts.CallExpression): string | undefined {
-  const callee = call.expression;
-  if (ts.isIdentifier(callee)) return callee.text;
-  if (ts.isPropertyAccessExpression(callee)) return callee.name.text;
-  return undefined;
+  return ts.isIdentifier(call.expression) ? call.expression.text : undefined;
 }
 
 /**
