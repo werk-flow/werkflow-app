@@ -214,10 +214,6 @@ export function workArtifactInput(dialog: Locator, input: keyof typeof ARTIFACT_
 }
 
 /** Proves the section exists nowhere in the DOM, hidden streaming containers included. */
-export async function expectNoWorkArtifactsSection(page: Page): Promise<void> {
-  await expect(page.getByTestId('work-artifacts-section')).toHaveCount(0);
-}
-
 export function workArtifactPicker(dialog: Locator, picker: WorkArtifactPicker): Locator {
   return dialog.getByRole('combobox', { name: ARTIFACT_COPY.picker[picker] });
 }

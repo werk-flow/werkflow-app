@@ -73,12 +73,13 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     adminPage,
     bueroPage,
     employeePage,
-    outsiderPage,
     world,
   }) => {
-    // Assigned access, shared routes, minimal parent
-    // projection, office continuity, server authorization, side-effect-free
-    // opening, first-viewport order, practical contact actions, and privacy.
+    // Assigned access, shared routes, minimal parent projection, office
+    // continuity, side-effect-free opening, first-viewport order, practical
+    // contact actions, and privacy. The server's refusal of an unassigned field
+    // worker and of another organization, and the office-only values the pack
+    // never receives, are lib/org/field-work-pack-access.test.ts.
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     // Short suffix: the world already isolates the organization, and a 32-character
     // hex token wraps the phone header to three lines, which no real job title does.
@@ -90,7 +91,6 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     const projectTitle = `P116 Audit Projekt ${world.runId}`;
     const childJobNumber = `${projectNumber}-1`;
     const siblingJobNumber = `${projectNumber}-2`;
-    const unassignedJobNumber = `AUF-${world.runId}-P116-UNASSIGNED`;
     const siblingJobTitle = `P116 Vertraulicher Geschwisterauftrag ${world.runId}`;
     const visitDate = ownedBerlinDateAtOffset('p1-16', 85);
     const emailDomain = testData`@example.test`;
@@ -145,11 +145,6 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
       title: siblingJobTitle,
       projectNumber,
       clientName: customerName,
-    });
-    await createJob(adminPage, {
-      jobNumber: unassignedJobNumber,
-      title: `P116 Nicht zugewiesen ${world.runId}`,
-      plannedDateDigits: dateDigits(visitDate),
     });
 
     const officeDraftTitle = `P116 interner Büroentwurf ${world.runId}`;
@@ -224,13 +219,6 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await bueroPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
     await expectNoFieldWorkPack(bueroPage);
     await expect(bueroPage.getByRole('heading', { name: SHARED_COPY.region.details })).toBeVisible();
-
-    await employeePage.goto(`/auftraege/${unassignedJobNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/);
-    await expectNoFieldWorkPack(employeePage);
-    await outsiderPage.goto(`/auftraege/projekt/${projectNumber}/${childJobNumber}`);
-    await outsiderPage.waitForURL(/\/auftraege\/?$/);
-    await expectNoFieldWorkPack(outsiderPage);
   });
 
   test('dispatch and readiness keep one next action without changing execution facts', async ({
@@ -526,7 +514,5 @@ test.describe('P1-16 exhaustive field work pack flows @AUDIT-W2-P1-16 @AUDIT-W2'
     await employeePage.evaluate(() => window.dispatchEvent(new Event('focus')));
     await employeePage.waitForURL(/\/auftraege\/?$/);
     await expectNoFieldWorkPack(employeePage);
-    await employeePage.goto(`/auftraege/${jobNumber}`);
-    await employeePage.waitForURL(/\/auftraege\/?$/);
   });
 });
