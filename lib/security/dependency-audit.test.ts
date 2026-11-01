@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { resolve } from 'node:path';
 const repositoryRoot = resolve(import.meta.dir, '../..');
 import { dependencyDigest, inspectDependencyAudit } from '../testing/publication/dependency-audit';
+import { z } from '@/lib/zod';
 
 const advisory = 'https://github.com/advisories/GHSA-1234-5678-abcd';
 const manifest = '{"dependencies":{"tool":"1.2.3"}}';
@@ -26,6 +27,20 @@ const policy = {
 };
 const audit = { tool: [{ url: advisory, severity: 'high', vulnerable_versions: '<1.2.4' }] };
 const input = { stdout: JSON.stringify(audit), exitCode: 1, manifest, lockfile, policy, today: '2026-09-07' };
+// The exception fields the checked-in policy checks below read; inspectDependencyAudit
+// owns the full policy schema.
+const reviewedPolicySchema = z.object({
+  exceptions: z.array(
+    z.object({
+      package: z.string(),
+      advisory: z.string(),
+      reviewedOn: z.string(),
+      expiresOn: z.string(),
+      rationale: z.string(),
+      evidence: z.array(z.string()),
+    }),
+  ),
+});
 
 test('accepts clean audit and narrowly reviewed exact findings', () => {
   const clean = { ...input, stdout: '{}', exitCode: 0, policy: { ...policy, exceptions: [] } };
@@ -95,9 +110,9 @@ test('duplicate advisory ranges yield one finding per affected installed path', 
 });
 
 test('checked-in exceptions remain narrow, explained and short lived', () => {
-  const reviewed = JSON.parse(
-    readFileSync(resolve(repositoryRoot, 'lib/security/dependency-exceptions.json'), 'utf8'),
-  ) as typeof policy;
+  const reviewed = reviewedPolicySchema.parse(
+    JSON.parse(readFileSync(resolve(repositoryRoot, 'lib/security/dependency-exceptions.json'), 'utf8')),
+  );
   for (const item of reviewed.exceptions) {
     expect(item.rationale.length).toBeGreaterThan(30);
     expect(item.evidence).toContain(item.advisory);
@@ -107,9 +122,9 @@ test('checked-in exceptions remain narrow, explained and short lived', () => {
 });
 
 test('reviewed vulnerable glob and YAML toolchains cannot be imported into application source', () => {
-  const reviewed = JSON.parse(
-    readFileSync(resolve(repositoryRoot, 'lib/security/dependency-exceptions.json'), 'utf8'),
-  ) as typeof policy;
+  const reviewed = reviewedPolicySchema.parse(
+    JSON.parse(readFileSync(resolve(repositoryRoot, 'lib/security/dependency-exceptions.json'), 'utf8')),
+  );
   const reviewedPackages = new Set(reviewed.exceptions.map((item) => item.package));
   const toolchain =
     /^(?:brace-expansion|js-yaml|minimatch|picomatch|micromatch|tinyglobby|eslint|eslint-config-next|eslint-plugin-[^/]+|@eslint\/[^/]+|@typescript-eslint\/[^/]+)(?:\/|$)/;

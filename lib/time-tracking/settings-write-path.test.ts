@@ -1,4 +1,5 @@
 import { beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
+import { z } from '@/lib/zod';
 
 // The settings write appends to `break_policy_history` and writes it back.
 // It read the current value from a 300-second cache, so a second change
@@ -15,6 +16,8 @@ type StoredSettings = {
   break_policy_history: unknown[];
 };
 type RpcCall = { name: string; args: Record<string, unknown> };
+// The history as written, every field kept, so an entry compares whole.
+const writtenHistorySchema = z.array(z.looseObject({ breakMode: z.string() }));
 
 const recordedEntry = {
   breakMode: 'manual',
@@ -164,7 +167,7 @@ if (ISOLATED) {
     const result = await updateTimeTrackingSettings(change);
     expect(result.success).toBe(true);
     expect(rpcCalls.map((call) => call.name)).toEqual(['update_time_tracking_settings']);
-    const history = rpcCalls[0]?.args.p_break_policy_history as { breakMode: string }[];
+    const history = writtenHistorySchema.parse(rpcCalls[0]?.args.p_break_policy_history);
     expect(history.map((entry) => entry.breakMode)).toEqual(['manual', 'automatic']);
     expect(history[0]).toEqual(recordedEntry);
     // The function refuses when the stored row no longer equals this snapshot.

@@ -76,11 +76,17 @@ function rawPulses(markup: string): string[] {
     .filter((tag) => !tag.includes(SKELETON_SLOT));
 }
 
+/** A loading file's default export: a function component that takes no props. */
+function isPropLessComponent(value: unknown): value is () => ReactElement {
+  return typeof value === 'function';
+}
+
 async function renderDefault(path: string): Promise<string> {
   const loaded: unknown = await import(path);
-  const component = (loaded as { default?: unknown }).default;
-  if (typeof component !== 'function') throw new Error(`${path} has no default component`);
-  return renderToStaticMarkup(createElement(component as () => ReactElement));
+  const component =
+    typeof loaded === 'object' && loaded !== null && 'default' in loaded ? loaded.default : undefined;
+  if (!isPropLessComponent(component)) throw new Error(`${path} has no default component`);
+  return renderToStaticMarkup(createElement(component));
 }
 
 test('every loading file renders registry skeletons only', async () => {

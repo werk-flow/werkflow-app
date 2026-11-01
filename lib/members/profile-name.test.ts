@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { createClient } from '@supabase/supabase-js';
 
+import type { Database } from '@/lib/supabase/database.types';
 import { createInMemoryAdmin, type InMemoryTables } from '@/lib/testing/fixtures/in-memory-admin';
 import { formatProfileName, getInitials, getManagerAssigneeOptions } from './profile-name';
 
@@ -8,9 +10,44 @@ type AssigneeAdminClient = Parameters<typeof getManagerAssigneeOptions>[0];
 const ORGANIZATION = 'organization-1';
 const OTHER_ORGANIZATION = 'organization-2';
 
+/** A real service-role client whose PostgREST requests `answer` serves. */
+function clientAnswering(answer: (url: URL) => Promise<Response>): AssigneeAdminClient {
+  const request: typeof fetch = Object.assign(
+    async (input: Parameters<typeof fetch>[0]): Promise<Response> =>
+      answer(new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)),
+    { preconnect: () => {} },
+  );
+  return createClient<Database>('http://127.0.0.1:54321', 'isolated-test-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: request },
+  });
+}
+
+/**
+ * Test double: the in-memory tables answer each request with the `eq` and `in`
+ * filters it really sent, so a read that drops a filter returns the rows it would in Postgres.
+ */
+function inMemoryAdmin(tables: InMemoryTables): AssigneeAdminClient {
+  const memory = createInMemoryAdmin(tables);
+  return clientAnswering(async (url) => {
+    const query = memory
+      .from(url.pathname.replace('/rest/v1/', ''))
+      .select(url.searchParams.get('select') ?? '*');
+    for (const [column, filter] of url.searchParams) {
+      if (column === 'select') continue;
+      const [operator = '', ...rest] = filter.split('.');
+      const value = rest.join('.');
+      if (operator === 'eq') query.eq(column, value);
+      else if (operator === 'in') query.in(column, value.replace(/^\(|\)$/g, '').split(','));
+      else throw new Error(`The in-memory double does not implement the filter ${column}=${filter}.`);
+    }
+    const { data, error } = await query;
+    return Response.json(error ?? data, { status: error ? 500 : 200 });
+  });
+}
+
 async function assigneeOptions(tables: InMemoryTables, organizationId = ORGANIZATION) {
-  // Test double: the in-memory client implements only the query-builder calls this read uses.
-  const admin = createInMemoryAdmin(tables) as unknown as AssigneeAdminClient;
+  const admin = inMemoryAdmin(tables);
   const result = await getManagerAssigneeOptions(admin, organizationId);
   if (!result.success) throw new Error(result.error);
   return result.options;
@@ -79,11 +116,7 @@ describe('getManagerAssigneeOptions', () => {
   });
 
   test('a failed member read is load_failed, never an empty list', async () => {
-    const failing = {
-      from: () => ({
-        select: () => ({ eq: () => ({ in: async () => ({ data: null, error: { code: 'XX000' } }) }) }),
-      }),
-    } as unknown as AssigneeAdminClient;
+    const failing = clientAnswering(async () => Response.json({ code: 'XX000' }, { status: 500 }));
     expect(await getManagerAssigneeOptions(failing, ORGANIZATION)).toEqual({
       success: false,
       error: 'load_failed',

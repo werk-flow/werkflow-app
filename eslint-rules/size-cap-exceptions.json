@@ -3,9 +3,7 @@
     "default": "Predates the 800-line module cap or the 80-line function cap; split it when it next changes.",
     "components/kalender/": "Calendar render behaviour is recorded: split only with a recalibration run."
   },
-  "modules": {
-    "lib/security/server-action-authorization.test.ts": 959
-  },
+  "modules": {},
   "functions": {
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 132 },

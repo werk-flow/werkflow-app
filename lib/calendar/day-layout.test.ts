@@ -12,17 +12,20 @@ import {
 } from './day-layout';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
-const entry = (id: string, entryType: TimeEntry['entryType'], timestamp: string): TimeEntry =>
-  ({
-    id,
-    entryType,
-    timestamp,
-    userId: 'u1',
-    organizationId: 'org',
-    status: 'approved',
-    createdAt: timestamp,
-    jobId: null,
-  }) as unknown as TimeEntry;
+const entry = (id: string, entryType: TimeEntry['entryType'], timestamp: string): TimeEntry => ({
+  id,
+  entryType,
+  timestamp,
+  userId: 'u1',
+  organizationId: 'org',
+  status: 'approved',
+  isManual: false,
+  reviewedBy: null,
+  reviewedAt: null,
+  createdAt: timestamp,
+  updatedAt: timestamp,
+  jobId: null,
+});
 
 describe('day layout', () => {
   test('short blocks get separate readable lanes without extending recorded time', () => {
