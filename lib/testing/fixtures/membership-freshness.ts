@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
-import type { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
+import { RequestCookiesAdapter } from 'next/dist/server/web/spec-extension/adapters/request-cookies';
+import { RequestCookies } from 'next/dist/server/web/spec-extension/cookies';
 
 mock.module('server-only', () => ({}));
 // Model persistent framework caching so restoring it makes this check fail.
@@ -128,8 +129,8 @@ await freshRead(async () => {
   assert.ok(results.every((result) => result === results[0]));
 });
 organizations = ['old', 'new'];
-// Only get() is consumed; use the real resolver with a narrow cookie boundary.
-const cookies = { get: () => ({ name: 'current_org_id', value: 'new' }) } as ReadonlyRequestCookies;
+// The real resolver reads the real request cookie store.
+const cookies = RequestCookiesAdapter.seal(new RequestCookies(new Headers({ cookie: 'current_org_id=new' })));
 assert.equal(
   await freshRead(() => resolveActiveOrgId(cookies, 'caller')),
   'new',

@@ -31,7 +31,7 @@ function printRuns(): void {
 }
 
 function isIncidentClass(value: string): value is IncidentClass {
-  return (INCIDENT_CLASSES as readonly string[]).includes(value);
+  return INCIDENT_CLASSES.some((incidentClass) => incidentClass === value);
 }
 
 async function cleanupRun(runKey: string): Promise<void> {

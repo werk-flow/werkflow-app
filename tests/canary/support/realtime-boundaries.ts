@@ -66,12 +66,12 @@ export async function captureRealtimeBoundaries(
             ready();
           }
         })
-        .on(
+        .on<Record<string, unknown>>(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'clients', filter: `organization_id=eq.${world.orgId}` },
           (payload) => {
-            const current = payload.new as Record<string, unknown>;
-            const previous = payload.old as Record<string, unknown>;
+            const current: Record<string, unknown> = payload.new;
+            const previous: Record<string, unknown> = payload.old;
             diagnostic?.({
               receiver: label,
               event: payload.eventType,
@@ -90,7 +90,7 @@ export async function captureRealtimeBoundaries(
               });
           },
         )
-        .on(
+        .on<Record<string, unknown>>(
           'postgres_changes',
           {
             event: 'INSERT',
@@ -99,7 +99,7 @@ export async function captureRealtimeBoundaries(
             filter: `organization_id=eq.${world.orgId}`,
           },
           (payload) => {
-            const current = payload.new as Record<string, unknown>;
+            const current = payload.new;
             if (current.row_id === id)
               events.push({
                 receiver: label,

@@ -5,7 +5,12 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, test } from 'bun:test';
 
 import { initialLabReference, type LabReferences } from './lab-counts';
-import { LAB_ARCHIVE, LAB_MEASUREMENT_VERSION, type LabObservation } from './lab-record';
+import {
+  LAB_ARCHIVE,
+  LAB_MEASUREMENT_VERSION,
+  labObservationSchema,
+  type LabObservation,
+} from './lab-record';
 import { checkLabEvidence } from './lab-evidence';
 import { getLabStep, LAB_METRICS, type LabMetric } from './lab-steps';
 
@@ -16,7 +21,9 @@ afterEach(() => {
 });
 
 function observation(overrides: Partial<Record<LabMetric, number>> = {}): LabObservation {
-  const counts = Object.fromEntries(LAB_METRICS.map((metric) => [metric, 2])) as Record<LabMetric, number>;
+  const counts = labObservationSchema.shape.counts.parse(
+    Object.fromEntries(LAB_METRICS.map((metric) => [metric, 2])),
+  );
   return {
     stepId: STEP.id,
     stepVersion: STEP.version,
