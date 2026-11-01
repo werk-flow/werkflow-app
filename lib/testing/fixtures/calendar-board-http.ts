@@ -125,10 +125,10 @@ mock.module('@/lib/supabase/admin', () => ({
   }),
 }));
 mock.module('@/lib/planning/server', () => ({
-  loadDailyTargetsByRecord: async (request: { employeeRecordIds: string[]; dates: string[] }) => {
+  loadDailyTargetsByRecord: async (request: { employees: Array<{ id: string }>; dates: string[] }) => {
     targetReads++;
     const targetByEmployeeDate = new Map<string, unknown>();
-    for (const record of request.employeeRecordIds) {
+    for (const { id: record } of request.employees) {
       for (const date of request.dates) {
         targetByEmployeeDate.set(`${record}:${date}`, {
           date,
@@ -136,6 +136,7 @@ mock.module('@/lib/planning/server', () => ({
           targetMinutes: record === 'record-no-login' ? 0 : 480,
           baseTargetMinutes: 480,
           source: 'schedule',
+          outsideEmployment: null,
           isHoliday: false,
           holidayName: null,
           isClosureDay: false,
