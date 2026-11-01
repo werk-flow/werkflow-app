@@ -94,13 +94,14 @@ async function readAttribution(
       ({ timeOrigin, now, rscUrls: confirmedRscUrls }) => {
         const sameDocument = performance.timeOrigin === timeOrigin;
         const since = sameDocument ? now : 0;
-        const navigation = performance.getEntriesByType('navigation')[0] as
-          | PerformanceNavigationTiming
-          | undefined;
+        const firstNavigationEntry = performance.getEntriesByType('navigation')[0];
+        const navigation =
+          firstNavigationEntry instanceof PerformanceNavigationTiming ? firstNavigationEntry : undefined;
         const fresh = !sameDocument && navigation !== undefined;
-        const resources = (performance.getEntriesByType('resource') as PerformanceResourceTiming[]).filter(
-          (entry) => entry.startTime >= since,
-        );
+        const resources = performance
+          .getEntriesByType('resource')
+          .filter((entry) => entry instanceof PerformanceResourceTiming)
+          .filter((entry) => entry.startTime >= since);
         const rsc = resources.filter((entry) => confirmedRscUrls.includes(entry.name));
         const sum = (entries: PerformanceResourceTiming[]): number =>
           entries.reduce((total, entry) => total + (entry.transferSize || entry.encodedBodySize || 0), 0);
