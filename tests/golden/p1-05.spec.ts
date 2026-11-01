@@ -14,15 +14,11 @@ import {
 import {
   approvePendingTimeEntry,
   createOwnManualTimeEntry,
-  expectExpiredResponsibilityDeniedAtAction,
   expectMemberRemovalBlockedByResponsibility,
-  expectPendingTimeApprovalHidden,
   expectPendingTimeApprovalVisible,
-  expectTimeApprovalsUnavailable,
   openTimeApprovals,
 } from './support/steps/time-tracking';
 import type { TestRole, TestWorld } from './support/world';
-import { freezeLiveUpdates } from './support/live';
 
 // P1-05 — Scoped responsibilities and substitution (@P1-05). Every test pins
 // the time-approval holders it builds on through the product's configuration
@@ -119,9 +115,11 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('approved');
   });
 
-  test('Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip', async ({
+  // That a holder never sees or approves an own entry, and that a member
+  // without the responsibility gets no approval surface, is proven at the
+  // page and the actions (lib/responsibilities/approval-page-access.test.ts).
+  test('Der eigene Eintrag eines Verantwortlichen wartet auf die zweite verantwortliche Person', async ({
     adminPage,
-    bueroPage,
     businessDate,
     employeePage,
     world,
@@ -136,9 +134,6 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.employee.id)).status).toBe(
       'pending',
     );
-    await expectTimeApprovalsUnavailable(bueroPage);
-    await openTimeApprovals(employeePage);
-    await expectPendingTimeApprovalHidden(employeePage, world.users.employee.id);
 
     await openTimeApprovals(adminPage);
     await expectPendingTimeApprovalVisible(adminPage, world.users.employee.id);
@@ -148,7 +143,10 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
     );
   });
 
-  test('Eine Vertretung gilt im Fenster und verliert die Freigabe nach dem Ende am Aktionspunkt', async ({
+  // The ended substitution's refusal at action time is proven at the action
+  // (lib/responsibilities/approval-page-access.test.ts), its message and the
+  // dropped card in the approvals contract (tests/ui-contracts/time-approvals.spec.ts).
+  test('Eine Vertretung aus den Einstellungen gibt im Fenster die Freigabe und lässt sich beenden', async ({
     adminPage,
     bueroPage,
     businessDate,
@@ -174,19 +172,10 @@ test.describe('P1-05 Verantwortlichkeiten und Vertretung @P1-05', () => {
       clockInDigits: '0800',
       clockOutDigits: '0900',
     });
-    // The employee keeps the approval card it opened with, so the click below
-    // reaches the server after the substitution ended, whatever a catch-up
-    // read would show meanwhile.
-    const releaseEmployee = await freezeLiveUpdates(employeePage);
     await openTimeApprovals(employeePage);
     await expectPendingTimeApprovalVisible(employeePage, world.users.buero.id);
 
-    // End the substitution in the admin session while the employee still has
-    // the stale approval card. The click must be denied by action-time
-    // resolution, not merely disappear after a UI refresh.
     await endResponsibilityDelegationViaSettings(adminPage, 'time_approval', employeeName);
-    await expectExpiredResponsibilityDeniedAtAction(employeePage, world.users.buero.id);
-    await releaseEmployee();
     expect((await getLatestManualTimeEntryState(world.orgId, world.users.buero.id)).status).toBe('pending');
 
     await openTimeApprovals(adminPage);

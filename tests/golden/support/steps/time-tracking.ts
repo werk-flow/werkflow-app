@@ -20,7 +20,6 @@ import {
   datePickerDigits,
   escapeRegExp,
   expectBannerAfter,
-  expectGone,
   pageHeader,
   selectFromSearchable,
   SHARED_COPY,
@@ -108,9 +107,6 @@ export const TIME_ENTRY_COPY = {
   approveAll: 'Alle genehmigen',
   approveAllConfirmation: 'Alle Zeiteinträge genehmigen?',
   entryApproved: 'Der Zeiteintrag wurde genehmigt.',
-  correctionReviewHeading: 'Zeitkorrekturen prüfen',
-  responsibilityExpired:
-    'Du bist für diese Freigabe nicht mehr verantwortlich. Die Ansicht wurde aktualisiert.',
   removalBlocked:
     'Vor dem Entfernen muss die Verantwortung für Zeitfreigaben neu zugewiesen oder auf den Standard zurückgestellt werden.',
   reassignFirst: 'Zuerst neu zuweisen',
@@ -601,23 +597,12 @@ export function approveAllTimeEntriesConfirmation(page: Page): Locator {
   return page.getByRole('alertdialog', { name: TIME_ENTRY_COPY.approveAllConfirmation, exact: true });
 }
 
-export async function expectTimeApprovalsUnavailable(page: Page): Promise<void> {
-  await page.goto('/zeiterfassung?tab=approvals');
-  await expect(timeApprovalsTab(page)).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByTestId('pending-approvals-panel')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: TIME_ENTRY_COPY.correctionReviewHeading })).toHaveCount(0);
-}
-
 function pendingTimeApprovalCard(page: Page, userId: string): Locator {
   return confirmed(page.locator(`[data-testid^="pending-session-"][data-user-id="${userId}"]`));
 }
 
 export async function expectPendingTimeApprovalVisible(page: Page, userId: string): Promise<void> {
   await expect(pendingTimeApprovalCard(page, userId)).toBeVisible();
-}
-
-export async function expectPendingTimeApprovalHidden(page: Page, userId: string): Promise<void> {
-  await expectGone(pendingTimeApprovalCard(page, userId));
 }
 
 export async function approvePendingTimeEntry(
@@ -636,13 +621,6 @@ export async function approvePendingTimeEntry(
   );
   await openTimeApprovals(page);
   await expect(card).toHaveCount(0);
-}
-
-export async function expectExpiredResponsibilityDeniedAtAction(page: Page, userId: string): Promise<void> {
-  const card = pendingTimeApprovalCard(page, userId);
-  await card.getByTitle(TIME_ENTRY_COPY.approveEntry).click();
-  await expect(page.getByText(TIME_ENTRY_COPY.responsibilityExpired)).toBeVisible();
-  await expectGone(card);
 }
 
 export async function expectMemberRemovalBlockedByResponsibility(

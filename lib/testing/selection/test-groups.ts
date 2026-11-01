@@ -330,6 +330,7 @@ const sqlDefinitions: readonly (readonly [string, readonly string[], readonly st
   ['qualification-history-writes', ['qualification_history_writes.sql'], ['personnel']],
   ['employee-capability-history-writes', ['employee_capability_history_writes.sql'], ['personnel']],
   ['personnel-history-writes', ['personnel_history_writes.sql'], ['personnel']],
+  ['organization-member-reads', ['organization_member_reads.sql'], ['personnel']],
   ['planning-options', ['planning_option_search.sql'], ['planning']],
   ['customer-relationships', ['customer_relationships.sql'], ['customers']],
   ['customer-atomic-writes', ['customer_atomic_writes.sql'], ['customers']],

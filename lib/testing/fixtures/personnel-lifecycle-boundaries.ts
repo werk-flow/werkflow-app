@@ -1,8 +1,8 @@
 // Actual personnel lifecycle actions over the in-memory database: only
-// managers reach another person's lifecycle, the access transition is
-// Admin-only, an employee record or protected document of another
-// organization is unreachable, and a prestart employee reads and acknowledges
-// only their own items.
+// managers reach another person's lifecycle, the access transition and the
+// Admin-only documents stay with the Admin, an employee record or protected
+// document of another organization is unreachable, and a prestart employee
+// reads and acknowledges only their own items.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
 import {
@@ -21,6 +21,7 @@ const ownRequirementId = '61000000-0000-4000-8000-000000000001';
 const colleagueRequirementId = '61000000-0000-4000-8000-000000000002';
 const ownDocumentId = '62000000-0000-4000-8000-000000000001';
 const colleagueDocumentId = '62000000-0000-4000-8000-000000000002';
+const colleagueStandardDocumentId = '62000000-0000-4000-8000-000000000003';
 const foreignDocumentId = '62000000-0000-4000-8000-000000000009';
 const colleagueId = '30000000-0000-4000-8000-000000000021';
 const foreignUserId = '30000000-0000-4000-8000-000000000029';
@@ -91,6 +92,7 @@ const world = installActionWorld({
   personnel_documents: [
     personnelDocument(ownDocumentId, ORGANIZATION_A, ownRecordId, 'health_evidence'),
     personnelDocument(colleagueDocumentId, ORGANIZATION_A, colleagueRecordId, 'admin_restricted'),
+    personnelDocument(colleagueStandardDocumentId, ORGANIZATION_A, colleagueRecordId, 'personnel_standard'),
     personnelDocument(foreignDocumentId, ORGANIZATION_B, foreignRecordId, 'personnel_standard'),
   ],
 });
@@ -178,13 +180,21 @@ assert.equal(world.adminClientRequests, 0);
 assert.deepEqual(await signedUrlOf(colleagueDocumentId), notAuthorized);
 assert.ok((await signedUrlOf(ownDocumentId)).success);
 
-// Büro manages lifecycles but neither changes access nor opens an Admin-only document.
+// Büro manages lifecycles but neither changes access nor opens or lists an
+// Admin-only document; the admin lists both of the person's documents.
+const listedDocuments = async (): Promise<string[]> => {
+  const lifecycle = await actions.getPersonnelLifecycle(colleagueRecordId);
+  assert.ok(lifecycle.success, `the lifecycle read failed: ${JSON.stringify(lifecycle)}`);
+  return lifecycle.data.documents.map((document) => document.documentId).sort();
+};
 signInAs(world, 'buero');
 assert.deepEqual(await accessTransition(colleagueRecordId), notAuthorized);
 assert.deepEqual(await signedUrlOf(colleagueDocumentId), notAuthorized);
+assert.deepEqual(await listedDocuments(), [colleagueStandardDocumentId]);
 
 // An Admin of organization A reaches no employee record or document of organization B.
 signInAs(world, 'admin');
+assert.deepEqual(await listedDocuments(), [colleagueDocumentId, colleagueStandardDocumentId].sort());
 assert.deepEqual(await actions.getPersonnelLifecycle(foreignRecordId), recordNotFound);
 assert.deepEqual(await accessTransition(foreignRecordId), recordNotFound);
 assert.deepEqual(await onboardingPlan(foreignRecordId), recordNotFound);
