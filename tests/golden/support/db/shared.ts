@@ -8,7 +8,7 @@ import { testSupabaseClientOptions } from '.././client-options';
 // the UI cannot prove (the invite code inside the email link, and the stock
 // ledger behind the visible quantities).
 
-declare const persistedBrand: unique symbol;
+const persistedBrand = Symbol('persisted');
 
 /**
  * A row read back from the database after the UI saved it. A mutation step
@@ -19,9 +19,16 @@ declare const persistedBrand: unique symbol;
  */
 export type Persisted<Row> = Row & { readonly [persistedBrand]: true };
 
+function carriesPersistedMark<Row extends object>(row: Row): row is Persisted<Row> {
+  return Object.getOwnPropertyDescriptor(row, persistedBrand)?.value === true;
+}
+
 /** Brands a row that a reader in this folder just read through the admin client. */
 export function persisted<Row extends object>(row: Row): Persisted<Row> {
-  return row as Persisted<Row>;
+  // Non-enumerable, so equality assertions and JSON output never see the mark.
+  Object.defineProperty(row, persistedBrand, { value: true });
+  if (!carriesPersistedMark(row)) throw new Error('The persisted mark did not attach to the row.');
+  return row;
 }
 
 export function createAdminClient(): SupabaseClient<Database> {
@@ -46,7 +53,7 @@ export async function getPendingInviteCode(orgId: string, email: string): Promis
   if (error || !data) {
     throw new Error(`No pending invite found for ${email}: ${error?.message}`);
   }
-  return data.invite_code as string;
+  return data.invite_code;
 }
 
 export class MissingTestFixtureError extends Error {
@@ -106,5 +113,5 @@ export async function getCustomerNumber(orgId: string, customerName: string): Pr
   if (error || !data) {
     throw new Error(`Customer ${customerName} not found: ${error?.message}`);
   }
-  return (data.customer_number as string | null) ?? null;
+  return data.customer_number ?? null;
 }

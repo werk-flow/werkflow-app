@@ -228,34 +228,34 @@ export async function getCustomerRelationshipState(
     throw new Error(`Customer relationship observation failed: ${firstError.message}`);
   }
   return {
-    clientId: client.id as string,
+    clientId: client.id,
     followUps: (followUps.data ?? []).map((row) => ({
-      id: row.id as string,
-      title: row.title as string,
-      status: row.status as string,
-      ownerUserId: row.owner_user_id as string,
-      completedBy: (row.completed_by as string | null) ?? null,
-      cancelledBy: (row.cancelled_by as string | null) ?? null,
-      sourceType: (row.source_type as string | null) ?? null,
-      sourceId: (row.source_id as string | null) ?? null,
+      id: row.id,
+      title: row.title,
+      status: row.status,
+      ownerUserId: row.owner_user_id,
+      completedBy: row.completed_by ?? null,
+      cancelledBy: row.cancelled_by ?? null,
+      sourceType: row.source_type ?? null,
+      sourceId: row.source_id ?? null,
     })),
-    followUpEventTypes: (followUpEvents.data ?? []).map((row) => row.event_type as string),
-    preferenceEventTypes: (preferenceEvents.data ?? []).map((row) => row.event_type as string),
+    followUpEventTypes: (followUpEvents.data ?? []).map((row) => row.event_type),
+    preferenceEventTypes: (preferenceEvents.data ?? []).map((row) => row.event_type),
     communicationSettings: settings.data
       ? {
-          preferredContactId: (settings.data.preferred_contact_id as string | null) ?? null,
-          preferredChannel: (settings.data.preferred_channel as string | null) ?? null,
-          doNotContactInstruction: (settings.data.do_not_contact_instruction as string | null) ?? null,
-          contactTimeNote: (settings.data.contact_time_note as string | null) ?? null,
-          languageNote: (settings.data.language_note as string | null) ?? null,
-          accessibilityNote: (settings.data.accessibility_note as string | null) ?? null,
+          preferredContactId: settings.data.preferred_contact_id ?? null,
+          preferredChannel: settings.data.preferred_channel ?? null,
+          doNotContactInstruction: settings.data.do_not_contact_instruction ?? null,
+          contactTimeNote: settings.data.contact_time_note ?? null,
+          languageNote: settings.data.language_note ?? null,
+          accessibilityNote: settings.data.accessibility_note ?? null,
         }
       : null,
     communicationPreferences: (preferences.data ?? []).map((row) => ({
-      contactId: (row.contact_id as string | null) ?? null,
-      channel: row.channel as string,
-      purpose: row.purpose as string,
-      state: row.state as string,
+      contactId: row.contact_id ?? null,
+      channel: row.channel,
+      purpose: row.purpose,
+      state: row.state,
     })),
   };
 }
