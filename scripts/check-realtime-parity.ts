@@ -1,6 +1,7 @@
 // Tier 2: local publication identity, deletion-trigger coverage, and operation
 // flags must match the provider. Raw DELETE/TRUNCATE bypass Realtime RLS.
 import { execFileSync } from 'node:child_process';
+import { z } from 'zod';
 import { REALTIME_PUBLISHED_TABLES } from '../lib/realtime/tables';
 import {
   validateRealtimePublication,
@@ -40,7 +41,27 @@ select coalesce(json_agg(row_to_json(p)), '[]'::json) from (
   from pg_publication where pubname='supabase_realtime'
 ) p`;
 
-function runLocalQuery<T>(query: string): T {
+const publishedTableStatesSchema: z.ZodType<PublishedTableState[]> = z.array(
+  z.object({
+    schemaname: z.string(),
+    tablename: z.string(),
+    replident: z.string(),
+    replident_index: z.string(),
+    replident_index_columns: z.string(),
+    deletion_trigger_valid: z.boolean(),
+    transaction_stamp_valid: z.boolean(),
+  }),
+);
+const publicationFlagsSchema: z.ZodType<PublicationFlags[]> = z.array(
+  z.object({
+    pubinsert: z.boolean(),
+    pubupdate: z.boolean(),
+    pubdelete: z.boolean(),
+    pubtruncate: z.boolean(),
+  }),
+);
+
+function runLocalQuery<T>(query: string, schema: z.ZodType<T>): T {
   const args = [
     'exec',
     'supabase_db_werkflow-app',
@@ -55,13 +76,13 @@ function runLocalQuery<T>(query: string): T {
   ];
   const raw = execFileSync('docker', args, { encoding: 'utf8', timeout: 30_000 }).trim();
   if (!raw) throw new Error('No response from the local stack.');
-  return JSON.parse(raw) as T;
+  return schema.parse(JSON.parse(raw));
 }
 
 export function checkRealtimeParity(): string[] {
   return validateRealtimePublication(
-    runLocalQuery<PublishedTableState[]>(REALTIME_STATE_QUERY),
-    runLocalQuery<PublicationFlags[]>(REALTIME_PUBLICATION_QUERY),
+    runLocalQuery(REALTIME_STATE_QUERY, publishedTableStatesSchema),
+    runLocalQuery(REALTIME_PUBLICATION_QUERY, publicationFlagsSchema),
   );
 }
 

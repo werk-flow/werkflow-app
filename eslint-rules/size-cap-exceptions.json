@@ -65,8 +65,6 @@
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 129 },
-    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
-    "lib/testing/spec-support/spec-independence.ts": { "specIndependenceProblems": 82 }
+    "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 }
   }
 }

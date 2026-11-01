@@ -24,7 +24,7 @@ const unfinished = {
   passed: 41,
   failed: 0,
   skipped: 0,
-  outcomes: [{ id: 'completed-business-stage', status: 'passed' as const }],
+  outcomes: [{ id: 'completed-business-stage', status: 'passed' as const, durationMilliseconds: 1_200 }],
   currentTestId: 'stage-in-progress',
   campaignId: 'campaign',
   rerunGrantId: 'consumed-grant',
@@ -47,18 +47,18 @@ type RecoveryFixture = Pick<
   | 'rerunGrantId'
 >;
 
-function manifestStore(directory: string): {
+/** The persisted manifest; every read and write is a copy, as a manifest file's would be. */
+function manifestStore(): {
   read: () => RecoveryFixture;
   persist: (patch: Partial<RunManifest>) => RecoveryFixture;
 } {
-  const path = join(directory, 'manifest.json');
-  writeFileSync(path, JSON.stringify(unfinished));
-  const read = (): RecoveryFixture => JSON.parse(readFileSync(path, 'utf8')) as RecoveryFixture;
+  let persisted: RecoveryFixture = structuredClone(unfinished);
+  const read = (): RecoveryFixture => structuredClone(persisted);
   return {
     read,
     persist: (patch) => {
       const next = { ...read(), ...patch };
-      writeFileSync(path, JSON.stringify(next));
+      persisted = structuredClone(next);
       return next;
     },
   };
@@ -163,7 +163,7 @@ describe('explicit interrupted-run recovery', () => {
     (failure) => {
       const directory = mkdtempSync(join(tmpdir(), 'werkflow-recovery-evidence-'));
       try {
-        const store = manifestStore(directory);
+        const store = manifestStore();
         const artifact = join(directory, 'original-output.log');
         writeFileSync(artifact, 'original forensic output');
         expect(() =>
@@ -200,7 +200,7 @@ describe('explicit interrupted-run recovery', () => {
   test('named archive repair preserves the original completion time, outcomes and consumed grant', () => {
     const directory = mkdtempSync(join(tmpdir(), 'werkflow-recovery-repair-'));
     try {
-      const store = manifestStore(directory);
+      const store = manifestStore();
       const archivePath = join(directory, 'world.json');
       const archiveAndVerify = (): void => {
         readFileSync(archivePath, 'utf8');
@@ -256,32 +256,27 @@ describe('explicit interrupted-run recovery', () => {
   });
 
   test('failure-record write failure preserves the earlier pending ownership and both errors', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'werkflow-recovery-write-fault-'));
-    try {
-      const store = manifestStore(directory);
-      let writes = 0;
-      expect(() =>
-        recoverInterruptedEvidence({
-          manifest: store.read(),
-          reason: 'Host terminated the runner before normal teardown completed.',
-          persist: (patch) => {
-            writes += 1;
-            if (writes > 1) throw new Error('archive failure record write failed');
-            return store.persist(patch);
-          },
-          archiveAndVerify: () => {
-            throw new Error('archive copy failed');
-          },
-        }),
-      ).toThrow(AggregateError);
-      expect(store.read()).toMatchObject({
-        status: 'interrupted',
-        cleanedAt: null,
-        interruptionRecovery: { archive: { status: 'pending' } },
-      });
-      expect(store.read().retainedAt).not.toBeNull();
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
+    const store = manifestStore();
+    let writes = 0;
+    expect(() =>
+      recoverInterruptedEvidence({
+        manifest: store.read(),
+        reason: 'Host terminated the runner before normal teardown completed.',
+        persist: (patch) => {
+          writes += 1;
+          if (writes > 1) throw new Error('archive failure record write failed');
+          return store.persist(patch);
+        },
+        archiveAndVerify: () => {
+          throw new Error('archive copy failed');
+        },
+      }),
+    ).toThrow(AggregateError);
+    expect(store.read()).toMatchObject({
+      status: 'interrupted',
+      cleanedAt: null,
+      interruptionRecovery: { archive: { status: 'pending' } },
+    });
+    expect(store.read().retainedAt).not.toBeNull();
   });
 });

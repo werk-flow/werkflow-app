@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { assertWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
+import { expectDefined } from '@/lib/testing/spec-support/expect-defined';
 import { WORK_EXECUTION_LABELS, workTransitionActionLabel } from '@/lib/work-lifecycle/types';
 import { LIVE_READ_PENDING_ATTRIBUTE } from '@/lib/ui/route-refresh-signal';
 
@@ -387,7 +388,10 @@ test('single choice supports keyboard filtering, selection, none and focus resto
   await expect(search).toBeFocused();
   await search.fill('Bernd');
   const list = page.getByRole('listbox', { name: 'Verantwortliche Person' });
-  await expect(trigger).toHaveAttribute('aria-controls', (await list.getAttribute('id')) as string);
+  await expect(trigger).toHaveAttribute(
+    'aria-controls',
+    expectDefined(await list.getAttribute('id'), 'the id of the listbox'),
+  );
   await expect(list.getByRole('option')).toHaveCount(2);
   await search.press('ArrowDown');
   await expect(list.getByRole('option', { name: 'Keine Auswahl' })).toBeFocused();
@@ -442,7 +446,10 @@ test('multi choice announces selected options and supports Space, arrows, Home a
   await trigger.click();
   const search = page.getByRole('textbox', { name: 'Team durchsuchen' });
   const list = page.getByRole('listbox', { name: 'Team', exact: true });
-  await expect(trigger).toHaveAttribute('aria-controls', (await list.getAttribute('id')) as string);
+  await expect(trigger).toHaveAttribute(
+    'aria-controls',
+    expectDefined(await list.getAttribute('id'), 'the id of the listbox'),
+  );
   await expect(list).toHaveAttribute('aria-multiselectable', 'true');
   await search.press('ArrowDown');
   await page.keyboard.press('Space');
