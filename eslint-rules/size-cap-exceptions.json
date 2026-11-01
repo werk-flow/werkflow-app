@@ -77,17 +77,10 @@
     "components/settings/profile-avatar-section.tsx": { "ProfileAvatarSection": 137 },
     "components/settings/profile-settings-form.tsx": { "ProfileSettingsForm": 87 },
     "components/settings/responsibility-delegation-dialog.tsx": { "DelegationDialog": 138 },
-    "components/settings/responsibility-settings.tsx": {
-      "ResponsibilityCard": 93,
-      "ConfigurationDialog": 85
-    },
     "components/settings/time-tracking-settings-form.tsx": { "TimeTrackingSettingsForm": 160 },
     "components/settings/use-email-change-wizard.ts": { "useEmailChangeWizard": 151 },
     "components/settings/use-password-change-flow.ts": { "usePasswordChangeFlow": 152 },
     "components/settings/use-profile-avatar-upload.ts": { "useProfileAvatarUpload": 168 },
-    "components/settings/use-responsibility-configuration-form.ts": {
-      "useResponsibilityConfigurationForm": 102
-    },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
