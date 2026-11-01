@@ -49,9 +49,10 @@ function dateDigits(value: string): string {
   return value.split('-').reverse().join('');
 }
 
-// Project-child packs, dispatch, interruptions, time switching, own blockers,
-// assignment revocation and the unassigned/outsider denials are edge cases in
-// tests/audit/wave-2/p1-16.spec.ts.
+// Project-child packs, dispatch, interruptions, time switching, own blockers
+// and assignment revocation are edge cases in tests/audit/wave-2/p1-16.spec.ts.
+// The unassigned and outsider denials and the office-only values the pack
+// never receives are lib/org/field-work-pack-access.test.ts.
 test.describe('P1-16 focused field work pack @P1-16', () => {
   test('an assigned field worker works through the pack and completes the job', async ({
     adminPage,
