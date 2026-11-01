@@ -39,27 +39,7 @@ export function PasswordChangeCard() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <p className="text-sm font-medium text-foreground">Sicherheit</p>
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-muted p-2 text-muted-foreground">
-                <KeyRound className="size-4" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Passwort aktualisieren</p>
-                <p className="text-sm text-muted-foreground">
-                  Ändere dein Passwort und halte andere Sitzungen aktuell.
-                </p>
-              </div>
-            </div>
-            {step === 'idle' ? (
-              <Button type="button" onClick={startFlow}>
-                Passwort ändern
-              </Button>
-            ) : null}
-          </div>
-        </div>
+        <PasswordSecurityRow showStart={step === 'idle'} startFlow={startFlow} />
 
         {step !== 'idle' ? (
           <div className="grid gap-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
@@ -85,31 +65,78 @@ export function PasswordChangeCard() {
               ) : null}
 
               {step === 'set_new' ? (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-foreground">
-                      <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
-                      <p className="text-base font-semibold">Schritt 2: Neues Passwort festlegen</p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Hinterlege jetzt dein neues Passwort und bestätige es zur Sicherheit ein zweites Mal.
-                    </p>
-                  </div>
-
-                  <NewPasswordFieldsForm
-                    formError={formError}
-                    isSubmitting={isPasswordSubmitting}
-                    submitLabel="Passwort aktualisieren"
-                    submittingLabel="Passwort wird aktualisiert…"
-                    onSubmit={onPasswordSubmit}
-                    onBack={backToVerificationStep}
-                  />
-                </div>
+                <SetNewPasswordStep
+                  formError={formError}
+                  isPasswordSubmitting={isPasswordSubmitting}
+                  onPasswordSubmit={onPasswordSubmit}
+                  backToVerificationStep={backToVerificationStep}
+                />
               ) : null}
             </div>
           </div>
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+function PasswordSecurityRow({ showStart, startFlow }: { showStart: boolean; startFlow: () => void }) {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-4">
+      <p className="text-sm font-medium text-foreground">Sicherheit</p>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="rounded-full bg-muted p-2 text-muted-foreground">
+            <KeyRound className="size-4" />
+          </div>
+          <div>
+            <p className="font-medium text-foreground">Passwort aktualisieren</p>
+            <p className="text-sm text-muted-foreground">
+              Ändere dein Passwort und halte andere Sitzungen aktuell.
+            </p>
+          </div>
+        </div>
+        {showStart ? (
+          <Button type="button" onClick={startFlow}>
+            Passwort ändern
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+type PasswordFlowState = ReturnType<typeof usePasswordChangeFlow>;
+
+function SetNewPasswordStep({
+  formError,
+  isPasswordSubmitting,
+  onPasswordSubmit,
+  backToVerificationStep,
+}: Pick<
+  PasswordFlowState,
+  'formError' | 'isPasswordSubmitting' | 'onPasswordSubmit' | 'backToVerificationStep'
+>) {
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 text-foreground">
+          <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" />
+          <p className="text-base font-semibold">Schritt 2: Neues Passwort festlegen</p>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Hinterlege jetzt dein neues Passwort und bestätige es zur Sicherheit ein zweites Mal.
+        </p>
+      </div>
+
+      <NewPasswordFieldsForm
+        formError={formError}
+        isSubmitting={isPasswordSubmitting}
+        submitLabel="Passwort aktualisieren"
+        submittingLabel="Passwort wird aktualisiert…"
+        onSubmit={onPasswordSubmit}
+        onBack={backToVerificationStep}
+      />
+    </div>
   );
 }

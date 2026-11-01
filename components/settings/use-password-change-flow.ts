@@ -73,6 +73,161 @@ async function rememberResetAddress(): Promise<boolean> {
   }
 }
 
+type PasswordChangeContext = {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  verificationClient: ReturnType<typeof createSupabaseTransientBrowserClient>;
+  /** The verified current password, kept in memory between the two steps only. */
+  currentPasswordRef: React.RefObject<string>;
+  currentPasswordForm: UseFormReturn<CurrentPasswordValues>;
+  setStep: (step: PasswordChangeStep) => void;
+  setFormError: (error: string | null) => void;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  returnToVerificationStep: () => void;
+  resetFlow: () => void;
+};
+
+/** The address to re-authenticate with, or null once the form says why there is none. */
+function verificationEmail(
+  profileEmail: string | undefined,
+  isEmailReading: boolean,
+  setFormError: (error: string | null) => void,
+): string | null {
+  const email = profileEmail?.trim();
+  if (email) return email;
+  // A failed read shows its own error with a retry above the form.
+  if (isEmailReading) setFormError('Deine E-Mail-Adresse wird noch geladen. Versuche es gleich erneut.');
+  return null;
+}
+
+/** Step 1: checks the current password on a throwaway client and keeps it for step 2. */
+async function verifyCurrentPassword(
+  {
+    verificationClient,
+    currentPasswordRef,
+    currentPasswordForm,
+    setStep,
+    setFormError,
+  }: PasswordChangeContext,
+  email: string,
+  values: CurrentPasswordValues,
+): Promise<void> {
+  setFormError(null);
+  currentPasswordForm.clearErrors('currentPassword');
+
+  try {
+    const { error } = await verificationClient.auth.signInWithPassword({
+      email,
+      password: values.currentPassword,
+    });
+
+    if (error) {
+      currentPasswordForm.setError('currentPassword', {
+        type: 'manual',
+        message: isCurrentPasswordError(error)
+          ? 'Dein aktuelles Passwort ist nicht korrekt.'
+          : translateSupabasePasswordError(error),
+      });
+      return;
+    }
+
+    // eslint-disable-next-line no-restricted-syntax -- the verification client holds a throwaway session; a failed local sign-out must not block the password change
+    await verificationClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
+    currentPasswordRef.current = values.currentPassword;
+    setStep('set_new');
+  } catch {
+    setFormError('Das aktuelle Passwort konnte nicht geprüft werden. Bitte versuche es erneut.');
+  }
+}
+
+/** Step 2: sets the new password with the kept current one, then signs out the other sessions. */
+async function updatePassword(
+  {
+    supabase,
+    currentPasswordRef,
+    currentPasswordForm,
+    setFormError,
+    showBanner,
+    returnToVerificationStep,
+    resetFlow,
+  }: PasswordChangeContext,
+  values: PasswordWithConfirmationValues,
+): Promise<void> {
+  setFormError(null);
+
+  const currentPassword = currentPasswordRef.current;
+
+  try {
+    if (!currentPassword) {
+      setFormError('Bitte bestätige zuerst erneut dein aktuelles Passwort.');
+      returnToVerificationStep();
+      return;
+    }
+
+    if (values.password === currentPassword) {
+      setFormError('Das neue Passwort muss sich vom alten Passwort unterscheiden.');
+      returnToVerificationStep();
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      current_password: currentPassword,
+      password: values.password,
+    });
+
+    if (error) {
+      if (isCurrentPasswordError(error)) {
+        returnToVerificationStep();
+        currentPasswordForm.setError('currentPassword', {
+          type: 'manual',
+          message: 'Dein aktuelles Passwort ist nicht korrekt.',
+        });
+        setFormError(null);
+        return;
+      }
+
+      returnToVerificationStep();
+      setFormError(translateSupabasePasswordError(error));
+      return;
+    }
+
+    const { error: signOutOthersError } = await supabase.auth.signOut({
+      scope: 'others',
+    });
+
+    resetFlow();
+    showBanner({
+      message: signOutOthersError
+        ? 'Dein Passwort wurde aktualisiert. Andere Sitzungen konnten nicht automatisch abgemeldet werden.'
+        : 'Dein Passwort wurde aktualisiert. Andere Sitzungen wurden abgemeldet.',
+      variant: 'success',
+    });
+  } catch {
+    setFormError('Das Passwort konnte nicht aktualisiert werden. Bitte versuche es erneut.');
+  }
+}
+
+/** Signs out everywhere and leaves for the reset form, which the server prefills when it can. */
+async function redirectToPasswordReset(
+  supabase: ReturnType<typeof createSupabaseBrowserClient>,
+  setFormError: (error: string | null) => void,
+): Promise<void> {
+  await clearEmailChangeChallengeQuietly();
+  // The address reaches the reset form in a cookie the server sets from the
+  // session, so this must run before the sign-out below.
+  const knownAddress = await rememberResetAddress();
+
+  // Global on purpose: a password change ends every existing session.
+  const { error } = await supabase.auth.signOut({ scope: 'global' });
+
+  if (error) {
+    setFormError('Wir konnten dich nicht sicher abmelden. Bitte versuche es erneut.');
+    return;
+  }
+
+  window.location.replace(knownAddress ? '/forgot-password?source=settings' : '/forgot-password');
+  return untilPageLeaves();
+}
+
 /**
  * The whole password-change state machine: re-authentication with the current
  * password, the in-memory copy of it, and the update with sign-out of other sessions.
@@ -115,43 +270,23 @@ export function usePasswordChangeFlow(): PasswordChangeFlow {
     setStep('verify_current');
   }
 
+  const flowContext: PasswordChangeContext = {
+    supabase,
+    verificationClient,
+    currentPasswordRef,
+    currentPasswordForm,
+    setStep,
+    setFormError,
+    showBanner,
+    returnToVerificationStep,
+    resetFlow,
+  };
+
   async function submitCurrentPassword(values: CurrentPasswordValues): Promise<void> {
-    const email = profile?.email?.trim();
+    const email = verificationEmail(profile?.email, isEmailReading, setFormError);
+    if (!email) return;
 
-    if (!email) {
-      // A failed read shows its own error with a retry above the form.
-      if (isEmailReading) setFormError('Deine E-Mail-Adresse wird noch geladen. Versuche es gleich erneut.');
-      return;
-    }
-
-    await runCurrentPasswordSubmit(async () => {
-      setFormError(null);
-      currentPasswordForm.clearErrors('currentPassword');
-
-      try {
-        const { error } = await verificationClient.auth.signInWithPassword({
-          email,
-          password: values.currentPassword,
-        });
-
-        if (error) {
-          currentPasswordForm.setError('currentPassword', {
-            type: 'manual',
-            message: isCurrentPasswordError(error)
-              ? 'Dein aktuelles Passwort ist nicht korrekt.'
-              : translateSupabasePasswordError(error),
-          });
-          return;
-        }
-
-        // eslint-disable-next-line no-restricted-syntax -- the verification client holds a throwaway session; a failed local sign-out must not block the password change
-        await verificationClient.auth.signOut({ scope: 'local' }).catch(() => undefined);
-        currentPasswordRef.current = values.currentPassword;
-        setStep('set_new');
-      } catch {
-        setFormError('Das aktuelle Passwort konnte nicht geprüft werden. Bitte versuche es erneut.');
-      }
-    });
+    await runCurrentPasswordSubmit(() => verifyCurrentPassword(flowContext, email, values));
   }
 
   // Wrapped at submit time, not during render: the handler writes the password ref.
@@ -159,87 +294,16 @@ export function usePasswordChangeFlow(): PasswordChangeFlow {
     currentPasswordForm.handleSubmit(submitCurrentPassword)(event);
 
   async function onPasswordSubmit(values: PasswordWithConfirmationValues): Promise<void> {
-    await runPasswordSubmit(async () => {
-      setFormError(null);
-
-      const currentPassword = currentPasswordRef.current;
-
-      try {
-        if (!currentPassword) {
-          setFormError('Bitte bestätige zuerst erneut dein aktuelles Passwort.');
-          returnToVerificationStep();
-          return;
-        }
-
-        if (values.password === currentPassword) {
-          setFormError('Das neue Passwort muss sich vom alten Passwort unterscheiden.');
-          returnToVerificationStep();
-          return;
-        }
-
-        const { error } = await supabase.auth.updateUser({
-          current_password: currentPassword,
-          password: values.password,
-        });
-
-        if (error) {
-          if (isCurrentPasswordError(error)) {
-            returnToVerificationStep();
-            currentPasswordForm.setError('currentPassword', {
-              type: 'manual',
-              message: 'Dein aktuelles Passwort ist nicht korrekt.',
-            });
-            setFormError(null);
-            return;
-          }
-
-          returnToVerificationStep();
-          setFormError(translateSupabasePasswordError(error));
-          return;
-        }
-
-        const { error: signOutOthersError } = await supabase.auth.signOut({
-          scope: 'others',
-        });
-
-        resetFlow();
-        showBanner({
-          message: signOutOthersError
-            ? 'Dein Passwort wurde aktualisiert. Andere Sitzungen konnten nicht automatisch abgemeldet werden.'
-            : 'Dein Passwort wurde aktualisiert. Andere Sitzungen wurden abgemeldet.',
-          variant: 'success',
-        });
-      } catch {
-        setFormError('Das Passwort konnte nicht aktualisiert werden. Bitte versuche es erneut.');
-      }
-    });
+    await runPasswordSubmit(() => updatePassword(flowContext, values));
   }
 
   async function handleForgotPassword(): Promise<void> {
     setFormError(null);
 
-    await runForgotPasswordRedirect(async () => {
-      await clearEmailChangeChallengeQuietly();
-      // The address reaches the reset form in a cookie the server sets from the
-      // session, so this must run before the sign-out below.
-      const knownAddress = await rememberResetAddress();
-
-      // Global on purpose: a password change ends every existing session.
-      const { error } = await supabase.auth.signOut({ scope: 'global' });
-
-      if (error) {
-        setFormError('Wir konnten dich nicht sicher abmelden. Bitte versuche es erneut.');
-        return;
-      }
-
-      window.location.replace(knownAddress ? '/forgot-password?source=settings' : '/forgot-password');
-      return untilPageLeaves();
-    });
+    await runForgotPasswordRedirect(() => redirectToPasswordReset(supabase, setFormError));
   }
 
-  function startFlow(): void {
-    setStep('verify_current');
-  }
+  const startFlow = () => setStep('verify_current');
 
   function backToVerificationStep(): void {
     setFormError(null);
