@@ -39,6 +39,208 @@ type ProfileAvatarUpload = {
   handleRemoveAvatar: () => Promise<void>;
 };
 
+type AvatarHandlerContext = {
+  supabase: ReturnType<typeof createSupabaseBrowserClient>;
+  profile: UserProfile | null;
+  refreshProfile: () => Promise<void>;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  cropSource: string | null;
+  croppedAreaPixels: Area | null;
+  setCropSource: (source: string) => void;
+  setCrop: (crop: CropPosition) => void;
+  setZoom: (zoom: number) => void;
+  setCroppedAreaPixels: (area: Area | null) => void;
+  setDialogOpen: (open: boolean) => void;
+  runUpload: ReturnType<typeof usePendingTask>['run'];
+  runRemove: ReturnType<typeof usePendingTask>['run'];
+  resetCropState: () => void;
+};
+
+type AvatarHandlers = Pick<
+  ProfileAvatarUpload,
+  'handleFileChange' | 'handleUploadAvatar' | 'handleRemoveAvatar'
+>;
+
+/** The banner sentence for a file the upload refuses, or null when the file is accepted. */
+function avatarFileProblem(file: File): string | null {
+  if (!PROFILE_AVATAR_ALLOWED_MIME_TYPES.some((mimeType) => mimeType === file.type)) {
+    return 'Bitte wähle eine gültige Bilddatei aus.';
+  }
+  if (file.size > PROFILE_AVATAR_MAX_FILE_SIZE_BYTES) {
+    return 'Das Profilbild darf maximal 5 MB groß sein.';
+  }
+  return null;
+}
+
+/** Uploads the cropped image, saves it as the profile picture and drops the upload when the save fails. */
+async function uploadCroppedAvatar({
+  supabase,
+  nextAvatarPath,
+  previousAvatarPath,
+  cropSource,
+  croppedAreaPixels,
+  refreshProfile,
+  showBanner,
+  resetCropState,
+}: Pick<AvatarHandlerContext, 'supabase' | 'refreshProfile' | 'showBanner' | 'resetCropState'> & {
+  nextAvatarPath: string;
+  previousAvatarPath: string | null;
+  cropSource: string;
+  croppedAreaPixels: Area;
+}): Promise<void> {
+  try {
+    const croppedBlob = await createCroppedAvatarBlob(cropSource, croppedAreaPixels);
+
+    const { error: uploadError } = await supabase.storage
+      .from(PROFILE_AVATAR_BUCKET)
+      .upload(nextAvatarPath, croppedBlob, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+      });
+
+    if (uploadError) {
+      showBanner({
+        message: 'Das Profilbild konnte nicht hochgeladen werden.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    const result = await updateProfileAvatar({
+      avatarPath: nextAvatarPath,
+      previousAvatarPath,
+    });
+
+    if (!result.success) {
+      await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([nextAvatarPath]);
+      showBanner({
+        message: 'Das Profilbild konnte nicht gespeichert werden.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    // The action's response renders the route; the profile context reads its own copy.
+    await refreshProfile();
+    resetCropState();
+    showBanner({
+      message: 'Dein Profilbild wurde aktualisiert.',
+      variant: 'success',
+    });
+  } catch {
+    showBanner({
+      message: 'Das Profilbild konnte nicht verarbeitet werden.',
+      variant: 'error',
+    });
+  }
+}
+
+async function removeCurrentAvatar({
+  refreshProfile,
+  showBanner,
+}: Pick<AvatarHandlerContext, 'refreshProfile' | 'showBanner'>): Promise<void> {
+  try {
+    const result = await removeProfileAvatar();
+    if (!result.success) {
+      showBanner({
+        message: 'Das Profilbild konnte nicht entfernt werden.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    await refreshProfile();
+    showBanner({
+      message: 'Dein Profilbild wurde entfernt.',
+      variant: 'success',
+    });
+  } catch {
+    showBanner({
+      message: 'Das Profilbild konnte nicht entfernt werden.',
+      variant: 'error',
+    });
+  }
+}
+
+/**
+ * File validation, upload and removal. It calls no React hook: it rebuilds the
+ * handlers on every render like the inline handlers it replaced, so they always
+ * read the current crop state. The hook name lets it receive `resetCropState`,
+ * which writes the file input's ref.
+ */
+function useAvatarHandlers({
+  supabase,
+  profile,
+  refreshProfile,
+  showBanner,
+  cropSource,
+  croppedAreaPixels,
+  setCropSource,
+  setCrop,
+  setZoom,
+  setCroppedAreaPixels,
+  setDialogOpen,
+  runUpload,
+  runRemove,
+  resetCropState,
+}: AvatarHandlerContext): AvatarHandlers {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const problem = avatarFileProblem(file);
+    if (problem !== null) {
+      showBanner({ message: problem, variant: 'error' });
+      event.target.value = '';
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setCropSource(objectUrl);
+    setCrop({ x: 0, y: 0 });
+    setZoom(1);
+    setCroppedAreaPixels(null);
+    setDialogOpen(true);
+  };
+
+  const handleUploadAvatar = async () => {
+    if (!profile?.id || !cropSource || !croppedAreaPixels) {
+      showBanner({
+        message: 'Das Profilbild konnte nicht vorbereitet werden.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    const nextAvatarPath = `${profile.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
+
+    await runUpload(() =>
+      uploadCroppedAvatar({
+        supabase,
+        nextAvatarPath,
+        previousAvatarPath: profile.avatarPath,
+        cropSource,
+        croppedAreaPixels,
+        refreshProfile,
+        showBanner,
+        resetCropState,
+      }),
+    );
+  };
+
+  const handleRemoveAvatar = async () => {
+    if (!profile?.avatarPath) {
+      return;
+    }
+
+    await runRemove(() => removeCurrentAvatar({ refreshProfile, showBanner }));
+  };
+
+  return { handleFileChange, handleUploadAvatar, handleRemoveAvatar };
+}
+
 /** File selection, crop state, upload and removal of the signed-in user's profile picture. */
 export function useProfileAvatarUpload(): ProfileAvatarUpload {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -86,127 +288,22 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
     inputRef.current?.click();
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    if (!(PROFILE_AVATAR_ALLOWED_MIME_TYPES as readonly string[]).includes(file.type)) {
-      showBanner({
-        message: 'Bitte wähle eine gültige Bilddatei aus.',
-        variant: 'error',
-      });
-      event.target.value = '';
-      return;
-    }
-
-    if (file.size > PROFILE_AVATAR_MAX_FILE_SIZE_BYTES) {
-      showBanner({
-        message: 'Das Profilbild darf maximal 5 MB groß sein.',
-        variant: 'error',
-      });
-      event.target.value = '';
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setCropSource(objectUrl);
-    setCrop({ x: 0, y: 0 });
-    setZoom(1);
-    setCroppedAreaPixels(null);
-    setDialogOpen(true);
-  };
-
-  const handleUploadAvatar = async () => {
-    if (!profile?.id || !cropSource || !croppedAreaPixels) {
-      showBanner({
-        message: 'Das Profilbild konnte nicht vorbereitet werden.',
-        variant: 'error',
-      });
-      return;
-    }
-
-    const nextAvatarPath = `${profile.id}/${Date.now()}-${crypto.randomUUID()}.jpg`;
-
-    await runUpload(async () => {
-      try {
-        const croppedBlob = await createCroppedAvatarBlob(cropSource, croppedAreaPixels);
-
-        const { error: uploadError } = await supabase.storage
-          .from(PROFILE_AVATAR_BUCKET)
-          .upload(nextAvatarPath, croppedBlob, {
-            contentType: 'image/jpeg',
-            cacheControl: '3600',
-          });
-
-        if (uploadError) {
-          showBanner({
-            message: 'Das Profilbild konnte nicht hochgeladen werden.',
-            variant: 'error',
-          });
-          return;
-        }
-
-        const result = await updateProfileAvatar({
-          avatarPath: nextAvatarPath,
-          previousAvatarPath: profile.avatarPath,
-        });
-
-        if (!result.success) {
-          await supabase.storage.from(PROFILE_AVATAR_BUCKET).remove([nextAvatarPath]);
-          showBanner({
-            message: 'Das Profilbild konnte nicht gespeichert werden.',
-            variant: 'error',
-          });
-          return;
-        }
-
-        // The action's response renders the route; the profile context reads its own copy.
-        await refreshProfile();
-        resetCropState();
-        showBanner({
-          message: 'Dein Profilbild wurde aktualisiert.',
-          variant: 'success',
-        });
-      } catch {
-        showBanner({
-          message: 'Das Profilbild konnte nicht verarbeitet werden.',
-          variant: 'error',
-        });
-      }
-    });
-  };
-
-  const handleRemoveAvatar = async () => {
-    if (!profile?.avatarPath) {
-      return;
-    }
-
-    await runRemove(async () => {
-      try {
-        const result = await removeProfileAvatar();
-        if (!result.success) {
-          showBanner({
-            message: 'Das Profilbild konnte nicht entfernt werden.',
-            variant: 'error',
-          });
-          return;
-        }
-
-        await refreshProfile();
-        showBanner({
-          message: 'Dein Profilbild wurde entfernt.',
-          variant: 'success',
-        });
-      } catch {
-        showBanner({
-          message: 'Das Profilbild konnte nicht entfernt werden.',
-          variant: 'error',
-        });
-      }
-    });
-  };
+  const handlers = useAvatarHandlers({
+    supabase,
+    profile,
+    refreshProfile,
+    showBanner,
+    cropSource,
+    croppedAreaPixels,
+    setCropSource,
+    setCrop,
+    setZoom,
+    setCroppedAreaPixels,
+    setDialogOpen,
+    runUpload,
+    runRemove,
+    resetCropState,
+  });
 
   return {
     profile,
@@ -224,8 +321,6 @@ export function useProfileAvatarUpload(): ProfileAvatarUpload {
     isRemoving,
     resetCropState,
     openFileDialog,
-    handleFileChange,
-    handleUploadAvatar,
-    handleRemoveAvatar,
+    ...handlers,
   };
 }
