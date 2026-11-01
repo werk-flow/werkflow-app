@@ -13,16 +13,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { SkeletonList, SkeletonRows, type SkeletonColumn } from '@/components/ui/skeleton-table';
 import { cn, formatBerlinDateTime } from '@/lib/utils';
 import { readInBackground } from '@/lib/data/background-read-client';
+import { Constants } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import { isEntryInClosedPeriod, type ClosedTimePeriod } from '@/lib/time-tracking/closed-period-dates';
-import type { TimeEntry, TimeEntryAuditEvent, TimeEntryStatus } from '@/lib/time-tracking/types';
+import type { TimeEntry, TimeEntryAuditEvent } from '@/lib/time-tracking/types';
 import { useBusyIds } from '@/hooks/use-busy-id';
 import { useHydrated } from '@/hooks/use-hydrated';
-import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
+import { useLiveView, type LiveViewResult, type LiveViewState } from '@/hooks/use-live-view';
 import { TimeCorrectionDialog } from './time-correction-dialog';
 import { useClosedTimePeriods } from './use-closed-time-periods';
 import type { MemberListEntry } from '@/lib/members/profile-name';
 import { EntryHistoryFilters } from './entry-history-filters';
-import { ENTRY_TYPE_LABELS, OwnEntryChanges } from './own-entry-changes';
+import { OwnEntryChanges } from './own-entry-changes';
+import { STATUS_LABELS, getEntryTypeLabel } from './entry-history-labels';
 import { historyRange, useHistoryDates } from './entry-history-range';
 
 // Settle key for a correction that adds time (no row yet); entry ids are UUIDs.
@@ -68,39 +71,6 @@ function EntryHistoryHeaderRow() {
   );
 }
 
-const STATUS_LABELS: Record<TimeEntryStatus, { label: string; className: string }> = {
-  approved: {
-    label: 'Genehmigt',
-    className: 'bg-success-soft text-success-soft-foreground',
-  },
-  pending: {
-    label: 'Ausstehend',
-    className: 'bg-warning-soft text-warning-soft-foreground',
-  },
-  rejected: {
-    label: 'Abgelehnt',
-    className: 'bg-destructive-soft text-destructive-soft-foreground',
-  },
-  pending_delete: {
-    label: 'Löschung ausstehend',
-    className: 'bg-warning-soft text-warning-soft-foreground',
-  },
-};
-
-function getEntryTypeLabel(entry: TimeEntry): string {
-  const activityLabels = {
-    work: 'Arbeit',
-    travel: 'Fahrt',
-    break: 'Pause',
-    standby: 'Bereitschaft',
-    callout: 'Notdienst',
-    internal_activity: 'Interne Tätigkeit',
-  } as const;
-  const direction = entry.entryType === 'clock_in' || entry.entryType === 'break_start' ? 'Start' : 'Ende';
-  if (entry.activityKind) return `${activityLabels[entry.activityKind]} · ${direction}`;
-  return ENTRY_TYPE_LABELS[entry.entryType];
-}
-
 function getEntryHistoryDisplayName(entry: EntryWithProfile): string {
   if (entry.firstName || entry.lastName) {
     return `${entry.firstName || ''} ${entry.lastName || ''}`.trim();
@@ -143,7 +113,15 @@ async function readEntryHistory(
         {
           organizationId,
           ...range,
-          ...(statusFilter !== 'all' ? { status: statusFilter as TimeEntryStatus } : {}),
+          ...(statusFilter !== 'all'
+            ? {
+                status: constrainedValue(
+                  Constants.public.Enums.time_entry_status,
+                  statusFilter,
+                  'time entry status filter',
+                ),
+              }
+            : {}),
           ...member,
         },
         signal,
@@ -370,6 +348,64 @@ function EntryHistoryResults(props: EntryHistoryRowsProps) {
   );
 }
 
+type EntryHistoryRegionProps = Omit<EntryHistoryRowsProps, 'entries'> & {
+  hasRange: boolean;
+  view: LiveViewState<EntryHistoryData>;
+  /** The last read failed: the rows stay, marked stale and inert below its retry. */
+  isStale: boolean;
+  members: MemberListEntry[];
+};
+
+/** Results: a failed refresh keeps the last rows, marked stale and inert below its retry. */
+function EntryHistoryRegion({
+  hasRange,
+  view,
+  isStale,
+  members,
+  settling,
+  hydrated,
+  setCorrectionEntry,
+  closedPeriods,
+}: EntryHistoryRegionProps) {
+  const entries = view.data?.entries ?? [];
+  const loadError = (
+    <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
+      Die Einträge konnten nicht geladen werden.
+    </SectionError>
+  );
+
+  return !hasRange ? (
+    <EmptyState
+      icon={Clock}
+      title="Zeitraum wählen"
+      description="Wähle ein Von- und ein Bis-Datum, um die Einträge zu sehen."
+    />
+  ) : view.isLoading ? (
+    <EntryHistorySkeleton />
+  ) : view.data === undefined ? (
+    loadError
+  ) : (
+    <StaleRegion stale={isStale} onRetry={view.refresh} className="space-y-4">
+      {entries.length === 0 ? (
+        <EmptyState
+          icon={Clock}
+          title="Keine Einträge gefunden"
+          description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
+        />
+      ) : (
+        <EntryHistoryResults
+          entries={entries}
+          settling={settling}
+          hydrated={hydrated}
+          setCorrectionEntry={setCorrectionEntry}
+          closedPeriods={closedPeriods}
+        />
+      )}
+      <OwnEntryChanges events={view.data.ownChanges} members={members} />
+    </StaleRegion>
+  );
+}
+
 export function EntryHistory({
   organizationId,
   members = [],
@@ -407,13 +443,6 @@ export function EntryHistory({
     ].join('|'),
   });
 
-  const entries = view.data?.entries ?? [];
-  const loadError = (
-    <SectionError onRetry={() => void view.refresh()} retryPending={view.isRefreshing}>
-      Die Einträge konnten nicht geladen werden.
-    </SectionError>
-  );
-
   return (
     <section className="space-y-4" aria-labelledby="entry-history-heading">
       <h2 id="entry-history-heading" className="font-semibold">
@@ -436,37 +465,16 @@ export function EntryHistory({
         isSettlingNewEntry={settling.isBusy(NEW_ENTRY_ID)}
       />
 
-      {/* Results: a failed refresh keeps the last rows, marked stale and inert below its retry. */}
-      {!hasRange ? (
-        <EmptyState
-          icon={Clock}
-          title="Zeitraum wählen"
-          description="Wähle ein Von- und ein Bis-Datum, um die Einträge zu sehen."
-        />
-      ) : view.isLoading ? (
-        <EntryHistorySkeleton />
-      ) : view.data === undefined ? (
-        loadError
-      ) : (
-        <StaleRegion stale={view.isStale} onRetry={view.refresh} className="space-y-4">
-          {entries.length === 0 ? (
-            <EmptyState
-              icon={Clock}
-              title="Keine Einträge gefunden"
-              description="Für den ausgewählten Zeitraum gibt es keine Einträge. Wähle einen anderen Zeitraum."
-            />
-          ) : (
-            <EntryHistoryResults
-              entries={entries}
-              settling={settling}
-              hydrated={hydrated}
-              setCorrectionEntry={setCorrectionEntry}
-              closedPeriods={closedPeriods}
-            />
-          )}
-          <OwnEntryChanges events={view.data.ownChanges} members={members} />
-        </StaleRegion>
-      )}
+      <EntryHistoryRegion
+        hasRange={hasRange}
+        view={view}
+        isStale={view.isStale}
+        members={members}
+        settling={settling}
+        hydrated={hydrated}
+        setCorrectionEntry={setCorrectionEntry}
+        closedPeriods={closedPeriods}
+      />
       {correctionEntry !== undefined ? (
         <TimeCorrectionDialog
           key={correctionEntry?.id ?? 'add'}

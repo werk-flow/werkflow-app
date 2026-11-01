@@ -23,6 +23,39 @@ import { OwnVacationRequestList } from './vacation-section-request-list';
 // Settle key for a request that has no row yet; request ids are UUIDs.
 const NEW_REQUEST_ID = 'new';
 
+/** The balance and the request button, or their skeleton while the first read runs. */
+function OwnVacationBalanceCard({
+  isLoading,
+  overview,
+  balance,
+  setShowRequestDialog,
+}: {
+  isLoading: boolean;
+  overview: OwnVacationOverview | null;
+  balance: OwnVacationOverview['balance'] | null;
+  setShowRequestDialog: (show: boolean) => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-2 w-full" />
+            <Skeleton className="h-4 w-56" />
+          </div>
+        ) : (
+          <OwnVacationBalanceSummary
+            overview={overview}
+            balance={balance}
+            setShowRequestDialog={setShowRequestDialog}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function VacationSection() {
   const [showRequestDialog, setShowRequestDialog] = useState(false);
   // Row-scoped pending for withdrawals and the settle window after the
@@ -76,23 +109,12 @@ export function VacationSection() {
             Die Urlaubsdaten konnten nicht geladen werden.
           </SectionError>
         ) : (
-          <Card>
-            <CardContent className="p-4">
-              {isLoading ? (
-                <div className="space-y-2">
-                  <Skeleton className="h-5 w-40" />
-                  <Skeleton className="h-2 w-full" />
-                  <Skeleton className="h-4 w-56" />
-                </div>
-              ) : (
-                <OwnVacationBalanceSummary
-                  overview={overview}
-                  balance={balance}
-                  setShowRequestDialog={setShowRequestDialog}
-                />
-              )}
-            </CardContent>
-          </Card>
+          <OwnVacationBalanceCard
+            isLoading={isLoading}
+            overview={overview}
+            balance={balance}
+            setShowRequestDialog={setShowRequestDialog}
+          />
         )}
 
         {overview && overview.requests.length > 0 && (

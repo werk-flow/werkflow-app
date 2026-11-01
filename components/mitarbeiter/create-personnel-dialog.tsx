@@ -21,9 +21,10 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { toLocalDateString } from '@/lib/utils';
 import { useCreatePersonnelDialogForm } from './use-create-personnel-dialog-form';
 
-export function CreatePersonnelDialog() {
+type CreatePersonnelForm = ReturnType<typeof useCreatePersonnelDialogForm>;
+
+function CreatePersonnelDialogFields({ form }: { form: CreatePersonnelForm }) {
   const {
-    open,
     firstName,
     setFirstName,
     lastName,
@@ -37,9 +38,49 @@ export function CreatePersonnelDialog() {
     isSaving,
     error,
     lastNameError,
-    handleOpenChange,
-    handleSubmit,
-  } = useCreatePersonnelDialogForm();
+  } = form;
+
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Vorname" htmlFor="personnel-first-name">
+          <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} disabled={isSaving} />
+        </Field>
+        <Field label="Nachname" htmlFor="personnel-last-name" required error={lastNameError}>
+          <Input
+            value={lastName}
+            onChange={(e) => handleLastNameChange(e.target.value)}
+            disabled={isSaving}
+          />
+        </Field>
+      </div>
+      <Field label="Personalnummer" htmlFor="personnel-number">
+        <Input
+          placeholder="z. B. MA-001"
+          value={employeeNumber}
+          onChange={(e) => handleEmployeeNumberChange(e.target.value)}
+          disabled={isSaving}
+        />
+      </Field>
+      <Field label="Eintrittsdatum" htmlFor="personnel-entry-date">
+        <DatePicker
+          ariaLabel="Eintrittsdatum"
+          value={entryDate ? new Date(`${entryDate}T00:00:00`) : undefined}
+          onChange={(date) => setEntryDate(date ? toLocalDateString(date) : '')}
+          disabled={isSaving}
+        />
+      </Field>
+      <Field label="Notizen" htmlFor="personnel-notes">
+        <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={isSaving} />
+      </Field>
+      <ErrorText>{error}</ErrorText>
+    </>
+  );
+}
+
+export function CreatePersonnelDialog() {
+  const form = useCreatePersonnelDialogForm();
+  const { open, isSaving, handleOpenChange, handleSubmit } = form;
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={isSaving}>
@@ -62,38 +103,7 @@ export function CreatePersonnelDialog() {
         </DialogHeader>
         <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
           <DialogBody className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Vorname" htmlFor="personnel-first-name">
-                <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} disabled={isSaving} />
-              </Field>
-              <Field label="Nachname" htmlFor="personnel-last-name" required error={lastNameError}>
-                <Input
-                  value={lastName}
-                  onChange={(e) => handleLastNameChange(e.target.value)}
-                  disabled={isSaving}
-                />
-              </Field>
-            </div>
-            <Field label="Personalnummer" htmlFor="personnel-number">
-              <Input
-                placeholder="z. B. MA-001"
-                value={employeeNumber}
-                onChange={(e) => handleEmployeeNumberChange(e.target.value)}
-                disabled={isSaving}
-              />
-            </Field>
-            <Field label="Eintrittsdatum" htmlFor="personnel-entry-date">
-              <DatePicker
-                ariaLabel="Eintrittsdatum"
-                value={entryDate ? new Date(`${entryDate}T00:00:00`) : undefined}
-                onChange={(date) => setEntryDate(date ? toLocalDateString(date) : '')}
-                disabled={isSaving}
-              />
-            </Field>
-            <Field label="Notizen" htmlFor="personnel-notes">
-              <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={isSaving} />
-            </Field>
-            <ErrorText>{error}</ErrorText>
+            <CreatePersonnelDialogFields form={form} />
           </DialogBody>
           <DialogFooter>
             <Button pending={isSaving} type="submit" disabled={isSaving}>

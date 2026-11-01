@@ -52,6 +52,126 @@ type TimeCorrectionRequestCardProps = {
   review: (request: TimeCorrectionRequest, decision: 'approve' | 'reject' | 'clarify') => Promise<void>;
 };
 
+function TimeCorrectionRequestHeader({
+  request,
+  mode,
+  requestBusy,
+  selected,
+  setSelected,
+}: Pick<TimeCorrectionRequestCardProps, 'request' | 'mode' | 'requestBusy' | 'selected' | 'setSelected'>) {
+  return (
+    <CardHeader className="px-4">
+      <div className="flex min-w-0 items-start gap-3">
+        {mode === 'approvals' ? (
+          <Checkbox
+            aria-label={`${request.subjectName} auswählen`}
+            checked={selected.has(request.id)}
+            onCheckedChange={(checked) =>
+              setSelected((current) => {
+                const next = new Set(current);
+                if (checked) next.add(request.id);
+                else next.delete(request.id);
+                return next;
+              })
+            }
+          />
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            {TIME_CORRECTION_KIND_LABELS[request.kind]}
+            <Badge variant="outline" className={statusClass(request.status)}>
+              {TIME_CORRECTION_STATUS_LABELS[request.status]}
+            </Badge>
+            <InlinePending active={requestBusy} />
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {request.subjectName} · {formatBerlinDateTime(request.createdAt)} · Version{' '}
+            {request.currentRevision}
+          </p>
+        </div>
+      </div>
+    </CardHeader>
+  );
+}
+
+function TimeCorrectionRequestComment({
+  request,
+  comments,
+  setComments,
+}: Pick<TimeCorrectionRequestCardProps, 'request' | 'comments' | 'setComments'>) {
+  return (
+    <Field
+      label={request.status === 'clarification_required' ? 'Antwort' : 'Kommentar'}
+      htmlFor={`correction-comment-${request.id}`}
+    >
+      <Textarea
+        value={comments[request.id] ?? ''}
+        onChange={(event) =>
+          setComments((current) => ({
+            ...current,
+            [request.id]: event.target.value,
+          }))
+        }
+        placeholder={
+          request.canReview
+            ? 'Für Rückfrage oder Ablehnung erforderlich'
+            : 'Ergänze die angeforderten Angaben'
+        }
+      />
+    </Field>
+  );
+}
+
+/** Withdraw and resubmit for the requester; clarify, reject and approve for a reviewer. */
+function TimeCorrectionRequestActions({
+  request,
+  actionsDisabled,
+  withdraw,
+  resubmit,
+  review,
+}: Pick<TimeCorrectionRequestCardProps, 'request' | 'withdraw' | 'resubmit' | 'review'> & {
+  actionsDisabled: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap justify-end gap-2">
+      {request.canWithdraw ? (
+        <Button size="sm" variant="outline" onClick={() => void withdraw(request)} disabled={actionsDisabled}>
+          Zurückziehen
+        </Button>
+      ) : null}
+      {request.status === 'clarification_required' && request.canWithdraw ? (
+        <Button size="sm" onClick={() => void resubmit(request)} disabled={actionsDisabled}>
+          <RotateCcw className="mr-1.5 size-4" /> Erneut einreichen
+        </Button>
+      ) : null}
+      {request.canReview ? (
+        <>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void review(request, 'clarify')}
+            disabled={actionsDisabled}
+          >
+            <HelpCircle className="mr-1.5 size-4" /> Rückfrage
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => void review(request, 'reject')}
+            disabled={actionsDisabled}
+          >
+            <X className="mr-1.5 size-4" /> Ablehnen
+          </Button>
+          <Button size="sm" onClick={() => void review(request, 'approve')} disabled={actionsDisabled}>
+            <Check className="mr-1.5 size-4" />
+            Freigeben
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function TimeCorrectionRequestCard({
   request,
   mode,
@@ -68,37 +188,13 @@ export function TimeCorrectionRequestCard({
   const actionsDisabled = requestBusy || stale;
   return (
     <Card data-testid={`time-correction-${request.id}`} className="gap-4 py-4">
-      <CardHeader className="px-4">
-        <div className="flex min-w-0 items-start gap-3">
-          {mode === 'approvals' ? (
-            <Checkbox
-              aria-label={`${request.subjectName} auswählen`}
-              checked={selected.has(request.id)}
-              onCheckedChange={(checked) =>
-                setSelected((current) => {
-                  const next = new Set(current);
-                  if (checked) next.add(request.id);
-                  else next.delete(request.id);
-                  return next;
-                })
-              }
-            />
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-              {TIME_CORRECTION_KIND_LABELS[request.kind]}
-              <Badge variant="outline" className={statusClass(request.status)}>
-                {TIME_CORRECTION_STATUS_LABELS[request.status]}
-              </Badge>
-              <InlinePending active={requestBusy} />
-            </CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {request.subjectName} · {formatBerlinDateTime(request.createdAt)} · Version{' '}
-              {request.currentRevision}
-            </p>
-          </div>
-        </div>
-      </CardHeader>
+      <TimeCorrectionRequestHeader
+        request={request}
+        mode={mode}
+        requestBusy={requestBusy}
+        selected={selected}
+        setSelected={setSelected}
+      />
       <CardContent className="space-y-3 px-4">
         <div className="grid gap-2 text-sm sm:grid-cols-2">
           <div className="rounded-md border p-3">
@@ -120,68 +216,16 @@ export function TimeCorrectionRequestCard({
         ) : null}
 
         {request.canReview || request.status === 'clarification_required' ? (
-          <Field
-            label={request.status === 'clarification_required' ? 'Antwort' : 'Kommentar'}
-            htmlFor={`correction-comment-${request.id}`}
-          >
-            <Textarea
-              value={comments[request.id] ?? ''}
-              onChange={(event) =>
-                setComments((current) => ({
-                  ...current,
-                  [request.id]: event.target.value,
-                }))
-              }
-              placeholder={
-                request.canReview
-                  ? 'Für Rückfrage oder Ablehnung erforderlich'
-                  : 'Ergänze die angeforderten Angaben'
-              }
-            />
-          </Field>
+          <TimeCorrectionRequestComment request={request} comments={comments} setComments={setComments} />
         ) : null}
 
-        <div className="flex flex-wrap justify-end gap-2">
-          {request.canWithdraw ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void withdraw(request)}
-              disabled={actionsDisabled}
-            >
-              Zurückziehen
-            </Button>
-          ) : null}
-          {request.status === 'clarification_required' && request.canWithdraw ? (
-            <Button size="sm" onClick={() => void resubmit(request)} disabled={actionsDisabled}>
-              <RotateCcw className="mr-1.5 size-4" /> Erneut einreichen
-            </Button>
-          ) : null}
-          {request.canReview ? (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void review(request, 'clarify')}
-                disabled={actionsDisabled}
-              >
-                <HelpCircle className="mr-1.5 size-4" /> Rückfrage
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => void review(request, 'reject')}
-                disabled={actionsDisabled}
-              >
-                <X className="mr-1.5 size-4" /> Ablehnen
-              </Button>
-              <Button size="sm" onClick={() => void review(request, 'approve')} disabled={actionsDisabled}>
-                <Check className="mr-1.5 size-4" />
-                Freigeben
-              </Button>
-            </>
-          ) : null}
-        </div>
+        <TimeCorrectionRequestActions
+          request={request}
+          actionsDisabled={actionsDisabled}
+          withdraw={withdraw}
+          resubmit={resubmit}
+          review={review}
+        />
       </CardContent>
     </Card>
   );

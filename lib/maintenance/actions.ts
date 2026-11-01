@@ -12,7 +12,7 @@ import { addLocalMonthsClamped, formatBerlinLocalDate } from '@/lib/date-time/be
 import { preparePlanningCreation } from '@/lib/planning/creation';
 import { createPlanningEntrySchema } from '@/lib/planning/schemas';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { jsonRecordOrEmpty, toJson } from '@/lib/supabase/json';
+import { toJson } from '@/lib/supabase/json';
 import { rpcArgs } from '@/lib/supabase/rpc-args';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type {
@@ -39,6 +39,8 @@ import { logError } from '@/lib/logging';
 import { requireServiceManager } from '@/lib/service-cases/manager-context';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { maintenanceWorkspaceQuerySchema, type MaintenanceWorkspaceQuery } from './workspace-page';
+import { readFieldMaintenanceContexts } from './field-context-reads';
+import { readReplayedVisitJobNumber, readVisitDueContext } from './visit-context-reads';
 import { loadMaintenanceCatalogs, readMaintenanceWorkspace } from './workspace-reads';
 
 function maintenanceFailureCode(error: { message?: string } | null, fallback: string): string {
@@ -278,96 +280,14 @@ export async function createMaintenanceVisit(input: {
     return { success: false, error: 'maintenance_visit_context_failed' };
   }
   if (replayEvents.length > 0) {
-    const replayDueIds = new Set(replayEvents.map((event) => event.maintenance_due_work_id));
-    const replayJobIds = new Set(
-      replayEvents.flatMap((event) => {
-        const payload = jsonRecordOrEmpty(event.request_payload);
-        return typeof payload.jobId === 'string' ? [payload.jobId] : [];
-      }),
-    );
-    const replayMatches =
-      replayDueIds.size === parsed.data.dueWorkIds.length &&
-      parsed.data.dueWorkIds.every((dueWorkId) => replayDueIds.has(dueWorkId)) &&
-      replayJobIds.size === 1;
-    const replayJobId = [...replayJobIds][0];
-    if (!replayMatches || !replayJobId) {
-      return { success: false, error: 'maintenance_idempotency_conflict' };
-    }
-    const { data: replayJob, error: replayJobError } = await context.admin
-      .from('jobs')
-      .select('job_number')
-      .eq('organization_id', context.organizationId)
-      .eq('id', replayJobId)
-      .single();
-    if (replayJobError || !replayJob.job_number) {
-      return { success: false, error: 'maintenance_visit_context_failed' };
-    }
+    const replay = await readReplayedVisitJobNumber(context, replayEvents, parsed.data.dueWorkIds);
+    if (!replay.success) return replay;
     refreshMaintenancePaths();
-    return { success: true, jobNumber: replayJob.job_number };
+    return { success: true, jobNumber: replay.jobNumber };
   }
-  const { data: dueRows, error: dueError } = await readInBatches(parsed.data.dueWorkIds, (batch) =>
-    context.admin
-      .from('maintenance_due_work')
-      .select('id, maintenance_plan_id, maintenance_plan_revision_id, due_date')
-      .eq('organization_id', context.organizationId)
-      .in('id', [...batch]),
-  );
-  if (dueError) {
-    return { success: false, error: 'maintenance_visit_context_failed' };
-  }
-  if (dueRows.length !== parsed.data.dueWorkIds.length) {
-    return { success: false, error: 'maintenance_due_not_found' };
-  }
-  const planIds = [...new Set(dueRows.map((row) => row.maintenance_plan_id))];
-  const revisionIds = [...new Set(dueRows.map((row) => row.maintenance_plan_revision_id))];
-  const [plansResult, revisionsResult] = await Promise.all([
-    readInBatches(planIds, (batch) =>
-      context.admin
-        .from('maintenance_plans')
-        .select('id, plan_number, client_id, site_id')
-        .eq('organization_id', context.organizationId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(revisionIds, (batch) =>
-      context.admin
-        .from('maintenance_plan_revisions')
-        .select('id, template_version_id, planned_duration_minutes, operational_instructions')
-        .eq('organization_id', context.organizationId)
-        .in('id', [...batch]),
-    ),
-  ]);
-  if (plansResult.error || revisionsResult.error) {
-    return { success: false, error: 'maintenance_visit_context_failed' };
-  }
-  const plans = plansResult.data;
-  const revisions = revisionsResult.data;
-  if (!plans.length || !revisions.length) {
-    return { success: false, error: 'maintenance_visit_context_failed' };
-  }
-  const clientIds = new Set(plans.map((plan) => plan.client_id));
-  const siteIds = new Set(plans.map((plan) => plan.site_id));
-  const templateIds = new Set(revisions.map((revision) => revision.template_version_id));
-  if (clientIds.size !== 1 || siteIds.size !== 1 || templateIds.size !== 1) {
-    return { success: false, error: 'maintenance_due_batch_incompatible' };
-  }
-  const [firstPlan] = plans;
-  const [firstRevision] = revisions;
-  if (!firstPlan || !firstRevision) {
-    return { success: false, error: 'maintenance_visit_context_failed' };
-  }
-  const durationByRevisionId = new Map(
-    revisions.map((revision) => [revision.id, revision.planned_duration_minutes]),
-  );
-  const estimatedDurationMinutes = dueRows.reduce(
-    (total, due) => total + (durationByRevisionId.get(due.maintenance_plan_revision_id) ?? 0),
-    0,
-  );
-  if (dueRows.some((due) => !durationByRevisionId.has(due.maintenance_plan_revision_id))) {
-    return { success: false, error: 'maintenance_visit_context_failed' };
-  }
-  if (estimatedDurationMinutes < 15 || estimatedDurationMinutes > 10_080) {
-    return { success: false, error: 'maintenance_due_batch_incompatible' };
-  }
+  const dueContext = await readVisitDueContext(context, parsed.data.dueWorkIds);
+  if (!dueContext.success) return dueContext;
+  const { plans, firstPlan, firstRevision, estimatedDurationMinutes } = dueContext;
   const prepared = await prepareJobCreation(
     { admin: context.admin, orgId: context.organizationId, actorId: context.actorId },
     {
@@ -649,114 +569,5 @@ export async function getAssignedMaintenanceContextForJob(
     return { success: false, error: 'maintenance_context_load_failed' };
   }
   if (dueRows.length === 0) return { success: true, contexts: [] };
-  const planIds = [...new Set(dueRows.map((row) => row.maintenance_plan_id))];
-  const revisionIds = [...new Set(dueRows.map((row) => row.maintenance_plan_revision_id))];
-  const [plansResult, revisionsResult, linksResult] = await Promise.all([
-    readInBatches(planIds, (batch) =>
-      admin
-        .from('maintenance_plans')
-        .select('id, plan_number')
-        .eq('organization_id', auth.context.orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(revisionIds, (batch) =>
-      admin
-        .from('maintenance_plan_revisions')
-        .select('id, template_version_id, operational_instructions')
-        .eq('organization_id', auth.context.orgId)
-        .in('id', [...batch]),
-    ),
-    readInBatches(revisionIds, (batch) =>
-      readCompleteRows(
-        (from, to) =>
-          admin
-            .from('maintenance_plan_revision_equipment')
-            .select('maintenance_plan_revision_id, equipment_id')
-            .eq('organization_id', auth.context.orgId)
-            .in('maintenance_plan_revision_id', [...batch])
-            .order('maintenance_plan_revision_id')
-            .order('equipment_id')
-            .range(from, to),
-        LIST_ROW_CAP,
-      ),
-    ),
-  ]);
-  const contextError = plansResult.error ?? revisionsResult.error ?? linksResult.error;
-  if (contextError) {
-    logReadFailure('getAssignedMaintenanceContextForJob: plan read failed', {
-      code: contextError.code,
-      message: contextError.message,
-    });
-    return { success: false, error: 'maintenance_context_load_failed' };
-  }
-  const plans = plansResult.data;
-  const revisions = revisionsResult.data;
-  const links = linksResult.data;
-  const [templatesResult, equipmentRowsResult] = await Promise.all([
-    readInBatches(
-      revisions.map((row) => row.template_version_id),
-      (batch) =>
-        admin
-          .from('work_template_versions')
-          .select('id, name, version_number')
-          .eq('organization_id', auth.context.orgId)
-          .in('id', [...batch]),
-    ),
-    readInBatches(
-      links.map((row) => row.equipment_id),
-      (batch) =>
-        admin
-          .from('installed_equipment')
-          .select('id, equipment_number, name')
-          .eq('organization_id', auth.context.orgId)
-          .in('id', [...batch]),
-    ),
-  ]);
-  const detailError = templatesResult.error ?? equipmentRowsResult.error;
-  if (detailError) {
-    logReadFailure('getAssignedMaintenanceContextForJob: template or equipment read failed', {
-      code: detailError.code,
-      message: detailError.message,
-    });
-    return { success: false, error: 'maintenance_context_load_failed' };
-  }
-  const plansById = new Map(plans.map((row) => [row.id, row]));
-  const revisionsById = new Map(revisions.map((row) => [row.id, row]));
-  const templatesById = new Map(templatesResult.data.map((row) => [row.id, row]));
-  const equipmentById = new Map(
-    equipmentRowsResult.data.map((row) => [
-      row.id,
-      { id: row.id, equipmentNumber: row.equipment_number, name: row.name },
-    ]),
-  );
-  const equipmentIdsByRevision = new Map<string, string[]>();
-  for (const link of links) {
-    const ids = equipmentIdsByRevision.get(link.maintenance_plan_revision_id) ?? [];
-    ids.push(link.equipment_id);
-    equipmentIdsByRevision.set(link.maintenance_plan_revision_id, ids);
-  }
-  return {
-    success: true,
-    contexts: dueRows.flatMap((due) => {
-      const plan = plansById.get(due.maintenance_plan_id);
-      const revision = revisionsById.get(due.maintenance_plan_revision_id);
-      const template = revision ? templatesById.get(revision.template_version_id) : null;
-      if (!plan || !revision || !template) return [];
-      return [
-        {
-          planNumber: plan.plan_number,
-          dueDate: due.due_date,
-          windowStartDate: due.window_start_date,
-          windowEndDate: due.window_end_date,
-          templateName: template.name,
-          templateVersionNumber: template.version_number,
-          operationalInstructions: revision.operational_instructions,
-          equipment: (equipmentIdsByRevision.get(revision.id) ?? []).flatMap((id) => {
-            const item = equipmentById.get(id);
-            return item ? [item] : [];
-          }),
-        },
-      ];
-    }),
-  };
+  return readFieldMaintenanceContexts(admin, auth.context.orgId, dueRows);
 }

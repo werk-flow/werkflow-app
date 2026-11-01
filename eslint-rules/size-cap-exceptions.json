@@ -5,14 +5,11 @@
   },
   "modules": {
     "lib/conventions/server-action-feedback.test.ts": 869,
-    "lib/customer-relationships/actions.ts": 1427,
     "lib/security/server-action-authorization.test.ts": 959
   },
   "functions": {
     "app/(app)/kalender/page.tsx": { "KalenderData": 121 },
     "app/(app)/mitarbeiter/[userId]/page.tsx": { "MitarbeiterDetailData": 134 },
-    "app/(app)/mitarbeiter/page.tsx": { "MitarbeiterData": 115 },
-    "app/(app)/zeiterfassung/perioden/[periodId]/page.tsx": { "TimePeriodDetailPage": 116 },
     "components/kalender/board/board-cell.tsx": { "BoardCell": 87 },
     "components/kalender/board/board-row-card.tsx": { "BoardRowCard": 100 },
     "components/kalender/board/board-row.tsx": { "BoardRow": 138 },
@@ -67,33 +64,9 @@
     "components/kalender/use-entry-details-draft.ts": { "useEntryDetailsDraft": 120 },
     "components/kalender/use-park-flow.ts": { "useParkFlow": 96 },
     "components/kalender/use-planning-series-extension.ts": { "usePlanningSeriesExtension": 88 },
-    "components/mitarbeiter/create-personnel-dialog.tsx": { "CreatePersonnelDialog": 83 },
-    "components/mitarbeiter/employment-condition-dialog.tsx": { "EmploymentConditionDialog": 101 },
-    "components/mitarbeiter/employment-conditions-section.tsx": { "EmploymentConditionsSection": 99 },
     "components/mitarbeiter/hours-display.tsx": { "HoursDisplay": 87 },
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
-    "components/mitarbeiter/mitarbeiter-tabs.tsx": { "MitarbeiterTabs": 139 },
-    "components/mitarbeiter/personalien-section.tsx": { "PersonalienSection": 97 },
-    "components/mitarbeiter/personnel-invite-dialog.tsx": { "PersonnelInviteDialog": 103 },
-    "components/mitarbeiter/personnel-lifecycle-onboarding-dialogs.tsx": {
-      "PersonnelLifecycleRequirementDialog": 87
-    },
-    "components/mitarbeiter/personnel-lifecycle-overview.tsx": { "PersonnelLifecycleStatusCards": 92 },
-    "components/mitarbeiter/personnel-lifecycle-section.tsx": { "PersonnelLifecycleSection": 108 },
-    "components/mitarbeiter/personnel-own-actions-section.tsx": { "PersonnelOwnActionsSection": 172 },
-    "components/mitarbeiter/personnel-records-section.tsx": { "PersonnelRecordsSection": 113 },
-    "components/mitarbeiter/use-create-personnel-dialog-form.ts": { "useCreatePersonnelDialogForm": 87 },
-    "components/mitarbeiter/use-employment-condition-form.ts": { "useEmploymentConditionForm": 94 },
-    "components/mitarbeiter/use-personnel-lifecycle-documents.ts": { "usePersonnelLifecycleDocuments": 116 },
-    "components/mitarbeiter/use-personnel-lifecycle-onboarding.ts": {
-      "usePersonnelLifecycleRequirements": 125
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-transitions.ts": {
-      "usePersonnelLifecycleTransitions": 115
-    },
-    "components/mitarbeiter/use-personnel-lifecycle-view.ts": { "usePersonnelLifecycleView": 88 },
-    "components/mitarbeiter/work-schedule-dialog.tsx": { "WorkScheduleDialog": 86 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
     "components/settings/auftraege-column-settings-form.tsx": { "AuftraegeColumnSettingsForm": 109 },
     "components/settings/closure-days-card.tsx": { "ClosureDaysCard": 129 },
@@ -119,59 +92,6 @@
       "useResponsibilityConfigurationForm": 102
     },
     "components/settings/use-responsibility-delegation-form.ts": { "useResponsibilityDelegationForm": 100 },
-    "components/zeiterfassung/entry-history.tsx": { "EntryHistory": 106 },
-    "components/zeiterfassung/pending-approvals-cards.tsx": {
-      "SessionRequestCard": 107,
-      "ChangeRequestCard": 102
-    },
-    "components/zeiterfassung/pending-approvals-list.tsx": { "PendingApprovalsList": 86 },
-    "components/zeiterfassung/pending-approvals.tsx": { "PendingApprovals": 125 },
-    "components/zeiterfassung/sickness-section-report-dialog.tsx": {
-      "OwnSicknessReportFields": 94,
-      "OwnSicknessReportDialog": 107
-    },
-    "components/zeiterfassung/sickness-section.tsx": { "SicknessSection": 109 },
-    "components/zeiterfassung/time-account-settings-forms.tsx": { "AdjustmentRequestForm": 125 },
-    "components/zeiterfassung/time-account-settings-sections.tsx": {
-      "EmployeeTimePolicyAssignment": 97,
-      "MissingTimeAccount": 105
-    },
-    "components/zeiterfassung/time-correction-dialog-fields.tsx": { "TimeCorrectionDialogFields": 106 },
-    "components/zeiterfassung/time-correction-dialog.tsx": { "TimeCorrectionDialog": 85 },
-    "components/zeiterfassung/time-correction-requests-card.tsx": { "TimeCorrectionRequestCard": 132 },
-    "components/zeiterfassung/time-correction-requests.tsx": { "TimeCorrectionRequests": 128 },
-    "components/zeiterfassung/time-progress-ring.tsx": { "TimeProgressRing": 103 },
-    "components/zeiterfassung/use-time-correction-dialog.ts": {
-      "useTimeCorrectionDialogSession": 86,
-      "useTimeCorrectionDialogForm": 128
-    },
-    "components/zeiterfassung/use-time-correction-requests.ts": { "useTimeCorrectionRequestActions": 137 },
-    "components/zeiterfassung/use-vacation-approvals.ts": { "useVacationApprovalDecisions": 83 },
-    "components/zeiterfassung/vacation-approvals.tsx": { "VacationApprovals": 86 },
-    "components/zeiterfassung/vacation-section-request-dialog.tsx": { "OwnVacationRequestDialog": 112 },
-    "components/zeiterfassung/vacation-section.tsx": { "VacationSection": 82 },
-    "components/zeiterfassung/weekly-hours-chart.tsx": { "WeeklyHoursChart": 102 },
-    "lib/customer-relationships/actions.ts": {
-      "buildTimelineRecordQueries": 105,
-      "buildTimelineLinkAndEventQueries": 104,
-      "readTimelineSources": 81,
-      "addTimelineRecordItems": 133,
-      "addTimelineWorkAndEventItems": 127,
-      "loadFollowUpSourceReferences": 156
-    },
-    "lib/installed-equipment/actions.ts": { "loadEquipmentDetail": 126 },
-    "lib/installed-equipment/source-options-server.ts": { "readWorkSources": 97 },
-    "lib/maintenance/actions.ts": {
-      "createMaintenanceVisit": 152,
-      "getAssignedMaintenanceContextForJob": 150
-    },
-    "lib/maintenance/workspace-reads.ts": {
-      "loadMaintenanceCatalogs": 93,
-      "readPlanItems": 95,
-      "readMaintenanceWorkspace": 118
-    },
-    "lib/service-cases/actions.ts": { "loadClientOption": 113, "getServiceCaseDetailByNumber": 115 },
-    "lib/service-cases/list-page-server.ts": { "hydrateListItems": 126 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
     "lib/testing/latency-evidence.ts": { "checkScenarioEvidence": 187 },

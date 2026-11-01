@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useServerAction } from '@/hooks/use-server-action';
 import { reportOwnSickness } from '@/lib/sickness/actions';
 import {
+  SICKNESS_ABSENCE_TYPES,
   SICKNESS_ERROR_MESSAGES,
   SICKNESS_TYPE_LABELS,
   type SicknessAbsenceType,
@@ -28,6 +29,7 @@ import { cn, toLocalDateString } from '@/lib/utils';
 import { getBusinessTodayIso } from '@/lib/date-time/berlin';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 
 type OwnSicknessReportDateErrors = {
   start?: string | undefined;
@@ -50,11 +52,20 @@ type OwnSicknessReportFieldsProps = {
   dateErrors: OwnSicknessReportDateErrors;
 };
 
-function OwnSicknessReportFields({
-  absenceType,
-  setAbsenceType,
-  startDate,
-  setStartDate,
+type OwnSicknessReportEndFieldsProps = Pick<
+  OwnSicknessReportFieldsProps,
+  | 'endKnown'
+  | 'setEndKnown'
+  | 'endDate'
+  | 'setEndDate'
+  | 'halfDay'
+  | 'setHalfDay'
+  | 'isSingleDay'
+  | 'isSaving'
+> & { endError: string | undefined };
+
+/** Whether the end is known, the end date or its open-ended note, and the half day. */
+function OwnSicknessReportEndFields({
   endKnown,
   setEndKnown,
   endDate,
@@ -63,44 +74,10 @@ function OwnSicknessReportFields({
   setHalfDay,
   isSingleDay,
   isSaving,
-  dateErrors,
-}: OwnSicknessReportFieldsProps) {
+  endError,
+}: OwnSicknessReportEndFieldsProps) {
   return (
     <>
-      <Field label="Art" htmlFor="sickness-type">
-        <Select
-          value={absenceType}
-          onValueChange={(value) => setAbsenceType(value as SicknessAbsenceType)}
-          disabled={isSaving}
-        >
-          <SelectTrigger aria-label="Art">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(SICKNESS_TYPE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field label="Ab" htmlFor="sickness-start-date" required error={dateErrors.start}>
-        <DatePicker
-          ariaLabel="Ab"
-          value={startDate ? new Date(`${startDate}T00:00:00`) : undefined}
-          onChange={(date) => {
-            const next = date ? toLocalDateString(date) : '';
-            setStartDate(next);
-            if (next && endKnown && (!endDate || endDate < next)) {
-              setEndDate(next);
-            }
-          }}
-          disabled={isSaving}
-        />
-      </Field>
-
       <div className="flex items-center gap-2">
         <Checkbox
           id="sickness-end-known"
@@ -114,7 +91,7 @@ function OwnSicknessReportFields({
       </div>
 
       {endKnown ? (
-        <Field label="Bis" htmlFor="sickness-end-date" required error={dateErrors.end}>
+        <Field label="Bis" htmlFor="sickness-end-date" required error={endError}>
           <DatePicker
             ariaLabel="Bis"
             value={endDate ? new Date(`${endDate}T00:00:00`) : undefined}
@@ -149,6 +126,134 @@ function OwnSicknessReportFields({
   );
 }
 
+function OwnSicknessReportFields({
+  absenceType,
+  setAbsenceType,
+  startDate,
+  setStartDate,
+  endKnown,
+  setEndKnown,
+  endDate,
+  setEndDate,
+  halfDay,
+  setHalfDay,
+  isSingleDay,
+  isSaving,
+  dateErrors,
+}: OwnSicknessReportFieldsProps) {
+  return (
+    <>
+      <Field label="Art" htmlFor="sickness-type">
+        <Select
+          value={absenceType}
+          onValueChange={(value) =>
+            setAbsenceType(constrainedValue(SICKNESS_ABSENCE_TYPES, value, 'absence type'))
+          }
+          disabled={isSaving}
+        >
+          <SelectTrigger aria-label="Art">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(SICKNESS_TYPE_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+
+      <Field label="Ab" htmlFor="sickness-start-date" required error={dateErrors.start}>
+        <DatePicker
+          ariaLabel="Ab"
+          value={startDate ? new Date(`${startDate}T00:00:00`) : undefined}
+          onChange={(date) => {
+            const next = date ? toLocalDateString(date) : '';
+            setStartDate(next);
+            if (next && endKnown && (!endDate || endDate < next)) {
+              setEndDate(next);
+            }
+          }}
+          disabled={isSaving}
+        />
+      </Field>
+
+      <OwnSicknessReportEndFields
+        endKnown={endKnown}
+        setEndKnown={setEndKnown}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        halfDay={halfDay}
+        setHalfDay={setHalfDay}
+        isSingleDay={isSingleDay}
+        isSaving={isSaving}
+        endError={dateErrors.end}
+      />
+    </>
+  );
+}
+
+/** The start and end errors of a report; an end before the start is the range error. */
+function sicknessReportDateErrors(
+  startDate: string,
+  endKnown: boolean,
+  endDate: string,
+): { start: string | undefined; end: string | undefined } {
+  const startError = startDate ? undefined : 'Bitte wähle ein Datum aus.';
+  const endError =
+    endKnown && !endDate
+      ? 'Bitte wähle ein Datum aus.'
+      : endKnown && endDate < startDate
+        ? SICKNESS_ERROR_MESSAGES.invalid_range
+        : undefined;
+  return { start: startError, end: endError };
+}
+
+function sicknessReportFailure(error: string): string {
+  return describeFailure(error, SICKNESS_ERROR_MESSAGES, 'Die Meldung konnte nicht gespeichert werden.');
+}
+
+function OwnSicknessOverlapHint() {
+  return (
+    <p role="status" className="text-xs text-muted-foreground">
+      Hinweis: Der Zeitraum überschneidet sich mit genehmigtem Urlaub. Dein Büro entscheidet, wie damit
+      umgegangen wird.
+    </p>
+  );
+}
+
+function OwnSicknessReportFooter({
+  overlapHint,
+  isSaving,
+  onClose,
+}: {
+  overlapHint: boolean;
+  isSaving: boolean;
+  onClose: (saved: boolean) => void;
+}) {
+  return (
+    <DialogFooter>
+      {overlapHint ? (
+        // The report is saved; the hint must be acknowledged, not raced
+        // by an auto-close timer.
+        <Button type="button" onClick={() => onClose(true)}>
+          Verstanden
+        </Button>
+      ) : (
+        <>
+          <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
+            Abbrechen
+          </Button>
+          <Button pending={isSaving} type="submit" disabled={isSaving}>
+            {isSaving ? 'Wird gemeldet…' : 'Krank melden'}
+          </Button>
+        </>
+      )}
+    </DialogFooter>
+  );
+}
+
 export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean) => void }) {
   const todayIso = getBusinessTodayIso();
   const [absenceType, setAbsenceType] = useState<SicknessAbsenceType>('krankheit');
@@ -168,13 +273,7 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
     if (isSaving) return;
     setError(null);
 
-    const startError = startDate ? undefined : 'Bitte wähle ein Datum aus.';
-    const endError =
-      endKnown && !endDate
-        ? 'Bitte wähle ein Datum aus.'
-        : endKnown && endDate < startDate
-          ? SICKNESS_ERROR_MESSAGES.invalid_range
-          : undefined;
+    const { start: startError, end: endError } = sicknessReportDateErrors(startDate, endKnown, endDate);
     setDateErrors({ start: startError, end: endError });
     if (focusFirstInvalidField({ 'sickness-start-date': startError, 'sickness-end-date': endError })) return;
 
@@ -194,13 +293,7 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
           onClose(true);
         }
       } else {
-        setError(
-          describeFailure(
-            result.error,
-            SICKNESS_ERROR_MESSAGES,
-            'Die Meldung konnte nicht gespeichert werden.',
-          ),
-        );
+        setError(sicknessReportFailure(result.error));
       }
     } catch {
       setError('Die Meldung konnte nicht gespeichert werden.');
@@ -235,33 +328,11 @@ export function OwnSicknessReportDialog({ onClose }: { onClose: (saved: boolean)
               dateErrors={dateErrors}
             />
 
-            {overlapHint && (
-              <p role="status" className="text-xs text-muted-foreground">
-                Hinweis: Der Zeitraum überschneidet sich mit genehmigtem Urlaub. Dein Büro entscheidet, wie
-                damit umgegangen wird.
-              </p>
-            )}
+            {overlapHint && <OwnSicknessOverlapHint />}
 
             <ErrorText>{error}</ErrorText>
           </div>
-          <DialogFooter>
-            {overlapHint ? (
-              // The report is saved; the hint must be acknowledged, not raced
-              // by an auto-close timer.
-              <Button type="button" onClick={() => onClose(true)}>
-                Verstanden
-              </Button>
-            ) : (
-              <>
-                <Button type="button" variant="outline" onClick={() => onClose(false)} disabled={isSaving}>
-                  Abbrechen
-                </Button>
-                <Button pending={isSaving} type="submit" disabled={isSaving}>
-                  {isSaving ? 'Wird gemeldet…' : 'Krank melden'}
-                </Button>
-              </>
-            )}
-          </DialogFooter>
+          <OwnSicknessReportFooter overlapHint={overlapHint} isSaving={isSaving} onClose={onClose} />
         </form>
       </DialogContent>
     </Dialog>

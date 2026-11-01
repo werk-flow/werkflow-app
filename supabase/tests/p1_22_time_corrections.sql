@@ -544,6 +544,40 @@ begin
 end;
 $$;
 
+-- Four eyes for a holder: the admin holds the time approval for everyone
+-- else, yet their own correction stays a request that they cannot approve.
+do $$
+declare
+  v_admin_record uuid;
+  v_request_id uuid;
+  v_result jsonb;
+begin
+  select id into v_admin_record from public.employee_records
+  where organization_id = '22000000-0000-0000-0000-000000000010' and user_id = '22000000-0000-0000-0000-000000000001';
+  v_result := public.create_time_correction_request(
+    '22000000-0000-0000-0000-000000000010', v_admin_record,
+    '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 'add', 'Eigener Nachtrag',
+    repeat('c', 63) || '1', repeat('d', 63) || '1',
+    '{"schemaVersion":1,"facts":[]}', '{"schemaVersion":1,"facts":[]}',
+    '[]', ('{"mode":"role_default","role":"admin"}')::jsonb || pg_temp.timeline_fence()
+  );
+  v_request_id := (v_result->>'requestId')::uuid;
+  if v_result->>'status' <> 'submitted' then raise exception 'a holder applied their own correction'; end if;
+  begin
+    perform public.decide_time_correction(
+      v_request_id, '22000000-0000-0000-0000-000000000001', gen_random_uuid(), 1, 'approve', null,
+      ('{"mode":"role_default","role":"admin"}')::jsonb || pg_temp.timeline_fence()
+    );
+    raise exception 'a holder approved their own correction';
+  exception when others then
+    if sqlerrm not like '%time_correction_self_approval_forbidden%' then raise; end if;
+  end;
+  if (select status from public.time_correction_requests where id = v_request_id) <> 'submitted'
+    or exists (select 1 from public.time_correction_applications where request_id = v_request_id)
+  then raise exception 'a refused self approval changed the request'; end if;
+end;
+$$;
+
 -- P1-22-F44/F45: the requester reads their own corrections; a member of a
 -- foreign organization reads no request, revision, source, event or application.
 set local role authenticated;

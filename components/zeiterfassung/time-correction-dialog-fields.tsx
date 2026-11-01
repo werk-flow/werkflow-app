@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { TIME_CORRECTION_KIND_LABELS, type TimeCorrectionKind } from '@/lib/time-corrections/types';
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
+import { Constants } from '@/lib/supabase/database.types';
+import { constrainedValue } from '@/lib/validation/constrained-value';
 import type { TimeCorrectionDialogForm } from './use-time-correction-dialog';
 
 const SOURCE_KINDS: TimeCorrectionKind[] = [
@@ -20,6 +22,9 @@ const SOURCE_KINDS: TimeCorrectionKind[] = [
   'reallocate',
   'reassign',
 ];
+
+// A correction without a source entry adds time.
+const ADD_KINDS: TimeCorrectionKind[] = ['add', 'missed_clock'];
 
 const ACTIVITY_OPTIONS: Array<{ value: TimeSegmentKind; label: string }> = [
   { value: 'work', label: 'Arbeit' },
@@ -130,6 +135,72 @@ function TimeCorrectionTimeFields({ form }: { form: TimeCorrectionDialogForm }) 
   );
 }
 
+function TimeCorrectionFieldsSkeleton() {
+  return (
+    <div className="space-y-4" role="status" aria-busy="true">
+      <span className="sr-only">Daten werden geladen.</span>
+      {Array.from({ length: 3 }, (_, index) => (
+        <div key={index} className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TimeCorrectionActivityField({
+  activityKind,
+  setActivityKind,
+}: Pick<TimeCorrectionDialogForm, 'activityKind' | 'setActivityKind'>) {
+  return (
+    <Field label="Neue Tätigkeit" className="gap-1.5">
+      <Select
+        value={activityKind}
+        onValueChange={(value) =>
+          setActivityKind(constrainedValue(Constants.public.Enums.time_segment_kind, value, 'activity kind'))
+        }
+      >
+        <SelectTrigger aria-label="Neue Tätigkeit">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ACTIVITY_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+function TimeCorrectionJobField({
+  jobSearch,
+  jobId,
+  setJobId,
+}: Pick<TimeCorrectionDialogForm, 'jobId' | 'setJobId'> & {
+  jobSearch: ReturnType<typeof useJobEntityOptions>;
+}) {
+  return (
+    <Field label="Auftrag" className="gap-1.5">
+      <SearchableSelect
+        ariaLabel="Auftrag für Zeitkorrektur"
+        options={[{ value: 'none', label: 'Ohne Auftrag' }, ...jobSearch.options]}
+        value={jobId}
+        onChange={setJobId}
+        onSearchChange={jobSearch.onSearchChange}
+        loading={jobSearch.loading}
+        loadFailure={jobSearch.loadFailure}
+        onLoadMore={jobSearch.onLoadMore}
+        searchPlaceholder="Auftrag suchen …"
+        emptyMessage="Kein Auftrag gefunden"
+      />
+    </Field>
+  );
+}
+
 export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialogFieldsProps) {
   const {
     loadingOptions,
@@ -150,25 +221,23 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     { kind: 'jobs', purpose: 'time-correction' },
     jobId && jobId !== 'none' ? [jobId] : [],
   );
-  const jobOptions = [{ value: 'none', label: 'Ohne Auftrag' }, ...jobSearch.options];
-  const sourceKinds = entry ? SOURCE_KINDS : (['add', 'missed_clock'] as TimeCorrectionKind[]);
+  const sourceKinds = entry ? SOURCE_KINDS : ADD_KINDS;
 
   return (
     <>
       {loadingOptions || !options ? (
-        <div className="space-y-4" role="status" aria-busy="true">
-          <span className="sr-only">Daten werden geladen.</span>
-          {Array.from({ length: 3 }, (_, index) => (
-            <div key={index} className="space-y-2">
-              <Skeleton className="h-4 w-28" />
-              <Skeleton className="h-9 w-full" />
-            </div>
-          ))}
-        </div>
+        <TimeCorrectionFieldsSkeleton />
       ) : (
         <>
           <Field label="Korrektur" className="gap-1.5">
-            <Select value={kind} onValueChange={(value) => setKind(value as TimeCorrectionKind)}>
+            <Select
+              value={kind}
+              onValueChange={(value) =>
+                setKind(
+                  constrainedValue(Constants.public.Enums.time_correction_kind, value, 'correction kind'),
+                )
+              }
+            >
               <SelectTrigger aria-label="Art der Zeitkorrektur">
                 <SelectValue />
               </SelectTrigger>
@@ -187,40 +256,11 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
           <TimeCorrectionTimeFields form={form} />
 
           {kind === 'reclassify' ? (
-            <Field label="Neue Tätigkeit" className="gap-1.5">
-              <Select
-                value={activityKind}
-                onValueChange={(value) => setActivityKind(value as TimeSegmentKind)}
-              >
-                <SelectTrigger aria-label="Neue Tätigkeit">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {ACTIVITY_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            <TimeCorrectionActivityField activityKind={activityKind} setActivityKind={setActivityKind} />
           ) : null}
 
           {kind === 'reallocate' || kind === 'add' || kind === 'missed_clock' ? (
-            <Field label="Auftrag" className="gap-1.5">
-              <SearchableSelect
-                ariaLabel="Auftrag für Zeitkorrektur"
-                options={jobOptions}
-                value={jobId}
-                onChange={setJobId}
-                onSearchChange={jobSearch.onSearchChange}
-                loading={jobSearch.loading}
-                loadFailure={jobSearch.loadFailure}
-                onLoadMore={jobSearch.onLoadMore}
-                searchPlaceholder="Auftrag suchen …"
-                emptyMessage="Kein Auftrag gefunden"
-              />
-            </Field>
+            <TimeCorrectionJobField jobSearch={jobSearch} jobId={jobId} setJobId={setJobId} />
           ) : null}
 
           <Field

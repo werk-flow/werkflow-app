@@ -102,12 +102,32 @@ function closedPeriodTimeErrors(
   };
 }
 
+type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
+
+// The dialog cannot work without its options: say so and close it.
+function closeOnOptionsLoadFailure(showBanner: ShowBanner, setOpen: (nextOpen: boolean) => void): void {
+  showBanner({
+    variant: 'error',
+    message: 'Die Korrekturmaske konnte nicht geladen werden.',
+  });
+  setOpen(false);
+}
+
+// The entry's person, or the caller's own record when the correction adds time.
+function initialSubjectEmployeeRecordId(
+  options: TimeCorrectionFormOptions,
+  entry: TimeEntry | undefined,
+): string {
+  const sourcePerson = entry ? options.people.find((person) => person.userId === entry.userId) : null;
+  return sourcePerson?.employeeRecordId ?? options.currentEmployeeRecordId;
+}
+
 type TimeCorrectionDialogSessionInput = {
   organizationId: string;
   entry: TimeEntry | undefined;
   controlledOpen: boolean | undefined;
   onOpenChange: ((open: boolean) => void) | undefined;
-  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  showBanner: ShowBanner;
 };
 
 // The state that restarts with every opening of the dialog: the loaded form
@@ -165,28 +185,17 @@ function useTimeCorrectionDialogSession({
       .then((result) => {
         if (controller.signal.aborted) return;
         if (!result.success) {
-          showBanner({
-            variant: 'error',
-            message: 'Die Korrekturmaske konnte nicht geladen werden.',
-          });
-          setOpen(false);
+          closeOnOptionsLoadFailure(showBanner, setOpen);
           return;
         }
         setLoadedOptions({ organizationId, value: result.options });
-        const sourcePerson = entry
-          ? result.options.people.find((person) => person.userId === entry.userId)
-          : null;
-        const subjectId = sourcePerson?.employeeRecordId ?? result.options.currentEmployeeRecordId;
+        const subjectId = initialSubjectEmployeeRecordId(result.options, entry);
         setSubjectEmployeeRecordId(subjectId);
         setTargetEmployeeRecordId(subjectId);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
-        showBanner({
-          variant: 'error',
-          message: 'Die Korrekturmaske konnte nicht geladen werden.',
-        });
-        setOpen(false);
+        closeOnOptionsLoadFailure(showBanner, setOpen);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingOptions(false);
@@ -250,6 +259,87 @@ export type TimeCorrectionDialogForm = {
   fieldErrors: TimeCorrectionFieldErrors;
 };
 
+// The source a correction changes: the canonical segment, the applied
+// correction, or the entry itself.
+function correctionSource(
+  entry: TimeEntry | undefined,
+): { kind: NonNullable<TimeEntry['sourceKind']>; id: string } | null {
+  if (!entry?.sourceKind) return null;
+  const id =
+    entry.sourceKind === 'canonical_segment'
+      ? entry.canonicalSegmentId
+      : entry.sourceKind === 'correction_application'
+        ? entry.correctionApplicationId
+        : entry.id;
+  return id ? { kind: entry.sourceKind, id } : null;
+}
+
+// Every field error of a submit: a missing person or reason, an incomplete or
+// unordered time, then a time in a closed period.
+function timeCorrectionFieldErrors(
+  times: { kind: TimeCorrectionKind; startAt: string; splitAt: string; endAt: string },
+  closedPeriods: readonly ClosedTimePeriod[],
+  subjectEmployeeRecordId: string,
+  reason: string,
+): TimeCorrectionFieldErrors {
+  const timeErrors = validateTimeCorrectionTimes(times);
+  const closedErrors = closedPeriodTimeErrors(times, closedPeriods);
+  return {
+    person: subjectEmployeeRecordId ? undefined : 'Bitte wähle eine Person aus.',
+    startAt: timeErrors.startAt ?? closedErrors.startAt,
+    splitAt: timeErrors.splitAt ?? closedErrors.splitAt,
+    endAt: timeErrors.endAt ?? closedErrors.endAt,
+    reason: reason.trim() ? undefined : 'Bitte gib einen Grund an.',
+  };
+}
+
+// The field ids in form order, for focusFirstInvalidField.
+function timeCorrectionFieldIds(errors: TimeCorrectionFieldErrors): Record<string, string | undefined> {
+  return {
+    'time-correction-person': errors.person,
+    'time-correction-start-date': errors.startAt,
+    'time-correction-split-date': errors.splitAt,
+    'time-correction-end-date': errors.endAt,
+    'time-correction-reason': errors.reason,
+  };
+}
+
+function timeCorrectionFailure(error: string): string {
+  return describeFailure(
+    error,
+    TIME_CORRECTION_FAILURE_MESSAGES,
+    'Die Korrektur konnte nicht gespeichert werden.',
+  );
+}
+
+// The fields of one correction, from the entry it starts with.
+function useTimeCorrectionFieldState(entry: TimeEntry | undefined) {
+  const [kind, setKind] = useState<TimeCorrectionKind>(entry ? 'edit' : 'missed_clock');
+  const initialStart = toLocalDateTime(entry?.timestamp ?? new Date().toISOString());
+  const [startAt, setStartAt] = useState(initialStart);
+  const [splitAt, setSplitAt] = useState(oneHourAfter(initialStart));
+  const [endAt, setEndAt] = useState(oneHourAfter(initialStart));
+  const [reason, setReason] = useState('');
+  const [activityKind, setActivityKind] = useState<TimeSegmentKind>(entry?.activityKind ?? 'work');
+  const [fieldErrors, setFieldErrors] = useState<TimeCorrectionFieldErrors>({});
+  return {
+    kind,
+    setKind,
+    startAt,
+    setStartAt,
+    splitAt,
+    setSplitAt,
+    endAt,
+    setEndAt,
+    reason,
+    setReason,
+    activityKind,
+    setActivityKind,
+    fieldErrors,
+    setFieldErrors,
+  };
+}
+
 export function useTimeCorrectionDialogForm({
   organizationId,
   entry,
@@ -269,46 +359,20 @@ export function useTimeCorrectionDialogForm({
   const { operationIdRef, ...sessionState } = session;
   const { setOpen, subjectEmployeeRecordId, targetEmployeeRecordId, jobId, setSubmitError } = sessionState;
   const { run: runSubmit, isPending: submitting } = useServerAction(submitTimeCorrection);
-  const [kind, setKind] = useState<TimeCorrectionKind>(entry ? 'edit' : 'missed_clock');
-  const initialStart = toLocalDateTime(entry?.timestamp ?? new Date().toISOString());
-  const [startAt, setStartAt] = useState(initialStart);
-  const [splitAt, setSplitAt] = useState(oneHourAfter(initialStart));
-  const [endAt, setEndAt] = useState(oneHourAfter(initialStart));
-  const [reason, setReason] = useState('');
-  const [activityKind, setActivityKind] = useState<TimeSegmentKind>(entry?.activityKind ?? 'work');
-  const [fieldErrors, setFieldErrors] = useState<TimeCorrectionFieldErrors>({});
+  const { setFieldErrors, ...fields } = useTimeCorrectionFieldState(entry);
+  const { kind, startAt, splitAt, endAt, reason, setReason, activityKind } = fields;
 
-  const source = useMemo(() => {
-    if (!entry?.sourceKind) return null;
-    const id =
-      entry.sourceKind === 'canonical_segment'
-        ? entry.canonicalSegmentId
-        : entry.sourceKind === 'correction_application'
-          ? entry.correctionApplicationId
-          : entry.id;
-    return id ? { kind: entry.sourceKind, id } : null;
-  }, [entry]);
+  const source = useMemo(() => correctionSource(entry), [entry]);
 
   const submit = async () => {
-    const timeErrors = validateTimeCorrectionTimes({ kind, startAt, splitAt, endAt });
-    const closedErrors = closedPeriodTimeErrors({ kind, startAt, splitAt, endAt }, closedPeriods);
-    const nextFieldErrors = {
-      person: subjectEmployeeRecordId ? undefined : 'Bitte wähle eine Person aus.',
-      startAt: timeErrors.startAt ?? closedErrors.startAt,
-      splitAt: timeErrors.splitAt ?? closedErrors.splitAt,
-      endAt: timeErrors.endAt ?? closedErrors.endAt,
-      reason: reason.trim() ? undefined : 'Bitte gib einen Grund an.',
-    };
+    const nextFieldErrors = timeCorrectionFieldErrors(
+      { kind, startAt, splitAt, endAt },
+      closedPeriods,
+      subjectEmployeeRecordId,
+      reason,
+    );
     setFieldErrors(nextFieldErrors);
-    if (
-      focusFirstInvalidField({
-        'time-correction-person': nextFieldErrors.person,
-        'time-correction-start-date': nextFieldErrors.startAt,
-        'time-correction-split-date': nextFieldErrors.splitAt,
-        'time-correction-end-date': nextFieldErrors.endAt,
-        'time-correction-reason': nextFieldErrors.reason,
-      })
-    ) {
+    if (focusFirstInvalidField(timeCorrectionFieldIds(nextFieldErrors))) {
       return;
     }
     if (entry && isEntryInClosedPeriod(entry, closedPeriods)) {
@@ -339,13 +403,7 @@ export function useTimeCorrectionDialogForm({
         operationId: (operationIdRef.current ??= crypto.randomUUID()),
       });
       if (!result.success) {
-        setSubmitError(
-          describeFailure(
-            result.error,
-            TIME_CORRECTION_FAILURE_MESSAGES,
-            'Die Korrektur konnte nicht gespeichert werden.',
-          ),
-        );
+        setSubmitError(timeCorrectionFailure(result.error));
         return;
       }
       showBanner({
@@ -363,22 +421,5 @@ export function useTimeCorrectionDialogForm({
     }
   };
 
-  return {
-    ...sessionState,
-    submitting,
-    submit,
-    kind,
-    setKind,
-    startAt,
-    setStartAt,
-    splitAt,
-    setSplitAt,
-    endAt,
-    setEndAt,
-    reason,
-    setReason,
-    activityKind,
-    setActivityKind,
-    fieldErrors,
-  };
+  return { ...sessionState, submitting, submit, ...fields };
 }

@@ -68,13 +68,6 @@ const OUTSIDER_SESSION = /\boutsiderPage\b/;
 export const ROLE_DENIAL_GROUPS: Readonly<
   Record<string, { readonly tests: readonly string[]; readonly movesIn: string }>
 > = {
-  'golden:p1-04': {
-    tests: [
-      'Admin wählt den Feiertagskalender, Büro sieht ihn nur und der Feiertag erscheint im Kalender-Monat',
-      'Handwerker erreicht keine Verwaltung des Feiertagskalenders und der Betriebsruhe',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#39',
-  },
   'golden:p1-05': {
     tests: [
       'Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip',
@@ -100,22 +93,12 @@ export const ROLE_DENIAL_GROUPS: Readonly<
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
   },
-  'golden:p1-22': {
-    tests: [
-      'keeps a correction provisional, then applies one attributable second-person decision @P1-22-stage-submit @P1-22-stage-approve @READINESS',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#39',
-  },
   'audit:wave-1:a1-organisation': {
     tests: [
       'A1-02/A1-03/A1-05/A1-26/A1-27/A1-28: Beitritt per Code, Organisationswechsel, Live-Status, Pause, Auftragwechsel und Org-Sperre',
       'A1-04/A1-06: Handwerker-Oberfläche und konservative Rollenregeln',
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a1-zeiten': {
-    tests: ['A1-32: Nur Admin ändert Pausenregel und abgeschlossene Historie bleibt stabil'],
-    movesIn: 'werk-flow/werkflow-planning#39',
   },
   'audit:wave-1:a3': {
     tests: [
@@ -135,12 +118,6 @@ export const ROLE_DENIAL_GROUPS: Readonly<
       'A5-07/A5-08/A5-09/A5-10: Fünf Abdeckungszustände mit stärkster Person, Mehrfach-Warnung mit Pflichtgrund, Azubi-Standard aus, rechtzeitiger Ablaufhinweis; Bearbeitungsdialog und Kalender-Drag prüfen erneut und die Eigenansicht bleibt nur lesend [P1-09-F02/P1-09-F03/P1-09-F04/P1-09-F05/P1-09-F06]',
     ],
     movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-2:p1-22': {
-    tests: [
-      'applies a Büro correction for another person at once but keeps the own correction a request @READINESS',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#39',
   },
 };
 

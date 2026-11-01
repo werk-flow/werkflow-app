@@ -23,7 +23,7 @@ import { useBusyIds } from '@/hooks/use-busy-id';
 import { useOptimisticList } from '@/hooks/use-optimistic-list';
 import { useLiveView, type LiveViewResult } from '@/hooks/use-live-view';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
-import { useVacationApprovalDecisions } from './use-vacation-approvals';
+import { useVacationApprovalDecisions, type VacationReasonDialogState } from './use-vacation-approvals';
 import { VacationApprovalApprovedList, VacationApprovalPendingCard } from './vacation-approvals-cards';
 
 const EMPTY_REQUESTS: ApproverVacationRequest[] = [];
@@ -50,6 +50,30 @@ async function readApproverVacationLists(
       pending: pendingResult.requests,
       approved: approvedResult.requests,
     },
+  };
+}
+
+function VacationApprovalsSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-24 w-full" />
+    </div>
+  );
+}
+
+/** The reason dialog's title, description and confirm label for a rejection or a cancellation. */
+function reasonDialogCopy(reasonDialog: Exclude<VacationReasonDialogState, { mode: 'closed' }>): {
+  title: string;
+  description: string;
+  confirmLabel: string;
+} {
+  return {
+    title: reasonDialog.mode === 'reject' ? 'Urlaubsantrag ablehnen' : 'Genehmigten Urlaub stornieren',
+    description:
+      reasonDialog.mode === 'reject'
+        ? `Der Antrag von ${reasonDialog.item.personName} wird mit Begründung abgelehnt.`
+        : `Die Stornierung stellt die verbrauchten Urlaubstage von ${reasonDialog.item.personName} nachvollziehbar wieder her.`,
+    confirmLabel: reasonDialog.mode === 'reject' ? 'Ablehnen' : 'Stornieren',
   };
 }
 
@@ -90,11 +114,7 @@ export function VacationApprovals() {
   } = useVacationApprovalDecisions({ view, busy, pendingList, approvedList });
 
   if (isLoading) {
-    return (
-      <div className="space-y-3">
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
+    return <VacationApprovalsSkeleton />;
   }
 
   // A failed initial load must be visible, never an empty screen.
@@ -142,13 +162,7 @@ export function VacationApprovals() {
 
       {reasonDialog.mode !== 'closed' && (
         <VacationDecisionReasonDialog
-          title={reasonDialog.mode === 'reject' ? 'Urlaubsantrag ablehnen' : 'Genehmigten Urlaub stornieren'}
-          description={
-            reasonDialog.mode === 'reject'
-              ? `Der Antrag von ${reasonDialog.item.personName} wird mit Begründung abgelehnt.`
-              : `Die Stornierung stellt die verbrauchten Urlaubstage von ${reasonDialog.item.personName} nachvollziehbar wieder her.`
-          }
-          confirmLabel={reasonDialog.mode === 'reject' ? 'Ablehnen' : 'Stornieren'}
+          {...reasonDialogCopy(reasonDialog)}
           isBusy={busy.isBusy(reasonDialog.item.request.id)}
           submitError={dialogError}
           onConfirm={handleReasonSubmit}
