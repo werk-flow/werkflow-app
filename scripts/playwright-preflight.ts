@@ -290,24 +290,22 @@ export async function runBackendPreflight(input: {
 if (import.meta.main) {
   try {
     const laneArgument = process.argv[2] ?? 'iteration';
-    if (
-      laneArgument !== 'backend' &&
-      laneArgument !== 'build' &&
-      !(RUNNABLE_LANES as readonly string[]).includes(laneArgument)
-    ) {
+    const lane = RUNNABLE_LANES.find((runnable) => runnable === laneArgument);
+    if (laneArgument !== 'backend' && laneArgument !== 'build' && !lane) {
       throw new Error(
         `Unknown lane: ${laneArgument}. Expected backend, build or one of ${RUNNABLE_LANES.join(', ')}.`,
       );
     }
     const targetArgument = process.argv[3] ?? 'local';
-    if (!PLAYWRIGHT_TARGETS.includes(targetArgument as PlaywrightTarget)) {
+    const target = PLAYWRIGHT_TARGETS.find((candidate) => candidate === targetArgument);
+    if (!target) {
       throw new Error(`Unknown target: ${targetArgument}. Expected one of ${PLAYWRIGHT_TARGETS.join(', ')}.`);
     }
-    const target = targetArgument as PlaywrightTarget;
     if (laneArgument === 'backend') await runBackendPreflight({ target });
     // A build made elsewhere (the CI Build job) serves here only on this checkout's source and environment.
     else if (laneArgument === 'build') assertRecordedBuild(resolve(import.meta.dir, '..'));
-    else await runPlaywrightPreflight({ lane: laneArgument as PlaywrightLane, target });
+    // The lane check above leaves a runnable lane here.
+    else if (lane) await runPlaywrightPreflight({ lane, target });
     console.log(`[werkflow-test] ${laneArgument} preflight passed (target ${target})`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));

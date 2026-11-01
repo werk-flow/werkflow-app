@@ -52,8 +52,10 @@ function ignoredByGit(path: string): boolean {
 
 let call: GuardedToolCall & { cwd?: unknown };
 try {
-  // JSON.parse is typed `any`; every field of the call is optional and read as `unknown`.
-  call = JSON.parse(await Bun.stdin.text());
+  const parsed: unknown = JSON.parse(await Bun.stdin.text());
+  // A call that is no JSON object cannot be decided, so it passes like every other such case.
+  if (!isJsonRecord(parsed)) process.exit(0);
+  call = parsed;
 } catch {
   process.exit(0);
 }

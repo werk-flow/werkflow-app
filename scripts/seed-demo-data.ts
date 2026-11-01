@@ -30,7 +30,8 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import type { Database, Json } from '../lib/supabase/database.types';
+import type { Database } from '../lib/supabase/database.types';
+import type { TableInsert } from '../lib/supabase/table-insert';
 import { getPublicHolidaysForYear, type HolidayRegion } from '../lib/personnel/holidays';
 import { resolveBerlinWallTime } from '../lib/date-time/berlin';
 import { generateOrganizationCode } from '../lib/org/schemas';
@@ -38,7 +39,6 @@ import { DEMO_MEMBER_PASSWORD_ENV, resolveDemoMemberPassword } from '../lib/secu
 import { deleteStorageObjects, listStorageObjectPaths } from '../lib/storage/r2';
 
 type Tables = Database['public']['Tables'];
-type Insert<T extends keyof Tables> = Tables[T]['Insert'];
 type Admin = SupabaseClient<Database>;
 
 const OWNER_EMAIL = 'tamay@coban.cc';
@@ -58,7 +58,8 @@ const ENV_FILES = {
 
 type Role = Database['public']['Enums']['org_role'];
 type Employment = 'vollzeit' | 'teilzeit' | 'ausbildung' | 'minijob';
-type TeamKey = 'heizung' | 'sanitaer' | 'service';
+const TEAM_KEYS = ['heizung', 'sanitaer', 'service'] as const;
+type TeamKey = (typeof TEAM_KEYS)[number];
 
 type PersonSpec = {
   first: string;
@@ -1946,17 +1947,17 @@ function fail(step: string, error: { message: string } | null): never {
 async function insertRows<T extends keyof Tables>(
   admin: Admin,
   table: T,
-  rows: Insert<T>[],
+  rows: TableInsert<T>[],
   batchSize = 400,
 ): Promise<void> {
-  const groups = new Map<string, Insert<T>[]>();
+  const groups = new Map<string, TableInsert<T>[]>();
   for (const row of rows) {
     const signature = Object.keys(row).sort().join(',');
     groups.set(signature, [...(groups.get(signature) ?? []), row]);
   }
   for (const group of groups.values()) {
     for (let index = 0; index < group.length; index += batchSize) {
-      const { error } = await admin.from(table).insert(group.slice(index, index + batchSize) as never);
+      const { error } = await admin.from(table).insert(group.slice(index, index + batchSize));
       if (error) fail(`insert ${String(table)} batch ${index / batchSize + 1}`, error);
     }
   }
@@ -2170,7 +2171,10 @@ async function createMembers(
 
 function scheduleFor(
   person: PersonSpec,
-): Omit<Insert<'work_schedules'>, 'organization_id' | 'employee_record_id' | 'valid_from' | 'created_by'> {
+): Omit<
+  TableInsert<'work_schedules'>,
+  'organization_id' | 'employee_record_id' | 'valid_from' | 'created_by'
+> {
   if (person.employment === 'minijob')
     return {
       monday_minutes: 200,
@@ -2237,7 +2241,7 @@ async function seedPersonnel(
   );
 
   const capabilityIds = new Map<string, string>();
-  const capabilityRows: Insert<'organization_capabilities'>[] = [
+  const capabilityRows: TableInsert<'organization_capabilities'>[] = [
     ...Object.entries(SKILLS).map(([name, description]) => ({
       id: crypto.randomUUID(),
       organization_id: organizationId,
@@ -2262,7 +2266,7 @@ async function seedPersonnel(
   for (const row of capabilityRows) if (row.id) capabilityIds.set(row.name, row.id);
   await insertRows(admin, 'organization_capabilities', capabilityRows);
 
-  const employeeCapabilities: Insert<'employee_capabilities'>[] = [];
+  const employeeCapabilities: TableInsert<'employee_capabilities'>[] = [];
   for (const member of members) {
     for (const skill of member.skills) {
       const capabilityId = capabilityIds.get(skill);
@@ -2313,7 +2317,7 @@ async function seedPersonnel(
   await insertRows(
     admin,
     'teams',
-    (Object.keys(TEAMS) as TeamKey[]).map((key) => {
+    TEAM_KEYS.map((key) => {
       const id = crypto.randomUUID();
       teamIds.set(key, id);
       return {
@@ -2353,9 +2357,9 @@ async function seedCustomers(
   random: Random,
 ): Promise<Customer[]> {
   const customers: Customer[] = [];
-  const clientRows: Insert<'clients'>[] = [];
-  const contactRows: Insert<'client_contacts'>[] = [];
-  const siteRows: Insert<'client_sites'>[] = [];
+  const clientRows: TableInsert<'clients'>[] = [];
+  const contactRows: TableInsert<'client_contacts'>[] = [];
+  const siteRows: TableInsert<'client_sites'>[] = [];
   let customerNumber = 1001;
   const addAddress = (): { street: string; postalCode: string; address: string } => {
     const street = `${random.pick(company.streets)} ${random.int(1, 140)}`;
@@ -2523,7 +2527,7 @@ async function seedAbsences(
     [7, '2026-11-09', '2026-11-13'],
     [8, '2026-10-26', '2026-10-27'],
   ];
-  const vacationRows: Insert<'vacation_requests'>[] = [];
+  const vacationRows: TableInsert<'vacation_requests'>[] = [];
   for (const [index, from, to] of approved) {
     const member = at(index);
     markAbsent(member, from, to);
@@ -2562,7 +2566,7 @@ async function seedAbsences(
     [2, '2026-09-14', '2026-09-16', true, 'pending'],
     [8, '2026-08-31', '2026-08-31', false, 'not_required'],
   ];
-  const sicknessRows: Insert<'sickness_reports'>[] = [];
+  const sicknessRows: TableInsert<'sickness_reports'>[] = [];
   for (const [index, from, to, evidenceRequired, evidenceStatus] of sickness) {
     const member = at(index);
     markAbsent(member, from, to);
@@ -2632,7 +2636,7 @@ async function seedInventory(
 
   const mainLocationId = crypto.randomUUID();
   const vehicleIds: string[] = [];
-  const locationRows: Insert<'inventory_locations'>[] = [
+  const locationRows: TableInsert<'inventory_locations'>[] = [
     {
       id: mainLocationId,
       organization_id: organizationId,
@@ -2836,7 +2840,7 @@ async function seedEquipment(
       const { error } = await admin.rpc('create_installed_equipment', {
         p_organization_id: organizationId,
         p_equipment_id: equipmentId,
-        p_payload: payload as Json,
+        p_payload: payload,
         p_actor_id: ownerId,
         p_idempotency_key: crypto.randomUUID(),
       });
@@ -2885,7 +2889,7 @@ async function seedWork(
   };
 
   const jobs: SeededJob[] = [];
-  const jobRows: Insert<'jobs'>[] = [];
+  const jobRows: TableInsert<'jobs'>[] = [];
   let jobNumber = 1;
   const pushJob = (
     kind: JobKind,
@@ -2936,7 +2940,7 @@ async function seedWork(
   };
 
   // Projects: five per organization, staggered so two are finished, two are running and one starts in November.
-  const projectRows: Insert<'projects'>[] = [];
+  const projectRows: TableInsert<'projects'>[] = [];
   const projectStarts = ['2026-08-03', '2026-08-17', '2026-09-07', '2026-10-05', '2026-11-02'];
   const commercial = customers.filter((customer) => customer.type === 'gewerblich');
   const privateCustomers = customers.filter((customer) => customer.type === 'privat');
@@ -3066,7 +3070,7 @@ async function seedTimeEntries(
       jobsByMemberDay.set(key, [...(jobsByMemberDay.get(key) ?? []), job]);
     }
   }
-  const rows: Insert<'time_entries'>[] = [];
+  const rows: TableInsert<'time_entries'>[] = [];
   const pastWorkdays = workdays.filter((date) => date <= TODAY);
   const recentWorkdays = pastWorkdays.slice(-8);
   let pendingSequence = 0;
@@ -3241,14 +3245,14 @@ async function seedRequests(
 ): Promise<void> {
   const office = members.find((member) => member.role === 'buero') ?? members[0];
   if (!office) throw new Error('no office member');
-  const rows: Insert<'client_requests'>[] = [];
+  const rows: TableInsert<'client_requests'>[] = [];
   const conversions: Array<{ requestId: string; spec: RequestSpec; customer: Customer }> = [];
   REQUESTS.forEach((spec, index) => {
     const customer = customers[(index * 3) % customers.length];
     if (!customer) throw new Error('missing request customer');
     const id = crypto.randomUUID();
     const receivedAt = berlinInstant(spec.receivedAt.slice(0, 10), spec.receivedAt.slice(11));
-    const row: Insert<'client_requests'> = {
+    const row: TableInsert<'client_requests'> = {
       id,
       organization_id: organizationId,
       request_number: `ANF-2026-${String(index + 1).padStart(3, '0')}`,
@@ -3312,7 +3316,7 @@ async function seedRequests(
     const { error } = await admin.rpc('create_service_case', {
       p_organization_id: organizationId,
       p_service_case_id: crypto.randomUUID(),
-      p_payload: payload as Json,
+      p_payload: payload,
       p_actor_id: ownerId,
       p_idempotency_key: crypto.randomUUID(),
     });
@@ -3364,7 +3368,7 @@ async function seedRequests(
     const { error } = await admin.rpc('create_service_case', {
       p_organization_id: organizationId,
       p_service_case_id: crypto.randomUUID(),
-      p_payload: payload as Json,
+      p_payload: payload,
       p_actor_id: ownerId,
       p_idempotency_key: crypto.randomUUID(),
     });
@@ -3409,7 +3413,7 @@ async function seedMaintenance(
     const { error: coverageError } = await admin.rpc('create_maintenance_coverage', {
       p_organization_id: organizationId,
       p_maintenance_coverage_id: coverageId,
-      p_payload: coveragePayload as Json,
+      p_payload: coveragePayload,
       p_actor_id: ownerId,
       p_idempotency_key: crypto.randomUUID(),
     });
@@ -3436,7 +3440,7 @@ async function seedMaintenance(
       p_organization_id: organizationId,
       p_maintenance_plan_id: crypto.randomUUID(),
       p_revision_id: crypto.randomUUID(),
-      p_payload: planPayload as Json,
+      p_payload: planPayload,
       p_actor_id: ownerId,
       p_idempotency_key: crypto.randomUUID(),
     });
@@ -3546,7 +3550,7 @@ async function verifyVisitTeams(admin: Admin, organizationId: string): Promise<v
 // seeded generator. A drawn code another organization holds is drawn again, as the app does.
 async function insertOrganization(
   admin: Admin,
-  row: Omit<Insert<'organizations'>, 'unique_code'>,
+  row: Omit<TableInsert<'organizations'>, 'unique_code'>,
 ): Promise<void> {
   for (let attempt = 0; attempt < 10; attempt += 1) {
     const { error } = await admin
