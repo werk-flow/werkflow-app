@@ -1,8 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { z } from 'zod';
 
 import type { Database } from '../../../lib/supabase/database.types';
+import type { TableInsert } from '../../../lib/supabase/table-insert';
 import { resolveBerlinWallTime } from '../../../lib/planning/date-time';
 import { shiftIsoDateByDays } from '../../../lib/personnel/types';
 import { berlinDateAtOffset, ownedBerlinWeekAtOffset } from '../../golden/support/date-ownership';
@@ -87,12 +89,12 @@ function createAdminClient(): SupabaseClient<Database> {
 async function insertInBatches<T extends keyof Tables>(
   admin: SupabaseClient<Database>,
   table: T,
-  rows: Tables[T]['Insert'][],
+  rows: TableInsert<T>[],
   batchSize = 500,
 ): Promise<void> {
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
-    const { error } = await admin.from(table).insert(batch as never);
+    const { error } = await admin.from(table).insert(batch);
     if (error)
       throw new Error(`Failed to seed ${String(table)} batch ${index / batchSize + 1}: ${error.message}`);
   }
@@ -440,6 +442,20 @@ async function seedTypicalProfile(world: TestWorld): Promise<TypicalProfileCount
 }
 
 type ArchivedWorkload = { counts: Omit<TypicalProfileCounts, 'assignedJobNumber'> };
+const archivedWorkloadSchema: z.ZodType<ArchivedWorkload> = z.object({
+  counts: z.object({
+    employeeRecords: z.number(),
+    customers: z.number(),
+    jobs: z.number(),
+    equipment: z.number(),
+    pendingSubmissions: z.number(),
+    occurrences: z.number(),
+    assignments: z.number(),
+    timeEntries: z.number(),
+    window: z.object({ from: z.string(), to: z.string(), days: z.number() }),
+    workdays: z.number(),
+  }),
+});
 
 /**
  * Every measured test prepares the profile it reads: the first test of a
@@ -459,7 +475,7 @@ export async function ensureTypicalProfile(world: TestWorld): Promise<TypicalPro
     throw new Error(
       `The world holds ${count} customers without a complete typical profile of this run; use a fresh world.`,
     );
-  const recorded = JSON.parse(readFileSync(archive, 'utf8')) as ArchivedWorkload;
+  const recorded = archivedWorkloadSchema.parse(JSON.parse(readFileSync(archive, 'utf8')));
   return {
     ...recorded.counts,
     assignedJobNumber: syntheticJobNumber(world, TYPICAL_PROFILE.jobs - 1),

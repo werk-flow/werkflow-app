@@ -33,7 +33,12 @@ function readWorkspaceLockOwner(path: string): WorkspaceLockOwner {
       typeof owner.startedAt !== 'string'
     )
       throw new Error('Workspace lock owner data is invalid.');
-    return owner as WorkspaceLockOwner;
+    return {
+      token: owner.token,
+      processId: owner.processId,
+      operation: owner.operation,
+      startedAt: owner.startedAt,
+    };
   } catch (cause) {
     throw new Error(
       `Cannot verify the active workspace lock at ${path}. It is missing, unreadable or corrupt; inspect the owner and recover explicitly before continuing.`,
