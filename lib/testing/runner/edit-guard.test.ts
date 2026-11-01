@@ -1,5 +1,6 @@
 // Rule test: an agent edit to a proof input is refused while a verification run holds the workspace lock.
 import { expect, test } from 'bun:test';
+import { resolve } from 'node:path';
 import {
   editedFiles,
   guardedInputs,
@@ -154,4 +155,17 @@ test('a stack reset or stop is refused while another worktree holds the shared l
   );
   expect(stackResetRefusal(shell('supabase db reset'), [])).toBeUndefined();
   expect(stackResetRefusal(shell('bunx next build'), [holder])).toBeUndefined();
+});
+
+test('the hook lets a call through whose stdin is JSON but no object', () => {
+  const script = resolve(import.meta.dir, '../../../scripts/guard-edits-during-verification.ts');
+  for (const stdin of ['null', '42']) {
+    const result = Bun.spawnSync({
+      cmd: [process.execPath, script],
+      stdin: Buffer.from(stdin),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(result.exitCode, `${stdin}: ${result.stderr.toString()}`).toBe(0);
+  }
 });
