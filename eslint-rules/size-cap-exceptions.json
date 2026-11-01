@@ -74,9 +74,6 @@
     "components/settings/holiday-region-card.tsx": { "HolidayRegionCard": 83 },
     "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 169 },
     "components/settings/password-change-card.tsx": { "PasswordChangeCard": 96 },
-    "components/settings/personnel-onboarding-template-settings.tsx": {
-      "PersonnelOnboardingTemplateSettings": 178
-    },
     "components/settings/profile-avatar-section.tsx": { "ProfileAvatarSection": 137 },
     "components/settings/profile-settings-form.tsx": { "ProfileSettingsForm": 87 },
     "components/settings/responsibility-delegation-dialog.tsx": { "DelegationDialog": 138 },
