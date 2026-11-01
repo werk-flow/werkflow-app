@@ -27,7 +27,7 @@ function NoScheduleYet() {
       size="compact"
       className="py-3"
       title="Kein Arbeitszeitmodell hinterlegt."
-      description="Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden pro Tag – sichtbar als Hinweis, nicht als echte Vorgabe."
+      description="Ohne Wochenplan gilt für Zeitziele das Standardziel von 8 Stunden pro Tag, Montag bis Freitag – sichtbar als Hinweis, nicht als echte Vorgabe."
     />
   );
 }

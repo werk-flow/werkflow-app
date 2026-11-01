@@ -67,59 +67,7 @@ const OUTSIDER_SESSION = /\boutsiderPage\b/;
  */
 export const ROLE_DENIAL_GROUPS: Readonly<
   Record<string, { readonly tests: readonly string[]; readonly movesIn: string }>
-> = {
-  'golden:p1-05': {
-    tests: [
-      'Eigene Einträge bleiben für Verantwortliche im Vier-Augen-Prinzip',
-      'Eine Vertretung gilt im Fenster und verliert die Freigabe nach dem Ende am Aktionspunkt',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'golden:p1-06': {
-    tests: [
-      'Vier Augen und Anspruchswarnung: eigener Antrag bleibt unsichtbar, Genehmigung ohne Anspruch ist eine sichtbare Ausnahme; Entzug wirkt am Aktionspunkt',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'golden:p1-08': {
-    tests: [
-      'Eine Krankmeldung als Faktenkette: Selbstmeldung, Büro-Erfassung, Korrektur, Einstempeln, Privacy-Matrix und Stornierung',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'golden:p1-09': {
-    tests: [
-      'Team und Zertifizierung anlegen, Anforderung mit Teamübernahme begründen und den Ablaufhinweis mit der Erneuerung auflösen',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a1-organisation': {
-    tests: [
-      'A1-02/A1-03/A1-05/A1-26/A1-27/A1-28: Beitritt per Code, Organisationswechsel, Live-Status, Pause, Auftragwechsel und Org-Sperre',
-      'A1-04/A1-06: Handwerker-Oberfläche und konservative Rollenregeln',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a3': {
-    tests: [
-      'A3-11: Betroffene sehen eigene Verantwortung und Vertretung, Büro liest nur, Manager sehen die Personenzusammenfassung',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a4': {
-    tests: [
-      'A4-R02: Freigabe zeigt neutral eine andere Abwesenheit und nur Aufträge im beantragten Zeitraum [P1-06-F03]',
-      'A4-R03: Halber Urlaubstag halbiert das Tagesziel; Manager sehen alle Kalenderzustände, Beschäftigte nur den eigenen [P1-06-F05]',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-  'audit:wave-1:a5': {
-    tests: [
-      'A5-07/A5-08/A5-09/A5-10: Fünf Abdeckungszustände mit stärkster Person, Mehrfach-Warnung mit Pflichtgrund, Azubi-Standard aus, rechtzeitiger Ablaufhinweis; Bearbeitungsdialog und Kalender-Drag prüfen erneut und die Eigenansicht bleibt nur lesend [P1-09-F02/P1-09-F03/P1-09-F04/P1-09-F05/P1-09-F06]',
-    ],
-    movesIn: 'werk-flow/werkflow-planning#40',
-  },
-};
+> = {};
 
 /** How a change plan selects the browser group `id` with its spec `files`. */
 export function changeTrigger(repositoryRoot: string, id: string, files: readonly string[]): ChangeTrigger {

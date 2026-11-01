@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { resolvePageMembership } from '@/lib/org/page-context';
 import { getEmployeeDocuments } from '@/lib/documents/actions';
 import { getCachedOrganizationSettings, getOrganizationUserPreferencesForView } from '@/lib/data/cached';
-import { getMemberDetail, getProfilesByIds } from '@/lib/members/actions';
+import { getMemberDetail, getProfilesByIds, type OrgMemberInfo } from '@/lib/members/actions';
 import { isManagerRole } from '@/lib/roles';
 import { getOrgMembersForUser } from '@/lib/members/queries';
 import { getPersonnelDetail, type PersonnelDetail } from '@/lib/personnel/actions';
@@ -16,6 +16,15 @@ import { RouteRedirect } from '@/components/shared/route-redirect';
 import { getResponsibilitySettingsData } from '@/lib/responsibilities/server';
 import { getPersonnelQualificationSummary } from '@/lib/qualifications/workspace-actions';
 import { getPersonnelLifecycle } from '@/lib/personnel/lifecycle-actions';
+import { getWeeklyTargets } from '@/lib/personnel/target-actions';
+import { getTimeEntries } from '@/lib/time-tracking/entry-read-actions';
+import {
+  buildWeeklyTimeData,
+  computeWeekLabel,
+  getTodayIndex,
+  getWeekBounds,
+} from '@/lib/time-tracking/weekly';
+import type { MemberInitialWeek } from '@/components/mitarbeiter/use-mitarbeiter-detail-live-time';
 import { logError } from '@/lib/logging';
 import MitarbeiterDetailLoading from './loading';
 
@@ -33,6 +42,44 @@ async function resolveActorNames(detail: PersonnelDetail | null): Promise<Record
     if (name) names[id] = name;
   }
   return names;
+}
+
+function toMemberOption(member: OrgMemberInfo): OrgMemberOption {
+  return {
+    userId: member.user_id,
+    firstName: member.first_name,
+    lastName: member.last_name,
+    role: member.role,
+  };
+}
+
+/**
+ * The member's current week with its resolved targets, so the status card's
+ * first frame measures against the real daily target; null when a read
+ * failed, and the card then reads the week on mount.
+ */
+async function loadMemberInitialWeek(
+  organizationId: string,
+  targetUserId: string,
+): Promise<MemberInitialWeek | null> {
+  const { monday, sunday } = getWeekBounds();
+  const [entriesResult, targetsResult, organizationSettings] = await Promise.all([
+    getTimeEntries({
+      organizationId,
+      from: monday.toISOString(),
+      to: sunday.toISOString(),
+      userId: targetUserId,
+    }),
+    getWeeklyTargets({ userId: targetUserId }),
+    getCachedOrganizationSettings(organizationId),
+  ]);
+  if (!entriesResult.success || !targetsResult.success) return null;
+  return {
+    weekData: buildWeeklyTimeData(entriesResult.entries, monday, organizationSettings, targetsResult.targets),
+    todayIndex: getTodayIndex(),
+    weekLabel: computeWeekLabel(monday),
+    weekTargets: targetsResult.targets,
+  };
 }
 
 interface MitarbeiterDetailPageProps {
@@ -61,6 +108,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     organizationUserPreferences,
     responsibilitySettingsResult,
     qualificationSummaryResult,
+    initialWeek,
   ] = await Promise.all([
     getMemberDetail(targetUserId),
     getPersonnelDetail(targetUserId),
@@ -71,6 +119,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     getOrganizationUserPreferencesForView(activeOrgId, user.id),
     getResponsibilitySettingsData(),
     getPersonnelQualificationSummary(targetUserId),
+    loadMemberInitialWeek(activeOrgId, targetUserId),
   ]);
   const qualificationSummary = qualificationSummaryResult.success ? qualificationSummaryResult.data : null;
   if (!qualificationSummaryResult.success) {
@@ -150,12 +199,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
       }
     : null;
 
-  const members: OrgMemberOption[] = membersResult.members.map((m) => ({
-    userId: m.user_id,
-    firstName: m.first_name,
-    lastName: m.last_name,
-    role: m.role,
-  }));
+  const members = membersResult.members.map(toMemberOption);
 
   const { visibleColumns } = organizationUserPreferences;
   if (!documentsResult.success) {
@@ -182,6 +226,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
       breakMode={organizationSettings.breakMode}
       autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
       autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
+      initialWeek={initialWeek}
       responsibilitySettings={responsibilitySettingsResult.success ? responsibilitySettingsResult.data : null}
       qualificationSummary={qualificationSummary}
       lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}

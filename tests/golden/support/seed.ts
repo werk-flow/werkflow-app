@@ -277,7 +277,7 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
     const { data: profiles, error } = await admin.from('profiles').select('id').in('email', additionalEmails);
     if (error) throw new Error(`Owned signup-user lookup failed: ${error.message}`);
     // A contact-only address or rejected signup has no Auth profile and owns no extra user.
-    additionalUserIds = (profiles ?? []).map((profile) => profile.id as string);
+    additionalUserIds = (profiles ?? []).map((profile) => profile.id);
   }
   const userIds = [...new Set([...worldUserIds(world), ...additionalUserIds])];
   const { data: ownedTestOrganizations, error: ownedOrganizationsError } = await admin
@@ -292,7 +292,7 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
     ...new Set([
       world.orgId,
       world.outsider.orgId,
-      ...(ownedTestOrganizations ?? []).map((organization) => organization.id as string),
+      ...(ownedTestOrganizations ?? []).map((organization) => organization.id),
     ]),
   ];
 
@@ -303,7 +303,7 @@ export async function destroyTestWorld(world: TestWorld): Promise<void> {
       const paths = await listStorageObjectPaths({ organizationId: orgId, prefix: `${orgId}/` });
       await deleteStorageObjects({ organizationId: orgId, paths });
     } catch (error) {
-      failures.push(`R2 cleanup for ${orgId}: ${(error as Error).message}`);
+      failures.push(`R2 cleanup for ${orgId}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
