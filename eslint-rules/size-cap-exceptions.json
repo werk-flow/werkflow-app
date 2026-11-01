@@ -68,7 +68,6 @@
     "components/mitarbeiter/mitarbeiter-detail-content.tsx": { "MitarbeiterDetailContent": 143 },
     "components/mitarbeiter/mitarbeiter-detail-time-cards.tsx": { "MitarbeiterDetailTimeCards": 141 },
     "components/mitarbeiter/work-schedule-section.tsx": { "WorkScheduleSection": 104 },
-    "components/settings/organization-settings-form.tsx": { "OrganizationSettingsForm": 169 },
     "components/settings/time-tracking-settings-form.tsx": { "TimeTrackingSettingsForm": 160 },
     "lib/testing/evidence/group-evidence.ts": { "sourceImportGraph": 115 },
     "lib/testing/fixtures/customer-page-http.ts": { "module#5": 81 },
