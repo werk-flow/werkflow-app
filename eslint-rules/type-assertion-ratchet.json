@@ -103,6 +103,7 @@
   "tests/golden/support/db/vacation.ts": 16,
   "tests/golden/support/db/work.ts": 17,
   "tests/golden/support/run-state.ts": 7,
+  "tests/golden/support/scenario-measurement.ts": 2,
   "tests/golden/support/seed.ts": 3,
   "tests/golden/support/steps/interaction.ts": 1,
   "tests/golden/support/steps/inventory.ts": 1,
