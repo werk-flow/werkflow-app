@@ -22,7 +22,7 @@ function row(overrides: Partial<TimeEntryRow> & { entry_type: string; timestamp:
     operation_id: null,
     recovery_reason: null,
     ...overrides,
-  } as TimeEntryRow;
+  };
 }
 
 test('a submission with breaks becomes one session that owns every row', () => {

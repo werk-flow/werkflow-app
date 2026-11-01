@@ -42,7 +42,7 @@ function optionBound(node: ts.Node, seen = new Set<ts.Node>()): number | undefin
     return node.properties.some(ts.isSpreadAssignment) ? undefined : node.properties.length;
   if (ts.isConditionalExpression(node)) {
     const branches = [optionBound(node.whenTrue, nextSeen), optionBound(node.whenFalse, nextSeen)];
-    return branches.every((bound) => bound !== undefined) ? Math.max(...(branches as number[])) : undefined;
+    return branches.every((bound) => bound !== undefined) ? Math.max(...branches) : undefined;
   }
   if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
     if (
