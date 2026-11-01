@@ -46,7 +46,6 @@ import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/suppor
 import {
   beginWorkArtifact,
   closeWorkArtifactDialog,
-  expectNoWorkArtifactsSection,
   makeWorkArtifactCustomerFacing,
   openWorkArtifact,
   openWorkArtifactLinkDisclosure,
@@ -113,15 +112,15 @@ async function submitWorkReport(page: Page, title: string, visitDate: string): P
 // The submit, approve and measurement journey lives in tests/golden/p1-15.spec.ts;
 // the organization boundary is in supabase/tests/work_execution_boundaries.sql.
 test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @AUDIT-W2', () => {
-  test('targets, roles, five structured kinds, validation, and outsider denial', async ({
+  test('targets, roles, five structured kinds, and validation', async ({
     adminPage,
     businessDate,
     employeePage,
-    outsiderPage,
     world,
   }) => {
     // Placement, exact target, site/task context,
     // visibility, empty/list/detail states, role bounds, and all five schemas.
+    // Another organization's page and artifact denial is lib/org/work-page-access.test.ts.
     const customerName = `P115 Kunde ${world.runId}`;
     const siteName = `P115 Einsatzort ${world.runId}`;
     const jobNumber = `AUF-${world.runId}-P115`;
@@ -281,9 +280,6 @@ test.describe('P1-15 exhaustive structured site evidence flows @AUDIT-W2-P1-15 @
       expected_labor_minutes: 90,
       actual_labor_minutes: 105,
     });
-
-    await outsiderPage.goto(`/auftraege/${jobNumber}`);
-    await expectNoWorkArtifactsSection(outsiderPage);
   });
 
   test('immutable revisions, stale-write recovery, idempotent actions, and realtime catch-up', async ({

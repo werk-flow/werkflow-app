@@ -21,7 +21,7 @@ export async function getDocumentStoragePathByName(orgId: string, displayName: s
   if (error || !data) {
     throw new Error(`No document named ${displayName} found: ${error?.message}`);
   }
-  return data.storage_path as string;
+  return data.storage_path;
 }
 
 // A valid one-pixel PNG: the viewer renders it as an image preview.

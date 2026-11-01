@@ -93,15 +93,15 @@ export async function getCapabilityHistoryState(
   }
   return {
     rows: (rowsResult.data ?? []).map((row) => ({
-      id: row.id as string,
-      validFrom: row.valid_from as string,
-      validUntil: (row.valid_until as string | null) ?? null,
-      supersedesId: (row.supersedes_id as string | null) ?? null,
-      supersededAt: (row.superseded_at as string | null) ?? null,
-      evidenceState: row.evidence_state as string,
-      confirmationStatus: row.confirmation_status as string,
+      id: row.id,
+      validFrom: row.valid_from,
+      validUntil: row.valid_until,
+      supersedesId: row.supersedes_id,
+      supersededAt: row.superseded_at,
+      evidenceState: row.evidence_state,
+      confirmationStatus: row.confirmation_status,
     })),
-    employeeEventTypes: (eventsResult.data ?? []).map((event) => event.event_type as string),
+    employeeEventTypes: (eventsResult.data ?? []).map((event) => event.event_type),
   };
 }
 
@@ -147,12 +147,12 @@ export async function getJobQualificationState(
     );
   }
   return {
-    jobId: job.id as string,
+    jobId: job.id,
     requirementCount: requirements.data?.length ?? 0,
     assessments: (assessments.data ?? []).map((row) => ({
-      overrideReason: (row.override_reason as string | null) ?? null,
-      teamSourceId: (row.team_source_id as string | null) ?? null,
-      fingerprint: row.coverage_fingerprint as string,
+      overrideReason: row.override_reason,
+      teamSourceId: row.team_source_id,
+      fingerprint: row.coverage_fingerprint,
     })),
   };
 }
