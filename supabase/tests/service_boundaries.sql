@@ -274,6 +274,9 @@ declare
   v_version_id uuid;
   v_plan public.maintenance_plans%rowtype;
   v_plan_payload jsonb;
+  -- The horizon must lie between Berlin today and 18 months ahead, so it moves
+  -- with the clock: a fixed date would be refused once it passed.
+  v_through_date date := ((timezone('Europe/Berlin', now()))::date + interval '12 months')::date;
 begin
   v_template_id := public.create_work_template(
     '18000000-0000-0000-0000-000000000010', 'job', 'Wartung SQL', '18000000-0000-0000-0000-000000000001'
@@ -322,7 +325,7 @@ begin
     '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000072'
   );
   perform public.generate_maintenance_due_work(
-    '18000000-0000-0000-0000-000000000010', v_plan.id, v_plan.version, '2027-06-30',
+    '18000000-0000-0000-0000-000000000010', v_plan.id, v_plan.version, v_through_date,
     '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000072'
   );
   if (select count(*) from public.maintenance_due_work where maintenance_plan_id = v_plan.id) < 3
@@ -371,7 +374,7 @@ begin
   );
   begin
     perform public.generate_maintenance_due_work(
-      '18000000-0000-0000-0000-000000000010', v_plan.id, v_plan.version, '2027-06-30',
+      '18000000-0000-0000-0000-000000000010', v_plan.id, v_plan.version, v_through_date,
       '18000000-0000-0000-0000-000000000001', '18000000-0000-0000-0000-000000000079'
     );
     raise exception 'unbounded_generation_accepted';
