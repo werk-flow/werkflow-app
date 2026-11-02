@@ -85,6 +85,25 @@ test('only the owner module and its wrappers count; identity alone or a lookalik
   ).toEqual([]);
 });
 
+// A guard's name on another receiver is a different function: `other` is no
+// owner module, so its check proves nothing (CodeRabbit on werk-flow/werkflow-app#153).
+test('a guard name called on another receiver is not the guard', () => {
+  const checked = 'const auth = await other.resolveActionContext(); if (!auth.success) return auth;';
+  expect(
+    fixture(
+      `'use server'; export async function save(id) { ${checked} await createSupabaseAdminClient().rpc('x'); }`,
+    ),
+  ).toEqual(['app/fixture.tsx#save: .rpc() before the guard']);
+  expect(
+    fixture(
+      `'use server'; const guard = async () => other.resolveActionContext(); export async function save() { const auth = await guard(); if (!auth.success) return auth; return readPrivate(); }`,
+    ),
+  ).toEqual(['app/fixture.tsx#save: calls no guard']);
+  expect(
+    fixture(`'use server'; export async function save() { return other.resolveActionContext(); }`),
+  ).toEqual(['app/fixture.tsx#save: calls no guard']);
+});
+
 test('called arrow and expression helpers establish context, unused closures do not', () => {
   expect(
     fixture(
