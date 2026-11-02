@@ -15,7 +15,8 @@ import { repositoryRoot } from './product-sources';
 // past date inside a clock window ("not older than 30 days"); review owns that.
 const CUTOFF = '2026-11-02';
 const SAFE_YEAR = '2037';
-const DATE = /\b20[2-3]\d-[01]\d-[0-3]\d\b/g;
+// Digit lookarounds, not \b: a timestamp's date ends in a digit followed by `T`.
+const DATE = /(?<!\d)20[2-3]\d-[01]\d-[0-3]\d(?!\d)/g;
 
 type ReviewedDates = {
   /** Each date with the number of times the file names it: every use is reviewed. */
@@ -115,7 +116,9 @@ function sqlTestDates(): ReadonlyMap<string, Map<string, number>> {
 test('the near-future window counts dates the clock will reach and spares 2037 and the past', () => {
   expect(
     Object.fromEntries(
-      nearFutureDates("start_date => '2026-11-02', end_date => '2026-11-02', p_through_date => '2036-12-31'"),
+      nearFutureDates(
+        "start_date => '2026-11-02', end_date => '2026-11-02', start_at => '2036-12-31T08:00:00Z'",
+      ),
     ),
   ).toEqual({ '2026-11-02': 2, '2036-12-31': 1 });
   expect(nearFutureDates("'2037-11-01', '2026-06-30', '1900-01-01', 'PRJ-2026-1051'").size).toBe(0);
