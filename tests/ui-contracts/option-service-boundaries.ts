@@ -1,4 +1,18 @@
+import { jobOptionRequestSchema } from '@/lib/jobs/option-types';
 import type { JobEntityOption, JobOptionRequest, JobOptionResult } from '@/lib/jobs/option-types';
+import { z } from '@/lib/zod';
+
+// The fixtures send readable ids ('org-a', 'second'), so only the id format stays unchecked.
+const contractRequestSchema = jobOptionRequestSchema.extend({
+  organizationId: z.string(),
+  selectedIds: z.array(z.string()).optional(),
+  clientId: z.string().optional(),
+  projectId: z.string().optional(),
+  siteId: z.string().optional(),
+});
+function isContractRequest(input: unknown): input is JobOptionRequest {
+  return contractRequestSchema.safeParse(input).success;
+}
 
 const pending: Array<(result: JobOptionResult) => void> = [];
 declare global {
@@ -30,6 +44,8 @@ window.optionContract = {
 };
 /** The `entity-options` background read: held until the spec resolves or fails it. */
 export function readEntityOptionContract(input: unknown): Promise<JobOptionResult> {
-  window.optionContract.requests.push(input as JobOptionRequest);
+  // The raw request is kept: a parsed one would show the schema's defaults, not what the picker sent.
+  if (!isContractRequest(input)) throw new Error(`Malformed option request: ${JSON.stringify(input)}`);
+  window.optionContract.requests.push(input);
   return new Promise((resolve) => pending.push(resolve));
 }

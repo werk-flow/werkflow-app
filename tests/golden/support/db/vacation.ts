@@ -1,9 +1,6 @@
-import { toWorkSchedule, type WorkSchedule, type WorkScheduleRow } from '../../../../lib/personnel/schedule';
-import {
-  toEmploymentCondition,
-  type EmploymentCondition,
-  type EmploymentConditionRow,
-} from '../../../../lib/personnel/types';
+import { z } from 'zod';
+import { toWorkSchedule, type WorkSchedule } from '../../../../lib/personnel/schedule';
+import { toEmploymentCondition, type EmploymentCondition } from '../../../../lib/personnel/types';
 import {
   parseHolidayRegionHistory,
   type EmploymentInterval,
@@ -64,17 +61,15 @@ export async function getTargetContextForRecord(
   if (!record) throw new Error(`Employee record ${employeeRecordId} not found`);
 
   return {
-    schedules: (schedulesResult.data ?? []).map((row) => toWorkSchedule(row as WorkScheduleRow)),
-    conditions: (conditionsResult.data ?? []).map((row) =>
-      toEmploymentCondition(row as EmploymentConditionRow),
-    ),
+    schedules: (schedulesResult.data ?? []).map((row) => toWorkSchedule(row)),
+    conditions: (conditionsResult.data ?? []).map((row) => toEmploymentCondition(row)),
     calendar: {
-      holidayRegion: (settingsResult.data?.holiday_region as string | null) ?? null,
+      holidayRegion: settingsResult.data?.holiday_region ?? null,
       holidayRegionHistory: parseHolidayRegionHistory(settingsResult.data?.holiday_region_history),
       closureDays: (closureResult.data ?? []).map((row) => ({
-        id: row.id as string,
-        closureDate: row.closure_date as string,
-        label: (row.label as string | null) ?? null,
+        id: row.id,
+        closureDate: row.closure_date,
+        label: row.label,
       })),
     },
     employment: {
@@ -93,6 +88,8 @@ export type VacationRequestState = {
   approvedDaysByYear: Record<string, number> | null;
   eventTypes: string[];
 };
+
+const approvedDaysByYearSchema = z.record(z.string(), z.number()).nullable();
 
 // Latest vacation request of a record plus its append-only event trail — the
 // DB-side proof for decision facts, snapshots, and traceable restoration.
@@ -123,13 +120,13 @@ export async function getLatestVacationRequestState(
   }
 
   return {
-    id: data.id as string,
-    status: data.status as string,
-    startDate: data.start_date as string,
-    endDate: data.end_date as string,
-    dayPortion: data.day_portion as string,
-    approvedDaysByYear: (data.approved_days_by_year as Record<string, number> | null) ?? null,
-    eventTypes: (events ?? []).map((event) => event.event_type as string),
+    id: data.id,
+    status: data.status,
+    startDate: data.start_date,
+    endDate: data.end_date,
+    dayPortion: data.day_portion,
+    approvedDaysByYear: approvedDaysByYearSchema.parse(data.approved_days_by_year),
+    eventTypes: (events ?? []).map((event) => event.event_type),
   };
 }
 
@@ -178,10 +175,7 @@ export async function getVacationRequestIdsByStartDate(
   for (const row of data ?? []) {
     // Later requests win: a withdrawn request and its re-submission share the
     // start date and the newer one is the acting item.
-    byStartDate.set(row.start_date as string, {
-      id: row.id as string,
-      status: row.status as string,
-    });
+    byStartDate.set(row.start_date, { id: row.id, status: row.status });
   }
   return byStartDate;
 }

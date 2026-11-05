@@ -127,11 +127,11 @@ for (let index = 0; index < 200; index += 1) {
 }
 const originalGetRandomValues = crypto.getRandomValues.bind(crypto);
 let draws = 0;
-crypto.getRandomValues = (<T extends ArrayBufferView | null>(array: T): T => {
+crypto.getRandomValues = <T extends ArrayBufferView | null>(array: T): T => {
   if (array instanceof Uint8Array) array.fill(draws === 0 ? 255 : 0);
   draws += 1;
   return array;
-}) as typeof crypto.getRandomValues;
+};
 try {
   assert.equal(await generateUniqueOrgCode(), 'AAAAAA');
   assert.equal(draws, 2);
