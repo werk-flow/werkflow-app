@@ -20,7 +20,5 @@
   "lib/attention/actions.ts": 1,
   "lib/data/background-read-client.ts": 1,
   "lib/supabase/rpc-args.ts": 1,
-  "lib/testing/runs/archive-state.ts": 1,
-  "lib/testing/spec-support/pre-submit-callbacks.test.ts": 1,
   "tests/golden/support/scenario-measurement.ts": 2
 }

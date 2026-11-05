@@ -1,35 +1,33 @@
 import { expect, test } from 'bun:test';
-import type { Page } from '@playwright/test';
 import {
-  updateInstalledEquipmentModel,
-  updateServiceCaseViaDialog,
+  saveInstalledEquipmentModelDialog,
+  saveServiceCaseDialog,
 } from '../../../tests/golden/support/steps/service';
 
-function pageBeforeSubmission(submit: () => Promise<void>): Page {
-  const dialog = {
+// Only the interactions before submission are available. Later assertions
+// need a real browser and are intentionally outside this callback test.
+function dialogBeforeSubmission(submit: () => Promise<void>) {
+  return {
     getByLabel: () => ({ fill: async () => {} }),
     locator: () => ({ fill: async () => {} }),
     getByRole: () => ({ click: submit }),
   };
-  // Only the interactions before submission are available. Later assertions
-  // need a real browser and are intentionally outside this callback test.
-  return {
-    getByRole: (role: string) => (role === 'dialog' ? dialog : { click: async () => {} }),
-  } as Page;
 }
 
 test('async setup rejection prevents equipment and service submission', async () => {
   const failure = new Error('Observer setup failed');
   let submissions = 0;
-  const page = pageBeforeSubmission(async () => {
+  const dialog = dialogBeforeSubmission(async () => {
     submissions += 1;
   });
   const beforeSubmit = async (): Promise<void> => {
     await Promise.resolve();
     throw failure;
   };
-  await expect(updateInstalledEquipmentModel(page, 'Model', 'Reason', beforeSubmit)).rejects.toBe(failure);
-  await expect(updateServiceCaseViaDialog(page, { reason: 'Reason', beforeSubmit })).rejects.toBe(failure);
+  await expect(saveInstalledEquipmentModelDialog(dialog, 'Model', 'Reason', beforeSubmit)).rejects.toBe(
+    failure,
+  );
+  await expect(saveServiceCaseDialog(dialog, { reason: 'Reason', beforeSubmit })).rejects.toBe(failure);
   expect(submissions).toBe(0);
 });
 
@@ -44,11 +42,11 @@ test('the actual helper waits for async setup before clicking submit', async () 
   const setup = new Promise<void>((resolveSetup) => {
     completeSetup = resolveSetup;
   });
-  const page = pageBeforeSubmission(async () => {
+  const dialog = dialogBeforeSubmission(async () => {
     events.push('submit');
     throw submitBoundary;
   });
-  const result = updateInstalledEquipmentModel(page, 'Model', 'Reason', async () => {
+  const result = saveInstalledEquipmentModelDialog(dialog, 'Model', 'Reason', async () => {
     events.push('setup-start');
     ready();
     await setup;

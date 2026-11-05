@@ -12,6 +12,7 @@ import {
   updateRunManifest,
 } from '../tests/golden/support/run-state';
 import { destroyTestWorld } from '../tests/golden/support/seed';
+import { testWorldSchema } from '../tests/golden/support/world';
 import { existsSync } from 'node:fs';
 import { readRetainedWorldState } from '../lib/testing/runs/archive-state';
 import { resolve } from 'node:path';
@@ -57,13 +58,15 @@ async function cleanupRun(runKey: string): Promise<void> {
       `Run ${runKey} was recorded against project ${manifest.projectRef}, but .env.local points at ${currentProjectRef}. Switch env (bun run env:local / env:dev) before cleanup.`,
     );
   }
-  const world = readRetainedWorldState(manifest, worldPath);
+  const retainedWorld = readRetainedWorldState(manifest, worldPath);
   if (manifest.backendProvenance) {
     const requested = currentBackendProvenance(manifest.suite);
     requested.target = manifest.target ?? 'cloud';
     const problems = validateDiagnosticProvenance(manifest.backendProvenance, requested);
     if (problems.length) throw new Error(problems.join('\n'));
   }
+  // Teardown reads every user of the world, so a shape without them stops here, before any delete.
+  const world = testWorldSchema.parse(retainedWorld);
   await destroyTestWorld(world);
   markWorldCleaned(world);
   console.log(`[werkflow-test] cleaned retained world ${world.runId}`);

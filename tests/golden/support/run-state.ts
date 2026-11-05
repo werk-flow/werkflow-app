@@ -28,6 +28,7 @@ import {
 import {
   mirrorOwnedStateFiles,
   readRetainedWorldState,
+  worldIdentitySchema,
   restoreRetainedWorkloads,
 } from '../../../lib/testing/runs/archive-state';
 import {
@@ -238,13 +239,6 @@ const runManifestSchema: z.ZodType<RunManifest> = z.looseObject({
       }),
     )
     .exactOptional(),
-});
-
-/** The identities archiveRecoveryActiveState compares in an active world.json. */
-const activeWorldIdentitySchema = z.object({
-  runId: z.string(),
-  orgId: z.string(),
-  outsider: z.object({ orgId: z.string() }),
 });
 
 function readManifestFile(path: string): RunManifest {
@@ -463,7 +457,7 @@ export function recoverInterruptedRun(runKey: string, reason: string): RunManife
       active = existsSync(recoveryManifestPath) ? readManifestFile(recoveryManifestPath) : null;
       if (recovered.world && !recovered.cleanedAt) {
         if (active?.runKey === runKey) {
-          const world = activeWorldIdentitySchema.parse(
+          const world = worldIdentitySchema.parse(
             JSON.parse(readFileSync(resolve(recoveryStateDirectory, 'world.json'), 'utf8')),
           );
           archiveRecoveryActiveState(recovered, active, world, () => {
