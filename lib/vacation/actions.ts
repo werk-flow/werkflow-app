@@ -24,6 +24,7 @@ import {
   loadPlannedJobsForRequests,
   loadRequestTargetMaps,
   resolveDecidableTarget,
+  spanOfRequests,
   type ActiveAbsence,
   type DecidableTarget,
   type PlannedAssignedJobs,
@@ -632,7 +633,8 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
       logError('Failed to load pending vacation requests:', pendingError);
       return { success: false, error: 'fetch_failed' };
     }
-    if (pendingRows.length === 0) {
+    const span = spanOfRequests(pendingRows);
+    if (!span) {
       return { success: true, requests: [] };
     }
 
@@ -640,10 +642,10 @@ export async function getPendingVacationRequestsForApprover(): Promise<ApproverV
     const maps = await loadRequestTargetMaps(admin, orgId, recordIds);
     if (!maps) return { success: false, error: 'fetch_failed' };
 
-    const activeAbsenceRows = await loadActiveAbsences(admin, orgId, recordIds);
+    const activeAbsenceRows = await loadActiveAbsences(admin, orgId, recordIds, span);
     if (!activeAbsenceRows) return { success: false, error: 'fetch_failed' };
 
-    const planned = await loadPlannedJobsForRequests(orgId, pendingRows, recordIds, maps.recordById);
+    const planned = await loadPlannedJobsForRequests(orgId, span, recordIds, maps.recordById);
     // A failed conflict read must not tell the approver there are no conflicts.
     if (!planned) return { success: false, error: 'fetch_failed' };
 
