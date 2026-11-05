@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 
-import { redeemOtpInvite } from '@/components/otp-form-invite';
+import { redeemOtpInvite } from '@/lib/invites/otp-redemption';
 import { Button } from '@/components/ui/button';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';

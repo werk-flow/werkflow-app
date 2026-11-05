@@ -25,7 +25,7 @@ mock.module('@/lib/navigation/document-load', () => ({
 }));
 
 const { POST } = await import('@/app/api/redeem-invite/route');
-const { redeemSignInInvite } = await import('@/components/otp-form-invite');
+const { redeemSignInInvite } = await import('@/lib/invites/otp-redemption');
 
 const sentBodies: string[] = [];
 

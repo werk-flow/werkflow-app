@@ -12,7 +12,7 @@ import { Field } from '@/components/ui/field';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { redeemSignInInvite } from '@/components/otp-form-invite';
+import { redeemSignInInvite } from '@/lib/invites/otp-redemption';
 import { useOtpResend } from '@/components/use-otp-form-resend';
 
 type OTPFormProps = React.ComponentProps<typeof Card> & {
