@@ -1,5 +1,6 @@
 // Rule test: an attention count reads rows in proportion to the pending work, never to the organization's history.
 import { describe, expect, mock, setSystemTime, test } from 'bun:test';
+import { addLocalDays } from '@/lib/date-time/berlin';
 
 // Tier 2 for "attention count reads" (docs/technical/realtime-and-caching.md),
 // beside count-reads.test.ts, which pins the queries of the steady state. The
@@ -9,7 +10,7 @@ import { describe, expect, mock, setSystemTime, test } from 'bun:test';
 // in, is, gt/gte/lt/lte, not, or, range) to a seeded world: pending work in
 // every collection the counts derive from, and a large closed history (decided
 // requests, approved entries, resolved defects, handed-over work, acknowledged
-// dispatches). The rows read may grow with the pending work only: the closed
+// dispatches, ended sickness reports). The rows read may grow with the pending work only: the closed
 // history adds no row except the reviewed HISTORY_READS below, each of which
 // names the change that removes it.
 
@@ -36,6 +37,10 @@ const RECENT = '2026-10-13T10:00:00.000Z';
 const DUE = RECENT.slice(0, 10);
 const OLD = '2024-01-02T09:00:00.000Z';
 const OLD_DATE = OLD.slice(0, 10);
+/** One day per pending item: the database refuses overlapping active requests or reports of one person. */
+const pendingDay = (index: number): string => addLocalDays(DUE, index);
+/** One past day per closed report: a report stays `reported` after it ends. */
+const closedDay = (index: number): string => addLocalDays(OLD_DATE, 10_000 - index);
 
 /** A deterministic UUID per kind of record and index. */
 function uuid(kind: number, index: number): string {
@@ -263,8 +268,8 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
         id: uuid(15, index),
         employee_record_id: index % 2 ? OWN_RECORD : COLLEAGUE_RECORD,
         status: isOpen ? 'pending' : 'approved',
-        start_date: isOpen ? DUE : OLD_DATE,
-        end_date: isOpen ? DUE : OLD_DATE,
+        start_date: isOpen ? pendingDay(index) : OLD_DATE,
+        end_date: isOpen ? pendingDay(index) : OLD_DATE,
         day_portion: 'full',
         decided_at: isOpen ? null : OLD,
         cancelled_at: null,
@@ -277,9 +282,9 @@ function requestRows(pending: number, history: number): Record<string, Row[]> {
       scoped({
         id: uuid(16, index),
         employee_record_id: COLLEAGUE_RECORD,
-        status: 'active',
-        start_date: DUE,
-        end_date: DUE,
+        status: 'reported',
+        start_date: isOpen ? pendingDay(index) : closedDay(index),
+        end_date: isOpen ? pendingDay(index) : closedDay(index),
         day_portion: 'full',
         reported_by: COLLEAGUE,
         cancelled_by: null,
@@ -628,9 +633,9 @@ function historyProblems(nextRole: Role, growth: Record<string, number>): string
  * Measured at 3 and 6 pending items; a new read raises the count and fails.
  */
 const ROW_BUDGET: Readonly<Record<Role, { fixed: number; perPendingItem: number; requests: number }>> = {
-  admin: { fixed: 29, perPendingItem: 30, requests: 70 },
-  buero: { fixed: 28, perPendingItem: 29, requests: 67 },
-  employee: { fixed: 15, perPendingItem: 14, requests: 30 },
+  admin: { fixed: 29, perPendingItem: 31, requests: 70 },
+  buero: { fixed: 28, perPendingItem: 30, requests: 67 },
+  employee: { fixed: 15, perPendingItem: 15, requests: 30 },
 };
 
 // Module mocks are process-wide, so the mocked scenario runs in its own process.

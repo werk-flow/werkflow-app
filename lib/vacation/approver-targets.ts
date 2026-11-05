@@ -138,10 +138,30 @@ export type ActiveAbsence = Pick<
 
 export type PlannedAssignedJobs = NonNullable<Awaited<ReturnType<typeof loadPlannedAssignedJobs>>>;
 
+export type RequestSpan = { from: string; to: string };
+
+/** The days from the earliest start to the latest end of the requests; null without a request. */
+export function spanOfRequests(rows: VacationRequestRow[]): RequestSpan | null {
+  const [first, ...others] = rows;
+  if (!first) return null;
+  return others.reduce(
+    (span, row) => ({
+      from: row.start_date < span.from ? row.start_date : span.from,
+      to: row.end_date > span.to ? row.end_date : span.to,
+    }),
+    { from: first.start_date, to: first.end_date },
+  );
+}
+
+// A report stays 'reported' after it ends, so only the span keeps this read
+// from growing with each person's sickness history. An open end reaches every
+// later day. The span holds every request, so each request's own overlap check
+// sees all the reports it needs.
 export async function loadActiveAbsences(
   admin: AdminClient,
   orgId: string,
   recordIds: string[],
+  span: RequestSpan,
 ): Promise<ActiveAbsence[] | null> {
   const { data: activeAbsenceRows, error: absenceError } = await readInBatches(recordIds, (batch) =>
     readCompleteRows(
@@ -152,6 +172,8 @@ export async function loadActiveAbsences(
           .eq('organization_id', orgId)
           .eq('status', 'reported')
           .in('employee_record_id', [...batch])
+          .lte('start_date', span.to)
+          .or(`end_date.gte.${span.from},end_date.is.null`)
           .order('id')
           .range(from, to),
       LIST_ROW_CAP,
@@ -166,15 +188,10 @@ export async function loadActiveAbsences(
 
 export async function loadPlannedJobsForRequests(
   orgId: string,
-  pendingRows: VacationRequestRow[],
+  span: RequestSpan,
   recordIds: string[],
   recordById: RequestTargetMaps['recordById'],
 ): Promise<PlannedAssignedJobs | null> {
-  // One span over every pending request; each row filters its own range below.
-  const earliestStart = pendingRows
-    .map((row) => row.start_date)
-    .reduce((min, date) => (date < min ? date : min));
-  const latestEnd = pendingRows.map((row) => row.end_date).reduce((max, date) => (date > max ? date : max));
   // One batched assignment lookup instead of one query per pending row.
   const pendingUserIds = [
     ...new Set(
@@ -183,8 +200,6 @@ export async function loadPlannedJobsForRequests(
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  return loadPlannedAssignedJobs(orgId, pendingUserIds, {
-    from: earliestStart,
-    to: latestEnd,
-  });
+  // One span over every pending request; each row filters its own range afterwards.
+  return loadPlannedAssignedJobs(orgId, pendingUserIds, span);
 }
