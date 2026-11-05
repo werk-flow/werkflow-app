@@ -19,6 +19,7 @@ import { logError } from '@/lib/logging';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { getOwnVacationOverview } from '@/lib/vacation/actions';
+import { toSicknessReportStatus } from '@/lib/sickness/types';
 import { toVacationDayPortion, toVacationRequestStatus } from '@/lib/vacation/types';
 import { deriveWorkArtifactTasks, deriveWorkHandoverTasks } from './work-tasks';
 import {
@@ -252,7 +253,7 @@ function toSicknessNotification(
   businessToday: string,
 ): AttentionNotification | null {
   const facts = resolveSicknessReportFacts({
-    status: row.status as 'reported' | 'cancelled',
+    status: toSicknessReportStatus(row.status),
     startDate: row.start_date,
     endDate: row.end_date,
     dayPortion: toVacationDayPortion(row.day_portion),

@@ -87,6 +87,10 @@ export type SicknessReport = {
   updatedAt: string;
 };
 
+export function toSicknessReportStatus(status: string): SicknessReportStatus {
+  return constrainedValue(SICKNESS_REPORT_STATUSES, status, 'sickness status');
+}
+
 export function toSicknessReport(row: SicknessReportRow): SicknessReport {
   return {
     id: row.id,
@@ -96,7 +100,7 @@ export function toSicknessReport(row: SicknessReportRow): SicknessReport {
     startDate: row.start_date,
     endDate: row.end_date,
     dayPortion: toVacationDayPortion(row.day_portion),
-    status: constrainedValue(SICKNESS_REPORT_STATUSES, row.status, 'sickness status'),
+    status: toSicknessReportStatus(row.status),
     evidenceRequired: row.evidence_required,
     evidenceStatus: constrainedValue(SICKNESS_EVIDENCE_STATUSES, row.evidence_status, 'evidence_status'),
     reportedBy: row.reported_by,

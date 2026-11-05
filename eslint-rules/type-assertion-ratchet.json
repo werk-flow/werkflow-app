@@ -17,7 +17,6 @@
   "components/kalender/use-calendar-range-data.ts": 1,
   "components/kalender/use-entry-details-session.ts": 2,
   "components/kalender/use-manual-entry-bridge.ts": 1,
-  "lib/attention/actions.ts": 1,
   "lib/data/background-read-client.ts": 1,
   "lib/supabase/rpc-args.ts": 1,
   "tests/golden/support/scenario-measurement.ts": 2
