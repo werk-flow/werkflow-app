@@ -1,3 +1,5 @@
+import type { User } from '@supabase/supabase-js';
+
 import { logError } from '@/lib/logging';
 import { loadDocument } from '@/lib/navigation/document-load';
 import type { createSupabaseBrowserClient } from '@/lib/supabase/client';
@@ -29,11 +31,13 @@ function inviteErrorPath(error: unknown): string {
  * cookie just changed, so the next page starts from fresh cookies and an
  * empty client state. A refused or failed redemption opens the invite error
  * page, never the dashboard as if nothing happened. Returns true when it
- * started a load, so the caller must not navigate again.
+ * started a load, so the caller must not navigate again. The code may be
+ * unknown: the route is what validates it, so a stored value that is no code
+ * ends on the invite error page like any other refusal.
  */
 export async function redeemOtpInvite(
   supabase: SupabaseBrowserClient,
-  effectiveInviteCode: string,
+  effectiveInviteCode: unknown,
 ): Promise<boolean> {
   try {
     const response = await fetch('/api/redeem-invite', {
@@ -79,6 +83,23 @@ export async function redeemOtpInvite(
     logError('redeemOtpInvite: redemption failed', error);
     return openRedeemFailedPage();
   }
+}
+
+/**
+ * Redeems the invite a sign-in carries: the code of the invite link, otherwise
+ * the `pending_invite_code` of a user who signed up through an invite and
+ * signed in elsewhere. Returns false when there is none. The metadata value
+ * stays unknown: the route validates it, and a value it refuses must open the
+ * invite error page. Narrowing it here would send that user to `/`.
+ */
+export async function redeemSignInInvite(
+  supabase: SupabaseBrowserClient,
+  inviteCode: string | undefined,
+  userMetadata: User['user_metadata'],
+): Promise<boolean> {
+  const pendingInviteCode: unknown = userMetadata?.pending_invite_code;
+  const effectiveInviteCode = inviteCode || pendingInviteCode;
+  return effectiveInviteCode ? redeemOtpInvite(supabase, effectiveInviteCode) : false;
 }
 
 /** A redemption that failed without a known refusal opens the generic invite error page. */

@@ -13,5 +13,8 @@ export function rpcArgs<Name extends keyof Functions>(
   args: Nullable<Functions[Name]['Args']>,
 ): Functions[Name]['Args'] {
   // The one place that waives parameter null-ness; names and value types stay checked.
+  // Permanent: `.rpc()` constrains its arguments to the generated types, so dropping this cast
+  // means a client typed with nullable arguments. That would let null compile on every direct
+  // call too, `p_organization_id` included, so one named waiver stays better than a silent one.
   return args as Functions[Name]['Args'];
 }

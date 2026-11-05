@@ -12,7 +12,7 @@ import { Field } from '@/components/ui/field';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp';
 import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { redeemOtpInvite } from '@/components/otp-form-invite';
+import { redeemSignInInvite } from '@/components/otp-form-invite';
 import { useOtpResend } from '@/components/use-otp-form-resend';
 
 type OTPFormProps = React.ComponentProps<typeof Card> & {
@@ -75,15 +75,9 @@ async function verifyOtpCode({
     // Note: Profile is automatically created by database trigger on auth.users INSERT
     // The trigger extracts first_name and last_name from user_metadata
 
-    // Determine the invite code to use:
-    // 1. If inviteCode prop is passed (user came from invite link), use that
-    // 2. Otherwise, check user metadata for pending_invite_code (user signed up via invite but logged in elsewhere)
-    const effectiveInviteCode =
-      inviteCode || (session.user.user_metadata?.pending_invite_code as string | undefined);
-
     // If there's an invite code, redeem it via server action to ensure proper auth context
-    if (effectiveInviteCode) {
-      if (await redeemOtpInvite(supabase, effectiveInviteCode)) return untilPageLeaves();
+    if (await redeemSignInInvite(supabase, inviteCode, session.user.user_metadata)) {
+      return untilPageLeaves();
     }
 
     router.replace('/');
