@@ -7,7 +7,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "550ec4c31d4864dcee725c5e6a22fac305c7ecbffdb192c66b5d0a3779687e3f",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -38,14 +38,14 @@
         },
         "direct:/rest/v1/organization_members": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 921, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 273, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 306, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 17281, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 110285, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 19763, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 110904, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 1, "tolerance": 0 }
         },
         "font": {
@@ -62,63 +62,63 @@
         },
         "prefetch:/auftraege/[jobNumber]": {
           "requests": { "reference": 5, "tolerance": 0 },
-          "encodedBytes": { "reference": 15590, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 51185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 15556, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 51159, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-          "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7566, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 27645, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 747955, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 22753, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 123384, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "fbae0779adf69b8adf2a9922b3842cc570d480deb93c45cccf1148481c409c68",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "550ec4c31d4864dcee725c5e6a22fac305c7ecbffdb192c66b5d0a3779687e3f",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -132,7 +132,8 @@
             "echoRenders": { "reference": 1, "tolerance": 0 },
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
-            "backendRequests": { "reference": 64, "tolerance": 1 }
+            "backendRequests": { "reference": 64, "tolerance": 1 },
+            "componentRenders": { "reference": 1277, "tolerance": 25 }
           },
           "payloads": {
             "api:/api/attention-counts": {
@@ -149,14 +150,14 @@
             },
             "direct:/rest/v1/organization_members": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 921, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 273, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 306, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "document:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 17281, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 110285, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 19763, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 110904, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": { "reference": 1, "tolerance": 0 }
             },
             "font": {
@@ -173,53 +174,43 @@
             },
             "prefetch:/auftraege/[jobNumber]": {
               "requests": { "reference": 5, "tolerance": 0 },
-              "encodedBytes": { "reference": 15590, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 51185, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 15556, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 51159, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "route:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 9861, "tolerance": { "relative": 0.9589, "absolute": 512 } },
-              "decodedBytes": { "reference": 27705, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 7566, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 27645, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "script": {
               "requests": { "reference": 43, "tolerance": 1 },
-              "encodedBytes": { "reference": 732572, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 747955, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": null,
               "rows": null
             },
             "stylesheet": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 22753, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 123384, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
         },
         {
-          "kind": "carry-over",
-          "fromDigest": "fbae0779adf69b8adf2a9922b3842cc570d480deb93c45cccf1148481c409c68",
-          "toDigest": "550ec4c31d4864dcee725c5e6a22fac305c7ecbffdb192c66b5d0a3779687e3f",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 732572, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 43, "tolerance": 1 },
-            "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-10-31T174358140Z-861d58"],
-          "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. The lab also counts lazily loaded chunks. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 1277, "tolerance": 25 },
+          "to": null,
+          "runKeys": [
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211406947Z-bd8163"
+          ],
+          "reason": "Keeps the step ungated as it was before the recalibration: its reactCommits spread 30 to 35 over these runs, so the count follows echo timing."
         }
       ]
     },
@@ -229,7 +220,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "a85a5531c186713490c285d344aa6640fcea14033c031ea7f203d388984768a2",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -249,51 +240,51 @@
       "payloads": {
         "prefetch:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 4726, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 14987, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 4692, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 14834, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1113, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 17404, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "ec97ceb24219f93c09ca7e85b36cede0ed7315807f24cefe8e4e91244c479830",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "a85a5531c186713490c285d344aa6640fcea14033c031ea7f203d388984768a2",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -308,36 +299,22 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 31, "tolerance": 1 },
-            "componentRenders": { "reference": 512, "tolerance": 10 }
+            "componentRenders": { "reference": 536, "tolerance": 10 }
           },
           "payloads": {
             "prefetch:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 4726, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 14987, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 4692, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 14834, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "route:/auftraege/[jobNumber]": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 1101, "tolerance": { "relative": 1, "absolute": 512 } },
-              "decodedBytes": { "reference": 17263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 1113, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 17404, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "ec97ceb24219f93c09ca7e85b36cede0ed7315807f24cefe8e4e91244c479830",
-          "toDigest": "a85a5531c186713490c285d344aa6640fcea14033c031ea7f203d388984768a2",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 512, "tolerance": 10 },
-          "to": { "reference": 536, "tolerance": 10 },
-          "runKeys": ["2026-10-31T174358140Z-861d58"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail and work pack splits (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -347,7 +324,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "aae44ad46c9b694f007e5f09e05a706b81166d6f6af848a00737d325d6caaad2",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -367,8 +344,8 @@
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 15513, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 47541, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 15531, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 47709, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "background:work-lifecycle-snapshot": {
@@ -379,45 +356,45 @@
         },
         "prefetch:/auftraege": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 6189, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 15559, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6154, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 15406, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "12915a46b78a3c78b2dae442c16d04c914420bfa7a5bae0bdb47686012a441c8",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "aae44ad46c9b694f007e5f09e05a706b81166d6f6af848a00737d325d6caaad2",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -432,13 +409,13 @@
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 1, "tolerance": 0 },
             "backendRequests": { "reference": 52, "tolerance": 1 },
-            "componentRenders": { "reference": 465, "tolerance": 9 }
+            "componentRenders": { "reference": 493, "tolerance": 9 }
           },
           "payloads": {
             "action:/auftraege/[jobNumber]": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 15513, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 47541, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 15531, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 47709, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "background:work-lifecycle-snapshot": {
@@ -449,25 +426,11 @@
             },
             "prefetch:/auftraege": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 6189, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 15559, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 6154, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 15406, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "12915a46b78a3c78b2dae442c16d04c914420bfa7a5bae0bdb47686012a441c8",
-          "toDigest": "aae44ad46c9b694f007e5f09e05a706b81166d6f6af848a00737d325d6caaad2",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 465, "tolerance": 9 },
-          "to": { "reference": 493, "tolerance": 9 },
-          "runKeys": ["2026-10-31T174358140Z-861d58"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The work pack split (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -477,7 +440,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "0d5f0a916673aea8009551d6fdd6c146222f3f7954fc94e69318371b82747ab6",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -496,51 +459,51 @@
       "payloads": {
         "action:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 16631, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 50056, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 16652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 50158, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "prefetch:/auftraege": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 6189, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 15559, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6154, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 15406, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "cf210c619259e12ca3fc52e576974724e791d874ed33485269ca4b5fccdf52f8",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "0d5f0a916673aea8009551d6fdd6c146222f3f7954fc94e69318371b82747ab6",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -554,28 +517,37 @@
             "echoRenders": { "reference": 0, "tolerance": 0 },
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
-            "backendRequests": { "reference": 53, "tolerance": 1 }
+            "backendRequests": { "reference": 53, "tolerance": 1 },
+            "componentRenders": { "reference": 1065, "tolerance": 21 }
           },
           "payloads": {
             "action:/auftraege/[jobNumber]": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 16631, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 50056, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 16652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 50158, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "prefetch:/auftraege": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 6189, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 15559, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 6154, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 15406, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
         },
         {
-          "kind": "carry-over",
-          "fromDigest": "cf210c619259e12ca3fc52e576974724e791d874ed33485269ca4b5fccdf52f8",
-          "toDigest": "0d5f0a916673aea8009551d6fdd6c146222f3f7954fc94e69318371b82747ab6",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 1065, "tolerance": 21 },
+          "to": null,
+          "runKeys": [
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211406947Z-bd8163"
+          ],
+          "reason": "Keeps the step ungated as it was before the recalibration: six runs of main 33f7ea62 took 1065 and 1378 on one build, the two values of a late echo render."
         }
       ]
     },
@@ -585,7 +557,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "3fcf7815e92f90b025a46697601384c7ee0d62dca9cc9552581b8c3bdca9c7bd",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -600,13 +572,13 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 22, "tolerance": 1 },
-        "componentRenders": { "reference": 708, "tolerance": 13 }
+        "componentRenders": { "reference": 708, "tolerance": 14 }
       },
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26030, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
@@ -618,38 +590,38 @@
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "b575038851a76b0144ff0f2f2e830b0761415167a60cd1e769787d9f28f8b568",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "3fcf7815e92f90b025a46697601384c7ee0d62dca9cc9552581b8c3bdca9c7bd",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -664,13 +636,13 @@
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 22, "tolerance": 1 },
-            "componentRenders": { "reference": 683, "tolerance": 13 }
+            "componentRenders": { "reference": 708, "tolerance": 14 }
           },
           "payloads": {
             "action:/dashboard": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 26210, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 9153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 26030, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "api:/api/time-tracking-state": {
@@ -680,20 +652,6 @@
               "rows": { "reference": 0, "tolerance": 0 }
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "b575038851a76b0144ff0f2f2e830b0761415167a60cd1e769787d9f28f8b568",
-          "toDigest": "3fcf7815e92f90b025a46697601384c7ee0d62dca9cc9552581b8c3bdca9c7bd",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 683, "tolerance": 13 },
-          "to": { "reference": 708, "tolerance": 13 },
-          "runKeys": ["2026-10-31T174358140Z-861d58"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -703,7 +661,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "44e1ce072b2d29e951a061c44c7b3ec7cbaccec0e6428b59feee794bc4cee214",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -723,38 +681,38 @@
       "payloads": {},
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "a15f8cb72ae4aa3cd7feeca02226bce8b0d5957e2f9f6cd72b30543017e28574",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "44e1ce072b2d29e951a061c44c7b3ec7cbaccec0e6428b59feee794bc4cee214",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -772,12 +730,6 @@
             "componentRenders": { "reference": 0, "tolerance": 0 }
           },
           "payloads": {}
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "a15f8cb72ae4aa3cd7feeca02226bce8b0d5957e2f9f6cd72b30543017e28574",
-          "toDigest": "44e1ce072b2d29e951a061c44c7b3ec7cbaccec0e6428b59feee794bc4cee214",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
         }
       ]
     },
@@ -787,7 +739,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "6bfa1480d7d32a5684360ee2f450592781f5752a71db05e9caf1832e7feeb73c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -807,51 +759,51 @@
       "payloads": {
         "action:/dashboard": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 26209, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 9153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 26029, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/time-tracking-state": {
           "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.033, "absolute": 512 } },
+          "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.0954, "absolute": 512 } },
           "rows": { "reference": 1, "tolerance": 0 }
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "c4ce0b10115fb686b4a895e31393517e6dd1dc8e1accde6435d59c57378945ea",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "6bfa1480d7d32a5684360ee2f450592781f5752a71db05e9caf1832e7feeb73c",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 375, "height": 812 },
@@ -866,54 +818,22 @@
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 18, "tolerance": 1 },
-            "componentRenders": { "reference": 671, "tolerance": 13 }
+            "componentRenders": { "reference": 696, "tolerance": 13 }
           },
           "payloads": {
             "action:/dashboard": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 9183, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 26209, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 9153, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 26029, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "api:/api/time-tracking-state": {
               "requests": { "reference": 3, "tolerance": 0 },
-              "encodedBytes": { "reference": 4563, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "rows": { "reference": 0, "tolerance": 0 }
+              "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.033, "absolute": 512 } },
+              "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.0954, "absolute": 512 } },
+              "rows": { "reference": 1, "tolerance": 0 }
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "c4ce0b10115fb686b4a895e31393517e6dd1dc8e1accde6435d59c57378945ea",
-          "toDigest": "6bfa1480d7d32a5684360ee2f450592781f5752a71db05e9caf1832e7feeb73c",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 671, "tolerance": 13 },
-          "to": { "reference": 696, "tolerance": 13 },
-          "runKeys": ["2026-10-31T174358140Z-861d58"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "api:/api/time-tracking-state",
-          "from": {
-            "requests": { "reference": 3, "tolerance": 0 },
-            "encodedBytes": { "reference": 4563, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": { "reference": 1474, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "rows": { "reference": 0, "tolerance": 0 }
-          },
-          "to": {
-            "requests": { "reference": 3, "tolerance": 0 },
-            "encodedBytes": { "reference": 4725, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": { "reference": 1636, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "rows": { "reference": 1, "tolerance": 0 }
-          },
-          "runKeys": ["2026-10-31T192644664Z-7546e0"],
-          "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) keeps today's time after clock-out, so the state read after clock-out now returns today's row (1 instead of 0). Intended behavior of #107, which merged without a full run; requests and route renders are unchanged."
         }
       ]
     },
@@ -923,7 +843,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "dd194789800d44dda412501de7c97e8186f3ae066fb0ff7c37a0492d02332c1c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -932,13 +852,13 @@
         "backend": "local"
       },
       "counts": {
-        "requests": { "reference": 53, "tolerance": 1 },
+        "requests": { "reference": 54, "tolerance": 1 },
         "routeRenders": { "reference": 1, "tolerance": 0 },
         "echoRenders": { "reference": 1, "tolerance": 0 },
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 90, "tolerance": 1 },
-        "componentRenders": { "reference": 10433, "tolerance": 201 }
+        "componentRenders": { "reference": 10475, "tolerance": 209 }
       },
       "payloads": {
         "api:/api/attention-counts": {
@@ -955,14 +875,14 @@
         },
         "direct:/rest/v1/organization_members": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 981, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 303, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "document:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 27508, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 521030, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 30008, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 521642, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 50, "tolerance": 1 }
         },
         "font": {
@@ -979,57 +899,57 @@
         },
         "route:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 13510, "tolerance": { "relative": 0.9874, "absolute": 512 } },
-          "decodedBytes": { "reference": 75703, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7982, "tolerance": { "relative": 0.0301, "absolute": 512 } },
+          "decodedBytes": { "reference": 75638, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 38, "tolerance": 1 },
-          "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 653606, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
         "stylesheet": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 22753, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 123384, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "1ddd0a61a9d5b8c8678d8f1387ed77c8015ee644df073f01096957bf78cd8903",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "dd194789800d44dda412501de7c97e8186f3ae066fb0ff7c37a0492d02332c1c",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1038,13 +958,13 @@
             "backend": "local"
           },
           "counts": {
-            "requests": { "reference": 55, "tolerance": 1 },
+            "requests": { "reference": 54, "tolerance": 1 },
             "routeRenders": { "reference": 1, "tolerance": 0 },
             "echoRenders": { "reference": 1, "tolerance": 0 },
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 90, "tolerance": 1 },
-            "componentRenders": { "reference": 10096, "tolerance": 201 }
+            "componentRenders": { "reference": 10475, "tolerance": 209 }
           },
           "payloads": {
             "api:/api/attention-counts": {
@@ -1061,14 +981,14 @@
             },
             "direct:/rest/v1/organization_members": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 919, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 270, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 981, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 303, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "document:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 27508, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 521030, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 30008, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 521642, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": { "reference": 50, "tolerance": 1 }
             },
             "font": {
@@ -1085,63 +1005,23 @@
             },
             "route:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 13510, "tolerance": { "relative": 0.9874, "absolute": 512 } },
-              "decodedBytes": { "reference": 75703, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 7982, "tolerance": { "relative": 0.0301, "absolute": 512 } },
+              "decodedBytes": { "reference": 75638, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "script": {
-              "requests": { "reference": 39, "tolerance": 1 },
-              "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "requests": { "reference": 38, "tolerance": 1 },
+              "encodedBytes": { "reference": 653606, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": null,
               "rows": null
             },
             "stylesheet": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 22697, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 122894, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 22753, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 123384, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "1ddd0a61a9d5b8c8678d8f1387ed77c8015ee644df073f01096957bf78cd8903",
-          "toDigest": "dd194789800d44dda412501de7c97e8186f3ae066fb0ff7c37a0492d02332c1c",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "ratchet",
-          "target": "requests",
-          "from": { "reference": 55, "tolerance": 1 },
-          "to": { "reference": 53, "tolerance": 1 },
-          "runKeys": ["2026-10-30T215330529Z-9e87a6"],
-          "reason": null
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 10096, "tolerance": 201 },
-          "to": { "reference": 10433, "tolerance": 201 },
-          "runKeys": ["2026-10-31T174522133Z-e2d261"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127), the shared UI and sidebar split (#125) and the live-view hook split (#113) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 39, "tolerance": 1 },
-            "encodedBytes": { "reference": 646983, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 38, "tolerance": 1 },
-            "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
-          "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start, which this step opens. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. This local run measures 652,990; CI's builds measure about 654,800 (runs 41227836236 and 41227929297, Browser 8, on #115 and #131), above the old ceiling. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged."
         }
       ]
     },
@@ -1151,7 +1031,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "6c03d2ad1f413ee819bdbd1208f6f4944ebfeea262a42bb4fed9a218ec7dd565",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1166,7 +1046,7 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 3, "tolerance": 0 },
         "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1634, "tolerance": 31 }
+        "componentRenders": { "reference": 1606, "tolerance": 32 }
       },
       "payloads": {
         "background:job-dispatch-cards": {
@@ -1189,57 +1069,57 @@
         },
         "prefetch:/auftraege/[jobNumber]/uebergabe": {
           "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 6656, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 10490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6636, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 10441, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "route:/auftraege/[jobNumber]": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 4956, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 14099, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 6082, "tolerance": { "relative": 0.3657, "absolute": 512 } },
+          "decodedBytes": { "reference": 14538, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8697, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "ae55a4203023b4aabea1c0c64f17a497aab0430bc5f2b8366a4f1a440a273034",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "6c03d2ad1f413ee819bdbd1208f6f4944ebfeea262a42bb4fed9a218ec7dd565",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1254,7 +1134,7 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 3, "tolerance": 0 },
             "backendRequests": { "reference": 72, "tolerance": 1 },
-            "componentRenders": { "reference": 1571, "tolerance": 31 }
+            "componentRenders": { "reference": 1606, "tolerance": 32 }
           },
           "payloads": {
             "background:job-dispatch-cards": {
@@ -1277,37 +1157,23 @@
             },
             "prefetch:/auftraege/[jobNumber]/uebergabe": {
               "requests": { "reference": 3, "tolerance": 0 },
-              "encodedBytes": { "reference": 6656, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 10490, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 6636, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 10441, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "route:/auftraege/[jobNumber]": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 4956, "tolerance": { "relative": 1, "absolute": 512 } },
-              "decodedBytes": { "reference": 14099, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 6082, "tolerance": { "relative": 0.3657, "absolute": 512 } },
+              "decodedBytes": { "reference": 14538, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "script": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 8475, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 8697, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": null,
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "ae55a4203023b4aabea1c0c64f17a497aab0430bc5f2b8366a4f1a440a273034",
-          "toDigest": "6c03d2ad1f413ee819bdbd1208f6f4944ebfeea262a42bb4fed9a218ec7dd565",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 1571, "tolerance": 31 },
-          "to": { "reference": 1634, "tolerance": 31 },
-          "runKeys": ["2026-10-31T174522133Z-e2d261"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail split (#124) and the Auftrag split (#127) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1317,7 +1183,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "4a5fcc50e80d21f56d8caa548a6c61e69df0782327326c54948d9ed960d86960",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1332,43 +1198,43 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 827, "tolerance": 15 }
+        "componentRenders": { "reference": 827, "tolerance": 16 }
       },
       "payloads": {},
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "3a7fce31e7f18fff30fc5f375b85eea36e5bd87b32f42b50aa66067d7c8960c4",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "4a5fcc50e80d21f56d8caa548a6c61e69df0782327326c54948d9ed960d86960",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1383,23 +1249,9 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 0, "tolerance": 0 },
-            "componentRenders": { "reference": 799, "tolerance": 15 }
+            "componentRenders": { "reference": 827, "tolerance": 16 }
           },
           "payloads": {}
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "3a7fce31e7f18fff30fc5f375b85eea36e5bd87b32f42b50aa66067d7c8960c4",
-          "toDigest": "4a5fcc50e80d21f56d8caa548a6c61e69df0782327326c54948d9ed960d86960",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 799, "tolerance": 15 },
-          "to": { "reference": 827, "tolerance": 15 },
-          "runKeys": ["2026-10-31T174522133Z-e2d261"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127) and the job detail split (#124) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1409,7 +1261,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "bbc6e784a88c05c49b3cf2643ec127bdda49defba3bc9240a9044bbb0f8e63b7",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1424,50 +1276,50 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 3, "tolerance": 0 },
-        "componentRenders": { "reference": 5713, "tolerance": 114 }
+        "componentRenders": { "reference": 5768, "tolerance": 115 }
       },
       "payloads": {
         "route:/kunden": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 2151, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 5790, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 2131, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 5723, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "ced4147088dc157706558510bc66a122f827be345ac670fdd44163729c9f018c",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "bbc6e784a88c05c49b3cf2643ec127bdda49defba3bc9240a9044bbb0f8e63b7",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1482,22 +1334,16 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 3, "tolerance": 0 },
-            "componentRenders": { "reference": 5713, "tolerance": 114 }
+            "componentRenders": { "reference": 5768, "tolerance": 115 }
           },
           "payloads": {
             "route:/kunden": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 2151, "tolerance": { "relative": 1, "absolute": 512 } },
-              "decodedBytes": { "reference": 5790, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 2131, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 5723, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "ced4147088dc157706558510bc66a122f827be345ac670fdd44163729c9f018c",
-          "toDigest": "bbc6e784a88c05c49b3cf2643ec127bdda49defba3bc9240a9044bbb0f8e63b7",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
         }
       ]
     },
@@ -1507,7 +1353,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "e7647ca92db8a09218bb8f699b6ad7b9436121be30e426b6b81f91f8be4edc4c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1522,13 +1368,13 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 44, "tolerance": 1 },
-        "componentRenders": { "reference": 5274, "tolerance": 101 }
+        "componentRenders": { "reference": 5274, "tolerance": 105 }
       },
       "payloads": {
         "action:/auftraege": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 14954, "tolerance": { "relative": 0.0193, "absolute": 512 } },
-          "decodedBytes": { "reference": 75638, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 14928, "tolerance": { "relative": 0.1699, "absolute": 512 } },
+          "decodedBytes": { "reference": 75573, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "api:/api/attention-counts": {
@@ -1546,38 +1392,38 @@
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "ca07276c5cd1402ce3d0d28db215c175c6320ae9d75b0793cdf383cfafbf34d5",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "e7647ca92db8a09218bb8f699b6ad7b9436121be30e426b6b81f91f8be4edc4c",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1592,13 +1438,13 @@
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 44, "tolerance": 1 },
-            "componentRenders": { "reference": 5085, "tolerance": 101 }
+            "componentRenders": { "reference": 5274, "tolerance": 105 }
           },
           "payloads": {
             "action:/auftraege": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 14954, "tolerance": { "relative": 0.0193, "absolute": 512 } },
-              "decodedBytes": { "reference": 75638, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 14928, "tolerance": { "relative": 0.1699, "absolute": 512 } },
+              "decodedBytes": { "reference": 75573, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "api:/api/attention-counts": {
@@ -1614,20 +1460,6 @@
               "rows": { "reference": 0, "tolerance": 0 }
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "ca07276c5cd1402ce3d0d28db215c175c6320ae9d75b0793cdf383cfafbf34d5",
-          "toDigest": "e7647ca92db8a09218bb8f699b6ad7b9436121be30e426b6b81f91f8be4edc4c",
-          "reason": "The spec now waits for the suggested job number before it types one (fillJobNumber). The wait and both fills happen before recordLabStep resets the network count, so the measured submit counts the same requests. Then: tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 5085, "tolerance": 101 },
-          "to": { "reference": 5274, "tolerance": 101 },
-          "runKeys": ["2026-10-31T174522133Z-e2d261"],
-          "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag form split (#127) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
         }
       ]
     },
@@ -1637,7 +1469,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "b1e85967ef6758faa27e51adc5544e2cabcad65217bd4e67993a4def6f2cca37",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1652,43 +1484,43 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 0, "tolerance": 0 },
-        "componentRenders": { "reference": 2259, "tolerance": 45 }
+        "componentRenders": { "reference": 2264, "tolerance": 45 }
       },
       "payloads": {},
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "e07402633999f0ae415462c017d9a14577ca7c988eb270617145372c791034fd",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "b1e85967ef6758faa27e51adc5544e2cabcad65217bd4e67993a4def6f2cca37",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1703,15 +1535,9 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 0, "tolerance": 0 },
-            "componentRenders": { "reference": 2259, "tolerance": 45 }
+            "componentRenders": { "reference": 2264, "tolerance": 45 }
           },
           "payloads": {}
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "e07402633999f0ae415462c017d9a14577ca7c988eb270617145372c791034fd",
-          "toDigest": "b1e85967ef6758faa27e51adc5544e2cabcad65217bd4e67993a4def6f2cca37",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
         }
       ]
     },
@@ -1721,7 +1547,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "d13e2461644951959461393f140ce8bc87326c4bb0afba845ef15cf4a34334a0",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1750,8 +1576,8 @@
         },
         "api:/api/calendar-board": {
           "requests": { "reference": 1, "tolerance": 1 },
-          "encodedBytes": { "reference": 42026, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 39964, "tolerance": { "relative": 1, "absolute": 512 } },
+          "encodedBytes": { "reference": 42290, "tolerance": { "relative": 1, "absolute": 512 } },
+          "decodedBytes": { "reference": 40228, "tolerance": { "relative": 1, "absolute": 512 } },
           "rows": { "reference": 90, "tolerance": 1 }
         },
         "api:/api/calendar-window": {
@@ -1775,38 +1601,38 @@
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "477dd36ad45613c7961e84122e344950b9bc001723d66f39e4047c1d4781f16a",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "d13e2461644951959461393f140ce8bc87326c4bb0afba845ef15cf4a34334a0",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1835,8 +1661,8 @@
             },
             "api:/api/calendar-board": {
               "requests": { "reference": 1, "tolerance": 1 },
-              "encodedBytes": { "reference": 42026, "tolerance": { "relative": 1, "absolute": 512 } },
-              "decodedBytes": { "reference": 39964, "tolerance": { "relative": 1, "absolute": 512 } },
+              "encodedBytes": { "reference": 42290, "tolerance": { "relative": 1, "absolute": 512 } },
+              "decodedBytes": { "reference": 40228, "tolerance": { "relative": 1, "absolute": 512 } },
               "rows": { "reference": 90, "tolerance": 1 }
             },
             "api:/api/calendar-window": {
@@ -1858,12 +1684,6 @@
               "rows": { "reference": 0, "tolerance": 0 }
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "477dd36ad45613c7961e84122e344950b9bc001723d66f39e4047c1d4781f16a",
-          "toDigest": "d13e2461644951959461393f140ce8bc87326c4bb0afba845ef15cf4a34334a0",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
         }
       ]
     },
@@ -1873,7 +1693,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "0b4fd73b80bf55727cf956371965fe08a888fef934c2581a6540fe07e141fcce",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1888,12 +1708,12 @@
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 2, "tolerance": 0 },
         "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1035, "tolerance": 19 }
+        "componentRenders": { "reference": 1035, "tolerance": 20 }
       },
       "payloads": {
         "action:/zeiterfassung": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1295, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1294, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": { "reference": 120, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
@@ -1911,45 +1731,45 @@
         },
         "background:pending-sessions": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 15140, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 13078, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 15470, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 13408, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 5, "tolerance": 0 }
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "d9caa1bc41476c669938b6180e9e3465c8e009c6fe6a2c006d9be1cb9efb1567",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "0b4fd73b80bf55727cf956371965fe08a888fef934c2581a6540fe07e141fcce",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -1964,12 +1784,12 @@
             "actionRoundTrips": { "reference": 1, "tolerance": 0 },
             "backgroundReads": { "reference": 2, "tolerance": 0 },
             "backendRequests": { "reference": 72, "tolerance": 1 },
-            "componentRenders": { "reference": 966, "tolerance": 19 }
+            "componentRenders": { "reference": 1035, "tolerance": 20 }
           },
           "payloads": {
             "action:/zeiterfassung": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 1295, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 1294, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": { "reference": 120, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
@@ -1987,25 +1807,11 @@
             },
             "background:pending-sessions": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 15140, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 13078, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 15470, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 13408, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": { "reference": 5, "tolerance": 0 }
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "d9caa1bc41476c669938b6180e9e3465c8e009c6fe6a2c006d9be1cb9efb1567",
-          "toDigest": "0b4fd73b80bf55727cf956371965fe08a888fef934c2581a6540fe07e141fcce",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "raise",
-          "target": "componentRenders",
-          "from": { "reference": 966, "tolerance": 19 },
-          "to": { "reference": 1035, "tolerance": 19 },
-          "runKeys": ["2026-11-01T070519609Z-6e2e24"],
-          "reason": "Debt splits merged after #141 (#137, #136, #109, #129): #129 splits components/zeiterfassung and the period page, which hold the time approval list, into smaller components that render separately (966 to 1035 renders, no extra reads). Behavior unchanged; owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
         }
       ]
     },
@@ -2015,7 +1821,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "49d2d86e7c4c64d85742c7cd519ef2a63676cc69a3f17c24a95cdf9e3b28cf92",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -2034,8 +1840,8 @@
       "payloads": {
         "background:attention-overview": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 2223, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 1193, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": { "reference": 5, "tolerance": 0 }
         },
         "background:own-personnel-actions": {
@@ -2046,63 +1852,63 @@
         },
         "prefetch:/aufgaben": {
           "requests": { "reference": 2, "tolerance": 0 },
-          "encodedBytes": { "reference": 5794, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 13105, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 5758, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 12952, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "prefetch:/zeiterfassung": {
           "requests": { "reference": 3, "tolerance": 0 },
-          "encodedBytes": { "reference": 7526, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 16263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 7484, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 16110, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "route:/aufgaben": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
-          "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1535, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 4573, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 33029, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "ce85d8db1b671aa682bfe037a5cd2c23efb310a2d6f90c673e833fdea4cfe7f6",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "49d2d86e7c4c64d85742c7cd519ef2a63676cc69a3f17c24a95cdf9e3b28cf92",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -2121,8 +1927,8 @@
           "payloads": {
             "background:attention-overview": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 2058, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 1028, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 2223, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 1193, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": { "reference": 5, "tolerance": 0 }
             },
             "background:own-personnel-actions": {
@@ -2133,89 +1939,29 @@
             },
             "prefetch:/aufgaben": {
               "requests": { "reference": 2, "tolerance": 0 },
-              "encodedBytes": { "reference": 5794, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 13105, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 5758, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 12952, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "prefetch:/zeiterfassung": {
               "requests": { "reference": 3, "tolerance": 0 },
-              "encodedBytes": { "reference": 7526, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 16263, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 7484, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 16110, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "route:/aufgaben": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 1560, "tolerance": { "relative": 0.01, "absolute": 512 } },
-              "decodedBytes": { "reference": 4628, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 1535, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 4573, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "script": {
               "requests": { "reference": 4, "tolerance": 0 },
-              "encodedBytes": { "reference": 29316, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 33029, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": null,
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "ce85d8db1b671aa682bfe037a5cd2c23efb310a2d6f90c673e833fdea4cfe7f6",
-          "toDigest": "49d2d86e7c4c64d85742c7cd519ef2a63676cc69a3f17c24a95cdf9e3b28cf92",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 29316, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-10-30T215330529Z-9e87a6"],
-          "reason": "werkflow-app#98 moved the time-entry validation (lib/time-tracking/validation.ts) out of an (app) layout chunk into the /zeiterfassung route chunk: before #98 (fa4faae4) layout chunk 0u25amz-dd_w_.js (5983 B gzip) carried it, after (bda6adb7) no layout chunk does. Every page loads less (lab.office.cold-start script bytes -4061 in this run); this step prefetches /zeiterfassung from the task list, so its four route chunks grew from 24964 to 26624 B gzip in the CI builds. Moved, not added."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 31150, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
-          "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) adds code to the /zeiterfassung route chunks, which the task list prefetches during this step; it is the only merge between c7328f71, where this step passed, and 58f44164. Same mechanism as the #98 accept. A product feature, not a split: E0 and werk-flow/werkflow-planning#212 may win the bytes back."
-        },
-        {
-          "kind": "ceiling-accept",
-          "target": "script",
-          "from": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 32185, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "to": {
-            "requests": { "reference": 4, "tolerance": 0 },
-            "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
-            "decodedBytes": null,
-            "rows": null
-          },
-          "runKeys": ["2026-11-01T070519609Z-6e2e24"],
-          "reason": "Debt splits merged after #141: #129 splits the /zeiterfassung components that the task list prefetches (32185 to 32999 bytes, the same mechanism as the #107 accept in #140). Owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
         }
       ]
     },
@@ -2225,7 +1971,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "85883b81346c248c99d89df77bd0708278889d41821a3a9f4e7928c30b144845",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -2240,56 +1986,56 @@
         "actionRoundTrips": { "reference": 0, "tolerance": 0 },
         "backgroundReads": { "reference": 0, "tolerance": 0 },
         "backendRequests": { "reference": 11, "tolerance": 1 },
-        "componentRenders": { "reference": 494, "tolerance": 9 }
+        "componentRenders": { "reference": 503, "tolerance": 10 }
       },
       "payloads": {
         "route:/einstellungen/mitarbeiter": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 4183, "tolerance": { "relative": 1, "absolute": 512 } },
-          "decodedBytes": { "reference": 11504, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 1003, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "decodedBytes": { "reference": 11581, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "rows": null
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8325, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8937, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
       },
       "source": {
         "runKeys": [
-          "2026-10-25T165618654Z-9ebeb1",
-          "2026-10-25T165931988Z-5db192",
-          "2026-10-25T170243762Z-90b20c",
-          "2026-10-25T170554443Z-2d90e9",
-          "2026-10-25T170901476Z-c267d7",
-          "2026-10-25T165618654Z-527242",
-          "2026-10-25T165931988Z-d30194",
-          "2026-10-25T170243762Z-df48e3",
-          "2026-10-25T170554443Z-7570ea",
-          "2026-10-25T170901476Z-38d6bc"
+          "2026-11-05T210413860Z-3bf97b",
+          "2026-11-05T210413860Z-704c47",
+          "2026-11-05T210657033Z-0b19d0",
+          "2026-11-05T210657033Z-e9fa17",
+          "2026-11-05T210920854Z-426b85",
+          "2026-11-05T210920854Z-4f8fce",
+          "2026-11-05T211143736Z-a0d811",
+          "2026-11-05T211143736Z-bce83a",
+          "2026-11-05T211406947Z-008a0a",
+          "2026-11-05T211406947Z-bd8163"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3"
+        "buildId": "48dcad4c-82ef-4405-96ff-15815838003d"
       },
       "history": [
         {
           "kind": "initial",
           "runKeys": [
-            "2026-10-25T165618654Z-9ebeb1",
-            "2026-10-25T165931988Z-5db192",
-            "2026-10-25T170243762Z-90b20c",
-            "2026-10-25T170554443Z-2d90e9",
-            "2026-10-25T170901476Z-c267d7",
-            "2026-10-25T165618654Z-527242",
-            "2026-10-25T165931988Z-d30194",
-            "2026-10-25T170243762Z-df48e3",
-            "2026-10-25T170554443Z-7570ea",
-            "2026-10-25T170901476Z-38d6bc"
+            "2026-11-05T210413860Z-3bf97b",
+            "2026-11-05T210413860Z-704c47",
+            "2026-11-05T210657033Z-0b19d0",
+            "2026-11-05T210657033Z-e9fa17",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210920854Z-4f8fce",
+            "2026-11-05T211143736Z-a0d811",
+            "2026-11-05T211143736Z-bce83a",
+            "2026-11-05T211406947Z-008a0a",
+            "2026-11-05T211406947Z-bd8163"
           ],
-          "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host, the recorder follows the gateway log through the native docker CLI, and the app now loads Geist (brief F1); five passing fresh runs on one build",
+          "reason": "#151 edited tests/audit/support/performance-profile.ts, which moved the typical workload digest caedeec9 to b226be96 and orphaned every lab reference (performance.md, Change a lab reference, step 3). Five runs of one build of the calendar split of werk-flow/werkflow-planning#113. Six runs of main 33f7ea62 lay inside the old references on every metric; against those runs the split adds only rendered components: 2 per shell render (CalendarHeaderActions, CalendarMemberFilter) and 3 per card popover (title, badges, actions).",
           "context": {
-            "measurementDigest": "7df03f8f09833a1bcd5802cecef824d2350d52bbe3f12fcc1af1b4d783167dec",
-            "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+            "measurementDigest": "85883b81346c248c99d89df77bd0708278889d41821a3a9f4e7928c30b144845",
+            "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
             "browser": "chromium",
             "browserVersion": "151.0.7922.34",
             "viewport": { "width": 1440, "height": 900 },
@@ -2304,28 +2050,22 @@
             "actionRoundTrips": { "reference": 0, "tolerance": 0 },
             "backgroundReads": { "reference": 0, "tolerance": 0 },
             "backendRequests": { "reference": 11, "tolerance": 1 },
-            "componentRenders": { "reference": 494, "tolerance": 9 }
+            "componentRenders": { "reference": 503, "tolerance": 10 }
           },
           "payloads": {
             "route:/einstellungen/mitarbeiter": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 4183, "tolerance": { "relative": 1, "absolute": 512 } },
-              "decodedBytes": { "reference": 11504, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 1003, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "decodedBytes": { "reference": 11581, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "rows": null
             },
             "script": {
               "requests": { "reference": 1, "tolerance": 0 },
-              "encodedBytes": { "reference": 8325, "tolerance": { "relative": 0.01, "absolute": 512 } },
+              "encodedBytes": { "reference": 8937, "tolerance": { "relative": 0.01, "absolute": 512 } },
               "decodedBytes": null,
               "rows": null
             }
           }
-        },
-        {
-          "kind": "carry-over",
-          "fromDigest": "7df03f8f09833a1bcd5802cecef824d2350d52bbe3f12fcc1af1b4d783167dec",
-          "toDigest": "85883b81346c248c99d89df77bd0708278889d41821a3a9f4e7928c30b144845",
-          "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
         }
       ]
     }
