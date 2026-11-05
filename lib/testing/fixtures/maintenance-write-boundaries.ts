@@ -3,7 +3,7 @@
 // caller's organization and the caller, a foreign id is refused by that call,
 // and a refusal leaves no second write or compensating delete behind.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
+import { mock, setSystemTime } from 'bun:test';
 import { CALLER_ID, ORGANIZATION_A, installActionWorld, signInAs } from './action-boundary-world';
 
 const planId = '40000000-0000-4000-8000-000000000001';
@@ -13,6 +13,9 @@ const foreignDueWorkId = '40000000-0000-4000-8000-000000000004';
 const jobId = '40000000-0000-4000-8000-000000000005';
 const idempotencyKey = '40000000-0000-4000-8000-000000000006';
 const occurrence = { originalStartLocal: '2026-11-03T09:00', jobId, entryKind: 'job_visit' };
+
+// The plan schema bounds its dates by today, and this child process is out of reach of the test's clock.
+setSystemTime(new Date('2026-11-02T10:00:00.000Z'));
 
 const world = installActionWorld({ planning_occurrences: [] });
 // The assessment reads of a new planning entry are owned by lib/planning; here
@@ -40,8 +43,8 @@ const planInput = {
   maintenanceCoverageId: null,
   status: 'active' as const,
   templateVersionId: '40000000-0000-4000-8000-00000000000a',
-  effectiveFromDate: '2037-10-01',
-  firstDueDate: '2037-11-01',
+  effectiveFromDate: '2026-10-01',
+  firstDueDate: '2026-11-01',
   intervalMonths: 6,
   dueWindowBeforeDays: 7,
   dueWindowAfterDays: 7,
