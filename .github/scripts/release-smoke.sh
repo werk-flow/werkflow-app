@@ -50,8 +50,8 @@ else
   failures=$((failures + 1))
 fi
 
-# The build's first minutes: let it serve, then count its runtime errors. Hobby log
-# retention is short, so the window stays inside the last hour.
+# The build's first minutes: let it serve, then count its runtime errors. The
+# short window counts this build only.
 echo "Counting runtime errors of ${served} in 5 minutes."
 sleep 300
 report="$(npx --yes vercel@65 logs --project "$VERCEL_PROJECT_ID" --scope werkflows-projects --token "$VERCEL_TOKEN" \
