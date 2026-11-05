@@ -26,7 +26,8 @@ const AUDIT_DATE_WINDOWS = {
   ],
   'a1-kalender': [
     { from: 22, to: 24 },
-    { from: 151, to: 151 },
+    // Three days hold a workday on every run weekday (ownedBerlinWorkdayAtOffset).
+    { from: 147, to: 149 },
   ],
   'a1-kunden': [{ from: 65, to: 65 }],
   'a2-stammdaten': [{ from: 25, to: 26 }],
@@ -121,6 +122,18 @@ export function ownedBerlinDateAtOffset(spec: AuditSpecName, offsetDays: number)
     );
   }
   return berlinDateAtOffset(offsetDays);
+}
+
+/**
+ * The first Monday-to-Friday date on or after run-day + offset, for a fixture
+ * that drops a card on a person's row. A person without a work schedule has
+ * no weekend target, and the calendar refuses that drop at the pointer
+ * (`checkPersonDay`). Throws unless the spec owns the date.
+ */
+export function ownedBerlinWorkdayAtOffset(spec: AuditSpecName, offsetDays: number): string {
+  const weekday = new Date(`${berlinDateAtOffset(offsetDays)}T12:00:00Z`).getUTCDay();
+  const daysToMonday = weekday === 6 ? 2 : weekday === 0 ? 1 : 0;
+  return ownedBerlinDateAtOffset(spec, offsetDays + daysToMonday);
 }
 
 /**
