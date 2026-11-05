@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { monthGridRange, monthWeeks } from '../../calendar/month-layout';
 import { addLocalDays } from '../../date-time/berlin';
+import { ownedBerlinDateAtOffset } from '../../../tests/golden/support/date-ownership';
 import { businessYearOffset, monthDragOffsets } from './run-day-dates';
 
 const FIRST_RUN_DAY = '2026-01-01';
@@ -45,6 +46,16 @@ describe('businessYearOffset', () => {
   test('moves the whole window once its end reaches the next year', () => {
     expect(businessYearOffset('2026-11-23', 35, 39)).toBe(-45);
     expect(businessYearOffset('2026-11-23', 39, 39)).toBe(-41);
+  });
+
+  test('stays inside the window A4 owns on every run day', () => {
+    for (const businessDate of everyRunDay()) {
+      for (const offset of [35, 38, 39]) {
+        expect(() =>
+          ownedBerlinDateAtOffset('a4-abwesenheit', businessYearOffset(businessDate, offset, 39)),
+        ).not.toThrow();
+      }
+    }
   });
 
   test('keeps every date of the window in the business year and in order on every run day', () => {

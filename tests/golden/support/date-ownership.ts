@@ -43,6 +43,8 @@ const AUDIT_DATE_WINDOWS = {
   'a4-abwesenheit': [
     { from: 35, to: 39 },
     { from: 68, to: 69 },
+    // The conditions of +35 … +39 near December 31 (businessYearOffset).
+    { from: -45, to: -41 },
   ],
   'a5-aufgaben-qualifikationen': [{ from: 40, to: 44 }],
   'a6-planung': [{ from: 45, to: 54 }],

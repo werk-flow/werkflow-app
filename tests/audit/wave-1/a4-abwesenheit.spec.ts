@@ -67,7 +67,8 @@ import type { TestWorld } from '../../golden/support/world';
 // the vacation and sickness goldens: the newest condition of the year, the
 // preview's exclusions, approval hints, the half-day target effects, the
 // neutral calendar per role and the no-diagnosis contract. Every test prepares
-// its own entitlement and schedule; the run-day window is +35 … +39, +68, +69.
+// its own entitlement and schedule; the run-day window is +35 … +39, +68, +69,
+// and -45 … -41 for a condition near December 31.
 
 /** A one-hour plan on every day from today for everyone, so the current day always carries a target. */
 async function giveEveryoneATodayPlan(world: TestWorld, todayIso: string): Promise<void> {
@@ -83,10 +84,7 @@ async function giveEveryoneATodayPlan(world: TestWorld, todayIso: string): Promi
 
 /** A date of the +35 … +39 window for a condition the own balance must count; see businessYearOffset. */
 function conditionDateInBusinessYear(offset: number): string {
-  const yearOffset = businessYearOffset(berlinDateAtOffset(0), offset, 39);
-  return yearOffset === offset
-    ? ownedBerlinDateAtOffset('a4-abwesenheit', offset)
-    : berlinDateAtOffset(yearOffset);
+  return ownedBerlinDateAtOffset('a4-abwesenheit', businessYearOffset(berlinDateAtOffset(0), offset, 39));
 }
 
 /** Year, month and day of a `YYYY-MM-DD` string; a missing or non-numeric part is an error, never NaN arithmetic. */
