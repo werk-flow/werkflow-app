@@ -31,6 +31,9 @@ export async function readInBackground<Kind extends BackgroundReadKind>(
     if (!parsed.success || (!response.ok && parsed.data.success)) {
       return { success: false, error: 'background_read_failed' };
     }
+    // Permanent: a reader's result has a compile-time type only. Checking it here needs a schema
+    // per kind in the browser bundle, which can drift from its reader and refuse a result that
+    // this same-origin read accepts today.
     return parsed.data as BackgroundReadResult<Kind>;
   } catch {
     return { success: false, error: 'background_read_failed' };
