@@ -64,7 +64,7 @@ Owner: [security](docs/technical/security.md#how-to-work).
 - An identity check that cannot complete is a failure, never a sign-out and never access.
 - Never export a helper from a `'use server'` module, or send file bytes through a Server Action.
 - Never log personal data, codes or provider bodies (`lib/logging.ts`).
-- Never write to PROD outside a release the owner requested.
+- Never write to PROD outside the `release` workflow.
 - Tier 3 defaults: whether a permission check fits its operation, and every accepted residual exposure.
 
 ### 4. Code quality and maintainability
@@ -113,7 +113,8 @@ Before UI work is done, check each surface and name in the PR the ones that appl
 ## Decide or ask
 
 - Do whatever your tools can do. The owner supplies only the owner's own passwords, tokens and account settings.
-- The owner decides business scope, money and paid services, PROD and releases, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend, and record why in the commit body, or the owning doc for a lasting rule.
+- Commit, push, merge and release on your own once the change is not risky and its required checks passed. No step waits for the owner just because it moves code.
+- The owner decides business scope, money and paid services, analytics or new personal data, and what a virtue demands. Decide everything else as you would recommend, and record why in the commit body, or the owning doc for a lasting rule.
 - Ask when scope, acceptance or an edge case is ambiguous; never invent business strategy. Ask through the ask-user tool and end your turn, so T3 Code flags the thread. Never bury an owner action in a status message.
 - **The Willert rule.** When a decision would be expensive to rebuild if an SHK assumption is wrong, ask the owner through the question tool and propose a concrete question for a named role at Willert Haustechnik, the beta partner.
 - Tamay owns product and offer; John owns sales and customers. A business ambition never adds a feature, entitlement or analytics by itself, and sales positioning stays out of feature logic.
@@ -145,4 +146,4 @@ Domain terms, each defined by its feature spec: `Auftrag` (work order), `Projekt
 - Generated types (`lib/supabase/database.types.ts`) and live Supabase inspection outrank every schema description.
 - A schema change follows [the migration rule](docs/technical/environments.md#the-migration-rule): one migration per PR at most, with its regenerated types, expand-only.
 - The stack is settled ([decision 0001](docs/decisions/0001-infrastructure-stack.md)). Propose no provider migration without a superseding decision.
-- `main` is staging on DEV, `production` is PROD. `release` ships a moved, green `main` weekdays at 07:00 Berlin, or when the owner or the coordinator thread asks ("release main"): `gh workflow run release`, `gh run watch`, check production, roll back through Vercel if it breaks ([release and rollback](docs/technical/environments.md#release-and-rollback)), report.
+- `main` is staging on DEV, `production` is PROD. `release` ships a moved, green `main` weekdays at 07:00 Berlin, or when an agent or the owner judges a green `main` should not wait, such as for a bug fix ("release main"): `gh workflow run release`, `gh run watch`, check production, roll back through Vercel if it breaks ([release and rollback](docs/technical/environments.md#release-and-rollback)), report.

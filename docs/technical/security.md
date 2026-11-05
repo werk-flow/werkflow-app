@@ -119,7 +119,7 @@ Every plan carries an advisory check under 24 hours old. An unknown finding, a c
 - Log personal data, codes, provider bodies or a raw error object. Log through `logError`, never `console`.
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
-- Write to PROD outside a release the owner requested.
+- Write to PROD outside the `release` workflow.
 - Read PROD data in an agent session, through any tool: the result goes to the model provider. `bun run prod:inspect` returns metadata only. `.claude/hooks/refuse-production-mcp.ts` enforces the rule for MCP tools; the shell path is a [backlog](enforcement-ladder-backlog.md) row.
 
 ## Verify your work

@@ -126,3 +126,7 @@ On 2026-10-30 the Vercel account reached the Hobby plan's 100 deployments a day,
 
 1. Vercel deploys from Git only the `production` branch (`git.deploymentEnabled` in `vercel.json`). Pull-request branches never deploy, also after a Vercel Pro upgrade; this supersedes "pull-request previews stay automatic" in "Configuration this decision needs". `main` deploys only through `.github/workflows/staging.yml`, after DEV's migrations, as before.
 2. The owner tries a user-visible change on staging after its merge, not on a preview of its branch.
+
+## Amendment 2026-11-05: agents release on their own
+
+The owner decided on 2026-11-05 that no step waits for approval just because it moves code. Rule 7 now reads: besides the weekday run, an agent may start the `release` workflow when `main` is green, the change is not risky and it should not wait, such as for a bug fix. The workflow's gates, the check of production and the rollback stay as they are. Code still reaches `main` and `production` only through a pull request and the `release` workflow.
