@@ -4,34 +4,18 @@
   "exceptions": [
     {
       "package": "minimatch",
-      "version": "3.1.5",
-      "advisory": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
-      "severity": "moderate",
-      "paths": ["minimatch"],
-      "reviewedOn": "2026-10-31",
-      "expiresOn": "2026-11-30",
-      "rationale": "Potential denial of service through glob pattern amplification (globparts). minimatch is installed only through the lint toolchain (eslint 9 via @eslint/config-array, typescript-eslint via @typescript-eslint/typescript-estree, eslint-config-next, eslint-plugin-jsx-a11y, @eslint-community/eslint-plugin-eslint-comments), all dev dependencies, and never runs in the deployed application; the only patterns it receives come from the repository configuration. Only minimatch 11.0.1 and later fix it, a major version these packages do not accept: eslint 9 calls the 3.x API. Accepted by the owner on 2026-10-31 for 30 days; an agent may renew it for 30 days after a re-review while every path stays in the lint toolchain (a path into the deployed application needs the owner). Remove it as soon as eslint and typescript-eslint accept a fixed minimatch.",
-      "evidence": [
-        "https://github.com/advisories/GHSA-g3hv-75wg-m249",
-        "bun pm why minimatch on 2026-10-31: every path ends in a dev dependency (eslint-config-next 16.3.6, typescript-eslint 8.47.0, @typescript-eslint/parser 8.47.0, eslint-plugin-jsx-a11y 6.10.2, @eslint-community/eslint-plugin-eslint-comments ^4.8.1, eslint ^9).",
-        "npm registry on 2026-10-31: minimatch 11.0.3 is the latest; @eslint/config-array 0.21.1 requires ^3.1.2 and @typescript-eslint/typescript-estree 8.47.0 requires ^9.0.4.",
-        "bun pm why minimatch: minimatch 3.1.5 comes through @eslint/config-array 0.21.1 (eslint 9.39.1) and the eslint plugins."
-      ]
-    },
-    {
-      "package": "minimatch",
       "version": "9.0.9",
       "advisory": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
       "severity": "moderate",
       "paths": ["@typescript-eslint/typescript-estree/minimatch"],
       "reviewedOn": "2026-10-31",
       "expiresOn": "2026-11-30",
-      "rationale": "Potential denial of service through glob pattern amplification (globparts). minimatch is installed only through the lint toolchain (eslint 9 via @eslint/config-array, typescript-eslint via @typescript-eslint/typescript-estree, eslint-config-next, eslint-plugin-jsx-a11y, @eslint-community/eslint-plugin-eslint-comments), all dev dependencies, and never runs in the deployed application; the only patterns it receives come from the repository configuration. Only minimatch 11.0.1 and later fix it, a major version these packages do not accept: eslint 9 calls the 3.x API. Accepted by the owner on 2026-10-31 for 30 days; an agent may renew it for 30 days after a re-review while every path stays in the lint toolchain (a path into the deployed application needs the owner). Remove it as soon as eslint and typescript-eslint accept a fixed minimatch.",
+      "rationale": "Potential denial of service through glob pattern amplification (globparts). The affected minimatch 9.0.9 is installed only through @typescript-eslint/typescript-estree, part of the lint toolchain (typescript-eslint, @typescript-eslint/parser, eslint-config-next), all dev dependencies, and never runs in the deployed application; the only patterns it receives come from the repository configuration. Only minimatch 11.0.1 and later fix it, a major version typescript-estree does not accept. Accepted by the owner on 2026-10-31 for 30 days; an agent may renew it for 30 days after a re-review while every path stays in the lint toolchain (a path into the deployed application needs the owner). Remove it as soon as typescript-eslint accepts a fixed minimatch.",
       "evidence": [
         "https://github.com/advisories/GHSA-g3hv-75wg-m249",
-        "bun pm why minimatch on 2026-10-31: every path ends in a dev dependency (eslint-config-next 16.3.6, typescript-eslint 8.47.0, @typescript-eslint/parser 8.47.0, eslint-plugin-jsx-a11y 6.10.2, @eslint-community/eslint-plugin-eslint-comments ^4.8.1, eslint ^9).",
-        "npm registry on 2026-10-31: minimatch 11.0.3 is the latest; @eslint/config-array 0.21.1 requires ^3.1.2 and @typescript-eslint/typescript-estree 8.47.0 requires ^9.0.4.",
-        "bun pm why minimatch: minimatch 9.0.9 comes through @typescript-eslint/typescript-estree 8.47.0 (typescript-eslint, @typescript-eslint/parser)."
+        "bun audit on 2026-11-05: the advisory now covers >=7.0.0 <11.0.1, so minimatch 3.1.5 is no longer affected and its exception was removed.",
+        "npm registry on 2026-10-31: minimatch 11.0.3 is the latest; @typescript-eslint/typescript-estree 8.47.0 requires ^9.0.4.",
+        "bun pm why minimatch@9.0.9 on 2026-11-05: it comes through @typescript-eslint/typescript-estree 8.47.0 (typescript-eslint, @typescript-eslint/parser, eslint-config-next 16.3.6), and every path ends in a dev dependency."
       ]
     }
   ]
