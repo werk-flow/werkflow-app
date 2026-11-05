@@ -72,3 +72,7 @@ A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2
 ## Amendment 2026-10-26: superseded by decision 0009
 
 [Decision 0009](0009-pull-requests-and-ci.md) supersedes this decision. Its revisit trigger fired: the first push from Linux skipped the pre-push gate when the hook lost its executable bit, and parallel agents in worktrees outgrew one local `main`. Work now runs as a worktree, a branch and a pull request per task, CI's `Check` is the gate, `main` is staging on DEV, and the `production` branch is production, advanced only by the owner's `release` workflow. The `partner-preview` branch is retired.
+
+## Amendment 2026-11-05: Vercel Pro came before the first payment
+
+The team moved to Vercel Pro on 2026-11-05, ahead of the first paying customer, so that Vercel's data processing agreement applies before Willert's first real data. The first paying customer now triggers only point-in-time recovery and the preview password.

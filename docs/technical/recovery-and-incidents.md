@@ -16,11 +16,11 @@ The owner accepted these limits until the point-in-time upgrade below. No restor
 
 ## Planned provider upgrades
 
-The owner deferred both until the first paying customer. Whoever performs one completes its checklist in the same task and updates this page.
+The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until the first paying customer. Whoever completes a checklist updates this page.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
-| Vercel Pro for the team | Hobby excludes commercial use and Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Invite the business partner. Confirm deployment protection. Record the settings in [environments](environments.md). |
+| Vercel Pro for the team | Active since 2026-11-05. It brings Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Confirm deployment protection. Record the settings in [environments](environments.md). |
 | Supabase point-in-time recovery on PROD | Too expensive before revenue. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. |
 
 ## Recovery rehearsal
