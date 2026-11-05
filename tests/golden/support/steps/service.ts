@@ -174,6 +174,13 @@ export function serviceEditButton(page: Page): Locator {
   return page.getByRole('button', { name: SHARED_COPY.action.edit });
 }
 
+/** What an edit dialog offers up to its save click, so a test can stand in for it without a browser. */
+type EditDialogBeforeSave = {
+  getByLabel: (...args: Parameters<Locator['getByLabel']>) => Pick<Locator, 'fill'>;
+  locator: (...args: Parameters<Locator['locator']>) => Pick<Locator, 'fill'>;
+  getByRole: (...args: Parameters<Locator['getByRole']>) => Pick<Locator, 'click'>;
+};
+
 // ---------------------------------------------------------------------------
 // Installed equipment (P1-18)
 
@@ -363,12 +370,22 @@ export async function updateInstalledEquipmentModel(
 ): Promise<void> {
   await serviceEditButton(page).click();
   const dialog = page.getByRole('dialog');
+  await saveInstalledEquipmentModelDialog(dialog, model, reason, beforeSubmit);
+  await expect(dialog).toHaveCount(0);
+  await expect(visibleText(page, model)).toBeVisible();
+}
+
+/** @internal The steps up to the save click, a seam for pre-submit-callbacks.test.ts. */
+export async function saveInstalledEquipmentModelDialog(
+  dialog: EditDialogBeforeSave,
+  model: string,
+  reason: string,
+  beforeSubmit?: () => void | Promise<void>,
+): Promise<void> {
   await dialog.getByLabel(EQUIPMENT_COPY.field.model, { exact: true }).fill(model);
   await dialog.getByLabel(EQUIPMENT_COPY.field.changeReason).fill(reason);
   await beforeSubmit?.();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(visibleText(page, model)).toBeVisible();
 }
 
 export async function linkInstalledEquipmentSourceToJob(
@@ -622,10 +639,18 @@ export async function updateServiceCaseViaDialog(
     });
     if (!(await checkbox.isChecked())) await checkbox.click();
   }
+  await saveServiceCaseDialog(dialog, options);
+  await expect(dialog).toHaveCount(0);
+}
+
+/** @internal The steps up to the save click, a seam for pre-submit-callbacks.test.ts. */
+export async function saveServiceCaseDialog(
+  dialog: EditDialogBeforeSave,
+  options: { reason: string; beforeSubmit?: () => void | Promise<void> },
+): Promise<void> {
   await dialog.locator('#service-reason').fill(options.reason);
   await options.beforeSubmit?.();
   await dialog.getByRole('button', { name: SHARED_COPY.action.save, exact: true }).click();
-  await expect(dialog).toHaveCount(0);
 }
 
 /** Relates the open case to another case through the relations section. */

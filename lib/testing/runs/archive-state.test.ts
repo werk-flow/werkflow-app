@@ -8,6 +8,7 @@ import {
   restoreRetainedWorkloads,
   validateRetainedWorldIdentity,
 } from './archive-state';
+import { testWorldSchema } from '../../../tests/golden/support/world';
 
 describe('retained state archive ownership', () => {
   test('restores exact workload inputs without inheriting acceptance results or stale workloads', () => {
@@ -44,6 +45,38 @@ describe('retained state archive ownership', () => {
           join(root, 'missing.json'),
         ),
       ).toThrow('Refusing to omit its owned resources');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+  test('a retained world older than the current shape keeps its protection and every key', () => {
+    const root = mkdtempSync(join(tmpdir(), 'werkflow-archive-'));
+    const user = { id: 'user', email: 'user@test', password: 'test', firstName: 'A', lastName: 'B' };
+    // The shape of the first harness: no invitees and no inventory.
+    const olderWorld = {
+      runId: 'owned',
+      orgId: 'primary',
+      orgName: 'Primary',
+      users: { admin: user, buero: user, employee: user },
+      outsider: { orgId: 'other', orgName: 'Other', admin: user },
+    };
+    const path = join(root, 'world.json');
+    const retained = { runKey: 'older', retainedAt: '2026-08-04T18:00:00Z', cleanedAt: null };
+    try {
+      writeFileSync(path, JSON.stringify(olderWorld));
+      expect(testWorldSchema.safeParse(olderWorld).success).toBe(false);
+      expect(
+        readRetainedWorldState(
+          { ...retained, world: { runId: 'owned', organizationIds: ['primary', 'other'], userIds: [] } },
+          path,
+        ),
+      ).toEqual(olderWorld);
+      expect(() =>
+        readRetainedWorldState(
+          { ...retained, world: { runId: 'another', organizationIds: ['primary', 'other'], userIds: [] } },
+          path,
+        ),
+      ).toThrow('do not match');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
