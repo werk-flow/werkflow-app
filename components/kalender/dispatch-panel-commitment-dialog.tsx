@@ -19,6 +19,7 @@ import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TimeInput } from '@/components/ui/time-input';
 import type { DispatchOverviewOccurrence } from '@/lib/dispatch/types';
+import { Constants } from '@/lib/supabase/database.types';
 import { recordCustomerCommitment } from '@/lib/commitments/actions';
 import {
   COMMITMENT_SOURCE_LABELS,
@@ -31,11 +32,10 @@ type CommitmentDialogState = {
   entry: DispatchOverviewOccurrence;
 };
 
-export function CommitmentDialog({
-  entry,
-  onClose,
-  onSaved,
-}: CommitmentDialogState & { onClose: () => void; onSaved: () => void }) {
+type CommitmentDialogProps = CommitmentDialogState & { onClose: () => void; onSaved: () => void };
+
+/** The commitment's fields, their errors and the save. */
+function useCommitmentForm({ entry, onSaved }: CommitmentDialogProps) {
   const [committedDate, setCommittedDate] = useState<Date | undefined>(() => {
     const iso = berlinLocalDateOf(entry);
     const [year, month, day] = iso.split('-').map(Number);
@@ -82,6 +82,28 @@ export function CommitmentDialog({
     }
   };
 
+  return {
+    committedDate,
+    setCommittedDate,
+    windowStart,
+    setWindowStart,
+    windowEnd,
+    setWindowEnd,
+    source,
+    setSource,
+    error,
+    isSaving,
+    attempted,
+    fieldErrors,
+    handleSave,
+  };
+}
+
+export function CommitmentDialog(props: CommitmentDialogProps) {
+  const { onClose } = props;
+  const form = useCommitmentForm(props);
+  const { windowStart, windowEnd, source, error, isSaving, attempted, fieldErrors } = form;
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} pending={isSaving}>
       <DialogContent size="md">
@@ -92,14 +114,18 @@ export function CommitmentDialog({
             versendet.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSave} noValidate className="space-y-4">
+        <form onSubmit={form.handleSave} noValidate className="space-y-4">
           <Field
             label="Zugesagter Tag"
             htmlFor="commitment-date"
             required
             error={attempted ? fieldErrors['commitment-date'] : undefined}
           >
-            <DatePicker ariaLabel="Zugesagter Tag" value={committedDate} onChange={setCommittedDate} />
+            <DatePicker
+              ariaLabel="Zugesagter Tag"
+              value={form.committedDate}
+              onChange={form.setCommittedDate}
+            />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field
@@ -107,18 +133,26 @@ export function CommitmentDialog({
               htmlFor="commitment-window-start"
               error={attempted ? fieldErrors['commitment-window-start'] : undefined}
             >
-              <TimeInput value={windowStart} onChange={setWindowStart} />
+              <TimeInput value={windowStart} onChange={form.setWindowStart} />
             </Field>
             <Field
               label="bis"
               htmlFor="commitment-window-end"
               error={attempted ? fieldErrors['commitment-window-end'] : undefined}
             >
-              <TimeInput value={windowEnd} onChange={setWindowEnd} />
+              <TimeInput value={windowEnd} onChange={form.setWindowEnd} />
             </Field>
           </div>
           <Field label="Wie vereinbart?" htmlFor="commitment-source">
-            <Select value={source} onValueChange={(value) => setSource(value as CustomerCommitmentSource)}>
+            <Select
+              value={source}
+              onValueChange={(value) => {
+                const nextSource = Constants.public.Enums.customer_commitment_source.find(
+                  (candidate) => candidate === value,
+                );
+                if (nextSource) form.setSource(nextSource);
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>

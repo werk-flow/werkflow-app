@@ -103,17 +103,18 @@ function getStartOfWeek(date: Date): Date {
   return d;
 }
 
-export function CalendarHeader({
+type CalendarHeaderActionsProps = CalendarHeaderProps & {
+  hydrated: boolean;
+  entryDialogOpen: boolean;
+  onEntryDialogOpenChange: (open: boolean) => void;
+};
+
+/** The dispatch and Parkplatz toggles and the create action with its dialog for the role. */
+function CalendarHeaderActions({
   currentDate,
-  view,
-  todayIso,
-  horizonWeeks,
-  onPrevious,
-  onNext,
-  onToday,
-  onRefresh,
-  onManualEntrySuccess,
+  hydrated,
   isAdminOrManager = false,
+  onManualEntrySuccess,
   onJobSuccess,
   parkedJobCount = 0,
   parkplatzOpen = false,
@@ -121,19 +122,83 @@ export function CalendarHeader({
   parkplatzButtonRef,
   dispatchPanelOpen = false,
   onDispatchPanelToggle,
-}: CalendarHeaderProps) {
+  entryDialogOpen,
+  onEntryDialogOpenChange,
+}: CalendarHeaderActionsProps): React.JSX.Element {
+  return (
+    <div className="flex items-center gap-1 sm:gap-2">
+      {isAdminOrManager && onDispatchPanelToggle && (
+        <Button
+          variant={dispatchPanelOpen ? 'secondary' : 'ghost'}
+          size="default"
+          className="h-11 gap-2 sm:h-9"
+          onClick={onDispatchPanelToggle}
+          disabled={!hydrated}
+          data-testid="dispatch-panel-toggle"
+          aria-label={dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'}
+          title={dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'}
+          aria-pressed={dispatchPanelOpen}
+        >
+          <Send className="size-4" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">Einsätze</span>
+        </Button>
+      )}
+      {isAdminOrManager && onParkplatzToggle && (
+        <ParkplatzButton
+          ref={parkplatzButtonRef}
+          count={parkedJobCount}
+          isOpen={parkplatzOpen}
+          onToggle={onParkplatzToggle}
+        />
+      )}
+      <Button
+        size="default"
+        className="h-11 gap-2 sm:h-9"
+        disabled={!hydrated}
+        onClick={() => onEntryDialogOpenChange(true)}
+      >
+        <CalendarPlus className="size-4" />
+        <span>Kalendereintrag</span>
+      </Button>
+
+      {isAdminOrManager ? (
+        <CalendarEntryDialog
+          open={entryDialogOpen}
+          onOpenChange={onEntryDialogOpenChange}
+          preselectedDate={currentDate}
+          onManualEntrySuccess={onManualEntrySuccess}
+          onJobSuccess={onJobSuccess}
+        />
+      ) : (
+        <ManualEntryDialog
+          controlledOpen={entryDialogOpen}
+          onOpenChange={onEntryDialogOpenChange}
+          preselectedDate={currentDate}
+          onSuccess={onManualEntrySuccess}
+        />
+      )}
+    </div>
+  );
+}
+
+/** What „Heute" says on the desktop for the view. */
+function todayButtonLabel(view: CalendarView, horizonWeeks: number): string {
+  return view === 'day'
+    ? 'Heute'
+    : view === 'week'
+      ? horizonWeeks > 1
+        ? 'Aktueller Zeitraum'
+        : 'Diese Woche'
+      : 'Dieser Monat';
+}
+
+export function CalendarHeader(props: CalendarHeaderProps) {
+  const { currentDate, view, todayIso, horizonWeeks, onPrevious, onNext, onToday, onRefresh } = props;
   const [entryDialogOpen, setEntryDialogOpen] = useState(false);
   const hydrated = useHydrated();
   const isCurrentPeriod = isCurrentCalendarPeriod(currentDate, view, todayIso);
 
-  const todayLabel =
-    view === 'day'
-      ? 'Heute'
-      : view === 'week'
-        ? horizonWeeks > 1
-          ? 'Aktueller Zeitraum'
-          : 'Diese Woche'
-        : 'Dieser Monat';
+  const todayLabel = todayButtonLabel(view, horizonWeeks);
 
   return (
     <header className="sticky top-0 z-10 grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 border-b bg-background px-4 py-2 sm:flex sm:flex-wrap sm:justify-between sm:gap-x-6 sm:gap-y-3 sm:px-6 sm:py-3">
@@ -186,58 +251,12 @@ export function CalendarHeader({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 sm:gap-2">
-        {isAdminOrManager && onDispatchPanelToggle && (
-          <Button
-            variant={dispatchPanelOpen ? 'secondary' : 'ghost'}
-            size="default"
-            className="h-11 gap-2 sm:h-9"
-            onClick={onDispatchPanelToggle}
-            disabled={!hydrated}
-            data-testid="dispatch-panel-toggle"
-            aria-label={dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'}
-            title={dispatchPanelOpen ? 'Einsätze schließen' : 'Einsätze öffnen'}
-            aria-pressed={dispatchPanelOpen}
-          >
-            <Send className="size-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Einsätze</span>
-          </Button>
-        )}
-        {isAdminOrManager && onParkplatzToggle && (
-          <ParkplatzButton
-            ref={parkplatzButtonRef}
-            count={parkedJobCount}
-            isOpen={parkplatzOpen}
-            onToggle={onParkplatzToggle}
-          />
-        )}
-        <Button
-          size="default"
-          className="h-11 gap-2 sm:h-9"
-          disabled={!hydrated}
-          onClick={() => setEntryDialogOpen(true)}
-        >
-          <CalendarPlus className="size-4" />
-          <span>Kalendereintrag</span>
-        </Button>
-
-        {isAdminOrManager ? (
-          <CalendarEntryDialog
-            open={entryDialogOpen}
-            onOpenChange={setEntryDialogOpen}
-            preselectedDate={currentDate}
-            onManualEntrySuccess={onManualEntrySuccess}
-            onJobSuccess={onJobSuccess}
-          />
-        ) : (
-          <ManualEntryDialog
-            controlledOpen={entryDialogOpen}
-            onOpenChange={setEntryDialogOpen}
-            preselectedDate={currentDate}
-            onSuccess={onManualEntrySuccess}
-          />
-        )}
-      </div>
+      <CalendarHeaderActions
+        {...props}
+        hydrated={hydrated}
+        entryDialogOpen={entryDialogOpen}
+        onEntryDialogOpenChange={setEntryDialogOpen}
+      />
     </header>
   );
 }

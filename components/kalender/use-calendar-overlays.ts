@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { OrgRole } from '@/lib/roles';
+import { isOrgRole } from '@/lib/roles';
 import type { InteractiveCalendarSession, WorkSession } from '@/lib/time-tracking/types';
 import { useOrganization } from '@/components/organization/organization-context';
 import { useClosedTimePeriods } from '@/components/zeiterfassung/use-closed-time-periods';
@@ -81,9 +81,9 @@ export function useCalendarSurfaceActions({
       const sessionUserId = session.clockIn?.userId || session.clockOut?.userId;
       const sessionMember = members.find((member) => member.user_id === sessionUserId);
       setSelectedSession({
-        ...(session as InteractiveCalendarSession),
+        ...session,
         employeeName: sessionMember ? memberDisplayName(sessionMember) : null,
-        ...(sessionMember ? { employeeRole: sessionMember.role as OrgRole } : {}),
+        ...(sessionMember && isOrgRole(sessionMember.role) ? { employeeRole: sessionMember.role } : {}),
       });
     },
     [members, setSelectedSession],

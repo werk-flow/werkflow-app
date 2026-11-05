@@ -31,6 +31,10 @@ const WEEKDAYS = [
   ['So', 6],
 ] as const;
 
+const TIME_KINDS: readonly PlanningTimeKind[] = ['timed', 'all_day'];
+const RECURRENCE_FREQUENCIES: readonly PlanningRecurrenceFrequency[] = ['daily', 'weekly', 'monthly'];
+const RECURRENCE_END_MODES: readonly PlanningRecurrenceEndMode[] = ['count', 'until'];
+
 interface PlanningEntryScheduleFieldsProps {
   date: string;
   dateError: string | undefined;
@@ -79,7 +83,13 @@ export function PlanningEntryScheduleFields({
           />
         </Field>
         <Field label="Zeitart" htmlFor="planning-time-kind">
-          <Select value={timeKind} onValueChange={(value) => onTimeKindChange(value as 'timed' | 'all_day')}>
+          <Select
+            value={timeKind}
+            onValueChange={(value) => {
+              const nextTimeKind = TIME_KINDS.find((candidate) => candidate === value);
+              if (nextTimeKind) onTimeKindChange(nextTimeKind);
+            }}
+          >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
@@ -137,6 +147,112 @@ interface PlanningEntryRecurrenceFieldsProps {
   onUntilDateChange: (untilDate: string) => void;
 }
 
+/** The series rhythm: its frequency and the interval in that frequency's unit. */
+function PlanningRecurrenceRhythm({
+  frequency,
+  onFrequencyChange,
+  interval,
+  onIntervalChange,
+}: Pick<
+  PlanningEntryRecurrenceFieldsProps,
+  'frequency' | 'onFrequencyChange' | 'interval' | 'onIntervalChange'
+>): React.JSX.Element {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Rhythmus" htmlFor="planning-frequency">
+        <Select
+          value={frequency}
+          onValueChange={(value) => {
+            const nextFrequency = RECURRENCE_FREQUENCIES.find((candidate) => candidate === value);
+            if (nextFrequency) onFrequencyChange(nextFrequency);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="daily">Täglich</SelectItem>
+            <SelectItem value="weekly">Wöchentlich</SelectItem>
+            <SelectItem value="monthly">Monatlich</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Alle" htmlFor="planning-interval">
+        <div className="flex items-center gap-2">
+          <QuantityStepper
+            id="planning-interval"
+            min={1}
+            className="flex-1"
+            value={interval}
+            onChange={onIntervalChange}
+          />
+          <span className="text-sm text-muted-foreground">
+            {frequency === 'daily' ? 'Tage' : frequency === 'weekly' ? 'Wochen' : 'Monate'}
+          </span>
+        </div>
+      </Field>
+    </div>
+  );
+}
+
+/** The series end: after a count of occurrences or at a last date. */
+function PlanningRecurrenceEnd({
+  endMode,
+  onEndModeChange,
+  occurrenceCount,
+  onOccurrenceCountChange,
+  untilDate,
+  onUntilDateChange,
+}: Pick<
+  PlanningEntryRecurrenceFieldsProps,
+  | 'endMode'
+  | 'onEndModeChange'
+  | 'occurrenceCount'
+  | 'onOccurrenceCountChange'
+  | 'untilDate'
+  | 'onUntilDateChange'
+>): React.JSX.Element {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Field label="Ende" htmlFor="planning-end-mode">
+        <Select
+          value={endMode}
+          onValueChange={(value) => {
+            const nextEndMode = RECURRENCE_END_MODES.find((candidate) => candidate === value);
+            if (nextEndMode) onEndModeChange(nextEndMode);
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="count">Nach Anzahl</SelectItem>
+            <SelectItem value="until">An Datum</SelectItem>
+          </SelectContent>
+        </Select>
+      </Field>
+      {endMode === 'count' ? (
+        <Field label="Termine" htmlFor="planning-count">
+          <QuantityStepper
+            id="planning-count"
+            min={2}
+            value={occurrenceCount}
+            onChange={onOccurrenceCountChange}
+          />
+        </Field>
+      ) : (
+        <Field label="Letztes Datum" htmlFor="planning-until">
+          <DatePicker
+            ariaLabel="Letztes Datum der Serie"
+            value={parseIsoLocalDate(untilDate)}
+            onChange={(nextDate) => onUntilDateChange(nextDate ? toLocalDateString(nextDate) : '')}
+          />
+        </Field>
+      )}
+    </div>
+  );
+}
+
 /** The „Wiederholen" switch and, while on, the series rhythm, weekdays and end. */
 export function PlanningEntryRecurrenceFields({
   recurring,
@@ -162,37 +278,12 @@ export function PlanningEntryRecurrenceFields({
       </label>
       {recurring && (
         <div className="space-y-4 rounded-lg border bg-muted/20 p-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Rhythmus" htmlFor="planning-frequency">
-              <Select
-                value={frequency}
-                onValueChange={(value) => onFrequencyChange(value as typeof frequency)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Täglich</SelectItem>
-                  <SelectItem value="weekly">Wöchentlich</SelectItem>
-                  <SelectItem value="monthly">Monatlich</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Alle" htmlFor="planning-interval">
-              <div className="flex items-center gap-2">
-                <QuantityStepper
-                  id="planning-interval"
-                  min={1}
-                  className="flex-1"
-                  value={interval}
-                  onChange={onIntervalChange}
-                />
-                <span className="text-sm text-muted-foreground">
-                  {frequency === 'daily' ? 'Tage' : frequency === 'weekly' ? 'Wochen' : 'Monate'}
-                </span>
-              </div>
-            </Field>
-          </div>
+          <PlanningRecurrenceRhythm
+            frequency={frequency}
+            onFrequencyChange={onFrequencyChange}
+            interval={interval}
+            onIntervalChange={onIntervalChange}
+          />
           {frequency === 'weekly' && (
             <div className="space-y-2">
               <Label id="planning-weekdays-label">Wochentage</Label>
@@ -217,37 +308,14 @@ export function PlanningEntryRecurrenceFields({
               </div>
             </div>
           )}
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Ende" htmlFor="planning-end-mode">
-              <Select value={endMode} onValueChange={(value) => onEndModeChange(value as typeof endMode)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="count">Nach Anzahl</SelectItem>
-                  <SelectItem value="until">An Datum</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            {endMode === 'count' ? (
-              <Field label="Termine" htmlFor="planning-count">
-                <QuantityStepper
-                  id="planning-count"
-                  min={2}
-                  value={occurrenceCount}
-                  onChange={onOccurrenceCountChange}
-                />
-              </Field>
-            ) : (
-              <Field label="Letztes Datum" htmlFor="planning-until">
-                <DatePicker
-                  ariaLabel="Letztes Datum der Serie"
-                  value={parseIsoLocalDate(untilDate)}
-                  onChange={(nextDate) => onUntilDateChange(nextDate ? toLocalDateString(nextDate) : '')}
-                />
-              </Field>
-            )}
-          </div>
+          <PlanningRecurrenceEnd
+            endMode={endMode}
+            onEndModeChange={onEndModeChange}
+            occurrenceCount={occurrenceCount}
+            onOccurrenceCountChange={onOccurrenceCountChange}
+            untilDate={untilDate}
+            onUntilDateChange={onUntilDateChange}
+          />
           <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
             <CalendarDays className="mt-0.5 size-3.5 shrink-0" />
             WerkFlow plant höchstens 18 Monate im Voraus und erweitert die Serie später ohne Duplikate.

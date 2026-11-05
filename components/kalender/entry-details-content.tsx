@@ -158,6 +158,32 @@ function EntryDetailsNotices({ session, snapshot, isEditing, hasActualBreaks }: 
   );
 }
 
+type EntryDetailsBreakCardsProps = {
+  snapshot: EntryDetailsSnapshot;
+  draft: EntryDetailsDraft;
+  displayedBreaks: EntryDetailsDisplayedBreaks['displayedBreaks'];
+  canEdit: boolean;
+};
+
+/** One card per shown break, editable while the dialog edits. */
+function EntryDetailsBreakCards({ snapshot, draft, displayedBreaks, canEdit }: EntryDetailsBreakCardsProps) {
+  return displayedBreaks.map((workBreak, index) => (
+    <EntryDetailsBreakCard
+      key={workBreak.key}
+      workBreak={workBreak}
+      index={index}
+      isEditing={draft.isEditing}
+      canEdit={canEdit}
+      isAutomaticBreakMode={snapshot.isAutomaticBreakMode}
+      editedBlockDate={draft.editedBlockDate}
+      entryUserId={snapshot.entryUserId}
+      entryOrganizationId={snapshot.entryOrganizationId}
+      onRemoveBreak={draft.handleRemoveBreak}
+      onBreakChange={draft.handleBreakChange}
+    />
+  ));
+}
+
 type EntryDetailsContentProps = {
   session: WorkSession;
   snapshot: EntryDetailsSnapshot;
@@ -184,30 +210,8 @@ export function EntryDetailsContent({
   canEdit,
   onNavigate,
 }: EntryDetailsContentProps) {
-  const {
-    isAutomaticBreakMode,
-    actualClockOutEntry,
-    startEntry,
-    clockInDate,
-    clockOutDate,
-    employeeName,
-    entryUserId,
-    entryOrganizationId,
-    isOrphan,
-    isActiveBlock,
-  } = snapshot;
-  const {
-    isEditing,
-    error,
-    editedClockIn,
-    setEditedClockIn,
-    editedClockOut,
-    setEditedClockOut,
-    editedBlockDate,
-    handleRemoveBreak,
-    handleBreakChange,
-    handleBlockDateChange,
-  } = draft;
+  const { actualClockOutEntry, startEntry, entryUserId } = snapshot;
+  const { isEditing, editedBlockDate, error } = draft;
   const { displayedBreaks, totalWorkMinutes } = breaks;
   const employeeDetailUrl = entryUserId ? `/mitarbeiter/${entryUserId}` : null;
   const hasActualBreaks = displayedBreaks.length > 0;
@@ -215,12 +219,12 @@ export function EntryDetailsContent({
   return (
     <>
       <EntryDetailsSummary
-        employeeName={employeeName}
+        employeeName={snapshot.employeeName}
         employeeDetailUrl={employeeDetailUrl}
         resolvedJob={resolvedJob}
         jobDetailUrl={jobDetailUrl}
-        isOrphan={isOrphan}
-        isActiveBlock={isActiveBlock}
+        isOrphan={snapshot.isOrphan}
+        isActiveBlock={snapshot.isActiveBlock}
         totalWorkMinutes={totalWorkMinutes}
         onNavigate={onNavigate}
       />
@@ -231,45 +235,36 @@ export function EntryDetailsContent({
           description="Dieses Datum gilt für alle Zeiten dieses Arbeitsblocks."
           className="rounded-md border border-border/60 px-3 py-3"
         >
-          <DatePicker value={editedBlockDate} onChange={handleBlockDateChange} />
+          <DatePicker value={editedBlockDate} onChange={draft.handleBlockDateChange} />
         </Field>
       )}
 
       {startEntry && (
         <EntryDetailsClockEntryCard
           entry={startEntry}
-          originalDate={clockInDate}
-          editedValue={editedClockIn}
-          onEditedValueChange={setEditedClockIn}
+          originalDate={snapshot.clockInDate}
+          editedValue={draft.editedClockIn}
+          onEditedValueChange={draft.setEditedClockIn}
           isEditing={isEditing}
           editedBlockDate={editedBlockDate}
         />
       )}
 
-      {displayedBreaks.map((workBreak, index) => (
-        <EntryDetailsBreakCard
-          key={workBreak.key}
-          workBreak={workBreak}
-          index={index}
-          isEditing={isEditing}
-          canEdit={canEdit}
-          isAutomaticBreakMode={isAutomaticBreakMode}
-          editedBlockDate={editedBlockDate}
-          entryUserId={entryUserId}
-          entryOrganizationId={entryOrganizationId}
-          onRemoveBreak={handleRemoveBreak}
-          onBreakChange={handleBreakChange}
-        />
-      ))}
+      <EntryDetailsBreakCards
+        snapshot={snapshot}
+        draft={draft}
+        displayedBreaks={displayedBreaks}
+        canEdit={canEdit}
+      />
 
       <EntryDetailsBreakControls snapshot={snapshot} draft={draft} breaks={breaks} canEdit={canEdit} />
 
       {actualClockOutEntry && (
         <EntryDetailsClockEntryCard
           entry={actualClockOutEntry}
-          originalDate={clockOutDate}
-          editedValue={editedClockOut}
-          onEditedValueChange={setEditedClockOut}
+          originalDate={snapshot.clockOutDate}
+          editedValue={draft.editedClockOut}
+          onEditedValueChange={draft.setEditedClockOut}
           isEditing={isEditing}
           editedBlockDate={editedBlockDate}
         />

@@ -9,6 +9,21 @@ import type { CalendarOverlays } from './use-calendar-overlays';
 import type { CalendarViewScope } from './use-calendar-view-scope';
 import type { CalendarViewState } from './use-calendar-view-state';
 
+type CalendarToolbarProps = {
+  viewState: CalendarViewState;
+  viewScope: CalendarViewScope;
+  overlays: CalendarOverlays;
+  members: CalendarMember[];
+  isAdminOrManager: boolean;
+  phone: boolean;
+  todayIso: string;
+  calendarHeaderRef: React.RefObject<HTMLDivElement | null>;
+  parkplatzButtonRef: React.RefObject<HTMLButtonElement | null>;
+  onRefresh: () => Promise<void>;
+  onManualEntrySuccess: (entries: TimeEntry[]) => void;
+  onSilentRefresh: () => void;
+};
+
 /** The calendar's header and view tabs with the member scope and, on the desktop board, the board toolbar. */
 export function CalendarToolbar({
   viewState,
@@ -23,20 +38,7 @@ export function CalendarToolbar({
   onRefresh,
   onManualEntrySuccess,
   onSilentRefresh,
-}: {
-  viewState: CalendarViewState;
-  viewScope: CalendarViewScope;
-  overlays: CalendarOverlays;
-  members: CalendarMember[];
-  isAdminOrManager: boolean;
-  phone: boolean;
-  todayIso: string;
-  calendarHeaderRef: React.RefObject<HTMLDivElement | null>;
-  parkplatzButtonRef: React.RefObject<HTMLButtonElement | null>;
-  onRefresh: () => Promise<void>;
-  onManualEntrySuccess: (entries: TimeEntry[]) => void;
-  onSilentRefresh: () => void;
-}): React.JSX.Element {
+}: CalendarToolbarProps): React.JSX.Element {
   const { currentDate, view, setView, preferences, updatePreferences } = viewState;
   const { setParkplatzOpen, setDispatchPanelOpen, setHelpOpen } = overlays;
   return (

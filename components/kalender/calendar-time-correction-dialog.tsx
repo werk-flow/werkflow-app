@@ -42,19 +42,37 @@ const errors: Readonly<Partial<Record<string, string>>> = {
     'Dieser Block enthält mehrere frühere Korrekturen. Bitte bearbeite sie einzeln in der Zeiterfassung.',
 };
 
-export function CalendarTimeCorrectionDialog({
-  organizationId,
-  draft,
-  rows,
-  onClose,
-  onSubmitted,
-}: {
+/** Whether a boundary's old or new time falls into a closed period. */
+function correctionTouchesClosedPeriod(
+  boundaries: NonNullable<ReturnType<typeof calendarCorrectionBoundaries>>,
+  closedPeriods: ReturnType<typeof useClosedTimePeriods>,
+): boolean {
+  return boundaries.some(
+    (boundary) =>
+      isEntryInClosedPeriod(
+        { timestamp: boundary.originalTimestamp, entryType: boundary.entryType },
+        closedPeriods,
+      ) ||
+      isEntryInClosedPeriod({ timestamp: boundary.timestamp, entryType: boundary.entryType }, closedPeriods),
+  );
+}
+
+type CalendarTimeCorrectionDialogProps = {
   organizationId: string;
   draft: CalendarTimeCorrectionDraft;
   rows: readonly CalendarBoardRow[];
   onClose: () => void;
   onSubmitted: () => void;
-}) {
+};
+
+/** The dialog's state and its one submit: the checks, the correction write and its answer. */
+function useTimeCorrectionSubmit({
+  organizationId,
+  draft,
+  rows,
+  onClose,
+  onSubmitted,
+}: CalendarTimeCorrectionDialogProps) {
   const { showBanner } = useBanner();
   const closedPeriods = useClosedTimePeriods(organizationId);
   const people = rows.flatMap((row) =>
@@ -83,18 +101,7 @@ export function CalendarTimeCorrectionDialog({
       );
       return;
     }
-    const touchesClosedPeriod = boundaries.some(
-      (boundary) =>
-        isEntryInClosedPeriod(
-          { timestamp: boundary.originalTimestamp, entryType: boundary.entryType },
-          closedPeriods,
-        ) ||
-        isEntryInClosedPeriod(
-          { timestamp: boundary.timestamp, entryType: boundary.entryType },
-          closedPeriods,
-        ),
-    );
-    if (touchesClosedPeriod) {
+    if (correctionTouchesClosedPeriod(boundaries, closedPeriods)) {
       setError(SHARED_FAILURE_MESSAGES.period_closed);
       return;
     }
@@ -135,6 +142,30 @@ export function CalendarTimeCorrectionDialog({
       setError('Die Antwort ist ausgeblieben. Du kannst denselben Antrag erneut senden.');
     }
   };
+  return { reason, setReason, error, reasonError, submitting, uncertain, subject, target, submit };
+}
+
+/** What the correction moves: each source boundary with its new time. */
+function CorrectionBoundaryList({ draft }: { draft: CalendarTimeCorrectionDraft }): React.JSX.Element {
+  return (
+    <dl className="space-y-2 text-sm">
+      {draft.updates.map((update) => {
+        const original = draft.sourceEntries.find((entry) => entry.id === update.entryId);
+        return original ? (
+          <div key={update.entryId}>
+            <dt className="text-muted-foreground">{formatBerlin(original.timestamp, 'shortDateTime')}</dt>
+            <dd>{formatBerlin(update.newTimestamp, 'shortDateTime')}</dd>
+          </div>
+        ) : null;
+      })}
+    </dl>
+  );
+}
+
+export function CalendarTimeCorrectionDialog(props: CalendarTimeCorrectionDialogProps) {
+  const { draft, onClose } = props;
+  const { reason, setReason, error, reasonError, submitting, uncertain, subject, target, submit } =
+    useTimeCorrectionSubmit(props);
   return (
     <Dialog
       open
@@ -164,19 +195,7 @@ export function CalendarTimeCorrectionDialog({
               {subject?.name ?? 'Person ist im geladenen Kalender nicht mehr verfügbar.'}
               {target && target.userId !== subject?.userId ? ` → ${target.name}` : ''}
             </p>
-            <dl className="space-y-2 text-sm">
-              {draft.updates.map((update) => {
-                const original = draft.sourceEntries.find((entry) => entry.id === update.entryId);
-                return original ? (
-                  <div key={update.entryId}>
-                    <dt className="text-muted-foreground">
-                      {formatBerlin(original.timestamp, 'shortDateTime')}
-                    </dt>
-                    <dd>{formatBerlin(update.newTimestamp, 'shortDateTime')}</dd>
-                  </div>
-                ) : null;
-              })}
-            </dl>
+            <CorrectionBoundaryList draft={draft} />
             <Field label="Grund" htmlFor="calendar-correction-reason" required error={reasonError}>
               <Textarea
                 id="calendar-correction-reason"

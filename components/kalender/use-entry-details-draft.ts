@@ -32,25 +32,81 @@ export type EntryDetailsDraft = {
   handleBlockDateChange: (nextDate: Date | undefined) => void;
 };
 
+type DraftBreakEdits = {
+  editedBreaks: EditableBreak[];
+  setEditedBreaks: Dispatch<SetStateAction<EditableBreak[]>>;
+  setRemovedBreaks: Dispatch<SetStateAction<EditableBreak[]>>;
+  setEditedBlockDate: Dispatch<SetStateAction<Date | null>>;
+  setEditedClockIn: Dispatch<SetStateAction<Date | null>>;
+  setEditedClockOut: Dispatch<SetStateAction<Date | null>>;
+};
+
+/** The edits of one break and of the block's date, which moves every time of the block with it. */
+function draftBreakHandlers({
+  editedBreaks,
+  setEditedBreaks,
+  setRemovedBreaks,
+  setEditedBlockDate,
+  setEditedClockIn,
+  setEditedClockOut,
+}: DraftBreakEdits): Pick<
+  EntryDetailsDraft,
+  'handleRemoveBreak' | 'handleBreakChange' | 'handleBlockDateChange'
+> {
+  const handleRemoveBreak = (key: string) => {
+    const targetBreak = editedBreaks.find((workBreak) => workBreak.key === key);
+    if (targetBreak && !targetBreak.isNew) {
+      setRemovedBreaks((current) =>
+        current.some((workBreak) => workBreak.key === key) ? current : [...current, targetBreak],
+      );
+    }
+    setEditedBreaks((prev) => prev.filter((workBreak) => workBreak.key !== key));
+  };
+
+  const handleBreakChange = (key: string, field: 'breakStart' | 'breakEnd', value: Date) => {
+    setEditedBreaks((prev) =>
+      prev.map((workBreak) =>
+        workBreak.key === key
+          ? {
+              ...workBreak,
+              [field]: value,
+            }
+          : workBreak,
+      ),
+    );
+  };
+
+  const handleBlockDateChange = (nextDate: Date | undefined) => {
+    if (!nextDate) return;
+
+    setEditedBlockDate(new Date(nextDate));
+    setEditedClockIn((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
+    setEditedClockOut((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
+    setEditedBreaks((prev) =>
+      prev.map((workBreak) => ({
+        ...workBreak,
+        breakStart: applyDatePart(workBreak.breakStart, nextDate),
+        breakEnd: workBreak.breakEnd ? applyDatePart(workBreak.breakEnd, nextDate) : null,
+      })),
+    );
+  };
+
+  return { handleRemoveBreak, handleBreakChange, handleBlockDateChange };
+}
+
+type EntryDetailsDraftOptions = {
+  open: boolean;
+  startInEditMode: boolean;
+  snapshot: EntryDetailsSnapshot;
+};
+
 export function useEntryDetailsDraft({
   open,
   startInEditMode,
   snapshot,
-}: {
-  open: boolean;
-  startInEditMode: boolean;
-  snapshot: EntryDetailsSnapshot;
-}): EntryDetailsDraft {
-  const {
-    isAutomaticBreakMode,
-    sessionBreaks,
-    clockInTimestamp,
-    clockOutTimestamp,
-    clockInDate,
-    clockOutDate,
-    hasCanonicalSegment,
-    blockReferenceDate,
-  } = snapshot;
+}: EntryDetailsDraftOptions): EntryDetailsDraft {
+  const { isAutomaticBreakMode, sessionBreaks, clockInTimestamp, clockOutTimestamp } = snapshot;
+  const { clockInDate, clockOutDate, hasCanonicalSegment, blockReferenceDate } = snapshot;
   const [error, setError] = useState<string | null>(null);
   const [editedClockIn, setEditedClockIn] = useState<Date | null>(null);
   const [editedClockOut, setEditedClockOut] = useState<Date | null>(null);
@@ -115,44 +171,6 @@ export function useEntryDetailsDraft({
     setEditedBreaks([buildNewEditableBreak(baseClockIn, baseClockOut)]);
   };
 
-  const handleRemoveBreak = (key: string) => {
-    const targetBreak = editedBreaks.find((workBreak) => workBreak.key === key);
-    if (targetBreak && !targetBreak.isNew) {
-      setRemovedBreaks((current) =>
-        current.some((workBreak) => workBreak.key === key) ? current : [...current, targetBreak],
-      );
-    }
-    setEditedBreaks((prev) => prev.filter((workBreak) => workBreak.key !== key));
-  };
-
-  const handleBreakChange = (key: string, field: 'breakStart' | 'breakEnd', value: Date) => {
-    setEditedBreaks((prev) =>
-      prev.map((workBreak) =>
-        workBreak.key === key
-          ? {
-              ...workBreak,
-              [field]: value,
-            }
-          : workBreak,
-      ),
-    );
-  };
-
-  const handleBlockDateChange = (nextDate: Date | undefined) => {
-    if (!nextDate) return;
-
-    setEditedBlockDate(new Date(nextDate));
-    setEditedClockIn((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
-    setEditedClockOut((prev) => (prev ? applyDatePart(prev, nextDate) : prev));
-    setEditedBreaks((prev) =>
-      prev.map((workBreak) => ({
-        ...workBreak,
-        breakStart: applyDatePart(workBreak.breakStart, nextDate),
-        breakEnd: workBreak.breakEnd ? applyDatePart(workBreak.breakEnd, nextDate) : null,
-      })),
-    );
-  };
-
   return {
     isEditing,
     setIsEditing,
@@ -169,8 +187,13 @@ export function useEntryDetailsDraft({
     handleCancelEdit,
     handleAddBreak,
     handleStartEditWithBreak,
-    handleRemoveBreak,
-    handleBreakChange,
-    handleBlockDateChange,
+    ...draftBreakHandlers({
+      editedBreaks,
+      setEditedBreaks,
+      setRemovedBreaks,
+      setEditedBlockDate,
+      setEditedClockIn,
+      setEditedClockOut,
+    }),
   };
 }

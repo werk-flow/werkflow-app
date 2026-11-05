@@ -3,8 +3,9 @@
 import dynamic from 'next/dynamic';
 import type { useBanner } from '@/components/ui/banner';
 import type { CalendarBoardRow } from '@/lib/calendar/board';
-import type { OrgRole } from '@/lib/roles';
-import type { TimeEntry } from '@/lib/time-tracking/types';
+import type { CalendarJob } from '@/lib/jobs/types';
+import { isOrgRole, type OrgRole } from '@/lib/roles';
+import type { InteractiveCalendarSession, TimeEntry } from '@/lib/time-tracking/types';
 import { ShortcutsHelp } from './board/shortcuts-help';
 import { CalendarEntryDialog } from './calendar-entry-dialog';
 import { DispatchIssueDialog } from './dispatch-issue-dialog';
@@ -15,7 +16,7 @@ import type { CalendarMutations } from './mutations/use-calendar-mutations';
 import { ParkingContextDialog } from './parking-context-dialog';
 import { ScheduleParkedDialog } from './schedule-parked-dialog';
 import type { CalendarData } from './use-calendar-data';
-import type { CalendarOverlays } from './use-calendar-overlays';
+import type { CalendarAddEntry, CalendarOverlays } from './use-calendar-overlays';
 import type { CalendarViewScope } from './use-calendar-view-scope';
 import type { ParkFlowState } from './use-park-flow';
 
@@ -24,27 +25,139 @@ const EntryDetailsDialog = dynamic(
   { ssr: false },
 );
 
-/**
- * The calendar's panels, dialogs and popover. Each one opens from the
- * overlay state; the Parkplatz context dialog settles the park flow that a
- * drag or a card command started.
- */
-export function CalendarDialogs({
-  overlays,
+type ShowBanner = ReturnType<typeof useBanner>['showBanner'];
+
+/** The Parkplatz context of `job`; it settles the park flow a drag or a card command started. */
+function ParkingContextOverlay({
+  job,
   parkFlow,
   data,
-  viewScope,
-  mutations,
+  showBanner,
+}: {
+  job: CalendarJob;
+  parkFlow: ParkFlowState;
+  data: CalendarData;
+  showBanner: ShowBanner;
+}): React.JSX.Element {
+  const { parkFlowRef, setParkingContextJob } = parkFlow;
+  return (
+    <ParkingContextDialog
+      jobId={job.jobId ?? job.id}
+      jobTitle={job.title}
+      expectedExecutionVersion={job.executionVersion ?? 0}
+      isAlreadyParked={!parkFlow.hasPendingPark()}
+      existingContext={data.parkingContexts?.get(job.jobId ?? job.id) ?? null}
+      onClose={() => {
+        parkFlowRef.current?.cancelled();
+        parkFlowRef.current = null;
+        setParkingContextJob(null);
+      }}
+      onSaveStart={() => (parkFlowRef.current ? () => undefined : data.handleOperationStart())}
+      onSaveFailed={() => {
+        parkFlowRef.current?.failed();
+        parkFlowRef.current = null;
+      }}
+      onSaved={async () => {
+        const flow = parkFlowRef.current;
+        parkFlowRef.current = null;
+        // The contexts map is current before the dialog closes: a Parkplatz card dragged right after the
+        // save reads it at the pointer, and a stale map would refuse the drop as „ohne Kontext“.
+        await data.fetchParkingContexts();
+        setParkingContextJob(null);
+        if (flow) {
+          flow.saved(() => parkFlow.undoPark(job));
+          return;
+        }
+        showBanner({ variant: 'success', message: 'Parkplatz-Kontext wurde gespeichert.' });
+      }}
+    />
+  );
+}
+
+/** The details of the selected session, with the names the calendar already holds. */
+function EntryDetailsOverlay({
+  session,
   members,
-  boardRows,
-  isAdminOrManager,
+  data,
   currentUserId,
   currentUserRole,
-  calendarHeaderHeight,
-  showBanner,
-  announce,
-  onManualEntrySuccess,
+  onClose,
 }: {
+  session: InteractiveCalendarSession;
+  members: CalendarMember[];
+  data: CalendarData;
+  currentUserId: string;
+  currentUserRole: OrgRole;
+  onClose: () => void;
+}): React.JSX.Element {
+  const entryUserRole = members.find(
+    (member) => member.user_id === (session.clockIn?.userId || session.clockOut?.userId),
+  )?.role;
+  return (
+    <EntryDetailsDialog
+      open
+      onOpenChange={(open) => !open && onClose()}
+      session={session}
+      currentUserRole={currentUserRole}
+      currentUserId={currentUserId}
+      onRefresh={data.handleSilentRefresh}
+      jobName={
+        session.jobId ? (data.range.jobs.find((job) => job.id === session.jobId)?.title ?? null) : null
+      }
+      entryUserRole={entryUserRole !== undefined && isOrgRole(entryUserRole) ? entryUserRole : undefined}
+    />
+  );
+}
+
+/** The dispatch of a parked job, offered to the people the job names. */
+function ParkedDispatchOverlay({
+  job,
+  onClose,
+  onIssued,
+}: {
+  job: CalendarJob;
+  onClose: () => void;
+  onIssued: () => void;
+}): React.JSX.Element {
+  return (
+    <DispatchIssueDialog
+      target={{ jobId: job.jobId ?? job.id }}
+      defaultRecipientUserIds={job.assignedUserIds}
+      onClose={onClose}
+      onIssued={onIssued}
+    />
+  );
+}
+
+/** The entry dialog a surface gesture opened, with the day, time and person of that gesture. */
+function AddEntryOverlay({
+  addEntry,
+  onClose,
+  onManualEntrySuccess,
+  onJobSuccess,
+}: {
+  addEntry: CalendarAddEntry;
+  onClose: () => void;
+  onManualEntrySuccess: (entries: TimeEntry[]) => void;
+  onJobSuccess: () => void;
+}): React.JSX.Element {
+  return (
+    <CalendarEntryDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+      preselectedDate={new Date(`${addEntry.date}T12:00:00`)}
+      preselectedUserId={addEntry.userId}
+      preselectedClockInTime={addEntry.time}
+      preselectedClockOutTime={addEntry.endTime}
+      onManualEntrySuccess={onManualEntrySuccess}
+      onJobSuccess={onJobSuccess}
+    />
+  );
+}
+
+type CalendarDialogsProps = {
   overlays: CalendarOverlays;
   parkFlow: ParkFlowState;
   data: CalendarData;
@@ -56,21 +169,24 @@ export function CalendarDialogs({
   currentUserId: string;
   currentUserRole: OrgRole;
   calendarHeaderHeight: number;
-  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  showBanner: ShowBanner;
   announce: (message: string) => void;
   onManualEntrySuccess: (entries: TimeEntry[]) => void;
-}): React.JSX.Element {
-  const {
-    addEntry,
-    setAddEntry,
-    parkedDispatchJob,
-    setParkedDispatchJob,
-    selectedSession,
-    setSelectedSession,
-  } = overlays;
-  const { parkFlowRef, parkingContextJob, setParkingContextJob, scheduleParkedJob, setScheduleParkedJob } =
-    parkFlow;
-  const { handleSilentRefresh, parkingContexts } = data;
+};
+
+/**
+ * The calendar's panels, dialogs and popover. Each one opens from the
+ * overlay state; the Parkplatz context dialog settles the park flow that a
+ * drag or a card command started.
+ */
+export function CalendarDialogs(props: CalendarDialogsProps): React.JSX.Element {
+  const { overlays, parkFlow, data, viewScope, mutations, members, boardRows, isAdminOrManager } = props;
+  const { currentUserId, currentUserRole, calendarHeaderHeight, showBanner, onManualEntrySuccess } = props;
+  const { announce } = props;
+  const { addEntry, setAddEntry, parkedDispatchJob, setParkedDispatchJob } = overlays;
+  const { selectedSession, setSelectedSession } = overlays;
+  const { parkingContextJob, scheduleParkedJob, setScheduleParkedJob } = parkFlow;
+  const { handleSilentRefresh } = data;
   const boardRowsForForms = isAdminOrManager ? boardRows : [];
   return (
     <>
@@ -83,43 +199,17 @@ export function CalendarDialogs({
       )}
 
       {isAdminOrManager && parkingContextJob && (
-        <ParkingContextDialog
-          jobId={parkingContextJob.jobId ?? parkingContextJob.id}
-          jobTitle={parkingContextJob.title}
-          expectedExecutionVersion={parkingContextJob.executionVersion ?? 0}
-          isAlreadyParked={!parkFlow.hasPendingPark()}
-          existingContext={parkingContexts?.get(parkingContextJob.jobId ?? parkingContextJob.id) ?? null}
-          onClose={() => {
-            parkFlowRef.current?.cancelled();
-            parkFlowRef.current = null;
-            setParkingContextJob(null);
-          }}
-          onSaveStart={() => (parkFlowRef.current ? () => undefined : data.handleOperationStart())}
-          onSaveFailed={() => {
-            parkFlowRef.current?.failed();
-            parkFlowRef.current = null;
-          }}
-          onSaved={async () => {
-            const job = parkingContextJob;
-            const flow = parkFlowRef.current;
-            parkFlowRef.current = null;
-            // The contexts map is current before the dialog closes: a Parkplatz card dragged right after the
-            // save reads it at the pointer, and a stale map would refuse the drop as „ohne Kontext“.
-            await data.fetchParkingContexts();
-            setParkingContextJob(null);
-            if (flow) {
-              flow.saved(() => parkFlow.undoPark(job));
-              return;
-            }
-            showBanner({ variant: 'success', message: 'Parkplatz-Kontext wurde gespeichert.' });
-          }}
+        <ParkingContextOverlay
+          job={parkingContextJob}
+          parkFlow={parkFlow}
+          data={data}
+          showBanner={showBanner}
         />
       )}
 
       {isAdminOrManager && parkedDispatchJob && (
-        <DispatchIssueDialog
-          target={{ jobId: parkedDispatchJob.jobId ?? parkedDispatchJob.id }}
-          defaultRecipientUserIds={parkedDispatchJob.assignedUserIds}
+        <ParkedDispatchOverlay
+          job={parkedDispatchJob}
           onClose={() => setParkedDispatchJob(null)}
           onIssued={() => {
             setParkedDispatchJob(null);
@@ -138,15 +228,9 @@ export function CalendarDialogs({
       )}
 
       {isAdminOrManager && addEntry && (
-        <CalendarEntryDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setAddEntry(null);
-          }}
-          preselectedDate={new Date(`${addEntry.date}T12:00:00`)}
-          preselectedUserId={addEntry.userId}
-          preselectedClockInTime={addEntry.time}
-          preselectedClockOutTime={addEntry.endTime}
+        <AddEntryOverlay
+          addEntry={addEntry}
+          onClose={() => setAddEntry(null)}
           onManualEntrySuccess={onManualEntrySuccess}
           onJobSuccess={() => {
             setAddEntry(null);
@@ -167,24 +251,13 @@ export function CalendarDialogs({
       />
 
       {selectedSession && (
-        <EntryDetailsDialog
-          open
-          onOpenChange={(open) => !open && setSelectedSession(null)}
+        <EntryDetailsOverlay
           session={selectedSession}
-          currentUserRole={currentUserRole}
+          members={members}
+          data={data}
           currentUserId={currentUserId}
-          onRefresh={handleSilentRefresh}
-          jobName={
-            selectedSession.jobId
-              ? (data.range.jobs.find((job) => job.id === selectedSession.jobId)?.title ?? null)
-              : null
-          }
-          entryUserRole={
-            members.find(
-              (member) =>
-                member.user_id === (selectedSession.clockIn?.userId || selectedSession.clockOut?.userId),
-            )?.role as OrgRole | undefined
-          }
+          currentUserRole={currentUserRole}
+          onClose={() => setSelectedSession(null)}
         />
       )}
       <ShortcutsHelp open={overlays.helpOpen} onOpenChange={overlays.setHelpOpen} />

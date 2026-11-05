@@ -49,12 +49,16 @@ interface PlanningOccurrenceEditDialogProps {
   onSuccess?: () => void;
 }
 
-export function PlanningOccurrenceEditDialog({
+/** The occurrence's edit state, refilled each time the dialog opens, and its series extension. */
+function usePlanningOccurrenceEdit({
   job,
   open,
-  onOpenChange,
   onSuccess,
-}: PlanningOccurrenceEditDialogProps) {
+}: {
+  job: CalendarJob;
+  open: boolean;
+  onSuccess: PlanningOccurrenceEditDialogProps['onSuccess'];
+}) {
   const { showBanner } = useBanner();
   const assignedEmployeeRecordKey = (job.assignedEmployeeRecordIds ?? []).join(',');
   const [date, setDate] = useState(job.plannedDate ?? '');
@@ -101,85 +105,165 @@ export function PlanningOccurrenceEditDialog({
   ]);
 
   const [fieldErrors, setFieldErrors] = useState<PlanningOccurrenceFieldErrors>({});
+  return {
+    showBanner,
+    fields: { date, setDate, time, setTime, durationHours, setDurationHours, scope, setScope },
+    employees: { employeeRecordIds, setEmployeeRecordIds, employeeSearch },
+    review: { conflicts, setConflicts, fingerprint, setFingerprint, reason, setReason },
+    submit: { runSubmit, submitting, submitError, setSubmitError },
+    status: { statusIntent, setStatusIntent, statusReasonError, setStatusReasonError },
+    fieldErrors,
+    setFieldErrors,
+    extension,
+  };
+}
+
+type PlanningOccurrenceEdit = ReturnType<typeof usePlanningOccurrenceEdit>;
+type OccurrenceCommand = {
+  job: CalendarJob;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: PlanningOccurrenceEditDialogProps['onSuccess'];
+  edit: PlanningOccurrenceEdit;
+};
+
+/** Saves the edit for the chosen scope; a warning answer asks for a reason before the next try. */
+async function submitOccurrenceEdit({
+  job,
+  onOpenChange,
+  onSuccess,
+  edit,
+}: OccurrenceCommand): Promise<void> {
+  const { showBanner, fields, employees, review, submit, setFieldErrors } = edit;
+  const { date, time, durationHours, scope } = fields;
+  const { conflicts, setConflicts, fingerprint, setFingerprint, reason } = review;
+  const { runSubmit, setSubmitError } = submit;
   const { occurrenceId } = job;
-
-  async function handleSubmit() {
-    if (!occurrenceId) return;
-    setFieldErrors({});
-    const editCheck = checkPlanningOccurrenceEdit({
-      date,
-      time,
-      durationHours,
-      timeKind: job.timeKind,
-      employeeRecordIds,
-      conflicts,
-      fingerprint,
-      reason,
-    });
-    if (editCheck.kind === 'missing') {
-      setFieldErrors(Object.fromEntries(editCheck.inputs.map(({ field, message }) => [field, message])));
-      focusFirstInvalidField(errorsByControlId(editCheck.inputs));
-      return;
-    }
-    setSubmitError(null);
-    const { input } = editCheck;
-    await runSubmit(async () => {
-      try {
-        const result =
-          scope === 'one'
-            ? await updatePlanningCalendarEntry(occurrenceId, input)
-            : await reschedulePlanningSeries(occurrenceId, scope, input);
-        if (result.success) {
-          onOpenChange(false);
-          showBanner({ variant: 'success', message: planningEditSuccessMessage(scope) });
-          onSuccess?.();
-          return;
-        }
-        if (
-          (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
-          result.conflicts !== undefined &&
-          result.fingerprint !== undefined
-        ) {
-          setConflicts(result.conflicts);
-          setFingerprint(result.fingerprint);
-          if (result.error === 'stale_assessment') {
-            showBanner({
-              variant: 'info',
-              message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
-            });
-          }
-          return;
-        }
-        setSubmitError(
-          calendarRefusalMessage(result.error) ?? 'Die Änderung konnte nicht gespeichert werden.',
-        );
-      } catch {
-        setSubmitError('Die Änderung konnte nicht gespeichert werden.');
-      }
-    });
+  if (!occurrenceId) return;
+  setFieldErrors({});
+  const editCheck = checkPlanningOccurrenceEdit({
+    date,
+    time,
+    durationHours,
+    timeKind: job.timeKind,
+    employeeRecordIds: employees.employeeRecordIds,
+    conflicts,
+    fingerprint,
+    reason,
+  });
+  if (editCheck.kind === 'missing') {
+    setFieldErrors(Object.fromEntries(editCheck.inputs.map(({ field, message }) => [field, message])));
+    focusFirstInvalidField(errorsByControlId(editCheck.inputs));
+    return;
   }
-
-  async function handleStatusChange() {
-    if (!occurrenceId || !statusIntent) return;
-    const reasonError = reason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
-    setStatusReasonError(reasonError);
-    if (focusFirstInvalidField({ 'planning-status-reason': reasonError })) return;
-    setSubmitError(null);
-    await runSubmit(async () => {
-      try {
-        const result = await setPlanningOccurrenceStatus(occurrenceId, statusIntent, reason);
-        if (!result.success) {
-          setSubmitError('Der Terminstatus konnte nicht geändert werden.');
-          return;
-        }
+  setSubmitError(null);
+  const { input } = editCheck;
+  await runSubmit(async () => {
+    try {
+      const result =
+        scope === 'one'
+          ? await updatePlanningCalendarEntry(occurrenceId, input)
+          : await reschedulePlanningSeries(occurrenceId, scope, input);
+      if (result.success) {
         onOpenChange(false);
-        showBanner({ variant: 'success', message: planningStatusChangeMessage(statusIntent) });
+        showBanner({ variant: 'success', message: planningEditSuccessMessage(scope) });
         onSuccess?.();
-      } catch {
-        setSubmitError('Der Terminstatus konnte nicht geändert werden.');
+        return;
       }
-    });
-  }
+      if (
+        (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
+        result.conflicts !== undefined &&
+        result.fingerprint !== undefined
+      ) {
+        setConflicts(result.conflicts);
+        setFingerprint(result.fingerprint);
+        if (result.error === 'stale_assessment') {
+          showBanner({
+            variant: 'info',
+            message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
+          });
+        }
+        return;
+      }
+      setSubmitError(calendarRefusalMessage(result.error) ?? 'Die Änderung konnte nicht gespeichert werden.');
+    } catch {
+      setSubmitError('Die Änderung konnte nicht gespeichert werden.');
+    }
+  });
+}
+
+/** Skips or cancels the occurrence once its reason holds. */
+async function submitOccurrenceStatus({
+  job,
+  onOpenChange,
+  onSuccess,
+  edit,
+}: OccurrenceCommand): Promise<void> {
+  const { showBanner, review, submit, status } = edit;
+  const { reason } = review;
+  const { runSubmit, setSubmitError } = submit;
+  const { statusIntent, setStatusReasonError } = status;
+  const { occurrenceId } = job;
+  if (!occurrenceId || !statusIntent) return;
+  const reasonError = reason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined;
+  setStatusReasonError(reasonError);
+  if (focusFirstInvalidField({ 'planning-status-reason': reasonError })) return;
+  setSubmitError(null);
+  await runSubmit(async () => {
+    try {
+      const result = await setPlanningOccurrenceStatus(occurrenceId, statusIntent, reason);
+      if (!result.success) {
+        setSubmitError('Der Terminstatus konnte nicht geändert werden.');
+        return;
+      }
+      onOpenChange(false);
+      showBanner({ variant: 'success', message: planningStatusChangeMessage(statusIntent) });
+      onSuccess?.();
+    } catch {
+      setSubmitError('Der Terminstatus konnte nicht geändert werden.');
+    }
+  });
+}
+
+/** The occurrence's schedule and people, bound to the edit state. */
+function OccurrenceEditSchedule({
+  job,
+  edit,
+}: {
+  job: CalendarJob;
+  edit: PlanningOccurrenceEdit;
+}): React.JSX.Element {
+  const { fields, employees, review, fieldErrors } = edit;
+  return (
+    <PlanningOccurrenceScheduleFields
+      timeKind={job.timeKind}
+      date={fields.date}
+      dateError={fieldErrors.date}
+      onDateChange={fields.setDate}
+      time={fields.time}
+      onTimeChange={fields.setTime}
+      durationHours={fields.durationHours}
+      durationError={fieldErrors.duration}
+      onDurationHoursChange={fields.setDurationHours}
+      employeeSelect={employees.employeeSearch.select}
+      employeeRecordIds={employees.employeeRecordIds}
+      onEmployeeRecordIdsChange={employees.setEmployeeRecordIds}
+      onConflictsChange={review.setConflicts}
+    />
+  );
+}
+
+export function PlanningOccurrenceEditDialog({
+  job,
+  open,
+  onOpenChange,
+  onSuccess,
+}: PlanningOccurrenceEditDialogProps) {
+  const edit = usePlanningOccurrenceEdit({ job, open, onSuccess });
+  const { fields, review, submit, status, fieldErrors, extension } = edit;
+  const { conflicts, setConflicts, reason, setReason } = review;
+  const { submitting, submitError, setSubmitError } = submit;
+  const { statusIntent, setStatusIntent } = status;
+  const command = { job, onOpenChange, onSuccess, edit };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={submitting}>
@@ -191,7 +275,7 @@ export function PlanningOccurrenceEditDialog({
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            void (statusIntent ? handleStatusChange() : handleSubmit());
+            void (statusIntent ? submitOccurrenceStatus(command) : submitOccurrenceEdit(command));
           }}
           noValidate
           className="flex min-h-0 flex-1 flex-col"
@@ -199,27 +283,13 @@ export function PlanningOccurrenceEditDialog({
           <DialogBody className="space-y-4">
             {job.seriesId && (
               <PlanningSeriesScopeField
-                scope={scope}
-                onScopeChange={setScope}
+                scope={fields.scope}
+                onScopeChange={fields.setScope}
                 onConflictsChange={setConflicts}
                 extension={extension}
               />
             )}
-            <PlanningOccurrenceScheduleFields
-              timeKind={job.timeKind}
-              date={date}
-              dateError={fieldErrors.date}
-              onDateChange={setDate}
-              time={time}
-              onTimeChange={setTime}
-              durationHours={durationHours}
-              durationError={fieldErrors.duration}
-              onDurationHoursChange={setDurationHours}
-              employeeSelect={employeeSearch.select}
-              employeeRecordIds={employeeRecordIds}
-              onEmployeeRecordIdsChange={setEmployeeRecordIds}
-              onConflictsChange={setConflicts}
-            />
+            <OccurrenceEditSchedule job={job} edit={edit} />
             {conflicts.length > 0 && (
               <PlanningOccurrenceConflictWarning
                 conflicts={conflicts}
@@ -233,7 +303,7 @@ export function PlanningOccurrenceEditDialog({
                 statusIntent={statusIntent}
                 onStatusIntentChange={setStatusIntent}
                 reason={reason}
-                reasonError={statusReasonError}
+                reasonError={status.statusReasonError}
                 onReasonChange={setReason}
                 onSubmitErrorChange={setSubmitError}
               />

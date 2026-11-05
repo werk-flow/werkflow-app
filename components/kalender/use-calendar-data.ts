@@ -25,6 +25,17 @@ const ALL_CALENDAR_DATASETS: readonly CalendarDataset[] = [
   'board',
 ];
 
+type CalendarDataOptions = {
+  organizationId: string;
+  identityKey: string;
+  needed: CalendarFetchRange;
+  initialData: CalendarInitialData | undefined;
+  holidayCalendar: OrganizationHolidayCalendar | undefined;
+  isAdminOrManager: boolean;
+  isScopeActive: () => boolean;
+  reportReadFailure: () => void;
+};
+
 /**
  * The scoped calendar's reads: the range owner for the window, the Parkplatz
  * jobs riding its planning invalidation, the Parkplatz contexts on their own
@@ -41,16 +52,7 @@ export function useCalendarData({
   isAdminOrManager,
   isScopeActive,
   reportReadFailure,
-}: {
-  organizationId: string;
-  identityKey: string;
-  needed: CalendarFetchRange;
-  initialData: CalendarInitialData | undefined;
-  holidayCalendar: OrganizationHolidayCalendar | undefined;
-  isAdminOrManager: boolean;
-  isScopeActive: () => boolean;
-  reportReadFailure: () => void;
-}) {
+}: CalendarDataOptions) {
   const calendarJobsRef = useRef<CalendarJob[]>([]);
   const {
     parkedJobs,

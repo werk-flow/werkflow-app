@@ -241,22 +241,17 @@ function createInitialState(input: {
   initial?: CalendarInitialData | undefined;
 }): State {
   const { initial } = input;
-  const seeded = <Key extends CalendarDataset>(key: Key) => {
-    const value = initial?.[key];
-    return createDatasetState<CalendarDatasets[Key]>(
-      (value ?? EMPTY[key]) as CalendarDatasets[Key],
-      value !== undefined && initial ? initial.range : null,
-    );
-  };
+  const seeded = <Value>(value: Value | undefined, empty: Value) =>
+    createDatasetState<Value>(value ?? empty, value !== undefined && initial ? initial.range : null);
   return {
     scopeKey: input.organizationId,
     datasets: {
-      entries: seeded('entries'),
-      jobs: seeded('jobs'),
-      vacation: seeded('vacation'),
-      sickness: seeded('sickness'),
-      holidays: seeded('holidays'),
-      board: seeded('board'),
+      entries: seeded(initial?.entries, EMPTY.entries),
+      jobs: seeded(initial?.jobs, EMPTY.jobs),
+      vacation: seeded(initial?.vacation, EMPTY.vacation),
+      sickness: seeded(initial?.sickness, EMPTY.sickness),
+      holidays: seeded(initial?.holidays, EMPTY.holidays),
+      board: seeded(initial?.board, EMPTY.board),
     },
   };
 }
@@ -266,6 +261,131 @@ type WindowRead = (
   purpose: WindowReadPurpose,
   invalidatedAt?: number,
 ) => Promise<WindowReadOutcome>;
+
+/** The scope one window read belongs to and the refs it reads and writes. */
+type WindowReadScope = {
+  organizationId: string;
+  scopeKey: string;
+  ownership: CalendarMutationOwnership;
+  stateRef: RefObject<State>;
+  inFlightRef: RefObject<InFlightRead | null>;
+  onReadFailedRef: RefObject<() => void>;
+};
+
+/** What a window read commits through: the reducer, the change requests and the generation owner. */
+type WindowReadCommit = {
+  dispatch: Dispatch<Action>;
+  setChangeRequestMap: Dispatch<EntryChangeRequestMap>;
+  currentGeneration: (dataset: CalendarDataset) => number;
+  allocateGeneration: (dataset: CalendarDataset) => number;
+};
+
+/** Awaits the pair of one read and commits it, unless a newer read, a mutation or a scope change took over. */
+async function settleWindowRead(
+  { organizationId, scopeKey, ownership, stateRef, inFlightRef, onReadFailedRef }: WindowReadScope,
+  { dispatch, setChangeRequestMap, currentGeneration }: WindowReadCommit,
+  range: CalendarFetchRange,
+  generations: Generations,
+  signal: AbortSignal,
+): Promise<WindowReadOutcome> {
+  const [window, board] = await readWindowPair(organizationId, range, signal);
+  if (inFlightRef.current?.generations === generations) inFlightRef.current = null;
+  // A superseded generation is ignored by the reducer; only the newest
+  // request may report a failure banner or commit data.
+  const current = ALL_DATASETS.filter((dataset) => currentGeneration(dataset) === generations[dataset]);
+  if (!ownership.active || stateRef.current.scopeKey !== scopeKey || current.length === 0)
+    return 'superseded';
+  if (!window.success || !board.success) {
+    for (const dataset of current) {
+      dispatch({ type: 'read-failed', scopeKey, dataset, generation: generations[dataset], range });
+    }
+    onReadFailedRef.current();
+    return 'failed';
+  }
+  const data = windowDatasets(window, board);
+  for (const dataset of current) {
+    dispatch(
+      readCommitted<CalendarDatasets, typeof dataset>({
+        scopeKey,
+        dataset,
+        generation: generations[dataset],
+        range,
+        data: data[dataset],
+      }),
+    );
+  }
+  if (current.includes('entries')) {
+    setChangeRequestMap(window.changeRequestMap);
+  }
+  return current.length === ALL_DATASETS.length ? 'committed' : 'superseded';
+}
+
+/**
+ * Starts one generation-guarded read of the whole window: the window GET
+ * and the board GET together. A read for the same range whose generations
+ * are all still current is reused instead of duplicated, so the mutation
+ * catch-up, a queued Realtime catch-up and the range effect firing together
+ * cost one request pair.
+ */
+function startWindowRead(
+  scope: WindowReadScope,
+  commit: WindowReadCommit,
+  {
+    requestedRange,
+    purpose,
+    invalidatedAt,
+  }: {
+    requestedRange: CalendarFetchRange;
+    purpose: WindowReadPurpose;
+    invalidatedAt: number | undefined;
+  },
+): Promise<WindowReadOutcome> {
+  const { scopeKey, ownership, stateRef, inFlightRef } = scope;
+  const { dispatch, currentGeneration, allocateGeneration } = commit;
+  if (!ownership.active || stateRef.current.scopeKey !== scopeKey) return Promise.resolve('superseded');
+  if (ownership.count > 0) {
+    return new Promise<WindowReadOutcome>((resolve) => ownership.waiting.push(resolve));
+  }
+  // Refresh the one committed window instead of shrinking week/month
+  // coverage after a day-view edit. Never combine separate windows.
+  const range = windowRangeToRead(
+    ALL_DATASETS.map((dataset) => stateRef.current.datasets[dataset].coverage),
+    requestedRange,
+  );
+  const running = inFlightRef.current;
+  if (
+    running &&
+    canReuseWindowRead({
+      running,
+      scopeKey,
+      range,
+      invalidatedAt,
+      datasets: ALL_DATASETS,
+      currentGeneration,
+    })
+  ) {
+    if (purpose === 'freshness') running.purpose = 'freshness';
+    return running.promise;
+  }
+  const generations = {
+    entries: allocateGeneration('entries'),
+    jobs: allocateGeneration('jobs'),
+    vacation: allocateGeneration('vacation'),
+    sickness: allocateGeneration('sickness'),
+    holidays: allocateGeneration('holidays'),
+    board: allocateGeneration('board'),
+  };
+  for (const dataset of ALL_DATASETS) {
+    dispatch({ type: 'read-started', scopeKey, dataset, generation: generations[dataset], range });
+  }
+  // Only obsolete generations are cancelled; a reused current read keeps its transport.
+  running?.controller.abort();
+  const controller = new AbortController();
+  const startedAt = performance.now();
+  const promise = settleWindowRead(scope, commit, range, generations, controller.signal);
+  inFlightRef.current = { scopeKey, controller, startedAt, generations, range, purpose, promise };
+  return promise;
+}
 
 /**
  * Keeps the needed window covered. When a required dataset does not cover
@@ -326,6 +446,44 @@ function useWindowCoverage({
   return cancelRunningRead;
 }
 
+/** The one authoritative read after the user's own change, joined by every read that waited for it. */
+function runSettlementRead(
+  ownership: CalendarMutationOwnership,
+  readWindow: WindowRead,
+  neededRef: RefObject<CalendarFetchRange>,
+  readPlanningExtrasRef: RefObject<(() => Promise<boolean>) | undefined>,
+  onReadFailedRef: RefObject<() => void>,
+): void {
+  if (ownership.count > 0) return;
+  const waiting = ownership.waiting.splice(0);
+  void readWindow(neededRef.current, 'freshness').then((outcome) => {
+    for (const resolve of waiting) resolve(outcome);
+  });
+  // The extras reader reports its own failed reads and answers `false` for a
+  // superseded or out-of-scope read, which is not a failure (A1-30 showed the
+  // stale notice replacing the success banner when it was treated as one).
+  // Only a rejected promise is an unreported failure.
+  void readPlanningExtrasRef.current?.().catch(() => onReadFailedRef.current());
+}
+
+/** Ends the owner with its scope: waiters resolve as superseded and its running read aborts. */
+function useOwnershipLifetime(
+  ownership: CalendarMutationOwnership,
+  inFlightRef: RefObject<InFlightRead | null>,
+): void {
+  useEffect(() => {
+    ownership.activate();
+    return () => {
+      ownership.dispose();
+      const obsolete = inFlightRef.current;
+      if (obsolete?.scopeKey === ownership.scopeKey) {
+        inFlightRef.current = null;
+        obsolete.controller.abort();
+      }
+    };
+  }, [ownership, inFlightRef]);
+}
+
 /** The optimistic local edits of the two editable datasets, bound to the current scope. */
 function useDatasetUpdaters(scopeKey: string, dispatch: Dispatch<Action>) {
   const updateEntries = useCallback(
@@ -369,6 +527,74 @@ const CALENDAR_TABLES = [
   'sickness_reports',
 ] as const;
 
+/**
+ * Realtime consumption: one adapter for every calendar table, reporting the
+ * real read outcome. `suspend` queues events during the user's own mutation
+ * instead of dropping them; exactly one catch-up follows when ownership
+ * ends (PF-04).
+ */
+function useCalendarLiveRead({
+  readWindow,
+  ownership,
+  stateRef,
+  scopeKey,
+  neededRef,
+  readPlanningExtrasRef,
+  isMutating,
+}: {
+  readWindow: WindowRead;
+  ownership: CalendarMutationOwnership;
+  stateRef: RefObject<State>;
+  scopeKey: string;
+  neededRef: RefObject<CalendarFetchRange>;
+  readPlanningExtrasRef: RefObject<(() => Promise<boolean>) | undefined>;
+  isMutating: boolean;
+}): void {
+  useLiveView<null>({
+    tables: CALENDAR_TABLES,
+    read: async ({ invalidatedAt }) => {
+      const outcome = await followSupersededReads(
+        () => readWindow(neededRef.current, 'freshness', invalidatedAt),
+        () => ownership.active && stateRef.current.scopeKey === scopeKey,
+      );
+      const extrasOk = ownership.active
+        ? await (readPlanningExtrasRef.current?.() ?? Promise.resolve(true))
+        : false;
+      return outcome === 'committed' && extrasOk ? { ok: true, data: null } : { ok: false };
+    },
+    initialData: null,
+    suspend: isMutating,
+  });
+}
+
+/** The refresh control's read: the current window, then the extras while the owner lives. */
+function useRefreshAll(
+  readWindow: WindowRead,
+  ownership: CalendarMutationOwnership,
+  neededRef: RefObject<CalendarFetchRange>,
+  readPlanningExtrasRef: RefObject<(() => Promise<boolean>) | undefined>,
+): () => Promise<void> {
+  return useCallback(async () => {
+    await readWindow(neededRef.current, 'freshness');
+    if (ownership.active) await readPlanningExtrasRef.current?.();
+  }, [readWindow, ownership, neededRef, readPlanningExtrasRef]);
+}
+
+/** The composed readiness of the datasets the view renders. */
+function useRangeReadiness(
+  requiredDatasets: readonly CalendarDataset[],
+  state: State,
+  needed: CalendarFetchRange,
+): CalendarReadiness {
+  return useMemo(
+    () =>
+      composeCalendarReadiness(
+        requiredDatasets.map((dataset) => presentDataset(state.datasets[dataset], needed)),
+      ),
+    [requiredDatasets, state, needed],
+  );
+}
+
 export type UseCalendarRangeDataOptions = {
   organizationId: string;
   /** Verified caller and role identity; permission changes discard retained data. */
@@ -409,6 +635,29 @@ export type CalendarRangeData = {
   refreshAll: () => Promise<void>;
 };
 
+/** An operation's idempotent release. */
+function releaseOnce(release: () => void): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    release();
+  };
+}
+
+/** The six datasets' current data and whether an optimistic edit still waits for a committed read. */
+function datasetValues(state: State) {
+  return {
+    entries: state.datasets.entries.data,
+    jobs: state.datasets.jobs.data,
+    vacation: state.datasets.vacation.data,
+    sickness: state.datasets.sickness.data,
+    holidays: state.datasets.holidays.data,
+    board: state.datasets.board.data,
+    isUnconfirmed: holdsUnconfirmedEdits(ALL_DATASETS.map((dataset) => state.datasets[dataset])),
+  };
+}
+
 export function useCalendarRangeData(options: UseCalendarRangeDataOptions): CalendarRangeData {
   const { organizationId, needed, requiredDatasets, onReadFailed, readPlanningExtras } = options;
   const scopeKey = `${organizationId}:${options.identityKey}`;
@@ -444,107 +693,18 @@ export function useCalendarRangeData(options: UseCalendarRangeDataOptions): Cale
     setMutationCount(0);
   }
 
-  /**
-   * Starts one generation-guarded read of the whole window: the window GET
-   * and the board GET together. A read for the same range whose generations
-   * are all still current is reused instead of duplicated, so the mutation
-   * catch-up, a queued Realtime catch-up and the range effect firing together
-   * cost one request pair.
-   */
-  const readWindow = useCallback(
-    (
-      requestedRange: CalendarFetchRange,
-      purpose: WindowReadPurpose,
-      invalidatedAt?: number,
-    ): Promise<WindowReadOutcome> => {
-      if (!ownership.active || stateRef.current.scopeKey !== scopeKey) return Promise.resolve('superseded');
-      if (ownership.count > 0) {
-        return new Promise<WindowReadOutcome>((resolve) => ownership.waiting.push(resolve));
-      }
-      // Refresh the one committed window instead of shrinking week/month
-      // coverage after a day-view edit. Never combine separate windows.
-      const range = windowRangeToRead(
-        ALL_DATASETS.map((dataset) => stateRef.current.datasets[dataset].coverage),
-        requestedRange,
-      );
-      const running = inFlightRef.current;
-      if (
-        running &&
-        canReuseWindowRead({
-          running,
-          scopeKey,
-          range,
-          invalidatedAt,
-          datasets: ALL_DATASETS,
-          currentGeneration,
-        })
-      ) {
-        if (purpose === 'freshness') running.purpose = 'freshness';
-        return running.promise;
-      }
-      const generations = {
-        entries: allocateGeneration('entries'),
-        jobs: allocateGeneration('jobs'),
-        vacation: allocateGeneration('vacation'),
-        sickness: allocateGeneration('sickness'),
-        holidays: allocateGeneration('holidays'),
-        board: allocateGeneration('board'),
-      };
-      for (const dataset of ALL_DATASETS) {
-        dispatch({ type: 'read-started', scopeKey, dataset, generation: generations[dataset], range });
-      }
-      // Only obsolete generations are cancelled; a reused current read keeps its transport.
-      running?.controller.abort();
-      const controller = new AbortController();
-      const startedAt = performance.now();
-      const promise = (async (): Promise<WindowReadOutcome> => {
-        const [window, board] = await readWindowPair(organizationId, range, controller.signal);
-        if (inFlightRef.current?.generations === generations) inFlightRef.current = null;
-        // A superseded generation is ignored by the reducer; only the newest
-        // request may report a failure banner or commit data.
-        const current = ALL_DATASETS.filter((dataset) => currentGeneration(dataset) === generations[dataset]);
-        if (!ownership.active || stateRef.current.scopeKey !== scopeKey || current.length === 0)
-          return 'superseded';
-        if (!window.success || !board.success) {
-          for (const dataset of current) {
-            dispatch({ type: 'read-failed', scopeKey, dataset, generation: generations[dataset], range });
-          }
-          onReadFailedRef.current();
-          return 'failed';
-        }
-        const data = windowDatasets(window, board);
-        for (const dataset of current) {
-          dispatch(
-            readCommitted<CalendarDatasets, typeof dataset>({
-              scopeKey,
-              dataset,
-              generation: generations[dataset],
-              range,
-              data: data[dataset],
-            }),
-          );
-        }
-        if (current.includes('entries')) {
-          setChangeRequestMap(window.changeRequestMap);
-        }
-        return current.length === ALL_DATASETS.length ? 'committed' : 'superseded';
-      })();
-      inFlightRef.current = { scopeKey, controller, startedAt, generations, range, purpose, promise };
-      return promise;
-    },
+  const readWindow = useCallback<WindowRead>(
+    (requestedRange, purpose, invalidatedAt) =>
+      startWindowRead(
+        { organizationId, scopeKey, ownership, stateRef, inFlightRef, onReadFailedRef },
+        { dispatch, setChangeRequestMap, currentGeneration, allocateGeneration },
+        { requestedRange, purpose, invalidatedAt },
+      ),
     [organizationId, scopeKey, ownership, allocateGeneration, currentGeneration, stateRef],
   );
 
-  const cancelRunningRead = useWindowCoverage({
-    scopeKey,
-    needed,
-    requiredDatasets,
-    state,
-    readWindow,
-    inFlightRef,
-    dispatch,
-    allocateGeneration,
-  });
+  const coverage = { scopeKey, needed, requiredDatasets, state, readWindow, inFlightRef };
+  const cancelRunningRead = useWindowCoverage({ ...coverage, dispatch, allocateGeneration });
 
   const isMutating = mutationCount > 0;
 
@@ -556,18 +716,9 @@ export function useCalendarRangeData(options: UseCalendarRangeDataOptions): Cale
     // The one guaranteed authoritative read after the user's own change: the
     // server action has already committed, so the shared debounce is the only
     // delay, and it coalesces a chain of undo/redo settlements.
-    ownership.schedule(() => {
-      if (ownership.count > 0) return;
-      const waiting = ownership.waiting.splice(0);
-      void readWindow(neededRef.current, 'freshness').then((outcome) => {
-        for (const resolve of waiting) resolve(outcome);
-      });
-      // The extras reader reports its own failed reads and answers `false` for a
-      // superseded or out-of-scope read, which is not a failure (A1-30 showed the
-      // stale notice replacing the success banner when it was treated as one).
-      // Only a rejected promise is an unreported failure.
-      void readPlanningExtrasRef.current?.().catch(() => onReadFailedRef.current());
-    });
+    ownership.schedule(() =>
+      runSettlementRead(ownership, readWindow, neededRef, readPlanningExtrasRef, onReadFailedRef),
+    );
   }, [readWindow, ownership]);
 
   const beginMutation = useCallback((): (() => void) => {
@@ -575,72 +726,28 @@ export function useCalendarRangeData(options: UseCalendarRangeDataOptions): Cale
     ownership.begin();
     setMutationCount(ownership.count);
     cancelRunningRead();
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      settleMutation();
-    };
+    return releaseOnce(settleMutation);
   }, [cancelRunningRead, ownership, settleMutation]);
 
-  useEffect(() => {
-    ownership.activate();
-    return () => {
-      ownership.dispose();
-      const obsolete = inFlightRef.current;
-      if (obsolete?.scopeKey === ownership.scopeKey) {
-        inFlightRef.current = null;
-        obsolete.controller.abort();
-      }
-    };
-  }, [ownership]);
-
-  // Realtime consumption: one adapter for every calendar table, reporting the
-  // real read outcome. `suspend` queues events during the user's own mutation
-  // instead of dropping them; exactly one catch-up follows when ownership
-  // ends (PF-04).
-  useLiveView<null>({
-    tables: CALENDAR_TABLES,
-    read: async ({ invalidatedAt }) => {
-      const outcome = await followSupersededReads(
-        () => readWindow(neededRef.current, 'freshness', invalidatedAt),
-        () => ownership.active && stateRef.current.scopeKey === scopeKey,
-      );
-      const extrasOk = ownership.active
-        ? await (readPlanningExtrasRef.current?.() ?? Promise.resolve(true))
-        : false;
-      return outcome === 'committed' && extrasOk ? { ok: true, data: null } : { ok: false };
-    },
-    initialData: null,
-    suspend: isMutating,
+  useOwnershipLifetime(ownership, inFlightRef);
+  useCalendarLiveRead({
+    readWindow,
+    ownership,
+    stateRef,
+    scopeKey,
+    neededRef,
+    readPlanningExtrasRef,
+    isMutating,
   });
-
-  const refreshAll = useCallback(async () => {
-    await readWindow(neededRef.current, 'freshness');
-    if (ownership.active) await readPlanningExtrasRef.current?.();
-  }, [readWindow, ownership]);
-
+  const refreshAll = useRefreshAll(readWindow, ownership, neededRef, readPlanningExtrasRef);
   const { updateEntries, updateJobs } = useDatasetUpdaters(scopeKey, dispatch);
-
-  const readiness = useMemo(
-    () =>
-      composeCalendarReadiness(
-        requiredDatasets.map((dataset) => presentDataset(state.datasets[dataset], needed)),
-      ),
-    [requiredDatasets, state, needed],
-  );
+  const readiness = useRangeReadiness(requiredDatasets, state, needed);
 
   return {
-    entries: state.datasets.entries.data,
-    jobs: state.datasets.jobs.data,
-    vacation: state.datasets.vacation.data,
-    sickness: state.datasets.sickness.data,
-    holidays: state.datasets.holidays.data,
-    board: state.datasets.board.data,
+    ...datasetValues(state),
     changeRequestMap,
     readiness,
     isMutating,
-    isUnconfirmed: holdsUnconfirmedEdits(ALL_DATASETS.map((dataset) => state.datasets[dataset])),
     updateEntries,
     updateJobs,
     beginMutation,

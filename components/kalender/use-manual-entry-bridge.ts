@@ -44,7 +44,9 @@ export function useManualEntryBridge({
 
   useEffect(() => {
     const handleExternalManualEntry = (event: Event) => {
-      const newEntries = (event as CustomEvent<{ entries?: TimeEntry[] }>).detail?.entries;
+      if (!(event instanceof CustomEvent)) return;
+      const detail: { entries?: TimeEntry[] } | null = event.detail;
+      const newEntries = detail?.entries;
       if (!newEntries?.length || newEntries.every((entry) => entry.organizationId !== organizationId)) return;
       handleManualEntrySuccess(newEntries);
     };

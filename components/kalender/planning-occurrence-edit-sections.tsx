@@ -18,11 +18,47 @@ import type { PlanningConflict } from '@/lib/planning/types';
 import { formatGermanDate, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import type { usePlanningSeriesExtension } from './use-planning-series-extension';
 
+const EDIT_SCOPES: readonly PlanningEditScope[] = ['one', 'future', 'series'];
+
 interface PlanningSeriesScopeFieldProps {
   scope: PlanningEditScope;
   onScopeChange: (scope: PlanningEditScope) => void;
   onConflictsChange: (conflicts: PlanningConflict[]) => void;
   extension: ReturnType<typeof usePlanningSeriesExtension>;
+}
+
+/** The extension's own planning warnings and the reason a warned extension needs. */
+function SeriesExtensionWarnings({
+  extension,
+}: {
+  extension: ReturnType<typeof usePlanningSeriesExtension>;
+}): React.JSX.Element {
+  const { extendConflicts, extendReason, extendReasonError } = extension;
+  return (
+    <div
+      data-planning-warning
+      role="status"
+      className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-2.5"
+    >
+      <p className="text-sm font-medium">Planungshinweise</p>
+      <ul className="space-y-1 text-sm">
+        {extendConflicts.map((conflict, index) => (
+          <li key={`extend-${conflict.kind}-${index}`}>
+            • {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
+            {conflict.message}
+            {conflict.localDate ? ` (${formatGermanDate(conflict.localDate)})` : ''}
+          </li>
+        ))}
+      </ul>
+      <Field label="Begründung" htmlFor="planning-extend-reason" required error={extendReasonError}>
+        <Textarea
+          value={extendReason}
+          onChange={(event) => extension.setExtendReason(event.target.value)}
+          placeholder="Warum ist die Verlängerung trotzdem sinnvoll?"
+        />
+      </Field>
+    </div>
+  );
 }
 
 /** The change scope of a series occurrence and the series horizon extension with its own warnings. */
@@ -32,13 +68,14 @@ export function PlanningSeriesScopeField({
   onConflictsChange,
   extension,
 }: PlanningSeriesScopeFieldProps) {
-  const { extending, extendError, extendConflicts, extendReason, extendReasonError } = extension;
+  const { extending, extendError, extendConflicts } = extension;
   return (
     <Field label="Änderungsumfang" htmlFor="planning-edit-scope">
       <Select
         value={scope}
         onValueChange={(value) => {
-          onScopeChange(value as typeof scope);
+          const nextScope = EDIT_SCOPES.find((candidate) => candidate === value);
+          if (nextScope) onScopeChange(nextScope);
           onConflictsChange([]);
         }}
       >
@@ -77,31 +114,7 @@ export function PlanningSeriesScopeField({
           </Button>
         </div>
         <ErrorText>{extendError}</ErrorText>
-        {extendConflicts.length > 0 && (
-          <div
-            data-planning-warning
-            role="status"
-            className="space-y-2 rounded-md border border-warning/40 bg-warning-soft p-2.5"
-          >
-            <p className="text-sm font-medium">Planungshinweise</p>
-            <ul className="space-y-1 text-sm">
-              {extendConflicts.map((conflict, index) => (
-                <li key={`extend-${conflict.kind}-${index}`}>
-                  • {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
-                  {conflict.message}
-                  {conflict.localDate ? ` (${formatGermanDate(conflict.localDate)})` : ''}
-                </li>
-              ))}
-            </ul>
-            <Field label="Begründung" htmlFor="planning-extend-reason" required error={extendReasonError}>
-              <Textarea
-                value={extendReason}
-                onChange={(event) => extension.setExtendReason(event.target.value)}
-                placeholder="Warum ist die Verlängerung trotzdem sinnvoll?"
-              />
-            </Field>
-          </div>
-        )}
+        {extendConflicts.length > 0 && <SeriesExtensionWarnings extension={extension} />}
       </div>
     </Field>
   );

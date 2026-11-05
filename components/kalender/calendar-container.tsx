@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Undo2 } from 'lucide-react';
 import { CalendarDragProvider } from './drag-engine/drag-engine';
 import { CalendarLiveRegion, useCalendarAnnounce } from './surface/live-region';
-import { useCalendarMutations } from './mutations/use-calendar-mutations';
+import { useCalendarMutations, type CalendarMutations } from './mutations/use-calendar-mutations';
 import { useQualificationWarningConfirmation } from '@/components/auftraege/shared/qualification-warning-dialog';
 import { CalendarTimeCorrectionDialog } from './calendar-time-correction-dialog';
 import { useBanner } from '@/components/ui/banner';
@@ -24,9 +24,13 @@ import { CalendarToolbar } from './calendar-toolbar';
 import type { CalendarMember } from './members';
 import { useCalendarData } from './use-calendar-data';
 import { useCalendarStateMarker, useObservedHeight, usePhoneQuery } from './use-calendar-layout';
-import { useCalendarOverlays, useCalendarSurfaceActions } from './use-calendar-overlays';
+import {
+  useCalendarOverlays,
+  useCalendarSurfaceActions,
+  type CalendarOverlays,
+} from './use-calendar-overlays';
 import { useCalendarViewScope } from './use-calendar-view-scope';
-import { useCalendarViewState } from './use-calendar-view-state';
+import { useCalendarViewState, type CalendarViewState } from './use-calendar-view-state';
 import { useManualEntryBridge } from './use-manual-entry-bridge';
 import { useParkFlow } from './use-park-flow';
 import { useScopeActive } from './use-scope-active';
@@ -70,18 +74,14 @@ export function CalendarContainer(props: CalendarContainerProps): React.JSX.Elem
 }
 
 /**
- * One organization, user and role's calendar. The hooks run in a fixed order
- * that the effects depend on: scope, view state, the range owner and the
- * Parkplatz reads, the optimistic owner, then the manual-entry bridge, the
- * highlight, the shortcuts and the readiness marker.
+ * The first half of the scoped calendar's hooks, up to the reads: scope, the
+ * two warning confirmations, view state, overlays and the read owner.
  */
-function ScopedCalendarContainer({
+function useScopedCalendarReads({
   organizationId,
   currentUserId,
   currentUserRole,
   isAdminOrManager,
-  members,
-  organizationSettings,
   holidayCalendar,
   initialData,
   initialDate,
@@ -106,10 +106,7 @@ function ScopedCalendarContainer({
     initialDate,
     todayIso,
   });
-  const { preferences, currentDate, view, setView, needed, highlightMemberId, setHighlightMemberId } =
-    viewState;
   const overlays = useCalendarOverlays();
-  const { setAddEntry, setHelpOpen } = overlays;
 
   const parkplatzButtonRef = useRef<HTMLButtonElement>(null);
   const calendarHeaderRef = useRef<HTMLDivElement>(null);
@@ -122,24 +119,47 @@ function ScopedCalendarContainer({
   const data = useCalendarData({
     organizationId,
     identityKey: `${currentUserId}:${currentUserRole}`,
-    needed,
+    needed: viewState.needed,
     initialData,
     holidayCalendar,
     isAdminOrManager,
     isScopeActive,
     reportReadFailure,
   });
-  const { range, handleOperationStart, handleSilentRefresh } = data;
-  const { readiness } = range;
-  // The skeleton replaces the grid only while no data exists at all (first
-  // open, organization switch). Navigating to an uncovered window keeps the
-  // grid mounted and marks it busy.
-  const isLoading = readiness.kind === 'loading' && !readiness.hasData;
-  const isReloading = readiness.kind === 'loading' && readiness.hasData;
+  return {
+    scopeActive,
+    isScopeActive,
+    showBanner,
+    announce,
+    requestApproval,
+    warningDialog,
+    requestPlanningApproval,
+    planningWarningDialog,
+    phone,
+    todayIso,
+    viewState,
+    overlays,
+    parkplatzButtonRef,
+    calendarHeaderRef,
+    calendarHeaderHeight,
+    data,
+  };
+}
 
-  const mutations = useCalendarMutations({
-    beginMutation: handleOperationStart,
-    updateJobs: range.updateJobs,
+type ScopedCalendarReads = ReturnType<typeof useScopedCalendarReads>;
+
+/** The optimistic owner, its banners bound to the calendar's scope: a closed scope shows none. */
+function useScopedCalendarMutations({
+  scopeActive,
+  isScopeActive,
+  showBanner,
+  requestApproval,
+  requestPlanningApproval,
+  data,
+}: ScopedCalendarReads): CalendarMutations {
+  return useCalendarMutations({
+    beginMutation: data.handleOperationStart,
+    updateJobs: data.range.updateJobs,
     updateParkedJobs: data.updateParkedJobs,
     jobsRef: data.calendarJobsRef,
     showBanner: (banner) => {
@@ -152,22 +172,32 @@ function ScopedCalendarContainer({
     isScopeActive,
     requestApproval,
     requestPlanningApproval,
-    silentRefresh: handleSilentRefresh,
+    silentRefresh: data.handleSilentRefresh,
   });
+}
 
-  const handleManualEntrySuccess = useManualEntryBridge({
-    organizationId,
-    needed,
-    beginOperation: handleOperationStart,
-    setEntries: range.updateEntries,
-  });
-
+/** A highlighted member fades after 1.5 s, counted from the moment the grid shows. */
+function useHighlightFade(
+  highlightMemberId: string | null,
+  isLoading: boolean,
+  setHighlightMemberId: (memberId: string | null) => void,
+): void {
   useEffect(() => {
     if (!highlightMemberId || isLoading) return;
     const timer = window.setTimeout(() => setHighlightMemberId(null), 1500);
     return () => window.clearTimeout(timer);
   }, [highlightMemberId, isLoading, setHighlightMemberId]);
+}
 
+/** The keyboard commands of the scoped calendar; `c` creates only for a caller who may. */
+function useCalendarCommandKeys(
+  viewState: CalendarViewState,
+  overlays: CalendarOverlays,
+  mutations: CalendarMutations,
+  isAdminOrManager: boolean,
+): void {
+  const { currentDate, view, setView } = viewState;
+  const { setAddEntry, setHelpOpen } = overlays;
   const handleCreateShortcut = useMemo(
     () => (isAdminOrManager ? () => setAddEntry({ date: toLocalDateString(currentDate) }) : null),
     [isAdminOrManager, currentDate, setAddEntry],
@@ -184,6 +214,38 @@ function ScopedCalendarContainer({
     onHelp: handleHelpShortcut,
     setDayZoom: viewState.setDayZoom,
   });
+}
+
+/**
+ * The second half of the scoped calendar's hooks, built on the reads: the
+ * optimistic owner, the manual-entry bridge, the highlight, the shortcuts, the
+ * view scope, the park flow, the surface actions and the readiness marker.
+ */
+function useScopedCalendarFlows(
+  { organizationId, currentUserId, isAdminOrManager, members }: CalendarContainerProps,
+  reads: ScopedCalendarReads,
+) {
+  const { showBanner, viewState, overlays, data } = reads;
+  const { preferences, view, needed, highlightMemberId, setHighlightMemberId } = viewState;
+  const { range, handleOperationStart } = data;
+  const { readiness } = range;
+  // The skeleton replaces the grid only while no data exists at all (first
+  // open, organization switch). Navigating to an uncovered window keeps the
+  // grid mounted and marks it busy.
+  const isLoading = readiness.kind === 'loading' && !readiness.hasData;
+  const isReloading = readiness.kind === 'loading' && readiness.hasData;
+
+  const mutations = useScopedCalendarMutations(reads);
+
+  const handleManualEntrySuccess = useManualEntryBridge({
+    organizationId,
+    needed,
+    beginOperation: handleOperationStart,
+    setEntries: range.updateEntries,
+  });
+
+  useHighlightFade(highlightMemberId, isLoading, setHighlightMemberId);
+  useCalendarCommandKeys(viewState, overlays, mutations, isAdminOrManager);
 
   const viewScope = useCalendarViewScope({
     preferences,
@@ -224,13 +286,44 @@ function ScopedCalendarContainer({
     horizonWeeks: preferences.horizonWeeks,
   });
 
+  return {
+    isLoading,
+    isReloading,
+    mutations,
+    handleManualEntrySuccess,
+    viewScope,
+    parkFlow,
+    surfaceActions,
+    handleSessionClick,
+    showUnavailable,
+    calendarStale,
+    scrollContainerRef,
+    verticalScroller,
+  };
+}
+
+/**
+ * One organization, user and role's calendar. The hooks run in a fixed order
+ * that the effects depend on: scope, view state, the range owner and the
+ * Parkplatz reads, the optimistic owner, then the manual-entry bridge, the
+ * highlight, the shortcuts and the readiness marker.
+ */
+function ScopedCalendarContainer(props: CalendarContainerProps) {
+  const { organizationId, currentUserId, currentUserRole, isAdminOrManager, members } = props;
+  const reads = useScopedCalendarReads(props);
+  const { phone, todayIso, viewState, overlays, data, showBanner, announce } = reads;
+  const flows = useScopedCalendarFlows(props, reads);
+  const { mutations, parkFlow, viewScope, handleManualEntrySuccess } = flows;
+  const { handleSilentRefresh } = data;
+  const boardRows = data.range.board.rows;
+
   return (
     <PageShell>
       {mutations.timeCorrectionDraft && (
         <CalendarTimeCorrectionDialog
           organizationId={organizationId}
           draft={mutations.timeCorrectionDraft}
-          rows={range.board.rows}
+          rows={boardRows}
           onClose={mutations.closeTimeCorrection}
           onSubmitted={handleSilentRefresh}
         />
@@ -243,32 +336,32 @@ function ScopedCalendarContainer({
         isAdminOrManager={isAdminOrManager}
         phone={phone}
         todayIso={todayIso}
-        calendarHeaderRef={calendarHeaderRef}
-        parkplatzButtonRef={parkplatzButtonRef}
+        calendarHeaderRef={reads.calendarHeaderRef}
+        parkplatzButtonRef={reads.parkplatzButtonRef}
         onRefresh={data.handleManualRefresh}
         onManualEntrySuccess={handleManualEntrySuccess}
         onSilentRefresh={handleSilentRefresh}
       />
       <CalendarBody
         overlays={overlays}
-        scrollContainerRef={scrollContainerRef}
-        isLoading={isLoading}
-        isReloading={isReloading}
-        calendarStale={calendarStale}
-        showUnavailable={showUnavailable}
+        scrollContainerRef={flows.scrollContainerRef}
+        isLoading={flows.isLoading}
+        isReloading={flows.isReloading}
+        calendarStale={flows.calendarStale}
+        showUnavailable={flows.showUnavailable}
         viewState={viewState}
         viewScope={viewScope}
         data={data}
         mutations={mutations}
-        surfaceActions={surfaceActions}
+        surfaceActions={flows.surfaceActions}
         parkFlow={parkFlow}
         phone={phone}
-        organizationSettings={organizationSettings}
+        organizationSettings={props.organizationSettings}
         currentUserId={currentUserId}
         currentUserRole={currentUserRole}
         isAdminOrManager={isAdminOrManager}
-        onSessionClick={handleSessionClick}
-        verticalScroller={verticalScroller}
+        onSessionClick={flows.handleSessionClick}
+        verticalScroller={flows.verticalScroller}
         todayIso={todayIso}
       />
       <CalendarDialogs
@@ -278,17 +371,17 @@ function ScopedCalendarContainer({
         viewScope={viewScope}
         mutations={mutations}
         members={members}
-        boardRows={range.board.rows}
+        boardRows={boardRows}
         isAdminOrManager={isAdminOrManager}
         currentUserId={currentUserId}
         currentUserRole={currentUserRole}
-        calendarHeaderHeight={calendarHeaderHeight}
+        calendarHeaderHeight={reads.calendarHeaderHeight}
         showBanner={showBanner}
         announce={announce}
         onManualEntrySuccess={handleManualEntrySuccess}
       />
-      {warningDialog}
-      {planningWarningDialog}
+      {reads.warningDialog}
+      {reads.planningWarningDialog}
     </PageShell>
   );
 }

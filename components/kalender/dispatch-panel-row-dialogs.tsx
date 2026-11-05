@@ -64,18 +64,9 @@ type DispatchPanelRowDialogsProps = {
 };
 
 export function DispatchPanelRowDialogs({ dialogs, settleRow }: DispatchPanelRowDialogsProps) {
-  const {
-    issueTarget,
-    setIssueTarget,
-    commitmentEntry,
-    setCommitmentEntry,
-    withdrawCommitment,
-    setWithdrawCommitment,
-    resolveChallengeId,
-    setResolveChallengeId,
-    cancelDispatch,
-    setCancelDispatch,
-  } = dialogs;
+  const { issueTarget, setIssueTarget, commitmentEntry, setCommitmentEntry } = dialogs;
+  const { withdrawCommitment, setWithdrawCommitment, resolveChallengeId, setResolveChallengeId } = dialogs;
+  const { cancelDispatch, setCancelDispatch } = dialogs;
 
   return (
     <>

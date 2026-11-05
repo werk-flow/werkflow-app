@@ -47,7 +47,8 @@ interface EntryDetailsDialogProps {
   entryUserRole?: OrgRole | undefined;
 }
 
-export function EntryDetailsDialog({
+/** The dialog's reads, permissions and draft, and the commands its buttons run. */
+function useEntryDetailsDialog({
   open,
   onOpenChange,
   session,
@@ -79,7 +80,6 @@ export function EntryDetailsDialog({
     },
   );
   const draft = useEntryDetailsDraft({ open, startInEditMode: startInEditMode && canEdit, snapshot });
-  const { isEditing, handleStartEdit, handleCancelEdit } = draft;
   const breaks = useEntryDetailsDisplayedBreaks(snapshot, draft);
 
   const commandContext: EntryDetailsCommandContext = {
@@ -101,22 +101,43 @@ export function EntryDetailsDialog({
   const handleDelete = () => deleteEntryDetailsBlock(commandContext, snapshot);
   const handleReview = (decision: 'approved' | 'rejected') =>
     reviewEntryDetailsEntries(commandContext, pendingEntries, decision);
+  const handleNavigate = (url: string) => {
+    onOpenChange(false);
+    router.push(url);
+  };
 
-  const entryContent = (
-    <EntryDetailsContent
-      session={session}
-      snapshot={snapshot}
-      draft={draft}
-      breaks={breaks}
-      resolvedJob={resolvedJob}
-      jobDetailUrl={jobDetailUrl}
-      canEdit={canEdit}
-      onNavigate={(url) => {
-        onOpenChange(false);
-        router.push(url);
-      }}
-    />
-  );
+  return {
+    isBusy,
+    isPending,
+    snapshot,
+    editFormId,
+    canEdit,
+    canApprove,
+    hasPendingEntry,
+    inClosedPeriod,
+    draft,
+    handleSaveEdit,
+    handleDelete,
+    handleReview,
+    contentProps: {
+      snapshot,
+      draft,
+      breaks,
+      resolvedJob,
+      jobDetailUrl,
+      canEdit,
+      onNavigate: handleNavigate,
+    },
+  };
+}
+
+export function EntryDetailsDialog(props: EntryDetailsDialogProps) {
+  const { open, onOpenChange, session } = props;
+  const details = useEntryDetailsDialog(props);
+  const { isBusy, isPending, snapshot, editFormId, canEdit, canApprove, draft, handleSaveEdit } = details;
+  const { isEditing, handleStartEdit, handleCancelEdit } = draft;
+
+  const entryContent = <EntryDetailsContent session={session} {...details.contentProps} />;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} pending={isPending}>
@@ -127,7 +148,7 @@ export function EntryDetailsDialog({
         </DialogHeader>
 
         <DialogBody className="space-y-4">
-          {inClosedPeriod && (
+          {details.inClosedPeriod && (
             <p className="text-sm text-muted-foreground">{SHARED_FAILURE_MESSAGES.period_closed}</p>
           )}
           {isEditing ? (
@@ -151,16 +172,20 @@ export function EntryDetailsDialog({
 
         <DialogFooter className="flex-col gap-2 sm:flex-row">
           {canApprove && !isEditing && (
-            <EntryDetailsReviewActions isPending={isPending} isBusy={isBusy} onReview={handleReview} />
+            <EntryDetailsReviewActions
+              isPending={isPending}
+              isBusy={isBusy}
+              onReview={details.handleReview}
+            />
           )}
 
           {canEdit && !isEditing && (
             <EntryDetailsManageActions
               isPending={isPending}
               isBusy={isBusy}
-              hasPendingEntry={hasPendingEntry}
+              hasPendingEntry={details.hasPendingEntry}
               onStartEdit={handleStartEdit}
-              onDelete={handleDelete}
+              onDelete={details.handleDelete}
             />
           )}
 

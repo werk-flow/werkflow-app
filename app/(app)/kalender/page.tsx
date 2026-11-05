@@ -11,8 +11,9 @@ import { getCalendarBoardContext } from '@/lib/calendar/board-actions';
 import { getSicknessCalendarEntries } from '@/lib/sickness/actions';
 import { getVacationCalendarEntries } from '@/lib/vacation/calendar-actions';
 import { toCalendarJob } from '@/lib/planning/view-model';
-import { CalendarContainer } from '@/components/kalender/calendar-container';
+import { CalendarContainer, type CalendarView } from '@/components/kalender/calendar-container';
 import type { CalendarInitialData } from '@/components/kalender/use-calendar-range-data';
+import type { CalendarFetchRange } from '@/lib/calendar/navigation';
 import { KalenderPageSkeleton } from '@/components/loading-states/kalender-page-skeleton';
 import { PageHeader } from '@/components/shared/page-header';
 import { RegionLoadError } from '@/components/shared/region-load-error';
@@ -30,19 +31,142 @@ import { getOrgMembersForUser } from '@/lib/members/queries';
 import type { MemberListEntry } from '@/lib/members/profile-name';
 import { addLocalDays, getBusinessTodayIso } from '@/lib/date-time/berlin';
 
+type KalenderDataProps = {
+  activeOrgId: string;
+  userId: string;
+  currentUserRole: OrgRole;
+  isAdminOrManager: boolean;
+  searchParams: Promise<{ date?: string | string[] }>;
+};
+
+/** The window the landing view renders: the week board's horizon, the month, or the day plus the previous day. */
+function landingFetchWindow(
+  landingView: CalendarView,
+  businessDate: string,
+  horizonWeeks: CalendarPreferences['horizonWeeks'],
+) {
+  return landingView === 'week'
+    ? getBerlinWeekFetchRange(businessDate, horizonWeeks)
+    : landingView === 'month'
+      ? getBerlinMonthFetchRange(businessDate)
+      : {
+          ...getBerlinDayFetchRange(businessDate),
+          fromIso: addLocalDays(businessDate, -1),
+          toIso: businessDate,
+        };
+}
+
+/** The members the caller may see: every member for a manager, otherwise only the caller; null on a failed read. */
+async function readCalendarMembers(
+  activeOrgId: string,
+  userId: string,
+  isAdminOrManager: boolean,
+): Promise<MemberListEntry[] | null> {
+  const membersRead = await getOrgMembersForUser(activeOrgId, userId);
+  if (!membersRead.success) return null;
+  if (isAdminOrManager) {
+    return membersRead.members;
+  }
+  return membersRead.members.filter((member) => member.user_id === userId);
+}
+
+/** Every read of the first render, started together for one window. */
+async function readCalendarPage({
+  activeOrgId,
+  userId,
+  isAdminOrManager,
+  range,
+  fromIso,
+  toIso,
+}: {
+  activeOrgId: string;
+  userId: string;
+  isAdminOrManager: boolean;
+  range: CalendarFetchRange;
+  fromIso: string;
+  toIso: string;
+}) {
+  const dates = { from: fromIso, to: toIso };
+  const [
+    entriesResult,
+    members,
+    jobsResult,
+    organizationSettings,
+    holidayCalendar,
+    vacationResult,
+    sicknessResult,
+    boardResult,
+  ] = await Promise.all([
+    completeCalendarEntryRead(
+      getTimeEntries({
+        organizationId: activeOrgId,
+        from: range.start.toISOString(),
+        to: range.end.toISOString(),
+      }),
+      getChangeRequestsForEntries,
+    ),
+    readCalendarMembers(activeOrgId, userId, isAdminOrManager),
+    getPlanningEntries(fromIso, toIso),
+    getCachedOrganizationSettings(activeOrgId),
+    getCachedOrganizationCalendar(activeOrgId),
+    getVacationCalendarEntries(dates),
+    getSicknessCalendarEntries(dates),
+    getCalendarBoardContext({ organizationId: activeOrgId, fromDate: fromIso, toDate: toIso }),
+  ]);
+  return {
+    entriesResult,
+    members,
+    jobsResult,
+    organizationSettings,
+    holidayCalendar,
+    vacationResult,
+    sicknessResult,
+    boardResult,
+  };
+}
+
+/**
+ * Initial data carries the same official plus provisional projection and the
+ * same pending-correction badges as every later client read (PF-06).
+ */
+function calendarInitialData(
+  range: CalendarFetchRange,
+  {
+    entriesResult,
+    jobsResult,
+    vacationResult,
+    sicknessResult,
+    boardResult,
+  }: Awaited<ReturnType<typeof readCalendarPage>>,
+): CalendarInitialData {
+  return {
+    range,
+    ...(entriesResult.success
+      ? { entries: entriesResult.entries, changeRequestMap: entriesResult.changeRequestMap }
+      : {}),
+    ...(jobsResult.success ? { jobs: jobsResult.entries.map(toCalendarJob) } : {}),
+    ...(vacationResult.success ? { vacation: vacationResult.entries } : {}),
+    ...(sicknessResult.success ? { sickness: sicknessResult.entries } : {}),
+    ...(boardResult.success
+      ? {
+          board: {
+            rows: boardResult.rows,
+            days: boardResult.days,
+            dispatch: boardResult.dispatch,
+            materialDemandJobIds: boardResult.materialDemandJobIds,
+          },
+        }
+      : {}),
+  };
+}
+
 async function KalenderData({
   activeOrgId,
   userId,
   currentUserRole,
   isAdminOrManager,
   searchParams,
-}: {
-  activeOrgId: string;
-  userId: string;
-  currentUserRole: OrgRole;
-  isAdminOrManager: boolean;
-  searchParams: Promise<{ date?: string | string[] }>;
-}) {
+}: KalenderDataProps) {
   // The prefetched window is the Berlin business day plus the previous day,
   // computed from Berlin wall time rather than the server process timezone
   // (PF-17). The client compares this range with the window it renders and
@@ -67,56 +191,17 @@ async function KalenderData({
     );
   }
   const landingView = preferences.view ?? (isAdminOrManager ? 'week' : 'day');
-  const window =
-    landingView === 'week'
-      ? getBerlinWeekFetchRange(businessDate, preferences.horizonWeeks)
-      : landingView === 'month'
-        ? getBerlinMonthFetchRange(businessDate)
-        : {
-            ...getBerlinDayFetchRange(businessDate),
-            fromIso: addLocalDays(businessDate, -1),
-            toIso: businessDate,
-          };
+  const window = landingFetchWindow(landingView, businessDate, preferences.horizonWeeks);
   const range = { start: window.start, end: window.end };
-  const fromIso = window.fromIso;
-  const toIso = window.toIso;
-
-  async function fetchMembers(): Promise<MemberListEntry[] | null> {
-    const membersRead = await getOrgMembersForUser(activeOrgId, userId);
-    if (!membersRead.success) return null;
-    if (isAdminOrManager) {
-      return membersRead.members;
-    }
-    return membersRead.members.filter((member) => member.user_id === userId);
-  }
-
-  const dates = { from: fromIso, to: toIso };
-  const [
-    entriesResult,
-    members,
-    jobsResult,
-    organizationSettings,
-    holidayCalendar,
-    vacationResult,
-    sicknessResult,
-    boardResult,
-  ] = await Promise.all([
-    completeCalendarEntryRead(
-      getTimeEntries({
-        organizationId: activeOrgId,
-        from: range.start.toISOString(),
-        to: range.end.toISOString(),
-      }),
-      getChangeRequestsForEntries,
-    ),
-    fetchMembers(),
-    getPlanningEntries(fromIso, toIso),
-    getCachedOrganizationSettings(activeOrgId),
-    getCachedOrganizationCalendar(activeOrgId),
-    getVacationCalendarEntries(dates),
-    getSicknessCalendarEntries(dates),
-    getCalendarBoardContext({ organizationId: activeOrgId, fromDate: fromIso, toDate: toIso }),
-  ]);
+  const reads = await readCalendarPage({
+    activeOrgId,
+    userId,
+    isAdminOrManager,
+    range,
+    fromIso: window.fromIso,
+    toIso: window.toIso,
+  });
+  const { members, organizationSettings, holidayCalendar } = reads;
 
   if (!members) {
     return (
@@ -125,28 +210,6 @@ async function KalenderData({
       </RegionLoadError>
     );
   }
-
-  // Initial data carries the same official plus provisional projection and
-  // the same pending-correction badges as every later client read (PF-06).
-  const initialData: CalendarInitialData = {
-    range,
-    ...(entriesResult.success
-      ? { entries: entriesResult.entries, changeRequestMap: entriesResult.changeRequestMap }
-      : {}),
-    ...(jobsResult.success ? { jobs: jobsResult.entries.map(toCalendarJob) } : {}),
-    ...(vacationResult.success ? { vacation: vacationResult.entries } : {}),
-    ...(sicknessResult.success ? { sickness: sicknessResult.entries } : {}),
-    ...(boardResult.success
-      ? {
-          board: {
-            rows: boardResult.rows,
-            days: boardResult.days,
-            dispatch: boardResult.dispatch,
-            materialDemandJobIds: boardResult.materialDemandJobIds,
-          },
-        }
-      : {}),
-  };
 
   return (
     <CalendarContainer
@@ -157,7 +220,7 @@ async function KalenderData({
       members={members}
       organizationSettings={organizationSettings}
       holidayCalendar={holidayCalendar}
-      initialData={initialData}
+      initialData={calendarInitialData(range, reads)}
       initialDate={businessDate}
       initialPreferences={preferences}
       initialView={landingView}

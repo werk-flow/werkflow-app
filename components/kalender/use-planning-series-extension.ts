@@ -10,6 +10,8 @@ import type { PlanningConflict } from '@/lib/planning/types';
 import { focusFirstInvalidField, REASON_MIN_8_MESSAGE } from '@/lib/ui/field-validation';
 
 const EXTEND_REASON_FIELD_ID = 'planning-extend-reason';
+const SERIES_ALREADY_PLANNED_MESSAGE = 'Die Serie ist bereits bis zu ihrem Ende geplant.';
+const PLANNING_SITUATION_CHANGED_MESSAGE = 'Die Planungslage hat sich geändert. Bitte erneut prüfen.';
 
 interface PlanningSeriesExtensionOptions {
   seriesId: string | null | undefined;
@@ -55,21 +57,14 @@ export function usePlanningSeriesExtension({
     }
     setExtendError(null);
     try {
-      const result = await runExtend(
-        seriesId,
+      const override =
         extendConflicts.length > 0
-          ? {
-              assessmentFingerprint: extendFingerprint,
-              overrideReason: extendReason.trim(),
-            }
-          : undefined,
-      );
+          ? { assessmentFingerprint: extendFingerprint, overrideReason: extendReason.trim() }
+          : undefined;
+      const result = await runExtend(seriesId, override);
       if (result.success) {
         if (result.occurrenceIds.length === 0) {
-          showBanner({
-            variant: 'info',
-            message: 'Die Serie ist bereits bis zu ihrem Ende geplant.',
-          });
+          showBanner({ variant: 'info', message: SERIES_ALREADY_PLANNED_MESSAGE });
           return;
         }
         showBanner({
@@ -91,10 +86,7 @@ export function usePlanningSeriesExtension({
         setExtendConflicts(result.conflicts);
         setExtendFingerprint(result.fingerprint);
         if (result.error === 'stale_assessment') {
-          showBanner({
-            variant: 'info',
-            message: 'Die Planungslage hat sich geändert. Bitte erneut prüfen.',
-          });
+          showBanner({ variant: 'info', message: PLANNING_SITUATION_CHANGED_MESSAGE });
         }
         return;
       }

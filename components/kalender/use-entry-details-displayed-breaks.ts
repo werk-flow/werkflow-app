@@ -18,6 +18,41 @@ export type EntryDetailsDisplayedBreaks = {
   totalWorkMinutes: number | null;
 };
 
+/** The one automatic break as a break the dialog can show. */
+function automaticEditableBreaks(
+  automaticBreak: { breakStart: Date; breakEnd: Date },
+  entryUserId: string | undefined,
+  entryOrganizationId: string | null,
+): EditableBreak[] {
+  const breakStartEntry = {
+    ...buildDraftEntry(
+      'auto-break-start',
+      'break_start',
+      automaticBreak.breakStart,
+      entryUserId,
+      entryOrganizationId ?? undefined,
+    ),
+    isManual: false,
+  };
+  const breakEndEntry = {
+    ...buildDraftEntry(
+      'auto-break-end',
+      'break_end',
+      automaticBreak.breakEnd,
+      entryUserId,
+      entryOrganizationId ?? undefined,
+    ),
+    isManual: false,
+  };
+
+  return buildEditableBreaks([
+    {
+      breakStart: breakStartEntry,
+      breakEnd: breakEndEntry,
+    },
+  ]);
+}
+
 /**
  * The breaks the dialog shows (the draft, or the one derived from the
  * organization's automatic break rule) and the block totals that follow.
@@ -53,33 +88,7 @@ export function useEntryDetailsDisplayedBreaks(
       return [];
     }
 
-    const breakStartEntry = {
-      ...buildDraftEntry(
-        'auto-break-start',
-        'break_start',
-        automaticBreak.breakStart,
-        entryUserId,
-        entryOrganizationId ?? undefined,
-      ),
-      isManual: false,
-    };
-    const breakEndEntry = {
-      ...buildDraftEntry(
-        'auto-break-end',
-        'break_end',
-        automaticBreak.breakEnd,
-        entryUserId,
-        entryOrganizationId ?? undefined,
-      ),
-      isManual: false,
-    };
-
-    return buildEditableBreaks([
-      {
-        breakStart: breakStartEntry,
-        breakEnd: breakEndEntry,
-      },
-    ]);
+    return automaticEditableBreaks(automaticBreak, entryUserId, entryOrganizationId);
   }, [
     clockInDate,
     clockOutDate,
