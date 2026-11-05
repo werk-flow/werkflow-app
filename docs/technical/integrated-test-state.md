@@ -18,6 +18,7 @@ A fact under a uniqueness constraint collides when two tests of one world pick t
 - Register a new group's window in `AUDIT_DATE_WINDOWS` when the slice starts. Take the next free offsets.
 - A visit that must appear in the manager dispatch panel uses `dispatchOverviewBerlinDateAtOffset()`.
 - Days a week view must show whole use `ownedBerlinWeekAtOffset()`. It returns the first Monday on or after the offset, so the week holds the same days on every run weekday, and it throws unless the spec owns all seven.
+- A fixture that drops a card on a person's row uses `ownedBerlinWorkdayAtOffset()`. It returns the first Monday-to-Friday date on or after the offset, because the calendar refuses that drop on a weekend.
 - A later test in a file never reuses an effective-date key an earlier test owns. Assess the dependent business action on the new date.
 - An ordinary manual time entry uses a past date, with times clear of the file's other entries. An entry later today is still in the future during an early run.
 - Avoid a fixture date on a DST switch unless the test is about DST.

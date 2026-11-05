@@ -10,6 +10,7 @@ import {
   dispatchOverviewBerlinDateAtOffset,
   ownedBerlinDateAtOffset,
   ownedBerlinWeekAtOffset,
+  ownedBerlinWorkdayAtOffset,
 } from '../../../tests/golden/support/date-ownership';
 import { specIndependenceProblems } from './spec-independence';
 
@@ -116,6 +117,21 @@ describe('browser spec conventions (testing.md)', () => {
     expect(() => dispatchOverviewBerlinDateAtOffset(15)).toThrow(
       'Dispatch overview offset must be an integer from 0 through 14; received 15.',
     );
+  });
+
+  test('a workday fixture is Monday to Friday on every run weekday', () => {
+    // The 2026-11-03 incident: run-day +151 was a Saturday, and the calendar refused A1-23's drop.
+    const anchor = process.env.WERKFLOW_TEST_BUSINESS_DATE;
+    try {
+      for (let day = 0; day < 7; day += 1) {
+        process.env.WERKFLOW_TEST_BUSINESS_DATE = addLocalDays('2026-10-19', day);
+        const weekday = new Date(`${ownedBerlinWorkdayAtOffset('a1-kalender', 147)}T12:00:00Z`).getUTCDay();
+        expect(weekday >= 1 && weekday <= 5).toBe(true);
+      }
+    } finally {
+      if (anchor === undefined) delete process.env.WERKFLOW_TEST_BUSINESS_DATE;
+      else process.env.WERKFLOW_TEST_BUSINESS_DATE = anchor;
+    }
   });
 
   test('the lab live week is one whole Plantafel week on every run weekday', () => {

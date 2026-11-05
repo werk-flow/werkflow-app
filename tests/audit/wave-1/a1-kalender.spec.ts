@@ -48,7 +48,11 @@ import {
   trailingResizeHandle,
   visibleCalendarLayerToggle,
 } from '../../golden/support/plantafel';
-import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
+import {
+  berlinDateAtOffset,
+  ownedBerlinDateAtOffset,
+  ownedBerlinWorkdayAtOffset,
+} from '../../golden/support/date-ownership';
 import { moveCalendarBlockToMember, visibleCalendarTimeBlock } from '../support/a1-steps';
 
 test.describe('A1 Kalender @AUDIT-W1-A1', () => {
@@ -158,7 +162,7 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     adminPage,
     world,
   }) => {
-    const plannedDate = ownedBerlinDateAtOffset('a1-kalender', 151);
+    const plannedDate = ownedBerlinWorkdayAtOffset('a1-kalender', 147);
     const jobNumber = `A1-CAL-J-${world.runId}`;
     const title = `A1 Kalenderauftrag ${world.runId}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
