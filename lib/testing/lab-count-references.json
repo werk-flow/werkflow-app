@@ -1707,8 +1707,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 2, "tolerance": 0 },
-        "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1035, "tolerance": 20 }
+        "backendRequests": { "reference": 72, "tolerance": 1 }
       },
       "payloads": {
         "action:/zeiterfassung": {
@@ -1812,6 +1811,18 @@
               "rows": { "reference": 5, "tolerance": 0 }
             }
           }
+        },
+        {
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 1035, "tolerance": 20 },
+          "to": null,
+          "runKeys": [
+            "2026-11-05T212101091Z-9b51c9",
+            "2026-11-05T210920854Z-426b85",
+            "2026-11-05T210413860Z-704c47"
+          ],
+          "reason": "Took 906, 1042 and 1035 on one build (48dcad4c): 906 in run 9b51c9, 1042 in 426b85, 1035 in the other runs. The value follows the timing of a late commit on a step the calendar split does not touch; performance.md leaves a two-valued count ungated rather than widening its tolerance."
         }
       ]
     },
