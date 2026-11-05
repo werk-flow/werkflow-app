@@ -273,9 +273,14 @@ test.describe('P1-06 Urlaubsanträge und Urlaubssaldo @P1-06', () => {
       expect(state.approvedDaysByYear).toEqual({ [halfDayIso.slice(0, 4)]: 0.5 });
 
       await openOwnVacationSection(employeePage);
-      // The half day lies ahead: planned, not taken.
-      await expectVisibleAfterSave(employeePage, vacationTakenAndPlannedText(0, 30, '0,5'));
-      await expectVisibleAfterSave(employeePage, vacationRemainingText('29,5'));
+      // The half day lies ahead: planned, not taken. The balance counts this
+      // year only, and near December 31 that Monday lies in the next one.
+      const plannedThisYear = halfDayIso.slice(0, 4) === todayIso.slice(0, 4);
+      await expectVisibleAfterSave(
+        employeePage,
+        plannedThisYear ? vacationTakenAndPlannedText(0, 30, '0,5') : vacationTakenText(0, 30),
+      );
+      await expectVisibleAfterSave(employeePage, vacationRemainingText(plannedThisYear ? '29,5' : 30));
       await expect(visibleText(employeePage, VACATION_PORTION_LABELS.half_day)).toBeVisible();
     });
   });

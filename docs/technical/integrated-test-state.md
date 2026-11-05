@@ -22,12 +22,14 @@ A fact under a uniqueness constraint collides when two tests of one world pick t
 - A later test in a file never reuses an effective-date key an earlier test owns. Assess the dependent business action on the new date.
 - An ordinary manual time entry uses a past date, with times clear of the file's other entries. An entry later today is still in the future during an early run.
 - Avoid a fixture date on a DST switch unless the test is about DST.
+- A month view ends with the week of the month's last day, so a month that ends on a Sunday hides the next day. A drag onto the next day takes its offsets from `monthDragOffsets()`.
 
 ## Compute date-dependent expectations
 
 Never write date logic by hand in a spec; it drifts in holiday weeks and on weekends.
 
 - Read schedules, conditions and holiday calendar through `getTargetContextForRecord` in `tests/golden/support/db/vacation.ts`. Compute vacation days and weekly targets with `lib/vacation/balance` and `lib/personnel/targets`.
+- The own vacation balance shows the business year only. A condition it must count takes its date through `businessYearOffset()`, and the expected counter follows the year of the requested day (`countVacationDaysByYear`).
 - Resolve every daily-target assertion through `resolveDailyTarget`. On a weekend day without a schedule, the dashboard shows no working day instead of a target.
 
 ## Keep the page stable during a step

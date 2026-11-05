@@ -4,6 +4,7 @@
 // approver queues and the calendar read only the caller's organization (an
 // employee's calendar only their own requests). A refused call writes nothing.
 import assert from 'node:assert/strict';
+import { addLocalDays, getBusinessTodayIso } from '../../date-time/berlin';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -23,6 +24,9 @@ const colleagueRequestId = '83000000-0000-4000-8000-000000000012';
 const foreignPendingId = '83000000-0000-4000-8000-000000000013';
 const foreignApprovedId = '83000000-0000-4000-8000-000000000014';
 
+// This process runs on the real clock, and the calendar's default window moves with it.
+const requestStart = getBusinessTodayIso();
+
 const vacationRequest = (
   id: string,
   organizationId: string,
@@ -32,8 +36,8 @@ const vacationRequest = (
   id,
   organization_id: organizationId,
   employee_record_id: employeeRecordId,
-  start_date: '2026-11-16',
-  end_date: '2026-11-20',
+  start_date: requestStart,
+  end_date: addLocalDays(requestStart, 4),
   day_portion: 'full',
   status,
 });
