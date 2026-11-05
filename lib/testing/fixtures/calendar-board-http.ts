@@ -4,6 +4,7 @@
 // exactly their own row, targets and dispatch states.
 import assert from 'node:assert/strict';
 import { mock } from 'bun:test';
+import { z } from 'zod';
 import type { CalendarBoardInput } from '@/lib/calendar/board-actions';
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
@@ -44,7 +45,12 @@ const employeeRecords = [
     exit_date: null,
   },
 ];
-const tables: Record<string, unknown[]> = {
+type FixtureRow = {
+  user_id?: string | null;
+  own?: Array<{ employee_record_id: string }>;
+  [column: string]: unknown;
+};
+const tables: Record<string, FixtureRow[]> = {
   employee_records: employeeRecords,
   profiles: [
     { id: 'manager', first_name: 'Lena', last_name: 'Hartmann' },
@@ -110,13 +116,12 @@ mock.module('@/lib/supabase/admin', () => ({
         }
         for (const [column, value] of filters) {
           if (column === 'user_id' && !Array.isArray(value))
-            rows = rows.filter((row) => (row as { user_id: string | null }).user_id === value);
+            rows = rows.filter((row) => row.user_id === value);
           if (column === 'own.employee_record_id')
-            rows = rows.filter((row) =>
-              (row as { own: Array<{ employee_record_id: string }> }).own.some(
-                (assignment) => assignment.employee_record_id === value,
-              ),
-            );
+            rows = rows.filter((row) => {
+              assert.ok(row.own, `${table} rows carry no own assignments`);
+              return row.own.some((assignment) => assignment.employee_record_id === value);
+            });
         }
         resolve({ error: null, data: rows });
       };
@@ -171,11 +176,31 @@ mock.module('@/lib/dispatch/server', () => ({
 const { GET } = await import('@/app/api/calendar-board/route');
 const request = (values: CalendarBoardInput = input): Request =>
   new Request(`http://localhost/api/calendar-board?${new URLSearchParams(values)}`);
-async function check(response: Response, status: number): Promise<Record<string, unknown>> {
+async function check(response: Response, status: number): Promise<unknown> {
   assert.equal(response.status, status);
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
-  return response.json() as Promise<Record<string, unknown>>;
+  return response.json();
 }
+// Only what the checks below read. Loose, so a key the board must not send still fails their exact comparisons.
+const boardSchema = z.looseObject({
+  rows: z.array(
+    z.looseObject({
+      employeeRecordId: z.string(),
+      hasLogin: z.boolean(),
+      teamName: z.string().nullable(),
+      role: z.string().nullable(),
+    }),
+  ),
+  days: z.array(
+    z.looseObject({
+      employeeRecordId: z.string(),
+      date: z.string(),
+      pendingVacation: z.boolean(),
+      absence: z.unknown(),
+    }),
+  ),
+  dispatch: z.array(z.unknown()),
+});
 
 authenticated = false;
 assert.deepEqual(await check(await GET(request()), 401), { success: false, error: 'not_authenticated' });
@@ -203,15 +228,9 @@ assert.deepEqual(await check(await GET(new Request('http://localhost/api/calenda
 assert.equal(targetReads, 0, 'no target read before authorization and validation pass');
 
 // A manager sees every record, the team of the window start, login state, pending vacation and every dispatch state.
-const managerBoard = await check(await GET(request()), 200);
+const managerBoard = boardSchema.parse(await check(await GET(request()), 200));
 assert.equal(managerBoard.success, true);
-const rows = managerBoard.rows as Array<{
-  employeeRecordId: string;
-  displayName: string;
-  hasLogin: boolean;
-  teamName: string | null;
-  role: string | null;
-}>;
+const { rows, days } = managerBoard;
 assert.deepEqual(
   rows.map((row) => row.employeeRecordId),
   ['record-manager', 'record-worker', 'record-no-login'],
@@ -224,13 +243,6 @@ assert.deepEqual(
     [false, null, null],
   ],
 );
-const days = managerBoard.days as Array<{
-  employeeRecordId: string;
-  date: string;
-  targetMinutes: number;
-  pendingVacation: boolean;
-  absence: unknown;
-}>;
 assert.equal(days.length, 6);
 assert.deepEqual(
   days.find((day) => day.employeeRecordId === 'record-worker' && day.date === '2026-06-16')?.pendingVacation,
@@ -240,25 +252,18 @@ assert.deepEqual(days.find((day) => day.employeeRecordId === 'record-no-login')?
   type: 'vacation',
   portion: 'full',
 });
-assert.equal((managerBoard.dispatch as unknown[]).length, 2);
+assert.equal(managerBoard.dispatch.length, 2);
 assert.deepEqual(managerBoard.materialDemandJobIds, ['job-one']);
 
 // An employee receives exactly their own row, their own targets and their own dispatch states.
 memberships = [{ orgId: organizationId, role: 'employee' }];
 callerId = 'worker';
-const employeeBoard = await check(await GET(request()), 200);
+const employeeBoard = boardSchema.parse(await check(await GET(request()), 200));
 assert.deepEqual(
-  (employeeBoard.rows as Array<{ employeeRecordId: string }>).map((row) => row.employeeRecordId),
+  employeeBoard.rows.map((row) => row.employeeRecordId),
   ['record-worker'],
 );
-assert.deepEqual(
-  [
-    ...new Set(
-      (employeeBoard.days as Array<{ employeeRecordId: string }>).map((day) => day.employeeRecordId),
-    ),
-  ],
-  ['record-worker'],
-);
+assert.deepEqual([...new Set(employeeBoard.days.map((day) => day.employeeRecordId))], ['record-worker']);
 assert.deepEqual(employeeBoard.dispatch, [
   { occurrenceId: 'occurrence-one', employeeRecordId: 'record-worker', state: 'bestaetigt' },
 ]);

@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { z } from '@/lib/zod';
 
-import { redeemOtpInvite } from '@/components/otp-form-invite';
+import { redeemOtpInvite } from '@/lib/invites/otp-redemption';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
