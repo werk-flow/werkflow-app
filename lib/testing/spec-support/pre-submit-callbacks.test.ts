@@ -15,7 +15,7 @@ function pageBeforeSubmission(submit: () => Promise<void>): Page {
   // need a real browser and are intentionally outside this callback test.
   return {
     getByRole: (role: string) => (role === 'dialog' ? dialog : { click: async () => {} }),
-  } as unknown as Page;
+  } as Page;
 }
 
 test('async setup rejection prevents equipment and service submission', async () => {

@@ -79,7 +79,7 @@ import {
   type DiscoveredPlaywrightTest,
 } from '../lib/testing/runner/playwright-discovery';
 import { PREPARED_PLAN_ENV, writePreparedPlan, type PreparedPlan } from '../lib/testing/runner/prepared-plan';
-import type { PlaywrightSuite } from '../lib/testing/runner/run-policy';
+import { PLAYWRIGHT_SUITES } from '../lib/testing/runner/run-policy';
 import { ensureRealtimeHealthy } from '../lib/testing/local-stack/realtime-health';
 import { formatCampaignSummary, summarizeCampaign } from '../lib/testing/evidence/campaign-summary';
 import { runPlaywrightPreflight } from './playwright-preflight';
@@ -552,7 +552,9 @@ async function main(): Promise<void> {
           signal.throwIfAborted();
           const discoveries: PreparedPlan['discoveries'] = {};
           for (const suite of new Set(
-            freshBrowserEntries.map((entry) => entry.group.kind as PlaywrightSuite),
+            freshBrowserEntries.flatMap((entry) =>
+              PLAYWRIGHT_SUITES.filter((candidate) => candidate === entry.group.kind),
+            ),
           )) {
             const playwrightArgs = selectedDiscoveryArguments(
               freshBrowserEntries.map((entry) => entry.group),
