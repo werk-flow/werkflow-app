@@ -19,14 +19,8 @@
   "components/kalender/use-manual-entry-bridge.ts": 1,
   "lib/attention/actions.ts": 1,
   "lib/data/background-read-client.ts": 1,
-  "lib/planning/daily-targets-batching.test.ts": 6,
   "lib/supabase/rpc-args.ts": 1,
-  "lib/testing/fixtures/calendar-board-http.ts": 8,
-  "lib/testing/fixtures/organization-join-limit.ts": 1,
   "lib/testing/runs/archive-state.ts": 1,
-  "lib/testing/spec-support/pre-submit-callbacks.test.ts": 2,
-  "scripts/verify.ts": 1,
-  "tests/golden/support/db/vacation.ts": 16,
-  "tests/golden/support/scenario-measurement.ts": 2,
-  "tests/ui-contracts/option-service-boundaries.ts": 1
+  "lib/testing/spec-support/pre-submit-callbacks.test.ts": 1,
+  "tests/golden/support/scenario-measurement.ts": 2
 }
