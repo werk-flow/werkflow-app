@@ -27,8 +27,11 @@ mock.module('@/lib/navigation/document-load', () => ({
 const { POST } = await import('@/app/api/redeem-invite/route');
 const { redeemSignInInvite } = await import('@/components/otp-form-invite');
 
+const sentBodies: string[] = [];
+
 async function answer(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   assert.equal(String(input), '/api/redeem-invite');
+  sentBodies.push(String(init?.body));
   return POST(
     new NextRequest('http://localhost/api/redeem-invite', {
       method: 'POST',
@@ -67,6 +70,7 @@ for (const pending_invite_code of [7, true, ['code'], { code: 'code' }, 'not-a-u
 
 // The code of the invite link goes first, whatever the metadata holds.
 assert.equal(await inviteLanding({ pending_invite_code: 7 }, 'link-code'), INVITE_ERROR);
+assert.equal(sentBodies.at(-1), JSON.stringify({ inviteCode: 'link-code' }));
 
 // Without a value there is nothing to refuse.
 for (const metadata of [{}, { pending_invite_code: null }, { pending_invite_code: '' }]) {
