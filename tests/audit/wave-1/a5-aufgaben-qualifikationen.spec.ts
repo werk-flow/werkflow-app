@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 
 import { expectDefined } from '../../../lib/testing/spec-support/expect-defined';
+import { monthDragOffsets } from '../../../lib/testing/spec-support/run-day-dates';
 import { VACATION_STATUS_LABELS } from '../../../lib/vacation/types';
 import { expect, test } from '../support/fixtures';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
@@ -531,8 +532,9 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
   }) => {
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const bueroName = `${world.users.buero.firstName} ${world.users.buero.lastName}`;
-    const plannedDateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 43);
-    const dragTargetIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', 44);
+    const [plannedOffset, dragTargetOffset] = monthDragOffsets(berlinDateAtOffset(0), 43);
+    const plannedDateIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', plannedOffset);
+    const dragTargetIso = ownedBerlinDateAtOffset('a5-aufgaben-qualifikationen', dragTargetOffset);
     const jobNumber = `A5-QUAL-${world.runId}`;
     const accompaniedJobNumber = `A5-BEGL-${world.runId}`;
 
@@ -554,8 +556,8 @@ test.describe('A5 Aufgaben und Qualifikationen @AUDIT-W1-A5', () => {
       await expect(apprenticeCheckbox).not.toBeChecked();
       await setApprenticeWarningViaManagement(adminPage, true);
 
-      // The employee becomes an apprentice from the planned date on (+43 —
-      // clear of every earlier session's condition key).
+      // The employee becomes an apprentice from the planned date on (+42 or
+      // +43, clear of every earlier session's condition key).
       await openMemberDetailFromList(adminPage, employeeName);
       await addConditionViaDialog(adminPage, {
         validFromDigits: toDatePickerDigits(plannedDateIso),

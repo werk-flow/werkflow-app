@@ -4,6 +4,7 @@
 // approver queues and the calendar read only the caller's organization (an
 // employee's calendar only their own requests). A refused call writes nothing.
 import assert from 'node:assert/strict';
+import { setSystemTime } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -22,6 +23,9 @@ const ownRequestId = '83000000-0000-4000-8000-000000000011';
 const colleagueRequestId = '83000000-0000-4000-8000-000000000012';
 const foreignPendingId = '83000000-0000-4000-8000-000000000013';
 const foreignApprovedId = '83000000-0000-4000-8000-000000000014';
+
+// The calendar's default window moves with today, and this child process is out of reach of the test's clock.
+setSystemTime(new Date('2026-11-02T10:00:00.000Z'));
 
 const vacationRequest = (
   id: string,

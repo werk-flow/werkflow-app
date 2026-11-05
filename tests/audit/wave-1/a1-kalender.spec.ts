@@ -1,3 +1,4 @@
+import { monthDragOffsets } from '../../../lib/testing/spec-support/run-day-dates';
 import { expect, test } from '../support/fixtures';
 import {
   confirmPlanningWarning,
@@ -134,8 +135,9 @@ test.describe('A1 Kalender @AUDIT-W1-A1', () => {
     adminPage,
     world,
   }) => {
-    const sourceDate = ownedBerlinDateAtOffset('a1-kalender', 22);
-    const targetDate = ownedBerlinDateAtOffset('a1-kalender', 23);
+    const [sourceOffset, targetOffset] = monthDragOffsets(berlinDateAtOffset(0), 23);
+    const sourceDate = ownedBerlinDateAtOffset('a1-kalender', sourceOffset);
+    const targetDate = ownedBerlinDateAtOffset('a1-kalender', targetOffset);
     const title = `A1 Drag ${world.runId}`;
     await createPlannedCalendarEntry(adminPage, {
       kind: 'internal',

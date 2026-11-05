@@ -3,7 +3,8 @@ import type { Page } from '@playwright/test';
 import { HOLIDAY_REGION_LABELS, getPublicHolidaysForYear } from '../../../lib/personnel/holidays';
 import { resolveDailyTargets } from '../../../lib/personnel/targets';
 import { formatDuration } from '../../../lib/time-tracking/helpers';
-import { doesDateConsumeVacation } from '../../../lib/vacation/balance';
+import { businessYearOffset } from '../../../lib/testing/spec-support/run-day-dates';
+import { countVacationDaysByYear, doesDateConsumeVacation } from '../../../lib/vacation/balance';
 import { formatSicknessRange } from '../../../lib/sickness/types';
 import { expect, test } from '../support/fixtures';
 import { berlinDateAtOffset, ownedBerlinDateAtOffset } from '../../golden/support/date-ownership';
@@ -66,7 +67,8 @@ import type { TestWorld } from '../../golden/support/world';
 // the vacation and sickness goldens: the newest condition of the year, the
 // preview's exclusions, approval hints, the half-day target effects, the
 // neutral calendar per role and the no-diagnosis contract. Every test prepares
-// its own entitlement and schedule; the run-day window is +35 … +39, +68, +69.
+// its own entitlement and schedule; the run-day window is +35 … +39, +68, +69,
+// and -45 … -41 for a condition near December 31.
 
 /** A one-hour plan on every day from today for everyone, so the current day always carries a target. */
 async function giveEveryoneATodayPlan(world: TestWorld, todayIso: string): Promise<void> {
@@ -78,6 +80,11 @@ async function giveEveryoneATodayPlan(world: TestWorld, todayIso: string): Promi
     weekendMinutes: 60,
     note: 'A4 Tagesplan',
   });
+}
+
+/** A date of the +35 … +39 window for a condition the own balance must count; see businessYearOffset. */
+function conditionDateInBusinessYear(offset: number): string {
+  return ownedBerlinDateAtOffset('a4-abwesenheit', businessYearOffset(berlinDateAtOffset(0), offset, 39));
 }
 
 /** Year, month and day of a `YYYY-MM-DD` string; a missing or non-numeric part is an error, never NaN arithmetic. */
@@ -134,8 +141,8 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     employeePage,
     world,
   }) => {
-    const firstConditionDate = ownedBerlinDateAtOffset('a4-abwesenheit', 38);
-    const secondConditionDate = ownedBerlinDateAtOffset('a4-abwesenheit', 39);
+    const firstConditionDate = conditionDateInBusinessYear(38);
+    const secondConditionDate = conditionDateInBusinessYear(39);
     const employeeName = `${world.users.employee.firstName} ${world.users.employee.lastName}`;
     const employeeRecord = await getEmployeeRecordStateByUser(world.orgId, world.users.employee.id);
 
@@ -262,7 +269,7 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
       organizationId: world.orgId,
       employeeRecordId: employeeRecord.id,
       actorUserId: world.users.admin.id,
-      validFrom: ownedBerlinDateAtOffset('a4-abwesenheit', 35),
+      validFrom: conditionDateInBusinessYear(35),
       employmentType: 'vollzeit',
       weeklyHours: 40,
       vacationDaysPerYear: 31,
@@ -276,6 +283,13 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     }
     const dateDigits = toDatePickerDigits(overlapDate);
     const rangeText = formatGermanDate(overlapDate);
+    // The own balance counts the business year only; near December 31 the day lies in the next one.
+    const plannedDays =
+      countVacationDaysByYear({ startDate: overlapDate, endDate: overlapDate, dayPortion: 'full' }, context)[
+        berlinDateAtOffset(0).slice(0, 4)
+      ] ?? 0;
+    const balanceWithPlannedDay =
+      plannedDays > 0 ? vacationTakenAndPlannedText(0, 31, plannedDays) : vacationTakenText(0, 31);
 
     await createOwnVacationRequestViaDialog(employeePage, {
       startDigits: dateDigits,
@@ -295,8 +309,8 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
 
     // The approved day lies ahead: planned, not taken.
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
-    await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
+    await expect(visibleText(employeePage, balanceWithPlannedDay)).toBeVisible();
+    await expect(visibleText(employeePage, vacationRemainingText(31 - plannedDays))).toBeVisible();
 
     await openOwnSicknessSection(employeePage);
     await reportSicknessButton(employeePage).click();
@@ -335,8 +349,8 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
-    await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
+    await expect(visibleText(employeePage, balanceWithPlannedDay)).toBeVisible();
+    await expect(visibleText(employeePage, vacationRemainingText(31 - plannedDays))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
     const sicknessRange = formatSicknessRange({
@@ -369,8 +383,8 @@ test.describe('A4 Abwesenheitscluster @AUDIT-W1-A4', () => {
     });
     expect(await getLatestVacationRequestState(world.orgId, employeeRecord.id)).toEqual(approvedVacation);
     await openOwnVacationSection(employeePage);
-    await expect(visibleText(employeePage, vacationTakenAndPlannedText(0, 31, 1))).toBeVisible();
-    await expect(visibleText(employeePage, vacationRemainingText(30))).toBeVisible();
+    await expect(visibleText(employeePage, balanceWithPlannedDay)).toBeVisible();
+    await expect(visibleText(employeePage, vacationRemainingText(31 - plannedDays))).toBeVisible();
 
     await openMemberDetailFromList(adminPage, employeeName);
     await cancelSicknessReportViaMenuWithReason(
