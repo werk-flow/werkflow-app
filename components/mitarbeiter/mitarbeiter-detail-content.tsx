@@ -27,7 +27,10 @@ import { MitarbeiterDetailPersonnelSections } from './mitarbeiter-detail-personn
 import { MitarbeiterDetailProfileSection } from './mitarbeiter-detail-profile-section';
 import { MitarbeiterDetailTimeCards } from './mitarbeiter-detail-time-cards';
 import { useMitarbeiterDetailLiveTime, type MemberInitialWeek } from './use-mitarbeiter-detail-live-time';
-import { useMitarbeiterDetailMemberActions } from './use-mitarbeiter-detail-member-actions';
+import {
+  useMitarbeiterDetailMemberActions,
+  type MitarbeiterDetailMemberActions,
+} from './use-mitarbeiter-detail-member-actions';
 
 // The server props of the detail page that a change of these tables outdates.
 const DETAIL_REFRESH_TABLES: readonly RealtimeTable[] = [
@@ -85,21 +88,29 @@ interface MitarbeiterDetailContentProps {
   canAdministerAccess: boolean;
 }
 
-export function MitarbeiterDetailContent({
+type MitarbeiterDetailCardsProps = Omit<
+  MitarbeiterDetailContentProps,
+  | 'jobs'
+  | 'projects'
+  | 'clientMap'
+  | 'jobAssignmentMap'
+  | 'members'
+  | 'currentUserId'
+  | 'currentUserRole'
+  | 'visibleColumns'
+> & {
+  fullName: string;
+  memberActions: MitarbeiterDetailMemberActions;
+};
+
+/** The left column: profile, personnel sections, documents and the live time cards. */
+function MitarbeiterDetailCards({
   member,
   personnel,
   personnelLoadFailed,
   actorNames,
-  jobs,
-  projects,
-  clientMap,
-  jobAssignmentMap,
-  members,
   organizationId,
-  currentUserId,
-  currentUserRole,
   isAdminOrManager,
-  visibleColumns,
   documents,
   breakMode,
   autoBreakThresholdMinutes,
@@ -109,7 +120,74 @@ export function MitarbeiterDetailContent({
   qualificationSummary,
   lifecycle,
   canAdministerAccess,
+  fullName,
+  memberActions,
+}: MitarbeiterDetailCardsProps) {
+  const { canManage, roleOptions, handleRoleChange } = memberActions;
+
+  return (
+    <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
+      <MitarbeiterDetailProfileSection
+        member={member}
+        canManage={canManage}
+        roleOptions={roleOptions}
+        onRoleChange={handleRoleChange}
+      />
+
+      <MitarbeiterDetailPersonnelSections
+        personnel={personnel}
+        personnelLoadFailed={personnelLoadFailed}
+        actorNames={actorNames}
+        isAdminOrManager={isAdminOrManager}
+        responsibilitySettings={responsibilitySettings}
+        qualificationSummary={qualificationSummary}
+        lifecycle={lifecycle}
+        canAdministerAccess={canAdministerAccess}
+      />
+
+      <div className="min-w-0 @[70rem]/detail:col-span-2 @7xl/detail:col-span-1">
+        {documents ? (
+          <ContextualDocumentsSection
+            title="Dokumente & Bilder"
+            description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
+            documents={documents}
+            documentTarget={{ kind: 'employee', employeeId: member.userId }}
+            contextLabel={fullName}
+            canUpload={isAdminOrManager}
+            canManage={isAdminOrManager}
+          />
+        ) : (
+          <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
+        )}
+      </div>
+
+      <MitarbeiterDetailLiveTimeCards
+        // The week view keeps its first data after mount; new entry or exit
+        // dates from the refreshed server props remount it with the new targets.
+        key={`${personnel?.record.entryDate ?? ''}:${personnel?.record.exitDate ?? ''}`}
+        organizationId={organizationId}
+        userId={member.userId}
+        breakMode={breakMode}
+        autoBreakThresholdMinutes={autoBreakThresholdMinutes}
+        autoBreakDurationMinutes={autoBreakDurationMinutes}
+        initialWeek={initialWeek}
+      />
+    </div>
+  );
+}
+
+export function MitarbeiterDetailContent({
+  jobs,
+  projects,
+  clientMap,
+  jobAssignmentMap,
+  members,
+  currentUserId,
+  currentUserRole,
+  visibleColumns,
+  ...cards
 }: MitarbeiterDetailContentProps) {
+  const { member, personnel, personnelLoadFailed, isAdminOrManager, responsibilitySettings } = cards;
   const fullName = [member.firstName, member.lastName].filter(Boolean).join(' ') || 'Unbekannt';
 
   const memberActions = useMitarbeiterDetailMemberActions({
@@ -125,14 +203,11 @@ export function MitarbeiterDetailContent({
   useRealtimeRouterRefresh({ tables: DETAIL_REFRESH_TABLES });
 
   const {
-    canManage,
-    roleOptions,
     removalBlockedMessage,
     showRemoveDialog,
     setShowRemoveDialog,
     isRemoving,
     actionError,
-    handleRoleChange,
     handleRemove,
   } = memberActions;
 
@@ -151,53 +226,7 @@ export function MitarbeiterDetailContent({
       <PageBody>
         <DetailColumns layout="cards-and-table">
           {/* Left Column: Profile + Status */}
-          <div className="grid grid-cols-1 gap-6 @[70rem]/detail:grid-cols-3 @7xl/detail:grid-cols-1">
-            <MitarbeiterDetailProfileSection
-              member={member}
-              canManage={canManage}
-              roleOptions={roleOptions}
-              onRoleChange={handleRoleChange}
-            />
-
-            <MitarbeiterDetailPersonnelSections
-              personnel={personnel}
-              personnelLoadFailed={personnelLoadFailed}
-              actorNames={actorNames}
-              isAdminOrManager={isAdminOrManager}
-              responsibilitySettings={responsibilitySettings}
-              qualificationSummary={qualificationSummary}
-              lifecycle={lifecycle}
-              canAdministerAccess={canAdministerAccess}
-            />
-
-            <div className="min-w-0 @[70rem]/detail:col-span-2 @7xl/detail:col-span-1">
-              {documents ? (
-                <ContextualDocumentsSection
-                  title="Dokumente & Bilder"
-                  description="Dokumente, Nachweise und Dateien zu diesem Mitarbeiter."
-                  documents={documents}
-                  documentTarget={{ kind: 'employee', employeeId: member.userId }}
-                  contextLabel={fullName}
-                  canUpload={isAdminOrManager}
-                  canManage={isAdminOrManager}
-                />
-              ) : (
-                <RegionLoadError>Dokumente und Bilder konnten nicht geladen werden.</RegionLoadError>
-              )}
-            </div>
-
-            <MitarbeiterDetailLiveTimeCards
-              // The week view keeps its first data after mount; new entry or exit
-              // dates from the refreshed server props remount it with the new targets.
-              key={`${personnel?.record.entryDate ?? ''}:${personnel?.record.exitDate ?? ''}`}
-              organizationId={organizationId}
-              userId={member.userId}
-              breakMode={breakMode}
-              autoBreakThresholdMinutes={autoBreakThresholdMinutes}
-              autoBreakDurationMinutes={autoBreakDurationMinutes}
-              initialWeek={initialWeek}
-            />
-          </div>
+          <MitarbeiterDetailCards {...cards} fullName={fullName} memberActions={memberActions} />
 
           {/* Right Column: Jobs Table */}
           <MitarbeiterDetailAssignedJobs

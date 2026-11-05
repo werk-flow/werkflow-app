@@ -32,31 +32,14 @@ function NoScheduleYet() {
   );
 }
 
-interface WorkScheduleSectionProps {
-  recordId: string;
-  schedules: WorkSchedule[];
-  conditions: EmploymentCondition[];
-  canEdit: boolean;
-}
-
-export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }: WorkScheduleSectionProps) {
-  const router = useRouter();
-  const { showBanner } = useBanner();
-  const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
+/** The delete confirmation of one schedule: its target, the delete and its failure. */
+function useWorkScheduleDelete(
+  router: ReturnType<typeof useRouter>,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+) {
   const [deleteTarget, setDeleteTarget] = useState<WorkSchedule | null>(null);
   const { run: runDelete, isPending: isDeleting } = useServerAction(deleteWorkSchedule);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  const todayIso = getBusinessTodayIso();
-  const current = getEffectiveSchedule(schedules, todayIso);
-  const sorted = [...schedules].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
-
-  // Non-blocking consistency hint: the schedule wins for targets, the
-  // condition's weekly hours stay contractual metadata (owner decision).
-  const currentCondition = getEffectiveCondition(conditions);
-  const currentWeeklyMinutes = current ? getWeeklyScheduleMinutes(current) : null;
-  const conditionWeeklyMinutes =
-    currentCondition?.weeklyHours != null ? Math.round(currentCondition.weeklyHours * 60) : null;
 
   const handleDelete = async () => {
     if (!deleteTarget || isDeleting) return;
@@ -78,6 +61,55 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
       );
     }
   };
+
+  return { deleteTarget, setDeleteTarget, isDeleting, deleteError, setDeleteError, handleDelete };
+}
+
+/**
+ * Non-blocking consistency hint: the schedule wins for targets, the
+ * condition's weekly hours stay contractual metadata (owner decision).
+ */
+function ScheduleConditionHint({
+  current,
+  conditions,
+}: {
+  current: WorkSchedule | null;
+  conditions: EmploymentCondition[];
+}) {
+  const currentCondition = getEffectiveCondition(conditions);
+  const currentWeeklyMinutes = current ? getWeeklyScheduleMinutes(current) : null;
+  const conditionWeeklyMinutes =
+    currentCondition?.weeklyHours != null ? Math.round(currentCondition.weeklyHours * 60) : null;
+
+  return (
+    currentWeeklyMinutes !== null &&
+    conditionWeeklyMinutes !== null &&
+    currentWeeklyMinutes !== conditionWeeklyMinutes && (
+      <p className="mt-2 text-xs text-muted-foreground">
+        Hinweis: Der aktuelle Wochenplan ({formatDuration(currentWeeklyMinutes)}) weicht von den Wochenstunden
+        der Beschäftigung ({formatDuration(conditionWeeklyMinutes)}) ab. Für Zeitziele gilt der Wochenplan.
+      </p>
+    )
+  );
+}
+
+interface WorkScheduleSectionProps {
+  recordId: string;
+  schedules: WorkSchedule[];
+  conditions: EmploymentCondition[];
+  canEdit: boolean;
+}
+
+export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }: WorkScheduleSectionProps) {
+  const router = useRouter();
+  const { showBanner } = useBanner();
+  const [dialogState, setDialogState] = useState<DialogState>({ mode: 'closed' });
+  const { deleteTarget, setDeleteTarget, isDeleting, deleteError, setDeleteError, handleDelete } =
+    useWorkScheduleDelete(router, showBanner);
+
+  const todayIso = getBusinessTodayIso();
+  const current = getEffectiveSchedule(schedules, todayIso);
+  const sorted = [...schedules].sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 
   return (
     <div className="rounded-lg border bg-card p-3 sm:p-4">
@@ -117,15 +149,7 @@ export function WorkScheduleSection({ recordId, schedules, conditions, canEdit }
         </ul>
       )}
 
-      {currentWeeklyMinutes !== null &&
-        conditionWeeklyMinutes !== null &&
-        currentWeeklyMinutes !== conditionWeeklyMinutes && (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Hinweis: Der aktuelle Wochenplan ({formatDuration(currentWeeklyMinutes)}) weicht von den
-            Wochenstunden der Beschäftigung ({formatDuration(conditionWeeklyMinutes)}) ab. Für Zeitziele gilt
-            der Wochenplan.
-          </p>
-        )}
+      <ScheduleConditionHint current={current} conditions={conditions} />
 
       {dialogState.mode !== 'closed' && (
         <WorkScheduleDialog
