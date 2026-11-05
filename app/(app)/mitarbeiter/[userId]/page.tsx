@@ -82,6 +82,119 @@ async function loadMemberInitialWeek(
   };
 }
 
+/** The reads that need only the caller and the target, all started together. */
+async function readDetailSources({
+  targetUserId,
+  activeOrgId,
+  currentUserId,
+}: {
+  targetUserId: string;
+  activeOrgId: string;
+  currentUserId: string;
+}) {
+  const [
+    memberResult,
+    personnelResult,
+    jobsResult,
+    membersResult,
+    documentsResult,
+    organizationSettings,
+    organizationUserPreferences,
+    responsibilitySettingsResult,
+    qualificationSummaryResult,
+    initialWeek,
+  ] = await Promise.all([
+    getMemberDetail(targetUserId),
+    getPersonnelDetail(targetUserId),
+    getJobsForMember(targetUserId),
+    getOrgMembersForUser(activeOrgId, currentUserId),
+    getEmployeeDocuments(targetUserId),
+    getCachedOrganizationSettings(activeOrgId),
+    getOrganizationUserPreferencesForView(activeOrgId, currentUserId),
+    getResponsibilitySettingsData(),
+    getPersonnelQualificationSummary(targetUserId),
+    loadMemberInitialWeek(activeOrgId, targetUserId),
+  ]);
+  return {
+    memberResult,
+    personnelResult,
+    jobsResult,
+    membersResult,
+    documentsResult,
+    organizationSettings,
+    organizationUserPreferences,
+    responsibilitySettingsResult,
+    qualificationSummaryResult,
+    initialWeek,
+  };
+}
+
+type DetailReads = Awaited<ReturnType<typeof readDetailSources>>;
+
+/** The qualification summary; null, and logged, when its read failed. */
+function qualificationSummaryFrom(qualificationSummaryResult: DetailReads['qualificationSummaryResult']) {
+  const qualificationSummary = qualificationSummaryResult.success ? qualificationSummaryResult.data : null;
+  if (!qualificationSummaryResult.success) {
+    logError('Mitarbeiter detail: qualification summary read failed', qualificationSummaryResult.error);
+  }
+  return qualificationSummary;
+}
+
+/** The person's record, and whether its read failed rather than found none. */
+function resolvePersonnelRecord(personnelResult: DetailReads['personnelResult']) {
+  const personnelDetail = personnelResult.success ? personnelResult.detail : null;
+  // A missing record keeps the member-only view; a failed read must not look like one.
+  // getPersonnelDetail logs both failures with their cause.
+  const personnelLoadFailed =
+    !personnelResult.success &&
+    (personnelResult.error === 'load_failed' || personnelResult.error === 'unexpected_error');
+  return { personnelDetail, personnelLoadFailed };
+}
+
+/** The lifecycle and the history's names: both need only the personnel detail, so they run together. */
+async function readPersonnelFollowUps(personnelDetail: PersonnelDetail | null) {
+  const [lifecycleResult, actorNames] = await Promise.all([
+    personnelDetail ? getPersonnelLifecycle(personnelDetail.record.id) : null,
+    resolveActorNames(personnelDetail),
+  ]);
+  if (lifecycleResult && !lifecycleResult.success) {
+    logError('Mitarbeiter detail: lifecycle read failed', lifecycleResult.error);
+  }
+  return { lifecycle: lifecycleResult?.success ? lifecycleResult.data : null, actorNames };
+}
+
+/** The member detail's props that come straight from a read; a failed section read stays `null`. */
+function memberSectionProps({
+  jobsResult,
+  documentsResult,
+  organizationSettings,
+  organizationUserPreferences,
+  responsibilitySettingsResult,
+  initialWeek,
+}: DetailReads) {
+  const jobsData = jobsResult.success
+    ? {
+        jobs: jobsResult.jobs,
+        projects: jobsResult.projects,
+        clientMap: jobsResult.clientMap,
+        jobAssignmentMap: jobsResult.jobAssignmentMap,
+      }
+    : null;
+  return {
+    jobs: jobsData?.jobs ?? null,
+    projects: jobsData?.projects ?? [],
+    clientMap: jobsData?.clientMap ?? {},
+    jobAssignmentMap: jobsData?.jobAssignmentMap ?? {},
+    visibleColumns: organizationUserPreferences.visibleColumns,
+    documents: documentsResult.success ? documentsResult.documents : null,
+    breakMode: organizationSettings.breakMode,
+    autoBreakThresholdMinutes: organizationSettings.autoBreakThresholdMinutes,
+    autoBreakDurationMinutes: organizationSettings.autoBreakDurationMinutes,
+    initialWeek,
+    responsibilitySettings: responsibilitySettingsResult.success ? responsibilitySettingsResult.data : null,
+  };
+}
+
 interface MitarbeiterDetailPageProps {
   params: Promise<{ userId: string }>;
 }
@@ -98,47 +211,11 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     redirect('/dashboard');
   }
 
-  const [
-    memberResult,
-    personnelResult,
-    jobsResult,
-    membersResult,
-    documentsResult,
-    organizationSettings,
-    organizationUserPreferences,
-    responsibilitySettingsResult,
-    qualificationSummaryResult,
-    initialWeek,
-  ] = await Promise.all([
-    getMemberDetail(targetUserId),
-    getPersonnelDetail(targetUserId),
-    getJobsForMember(targetUserId),
-    getOrgMembersForUser(activeOrgId, user.id),
-    getEmployeeDocuments(targetUserId),
-    getCachedOrganizationSettings(activeOrgId),
-    getOrganizationUserPreferencesForView(activeOrgId, user.id),
-    getResponsibilitySettingsData(),
-    getPersonnelQualificationSummary(targetUserId),
-    loadMemberInitialWeek(activeOrgId, targetUserId),
-  ]);
-  const qualificationSummary = qualificationSummaryResult.success ? qualificationSummaryResult.data : null;
-  if (!qualificationSummaryResult.success) {
-    logError('Mitarbeiter detail: qualification summary read failed', qualificationSummaryResult.error);
-  }
-  const personnelDetail = personnelResult.success ? personnelResult.detail : null;
-  // A missing record keeps the member-only view; a failed read must not look like one.
-  // getPersonnelDetail logs both failures with their cause.
-  const personnelLoadFailed =
-    !personnelResult.success &&
-    (personnelResult.error === 'load_failed' || personnelResult.error === 'unexpected_error');
-  // Both follow-up reads need only the personnel detail, so they run together.
-  const [lifecycleResult, actorNames] = await Promise.all([
-    personnelDetail ? getPersonnelLifecycle(personnelDetail.record.id) : null,
-    resolveActorNames(personnelDetail),
-  ]);
-  if (lifecycleResult && !lifecycleResult.success) {
-    logError('Mitarbeiter detail: lifecycle read failed', lifecycleResult.error);
-  }
+  const reads = await readDetailSources({ targetUserId, activeOrgId, currentUserId: user.id });
+  const { memberResult, membersResult, personnelResult, documentsResult } = reads;
+  const qualificationSummary = qualificationSummaryFrom(reads.qualificationSummaryResult);
+  const { personnelDetail, personnelLoadFailed } = resolvePersonnelRecord(personnelResult);
+  const { lifecycle, actorNames } = await readPersonnelFollowUps(personnelDetail);
 
   if (
     !memberResult.success &&
@@ -168,7 +245,7 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
           actorNames={actorNames}
           canEdit={isAdminOrManager}
           qualificationSummary={qualificationSummary}
-          lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}
+          lifecycle={lifecycle}
           canAdministerAccess={currentUserRole === 'admin'}
         />
       );
@@ -188,48 +265,24 @@ async function MitarbeiterDetailData({ targetUserId }: { targetUserId: string })
     );
   }
 
-  const { member } = memberResult;
-
-  const jobsData = jobsResult.success
-    ? {
-        jobs: jobsResult.jobs,
-        projects: jobsResult.projects,
-        clientMap: jobsResult.clientMap,
-        jobAssignmentMap: jobsResult.jobAssignmentMap,
-      }
-    : null;
-
-  const members = membersResult.members.map(toMemberOption);
-
-  const { visibleColumns } = organizationUserPreferences;
   if (!documentsResult.success) {
     logError('Mitarbeiter detail: document read failed', documentsResult.error);
   }
 
   return (
     <MitarbeiterDetailContent
-      member={member}
+      {...memberSectionProps(reads)}
+      member={memberResult.member}
       personnel={personnelDetail}
       personnelLoadFailed={personnelLoadFailed}
       actorNames={actorNames}
-      jobs={jobsData?.jobs ?? null}
-      projects={jobsData?.projects ?? []}
-      clientMap={jobsData?.clientMap ?? {}}
-      jobAssignmentMap={jobsData?.jobAssignmentMap ?? {}}
-      members={members}
+      members={membersResult.members.map(toMemberOption)}
       organizationId={activeOrgId}
       currentUserId={user.id}
       currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
-      visibleColumns={visibleColumns}
-      documents={documentsResult.success ? documentsResult.documents : null}
-      breakMode={organizationSettings.breakMode}
-      autoBreakThresholdMinutes={organizationSettings.autoBreakThresholdMinutes}
-      autoBreakDurationMinutes={organizationSettings.autoBreakDurationMinutes}
-      initialWeek={initialWeek}
-      responsibilitySettings={responsibilitySettingsResult.success ? responsibilitySettingsResult.data : null}
       qualificationSummary={qualificationSummary}
-      lifecycle={lifecycleResult?.success ? lifecycleResult.data : null}
+      lifecycle={lifecycle}
       canAdministerAccess={currentUserRole === 'admin'}
     />
   );
