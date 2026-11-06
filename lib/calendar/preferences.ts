@@ -11,7 +11,6 @@ import { isJsonRecord } from '@/lib/supabase/json';
  */
 
 export const CALENDAR_HORIZON_WEEKS = [1, 2, 4, 6] as const;
-export type CalendarHorizonWeeks = (typeof CALENDAR_HORIZON_WEEKS)[number];
 
 export const CALENDAR_DISPATCH_FILTERS = [
   'nicht_gesendet',
