@@ -66,7 +66,7 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
 - A spec or support file selects the groups that import it.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, CI's full runs, with `--group`, or when their own test code changed (never a wall-clock group).
+- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
 - Browser groups whose own spec or support changed run first.
 - `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
