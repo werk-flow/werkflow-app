@@ -12,7 +12,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
@@ -27,34 +27,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 835.999755859375,
+      "referenceMs": 995.199951171875,
       "samples": [
-        790.199951171875,
-        812.60009765625,
-        814.7998046875,
-        825.199951171875,
-        835.999755859375,
-        920.199951171875,
-        964.199951171875,
-        973.800048828125,
-        1180.5
+        853.099853515625,
+        910.900146484375,
+        947,
+        971.10009765625,
+        995.199951171875,
+        1027.800048828125,
+        1091.400146484375,
+        1131.800048828125,
+        1412.60009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:53:50.518Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:07.091Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     },
     {
@@ -63,7 +63,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
@@ -78,34 +78,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 648.800048828125,
+      "referenceMs": 737.2001953125,
       "samples": [
-        609.900146484375,
-        640.400146484375,
-        641.000244140625,
-        648.699951171875,
-        648.800048828125,
-        654.89990234375,
-        662.699951171875,
-        687.2998046875,
-        746
+        686,
+        689,
+        708.599853515625,
+        721.7998046875,
+        737.2001953125,
+        800.099853515625,
+        850.39990234375,
+        1012.300048828125,
+        1206.60009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:53:51.469Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:08.404Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     },
     {
@@ -114,7 +114,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
@@ -129,34 +129,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 503.199951171875,
+      "referenceMs": 555.199951171875,
       "samples": [
-        438.2001953125,
-        490.7998046875,
-        491.800048828125,
-        495.60009765625,
-        503.199951171875,
-        509.699951171875,
-        515.10009765625,
-        521.89990234375,
-        533.199951171875
+        474.39990234375,
+        526.60009765625,
+        530.5,
+        532.7001953125,
+        555.199951171875,
+        571.7001953125,
+        577.900146484375,
+        698.699951171875,
+        811.699951171875
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:53:53.037Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:10.314Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     },
     {
@@ -165,7 +165,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
@@ -180,34 +180,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 547.499755859375,
+      "referenceMs": 559.7001953125,
       "samples": [
-        514.60009765625,
-        526.300048828125,
-        538.10009765625,
-        545.199951171875,
-        547.499755859375,
-        550.2998046875,
-        552.10009765625,
-        553.5,
-        576.900146484375
+        509.099853515625,
+        532.900146484375,
+        549.699951171875,
+        554.800048828125,
+        559.7001953125,
+        576.500244140625,
+        796.199951171875,
+        1154.500244140625,
+        1470.300048828125
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:53:53.763Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:11.122Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     },
     {
@@ -216,7 +216,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
         "protocol": "fixed-workload-jobs-warmed-settled-closed-server-fresh-context-customers-jobs-detail-equipment-tasks-browser-raf-v5",
         "role": "admin",
@@ -231,34 +231,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 751.800048828125,
+      "referenceMs": 876.39990234375,
       "samples": [
-        684.800048828125,
-        695.699951171875,
-        702.099853515625,
-        738.2001953125,
-        751.800048828125,
-        758,
-        765.199951171875,
-        806.2998046875,
-        847.800048828125
+        775.000244140625,
+        778.39990234375,
+        819.10009765625,
+        823.39990234375,
+        876.39990234375,
+        898.5,
+        1043.900146484375,
+        1048.800048828125,
+        2378.10009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:53:54.677Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:12.321Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     },
     {
@@ -267,7 +267,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "4bb343c5da235475950de6c831677754c8a1455fee30696c6427a1be32e14325",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -282,34 +282,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 1290,
+      "referenceMs": 1447.400146484375,
       "samples": [
-        1178.599853515625,
-        1186.60009765625,
-        1215.30029296875,
-        1225.099853515625,
-        1290,
-        1356.699951171875,
-        1414,
-        1439.5,
-        1625
+        1340.699951171875,
+        1351.400146484375,
+        1398.199951171875,
+        1432.60009765625,
+        1447.400146484375,
+        1463.800048828125,
+        1541.400146484375,
+        1568.80029296875,
+        1734.099853515625
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:36.475Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:42.209Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -318,7 +318,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "b4331101020f8e2bf3e916f75e607c5a5dca3765338fc561290018b8c38b5046",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -333,34 +333,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 131.699951171875,
+      "referenceMs": 165.400146484375,
       "samples": [
-        113.10009765625,
-        124.2998046875,
-        127.099853515625,
-        130.199951171875,
-        131.699951171875,
-        132.599853515625,
-        138.400146484375,
-        143.10009765625,
-        187
+        110.900146484375,
+        141.800048828125,
+        149.199951171875,
+        161,
+        165.400146484375,
+        175,
+        180.699951171875,
+        183.900146484375,
+        188.199951171875
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:41.075Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:47.406Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -369,7 +369,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "6bd087a37b39bbdefdf075c13b2acdd4d8f2bfeaff16b15f17bbf11fdfee138b",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -384,34 +384,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 304.099853515625,
+      "referenceMs": 366.699951171875,
       "samples": [
-        272.699951171875,
-        295.199951171875,
-        298.699951171875,
-        301.10009765625,
-        304.099853515625,
-        310,
-        323.400146484375,
-        354.900146484375,
-        360.5
+        355.800048828125,
+        356.800048828125,
+        363.2001953125,
+        366.300048828125,
+        366.699951171875,
+        369.10009765625,
+        370,
+        392.300048828125,
+        397.5
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:43.119Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:49.994Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -420,7 +420,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "adff044f6e470e78b946c09d7f96fb683d620a4f0e4b45a6830338fa42a59f7a",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -435,34 +435,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 155.89990234375,
+      "referenceMs": 181,
       "samples": [
-        137.5,
-        148.199951171875,
-        148.800048828125,
-        153.60009765625,
-        155.89990234375,
-        156.60009765625,
-        158.39990234375,
-        176.5,
-        238.099853515625
+        141.60009765625,
+        157.699951171875,
+        172,
+        172,
+        181,
+        188.900146484375,
+        191.5,
+        197.699951171875,
+        202.60009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:44.005Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:50.948Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -471,7 +471,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "7878116154778397f646126b0a84cd1c97fc683f0dca00acc52f7169a45fff6c",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -486,34 +486,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 195.900146484375,
+      "referenceMs": 226.10009765625,
       "samples": [
-        192.60009765625,
-        193.699951171875,
-        194.300048828125,
-        195.7001953125,
-        195.900146484375,
-        199.900146484375,
-        203.5,
-        204.7998046875,
-        252.39990234375
+        200.5,
+        205.199951171875,
+        211.800048828125,
+        213.599853515625,
+        226.10009765625,
+        246.400146484375,
+        247.5,
+        255.39990234375,
+        258.199951171875
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:44.690Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:51.786Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -522,7 +522,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "5cbf169cc1d63a5d7a1ae2c8432853a810a57dafd99482dd28bfecc6ade85e96",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -537,34 +537,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 253.5,
+      "referenceMs": 288.900146484375,
       "samples": [
-        168.7001953125,
-        175.199951171875,
-        222.199951171875,
-        243.5,
-        253.5,
-        258.800048828125,
-        258.900146484375,
-        279.199951171875,
-        298.199951171875
+        164.60009765625,
+        191,
+        191.7001953125,
+        268.400146484375,
+        288.900146484375,
+        293.699951171875,
+        307.699951171875,
+        321.89990234375,
+        362
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:46.660Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:53.952Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -573,7 +573,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "0b8ac2741de02953f5534a6e82c395c82f668d5308545ce9670b4f872c56059c",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -588,34 +588,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 875.599853515625,
+      "referenceMs": 997.89990234375,
       "samples": [
-        810.5,
-        817.300048828125,
-        837.7001953125,
-        843.199951171875,
-        875.599853515625,
-        934.800048828125,
-        940,
-        1005.89990234375,
-        1099.39990234375
+        860.900146484375,
+        883.800048828125,
+        959.300048828125,
+        990.300048828125,
+        997.89990234375,
+        1064.39990234375,
+        1081.89990234375,
+        1088.7001953125,
+        1142.300048828125
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:47.820Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:55.548Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -624,7 +624,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "7bc6306e46c28f5b7b78bc716410f1a4ac33b43aae398cbca0e31553cb4e7533",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -639,34 +639,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 358.400146484375,
+      "referenceMs": 385.39990234375,
       "samples": [
-        333.60009765625,
-        335.2001953125,
-        347.5,
-        347.699951171875,
-        358.400146484375,
-        378.89990234375,
-        384,
-        419.699951171875,
-        536.199951171875
+        340.89990234375,
+        346.099853515625,
+        354.199951171875,
+        371,
+        385.39990234375,
+        428.60009765625,
+        450.7998046875,
+        470.39990234375,
+        482.10009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:48.894Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:57.067Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -675,7 +675,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "70441f0c809d269ce7ba72fc8450f9bf527d9b1eed60b188a747682a8f5f6196",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -690,34 +690,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 31.900146484375,
+      "referenceMs": 35.5,
       "samples": [
-        25.300048828125,
-        27,
-        27.800048828125,
-        28.5,
-        31.900146484375,
-        35.60009765625,
-        37,
+        31.199951171875,
+        34.599853515625,
+        34.800048828125,
+        35,
+        35.5,
+        38.10009765625,
         38.89990234375,
-        44.39990234375
+        40,
+        43.699951171875
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:49.560Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:57.863Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -726,7 +726,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "02e66b907a66456c5b4ab79e904fc0c6b700ba9dc104da3907728d3c8ee2c9fe",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -741,34 +741,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 174.099853515625,
+      "referenceMs": 213.800048828125,
       "samples": [
-        151.599853515625,
-        154.2001953125,
-        160.60009765625,
-        163.199951171875,
-        174.099853515625,
-        175.800048828125,
-        179.699951171875,
-        181.300048828125,
-        181.89990234375
+        168,
+        182.800048828125,
+        191.5,
+        193.39990234375,
+        213.800048828125,
+        227.900146484375,
+        228.5,
+        253.800048828125,
+        267.400146484375
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:50.785Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:59.193Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -777,7 +777,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "c2d4093fed2fe039882e0021288f1e0ce2e74c6878261222a3c1fdecbbf8a790",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -792,34 +792,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 286.5,
+      "referenceMs": 281.39990234375,
       "samples": [
-        253,
-        255.300048828125,
-        266.5,
-        273.10009765625,
-        286.5,
-        294.39990234375,
-        312,
-        329.099853515625,
-        403.60009765625
+        242.699951171875,
+        259.400146484375,
+        262.400146484375,
+        278.39990234375,
+        281.39990234375,
+        286.800048828125,
+        287.900146484375,
+        325.900146484375,
+        336.7001953125
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:51.547Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:45:59.974Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -828,7 +828,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "73f947a69043c49743e01c857f41a32f687d38712edc5a4e4777f9a90076df9e",
         "protocol": "fixed-date-jobs-warmed-settled-closed-server-fresh-context-board-reassign-day-resize-board-six-weeks-month-move-next-board-browser-raf-v6",
         "role": "admin",
@@ -843,34 +843,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 173,
+      "referenceMs": 103.10009765625,
       "samples": [
-        165.300048828125,
-        167.699951171875,
-        168.199951171875,
-        170.199951171875,
-        173,
-        177.300048828125,
-        179.300048828125,
-        181.5,
-        208.5
+        86.800048828125,
+        95.5,
+        96.199951171875,
+        98.800048828125,
+        103.10009765625,
+        104.60009765625,
+        104.800048828125,
+        118.099853515625,
+        121.89990234375
       ],
       "source": {
-        "runKey": "2026-10-25T164054029Z-72bd5e",
+        "runKey": "2026-11-06T063210577Z-64de42",
         "runKeys": [
-          "2026-10-25T164054029Z-72bd5e",
-          "2026-10-25T164612625Z-65ba5e",
-          "2026-10-25T165128733Z-45893c"
+          "2026-11-06T063210577Z-64de42",
+          "2026-11-06T063803492Z-afc4c0",
+          "2026-11-06T064427695Z-f9f3c9"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:52:52.034Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:46:00.230Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:34.889Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:39.230Z"
       }
     },
     {
@@ -879,7 +879,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
         "measurementDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
         "protocol": "independent-fixed-month-three-distinct-overlap-confirmations-browser-raf-v3",
         "role": "buero",
@@ -894,34 +894,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 521.2998046875,
+      "referenceMs": 648.2001953125,
       "samples": [
-        482.599853515625,
-        493.300048828125,
-        504.300048828125,
-        520.099853515625,
-        521.2998046875,
-        537.400146484375,
-        608.5,
-        616.7001953125,
-        650.39990234375
+        577.39990234375,
+        601.89990234375,
+        618.39990234375,
+        643.2001953125,
+        648.2001953125,
+        680.2998046875,
+        699.599853515625,
+        743,
+        997.400146484375
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-d655e9",
+        "runKey": "2026-11-06T063210577Z-ff7eda",
         "runKeys": [
-          "2026-10-25T164054030Z-d655e9",
-          "2026-10-25T164612625Z-ac5813",
-          "2026-10-25T165128733Z-c2660b"
+          "2026-11-06T063210577Z-ff7eda",
+          "2026-11-06T063803492Z-a55d19",
+          "2026-11-06T064427695Z-b1f8e5"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:55:01.539Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:48:39.928Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:43.462Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:50.193Z"
       }
     },
     {
@@ -930,7 +930,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
         "measurementDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
         "protocol": "independent-fixed-month-jobs-warmed-settled-closed-server-fresh-employee-after-three-saves-browser-raf-v5",
         "role": "employee",
@@ -945,34 +945,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 396.400146484375,
+      "referenceMs": 431,
       "samples": [
-        379.89990234375,
-        386.900146484375,
-        390.89990234375,
-        396.199951171875,
-        396.400146484375,
-        410.400146484375,
-        413.600341796875,
-        418.7001953125,
-        420.199951171875
+        396.699951171875,
+        409.099853515625,
+        417.5,
+        424.899658203125,
+        431,
+        431.800048828125,
+        440.800048828125,
+        449.300048828125,
+        471.000244140625
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-d655e9",
+        "runKey": "2026-11-06T063210577Z-ff7eda",
         "runKeys": [
-          "2026-10-25T164054030Z-d655e9",
-          "2026-10-25T164612625Z-ac5813",
-          "2026-10-25T165128733Z-c2660b"
+          "2026-11-06T063210577Z-ff7eda",
+          "2026-11-06T063803492Z-a55d19",
+          "2026-11-06T064427695Z-b1f8e5"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:55:10.605Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:48:50.747Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:43.462Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:50.193Z"
       }
     },
     {
@@ -981,7 +981,7 @@
       "profile": "golden-world",
       "backend": "local",
       "context": {
-        "workloadDigest": "63ff90afc6ac57573cc7be8eba2491852cea039873ce6580c20bb2b0b3a98521",
+        "workloadDigest": "938b8a0dda5681b9e31bf951e71aecfb1576b3c22bef272537a9ef38cf77ddd9",
         "measurementDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
         "protocol": "independent-fixed-month-fresh-admin-after-legacy-save-browser-raf-v3",
         "role": "admin",
@@ -996,34 +996,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 423.89990234375,
+      "referenceMs": 452,
       "samples": [
-        397.5,
-        398.10009765625,
-        398.300048828125,
-        417,
-        423.89990234375,
-        433.300048828125,
-        446.499755859375,
-        461.60009765625,
-        917.7001953125
+        419.39990234375,
+        422.699951171875,
+        436.2998046875,
+        437.800048828125,
+        452,
+        461.10009765625,
+        465.89990234375,
+        478.2001953125,
+        733.60009765625
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-d655e9",
+        "runKey": "2026-11-06T063210577Z-ff7eda",
         "runKeys": [
-          "2026-10-25T164054030Z-d655e9",
-          "2026-10-25T164612625Z-ac5813",
-          "2026-10-25T165128733Z-c2660b"
+          "2026-11-06T063210577Z-ff7eda",
+          "2026-11-06T063803492Z-a55d19",
+          "2026-11-06T064427695Z-b1f8e5"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:55:16.936Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:48:57.645Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:43.462Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:50.193Z"
       }
     },
     {
@@ -1032,7 +1032,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
@@ -1047,34 +1047,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 87.800048828125,
+      "referenceMs": 104.5,
       "samples": [
-        72.5,
-        79.599853515625,
-        84.2001953125,
-        86.599853515625,
-        87.800048828125,
-        101.10009765625,
-        103.10009765625,
-        105.39990234375,
-        119.599853515625
+        85.800048828125,
+        88.099853515625,
+        99.5,
+        101.699951171875,
+        104.5,
+        106.099853515625,
+        109,
+        140,
+        181
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-69f234",
+        "runKey": "2026-11-06T063210577Z-d065c3",
         "runKeys": [
-          "2026-10-25T164054030Z-69f234",
-          "2026-10-25T164612625Z-069367",
-          "2026-10-25T165128733Z-3f5168"
+          "2026-11-06T063210577Z-d065c3",
+          "2026-11-06T063803492Z-5866c6",
+          "2026-11-06T064427695Z-433464"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:55:59.870Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:49:54.127Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:47.901Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:56.851Z"
       }
     },
     {
@@ -1083,7 +1083,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "b60aad81d7b68c3d9a99b8ef0910928c7ded576a147649a6fde411a243815f97",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
@@ -1098,34 +1098,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 83.300048828125,
+      "referenceMs": 84.89990234375,
       "samples": [
-        62.7998046875,
-        69.099853515625,
-        74.400146484375,
-        80.699951171875,
-        83.300048828125,
-        84.300048828125,
-        87.5,
-        90.199951171875,
-        93.60009765625
+        80.400146484375,
+        81.2998046875,
+        82.5,
+        83.39990234375,
+        84.89990234375,
+        87.800048828125,
+        88.5,
+        94.800048828125,
+        226.7998046875
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-69f234",
+        "runKey": "2026-11-06T063210577Z-d065c3",
         "runKeys": [
-          "2026-10-25T164054030Z-69f234",
-          "2026-10-25T164612625Z-069367",
-          "2026-10-25T165128733Z-3f5168"
+          "2026-11-06T063210577Z-d065c3",
+          "2026-11-06T063803492Z-5866c6",
+          "2026-11-06T064427695Z-433464"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:56:00.328Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:49:54.667Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:47.901Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:56.851Z"
       }
     },
     {
@@ -1134,7 +1134,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "24bdf2f40428d55dfd61e19d8416ae61aa7bd6b6243eddea18a87d0fe5c3b0f9",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
@@ -1149,34 +1149,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 240.800048828125,
+      "referenceMs": 239.199951171875,
       "samples": [
-        202.300048828125,
-        213.599853515625,
-        226.89990234375,
-        240,
-        240.800048828125,
-        258.099853515625,
-        260.099853515625,
-        278.5,
-        289.300048828125
+        214.800048828125,
+        218.699951171875,
+        232.7998046875,
+        235.39990234375,
+        239.199951171875,
+        239.400146484375,
+        243.099853515625,
+        269,
+        646.5
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-69f234",
+        "runKey": "2026-11-06T063210577Z-d065c3",
         "runKeys": [
-          "2026-10-25T164054030Z-69f234",
-          "2026-10-25T164612625Z-069367",
-          "2026-10-25T165128733Z-3f5168"
+          "2026-11-06T063210577Z-d065c3",
+          "2026-11-06T063803492Z-5866c6",
+          "2026-11-06T064427695Z-433464"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:56:00.879Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:49:55.288Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:47.901Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:56.851Z"
       }
     },
     {
@@ -1185,7 +1185,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "cf4402065a992c8bf33400ea3c1f3ad43b10a024a2ed1880994fd472b9f3be19",
         "protocol": "typical-profile-jobs-warmed-settled-closed-server-fresh-employee-dashboard-clock-in-out-browser-raf-v1",
         "role": "employee",
@@ -1200,34 +1200,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 190,
+      "referenceMs": 221,
       "samples": [
-        163.800048828125,
-        172.89990234375,
-        179.10009765625,
-        184.400146484375,
-        190,
-        208.10009765625,
-        220.5,
-        232.400146484375,
-        249.699951171875
+        205.599853515625,
+        206.599853515625,
+        208.699951171875,
+        216.300048828125,
+        221,
+        226.300048828125,
+        232.60009765625,
+        237.2001953125,
+        605.900146484375
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-69f234",
+        "runKey": "2026-11-06T063210577Z-d065c3",
         "runKeys": [
-          "2026-10-25T164054030Z-69f234",
-          "2026-10-25T164612625Z-069367",
-          "2026-10-25T165128733Z-3f5168"
+          "2026-11-06T063210577Z-d065c3",
+          "2026-11-06T063803492Z-5866c6",
+          "2026-11-06T064427695Z-433464"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:56:01.213Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:49:55.734Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:47.901Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:56.851Z"
       }
     },
     {
@@ -1236,7 +1236,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "6a8f7c231dfc3a12154a8dd3109738094609704b795c90bd7bac82a75b252447",
         "protocol": "typical-profile-buero-approves-three-own-submissions-employee-history-browser-raf-v1",
         "role": "buero",
@@ -1251,34 +1251,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 671.39990234375,
+      "referenceMs": 801.800048828125,
       "samples": [
-        619.7001953125,
-        629.39990234375,
-        654.199951171875,
-        667.39990234375,
-        671.39990234375,
-        707.699951171875,
-        716.60009765625,
-        721.2001953125,
-        805.5
+        677.39990234375,
+        733.699951171875,
+        762.800048828125,
+        771.39990234375,
+        801.800048828125,
+        807.400146484375,
+        832.699951171875,
+        882,
+        1073.39990234375
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-69f234",
+        "runKey": "2026-11-06T063210577Z-d065c3",
         "runKeys": [
-          "2026-10-25T164054030Z-69f234",
-          "2026-10-25T164612625Z-069367",
-          "2026-10-25T165128733Z-3f5168"
+          "2026-11-06T063210577Z-d065c3",
+          "2026-11-06T063803492Z-5866c6",
+          "2026-11-06T064427695Z-433464"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:56:09.456Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:50:05.403Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:47.901Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:56.851Z"
       }
     },
     {
@@ -1287,7 +1287,7 @@
       "profile": "typical",
       "backend": "local",
       "context": {
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "measurementDigest": "b03c80816efba57da1ddff3f9359a7fc262d8d3d2a130d7c013907683c8ee18f",
         "protocol": "typical-profile-buero-assigns-three-own-jobs-admin-searched-job-list-browser-raf-v1",
         "role": "admin",
@@ -1302,34 +1302,34 @@
         "architecture": "x64",
         "cpuModel": "Intel(R) Core(TM) Ultra 5 135U",
         "logicalProcessors": 14,
-        "memoryGiB": 12,
+        "memoryGiB": 16,
         "providerDigest": "2896002ce2e3a4647ff083b4607e1eef90a22a57f663a254ca0fa38ec9e0dae8"
       },
-      "referenceMs": 578.39990234375,
+      "referenceMs": 667.60009765625,
       "samples": [
-        548.300048828125,
-        553.89990234375,
-        562.400146484375,
-        570,
-        578.39990234375,
-        594.900146484375,
-        605.89990234375,
-        609.199951171875,
-        615
+        596.39990234375,
+        617.900146484375,
+        628,
+        639.900146484375,
+        667.60009765625,
+        669.800048828125,
+        740.800048828125,
+        749.2001953125,
+        770.39990234375
       ],
       "source": {
-        "runKey": "2026-10-25T164054030Z-4e9871",
+        "runKey": "2026-11-06T063210577Z-c9297f",
         "runKeys": [
-          "2026-10-25T164054030Z-4e9871",
-          "2026-10-25T164612625Z-90a496",
-          "2026-10-25T165128733Z-e0700d"
+          "2026-11-06T063210577Z-c9297f",
+          "2026-11-06T063803492Z-8b401c",
+          "2026-11-06T064427695Z-750e1f"
         ],
-        "buildId": "9e7b093b-362c-4ab4-af5b-a4ba9d1b75c3",
-        "recordedAt": "2026-10-25T16:54:08.707Z"
+        "buildId": "d0b32a36-f9e6-480b-9d4b-b970204e7f92",
+        "recordedAt": "2026-11-06T06:47:31.401Z"
       },
       "review": {
-        "reason": "New development machine: WSL Ubuntu 26.04 on the owner's Windows laptop replaces the Windows host (brief F1); three passing fresh runs on one build",
-        "reviewedAt": "2026-10-25T17:12:38.892Z"
+        "reason": "Recalibrated on the Linux PC on mains power: WSL memory went from 12 to 16 GiB on 2026-10-26 and #151 moved the workload digest, so the old references no longer matched. Three fresh rounds on one build at 7637afc1, each within budget (werk-flow/werkflow-planning#220).",
+        "reviewedAt": "2026-11-06T06:50:44.499Z"
       }
     }
   ]
