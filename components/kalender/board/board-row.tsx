@@ -8,8 +8,14 @@ import {
   dispatchStateFor,
   isStartedOccurrence,
   type CalendarBoardDay,
+  type CalendarBoardRow,
 } from '@/lib/calendar/board';
-import { packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
+import {
+  packLanes,
+  type BoardColumn,
+  type BoardLaneItem,
+  type BoardSpanItem,
+} from '@/lib/calendar/board-layout';
 import { absenceItems, occurrenceSpan, type BoardRowModel } from '@/lib/calendar/board-model';
 import { BOARD_ROW_CONTENT_CHECKS } from '@/lib/calendar/board-row-memo';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -59,6 +65,135 @@ export type BoardRowProps = {
   isolate: (employeeRecordId: string) => void;
 };
 
+/** The row's visits and, for a person, the absences, packed into lanes. */
+function boardRowLanes(
+  { jobs, vacation, sickness, columns }: Pick<BoardRowProps, 'jobs' | 'vacation' | 'sickness' | 'columns'>,
+  row: CalendarBoardRow | null,
+) {
+  const items: LaneEntry[] = [];
+  for (const job of jobs) {
+    const span = occurrenceSpan(job);
+    if (span) items.push({ ...span, kind: 'job', job });
+  }
+  if (row) {
+    for (const absence of absenceItems({ vacation, sickness, employeeRecordId: row.employeeRecordId })) {
+      items.push({
+        ...absence,
+        kind: 'absence',
+        label: absence.label,
+        pending: absence.pending,
+        absenceKind: absence.kind,
+      });
+    }
+  }
+  return packLanes(items, columns);
+}
+
+/** The sticky name cell: the name isolates the person's row, the role sits below it. */
+function boardRowHeader(
+  row: CalendarBoardRow | null,
+  compact: boolean,
+  isolate: BoardRowProps['isolate'],
+): React.JSX.Element {
+  return (
+    <div
+      role="rowheader"
+      className={cn(
+        'sticky left-0 flex min-w-0 flex-col justify-center border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1',
+        CALENDAR_LAYER_CLASS.sticky,
+      )}
+      style={{ gridColumn: 1, gridRow: '1 / -1' }}
+    >
+      {row ? (
+        <PlainButton
+          type="button"
+          className="min-w-0 truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          title="Nur diese Zeile anzeigen"
+          onClick={() => isolate(row.employeeRecordId)}
+        >
+          {row.displayName}
+        </PlainButton>
+      ) : (
+        <span className="truncate text-sm font-medium">Ohne Zuweisung</span>
+      )}
+      {row && !compact && (
+        <span className="truncate text-xs text-muted-foreground">
+          {row.role ? getRoleLabel(row.role) : 'Ohne App-Zugang'}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** One day column of the row, with the day's capacity, planned and actual minutes. */
+function boardRowCell(
+  { rowIndex, days, planned, actual, compact, actions }: BoardRowProps,
+  row: CalendarBoardRow | null,
+  column: BoardColumn,
+  columnIndex: number,
+): React.JSX.Element {
+  const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
+  const employed =
+    !row ||
+    ((!row.entryDate || column.date >= row.entryDate) && (!row.exitDate || column.date <= row.exitDate));
+  return (
+    <BoardCell
+      key={column.date}
+      column={column}
+      columnIndex={columnIndex}
+      rowIndex={rowIndex}
+      row={row}
+      day={row ? days.get(key) : undefined}
+      plannedMinutes={row ? (planned.get(key) ?? 0) : 0}
+      actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
+      compact={compact}
+      actions={actions}
+      employed={employed}
+    />
+  );
+}
+
+/** One lane item of the row: an absence bar or a visit's card. */
+function boardRowLane(
+  props: BoardRowProps,
+  row: CalendarBoardRow | null,
+  { item, ...placement }: BoardLaneItem<LaneEntry>,
+): React.JSX.Element {
+  const { dispatch, materialDemandJobIds, compact, nowMs, actions, startDrag } = props;
+  const { hoveredOccurrenceId, onHoverLink } = props;
+  if (item.kind === 'absence') {
+    // Positioned like a card: the day cells are `relative`, so a static bar would paint beneath them.
+    return (
+      <div key={item.key} className="relative min-w-0 p-0.5" style={boardLaneStyle(placement)}>
+        <BarSegment
+          tone={item.pending ? 'absence-pending' : 'absence'}
+          edge="single"
+          label={item.label}
+          startDate={item.startDate}
+          className="h-full min-h-5"
+        />
+      </div>
+    );
+  }
+  return (
+    <BoardRowCard
+      key={item.key}
+      job={item.job}
+      startDate={item.startDate}
+      {...placement}
+      row={row}
+      dispatchState={dispatchStateFor(dispatch, item.job.occurrenceId, row?.employeeRecordId ?? null)}
+      materialDemand={materialDemandJobIds.has(item.job.jobId ?? '')}
+      compact={compact}
+      locked={isStartedOccurrence(item.job, nowMs)}
+      actions={actions}
+      startDrag={startDrag}
+      hovered={hoveredOccurrenceId !== null && hoveredOccurrenceId === item.job.occurrenceId}
+      onHoverLink={onHoverLink}
+    />
+  );
+}
+
 /**
  * One person (or the „Ohne Zuweisung" row) as one CSS grid: the name cell
  * sticky on the left, one background cell per column, and every card or bar
@@ -66,49 +201,14 @@ export type BoardRowProps = {
  * content and a multi-day occurrence is one element.
  */
 export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
-  const {
-    model,
-    rowIndex,
-    columns,
-    jobs,
-    vacation,
-    sickness,
-    days,
-    planned,
-    actual,
-    dispatch,
-    materialDemandJobIds,
-    compact,
-    scrollable,
-    nowMs,
-    actions,
-    startDrag,
-    hoveredOccurrenceId,
-    onHoverLink,
-    isolate,
-  } = props;
+  const { model, columns, jobs, vacation, sickness, compact, scrollable, isolate } = props;
   const row = model.kind === 'person' ? model.row : null;
   const laneHeight = compact ? BOARD_LANE_HEIGHT.compact : BOARD_LANE_HEIGHT.comfortable;
 
-  const { lanes, laneCount } = useMemo(() => {
-    const items: LaneEntry[] = [];
-    for (const job of jobs) {
-      const span = occurrenceSpan(job);
-      if (span) items.push({ ...span, kind: 'job', job });
-    }
-    if (row) {
-      for (const absence of absenceItems({ vacation, sickness, employeeRecordId: row.employeeRecordId })) {
-        items.push({
-          ...absence,
-          kind: 'absence',
-          label: absence.label,
-          pending: absence.pending,
-          absenceKind: absence.kind,
-        });
-      }
-    }
-    return packLanes(items, columns);
-  }, [columns, jobs, row, sickness, vacation]);
+  const { lanes, laneCount } = useMemo(
+    () => boardRowLanes({ jobs, vacation, sickness, columns }, row),
+    [columns, jobs, row, sickness, vacation],
+  );
 
   const rowLabel = row ? row.displayName : 'Ohne Zuweisung';
   return (
@@ -122,87 +222,9 @@ export const BoardRow = memo(function BoardRow(props: BoardRowProps) {
         gridTemplateRows: `repeat(${Math.max(1, laneCount)}, minmax(${laneHeight}px, auto))${row ? ' 20px' : ''}`,
       }}
     >
-      <div
-        role="rowheader"
-        className={cn(
-          'sticky left-0 flex min-w-0 flex-col justify-center border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1',
-          CALENDAR_LAYER_CLASS.sticky,
-        )}
-        style={{ gridColumn: 1, gridRow: '1 / -1' }}
-      >
-        {row ? (
-          <PlainButton
-            type="button"
-            className="min-w-0 truncate text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            title="Nur diese Zeile anzeigen"
-            onClick={() => isolate(row.employeeRecordId)}
-          >
-            {row.displayName}
-          </PlainButton>
-        ) : (
-          <span className="truncate text-sm font-medium">Ohne Zuweisung</span>
-        )}
-        {row && !compact && (
-          <span className="truncate text-xs text-muted-foreground">
-            {row.role ? getRoleLabel(row.role) : 'Ohne App-Zugang'}
-          </span>
-        )}
-      </div>
-      {columns.map((column, columnIndex) => {
-        const key = row ? boardDayKey(row.employeeRecordId, column.date) : '';
-        const employed =
-          !row ||
-          ((!row.entryDate || column.date >= row.entryDate) &&
-            (!row.exitDate || column.date <= row.exitDate));
-        return (
-          <BoardCell
-            key={column.date}
-            column={column}
-            columnIndex={columnIndex}
-            rowIndex={rowIndex}
-            row={row}
-            day={row ? days.get(key) : undefined}
-            plannedMinutes={row ? (planned.get(key) ?? 0) : 0}
-            actual={row?.userId && actual ? actual.get(`${row.userId}:${column.date}`) : undefined}
-            compact={compact}
-            actions={actions}
-            employed={employed}
-          />
-        );
-      })}
-      {lanes.map(({ item, ...placement }) => {
-        if (item.kind === 'absence') {
-          // Positioned like a card: the day cells are `relative`, so a static bar would paint beneath them.
-          return (
-            <div key={item.key} className="relative min-w-0 p-0.5" style={boardLaneStyle(placement)}>
-              <BarSegment
-                tone={item.pending ? 'absence-pending' : 'absence'}
-                edge="single"
-                label={item.label}
-                startDate={item.startDate}
-                className="h-full min-h-5"
-              />
-            </div>
-          );
-        }
-        return (
-          <BoardRowCard
-            key={item.key}
-            job={item.job}
-            startDate={item.startDate}
-            {...placement}
-            row={row}
-            dispatchState={dispatchStateFor(dispatch, item.job.occurrenceId, row?.employeeRecordId ?? null)}
-            materialDemand={materialDemandJobIds.has(item.job.jobId ?? '')}
-            compact={compact}
-            locked={isStartedOccurrence(item.job, nowMs)}
-            actions={actions}
-            startDrag={startDrag}
-            hovered={hoveredOccurrenceId !== null && hoveredOccurrenceId === item.job.occurrenceId}
-            onHoverLink={onHoverLink}
-          />
-        );
-      })}
+      {boardRowHeader(row, compact, isolate)}
+      {columns.map((column, columnIndex) => boardRowCell(props, row, column, columnIndex))}
+      {lanes.map((lane) => boardRowLane(props, row, lane))}
     </div>
   );
 }, memoPropsEqual<BoardRowProps>(BOARD_ROW_CONTENT_CHECKS));

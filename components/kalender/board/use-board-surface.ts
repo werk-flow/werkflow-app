@@ -1,26 +1,10 @@
 'use client';
 
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
-import {
-  boardRowRecordId,
-  boardSlotAtPoint,
-  boardSlotRect,
-  findBoardRowModel,
-  resizedBarSpan,
-} from '@/lib/calendar/board-slots';
-import type { CalendarBoardDay, CalendarBoardRow } from '@/lib/calendar/board';
-import { addLocalDays } from '@/lib/date-time/berlin';
+import { boardRowRecordId, boardSlotAtPoint, boardSlotRect } from '@/lib/calendar/board-slots';
+import type { CalendarBoardDay } from '@/lib/calendar/board';
 import type { BoardColumn } from '@/lib/calendar/board-layout';
-import { reassignmentChanges, type BoardRowModel } from '@/lib/calendar/board-model';
-import {
-  checkParkedContext,
-  checkNotAlreadyAssigned,
-  checkOccurrenceMovable,
-  checkParkable,
-  checkPersonDay,
-  dayFor,
-} from '@/lib/calendar/refusal-checks';
-import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
+import type { BoardRowModel } from '@/lib/calendar/board-model';
 import type { CalendarJob } from '@/lib/jobs/types';
 import { useCalendarAnnounce } from '../surface/live-region';
 import type { DragSurface } from '../drag-engine/drag-engine';
@@ -28,6 +12,8 @@ import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../
 import type { DragVerdict } from '@/lib/calendar/drag-ghost';
 import type { CalendarMutations } from '../mutations/use-calendar-mutations';
 import type { JobParkingContext } from '@/lib/parking/types';
+import { applyBoardDrop } from './board-surface-drop';
+import { boardTargetVerdict } from './board-surface-rules';
 
 /**
  * The board's drag surface (P1-24a): a slot map computed once at drag
@@ -65,22 +51,6 @@ export type BoardSurfaceInput = {
   focusCard: (occurrenceId: string, employeeRecordId: string | null) => void;
 };
 
-function rowName(row: BoardRowModel): string {
-  return row.kind === 'person' ? row.row.displayName : 'Ohne Zuweisung';
-}
-
-export function moveSuccessMessage(
-  changes: { plannedDate?: string; assignedUserIds?: string[] },
-  targetName: string,
-  dateLabel: string,
-): string {
-  const rowChanged = changes.assignedUserIds !== undefined;
-  const dateChanged = changes.plannedDate !== undefined;
-  if (rowChanged && dateChanged) return `Termin wurde zu ${targetName} auf ${dateLabel} verschoben.`;
-  if (rowChanged) return `Termin wurde zu ${targetName} verschoben.`;
-  return `Termin wurde auf ${dateLabel} verschoben.`;
-}
-
 /** Reads the row and column edges once at drag start; the resolver then only reads scroll offsets. */
 function measureBoardSlotMap(
   root: HTMLElement,
@@ -114,6 +84,51 @@ function measureBoardSlotMap(
   };
 }
 
+/** The cell under the pointer: the map's edges moved by what the scroller travelled since the drag began. */
+function boardTargetAt(map: SlotMap, point: { x: number; y: number }): CalendarDragTarget | null {
+  const dy = (map.verticalScroller?.scrollTop ?? 0) - map.scrollTop;
+  const dx = (map.horizontalScroller?.scrollLeft ?? 0) - map.scrollLeft;
+  const { rowStarts, columnStarts } = map;
+  const slot = boardSlotAtPoint({ rowStarts, columnStarts, point, scrollDelta: { x: dx, y: dy } });
+  if (!slot) return null;
+  const row = map.rows[slot.rowIndex];
+  const column = map.columns[slot.columnIndex];
+  if (!row || !column) return null;
+  return {
+    kind: 'cell',
+    employeeRecordId: boardRowRecordId(row),
+    userId: row.kind === 'person' ? row.row.userId : null,
+    date: column.date,
+  };
+}
+
+/** Moves the one highlight onto the target's cell, or hides it when no cell is targeted. */
+function paintBoardHighlight(
+  highlight: HTMLElement | null,
+  map: SlotMap | null,
+  target: CalendarDragTarget | null,
+  verdict: DragVerdict | null,
+): void {
+  if (!highlight) return;
+  if (!target || target.kind !== 'cell' || !map) {
+    highlight.hidden = true;
+    return;
+  }
+  const rowIndex = map.rows.findIndex((row) => boardRowRecordId(row) === target.employeeRecordId);
+  const columnIndex = map.columns.findIndex((column) => column.date === target.date);
+  if (rowIndex < 0 || columnIndex < 0) {
+    highlight.hidden = true;
+    return;
+  }
+  const { rowStarts, columnStarts, contentTop, contentLeft } = map;
+  const rect = boardSlotRect({ rowStarts, columnStarts, rowIndex, columnIndex, contentTop, contentLeft });
+  highlight.hidden = false;
+  highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
+  highlight.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
+  highlight.style.width = `${rect.width}px`;
+  highlight.style.height = `${rect.height}px`;
+}
+
 export function useBoardSurface(input: BoardSurfaceInput): DragSurface {
   const announce = useCalendarAnnounce();
   const mapRef = useRef<SlotMap | null>(null);
@@ -131,166 +146,22 @@ export function useBoardSurface(input: BoardSurfaceInput): DragSurface {
   const resolveTarget = useCallback((point: { x: number; y: number }): CalendarDragTarget | null => {
     const map = mapRef.current;
     if (!map) return null;
-    const dy = (map.verticalScroller?.scrollTop ?? 0) - map.scrollTop;
-    const dx = (map.horizontalScroller?.scrollLeft ?? 0) - map.scrollLeft;
-    const { rowStarts, columnStarts } = map;
-    const slot = boardSlotAtPoint({ rowStarts, columnStarts, point, scrollDelta: { x: dx, y: dy } });
-    if (!slot) return null;
-    const row = map.rows[slot.rowIndex];
-    const column = map.columns[slot.columnIndex];
-    if (!row || !column) return null;
-    return {
-      kind: 'cell',
-      employeeRecordId: boardRowRecordId(row),
-      userId: row.kind === 'person' ? row.row.userId : null,
-      date: column.date,
-    };
+    return boardTargetAt(map, point);
   }, []);
 
   const checkTarget = useCallback(
-    (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict => {
-      const { days, rowModels, parkingContexts, nowMs } = inputRef.current;
-      if (payload.kind === 'parked' && target.kind !== 'zone') {
-        const parked = checkParkedContext(parkingContexts, payload.job);
-        if (!parked.ok) return { ok: false, message: parked.message };
-      }
-      if (target.kind === 'zone') {
-        if (payload.kind !== 'occurrence')
-          return { ok: false, message: calendarRefusalMessage('only_occurrences_park') ?? '' };
-        const parkable = checkParkable(payload.job);
-        return parkable.ok ? { ok: true, label: 'Parken' } : { ok: false, message: parkable.message };
-      }
-      const row = findBoardRowModel(rowModels, target.employeeRecordId);
-      const boardRow: CalendarBoardRow | null = row?.kind === 'person' ? row.row : null;
-      const day = dayFor(days, target.employeeRecordId, target.date);
-      if (payload.kind === 'occurrence' || payload.kind === 'barEdge') {
-        const movable = checkOccurrenceMovable(payload.job, nowMs());
-        if (!movable.ok) return { ok: false, message: movable.message };
-      }
-      if (payload.kind === 'occurrence' && target.employeeRecordId !== payload.sourceEmployeeRecordId) {
-        const assigned = checkNotAlreadyAssigned(
-          payload.job,
-          target.employeeRecordId,
-          payload.sourceEmployeeRecordId,
-          boardRow?.displayName ?? null,
-        );
-        if (!assigned.ok) return { ok: false, message: assigned.message };
-      }
-      if (payload.kind === 'timeBlock')
-        return { ok: false, message: calendarRefusalMessage('time_block_moves_in_day_view') ?? '' };
-      const person = checkPersonDay({ row: boardRow, day, date: target.date, allowWarnings: modifiers.fine });
-      if (!person.ok) return { ok: false, message: person.message };
-      const label =
-        payload.kind === 'occurrence' && modifiers.copy
-          ? `Kopie: ${rowName(row ?? { key: 'unassigned', kind: 'unassigned', row: null })}, ${formatRefusalDate(target.date)}`
-          : `${rowName(row ?? { key: 'unassigned', kind: 'unassigned', row: null })}, ${formatRefusalDate(target.date)}`;
-      return { ok: true, label };
-    },
+    (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers): DragVerdict =>
+      boardTargetVerdict(inputRef.current, target, payload, modifiers),
     [],
   );
 
   const onTargetChange = useCallback((target: CalendarDragTarget | null, verdict: DragVerdict | null) => {
-    const highlight = inputRef.current.highlightRef.current;
-    const map = mapRef.current;
-    if (!highlight) return;
-    if (!target || target.kind !== 'cell' || !map) {
-      highlight.hidden = true;
-      return;
-    }
-    const rowIndex = map.rows.findIndex((row) => boardRowRecordId(row) === target.employeeRecordId);
-    const columnIndex = map.columns.findIndex((column) => column.date === target.date);
-    if (rowIndex < 0 || columnIndex < 0) {
-      highlight.hidden = true;
-      return;
-    }
-    const { rowStarts, columnStarts, contentTop, contentLeft } = map;
-    const rect = boardSlotRect({ rowStarts, columnStarts, rowIndex, columnIndex, contentTop, contentLeft });
-    highlight.hidden = false;
-    highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
-    highlight.style.transform = `translate3d(${rect.left}px, ${rect.top}px, 0)`;
-    highlight.style.width = `${rect.width}px`;
-    highlight.style.height = `${rect.height}px`;
+    paintBoardHighlight(inputRef.current.highlightRef.current, mapRef.current, target, verdict);
   }, []);
 
   const onDrop = useCallback(
-    (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers) => {
-      const { mutations, rowModels, parkingContexts, onPark, onParkedContextMissing, focusCard } =
-        inputRef.current;
-      if (target.kind === 'zone') {
-        if (payload.kind === 'occurrence') onPark(payload.job);
-        return;
-      }
-      const targetRow = findBoardRowModel(rowModels, target.employeeRecordId);
-      const targetName = targetRow ? rowName(targetRow) : 'Ohne Zuweisung';
-      const dateLabel = formatRefusalDate(target.date);
-      if (payload.kind === 'occurrence') {
-        const { job } = payload;
-        if (modifiers.copy && job.occurrenceId) {
-          void mutations.copyJob({
-            job,
-            plannedDate: target.date,
-            employeeRecordIds: target.employeeRecordId ? [target.employeeRecordId] : [],
-            successMessage: `Kopie für ${targetName} am ${dateLabel} wurde angelegt.`,
-          });
-          return;
-        }
-        const changes = reassignmentChanges({
-          job,
-          sourceEmployeeRecordId: payload.sourceEmployeeRecordId,
-          sourceUserId: payload.sourceUserId,
-          target,
-        });
-        if (!changes) return;
-        void mutations
-          .moveJob({
-            job,
-            changes,
-            successMessage: moveSuccessMessage(changes, targetName, dateLabel),
-            context: { name: targetName, date: dateLabel },
-          })
-          .then((moved) => {
-            if (moved) focusCard(job.occurrenceId ?? job.id, target.employeeRecordId);
-          });
-        return;
-      }
-      if (payload.kind === 'barEdge') {
-        const { job, edge } = payload;
-        if (!job.occurrenceId) return;
-        const span = resizedBarSpan({
-          startDate: job.plannedDate,
-          endDateExclusive: job.endDateExclusive,
-          edge,
-          targetDate: target.date,
-        });
-        if (!span) return;
-        void mutations.moveJob({
-          job,
-          changes: { plannedDate: span.plannedDate, durationDays: span.durationDays },
-          successMessage: `Termin dauert jetzt bis ${formatRefusalDate(addLocalDays(span.endDateExclusive, -1))}.`,
-          context: { date: dateLabel },
-        });
-        return;
-      }
-      if (payload.kind === 'parked') {
-        const context = parkingContexts?.get(payload.job.jobId ?? payload.job.id);
-        if (!context) {
-          onParkedContextMissing();
-          return;
-        }
-        void mutations.unparkJob({
-          job: payload.job,
-          parkingContext: context,
-          plannedDate: target.date,
-          ...(target.userId ? { assignToUserId: target.userId } : {}),
-          successMessage: `Auftrag wurde bei ${targetName} am ${dateLabel} eingeplant.`,
-          context: { name: targetName, date: dateLabel },
-        });
-        return;
-      }
-      if (payload.kind === 'untimed') {
-        announce('Ungeplante Aufträge werden in der Tagesansicht auf eine Uhrzeit gelegt.');
-      }
-    },
+    (target: CalendarDragTarget, payload: CalendarDragPayload, modifiers: DragModifiers) =>
+      applyBoardDrop(inputRef.current, announce, target, payload, modifiers),
     [announce],
   );
 

@@ -35,7 +35,7 @@ import { PLANNING_OCCURRENCE_STATUS_LABELS } from '@/lib/planning/types';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { PlanningOccurrenceEditDialog } from './planning-occurrence-edit-dialog';
 import type { CalendarMutations } from './mutations/use-calendar-mutations';
-import { moveSuccessMessage } from './board/use-board-surface';
+import { moveSuccessMessage } from './board/board-surface-drop';
 
 /** `w-80` on the popover content. */
 const POPOVER_WIDTH_PX = 320;

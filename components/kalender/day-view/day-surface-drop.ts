@@ -10,7 +10,7 @@ import {
 import { reassignmentChanges } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarDragPayload, CalendarDragTarget } from '../drag-engine/payload';
-import { moveSuccessMessage } from '../board/use-board-surface';
+import { moveSuccessMessage } from '../board/board-surface-drop';
 import { dayRowFor, dayRowKey, dayRowOwnsJob, UNASSIGNED_DAY_ROW_KEY } from '@/lib/calendar/day-rows';
 import { jobSpanMinutes } from './day-surface-rules';
 import type { DaySurfaceInput } from './use-day-surface';

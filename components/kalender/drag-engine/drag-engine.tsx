@@ -178,12 +178,185 @@ function releaseDrag(drag: ActiveDrag, ghost: HTMLDivElement | null): void {
   }
   if (drag.captured && 'releasePointerCapture' in drag.captured) {
     try {
-      (drag.captured as HTMLElement).releasePointerCapture(drag.pointerId);
+      drag.captured.releasePointerCapture(drag.pointerId);
     } catch {
       // best-effort: the browser may have released the capture already; the drag ends either way.
     }
   }
   if (drag.moved) suppressNextClick();
+}
+
+/**
+ * One frame per pointer batch: resolve the target, run the pre-check on a
+ * change, auto-scroll the surface's container, and paint the ghost.
+ */
+function advanceDrag(
+  drag: ActiveDrag,
+  surface: DragSurface | null,
+  ghost: HTMLDivElement | null,
+  stepRef: React.RefObject<() => void>,
+): void {
+  drag.frame = null;
+  const point = { x: drag.last.x, y: drag.last.y };
+  const container = surface?.scrollContainer() ?? null;
+  if (container && scrollAtEdge(drag, container, point))
+    drag.frame = requestAnimationFrame(() => stepRef.current());
+  const modifiers: DragModifiers = { copy: drag.last.alt, fine: drag.last.shift };
+  const origin = { x: point.x - drag.session.pointerOffset.x, y: point.y - drag.session.pointerOffset.y };
+  // A card that left the Parkplatz cannot land back on it: the panel's zone is invisible to a parked payload.
+  const zone = drag.session.payload.kind === 'parked' ? undefined : zoneAtPoint(drag.zones, point);
+  const target: CalendarDragTarget | null = zone
+    ? { kind: 'zone', zone: zone.zone }
+    : (surface?.resolveTarget(point, drag.session.payload, modifiers, origin) ?? null);
+  const key = targetKey(target);
+  if (key !== drag.targetKey) {
+    drag.targetKey = key;
+    drag.target = target;
+    drag.verdict = target && surface ? surface.checkTarget(target, drag.session.payload, modifiers) : null;
+    surface?.onTargetChange?.(target, drag.verdict, drag.session.payload);
+  }
+  paintDragGhost(ghost, drag);
+}
+
+type DragLoop = {
+  activeRef: React.RefObject<ActiveDrag | null>;
+  surfaceRef: React.RefObject<DragSurface | null>;
+  zonesRef: React.RefObject<ZoneRegistration[]>;
+  ghostRef: React.RefObject<HTMLDivElement | null>;
+  finish: (dropped: boolean) => void;
+  schedule: () => void;
+  step: () => void;
+};
+
+/** Follows the pointer and the keys of a drag on the window; the returned cleanup also cancels a running drag. */
+function listenForDrag(loop: DragLoop): () => void {
+  const { activeRef, surfaceRef, zonesRef, ghostRef, finish, schedule, step } = loop;
+  const onMove = (event: PointerEvent) => {
+    const drag = activeRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    const events = 'getCoalescedEvents' in event ? event.getCoalescedEvents() : [];
+    const latest = events.length ? (events[events.length - 1] ?? event) : event;
+    drag.last = { x: latest.clientX, y: latest.clientY, alt: event.altKey, shift: event.shiftKey };
+    if (!drag.moved) {
+      if (!exceedsDragThreshold(drag.start, drag.last)) return;
+      activateDrag(drag, surfaceRef.current, zonesRef.current, ghostRef.current);
+    }
+    schedule();
+  };
+  const onUp = (event: PointerEvent) => {
+    const drag = activeRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    drag.last = { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey };
+    if (drag.moved) {
+      // A final synchronous resolve, so the drop lands where the pointer let go.
+      if (drag.frame !== null) {
+        cancelAnimationFrame(drag.frame);
+        drag.frame = null;
+      }
+      step();
+    }
+    finish(true);
+  };
+  const onCancel = (event: PointerEvent) => {
+    const drag = activeRef.current;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    finish(false);
+  };
+  const onKey = (event: KeyboardEvent) => {
+    const drag = activeRef.current;
+    if (!drag) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      finish(false);
+      return;
+    }
+    if (event.key === 'Alt' || event.key === 'Shift') {
+      drag.last = { ...drag.last, alt: event.altKey, shift: event.shiftKey };
+      drag.targetKey = '';
+      schedule();
+    }
+  };
+  const onKeyUp = (event: KeyboardEvent) => {
+    const drag = activeRef.current;
+    if (!drag || (event.key !== 'Alt' && event.key !== 'Shift')) return;
+    drag.last = { ...drag.last, alt: event.altKey, shift: event.shiftKey };
+    drag.targetKey = '';
+    schedule();
+  };
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onCancel);
+  // Capture, so Escape cancels the drag before the panels' document
+  // handlers see it; the cancel prevents default and the panel stays open.
+  window.addEventListener('keydown', onKey, { capture: true });
+  window.addEventListener('keyup', onKeyUp);
+  return () => {
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onCancel);
+    window.removeEventListener('keydown', onKey, { capture: true });
+    window.removeEventListener('keyup', onKeyUp);
+    finish(false);
+  };
+}
+
+/** The drag a press opens; it stays a press until the threshold or the long press activates it. */
+function pressedDrag(event: React.PointerEvent, session: DragSession): ActiveDrag {
+  return {
+    session,
+    pointerId: event.pointerId,
+    start: { x: event.clientX, y: event.clientY },
+    last: { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey },
+    moved: false,
+    zones: [],
+    targetKey: 'none',
+    target: null,
+    verdict: null,
+    frame: null,
+    captured: event.currentTarget,
+    edgeSince: null,
+  };
+}
+
+/** Both pointer movement and a stationary touch long-press reveal this same content. */
+function writeGhostLabels(ghost: HTMLDivElement | null, session: DragSession): void {
+  const label = ghost?.querySelector<HTMLElement>('[data-ghost-label]');
+  if (label) label.textContent = session.ghost.label;
+  const secondary = ghost?.querySelector<HTMLElement>('[data-ghost-secondary]');
+  if (secondary) {
+    secondary.textContent = session.ghost.secondary ?? '';
+    secondary.hidden = !session.ghost.secondary;
+  }
+}
+
+/** A press on a draggable: the drag opens, the ghost takes its labels, and a touch arms its long press. */
+function pressDrag(
+  event: React.PointerEvent,
+  session: DragSession,
+  { activeRef, surfaceRef, zonesRef, ghostRef }: Omit<DragLoop, 'finish' | 'schedule' | 'step'>,
+  schedule: () => void,
+): void {
+  if (activeRef.current || event.button !== 0) return;
+  const element = event.currentTarget;
+  const isTouch = event.pointerType === 'touch';
+  const drag = pressedDrag(event, session);
+  activeRef.current = drag;
+  writeGhostLabels(ghostRef.current, session);
+  try {
+    element.setPointerCapture(event.pointerId);
+  } catch {
+    drag.captured = null;
+  }
+  if (isTouch) {
+    // A touch starts the drag after a long press; a quick swipe pans instead.
+    window.setTimeout(() => {
+      const current = activeRef.current;
+      if (current === drag && !current.moved) {
+        activateDrag(current, surfaceRef.current, zonesRef.current, ghostRef.current);
+        schedule();
+      }
+    }, LONG_PRESS_MS);
+  }
 }
 
 export function CalendarDragProvider({ children }: { children: ReactNode }): React.JSX.Element {
@@ -205,33 +378,11 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
     surface?.onEnd?.(drag.session.payload);
   }, []);
 
-  // One frame per pointer batch: resolve the target, run the pre-check on a
-  // change, auto-scroll the surface's container, and paint the ghost.
   const stepRef = useRef<() => void>(() => undefined);
   const step = useCallback(() => {
     const drag = activeRef.current;
     if (!drag) return;
-    drag.frame = null;
-    const surface = surfaceRef.current;
-    const point = { x: drag.last.x, y: drag.last.y };
-    const container = surface?.scrollContainer() ?? null;
-    if (container && scrollAtEdge(drag, container, point))
-      drag.frame = requestAnimationFrame(() => stepRef.current());
-    const modifiers: DragModifiers = { copy: drag.last.alt, fine: drag.last.shift };
-    const origin = { x: point.x - drag.session.pointerOffset.x, y: point.y - drag.session.pointerOffset.y };
-    // A card that left the Parkplatz cannot land back on it: the panel's zone is invisible to a parked payload.
-    const zone = drag.session.payload.kind === 'parked' ? undefined : zoneAtPoint(drag.zones, point);
-    const target: CalendarDragTarget | null = zone
-      ? { kind: 'zone', zone: zone.zone }
-      : (surface?.resolveTarget(point, drag.session.payload, modifiers, origin) ?? null);
-    const key = targetKey(target);
-    if (key !== drag.targetKey) {
-      drag.targetKey = key;
-      drag.target = target;
-      drag.verdict = target && surface ? surface.checkTarget(target, drag.session.payload, modifiers) : null;
-      surface?.onTargetChange?.(target, drag.verdict, drag.session.payload);
-    }
-    paintDragGhost(ghostRef.current, drag);
+    advanceDrag(drag, surfaceRef.current, ghostRef.current, stepRef);
   }, []);
   useEffect(() => {
     stepRef.current = step;
@@ -243,120 +394,14 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
     drag.frame = requestAnimationFrame(step);
   }, [step]);
 
-  useEffect(() => {
-    const onMove = (event: PointerEvent) => {
-      const drag = activeRef.current;
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      const events = 'getCoalescedEvents' in event ? event.getCoalescedEvents() : [];
-      const latest = events.length ? (events[events.length - 1] ?? event) : event;
-      drag.last = { x: latest.clientX, y: latest.clientY, alt: event.altKey, shift: event.shiftKey };
-      if (!drag.moved) {
-        if (!exceedsDragThreshold(drag.start, drag.last)) return;
-        activateDrag(drag, surfaceRef.current, zonesRef.current, ghostRef.current);
-      }
-      schedule();
-    };
-    const onUp = (event: PointerEvent) => {
-      const drag = activeRef.current;
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      drag.last = { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey };
-      if (drag.moved) {
-        // A final synchronous resolve, so the drop lands where the pointer let go.
-        if (drag.frame !== null) {
-          cancelAnimationFrame(drag.frame);
-          drag.frame = null;
-        }
-        step();
-      }
-      finish(true);
-    };
-    const onCancel = (event: PointerEvent) => {
-      const drag = activeRef.current;
-      if (!drag || event.pointerId !== drag.pointerId) return;
-      finish(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      const drag = activeRef.current;
-      if (!drag) return;
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        finish(false);
-        return;
-      }
-      if (event.key === 'Alt' || event.key === 'Shift') {
-        drag.last = { ...drag.last, alt: event.altKey, shift: event.shiftKey };
-        drag.targetKey = '';
-        schedule();
-      }
-    };
-    const onKeyUp = (event: KeyboardEvent) => {
-      const drag = activeRef.current;
-      if (!drag || (event.key !== 'Alt' && event.key !== 'Shift')) return;
-      drag.last = { ...drag.last, alt: event.altKey, shift: event.shiftKey };
-      drag.targetKey = '';
-      schedule();
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onCancel);
-    // Capture, so Escape cancels the drag before the panels' document
-    // handlers see it; the cancel prevents default and the panel stays open.
-    window.addEventListener('keydown', onKey, { capture: true });
-    window.addEventListener('keyup', onKeyUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onCancel);
-      window.removeEventListener('keydown', onKey, { capture: true });
-      window.removeEventListener('keyup', onKeyUp);
-      finish(false);
-    };
-  }, [finish, schedule, step]);
+  useEffect(
+    () => listenForDrag({ activeRef, surfaceRef, zonesRef, ghostRef, finish, schedule, step }),
+    [finish, schedule, step],
+  );
 
   const startDrag = useCallback(
-    (event: React.PointerEvent, session: DragSession) => {
-      if (activeRef.current || event.button !== 0) return;
-      const element = event.currentTarget;
-      const isTouch = event.pointerType === 'touch';
-      const drag: ActiveDrag = {
-        session,
-        pointerId: event.pointerId,
-        start: { x: event.clientX, y: event.clientY },
-        last: { x: event.clientX, y: event.clientY, alt: event.altKey, shift: event.shiftKey },
-        moved: false,
-        zones: [],
-        targetKey: 'none',
-        target: null,
-        verdict: null,
-        frame: null,
-        captured: element,
-        edgeSince: null,
-      };
-      activeRef.current = drag;
-      // Both pointer movement and a stationary touch long-press reveal this same content.
-      const label = ghostRef.current?.querySelector<HTMLElement>('[data-ghost-label]');
-      if (label) label.textContent = session.ghost.label;
-      const secondary = ghostRef.current?.querySelector<HTMLElement>('[data-ghost-secondary]');
-      if (secondary) {
-        secondary.textContent = session.ghost.secondary ?? '';
-        secondary.hidden = !session.ghost.secondary;
-      }
-      try {
-        element.setPointerCapture(event.pointerId);
-      } catch {
-        drag.captured = null;
-      }
-      if (isTouch) {
-        // A touch starts the drag after a long press; a quick swipe pans instead.
-        window.setTimeout(() => {
-          const current = activeRef.current;
-          if (current === drag && !current.moved) {
-            activateDrag(current, surfaceRef.current, zonesRef.current, ghostRef.current);
-            schedule();
-          }
-        }, LONG_PRESS_MS);
-      }
-    },
+    (event: React.PointerEvent, session: DragSession) =>
+      pressDrag(event, session, { activeRef, surfaceRef, zonesRef, ghostRef }, schedule),
     [schedule],
   );
 
