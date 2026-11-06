@@ -74,7 +74,7 @@
         },
         "script": {
           "requests": { "reference": 43, "tolerance": 1 },
-          "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 691787, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -226,6 +226,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 747297, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 43, "tolerance": 1 },
+            "encodedBytes": { "reference": 691787, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-06T163031434Z-2c5af8"],
+          "reason": "werk-flow/werkflow-app#173 cut the Zod namespace: lib/zod.ts re-exported all of z, and lib/zod-members.ts now names the members the product uses, so the 63 locales and the JSON Schema conversion leave the shell chunk. -56,174 bytes on this Mac, 747,961 on 23b0de15 to 691,787, with 43 script requests unchanged. The reference is a Mac value: CI's full run on main at d6d52102 (run 42237378515) read 749,939, about 0.3 % above this Mac, inside the 1 % tolerance. Lead's decision of 2026-11-06 (werk-flow/werkflow-planning#212)."
         }
       ]
     },
@@ -1027,7 +1045,7 @@
         },
         "script": {
           "requests": { "reference": 38, "tolerance": 1 },
-          "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 597427, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         },
@@ -1190,6 +1208,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "floor-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 38, "tolerance": 1 },
+            "encodedBytes": { "reference": 652990, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 38, "tolerance": 1 },
+            "encodedBytes": { "reference": 597427, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-06T163031434Z-c3366b"],
+          "reason": "werk-flow/werkflow-app#173 cut the Zod namespace: lib/zod.ts re-exported all of z, and lib/zod-members.ts now names the members the product uses, so the 63 locales and the JSON Schema conversion leave the shell chunk. -56,174 bytes on this Mac, 653,601 on 23b0de15 to 597,427, with 38 script requests unchanged. The reference is a Mac value: CI's full run on main at d6d52102 (run 42237378515) read 655,478, about 0.3 % above this Mac, inside the 1 % tolerance. Lead's decision of 2026-11-06 (werk-flow/werkflow-planning#212)."
         }
       ]
     },
