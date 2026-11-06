@@ -140,3 +140,7 @@ Reopen this decision if any of the following occurs:
 The owner re-evaluated sign-in. Supabase Auth stays and no managed identity provider is adopted for now. Reopen when a provider confirms sign-in without email in writing, or when several customers need company SSO that Supabase handles badly. The re-evaluation before the mobile app still applies.
 
 Stripe handles payments for WerkFlow's own subscriptions (werk-flow/werkflow-planning#245).
+
+## Amendment 2026-11-06: the Java validators wait for XRechnung
+
+The first Railway worker does not come with the invoice module. ZUGFeRD stays the only output for now. CI runs Mustang and veraPDF on made-up reference invoices, and a real invoice passes the EN 16931 rules at run time without Java. The worker question returns before XRechnung output is built (werk-flow/werkflow-planning#256).
