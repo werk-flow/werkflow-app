@@ -1,5 +1,4 @@
 {
   "lib/data/background-read-client.ts": 1,
-  "lib/supabase/rpc-args.ts": 1,
-  "tests/golden/support/scenario-measurement.ts": 2
+  "lib/supabase/rpc-args.ts": 1
 }
