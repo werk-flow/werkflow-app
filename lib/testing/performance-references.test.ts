@@ -2,8 +2,9 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import { MEASURED_SCENARIOS } from './measured-scenarios';
-import { readPerformanceBaselines } from './performance-baselines';
-import { measurementDigest } from './performance-context';
+import baselineFile from './performance-baselines.json';
+import { performanceBaselinesSchema, readPerformanceBaselines } from './performance-baselines';
+import { wallClockDigestProblems } from './reference-digests';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
@@ -12,19 +13,14 @@ const repositoryRoot = resolve(import.meta.dir, '../..');
 // be within target (2026-09-17: six digest inputs were edited after the last
 // transfer and all eleven references were orphaned without anyone noticing until
 // the next release plan). Either recalibrate and activate a reference at the
-// current digest, or mark the scenario `calibrating` until that happens.
-test('every required scenario has a reviewed reference at the current measurement digest', () => {
-  const baselines = readPerformanceBaselines();
-  const orphaned = MEASURED_SCENARIOS.filter((scenario) => scenario.comparison === 'required')
-    .filter((scenario) => {
-      const digest = measurementDigest(repositoryRoot, scenario);
-      return !baselines.baselines.some(
-        (baseline) =>
-          baseline.scenarioId === scenario.id &&
-          baseline.scenarioVersion === scenario.version &&
-          baseline.context.measurementDigest === digest,
-      );
-    })
-    .map((scenario) => scenario.id);
-  expect(orphaned).toEqual([]);
+// current digest, or mark the scenario `calibrating` until that happens. The
+// same holds for a moved workload digest (2026-11-01: #151).
+test('every required scenario has a reviewed reference at its current measurement and workload digest', () => {
+  const stored = performanceBaselinesSchema.parse(baselineFile);
+  const problems = wallClockDigestProblems(
+    repositoryRoot,
+    { stored, carried: readPerformanceBaselines() },
+    MEASURED_SCENARIOS,
+  );
+  expect(problems, problems.join('\n')).toEqual([]);
 });

@@ -151,7 +151,7 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. [Per
 
 - `expectLiveWithin` measures from submission to the new fact in the receiving session, `expectReadyWithin` from opening to usable controls. A slow but correct observation completes its test; the runner judges the timing afterwards.
 - Scenarios live in `lib/testing/measured-scenarios.ts`, reviewed references in `lib/testing/performance-baselines.json`. A new scenario takes its boundary's budget, a cross-session one the live target.
-- Every required scenario has a reviewed reference at its measurement digest. Editing a measured support file moves every digest.
+- Every required scenario has a reference at its measurement and workload digests. Editing measured support files moves every digest.
 - To calibrate: pass the measured groups (a scenario without a reference passes only as `comparison: 'calibrating'`; restore `'required'` after the copy). Run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it.
 - A support-file edit that cannot change what a scenario measures re-keys the references in `lib/testing/performance-reference-carryover.json` with its reason. Any other edit recalibrates.
 

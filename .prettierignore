@@ -10,6 +10,7 @@
 lib/supabase/database.types.ts
 lib/testing/selection/coverage-map.json
 lib/testing/performance-baselines.json
+lib/testing/workload-archive/
 bun.lock
 package-lock.json
 public/
