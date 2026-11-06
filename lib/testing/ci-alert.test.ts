@@ -133,6 +133,15 @@ test('a green run closes a duplicate a race left behind', () => {
   ]);
 });
 
+test('a failed issue lookup fails the job instead of passing without a report', () => {
+  rmSync(join(stub, 'issues.json'));
+  for (const args of [
+    ['close', TITLE],
+    ['open', TITLE, 'body'],
+  ])
+    expect(bash(repositoryRoot, alertScript, args).status, args[0]).not.toBe(0);
+});
+
 test('a green run with no open issue writes nothing', () => {
   expect(issueWrites(['run', TITLE, 'success success'])).toEqual([]);
 });

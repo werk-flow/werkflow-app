@@ -35,8 +35,9 @@ open_alert() {
 
 # Every match: GitHub has no create-if-absent, so a race can leave a second issue of one title.
 close_alert() {
-  local issue
-  for issue in $(open_issues "$1"); do
+  local issues issue
+  issues="$(open_issues "$1")"
+  for issue in $issues; do
     gh issue close "$issue" --comment "Green again: ${run_url}"
   done
 }
