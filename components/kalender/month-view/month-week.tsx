@@ -1,7 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { packLanes, type BoardColumn, type BoardSpanItem } from '@/lib/calendar/board-layout';
+import {
+  packLanes,
+  type BoardColumn,
+  type BoardLaneItem,
+  type BoardSpanItem,
+} from '@/lib/calendar/board-layout';
 import { absenceItems } from '@/lib/calendar/board-model';
 import { isMultiDay, type MonthCellItem } from '@/lib/calendar/month-cell-items';
 import { monthRowTemplate } from '@/lib/calendar/month-layout';
@@ -35,6 +40,75 @@ type MonthWeekProps = {
   onOpenCard: (job: CalendarJob, element: HTMLElement) => void;
 };
 
+/** The week's absences and multi-day visits, packed into lanes. */
+function monthWeekBars(
+  { vacation, sickness, jobs }: Pick<MonthWeekProps, 'vacation' | 'sickness' | 'jobs'>,
+  columns: BoardColumn[],
+) {
+  const items: MonthBar[] = [
+    ...absenceItems({ vacation, sickness, employeeRecordId: null }).map(
+      (absence): MonthBar => ({
+        kind: 'absence',
+        key: absence.key,
+        startDate: absence.startDate,
+        endDateExclusive: absence.endDateExclusive,
+        sortMinutes: absence.sortMinutes,
+        label: absence.label,
+        tone: absence.pending ? 'absence-pending' : 'absence',
+      }),
+    ),
+    ...jobs.filter(isMultiDay).flatMap((job): MonthBar[] =>
+      job.plannedDate
+        ? [
+            {
+              kind: 'job',
+              key: `job:${job.id}`,
+              startDate: job.plannedDate,
+              endDateExclusive: job.endDateExclusive ?? job.plannedDate,
+              sortMinutes: 0,
+              job,
+            },
+          ]
+        : [],
+    ),
+  ];
+  return packLanes(items, columns);
+}
+
+/** A multi-day bar spans its days: a row of the grid holds cells only, so the bar is a cell too. */
+function monthBarCell(
+  { item, lane, column, span }: BoardLaneItem<MonthBar>,
+  onOpenCard: MonthWeekProps['onOpenCard'],
+): React.JSX.Element {
+  return (
+    <div
+      key={item.key}
+      role="gridcell"
+      aria-colspan={span}
+      className="relative z-[1] min-w-0 px-0.5"
+      style={{ gridColumn: `${column + 1} / span ${span}`, gridRow: lane + 2 }}
+    >
+      {item.kind === 'job' ? (
+        <CalendarCard
+          job={item.job}
+          size="month"
+          className="h-5 w-full"
+          onOpen={(element) => onOpenCard(item.job, element)}
+        />
+      ) : (
+        <BarSegment
+          tone={item.tone}
+          edge="single"
+          label={item.label}
+          title={item.label}
+          startDate={item.startDate}
+          className="h-5"
+        />
+      )}
+    </div>
+  );
+}
+
 /**
  * One week row of the month grid: seven day cells, then absences and
  * multi-day visits as bars packed into lanes between the date headers and
@@ -66,36 +140,10 @@ export function MonthWeek(props: MonthWeekProps): React.JSX.Element {
       })),
     [week],
   );
-  const bars = useMemo(() => {
-    const items: MonthBar[] = [
-      ...absenceItems({ vacation, sickness, employeeRecordId: null }).map(
-        (absence): MonthBar => ({
-          kind: 'absence',
-          key: absence.key,
-          startDate: absence.startDate,
-          endDateExclusive: absence.endDateExclusive,
-          sortMinutes: absence.sortMinutes,
-          label: absence.label,
-          tone: absence.pending ? 'absence-pending' : 'absence',
-        }),
-      ),
-      ...jobs.filter(isMultiDay).flatMap((job): MonthBar[] =>
-        job.plannedDate
-          ? [
-              {
-                kind: 'job',
-                key: `job:${job.id}`,
-                startDate: job.plannedDate,
-                endDateExclusive: job.endDateExclusive ?? job.plannedDate,
-                sortMinutes: 0,
-                job,
-              },
-            ]
-          : [],
-      ),
-    ];
-    return packLanes(items, columns);
-  }, [columns, jobs, sickness, vacation]);
+  const bars = useMemo(
+    () => monthWeekBars({ vacation, sickness, jobs }, columns),
+    [columns, jobs, sickness, vacation],
+  );
   return (
     <div
       role="row"
@@ -117,34 +165,7 @@ export function MonthWeek(props: MonthWeekProps): React.JSX.Element {
           onAdd={onAdd}
         />
       ))}
-      {bars.lanes.map(({ item, lane, column, span }) => (
-        // A multi-day bar spans its days: a row of the grid holds cells only, so the bar is a cell too.
-        <div
-          key={item.key}
-          role="gridcell"
-          aria-colspan={span}
-          className="relative z-[1] min-w-0 px-0.5"
-          style={{ gridColumn: `${column + 1} / span ${span}`, gridRow: lane + 2 }}
-        >
-          {item.kind === 'job' ? (
-            <CalendarCard
-              job={item.job}
-              size="month"
-              className="h-5 w-full"
-              onOpen={(element) => onOpenCard(item.job, element)}
-            />
-          ) : (
-            <BarSegment
-              tone={item.tone}
-              edge="single"
-              label={item.label}
-              title={item.label}
-              startDate={item.startDate}
-              className="h-5"
-            />
-          )}
-        </div>
-      ))}
+      {bars.lanes.map((lane) => monthBarCell(lane, onOpenCard))}
     </div>
   );
 }

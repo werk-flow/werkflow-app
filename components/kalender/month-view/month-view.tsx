@@ -48,34 +48,32 @@ export type MonthViewProps = {
   verticalScroller: () => HTMLElement | null;
 };
 
-/**
- * The month view (P1-24a, package D): a CSS grid of the month's weeks that
- * grows with its content, absences and multi-day visits as bars per week,
- * visits and recorded blocks as one-line items, „+n mehr" in a popover,
- * past days dimmed, and date moves through the shared engine.
- */
-export function MonthView(props: MonthViewProps): React.JSX.Element {
-  const {
-    date,
-    todayIso,
-    jobs,
-    entries,
-    members,
-    vacation,
-    sickness,
-    holidays,
-    organizationSettings,
-    currentUserId,
-    currentUserRole,
-    isAdminOrManager,
-    mutations,
-    actions,
-    parkingContexts,
-    onParkedContextMissing,
-    onOpenDay,
-    onSessionClick,
-    verticalScroller,
-  } = props;
+/** Holiday and closure labels by date, a year either side so the grid's edge weeks carry theirs. */
+function monthDayLabels(holidays: OrganizationHolidayCalendar, anchorIso: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const year = Number(anchorIso.slice(0, 4));
+  for (const holiday of getHolidayContextDays(holidays, year - 1, year + 1))
+    map.set(holiday.date, holiday.name);
+  for (const closure of holidays.closureDays) map.set(closure.closureDate, closure.label ?? 'Betriebsruhe');
+  return map;
+}
+
+function workBlocksByUser(entries: TimeEntry[]) {
+  const byUser = new Map<string, TimeEntry[]>();
+  for (const entry of entries) {
+    const list = byUser.get(entry.userId) ?? [];
+    list.push(entry);
+    byUser.set(entry.userId, list);
+  }
+  return new Map(
+    [...byUser].map(([userId, userEntries]) => [userId, calculateCalendarWorkBlocks(userEntries)]),
+  );
+}
+
+/** The month's clock, grid, items and drag surface, in the order the view renders them. */
+function useMonthViewState(props: MonthViewProps) {
+  const { date, todayIso, jobs, entries, members, holidays, mutations, actions } = props;
+  const { parkingContexts, onParkedContextMissing, onOpenDay, verticalScroller } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const { startDrag } = useCalendarDrag();
@@ -86,30 +84,13 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
   const weeks = useMemo(() => monthWeeks(anchorIso, todayIso), [anchorIso, todayIso]);
   const range = useMemo(() => monthGridRange(weeks), [weeks]);
 
-  const labels = useMemo(() => {
-    const map = new Map<string, string>();
-    const year = Number(anchorIso.slice(0, 4));
-    for (const holiday of getHolidayContextDays(holidays, year - 1, year + 1))
-      map.set(holiday.date, holiday.name);
-    for (const closure of holidays.closureDays) map.set(closure.closureDate, closure.label ?? 'Betriebsruhe');
-    return map;
-  }, [anchorIso, holidays]);
+  const labels = useMemo(() => monthDayLabels(holidays, anchorIso), [anchorIso, holidays]);
 
   const nameByUser = useMemo(
     () => new Map(members.map((member) => [member.user_id, memberDisplayName(member)])),
     [members],
   );
-  const blocksByUser = useMemo(() => {
-    const byUser = new Map<string, TimeEntry[]>();
-    for (const entry of entries) {
-      const list = byUser.get(entry.userId) ?? [];
-      list.push(entry);
-      byUser.set(entry.userId, list);
-    }
-    return new Map(
-      [...byUser].map(([userId, userEntries]) => [userId, calculateCalendarWorkBlocks(userEntries)]),
-    );
-  }, [entries]);
+  const blocksByUser = useMemo(() => workBlocksByUser(entries), [entries]);
   const { itemsByDate, blocksByUserDate } = useMemo(
     () =>
       monthCellItemsByDate({
@@ -137,11 +118,39 @@ export function MonthView(props: MonthViewProps): React.JSX.Element {
   useDragSurface(surface);
   const keyboard = useMonthKeyboard({ weeks, rootRef, onOpenDay });
 
-  const draggable = isAdminOrManager;
   const roleByUser = useMemo(
     () => new Map(members.map((member) => [member.user_id, member.role])),
     [members],
   );
+  return {
+    rootRef,
+    highlightRef,
+    startDrag,
+    openMore,
+    setOpenMore,
+    nowTick,
+    anchorIso,
+    labels,
+    itemsByDate,
+    keyboard,
+    roleByUser,
+  };
+}
+
+/**
+ * The month view (P1-24a, package D): a CSS grid of the month's weeks that
+ * grows with its content, absences and multi-day visits as bars per week,
+ * visits and recorded blocks as one-line items, „+n mehr" in a popover,
+ * past days dimmed, and date moves through the shared engine.
+ */
+export function MonthView(props: MonthViewProps): React.JSX.Element {
+  const { jobs, vacation, sickness, organizationSettings, currentUserId, currentUserRole } = props;
+  const { isAdminOrManager, actions, onOpenDay, onSessionClick } = props;
+  const state = useMonthViewState(props);
+  const { rootRef, highlightRef, startDrag, openMore, setOpenMore, nowTick } = state;
+  const { anchorIso, labels, itemsByDate, keyboard, roleByUser } = state;
+
+  const draggable = isAdminOrManager;
   const itemFor = (item: MonthCellItem, full: boolean): React.JSX.Element => (
     <MonthCellEntry
       key={item.key}

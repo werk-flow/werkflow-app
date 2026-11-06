@@ -5,11 +5,6 @@
   },
   "modules": {},
   "functions": {
-    "components/kalender/month-view/month-cell-entry.tsx": { "MonthCellEntry": 89 },
-    "components/kalender/month-view/month-day-cell.tsx": { "MonthDayCell": 92 },
-    "components/kalender/month-view/month-view.tsx": { "MonthView": 151 },
-    "components/kalender/month-view/month-week.tsx": { "MonthWeek": 107 },
-    "components/kalender/month-view/use-month-surface.ts": { "useMonthSurface": 191 },
     "components/kalender/mutations/use-calendar-park-mutations.ts": { "useCalendarParkMutations": 140 },
     "components/kalender/mutations/use-calendar-visit-writes.ts": { "useCalendarVisitWrites": 170 },
     "components/kalender/mutations/use-optimistic-run.ts": { "useOptimisticRun": 93 }
