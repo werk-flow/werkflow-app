@@ -1,0 +1,162 @@
+name: Date look-ahead
+
+# The suite on the dates still to come, so a test that fails on a date alone surfaces weeks before
+# that date arrives (docs/technical/recovery-and-incidents.md, "Monitoring"). Each leg moves its own
+# runner's kernel clock (.github/scripts/shift-clock.sh), which shifts the app, Chromium and the
+# Supabase stack together. It only reports: nothing reads this workflow, so it gates no pull request
+# and no release. A red run on main opens or updates the issue "CI alert: date look-ahead"; a failed
+# job's name carries the date, and the next green run closes the issue. Started by hand, `date` runs
+# one date, to reproduce a failure; that run reports nothing.
+on:
+  schedule:
+    # GitHub starts this hours late, so it arrives in the afternoon, clear of the nightly (22:30 Berlin).
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'One date (YYYY-MM-DD) instead of the planned dates; reports nothing'
+        type: string
+        default: ''
+      alert_proof:
+        description: 'Proof run: report on "CI alert: date look-ahead (proof)", from any branch'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# A new run waits for the last one, so two never take the runners together.
+concurrency:
+  group: date-lookahead
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read # keep the browser legs of the dates the open alert names
+    outputs:
+      legs: ${{ steps.legs.outputs.legs }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Plan the full run's groups
+        id: groups
+        run: bun scripts/ci-plan.ts --full 'Date look-ahead'
+      - name: Plan the dates
+        id: legs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: "CI alert: date look-ahead${{ inputs.alert_proof && ' (proof)' || '' }}"
+          SHARDS: ${{ steps.groups.outputs.shards }}
+          SQL: ${{ steps.groups.outputs.sql }}
+          ASKED_DATE: ${{ inputs.date }}
+        run: |
+          # No pipe: this shell has no pipefail, and a failed lookup must fail the plan.
+          open_alert="$(gh issue list --state open --label ci-alert --json title,body \
+            --jq '.[] | select(.title == env.TITLE) | .body')"
+          OPEN_ALERT="$open_alert" bun scripts/date-lookahead-plan.ts
+
+  leg:
+    name: ${{ matrix.name }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      # The nightly peaks at 20 runners. A third of that leaves pull requests theirs.
+      max-parallel: 7
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.legs) }}
+    env:
+      INSTANT: ${{ matrix.instant }}
+      LEG_GROUPS: ${{ matrix.groups }}
+    steps:
+      - name: Free the runner's disk
+        if: matrix.browser
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      # The unit suite compares with origin/main. No step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: ./.github/actions/local-stack
+      - uses: ./.github/actions/playwright
+      # Built on the real clock, as a deployed build is: only the running app reads the shifted date.
+      - name: Build the app
+        if: matrix.browser
+        run: bun run build
+      - name: Shift the clock
+        run: bash .github/scripts/shift-clock.sh set "$INSTANT"
+      - name: Start the test server
+        id: server
+        if: matrix.browser
+        run: |
+          nohup bun run test:server local --prebuilt > "$RUNNER_TEMP/test-server.log" 2>&1 &
+          server=$!
+          deadline=$((SECONDS + 300))
+          until grep -q 'Serving the recorded local build' "$RUNNER_TEMP/test-server.log" \
+            && curl --silent --fail --output /dev/null http://localhost:3000/login; do
+            if ! kill -0 "$server" 2> /dev/null || test $SECONDS -ge $deadline; then
+              cat "$RUNNER_TEMP/test-server.log"
+              exit 1
+            fi
+            sleep 5
+          done
+      - name: Run the groups on the shifted clock
+        run: bun scripts/verify.ts run --group "$LEG_GROUPS" --jobs 1
+      # Before the evidence: the upload needs a clock the storage service accepts.
+      - name: Restore the clock
+        if: always()
+        run: bash .github/scripts/shift-clock.sh restore
+      - name: Copy the server output
+        if: failure() && steps.server.conclusion != 'skipped'
+        run: |
+          mkdir -p .agent-logs
+          cp "$RUNNER_TEMP/test-server.log" .agent-logs/
+      - uses: ./.github/actions/upload-evidence
+        if: failure()
+        with:
+          name: ${{ matrix.slug }}
+
+  alert:
+    name: Alert
+    needs: [plan, leg]
+    # Only main's whole plan speaks for the look-ahead; one asked date proves nothing about the rest,
+    # and a run a person cancelled says nothing. Nothing needs this job.
+    if: ${{ !cancelled() && ((github.ref == 'refs/heads/main' && !inputs.date) || inputs.alert_proof) }}
+    # Two runs ending together must not both find no issue.
+    concurrency: date-lookahead-alert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # name the failed jobs
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: "CI alert: date look-ahead${{ inputs.alert_proof && ' (proof)' || '' }}"
+          PLAN: ${{ needs.plan.result }}
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        # A run without a plan tested no date, so the issue keeps the dates the next plan reads.
+        run: |
+          if test "$PLAN" = success; then
+            bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS"
+          else
+            bash .github/scripts/alert-issue.sh keep "$TITLE" 'The look-ahead could not plan its dates, so no date ran.'
+          fi
