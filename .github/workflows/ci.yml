@@ -9,6 +9,8 @@ name: CI
 # makes the run's one production build beside `Plan`, and every browser shard
 # serves it. Every job runs its groups through scripts/verify.ts, the same
 # engine as a local run. The required check is `Check` at the end of this file.
+# `Midnight wait` holds the browser shards around Berlin midnight, so a run never
+# starts a group inside the window (ciBrowserHoldUntil in lib/testing/runner/group-schedule.ts).
 on:
   # No label event starts a run: a relabel on the same commit cancelled the run in progress and
   # left the required `Check` failed or "Expected". The Unit job reads the PR's labels at run
@@ -22,6 +24,13 @@ on:
     inputs:
       full:
         description: Why every browser group runs
+        type: string
+        required: true
+  # Proof of the midnight wait on a branch. A caller's run cannot set it, and main refuses it.
+  workflow_dispatch:
+    inputs:
+      midnight_proof_minutes:
+        description: 'Proof run only: hold the browser shards this many minutes, as if the midnight window were open'
         type: string
         required: true
 
@@ -43,6 +52,7 @@ jobs:
     outputs:
       browser: ${{ steps.plan.outputs.browser }}
       shards: ${{ steps.plan.outputs.shards }}
+      midnight_until: ${{ steps.plan.outputs.midnight_until }}
       static: ${{ steps.plan.outputs.static }}
       sql: ${{ steps.plan.outputs.sql }}
     steps:
@@ -53,7 +63,8 @@ jobs:
       - name: Plan the browser groups
         id: plan
         env:
-          FULL: ${{ inputs.full }}
+          FULL: ${{ inputs.full || (inputs.midnight_proof_minutes && 'Midnight proof run') }}
+          MIDNIGHT_PROOF_MINUTES: ${{ inputs.midnight_proof_minutes }}
           # A pull request is checked out as GitHub's merge commit with the current main; its first
           # parent is that main, so the plan diffs exactly the PR's own changes. The event's
           # base.sha can predate main's newer commits, which then counted as the PR's own
@@ -208,10 +219,34 @@ jobs:
         with:
           name: build
 
+  # A shard that started now could reach a group in the midnight start window, so the run waits
+  # here. The wait is a job of its own: in a Browser job it would count against that job's timeout
+  # and end in a cancellation (#131). It holds one idle runner and needs no checkout.
+  midnight:
+    name: Midnight wait
+    needs: plan
+    if: needs.plan.outputs.midnight_until != ''
+    runs-on: ubuntu-24.04
+    # Above the longest hold, CI_MIDNIGHT_HOLD_MAX_MS; a test keeps the two in step.
+    timeout-minutes: 80
+    permissions: {}
+    steps:
+      # GitHub shows a job's summary when the job ends, so Plan says why the run waits.
+      - name: Wait until the shards may start
+        env:
+          UNTIL: ${{ needs.plan.outputs.midnight_until }}
+        run: |
+          end="$(date --date "$UNTIL" +%s)"
+          while left=$((end - $(date +%s))); test "$left" -gt 0; do
+            echo "Waiting for the midnight start window: $(((left + 59) / 60)) min left, until $UNTIL."
+            sleep "$((left < 60 ? left : 60))"
+          done
+
   browser:
     name: Browser ${{ matrix.shard }}
-    needs: plan
-    if: needs.plan.outputs.browser == 'true'
+    needs: [plan, midnight]
+    # `midnight` is skipped on almost every run, and a skipped need skips this job by default.
+    if: ${{ !cancelled() && needs.plan.outputs.browser == 'true' && contains(fromJSON('["success", "skipped"]'), needs.midnight.result) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Reads the Build job's state.
@@ -284,13 +319,14 @@ jobs:
           name: browser-${{ matrix.shard }}
 
   # The one required status check. It fails unless every job passed, or the
-  # browser shards were skipped because the plan selected no browser group.
+  # browser shards were skipped because the plan selected no browser group, or
+  # the midnight wait was skipped because the plan set no hold.
   # `always()`, never `!cancelled()`: a cancelled run reports a failed Check,
   # and a skipped Check would count as passed.
   check:
     name: Check
     if: always()
-    needs: [plan, lint, static, unit, components, sql, build, browser]
+    needs: [plan, lint, static, unit, components, sql, build, midnight, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -299,6 +335,7 @@ jobs:
           RESULTS: ${{ toJSON(needs) }}
         run: |
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTS" | jq -e '.plan.outputs.browser as $browser | all(to_entries[];
+          echo "$RESULTS" | jq -e '.plan.outputs as $plan | all(to_entries[];
             .value.result == "success"
-            or (.key == "browser" and .value.result == "skipped" and $browser == "false"))' > /dev/null
+            or (.key == "browser" and .value.result == "skipped" and $plan.browser == "false")
+            or (.key == "midnight" and .value.result == "skipped" and ($plan.midnight_until // "") == ""))' > /dev/null

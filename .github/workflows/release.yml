@@ -1,15 +1,19 @@
 name: release
 
 # The owner's release (docs/technical/environments.md, "Release and rollback").
-# It starts on the schedule below, or by hand: gh workflow run release. It releases
+# It runs each weekday at 07:00 Berlin, or by hand: gh workflow run release. It releases
 # the main commit it starts on, and only after a green full run on exactly that
 # commit: a nightly or manual one it finds, or its own. A scheduled run ends without
 # a change when main equals production or its newest full run is red
-# (.github/scripts/release-candidate.sh).
+# (.github/scripts/release-candidate.sh). A failed release, or a scheduled one that
+# stopped at a red full run, opens or updates the issue "CI alert: release"; the next
+# release that ships closes it.
 on:
-  # One line per weekday release time, in Berlin time.
+  # GitHub starts this repository's scheduled runs up to 10 hours late, so a cron line at 07:00
+  # runs in the working day. This one fires the evening before a weekday, and the Hold job
+  # waits for 07:00. It stays a schedule event, so it decides as a scheduled run.
   schedule:
-    - cron: '0 7 * * 1-5'
+    - cron: '30 22 * * 0-4'
       timezone: Europe/Berlin
   workflow_dispatch:
     inputs:
@@ -17,6 +21,10 @@ on:
         description: Decide like a scheduled run, then stop before the full run and any change to PROD
         type: boolean
         default: false
+      alert_proof:
+        description: 'Proof run only: failure, success, red-run or no-change. Decides and ships nothing; reports on "CI alert: release (proof)"'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -32,14 +40,41 @@ env:
   VERCEL_PROJECT_ID: prj_h5ZIXgvJqyy4A7Qqy8Z0j9Ovo86R
 
 jobs:
+  hold:
+    name: Hold until 07:00
+    # Only a scheduled run waits. A job lasts 6 hours at most, so two legs in turn cover the
+    # evening: the second ends at once when the first reached 07:00. A failed leg stops the
+    # release, and the alert reports it.
+    strategy:
+      max-parallel: 1
+      matrix:
+        leg: [1, 2]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        if: github.event_name == 'schedule'
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Wait for 07:00 Berlin
+        if: github.event_name == 'schedule'
+        run: bash .github/scripts/hold-until.sh 07:00
+
   candidate:
     name: Find a full run
+    needs: hold
+    # Without a successful candidate no later job runs, so a proof run cannot ship.
+    if: ${{ !inputs.alert_proof }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       sha: ${{ steps.candidate.outputs.sha }}
       verified: ${{ steps.candidate.outputs.verified }}
       release: ${{ steps.candidate.outputs.release }}
+      skip: ${{ steps.candidate.outputs.skip }}
+      skip_reason: ${{ steps.candidate.outputs.skip_reason }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -188,3 +223,42 @@ jobs:
           HEALTH_URL: https://jbgaqpdjauzoocplgdsn.supabase.co/functions/v1/health
           DEPLOYMENT: ${{ needs.release.outputs.deployment }}
         run: bash .github/scripts/release-smoke.sh "$DEPLOYMENT"
+
+  proof:
+    name: Alert proof
+    if: ${{ inputs.alert_proof }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: End as asked
+        env:
+          PROOF: ${{ inputs.alert_proof }}
+        run: test "$PROOF" != failure
+
+  alert:
+    name: Alert
+    needs: [hold, candidate, full, release, smoke, proof]
+    # Only a real release on main speaks, and a run a person cancelled says nothing. Nothing
+    # needs this job, so it runs after the release decision and changes none.
+    if: ${{ !cancelled() && !inputs.dry_run && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # name the failed jobs
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: "CI alert: release${{ inputs.alert_proof && ' (proof)' || '' }}"
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          SKIP: ${{ needs.candidate.outputs.skip || inputs.alert_proof }}
+          SKIP_REASON: ${{ needs.candidate.outputs.skip_reason || 'Proof run.' }}
+        run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS" "$SKIP" "$SKIP_REASON"

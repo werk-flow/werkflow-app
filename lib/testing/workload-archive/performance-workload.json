@@ -1,0 +1,30 @@
+{
+  "profile": "typical",
+  "businessDate": "2026-06-15",
+  "definition": {
+    "employees": 10,
+    "occurrencesPerDay": 40,
+    "customers": 1000,
+    "jobs": 2500,
+    "timeEntriesPerWorkday": 4,
+    "jobsWithVisits": 400,
+    "equipment": 900,
+    "pendingSubmissions": 5
+  },
+  "counts": {
+    "employeeRecords": 10,
+    "customers": 1000,
+    "jobs": 2500,
+    "equipment": 900,
+    "pendingSubmissions": 5,
+    "occurrences": 2041,
+    "assignments": 2245,
+    "timeEntries": 176,
+    "window": {
+      "from": "2026-05-31",
+      "to": "2026-07-13",
+      "days": 44
+    },
+    "workdays": 31
+  }
+}

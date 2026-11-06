@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { format, resolveConfig } from 'prettier';
 import { resolve } from 'node:path';
@@ -26,6 +27,13 @@ import {
 import { type LabObservation } from '../lib/testing/lab-record';
 import { readLabObservations } from '../lib/testing/lab-evidence';
 import { getLabStep, LAB_METRICS, LAB_STEPS, type LabMetric } from '../lib/testing/lab-steps';
+import { MEASURED_SCENARIOS } from '../lib/testing/measured-scenarios';
+import {
+  performanceBaselinesSchema,
+  validatePerformanceBaselines,
+} from '../lib/testing/performance-baselines';
+import { rekeyLabWorkload, rekeyWallClockWorkload } from '../lib/testing/reference-digests';
+import { writeJsonAtomically } from '../lib/testing/runner/file-lock';
 import { getGroupTimingRequirements, getTestGroups } from '../lib/testing/selection/test-groups';
 import { withWorkspaceTestLock } from '../lib/testing/runner/workspace-test-lock';
 import { loadEnvLocal } from '../tests/golden/support/env';
@@ -43,6 +51,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 //   bun scripts/lab-counts.ts accept --run <key> --step <id> --target <metric or shape> --reason "<what changed>"
 //   bun scripts/lab-counts.ts ungate --runs <keys> --step <id> --metric <m> --reason "<the two values it took>"
 //   bun scripts/lab-counts.ts migrate-history --reason "<why the stored values are the reviewed ones>"   (once)
+//   bun scripts/lab-counts.ts rekey-workload --from <digest> --reason "<why the seeded rows stay the same>"
 //
 // Every command records the full bounds it writes in the step's history, and
 // the file is written only when that history replays to the stored bounds.
@@ -50,6 +59,7 @@ import { readRunManifest, runDirectory } from '../tests/golden/support/run-state
 const root = resolve(import.meta.dir, '..');
 const REFERENCE_PATH = resolve(root, 'lib/testing/lab-count-references.json');
 const CARRYOVER_PATH = resolve(root, 'lib/testing/lab-count-reference-carryover.json');
+const BASELINE_PATH = resolve(root, 'lib/testing/performance-baselines.json');
 const [command = '', ...rest] = process.argv.slice(2);
 const values = new Map<string, string>();
 while (rest.length) {
@@ -209,10 +219,37 @@ async function migrateHistory(): Promise<void> {
   await writeReferences(migrateLabReferences(legacy.data, required('--reason')));
 }
 
+/**
+ * Re-keys the lab and wall-clock references of a workload-file edit that left
+ * the seeded workload as it was. It runs no browser, so it needs no local stack
+ * and works from any machine.
+ */
+async function rekeyWorkload(): Promise<void> {
+  const change = { fromDigest: required('--from'), reason: required('--reason') };
+  const references = readReferences();
+  const baselines = performanceBaselinesSchema.parse(JSON.parse(readFileSync(BASELINE_PATH, 'utf8')));
+  const rekeyedReferences = rekeyLabWorkload(root, references, change);
+  const rekeyedBaselines = rekeyWallClockWorkload(root, baselines, MEASURED_SCENARIOS, change);
+  const labMoved = !isDeepStrictEqual(rekeyedReferences, references);
+  const wallClockMoved = !isDeepStrictEqual(rekeyedBaselines, baselines);
+  if (!labMoved && !wallClockMoved) throw new Error(`No reference needs a re-key from ${change.fromDigest}.`);
+  const problems = validatePerformanceBaselines(rekeyedBaselines, MEASURED_SCENARIOS);
+  if (problems.length) throw new Error(`Refusing invalid baselines: ${problems.join('; ')}`);
+  if (labMoved) await writeReferences(rekeyedReferences);
+  if (wallClockMoved) {
+    writeJsonAtomically(BASELINE_PATH, rekeyedBaselines);
+    console.log(`Wrote ${BASELINE_PATH}. Commit it with the change it records.`);
+  }
+}
+
 await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () => {
   loadEnvLocal();
   if (command === 'migrate-history') {
     await migrateHistory();
+    return;
+  }
+  if (command === 'rekey-workload') {
+    await rekeyWorkload();
     return;
   }
   const references = readReferences();
@@ -342,7 +379,7 @@ await withWorkspaceTestLock({ operation: `lab counts: ${command}` }, async () =>
     }
     default:
       throw new Error(
-        'Use report, gate, reject, calibrate, ungate, ratchet, accept or migrate-history; see scripts/lab-counts.ts.',
+        'Use report, gate, reject, calibrate, ungate, ratchet, accept, migrate-history or rekey-workload; see scripts/lab-counts.ts.',
       );
   }
 });
