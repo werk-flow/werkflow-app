@@ -38,7 +38,7 @@ Auth settings, mail templates, SMTP and rate limits are no schema and no migrati
 
 This table is the one home of every credential the deployments and workflows use. No check copies a secret elsewhere to test it.
 
-- `.github/workflows/health.yml` checks every row each Monday morning, Berlin time, with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`. The next green run closes it. GitHub mails a scheduled run's failure to the account that last changed its cron line, `tamaycbn`, which needs failed-workflow mail turned on.
+- `.github/workflows/health.yml` checks every row each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed", assigned to `tamaycbn`. The next green run closes it. GitHub also mails that failure to `tamaycbn`, the account that last changed the cron line, if failed-workflow mail is on.
 - The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both accept only a request with the header `x-health-check-token`; without it they answer like a missing route. The answer names each check `ok` or `failed`, never a value.
 
 | Credential | Lives in | Used by | Expires | Rotate |
@@ -103,8 +103,6 @@ Agents never read PROD data through any tool, because every tool result goes to 
 
 ## The migration rule
 
-This section is the one home of the rule.
-
 1. Every schema change is a committed file in `supabase/migrations/` first. A PR carries at most one migration, with its regenerated types: apply it locally (`supabase migration up`) and run `bun run types:generate -- --local`. CI fails while the committed types differ. Its version sorts after the newest migration on `main`, or `supabase db push` refuses it after the merge; `bun run migrations:order` (in `check:changed` and CI) fails otherwise and names the version to rename it to.
 2. A migration that creates a table follows [add a table](security.md#add-a-table).
 3. DEV receives a migration only when its PR merges to `main`: `.github/workflows/staging.yml` runs `supabase db push`, deploys the edge functions, then deploys that commit to staging. Never apply a migration to DEV by hand. `bun run migrations:check` and the canary fail when DEV's history diverges. `bun run advisors:check` fails on an advisor finding without a reviewed exception, and on an exception the advisor no longer reports.
@@ -142,8 +140,6 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 ## Work on production
 
 - Reads: metadata only, through `bun run prod:inspect`. [Which tool reaches what](#which-tool-reaches-what) owns the rule.
-- Staging: a PR merged to `main` reaches DEV's schema, then staging.
-- Release: only through the `release` workflow ([release and rollback](#release-and-rollback)).
 - A production-local session is the owner's: `bun run env:prod`, do the task, `bun run env:dev`. No tests and no bulk scripts in between.
 - Owner demo data: `bun scripts/seed-demo-data.ts --target local|dev|prod` (PROD adds `--confirm-prod`) recreates the demo organizations, never the beta partner's; `local` also creates the owner. CI's SQL job seeds twice, so a migration that breaks the seeder fails `Check`. Each run generates the members' password. To sign in to `bun run dev` as one, seed DEV with your own `DEMO_MEMBER_PASSWORD` and run `bun run env:dev` first; PROD refuses one.
 
@@ -151,7 +147,7 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 [Decision 0009](../decisions/0009-pull-requests-and-ci.md) owns why. `main` is staging. The `production` branch is what Vercel serves on `app.werk-flow.app`.
 
-1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). It runs every weekday at 07:00 Berlin; a scheduled run releases only when `main` moved since `production` and its newest full run, or its own, passed. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again. A rerun is safe.
+1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). It decides every weekday at 07:00 Berlin: GitHub starts cron runs here up to 10 hours late, so the cron line fires the evening before and the run holds until 07:00. A scheduled run releases only when `main` moved since `production` and its newest full run, or its own, passed. A manual run queues behind a held one: `gh run cancel` that first. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again. A rerun is safe.
 2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data. After a rollback Vercel stops assigning new production builds to the domain, so the next release must promote explicitly, which the workflow does.
 3. The last job checks production without reading data: the build serves, the login page renders, `health` answers, and five minutes later Vercel shows no runtime error from the last ten. If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
 4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).

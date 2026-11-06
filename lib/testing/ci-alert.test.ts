@@ -230,6 +230,23 @@ test('a scheduled release with main equal to production skips quietly', () => {
   ]);
 });
 
+test('a dry run stops where a scheduled run stops and marks nothing to ship', () => {
+  const stopsOf = (mode: string, ahead: boolean, conclusion: string) => {
+    writeFileSync(join(stub, 'output'), '');
+    rmSync(join(stub, 'repository'), { recursive: true, force: true });
+    const { sha, outputs } = decide(mode, ahead, conclusion);
+    return outputs.map((line) => line.replaceAll(sha, '<sha>'));
+  };
+  const redRun = stopsOf('dry-run', true, 'failure');
+  expect(redRun).toEqual(stopsOf('scheduled', true, 'failure'));
+  expect(redRun).toContain('release=false');
+  expect(redRun).toContain('skip=red-run');
+  const noChange = stopsOf('dry-run', false, 'success');
+  expect(noChange).toEqual(stopsOf('scheduled', false, 'success'));
+  expect(noChange).toContain('release=false');
+  expect(noChange).toContain('skip=no-change');
+});
+
 test('the skip output changes no decision: a green or manual release still goes on', () => {
   expect(decide('scheduled', true, 'success').outputs).toContain('release=true');
   writeFileSync(join(stub, 'output'), '');

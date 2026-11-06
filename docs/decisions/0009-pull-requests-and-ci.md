@@ -130,3 +130,7 @@ On 2026-10-30 the Vercel account reached the Hobby plan's 100 deployments a day,
 ## Amendment 2026-11-05: agents release on their own
 
 The owner decided on 2026-11-05 that no step waits for approval just because it moves code. Rule 7 now reads: besides the weekday run, an agent may start the `release` workflow when `main` is green, the change is not risky and it should not wait, such as for a bug fix. The workflow's gates, the check of production and the rollback stay as they are. Code still reaches `main` and `production` only through a pull request and the `release` workflow.
+
+## Amendment 2026-11-06: a scheduled release holds for its time
+
+The owner expects the weekday release at 07:00 Berlin, the time decided on 2026-10-30, and GitHub starts this repository's scheduled runs up to 10 hours late. The cron line of `release.yml` now fires the evening before, and the run waits in its `Hold` job until 07:00. This changes "More release times a weekday are one schedule line each": a further time also needs its own hold.
