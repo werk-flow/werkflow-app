@@ -48,20 +48,126 @@ export type DispatchPanelBatch = {
   runBatchCommit: () => Promise<void>;
 };
 
-/** Batch rescheduling of the dispatch panel: selection, inputs, server preview and commit. */
-export function useDispatchPanelBatch({
-  overview,
-  today,
-  requestApproval,
-  afterMutation,
-  showBanner,
-}: {
+type DispatchPanelBatchOptions = {
   overview: DispatchOverview | null;
   today: string;
   requestApproval: ReturnType<typeof usePlanningWarningConfirmation>['requestApproval'];
   afterMutation: () => Promise<void>;
   showBanner: ReturnType<typeof useBanner>['showBanner'];
-}): DispatchPanelBatch {
+};
+
+type BatchInputs = {
+  selectedIds: Set<string>;
+  dayShiftText: string;
+  newTime: string;
+};
+
+/** The visits that can still move: a future start, or a future day for one without a time. */
+function eligibleBatchEntries(
+  overview: DispatchOverview | null,
+  today: string,
+  batchNow: number,
+): DispatchOverviewOccurrence[] {
+  return (overview?.occurrences ?? []).filter((entry) => {
+    const startMs = entry.startAt ? new Date(entry.startAt).getTime() : null;
+    return startMs !== null ? startMs > batchNow : Boolean(entry.startDate && entry.startDate > today);
+  });
+}
+
+function batchInputErrors(
+  dayShiftText: string,
+  newTime: string,
+  batchReason: string,
+): DispatchPanelBatch['batchFieldErrors'] {
+  return {
+    'batch-day-shift':
+      dayShiftText.trim() === '' || !Number.isInteger(Number(dayShiftText))
+        ? 'Bitte gib eine ganze Zahl an Tagen an.'
+        : Number(dayShiftText) === 0 && newTime === ''
+          ? 'Gib eine Verschiebung in Tagen oder eine neue Uhrzeit an.'
+          : undefined,
+    'batch-reason': batchReason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined,
+  };
+}
+
+function batchMovedMessage(movedCount: number): string {
+  return movedCount === 1 ? 'Der Besuch wurde verschoben.' : `${movedCount} Besuche wurden verschoben.`;
+}
+
+/** Asks the server what the move would change; a rejected action reports the unexpected error. */
+async function previewBatch(
+  { selectedIds, newTime }: Pick<BatchInputs, 'selectedIds' | 'newTime'>,
+  dayShift: number,
+  onPreview: (preview: DispatchPanelBatchPreview) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  try {
+    const result = await previewBatchReschedule({
+      occurrenceIds: [...selectedIds],
+      dayShift,
+      newTime: newTime || null,
+    });
+    if (!result.success) {
+      onError(dispatchErrorMessage(result.error));
+      return;
+    }
+    onPreview({
+      itemCount: result.itemCount,
+      items: result.items,
+      commitmentMismatchTitles: result.commitmentMismatchTitles,
+      invalidatedAcknowledgementCount: result.invalidatedAcknowledgementCount,
+      conflictCount: result.conflicts.length,
+    });
+  } catch {
+    onError(dispatchErrorMessage('unexpected_error'));
+  }
+}
+
+/** The batch move; a planning warning asks for an approved reason, then the move runs once more with it. */
+async function commitBatchMove(
+  { selectedIds, dayShiftText, newTime }: BatchInputs,
+  batchReason: string,
+  requestApproval: DispatchPanelBatchOptions['requestApproval'],
+  onError: (message: string) => void,
+): Promise<boolean> {
+  const baseInput = {
+    occurrenceIds: [...selectedIds],
+    dayShift: Number(dayShiftText),
+    newTime: newTime || null,
+    reason: batchReason.trim(),
+    requestId: crypto.randomUUID(),
+  };
+  let result = await batchReschedule({
+    ...baseInput,
+    overrideReason: null,
+    assessmentFingerprint: null,
+  });
+  if (
+    !result.success &&
+    result.error === 'planning_warning' &&
+    'conflicts' in result &&
+    result.conflicts &&
+    'fingerprint' in result &&
+    result.fingerprint
+  ) {
+    const approval = await requestApproval(result.conflicts, result.fingerprint);
+    if (!approval) return false;
+    result = await batchReschedule({
+      ...baseInput,
+      overrideReason: approval.reason,
+      assessmentFingerprint: approval.fingerprint,
+    });
+  }
+  if (!result.success) {
+    onError(dispatchErrorMessage(result.error));
+    return false;
+  }
+  return true;
+}
+
+/** Batch rescheduling of the dispatch panel: selection, inputs, server preview and commit. */
+export function useDispatchPanelBatch(options: DispatchPanelBatchOptions): DispatchPanelBatch {
+  const { overview, today, requestApproval, afterMutation, showBanner } = options;
   // Batch rescheduling. batchNow is snapshotted when batch mode starts so the
   // eligibility memo stays pure during render; the RPC re-validates anyway.
   const [batchMode, setBatchMode] = useState(false);
@@ -75,88 +181,27 @@ export function useDispatchPanelBatch({
   const [batchError, setBatchError] = useState<string | null>(null);
 
   const eligibleForBatch = useMemo(
-    () =>
-      (overview?.occurrences ?? []).filter((entry) => {
-        const startMs = entry.startAt ? new Date(entry.startAt).getTime() : null;
-        return startMs !== null ? startMs > batchNow : Boolean(entry.startDate && entry.startDate > today);
-      }),
+    () => eligibleBatchEntries(overview, today, batchNow),
     [overview, today, batchNow],
   );
 
   const [batchAttempted, setBatchAttempted] = useState(false);
-  const batchFieldErrors = {
-    'batch-day-shift':
-      dayShiftText.trim() === '' || !Number.isInteger(Number(dayShiftText))
-        ? 'Bitte gib eine ganze Zahl an Tagen an.'
-        : Number(dayShiftText) === 0 && newTime === ''
-          ? 'Gib eine Verschiebung in Tagen oder eine neue Uhrzeit an.'
-          : undefined,
-    'batch-reason': batchReason.trim().length < 8 ? REASON_MIN_8_MESSAGE : undefined,
-  };
+  const batchFieldErrors = batchInputErrors(dayShiftText, newTime, batchReason);
 
   // A rejected Server Action reports the unexpected error and frees the panel's buttons.
   const runBatchPreview = useCallback(async () => {
     const dayShift = Number(dayShiftText);
     setBatchError(null);
-    await runBatchWork(async () => {
-      try {
-        const result = await previewBatchReschedule({
-          occurrenceIds: [...selectedIds],
-          dayShift,
-          newTime: newTime || null,
-        });
-        if (!result.success) {
-          setBatchError(dispatchErrorMessage(result.error));
-          return;
-        }
-        setBatchPreview({
-          itemCount: result.itemCount,
-          items: result.items,
-          commitmentMismatchTitles: result.commitmentMismatchTitles,
-          invalidatedAcknowledgementCount: result.invalidatedAcknowledgementCount,
-          conflictCount: result.conflicts.length,
-        });
-      } catch {
-        setBatchError(dispatchErrorMessage('unexpected_error'));
-      }
-    });
+    await runBatchWork(() =>
+      previewBatch({ selectedIds, newTime }, dayShift, setBatchPreview, setBatchError),
+    );
   }, [dayShiftText, newTime, selectedIds, runBatchWork]);
 
-  const commitBatch = useCallback(async (): Promise<boolean> => {
-    const baseInput = {
-      occurrenceIds: [...selectedIds],
-      dayShift: Number(dayShiftText),
-      newTime: newTime || null,
-      reason: batchReason.trim(),
-      requestId: crypto.randomUUID(),
-    };
-    let result = await batchReschedule({
-      ...baseInput,
-      overrideReason: null,
-      assessmentFingerprint: null,
-    });
-    if (
-      !result.success &&
-      result.error === 'planning_warning' &&
-      'conflicts' in result &&
-      result.conflicts &&
-      'fingerprint' in result &&
-      result.fingerprint
-    ) {
-      const approval = await requestApproval(result.conflicts, result.fingerprint);
-      if (!approval) return false;
-      result = await batchReschedule({
-        ...baseInput,
-        overrideReason: approval.reason,
-        assessmentFingerprint: approval.fingerprint,
-      });
-    }
-    if (!result.success) {
-      setBatchError(dispatchErrorMessage(result.error));
-      return false;
-    }
-    return true;
-  }, [dayShiftText, newTime, selectedIds, batchReason, requestApproval]);
+  const commitBatch = useCallback(
+    (): Promise<boolean> =>
+      commitBatchMove({ selectedIds, dayShiftText, newTime }, batchReason, requestApproval, setBatchError),
+    [dayShiftText, newTime, selectedIds, batchReason, requestApproval],
+  );
 
   const runBatchCommit = useCallback(async () => {
     setBatchError(null);
@@ -174,10 +219,7 @@ export function useDispatchPanelBatch({
     setBatchMode(false);
     setSelectedIds(new Set());
     setBatchReason('');
-    showBanner({
-      variant: 'success',
-      message: movedCount === 1 ? 'Der Besuch wurde verschoben.' : `${movedCount} Besuche wurden verschoben.`,
-    });
+    showBanner({ variant: 'success', message: batchMovedMessage(movedCount) });
     await afterMutation();
   }, [commitBatch, selectedIds, afterMutation, showBanner, runBatchWork]);
 

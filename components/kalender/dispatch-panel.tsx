@@ -23,6 +23,7 @@ import {
 import { ErrorText } from '@/components/ui/error-text';
 import { SectionError } from '@/components/ui/section-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { DispatchOverview } from '@/lib/dispatch/types';
 import { DispatchPanelBatchForm, DispatchPanelBatchPreviewDetails } from './dispatch-panel-batch';
 import { DispatchPanelOccurrences } from './dispatch-panel-occurrences';
 import { DispatchPanelRowDialogs, useDispatchPanelRowDialogs } from './dispatch-panel-row-dialogs';
@@ -37,6 +38,100 @@ import { CALENDAR_LAYER_CLASS } from './surface/layers';
 import { useDispatchPanelBatch } from './use-dispatch-panel-batch';
 import { useDispatchPanelFocus } from './use-dispatch-panel-focus';
 import { useDispatchPanelOverview } from './use-dispatch-panel-overview';
+
+type DispatchPanelOverview = ReturnType<typeof useDispatchPanelOverview>;
+type RowBusy = ReturnType<typeof useBusyIds>;
+
+/** The list's placeholder until the first overview arrives. */
+function DispatchPanelLoading(): React.JSX.Element {
+  return (
+    <div className="space-y-2" role="status" aria-busy="true">
+      <span className="sr-only">Einsätze werden geladen …</span>
+      <div aria-hidden="true" className="space-y-2">
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-20 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    </div>
+  );
+}
+
+/** The scrolling list: its load state, then challenges, occurrences, unscheduled jobs and travel notes. */
+function DispatchPanelList({
+  overview,
+  loadError,
+  isStale,
+  refresh,
+  openChallenges,
+  rowBusy,
+  dialogs,
+  batch,
+}: {
+  overview: DispatchOverview | null;
+  loadError: DispatchPanelOverview['loadError'];
+  isStale: boolean;
+  refresh: DispatchPanelOverview['refresh'];
+  openChallenges: DispatchPanelOverview['openChallenges'];
+  rowBusy: RowBusy;
+  dialogs: ReturnType<typeof useDispatchPanelRowDialogs>;
+  batch: ReturnType<typeof useDispatchPanelBatch>;
+}): React.JSX.Element {
+  return (
+    <div className="flex-1 space-y-5 overflow-y-auto p-4">
+      {loadError && <SectionError onRetry={() => void refresh()}>{loadError}</SectionError>}
+      {!overview && !loadError && <DispatchPanelLoading />}
+
+      <StaleRegion stale={isStale} onRetry={refresh} className="space-y-5">
+        {openChallenges.length > 0 && (
+          <DispatchPanelChallenges
+            openChallenges={openChallenges}
+            rowBusy={rowBusy}
+            setResolveChallengeId={dialogs.setResolveChallengeId}
+          />
+        )}
+
+        <DispatchPanelOccurrences overview={overview} rowBusy={rowBusy} dialogs={dialogs} batch={batch} />
+
+        {overview && overview.unscheduledJobs.length > 0 && (
+          <DispatchPanelUnscheduledJobs
+            overview={overview}
+            rowBusy={rowBusy}
+            setCancelDispatch={dialogs.setCancelDispatch}
+          />
+        )}
+
+        {overview && overview.travelNotes.length > 0 && <DispatchPanelTravelNotes overview={overview} />}
+      </StaleRegion>
+    </div>
+  );
+}
+
+/**
+ * Success path of a row action: the banner fires after persistence (the dialog
+ * only reports success once the server confirmed), then the row shows its
+ * settle indicator until the re-read lands. `refresh` never rejects: a failed
+ * read surfaces through the StaleRegion notice.
+ */
+function useDispatchRowSettling(
+  refresh: DispatchPanelOverview['refresh'],
+  onChanged: (() => void) | undefined,
+  rowBusy: RowBusy,
+  showBanner: ReturnType<typeof useBanner>['showBanner'],
+) {
+  const afterMutation = useCallback(async () => {
+    await refresh();
+    onChanged?.();
+  }, [refresh, onChanged]);
+  const settleRow = useCallback(
+    (rowKey: string, message: string) => {
+      showBanner({ variant: 'success', message });
+      void rowBusy.run(rowKey, afterMutation);
+    },
+    [afterMutation, rowBusy, showBanner],
+  );
+  return { afterMutation, settleRow };
+}
 
 export function DispatchPanel({
   onClose,
@@ -57,28 +152,8 @@ export function DispatchPanel({
   const { requestApproval, warningDialog } = usePlanningWarningConfirmation();
   const { today, overview, loadError, isStale, refresh, openChallenges } = useDispatchPanelOverview();
   const panelRef = useDispatchPanelFocus(onClose);
-  const afterMutation = useCallback(async () => {
-    await refresh();
-    onChanged?.();
-  }, [refresh, onChanged]);
-  // Success path of a row action: the banner fires after persistence (the
-  // dialog only reports success once the server confirmed), then the row
-  // shows its settle indicator until the re-read lands. `refresh` never
-  // rejects — a failed read surfaces through the StaleRegion notice.
-  const settleRow = useCallback(
-    (rowKey: string, message: string) => {
-      showBanner({ variant: 'success', message });
-      void rowBusy.run(rowKey, afterMutation);
-    },
-    [afterMutation, rowBusy, showBanner],
-  );
-  const batch = useDispatchPanelBatch({
-    overview,
-    today,
-    requestApproval,
-    afterMutation,
-    showBanner,
-  });
+  const { afterMutation, settleRow } = useDispatchRowSettling(refresh, onChanged, rowBusy, showBanner);
+  const batch = useDispatchPanelBatch({ overview, today, requestApproval, afterMutation, showBanner });
   const { batchMode, batchPreview, setBatchPreview, isBatchWorking, batchError, runBatchCommit } = batch;
 
   return (
@@ -99,42 +174,16 @@ export function DispatchPanel({
         primaryHeaderHeight={primaryHeaderHeight}
       />
 
-      <div className="flex-1 space-y-5 overflow-y-auto p-4">
-        {loadError && <SectionError onRetry={() => void refresh()}>{loadError}</SectionError>}
-        {!overview && !loadError && (
-          <div className="space-y-2" role="status" aria-busy="true">
-            <span className="sr-only">Einsätze werden geladen …</span>
-            <div aria-hidden="true" className="space-y-2">
-              <Skeleton className="h-4 w-44" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
-          </div>
-        )}
-
-        <StaleRegion stale={isStale} onRetry={refresh} className="space-y-5">
-          {openChallenges.length > 0 && (
-            <DispatchPanelChallenges
-              openChallenges={openChallenges}
-              rowBusy={rowBusy}
-              setResolveChallengeId={dialogs.setResolveChallengeId}
-            />
-          )}
-
-          <DispatchPanelOccurrences overview={overview} rowBusy={rowBusy} dialogs={dialogs} batch={batch} />
-
-          {overview && overview.unscheduledJobs.length > 0 && (
-            <DispatchPanelUnscheduledJobs
-              overview={overview}
-              rowBusy={rowBusy}
-              setCancelDispatch={dialogs.setCancelDispatch}
-            />
-          )}
-
-          {overview && overview.travelNotes.length > 0 && <DispatchPanelTravelNotes overview={overview} />}
-        </StaleRegion>
-      </div>
+      <DispatchPanelList
+        overview={overview}
+        loadError={loadError}
+        isStale={isStale}
+        refresh={refresh}
+        openChallenges={openChallenges}
+        rowBusy={rowBusy}
+        dialogs={dialogs}
+        batch={batch}
+      />
 
       {batchMode && <DispatchPanelBatchForm batch={batch} />}
 

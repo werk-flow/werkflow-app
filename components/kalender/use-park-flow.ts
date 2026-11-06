@@ -10,6 +10,35 @@ import type { CalendarMutations } from './mutations/use-calendar-mutations';
 
 export type ParkFlow = ReturnType<CalendarMutations['beginPark']>;
 
+type ParkFlowOptions = {
+  mutations: CalendarMutations;
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  parkingContextsRef: React.RefObject<Map<string, JobParkingContext> | null>;
+  fetchParkingContexts: () => Promise<boolean>;
+  fetchParkedJobs: () => Promise<boolean>;
+};
+
+/** The unpark of a parked job onto the chosen day and, when one is chosen, the chosen person. */
+function scheduleParkedRequest(
+  job: CalendarJob,
+  input: { date: string; time: string | undefined; row: CalendarBoardRow | null },
+  context: JobParkingContext,
+): Parameters<CalendarMutations['unparkJob']>[0] {
+  const targetName = input.row?.displayName ?? null;
+  const dateLabel = formatRefusalDate(input.date);
+  return {
+    job,
+    parkingContext: context,
+    plannedDate: input.date,
+    plannedTime: input.time,
+    assignToUserId: input.row?.userId ?? undefined,
+    successMessage: targetName
+      ? `Auftrag wurde bei ${targetName} am ${dateLabel} eingeplant.`
+      : `Auftrag wurde am ${dateLabel} eingeplant.`,
+    context: { ...(targetName ? { name: targetName } : {}), date: dateLabel },
+  };
+}
+
 /**
  * Parking from the calendar. Park: the card leaves the grid now; the context
  * dialog owns the write and settles the flow. Unpark: Undo of a park and the
@@ -22,13 +51,7 @@ export function useParkFlow({
   parkingContextsRef,
   fetchParkingContexts,
   fetchParkedJobs,
-}: {
-  mutations: CalendarMutations;
-  showBanner: ReturnType<typeof useBanner>['showBanner'];
-  parkingContextsRef: React.RefObject<Map<string, JobParkingContext> | null>;
-  fetchParkingContexts: () => Promise<boolean>;
-  fetchParkedJobs: () => Promise<boolean>;
-}) {
+}: ParkFlowOptions) {
   const [parkingContextJob, setParkingContextJob] = useState<CalendarJob | null>(null);
   const [scheduleParkedJob, setScheduleParkedJob] = useState<CalendarJob | null>(null);
 
@@ -88,19 +111,7 @@ export function useParkFlow({
         handleParkedContextMissing();
         return;
       }
-      const targetName = input.row?.displayName ?? null;
-      const dateLabel = formatRefusalDate(input.date);
-      void mutations.unparkJob({
-        job,
-        parkingContext: context,
-        plannedDate: input.date,
-        plannedTime: input.time,
-        assignToUserId: input.row?.userId ?? undefined,
-        successMessage: targetName
-          ? `Auftrag wurde bei ${targetName} am ${dateLabel} eingeplant.`
-          : `Auftrag wurde am ${dateLabel} eingeplant.`,
-        context: { ...(targetName ? { name: targetName } : {}), date: dateLabel },
-      });
+      void mutations.unparkJob(scheduleParkedRequest(job, input, context));
     },
     [handleParkedContextMissing, mutations, parkingContextsRef],
   );

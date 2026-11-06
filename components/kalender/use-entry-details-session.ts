@@ -35,7 +35,7 @@ export type EntryDetailsSnapshot = {
 };
 
 export function useEntryDetailsSession(session: WorkSession): EntryDetailsSnapshot {
-  const interactiveSession = session as InteractiveCalendarSession;
+  const interactiveSession: InteractiveCalendarSession = session;
   const isAutomaticBreakMode = interactiveSession.breakMode === 'automatic';
 
   const sourceEntries = useMemo(() => {
@@ -43,7 +43,7 @@ export function useEntryDetailsSession(session: WorkSession): EntryDetailsSnapsh
       return sortTimeEntries(interactiveSession.sourceEntries);
     }
 
-    return sortTimeEntries([session.clockIn, session.clockOut].filter(Boolean) as TimeEntry[]);
+    return sortTimeEntries([session.clockIn, session.clockOut].flatMap((entry) => (entry ? [entry] : [])));
   }, [interactiveSession.sourceEntries, session.clockIn, session.clockOut]);
 
   const sessionBreaks = useMemo(() => {

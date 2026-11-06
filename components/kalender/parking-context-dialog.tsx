@@ -37,23 +37,14 @@ import {
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { parkWorkTarget } from '@/lib/work-lifecycle/actions';
+import { WORK_BLOCKER_REASONS } from '@/lib/work-lifecycle/types';
 
 const NO_RESPONSIBLE_OPTIONS: ParkingResponsibleOption[] = [];
 
 /** Field errors keyed by control id in visual order (focusFirstInvalidField). */
 type ParkingFieldErrors = Partial<Record<'parking-responsible' | 'parking-review-date', string>>;
 
-export function ParkingContextDialog({
-  jobId,
-  jobTitle,
-  existingContext,
-  expectedExecutionVersion,
-  isAlreadyParked,
-  onClose,
-  onSaveStart,
-  onSaveFailed,
-  onSaved,
-}: {
+type ParkingContextDialogProps = {
   jobId: string;
   jobTitle: string;
   existingContext: JobParkingContext | null;
@@ -63,7 +54,80 @@ export function ParkingContextDialog({
   onSaveStart?: () => () => void;
   onSaveFailed?: () => void;
   onSaved: () => void;
+};
+
+/**
+ * A stored responsible person must remain selectable even when the option
+ * list fails to load or no longer contains them.
+ */
+function selectableResponsibleOptions(
+  responsibleId: string,
+  options: ParkingResponsibleOption[],
+  existingContext: JobParkingContext | null,
+): ParkingResponsibleOption[] {
+  return responsibleId !== '' && !options.some((option) => option.employeeRecordId === responsibleId)
+    ? [
+        {
+          employeeRecordId: responsibleId,
+          label: existingContext?.responsibleName ?? 'Aktuelle Person',
+        },
+        ...options,
+      ]
+    : options;
+}
+
+/** Edits the existing context, or parks the job with the new one. */
+function writeParkingContext({
+  jobId,
+  existingContext,
+  expectedExecutionVersion,
+  reason,
+  note,
+  responsibleId,
+  reviewDate,
+}: {
+  jobId: string;
+  existingContext: JobParkingContext | null;
+  expectedExecutionVersion: number;
+  reason: JobParkingReason;
+  note: string;
+  responsibleId: string;
+  reviewDate: Date | undefined;
 }) {
+  return existingContext
+    ? setJobParkingContext({
+        jobId,
+        reason,
+        note: note.trim() || null,
+        responsibleEmployeeRecordId: responsibleId,
+        nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
+      })
+    : parkWorkTarget({
+        targetType: 'job',
+        targetId: jobId,
+        expectedExecutionVersion,
+        reason,
+        ...(note.trim() ? { details: note.trim() } : {}),
+        responsibleEmployeeRecordId: responsibleId,
+        nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
+      });
+}
+
+/**
+ * Parking codes first, then the shared sentences; a work-lifecycle code from
+ * parkWorkTarget takes the calendar's sentence.
+ */
+function parkingFailureMessage(code: string): string {
+  return describeFailure(
+    code,
+    PARKING_ERROR_MESSAGES,
+    calendarRefusalMessage(code) ?? SHARED_FAILURE_MESSAGES.unexpected_error,
+  );
+}
+
+/** The dialog's fields, the responsible options and the save, a new park or a context edit. */
+function useParkingContextForm(props: ParkingContextDialogProps) {
+  const { jobId, existingContext, expectedExecutionVersion, onSaveStart, onSaveFailed, onSaved } = props;
   const [reason, setReason] = useState<JobParkingReason>(existingContext?.reason ?? 'other');
   const [note, setNote] = useState(existingContext?.note ?? '');
   const [responsibleId, setResponsibleId] = useState<string>(
@@ -82,18 +146,7 @@ export function ParkingContextDialog({
   const [fieldErrors, setFieldErrors] = useState<ParkingFieldErrors>({});
   const { run: runSave, isPending: isSaving } = usePendingTask();
 
-  // A stored responsible person must remain selectable even when the option
-  // list fails to load or no longer contains them.
-  const selectableOptions =
-    responsibleId !== '' && !options.some((option) => option.employeeRecordId === responsibleId)
-      ? [
-          {
-            employeeRecordId: responsibleId,
-            label: existingContext?.responsibleName ?? 'Aktuelle Person',
-          },
-          ...options,
-        ]
-      : options;
+  const selectableOptions = selectableResponsibleOptions(responsibleId, options, existingContext);
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -107,34 +160,18 @@ export function ParkingContextDialog({
     await runSave(async () => {
       const releaseOperation = onSaveStart?.();
       try {
-        const result = existingContext
-          ? await setJobParkingContext({
-              jobId,
-              reason,
-              note: note.trim() || null,
-              responsibleEmployeeRecordId: responsibleId,
-              nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
-            })
-          : await parkWorkTarget({
-              targetType: 'job',
-              targetId: jobId,
-              expectedExecutionVersion,
-              reason,
-              ...(note.trim() ? { details: note.trim() } : {}),
-              responsibleEmployeeRecordId: responsibleId,
-              nextReviewDate: reviewDate ? toLocalDateString(reviewDate) : '',
-            });
+        const result = await writeParkingContext({
+          jobId,
+          existingContext,
+          expectedExecutionVersion,
+          reason,
+          note,
+          responsibleId,
+          reviewDate,
+        });
         if (!result.success) {
           onSaveFailed?.();
-          // Parking codes first, then the shared sentences; a work-lifecycle code
-          // from parkWorkTarget takes the calendar's sentence.
-          setError(
-            describeFailure(
-              result.error,
-              PARKING_ERROR_MESSAGES,
-              calendarRefusalMessage(result.error) ?? SHARED_FAILURE_MESSAGES.unexpected_error,
-            ),
-          );
+          setError(parkingFailureMessage(result.error));
           return;
         }
         onSaved();
@@ -153,6 +190,59 @@ export function ParkingContextDialog({
     });
   };
 
+  return {
+    reason,
+    setReason,
+    note,
+    setNote,
+    responsibleId,
+    setResponsibleId,
+    reviewDate,
+    setReviewDate,
+    responsibleOptions,
+    error,
+    fieldErrors,
+    setFieldErrors,
+    isSaving,
+    selectableOptions,
+    handleSave,
+  };
+}
+
+/** The reason select: ten reasons, so the registry requires a searchable control. */
+function ParkingReasonField({
+  reason,
+  onReasonChange,
+}: {
+  reason: JobParkingReason;
+  onReasonChange: (reason: JobParkingReason) => void;
+}): React.JSX.Element {
+  return (
+    <Field label="Grund" htmlFor="parking-reason" required>
+      {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
+      <SearchableSelect
+        options={Object.entries(PARKING_REASON_LABELS).map(([value, label]) => ({
+          value,
+          label,
+        }))}
+        value={reason}
+        onChange={(value) => {
+          const nextReason = WORK_BLOCKER_REASONS.find((candidate) => candidate === value);
+          if (nextReason) onReasonChange(nextReason);
+        }}
+        placeholder="Grund auswählen"
+        searchPlaceholder="Grund suchen"
+        emptyMessage="Kein passender Grund gefunden"
+      />
+    </Field>
+  );
+}
+
+export function ParkingContextDialog(props: ParkingContextDialogProps) {
+  const { jobTitle, isAlreadyParked, onClose } = props;
+  const form = useParkingContextForm(props);
+  const { note, setNote, responsibleId, reviewDate, error, fieldErrors, setFieldErrors, isSaving } = form;
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()} pending={isSaving}>
       <DialogContent size="md">
@@ -163,21 +253,8 @@ export function ParkingContextDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSave} noValidate className="space-y-4">
-          <Field label="Grund" htmlFor="parking-reason" required>
-            {/* Ten reasons: at or above ten options the registry requires a searchable control. */}
-            <SearchableSelect
-              options={Object.entries(PARKING_REASON_LABELS).map(([value, label]) => ({
-                value,
-                label,
-              }))}
-              value={reason}
-              onChange={(value) => setReason(value as JobParkingReason)}
-              placeholder="Grund auswählen"
-              searchPlaceholder="Grund suchen"
-              emptyMessage="Kein passender Grund gefunden"
-            />
-          </Field>
+        <form onSubmit={form.handleSave} noValidate className="space-y-4">
+          <ParkingReasonField reason={form.reason} onReasonChange={form.setReason} />
 
           <Field label="Notiz (optional)" htmlFor="parking-note">
             <Textarea
@@ -195,13 +272,13 @@ export function ParkingContextDialog({
             error={fieldErrors['parking-responsible']}
           >
             <SearchableSelect
-              options={selectableOptions.map((option) => ({
+              options={form.selectableOptions.map((option) => ({
                 value: option.employeeRecordId,
                 label: option.label,
               }))}
               value={responsibleId}
               onChange={(value) => {
-                setResponsibleId(value);
+                form.setResponsibleId(value);
                 setFieldErrors({});
               }}
               placeholder="Person auswählen"
@@ -209,7 +286,7 @@ export function ParkingContextDialog({
               emptyMessage="Keine Person gefunden"
             />
           </Field>
-          {responsibleOptions.failure && <SectionError failure={responsibleOptions.failure} />}
+          {form.responsibleOptions.failure && <SectionError failure={form.responsibleOptions.failure} />}
 
           <Field
             label="Wiedervorlage"
@@ -221,7 +298,7 @@ export function ParkingContextDialog({
               ariaLabel="Wiedervorlagedatum"
               value={reviewDate}
               onChange={(value) => {
-                setReviewDate(value);
+                form.setReviewDate(value);
                 setFieldErrors({});
               }}
               placeholder="Datum wählen"

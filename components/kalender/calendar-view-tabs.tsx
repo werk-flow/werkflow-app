@@ -27,6 +27,71 @@ interface CalendarViewTabsProps {
   children?: ReactNode;
 }
 
+const CALENDAR_VIEWS: readonly CalendarView[] = ['day', 'week', 'month'];
+
+function changeCalendarView(value: string, onViewChange: (view: CalendarView) => void): void {
+  const nextView = CALENDAR_VIEWS.find((candidate) => candidate === value);
+  if (nextView) onViewChange(nextView);
+}
+
+/** The manager's member filter behind its popover; null in the selection means every member. */
+function CalendarMemberFilter({
+  members,
+  selectedMemberIds,
+  onSelectedMemberIdsChange,
+  selectedCount,
+}: Pick<CalendarViewTabsProps, 'members' | 'selectedMemberIds' | 'onSelectedMemberIdsChange'> & {
+  selectedCount: number;
+}): React.JSX.Element {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="ml-auto h-11 sm:h-9">
+          <Filter className="mr-2 size-4" aria-hidden="true" />
+          Mitarbeiter ({selectedCount})
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[min(20rem,calc(100vw-1rem))] space-y-3 p-3 sm:w-80"
+        align="end"
+        collisionPadding={8}
+      >
+        <SearchableMultiSelect
+          options={members.map((member) => ({
+            value: member.user_id,
+            label: memberDisplayName(member),
+            description: member.email,
+          }))}
+          selectedIds={selectedMemberIds ?? members.map((member) => member.user_id)}
+          onSelectionChange={(ids) => onSelectedMemberIdsChange(ids.length === members.length ? null : ids)}
+          placeholder="Mitarbeiter wählen"
+          ariaLabel="Mitarbeiter filtern"
+          searchPlaceholder="Mitarbeiter suchen …"
+          emptyMessage="Keine Mitarbeiter gefunden"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => onSelectedMemberIdsChange(null)}
+          >
+            Alle auswählen
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 text-xs"
+            onClick={() => onSelectedMemberIdsChange([])}
+          >
+            Keine auswählen
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function CalendarViewTabs({
   view,
   onViewChange,
@@ -48,7 +113,7 @@ export function CalendarViewTabs({
         <Tabs
           panels={false}
           value={view}
-          onValueChange={(value) => onViewChange(value as CalendarView)}
+          onValueChange={(value) => changeCalendarView(value, onViewChange)}
           className="shrink-0"
         >
           <TabsList className="h-11 p-0 sm:h-9 sm:p-0.5">
@@ -96,53 +161,12 @@ export function CalendarViewTabs({
         </div>
 
         {isAdminOrManager && members.length > 0 && (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="ml-auto h-11 sm:h-9">
-                <Filter className="mr-2 size-4" aria-hidden="true" />
-                Mitarbeiter ({selectedCount})
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent
-              className="w-[min(20rem,calc(100vw-1rem))] space-y-3 p-3 sm:w-80"
-              align="end"
-              collisionPadding={8}
-            >
-              <SearchableMultiSelect
-                options={members.map((member) => ({
-                  value: member.user_id,
-                  label: memberDisplayName(member),
-                  description: member.email,
-                }))}
-                selectedIds={selectedMemberIds ?? members.map((member) => member.user_id)}
-                onSelectionChange={(ids) =>
-                  onSelectedMemberIdsChange(ids.length === members.length ? null : ids)
-                }
-                placeholder="Mitarbeiter wählen"
-                ariaLabel="Mitarbeiter filtern"
-                searchPlaceholder="Mitarbeiter suchen …"
-                emptyMessage="Keine Mitarbeiter gefunden"
-              />
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => onSelectedMemberIdsChange(null)}
-                >
-                  Alle auswählen
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1 text-xs"
-                  onClick={() => onSelectedMemberIdsChange([])}
-                >
-                  Keine auswählen
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <CalendarMemberFilter
+            members={members}
+            selectedMemberIds={selectedMemberIds}
+            onSelectedMemberIdsChange={onSelectedMemberIdsChange}
+            selectedCount={selectedCount}
+          />
         )}
       </div>
       {children}

@@ -25,6 +25,187 @@ interface ParkplatzPanelProps {
   onScheduleJob: (job: CalendarJob) => void;
 }
 
+/** Who the parked job is assigned to: three names, then the count of the rest. */
+function ParkplatzCardAssignees({
+  job,
+  memberNames,
+}: Pick<ParkplatzPanelProps, 'memberNames'> & { job: CalendarJob }): React.JSX.Element | null {
+  if (job.assignedUserIds.length === 0) return null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {job.assignedUserIds.slice(0, 3).map((userId) => (
+        <span key={userId} className="max-w-[100px] truncate rounded-full bg-muted px-1.5 py-0.5 text-xs">
+          {memberNames[userId] ?? 'Mitarbeiter'}
+        </span>
+      ))}
+      {job.assignedUserIds.length > 3 && (
+        <span className="text-xs text-muted-foreground">+{job.assignedUserIds.length - 3}</span>
+      )}
+    </div>
+  );
+}
+
+/** Why the job is parked, who owns it and when it comes back; an old row says the context is missing. */
+function ParkplatzCardContext({ context }: { context: JobParkingContext | null }): React.JSX.Element {
+  return (
+    <div className="mt-1.5 space-y-0.5" data-parking-context={context ? 'set' : 'missing'}>
+      {context ? (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {PARKING_REASON_LABELS[context.reason]}
+            {context.note ? ` · ${context.note}` : ''}
+          </p>
+          {(context.responsibleName || context.nextReviewDate) && (
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {context.responsibleName ? `Zuständig: ${context.responsibleName}` : ''}
+              {context.responsibleName && context.nextReviewDate ? ' · ' : ''}
+              {context.nextReviewDate ? `Wiedervorlage: ${formatRefusalDate(context.nextReviewDate)}` : ''}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">Kontext fehlt (Altbestand)</p>
+      )}
+    </div>
+  );
+}
+
+type ParkplatzCardActionProps = Pick<
+  ParkplatzPanelProps,
+  'onEditContext' | 'onDispatchJob' | 'onScheduleJob'
+> & {
+  job: CalendarJob;
+  context: JobParkingContext | null;
+};
+
+/** The card's keyboard path: schedule it, edit its context, send its dispatch. */
+function ParkplatzCardActions({
+  job,
+  context,
+  onEditContext,
+  onDispatchJob,
+  onScheduleJob,
+}: ParkplatzCardActionProps): React.JSX.Element {
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {context && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          aria-label={`${job.title} einplanen`}
+          onClick={() => onScheduleJob(job)}
+        >
+          <CalendarPlus className="size-3" aria-hidden="true" />
+          Einplanen am …
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-2 text-xs"
+        aria-label={`Parkplatz-Kontext für ${job.title} ${context ? 'bearbeiten' : 'ergänzen'}`}
+        onClick={() => onEditContext(job)}
+      >
+        <NotebookPen className="size-3" aria-hidden="true" />
+        {context ? 'Kontext bearbeiten' : 'Kontext ergänzen'}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-2 text-xs"
+        aria-label={`Einsatz für ${job.title} senden`}
+        onClick={() => onDispatchJob(job)}
+      >
+        <Send className="size-3" aria-hidden="true" />
+        Einsatz senden
+      </Button>
+    </div>
+  );
+}
+
+/** One parked job: a drag source whose buttons and link keep their own press. */
+function ParkplatzCard({
+  job,
+  context,
+  showContext,
+  memberNames,
+  startDrag,
+  onEditContext,
+  onDispatchJob,
+  onScheduleJob,
+}: ParkplatzCardActionProps &
+  Pick<ParkplatzPanelProps, 'memberNames'> & {
+    showContext: boolean;
+    startDrag: ReturnType<typeof useCalendarDrag>['startDrag'];
+  }): React.JSX.Element {
+  return (
+    <div
+      data-parkplatz-card=""
+      data-job-id={job.id}
+      className={cn(
+        'group relative rounded-lg border bg-card p-3 shadow-xs transition-colors hover:border-brand-purple/40',
+        'cursor-grab active:cursor-grabbing',
+      )}
+      onPointerDown={(event) => {
+        // In read-only mode the engine's lock notice answers the press; the card stays put.
+        if (event.target instanceof Element && event.target.closest('a, button')) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        startDrag(event, {
+          payload: { kind: 'parked', job },
+          ghost: {
+            label: job.title,
+            secondary: job.clientName ?? undefined,
+            width: 220,
+            height: 40,
+          },
+          pointerOffset: {
+            x: Math.min(event.clientX - rect.left, 220),
+            y: Math.min(event.clientY - rect.top, 40),
+          },
+        });
+      }}
+    >
+      {job.jobNumber && (
+        <Link
+          href={`/auftraege/${job.jobNumber}`}
+          className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          title="Auftragsdetails öffnen"
+          aria-label={`Auftragsdetails für ${job.title} öffnen`}
+        >
+          <ExternalLink className="size-3.5" aria-hidden="true" />
+        </Link>
+      )}
+      <div className="min-w-0">
+        <div className="mb-1 flex items-center gap-1.5">
+          <Briefcase className="size-3.5 shrink-0 text-brand-purple" aria-hidden="true" />
+          <span className="line-clamp-2 break-words text-sm font-medium" title={job.title}>
+            {job.title}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {job.jobNumber && <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>}
+          <span
+            className={cn('rounded-full px-1.5 py-0.5 text-xs font-medium', PRIORITY_CLASSES[job.priority])}
+          >
+            {JOB_PRIORITY_LABELS[job.priority]}
+          </span>
+        </div>
+        {job.clientName && <p className="mt-1 truncate text-xs text-muted-foreground">{job.clientName}</p>}
+        <ParkplatzCardAssignees job={job} memberNames={memberNames} />
+        {showContext && <ParkplatzCardContext context={context} />}
+        <ParkplatzCardActions
+          job={job}
+          context={context}
+          onEditContext={onEditContext}
+          onDispatchJob={onDispatchJob}
+          onScheduleJob={onScheduleJob}
+        />
+      </div>
+    </div>
+  );
+}
+
 /**
  * The Parkplatz on the shared engine (P1-24a): every card is a drag source
  * whose buttons carry the keyboard path, the panel is a drop zone, and „Einplanen am …"
@@ -90,147 +271,19 @@ export function ParkplatzPanel({
             description="Ziehe Aufträge hierher, um sie zu parken."
           />
         ) : (
-          jobs.map((job) => {
-            const context = parkingContexts?.get(job.jobId ?? job.id) ?? null;
-            return (
-              <div
-                key={job.id}
-                data-parkplatz-card=""
-                data-job-id={job.id}
-                className={cn(
-                  'group relative rounded-lg border bg-card p-3 shadow-xs transition-colors hover:border-brand-purple/40',
-                  'cursor-grab active:cursor-grabbing',
-                )}
-                onPointerDown={(event) => {
-                  // In read-only mode the engine's lock notice answers the press; the card stays put.
-                  if ((event.target as HTMLElement).closest('a, button')) return;
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  startDrag(event, {
-                    payload: { kind: 'parked', job },
-                    ghost: {
-                      label: job.title,
-                      secondary: job.clientName ?? undefined,
-                      width: 220,
-                      height: 40,
-                    },
-                    pointerOffset: {
-                      x: Math.min(event.clientX - rect.left, 220),
-                      y: Math.min(event.clientY - rect.top, 40),
-                    },
-                  });
-                }}
-              >
-                {job.jobNumber && (
-                  <Link
-                    href={`/auftraege/${job.jobNumber}`}
-                    className="absolute right-2 top-2 rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-                    title="Auftragsdetails öffnen"
-                    aria-label={`Auftragsdetails für ${job.title} öffnen`}
-                  >
-                    <ExternalLink className="size-3.5" aria-hidden="true" />
-                  </Link>
-                )}
-                <div className="min-w-0">
-                  <div className="mb-1 flex items-center gap-1.5">
-                    <Briefcase className="size-3.5 shrink-0 text-brand-purple" aria-hidden="true" />
-                    <span className="line-clamp-2 break-words text-sm font-medium" title={job.title}>
-                      {job.title}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {job.jobNumber && (
-                      <span className="font-mono text-xs text-muted-foreground">{job.jobNumber}</span>
-                    )}
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 py-0.5 text-xs font-medium',
-                        PRIORITY_CLASSES[job.priority],
-                      )}
-                    >
-                      {JOB_PRIORITY_LABELS[job.priority]}
-                    </span>
-                  </div>
-                  {job.clientName && (
-                    <p className="mt-1 truncate text-xs text-muted-foreground">{job.clientName}</p>
-                  )}
-                  {job.assignedUserIds.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                      {job.assignedUserIds.slice(0, 3).map((userId) => (
-                        <span
-                          key={userId}
-                          className="max-w-[100px] truncate rounded-full bg-muted px-1.5 py-0.5 text-xs"
-                        >
-                          {memberNames[userId] ?? 'Mitarbeiter'}
-                        </span>
-                      ))}
-                      {job.assignedUserIds.length > 3 && (
-                        <span className="text-xs text-muted-foreground">
-                          +{job.assignedUserIds.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {parkingContexts && (
-                    <div className="mt-1.5 space-y-0.5" data-parking-context={context ? 'set' : 'missing'}>
-                      {context ? (
-                        <>
-                          <p className="text-xs text-muted-foreground">
-                            {PARKING_REASON_LABELS[context.reason]}
-                            {context.note ? ` · ${context.note}` : ''}
-                          </p>
-                          {(context.responsibleName || context.nextReviewDate) && (
-                            <p className="text-xs tabular-nums text-muted-foreground">
-                              {context.responsibleName ? `Zuständig: ${context.responsibleName}` : ''}
-                              {context.responsibleName && context.nextReviewDate ? ' · ' : ''}
-                              {context.nextReviewDate
-                                ? `Wiedervorlage: ${formatRefusalDate(context.nextReviewDate)}`
-                                : ''}
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <p className="text-xs italic text-muted-foreground">Kontext fehlt (Altbestand)</p>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {context && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1 px-2 text-xs"
-                        aria-label={`${job.title} einplanen`}
-                        onClick={() => onScheduleJob(job)}
-                      >
-                        <CalendarPlus className="size-3" aria-hidden="true" />
-                        Einplanen am …
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      aria-label={`Parkplatz-Kontext für ${job.title} ${context ? 'bearbeiten' : 'ergänzen'}`}
-                      onClick={() => onEditContext(job)}
-                    >
-                      <NotebookPen className="size-3" aria-hidden="true" />
-                      {context ? 'Kontext bearbeiten' : 'Kontext ergänzen'}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1 px-2 text-xs"
-                      aria-label={`Einsatz für ${job.title} senden`}
-                      onClick={() => onDispatchJob(job)}
-                    >
-                      <Send className="size-3" aria-hidden="true" />
-                      Einsatz senden
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            );
-          })
+          jobs.map((job) => (
+            <ParkplatzCard
+              key={job.id}
+              job={job}
+              context={parkingContexts?.get(job.jobId ?? job.id) ?? null}
+              showContext={Boolean(parkingContexts)}
+              memberNames={memberNames}
+              startDrag={startDrag}
+              onEditContext={onEditContext}
+              onDispatchJob={onDispatchJob}
+              onScheduleJob={onScheduleJob}
+            />
+          ))
         )}
       </div>
     </aside>

@@ -6,6 +6,7 @@ import { entriesWithinWindow, mergeEntriesById } from '@/lib/calendar/manual-ent
 import {
   consumeManualEntryBridge,
   MANUAL_ENTRY_CREATED_EVENT,
+  readManualEntryEvent,
 } from '@/lib/time-tracking/manual-entry-bridge';
 import type { TimeEntry } from '@/lib/time-tracking/types';
 
@@ -44,7 +45,8 @@ export function useManualEntryBridge({
 
   useEffect(() => {
     const handleExternalManualEntry = (event: Event) => {
-      const newEntries = (event as CustomEvent<{ entries?: TimeEntry[] }>).detail?.entries;
+      if (!(event instanceof CustomEvent)) return;
+      const newEntries = readManualEntryEvent(event.detail);
       if (!newEntries?.length || newEntries.every((entry) => entry.organizationId !== organizationId)) return;
       handleManualEntrySuccess(newEntries);
     };

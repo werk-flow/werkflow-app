@@ -4,6 +4,7 @@ import { KalenderContentSkeleton } from '@/components/loading-states/kalender-co
 import { PageBody } from '@/components/shared/page-shell';
 import { ScrollRegion } from '@/components/ui/scroll-region';
 import { SectionError } from '@/components/ui/section-error';
+import type { CalendarBoardContext } from '@/lib/calendar/board';
 import type { OrgRole } from '@/lib/roles';
 import type { OrganizationTimeTrackingSettings } from '@/lib/time-tracking/settings';
 import type { WorkSession } from '@/lib/time-tracking/types';
@@ -138,83 +139,80 @@ function CalendarSurface({
 }: CalendarSurfaceProps): React.JSX.Element {
   const { currentDate, view, preferences } = viewState;
   const { board, entries, vacation, sickness, holidays, changeRequestMap } = data.range;
+  const everyView = {
+    todayIso,
+    jobs: viewScope.filteredJobs,
+    holidays,
+    mutations,
+    actions: surfaceActions,
+    parkingContexts: data.parkingContexts,
+    onParkedContextMissing: parkFlow.handleParkedContextMissing,
+    verticalScroller,
+  };
   if (view === 'week')
     return (
       <Plantafel
+        {...everyView}
         anchorIso={toLocalDateString(currentDate)}
-        todayIso={todayIso}
         preferences={preferences}
         showActualTime={viewScope.showActualTime}
         board={board}
-        jobs={viewScope.filteredJobs}
         entries={entries}
         vacation={vacation}
         sickness={sickness}
-        holidays={holidays}
-        mutations={mutations}
-        parkingContexts={data.parkingContexts}
-        onParkedContextMissing={parkFlow.handleParkedContextMissing}
-        actions={surfaceActions}
-        verticalScroller={verticalScroller}
-        onIsolateRow={(employeeRecordId) => {
-          const row = board.rows.find((entry) => entry.employeeRecordId === employeeRecordId);
-          const selectedMemberIds = viewScope.selectedMemberIds;
-          if (row?.userId)
-            viewState.updatePreferences({
-              memberUserIds:
-                selectedMemberIds?.length === 1 && selectedMemberIds[0] === row.userId ? null : [row.userId],
-            });
-        }}
+        onIsolateRow={(employeeRecordId) => isolateBoardRow(employeeRecordId, board, viewScope, viewState)}
         phone={phone}
       />
     );
   if (view === 'day')
     return (
       <DayView
+        {...everyView}
         phone={phone}
         date={currentDate}
-        todayIso={todayIso}
         zoom={viewState.dayZoom}
         onZoomChange={viewState.setDayZoom}
         entries={viewScope.filteredEntries}
-        jobs={viewScope.filteredJobs}
         members={viewScope.filteredMembers}
         board={board}
-        holidays={holidays}
         organizationSettings={organizationSettings}
         currentUserId={currentUserId}
         currentUserRole={currentUserRole}
         changeRequestMap={changeRequestMap}
-        mutations={mutations}
-        actions={surfaceActions}
-        parkingContexts={data.parkingContexts}
-        onParkedContextMissing={parkFlow.handleParkedContextMissing}
         onSessionClick={onSessionClick}
         highlightMemberId={viewState.highlightMemberId}
-        verticalScroller={verticalScroller}
       />
     );
   return (
     <MonthView
+      {...everyView}
       date={currentDate}
-      todayIso={todayIso}
-      jobs={viewScope.filteredJobs}
       entries={viewScope.filteredEntries}
       members={viewScope.filteredMembers}
       vacation={vacation}
       sickness={sickness}
-      holidays={holidays}
       organizationSettings={organizationSettings}
       currentUserId={currentUserId}
       currentUserRole={currentUserRole}
       isAdminOrManager={isAdminOrManager}
-      mutations={mutations}
-      actions={surfaceActions}
-      parkingContexts={data.parkingContexts}
-      onParkedContextMissing={parkFlow.handleParkedContextMissing}
       onOpenDay={(date) => viewState.handleOpenDay(date, null)}
       onSessionClick={onSessionClick}
-      verticalScroller={verticalScroller}
     />
   );
+}
+
+/** Shows the row's person alone, or every member again when that person is already the only one selected. */
+function isolateBoardRow(
+  employeeRecordId: string,
+  board: CalendarBoardContext,
+  viewScope: CalendarViewScope,
+  viewState: CalendarViewState,
+): void {
+  const row = board.rows.find((entry) => entry.employeeRecordId === employeeRecordId);
+  const selectedMemberIds = viewScope.selectedMemberIds;
+  if (row?.userId)
+    viewState.updatePreferences({
+      memberUserIds:
+        selectedMemberIds?.length === 1 && selectedMemberIds[0] === row.userId ? null : [row.userId],
+    });
 }

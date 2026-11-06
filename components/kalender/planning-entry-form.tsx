@@ -43,20 +43,8 @@ interface PlanningEntryFormProps {
   onPendingChange?: ((pending: boolean) => void) | undefined;
 }
 
-export function PlanningEntryForm({
-  defaultDate,
-  defaultTime,
-  defaultUserId,
-  onSuccess,
-  onPendingChange,
-}: PlanningEntryFormProps) {
-  const initialDate = defaultDate ? toLocalDateString(defaultDate) : getBusinessTodayIso();
-  const { showBanner } = useBanner();
-  const idempotencyKeyFor = useRequestIdempotencyKey();
-  const { run: runSubmit, isPending: submitting } = usePendingTask();
-  useReportPending(submitting, onPendingChange);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<PlanningEntryFieldErrors>({});
+/** Every field of the form as the user left it, in the order the form asks for it. */
+function usePlanningEntryDraft(initialDate: string, defaultTime: string | undefined) {
   const [entryKind, setEntryKind] = useState<PlanningEntryKind>('job_visit');
   const [jobId, setJobId] = useState('');
   const [internalType, setInternalType] = useState('meeting');
@@ -81,21 +69,8 @@ export function PlanningEntryForm({
   const [conflicts, setConflicts] = useState<PlanningConflict[]>([]);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
-
-  const employeeSearch = usePlanningOptions(
-    'employees',
-    chosenEmployeeRecordIds,
-    defaultUserId ? [defaultUserId] : [],
-  );
-  const employeeRecordIds = employeeSearch.selectedIds;
-  const jobSearch = usePlanningOptions('jobs', jobId ? [jobId] : []);
-  const teamSearch = usePlanningOptions('teams', teamIds);
-
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setSubmitError(null);
-    setFieldErrors({});
-    const draftCheck = checkPlanningEntryDraft({
+  return {
+    values: {
       entryKind,
       jobId,
       internalType,
@@ -107,7 +82,6 @@ export function PlanningEntryForm({
       timeKind,
       durationHours,
       durationDays,
-      employeeRecordIds,
       teamIds,
       recurring,
       frequency,
@@ -116,130 +90,267 @@ export function PlanningEntryForm({
       endMode,
       occurrenceCount,
       untilDate,
-      hasConflicts: conflicts.length > 0,
       overrideReason,
-    });
-    if (draftCheck.kind === 'missing') {
-      setFieldErrors(Object.fromEntries(draftCheck.inputs.map(({ field, message }) => [field, message])));
-      focusFirstInvalidField(errorsByControlId(draftCheck.inputs));
-      return;
-    }
-    if (draftCheck.kind === 'invalid') {
-      setSubmitError(draftCheck.message);
-      return;
-    }
-    const { request } = draftCheck;
-    const payload = {
-      ...request,
-      idempotencyKey: idempotencyKeyFor(request),
-      overrideReason: conflicts.length > 0 ? overrideReason || null : null,
-      assessmentFingerprint: conflicts.length > 0 ? fingerprint : null,
-    };
-    await runSubmit(async () => {
-      try {
-        const result = await createPlanningEntry(payload);
-        if (result.success) {
-          showBanner({ variant: 'success', message: plannedEntriesMessage(result.occurrenceIds.length) });
-          await onSuccess();
-          return;
-        }
-        if (
-          (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
-          result.conflicts &&
-          result.fingerprint
-        ) {
-          setConflicts(result.conflicts);
-          setFingerprint(result.fingerprint);
-          if (result.error === 'stale_assessment') {
-            showBanner({
-              variant: 'info',
-              message: 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.',
-            });
-          }
-          return;
-        }
-        setSubmitError(calendarRefusalMessage(result.error) ?? 'Der Termin konnte nicht geplant werden.');
-      } catch {
-        setSubmitError('Der Termin konnte nicht geplant werden.');
+    },
+    set: {
+      setEntryKind,
+      setJobId,
+      setInternalType,
+      setTitle,
+      setDescription,
+      setLocation,
+      setDate,
+      setTime,
+      setTimeKind,
+      setDurationHours,
+      setDurationDays,
+      setEmployeeRecordIds,
+      setTeamIds,
+      setRecurring,
+      setFrequency,
+      setIntervalValue,
+      setWeekdays,
+      setEndMode,
+      setOccurrenceCount,
+      setUntilDate,
+      setConflicts,
+      setFingerprint,
+      setOverrideReason,
+    },
+    chosenEmployeeRecordIds,
+    conflicts,
+    fingerprint,
+  };
+}
+
+type PlanningEntryDraftState = ReturnType<typeof usePlanningEntryDraft>;
+
+type PlanningEntrySubmit = {
+  draft: PlanningEntryDraftState;
+  employeeRecordIds: string[];
+  idempotencyKeyFor: ReturnType<typeof useRequestIdempotencyKey>;
+  runSubmit: ReturnType<typeof usePendingTask>['run'];
+  showBanner: ReturnType<typeof useBanner>['showBanner'];
+  setSubmitError: (message: string | null) => void;
+  setFieldErrors: (errors: PlanningEntryFieldErrors) => void;
+  onSuccess: PlanningEntryFormProps['onSuccess'];
+};
+
+/** Checks the draft; a clean draft goes to the server, which may answer with warnings to review. */
+async function submitPlanningEntry({
+  draft,
+  employeeRecordIds,
+  idempotencyKeyFor,
+  runSubmit,
+  showBanner,
+  setSubmitError,
+  setFieldErrors,
+  onSuccess,
+}: PlanningEntrySubmit): Promise<void> {
+  const { values, set, conflicts, fingerprint } = draft;
+  setSubmitError(null);
+  setFieldErrors({});
+  const draftCheck = checkPlanningEntryDraft({
+    ...values,
+    employeeRecordIds,
+    hasConflicts: conflicts.length > 0,
+  });
+  if (draftCheck.kind === 'missing') {
+    setFieldErrors(Object.fromEntries(draftCheck.inputs.map(({ field, message }) => [field, message])));
+    focusFirstInvalidField(errorsByControlId(draftCheck.inputs));
+    return;
+  }
+  if (draftCheck.kind === 'invalid') {
+    setSubmitError(draftCheck.message);
+    return;
+  }
+  const { request } = draftCheck;
+  const payload = {
+    ...request,
+    idempotencyKey: idempotencyKeyFor(request),
+    overrideReason: conflicts.length > 0 ? values.overrideReason || null : null,
+    assessmentFingerprint: conflicts.length > 0 ? fingerprint : null,
+  };
+  await runSubmit(async () => {
+    try {
+      const result = await createPlanningEntry(payload);
+      if (result.success) {
+        showBanner({ variant: 'success', message: plannedEntriesMessage(result.occurrenceIds.length) });
+        await onSuccess();
+        return;
       }
+      if (
+        (result.error === 'planning_warning' || result.error === 'stale_assessment') &&
+        result.conflicts &&
+        result.fingerprint
+      ) {
+        set.setConflicts(result.conflicts);
+        set.setFingerprint(result.fingerprint);
+        if (result.error === 'stale_assessment') {
+          showBanner({
+            variant: 'info',
+            message: 'Die Planungslage hat sich geändert. Bitte Hinweise erneut prüfen.',
+          });
+        }
+        return;
+      }
+      setSubmitError(calendarRefusalMessage(result.error) ?? 'Der Termin konnte nicht geplant werden.');
+    } catch {
+      setSubmitError('Der Termin konnte nicht geplant werden.');
+    }
+  });
+}
+
+/** What the entry is, when it runs and who does it. */
+function PlanningEntryCoreFields({
+  draft,
+  fieldErrors,
+  jobSearch,
+  employeeSearch,
+  teamSearch,
+}: {
+  draft: PlanningEntryDraftState;
+  fieldErrors: PlanningEntryFieldErrors;
+  jobSearch: ReturnType<typeof usePlanningOptions>;
+  employeeSearch: ReturnType<typeof usePlanningOptions>;
+  teamSearch: ReturnType<typeof usePlanningOptions>;
+}): React.JSX.Element {
+  const { values, set } = draft;
+  return (
+    <>
+      <PlanningEntryKindFields
+        entryKind={values.entryKind}
+        onEntryKindChange={set.setEntryKind}
+        jobSelect={jobSearch.select}
+        jobId={values.jobId}
+        jobError={fieldErrors.job}
+        onJobIdChange={set.setJobId}
+        internalType={values.internalType}
+        onInternalTypeChange={set.setInternalType}
+        title={values.title}
+        titleError={fieldErrors.title}
+        onTitleChange={set.setTitle}
+      />
+
+      <PlanningEntryScheduleFields
+        date={values.date}
+        dateError={fieldErrors.date}
+        onDateChange={set.setDate}
+        onWeekdaysChange={set.setWeekdays}
+        onConflictsChange={set.setConflicts}
+        timeKind={values.timeKind}
+        onTimeKindChange={set.setTimeKind}
+        time={values.time}
+        onTimeChange={set.setTime}
+        durationHours={values.durationHours}
+        onDurationHoursChange={set.setDurationHours}
+        durationDays={values.durationDays}
+        onDurationDaysChange={set.setDurationDays}
+      />
+
+      <PlanningEntryAssignmentFields
+        employeeSelect={employeeSearch.select}
+        employeeRecordIds={employeeSearch.selectedIds}
+        onEmployeeRecordIdsChange={set.setEmployeeRecordIds}
+        teamSelect={teamSearch.select}
+        teamIds={values.teamIds}
+        onTeamIdsChange={set.setTeamIds}
+        onConflictsChange={set.setConflicts}
+      />
+    </>
+  );
+}
+
+/** The series fields, bound to the draft. */
+function PlanningEntryRecurrence({ draft }: { draft: PlanningEntryDraftState }): React.JSX.Element {
+  const { values, set } = draft;
+  return (
+    <PlanningEntryRecurrenceFields
+      recurring={values.recurring}
+      onRecurringChange={set.setRecurring}
+      frequency={values.frequency}
+      onFrequencyChange={set.setFrequency}
+      interval={values.interval}
+      onIntervalChange={set.setIntervalValue}
+      weekdays={values.weekdays}
+      onWeekdaysChange={set.setWeekdays}
+      endMode={values.endMode}
+      onEndModeChange={set.setEndMode}
+      occurrenceCount={values.occurrenceCount}
+      onOccurrenceCountChange={set.setOccurrenceCount}
+      untilDate={values.untilDate}
+      onUntilDateChange={set.setUntilDate}
+    />
+  );
+}
+
+export function PlanningEntryForm({
+  defaultDate,
+  defaultTime,
+  defaultUserId,
+  onSuccess,
+  onPendingChange,
+}: PlanningEntryFormProps) {
+  const initialDate = defaultDate ? toLocalDateString(defaultDate) : getBusinessTodayIso();
+  const { showBanner } = useBanner();
+  const idempotencyKeyFor = useRequestIdempotencyKey();
+  const { run: runSubmit, isPending: submitting } = usePendingTask();
+  useReportPending(submitting, onPendingChange);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<PlanningEntryFieldErrors>({});
+  const draft = usePlanningEntryDraft(initialDate, defaultTime);
+  const { values, set, conflicts } = draft;
+
+  const employeeSearch = usePlanningOptions(
+    'employees',
+    draft.chosenEmployeeRecordIds,
+    defaultUserId ? [defaultUserId] : [],
+  );
+  const jobSearch = usePlanningOptions('jobs', values.jobId ? [values.jobId] : []);
+  const teamSearch = usePlanningOptions('teams', values.teamIds);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    await submitPlanningEntry({
+      draft,
+      employeeRecordIds: employeeSearch.selectedIds,
+      idempotencyKeyFor,
+      runSubmit,
+      showBanner,
+      setSubmitError,
+      setFieldErrors,
+      onSuccess,
     });
   }
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex min-h-0 flex-1 flex-col">
       <DialogBody className="space-y-5 pt-2">
-        <PlanningEntryKindFields
-          entryKind={entryKind}
-          onEntryKindChange={setEntryKind}
-          jobSelect={jobSearch.select}
-          jobId={jobId}
-          jobError={fieldErrors.job}
-          onJobIdChange={setJobId}
-          internalType={internalType}
-          onInternalTypeChange={setInternalType}
-          title={title}
-          titleError={fieldErrors.title}
-          onTitleChange={setTitle}
+        <PlanningEntryCoreFields
+          draft={draft}
+          fieldErrors={fieldErrors}
+          jobSearch={jobSearch}
+          employeeSearch={employeeSearch}
+          teamSearch={teamSearch}
         />
 
-        <PlanningEntryScheduleFields
-          date={date}
-          dateError={fieldErrors.date}
-          onDateChange={setDate}
-          onWeekdaysChange={setWeekdays}
-          onConflictsChange={setConflicts}
-          timeKind={timeKind}
-          onTimeKindChange={setTimeKind}
-          time={time}
-          onTimeChange={setTime}
-          durationHours={durationHours}
-          onDurationHoursChange={setDurationHours}
-          durationDays={durationDays}
-          onDurationDaysChange={setDurationDays}
-        />
+        <PlanningEntryRecurrence draft={draft} />
 
-        <PlanningEntryAssignmentFields
-          employeeSelect={employeeSearch.select}
-          employeeRecordIds={employeeRecordIds}
-          onEmployeeRecordIdsChange={setEmployeeRecordIds}
-          teamSelect={teamSearch.select}
-          teamIds={teamIds}
-          onTeamIdsChange={setTeamIds}
-          onConflictsChange={setConflicts}
-        />
-
-        <PlanningEntryRecurrenceFields
-          recurring={recurring}
-          onRecurringChange={setRecurring}
-          frequency={frequency}
-          onFrequencyChange={setFrequency}
-          interval={interval}
-          onIntervalChange={setIntervalValue}
-          weekdays={weekdays}
-          onWeekdaysChange={setWeekdays}
-          endMode={endMode}
-          onEndModeChange={setEndMode}
-          occurrenceCount={occurrenceCount}
-          onOccurrenceCountChange={setOccurrenceCount}
-          untilDate={untilDate}
-          onUntilDateChange={setUntilDate}
-        />
-
-        {entryKind === 'internal' && (
+        {values.entryKind === 'internal' && (
           <PlanningEntryInternalDetails
-            location={location}
-            onLocationChange={setLocation}
-            description={description}
-            onDescriptionChange={setDescription}
+            location={values.location}
+            onLocationChange={set.setLocation}
+            description={values.description}
+            onDescriptionChange={set.setDescription}
           />
         )}
 
         {conflicts.length > 0 && (
           <PlanningEntryConflictWarning
             conflicts={conflicts}
-            overrideReason={overrideReason}
+            overrideReason={values.overrideReason}
             overrideError={fieldErrors.override}
-            onOverrideReasonChange={setOverrideReason}
+            onOverrideReasonChange={set.setOverrideReason}
           />
         )}
 

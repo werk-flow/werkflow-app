@@ -33,6 +33,12 @@ function readQueuedEntries(raw: string): TimeEntry[] | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** The entries of a created event, or null when its detail is not what the manual entry button sends. */
+export function readManualEntryEvent(detail: unknown): TimeEntry[] | null {
+  const parsed = z.object({ entries: queuedEntriesSchema }).safeParse(detail);
+  return parsed.success ? parsed.data.entries : null;
+}
+
 function canUseBrowserStorage() {
   return typeof window !== 'undefined' && typeof window.sessionStorage !== 'undefined';
 }

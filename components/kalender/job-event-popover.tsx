@@ -78,6 +78,168 @@ export function JobEventPopover({ card, ...rest }: JobEventPopoverProps) {
   return <CardPopover key={`${card.job.id}:${card.row?.employeeRecordId ?? ''}`} card={card} {...rest} />;
 }
 
+function openDetails(url: string, onClose: () => void, router: ReturnType<typeof useRouter>): void {
+  onClose();
+  router.push(url);
+}
+
+/** The popover's first focus goes to its first action. */
+function focusFirstAction(event: Event): void {
+  event.preventDefault();
+  const content = event.currentTarget;
+  if (!(content instanceof HTMLElement)) return;
+  // eslint-disable-next-line no-restricted-syntax -- the popover's first focus goes to its first action, not a validation path
+  content.querySelector<HTMLElement>('button, a')?.focus();
+}
+
+/** Closes the popover and returns focus to the card, when the card still exists. */
+function closeToAnchor(anchor: HTMLElement, onClose: () => void): void {
+  onClose();
+  requestAnimationFrame(() => {
+    if (anchor.isConnected) anchor.focus();
+  });
+}
+
+/** Where the card's job opens, when it has a number. */
+function jobDetailPath(job: CalendarJob): string | null {
+  return job.jobNumber
+    ? job.projectNumber
+      ? `/auftraege/projekt/${job.projectNumber}/${job.jobNumber}`
+      : `/auftraege/${job.jobNumber}`
+    : null;
+}
+
+function CardPopoverTitle({ job, onClose }: { job: CalendarJob; onClose: () => void }): React.JSX.Element {
+  return (
+    <div className="mb-3 flex items-start justify-between gap-2">
+      <div className="min-w-0 flex-1">
+        <p className="line-clamp-3 break-words font-semibold" title={job.title}>
+          {job.title}
+        </p>
+        {job.jobNumber && <p className="text-xs text-muted-foreground">{job.jobNumber}</p>}
+      </div>
+      <PlainButton
+        type="button"
+        aria-label="Terminübersicht schließen"
+        onClick={onClose}
+        className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </PlainButton>
+    </div>
+  );
+}
+
+/** The occurrence's state, its series mark and, for a job visit, the job's status and priority. */
+function CardPopoverBadges({
+  job,
+  inactiveStatusLabel,
+}: {
+  job: CalendarJob;
+  inactiveStatusLabel: string | undefined;
+}): React.JSX.Element {
+  const statusInfo = { label: getJobStatusLabel(job), className: getJobStatusClass(job) };
+  const priorityInfo = {
+    label: JOB_PRIORITY_LABELS[job.priority],
+    className: PRIORITY_CLASSES[job.priority],
+  };
+  return (
+    <div className="mb-3 flex flex-wrap gap-1.5">
+      {inactiveStatusLabel ? (
+        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          {inactiveStatusLabel}
+        </span>
+      ) : (
+        <span className="inline-flex items-center rounded-full bg-calendar-planning px-2 py-0.5 text-xs font-medium text-calendar-planning-foreground">
+          Geplant
+        </span>
+      )}
+      {job.seriesId && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          <Repeat2 className="size-3" aria-hidden="true" /> Serie
+        </span>
+      )}
+      {job.entryKind !== 'internal' && (
+        <>
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+              statusInfo.className,
+            )}
+          >
+            {statusInfo.label}
+          </span>
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+              priorityInfo?.className,
+            )}
+          >
+            {priorityInfo?.label}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The commands of the card: edit, move, park and open, each only where it can run. */
+function CardPopoverActions({
+  locked,
+  canEdit,
+  movable,
+  parkable,
+  jobUrl,
+  onEdit,
+  onMove,
+  onPark,
+  onOpenDetails,
+}: {
+  locked: boolean;
+  canEdit: boolean;
+  movable: boolean;
+  parkable: boolean;
+  jobUrl: string | null;
+  onEdit: () => void;
+  onMove: () => void;
+  onPark: () => void;
+  onOpenDetails: (url: string) => void;
+}): React.JSX.Element {
+  return (
+    <div className="mt-3 grid gap-2">
+      {locked && (
+        <p className="flex items-start gap-2 text-xs text-muted-foreground" data-card-locked="">
+          <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {calendarRefusalMessage('started_occurrence')}
+        </p>
+      )}
+      {canEdit && (
+        <Button variant="default" size="sm" onClick={onEdit}>
+          Termin bearbeiten
+        </Button>
+      )}
+      {movable && (
+        <Button variant="outline" size="sm" onClick={onMove}>
+          <MoveRight className="mr-2 size-3.5" aria-hidden="true" />
+          Verschieben …
+        </Button>
+      )}
+      {parkable && (
+        <Button variant="outline" size="sm" onClick={onPark}>
+          <ParkingSquare className="mr-2 size-3.5" aria-hidden="true" />
+          Parken
+        </Button>
+      )}
+      {jobUrl && (
+        <Button variant="outline" size="sm" className="w-full" onClick={() => onOpenDetails(jobUrl)}>
+          <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
+          Details anzeigen
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function CardPopover({
   card,
   onClose,
@@ -93,30 +255,14 @@ function CardPopover({
   const [editOpen, setEditOpen] = useState(false);
   const [moving, setMoving] = useState(false);
   const virtualRef = useMemo(() => ({ current: card.anchor }), [card.anchor]);
-  const statusInfo = { label: getJobStatusLabel(job), className: getJobStatusClass(job) };
-  const priorityInfo = {
-    label: JOB_PRIORITY_LABELS[job.priority],
-    className: PRIORITY_CLASSES[job.priority],
-  };
   const inactiveStatusLabel = job.occurrenceStatus
     ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
     : undefined;
-  const jobUrl = job.jobNumber
-    ? job.projectNumber
-      ? `/auftraege/projekt/${job.projectNumber}/${job.jobNumber}`
-      : `/auftraege/${job.jobNumber}`
-    : null;
   const locked = isStartedOccurrence(job, clock());
   const movable = canEditPlanning && mutations !== null && checkOccurrenceMovable(job, clock()).ok;
   const parkable = canEditPlanning && onPark !== null && checkParkable(job).ok;
 
-  const close = () => {
-    const anchor = card.anchor;
-    onClose();
-    requestAnimationFrame(() => {
-      if (anchor.isConnected) anchor.focus();
-    });
-  };
+  const close = () => closeToAnchor(card.anchor, onClose);
 
   return (
     <Popover
@@ -135,65 +281,11 @@ function CardPopover({
         data-job-popover=""
         // A dialog opened from inside (the planning warning after a move) returns focus to the card.
         data-focus-return={card.anchor.dataset.focusKey}
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          // eslint-disable-next-line no-restricted-syntax -- the popover's first focus goes to its first action, not a validation path
-          (event.currentTarget as HTMLElement).querySelector<HTMLElement>('button, a')?.focus();
-        }}
+        onOpenAutoFocus={focusFirstAction}
       >
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="line-clamp-3 break-words font-semibold" title={job.title}>
-              {job.title}
-            </p>
-            {job.jobNumber && <p className="text-xs text-muted-foreground">{job.jobNumber}</p>}
-          </div>
-          <PlainButton
-            type="button"
-            aria-label="Terminübersicht schließen"
-            onClick={close}
-            className="shrink-0 rounded-md p-0.5 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </PlainButton>
-        </div>
+        <CardPopoverTitle job={job} onClose={close} />
 
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {inactiveStatusLabel ? (
-            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              {inactiveStatusLabel}
-            </span>
-          ) : (
-            <span className="inline-flex items-center rounded-full bg-calendar-planning px-2 py-0.5 text-xs font-medium text-calendar-planning-foreground">
-              Geplant
-            </span>
-          )}
-          {job.seriesId && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-              <Repeat2 className="size-3" aria-hidden="true" /> Serie
-            </span>
-          )}
-          {job.entryKind !== 'internal' && (
-            <>
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  statusInfo.className,
-                )}
-              >
-                {statusInfo.label}
-              </span>
-              <span
-                className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  priorityInfo?.className,
-                )}
-              >
-                {priorityInfo?.label}
-              </span>
-            </>
-          )}
-        </div>
+        <CardPopoverBadges job={job} inactiveStatusLabel={inactiveStatusLabel} />
 
         <JobEventFacts job={job} memberNames={memberNames} />
 
@@ -207,52 +299,20 @@ function CardPopover({
             onCancel={() => setMoving(false)}
           />
         ) : (
-          <div className="mt-3 grid gap-2">
-            {locked && (
-              <p className="flex items-start gap-2 text-xs text-muted-foreground" data-card-locked="">
-                <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                {calendarRefusalMessage('started_occurrence')}
-              </p>
-            )}
-            {canEditPlanning && job.occurrenceId && !inactiveStatusLabel && !locked && (
-              <Button variant="default" size="sm" onClick={() => setEditOpen(true)}>
-                Termin bearbeiten
-              </Button>
-            )}
-            {movable && (
-              <Button variant="outline" size="sm" onClick={() => setMoving(true)}>
-                <MoveRight className="mr-2 size-3.5" aria-hidden="true" />
-                Verschieben …
-              </Button>
-            )}
-            {parkable && onPark && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onClose();
-                  onPark(job);
-                }}
-              >
-                <ParkingSquare className="mr-2 size-3.5" aria-hidden="true" />
-                Parken
-              </Button>
-            )}
-            {jobUrl && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() => {
-                  onClose();
-                  router.push(jobUrl);
-                }}
-              >
-                <ExternalLink className="mr-2 size-3.5" aria-hidden="true" />
-                Details anzeigen
-              </Button>
-            )}
-          </div>
+          <CardPopoverActions
+            locked={locked}
+            canEdit={Boolean(canEditPlanning && job.occurrenceId && !inactiveStatusLabel && !locked)}
+            movable={movable}
+            parkable={parkable}
+            jobUrl={jobDetailPath(job)}
+            onEdit={() => setEditOpen(true)}
+            onMove={() => setMoving(true)}
+            onPark={() => {
+              onClose();
+              onPark?.(job);
+            }}
+            onOpenDetails={(url) => openDetails(url, onClose, router)}
+          />
         )}
         {job.occurrenceId && (
           <PlanningOccurrenceEditDialog
@@ -317,21 +377,45 @@ function JobEventFacts({ job, memberNames }: { job: CalendarJob; memberNames: Re
   );
 }
 
-function MoveForm({
-  job,
-  row,
-  rows,
-  mutations,
-  onDone,
-  onCancel,
-}: {
+type MoveFormProps = {
   job: CalendarJob;
   row: CalendarBoardRow | null;
   rows: readonly CalendarBoardRow[];
   mutations: CalendarMutations;
   onDone: () => void;
   onCancel: () => void;
-}) {
+};
+
+/** Runs the move to the chosen person and day; a move that changes nothing runs no write. */
+function moveToTarget(
+  { job, row, rows, mutations }: Pick<MoveFormProps, 'job' | 'row' | 'rows' | 'mutations'>,
+  moveRecordId: string,
+  moveDate: Date,
+): void {
+  const targetRow = rows.find((entry) => entry.employeeRecordId === moveRecordId) ?? null;
+  const target = {
+    employeeRecordId: targetRow?.employeeRecordId ?? null,
+    userId: targetRow?.userId ?? null,
+    date: toLocalDateString(moveDate),
+  };
+  const changes = reassignmentChanges({
+    job,
+    sourceEmployeeRecordId: row?.employeeRecordId ?? null,
+    sourceUserId: row?.userId ?? null,
+    target,
+  });
+  if (!changes) return;
+  const targetName = targetRow?.displayName ?? 'Ohne Zuweisung';
+  const dateLabel = formatRefusalDate(target.date);
+  void mutations.moveJob({
+    job,
+    changes,
+    successMessage: moveSuccessMessage(changes, targetName, dateLabel),
+    context: { name: targetName, date: dateLabel },
+  });
+}
+
+function MoveForm({ job, row, rows, mutations, onDone, onCancel }: MoveFormProps) {
   const [moveDate, setMoveDate] = useState<Date | undefined>(() =>
     job.plannedDate ? new Date(`${job.plannedDate}T12:00:00`) : undefined,
   );
@@ -344,30 +428,7 @@ function MoveForm({
     const dateError = moveDate ? undefined : 'Bitte wähle ein Datum.';
     setMoveError(dateError ?? null);
     if (focusFirstInvalidField({ 'popover-move-date': dateError }) || !moveDate) return;
-    const targetRow = rows.find((entry) => entry.employeeRecordId === moveRecordId) ?? null;
-    const target = {
-      employeeRecordId: targetRow?.employeeRecordId ?? null,
-      userId: targetRow?.userId ?? null,
-      date: toLocalDateString(moveDate),
-    };
-    const changes = reassignmentChanges({
-      job,
-      sourceEmployeeRecordId: row?.employeeRecordId ?? null,
-      sourceUserId: row?.userId ?? null,
-      target,
-    });
-    if (!changes) {
-      onDone();
-      return;
-    }
-    const targetName = targetRow?.displayName ?? 'Ohne Zuweisung';
-    const dateLabel = formatRefusalDate(target.date);
-    void mutations.moveJob({
-      job,
-      changes,
-      successMessage: moveSuccessMessage(changes, targetName, dateLabel),
-      context: { name: targetName, date: dateLabel },
-    });
+    moveToTarget({ job, row, rows, mutations }, moveRecordId, moveDate);
     onDone();
   };
 

@@ -20,6 +20,55 @@ import { formatGermanDate } from '@/lib/utils';
 
 type PlanningApproval = { fingerprint: string; reason: string };
 
+/** The warnings the approval answers. */
+function PlanningWarningList({ conflicts }: { conflicts: PlanningConflict[] }): React.JSX.Element {
+  return (
+    <ul className="space-y-2 text-sm">
+      {conflicts.map((conflict, index) => (
+        <li
+          key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`}
+          className="rounded-md border bg-muted/30 px-3 py-2"
+        >
+          <p className="font-medium">
+            {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
+            {conflict.message}
+          </p>
+          {conflict.localDate && (
+            <p className="text-xs text-muted-foreground">{formatGermanDate(conflict.localDate)}</p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function PlanningWarningReasonField({
+  reason,
+  reasonError,
+  onReasonChange,
+}: {
+  reason: string;
+  reasonError: string | null;
+  onReasonChange: (reason: string) => void;
+}): React.JSX.Element {
+  return (
+    <Field
+      label="Kurze Begründung"
+      htmlFor="planning-warning-reason"
+      required
+      description="Mindestens 8 Zeichen."
+      error={reasonError}
+    >
+      <Textarea
+        value={reason}
+        onChange={(event) => onReasonChange(event.target.value)}
+        placeholder="z. B. abgestimmter Notdiensteinsatz"
+        maxLength={1000}
+      />
+    </Field>
+  );
+}
+
 export function usePlanningWarningConfirmation(): {
   requestApproval: (conflicts: PlanningConflict[], fingerprint: string) => Promise<PlanningApproval | null>;
   warningDialog: React.ReactNode;
@@ -72,36 +121,8 @@ export function usePlanningWarningConfirmation(): {
               Begründung.
             </DialogDescription>
           </DialogHeader>
-          <ul className="space-y-2 text-sm">
-            {request.conflicts.map((conflict, index) => (
-              <li
-                key={`${conflict.kind}-${conflict.employeeRecordId}-${conflict.localDate}-${index}`}
-                className="rounded-md border bg-muted/30 px-3 py-2"
-              >
-                <p className="font-medium">
-                  {conflict.employeeName ? `${conflict.employeeName}: ` : ''}
-                  {conflict.message}
-                </p>
-                {conflict.localDate && (
-                  <p className="text-xs text-muted-foreground">{formatGermanDate(conflict.localDate)}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-          <Field
-            label="Kurze Begründung"
-            htmlFor="planning-warning-reason"
-            required
-            description="Mindestens 8 Zeichen."
-            error={reasonError}
-          >
-            <Textarea
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="z. B. abgestimmter Notdiensteinsatz"
-              maxLength={1000}
-            />
-          </Field>
+          <PlanningWarningList conflicts={request.conflicts} />
+          <PlanningWarningReasonField reason={reason} reasonError={reasonError} onReasonChange={setReason} />
           <DialogFooter>
             <Button variant="outline" onClick={() => finish(null)}>
               Änderung zurücknehmen
