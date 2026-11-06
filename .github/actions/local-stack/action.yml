@@ -32,8 +32,8 @@ runs:
         START: ${{ inputs.environment-only != 'true' || steps.environment.outputs.cache-hit != 'true' }}
       run: echo "start=$START" >> "$GITHUB_OUTPUT"
 
-    # The stack's ports (54321 to 54327) sit inside Linux's default ephemeral range, so an
-    # outgoing connection can hold one before the database binds it. Move the range above them.
+    # The stack's ports (54321 to 54327) sit inside Linux's default ephemeral range, so a new
+    # outgoing connection, loopback ones included, could take one. Move the range above them.
     - name: Keep outgoing connections off the stack's ports
       if: steps.start.outputs.start == 'true'
       shell: bash
@@ -63,12 +63,38 @@ runs:
     # comes from GitHub's registry: public ECR rate-limits anonymous pulls, and the CLI then falls
     # back to GHCR for some images only. The variable is set on the CLI commands alone, because the
     # build identity fingerprints every SUPABASE_ variable the test runner sees.
+    # The range cannot move what is already open: the runner's own connections to GitHub start
+    # before the job's first step and last the whole job, and one can sit on a stack port. A bind
+    # on 0.0.0.0 then fails with "address already in use", and retrying fails the same way. Those
+    # connections use the runner's network address, so a bind on loopback cannot clash with them.
+    # Nothing outside the runner reads the stack. The CLI reuses a network that already exists.
+    - name: Publish the stack's ports on loopback only
+      if: steps.start.outputs.start == 'true'
+      shell: bash
+      run: |
+        docker network create \
+          --label com.supabase.cli.project=werkflow-app \
+          --opt com.docker.network.bridge.host_binding_ipv4=127.0.0.1 \
+          supabase_network_werkflow-app
+
     - name: Start the stack
       if: steps.start.outputs.start == 'true'
       shell: bash
       env:
         SUPABASE_INTERNAL_IMAGE_REGISTRY: ghcr.io
       run: supabase start --exclude studio,imgproxy
+
+    # A CLI that names its network differently would ignore the one above and bind every address
+    # again, which only shows as a rare failed start. This fails every start instead.
+    - name: Check that the stack publishes on loopback only
+      if: steps.start.outputs.start == 'true'
+      shell: bash
+      run: |
+        ports="$(docker ps --filter label=com.supabase.cli.project=werkflow-app --format '{{.Names}} {{.Ports}}')"
+        if grep --extended-regexp '(0\.0\.0\.0|\[::\]):' <<< "$ports"; then
+          echo "::error::A stack port is published on every address, so a runner connection can block the next start."
+          exit 1
+        fi
 
     # A fresh runner's edge runtime boots its functions after the stack reports ready, and the
     # test server's preflight gives it only three attempts. The script owns the bounded wait, the
