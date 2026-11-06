@@ -177,6 +177,8 @@ export const isAlive = (pid: number): boolean => {
   }
 };
 
+const SUPERVISOR_START_GRACE_MILLISECONDS = 60_000;
+
 /**
  * Resends each run whose supervisor is gone and whose wake never went through.
  * Returns one line per run that stays unheard, for the caller to print.
@@ -185,6 +187,7 @@ export function resendUnheardRuns(
   directory: string,
   send: WakeSender,
   supervisorAlive: (pid: number) => boolean = isAlive,
+  now: () => number = Date.now,
 ): string[] {
   if (!existsSync(directory)) return [];
   const unheard: string[] = [];
@@ -195,6 +198,11 @@ export function resendUnheardRuns(
       unheard.push(`UNHEARD RUN: ${path} cannot be read. Delete it once someone has checked it.`);
       continue;
     }
+    // A run saves its record before its supervisor saves a pid, so a young record without one is starting.
+    const starting =
+      record.supervisorPid === null &&
+      now() - Date.parse(record.startedAt) < SUPERVISOR_START_GRACE_MILLISECONDS;
+    if (starting) continue;
     if (record.supervisorPid !== null && supervisorAlive(record.supervisorPid)) continue;
     const failure = send(record.thread, wakeMessage(record));
     if (failure === null) saveRecord({ ...record, wake: 'sent', wakeError: null });

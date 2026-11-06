@@ -248,6 +248,24 @@ test('an unreadable entry is reported and stops no other run', () => {
   expect(existsSync(record.unheardPath)).toBe(false);
 });
 
+test('a record whose supervisor has not saved its pid yet is starting, not dead, for a minute', () => {
+  const unheard = temporaryDirectory();
+  const startedAt = '2026-11-06T10:00:00.000Z';
+  const started = Date.parse(startedAt);
+  saveRecord(runRecord(temporaryDirectory(), unheard, { startedAt, supervisorPid: null, outcome: null }));
+  const sent: string[] = [];
+  const send = (_thread: string, message: string): string | null => {
+    sent.push(message);
+    return null;
+  };
+  const dead = (): boolean => false;
+  // The 2026-11-06 race: a second run in that gap told the first run's thread it had died.
+  resendUnheardRuns(unheard, send, dead, () => started + 59_000);
+  expect(sent).toEqual([]);
+  resendUnheardRuns(unheard, send, dead, () => started + 61_000);
+  expect(sent).toHaveLength(1);
+});
+
 test('no unheard directory means nothing to resend', () => {
   expect(resendUnheardRuns(join(temporaryDirectory(), 'missing'), () => null)).toEqual([]);
 });
