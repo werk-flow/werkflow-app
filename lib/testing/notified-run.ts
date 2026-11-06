@@ -47,9 +47,17 @@ type WakeSender = (thread: string, message: string) => string | null;
 const USAGE =
   'Usage: bun scripts/run-notified.ts --began "<log text that proves work started>" [--thread <id>] -- <command> [arguments]';
 const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash']);
+/** `-c`, alone or in a cluster such as `-lc`. */
+const SHELL_LINE_FLAG = /^-[a-zA-Z]*c/;
 const T3_TIMEOUT_MILLISECONDS = 60_000;
 /** The waits before each wake attempt: long enough to outlast a T3 server restart. */
 export const WAKE_RETRY_WAITS_MILLISECONDS = [0, 30_000, 120_000, 600_000];
+
+/** A shell line can end in a pipe, and then the exit code is the pipe's. `timeout` or `env` in front changes nothing. */
+function runsShellLine(command: readonly string[]): boolean {
+  const shell = command.findIndex((argument) => SHELLS.has(basename(argument)));
+  return shell !== -1 && command.slice(shell + 1).some((argument) => SHELL_LINE_FLAG.test(argument));
+}
 
 /** Reads the wrapper's arguments. `thread` falls back to the id T3 gives every provider process. */
 export function parseRunArguments(
@@ -65,8 +73,7 @@ export function parseRunArguments(
   };
   const thread = flagValue('--thread') ?? environmentThread;
   const began = flagValue('--began');
-  const [program, firstArgument] = command;
-  if (program === undefined) return { kind: 'refused', reason: `No command given. ${USAGE}` };
+  if (command.length === 0) return { kind: 'refused', reason: `No command given. ${USAGE}` };
   if (!began)
     return {
       kind: 'refused',
@@ -77,11 +84,10 @@ export function parseRunArguments(
       kind: 'refused',
       reason: `No thread to wake: T3CODE_THREAD_ID is not set. Pass --thread <id>. ${USAGE}`,
     };
-  // A shell line can end in a pipe, and then the exit code is the pipe's, not the command's.
-  if (SHELLS.has(basename(program)) && firstArgument === '-c')
+  if (runsShellLine(command))
     return {
       kind: 'refused',
-      reason: `Pass the command itself, not a shell line: "${program} -c" reports the exit code of its last pipe stage.`,
+      reason: `Pass the command itself, not a shell line: "${command.join(' ')}" reports the exit code of its last pipe stage.`,
     };
   return { kind: 'run', options: { thread, began, command } };
 }

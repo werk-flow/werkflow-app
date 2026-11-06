@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import {
@@ -25,11 +25,13 @@ import {
 // at once: it is nobody's child in that tree, also while this foreground waits.
 
 const LAUNCH_FLAG = '--launch';
+const WAIT_FLAG = '--wait';
 const SUPERVISE_FLAG = '--supervise';
 /** Bounded below a tool call's own limit, so the caller always gets this script's report. */
 const BEGIN_WAIT_MILLISECONDS = 300_000;
+const END_WAIT_MILLISECONDS = 540_000;
 const POLL_MILLISECONDS = 500;
-/** Foreground exit code: the run goes on, and nothing proves it began work. */
+/** Foreground exit code: the run goes on, without the fact this call waited for. */
 const NOT_PROVEN_EXIT_CODE = 75;
 const REFUSED_EXIT_CODE = 2;
 const SPAWN_FAILED_EXIT_CODE = 127;
@@ -96,30 +98,37 @@ function reportEnded(record: RunRecord, exitCode: number): never {
   process.exit(exitCode);
 }
 
-/** Reports what the run really did: ended, proved it began work, or neither. */
-async function watchStart(record: RunRecord, began: string): Promise<never> {
-  const deadline = Date.now() + BEGIN_WAIT_MILLISECONDS;
-  const pollCommand = `timeout 570 bash -c 'until grep -q "\\"endedAt\\"" "${record.recordPath}"; do read -t 5 < /dev/zero; done'`;
+/**
+ * Stays until the run ended, its supervisor died, or the limit passed. With `began`
+ * it also returns once the log proves the command began work.
+ */
+async function watchRun(recordPath: string, limit: number, began: string | null): Promise<never> {
+  const deadline = Date.now() + limit;
+  const waitCommand = `bun "${import.meta.path}" ${WAIT_FLAG} "${recordPath}"`;
   for (;;) {
-    const current = readRecord(record.recordPath);
+    const current = readRecord(recordPath);
     if (current.outcome) reportEnded(current, current.outcome.exitCode);
     if (current.supervisorPid !== null && !isAlive(current.supervisorPid)) {
       // It writes the outcome before it exits, so only a read after its death can trust a missing one.
-      const last = readRecord(record.recordPath);
+      const last = readRecord(recordPath);
       if (last.outcome) reportEnded(last, last.outcome.exitCode);
-      console.error(`[run-notified] the supervisor died before the command ended. Log: ${record.log}`);
+      console.error(`[run-notified] the supervisor died before the command ended. Log: ${last.log}`);
       process.exit(1);
     }
-    if (existsSync(record.log) && readFileSync(record.log, 'utf8').includes(began)) {
+    if (began !== null && readFileSync(current.log, 'utf8').includes(began)) {
       console.log(`[run-notified] began work: the log shows "${began}".`);
-      console.log(`[run-notified] When it ends, thread ${record.thread} gets the exit code.`);
-      console.log(`[run-notified] Log: ${record.log}\n[run-notified] To wait in this turn: ${pollCommand}`);
+      console.log(`[run-notified] When it ends, thread ${current.thread} gets the exit code.`);
+      console.log(`[run-notified] Log: ${current.log}\n[run-notified] To wait in this turn: ${waitCommand}`);
       process.exit(0);
     }
     if (Date.now() > deadline) {
-      console.error(`[run-notified] NOT PROVEN RUNNING: the log never showed "${began}".`);
-      console.error(`${logTail(record.log)}\n[run-notified] It may be waiting or stuck. Log: ${record.log}`);
-      console.error(`[run-notified] Its wake still fires. To wait in this turn: ${pollCommand}`);
+      console.error(
+        began === null
+          ? '[run-notified] still running.'
+          : `[run-notified] NOT PROVEN RUNNING: the log never showed "${began}".`,
+      );
+      console.error(`${logTail(current.log)}\n[run-notified] Log: ${current.log}`);
+      console.error(`[run-notified] Its wake still fires. To wait in this turn: ${waitCommand}`);
       process.exit(NOT_PROVEN_EXIT_CODE);
     }
     await waitFor(POLL_MILLISECONDS);
@@ -136,11 +145,12 @@ async function start(argumentList: readonly string[]): Promise<void> {
 
   const record = createRun(parsed.options);
   saveRecord(record);
+  closeSync(openSync(record.log, 'a'));
   const launcher = spawnSync(process.execPath, [import.meta.path, LAUNCH_FLAG, record.recordPath], {
     stdio: 'inherit',
   });
   if (launcher.status !== 0) refuse(`The supervisor did not start: launcher exit ${launcher.status}.`);
-  await watchStart(record, parsed.options.began);
+  await watchRun(record.recordPath, BEGIN_WAIT_MILLISECONDS, parsed.options.began);
 }
 
 function launch(path: string): void {
@@ -155,4 +165,5 @@ function launch(path: string): void {
 const [mode, recordPath] = process.argv.slice(2);
 if (mode === LAUNCH_FLAG) launch(z.string().parse(recordPath));
 else if (mode === SUPERVISE_FLAG) await supervise(z.string().parse(recordPath));
+else if (mode === WAIT_FLAG) await watchRun(z.string().parse(recordPath), END_WAIT_MILLISECONDS, null);
 else await start(process.argv.slice(2));

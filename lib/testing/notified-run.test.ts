@@ -76,6 +76,21 @@ test.each([
     'shell line',
   ],
   ['a shell line by full path', ['--began', 'b', '--', '/bin/sh', '-c', 'x'], 'thread', 'shell line'],
+  ['a clustered login flag', ['--began', 'b', '--', 'bash', '-lc', 'x | tail -1'], 'thread', 'shell line'],
+  ['a clustered errexit flag', ['--began', 'b', '--', 'sh', '-ec', 'x | tail -1'], 'thread', 'shell line'],
+  [
+    'an option before the flag',
+    ['--began', 'b', '--', 'bash', '-o', 'pipefail', '-c', 'x'],
+    'thread',
+    'shell line',
+  ],
+  [
+    'a shell line behind timeout',
+    ['--began', 'b', '--', 'timeout', '9', 'bash', '-c', 'x'],
+    'thread',
+    'shell line',
+  ],
+  ['a shell line behind env', ['--began', 'b', '--', 'env', 'A=1', 'sh', '-c', 'x'], 'thread', 'shell line'],
 ])('a run with %s is refused before it starts', (_name, argumentList, thread, reason) => {
   const parsed = parseRunArguments(argumentList, thread);
   expect(parsed.kind).toBe('refused');
@@ -84,6 +99,8 @@ test.each([
 
 test('a shell script is a command, only a shell line is refused', () => {
   expect(parseRunArguments(['--began', 'b', '--', 'bash', 'scripts/x.sh'], 'thread').kind).toBe('run');
+  expect(parseRunArguments(['--began', 'b', '--', 'bash', 'x.sh', '--check'], 'thread').kind).toBe('run');
+  expect(parseRunArguments(['--began', 'b', '--', 'bun', 'run', '-c', 'x'], 'thread').kind).toBe('run');
 });
 
 test('a signal death reports the shell exit code', () => {
@@ -236,6 +253,8 @@ test('no unheard directory means nothing to resend', () => {
   expect(resendUnheardRuns(join(temporaryDirectory(), 'missing'), () => null)).toEqual([]);
 });
 
+const script = resolve(import.meta.dir, '../../scripts/run-notified.ts');
+
 const exited = (child: ChildProcess): Promise<number | null> =>
   new Promise((resolveExit) => child.once('exit', resolveExit));
 
@@ -266,23 +285,33 @@ test('the real script keeps its supervisor out of the process tree and wakes wit
   writeFileSync(command, `#!/bin/sh\nps -o ppid= -p "$PPID" > "${parentFile}"\nexit 6\n`, { mode: 0o755 });
 
   const delivered = wakeDelivered(unheard, wakeFile);
-  const foreground = spawn(
-    process.execPath,
-    [resolve(import.meta.dir, '../../scripts/run-notified.ts'), '--began', 'never printed', '--', command],
-    {
-      cwd: directory,
-      env: {
-        ...process.env,
-        PATH: `${directory}:${process.env.PATH}`,
-        T3CODE_THREAD_ID: 'thread-1',
-        WERKFLOW_UNHEARD_RUNS_DIR: unheard,
-      },
-      stdio: 'ignore',
+  const foreground = spawn(process.execPath, [script, '--began', 'never printed', '--', command], {
+    cwd: directory,
+    env: {
+      ...process.env,
+      PATH: `${directory}:${process.env.PATH}`,
+      T3CODE_THREAD_ID: 'thread-1',
+      WERKFLOW_UNHEARD_RUNS_DIR: unheard,
     },
-  );
+    stdio: 'ignore',
+  });
 
   expect(await exited(foreground)).toBe(6);
   await delivered;
   expect(readFileSync(wakeFile, 'utf8')).toContain('exit code 6');
   expect(Number(readFileSync(parentFile, 'utf8'))).not.toBe(foreground.pid);
+
+  const [runId = ''] = readdirSync(join(directory, '.agent-logs', 'notified-runs'));
+  const recordPath = join(directory, '.agent-logs', 'notified-runs', runId, 'run.json');
+  expect(await exited(spawn(process.execPath, [script, '--wait', recordPath], { stdio: 'ignore' }))).toBe(6);
+});
+
+test('a wait on a run whose supervisor died fails instead of waiting on', async () => {
+  const directory = temporaryDirectory();
+  const finished = spawn('true', []);
+  await exited(finished);
+  const record = runRecord(directory, directory, { outcome: null, supervisorPid: finished.pid ?? null });
+  saveRecord(record);
+  const wait = spawn(process.execPath, [script, '--wait', record.recordPath], { stdio: 'ignore' });
+  expect(await exited(wait)).toBe(1);
 });
