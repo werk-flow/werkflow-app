@@ -131,6 +131,16 @@ const carryOverEntrySchema = z
   .object({ kind: z.literal('carry-over'), fromDigest: sha256, toDigest: sha256, reason: reasonSchema })
   .strict();
 
+/** The same for the workload digest: an edit to a workload file that left the seeded workload as it was. */
+const workloadCarryOverEntrySchema = z
+  .object({
+    kind: z.literal('workload-carry-over'),
+    fromDigest: sha256,
+    toDigest: sha256,
+    reason: reasonSchema,
+  })
+  .strict();
+
 export const labHistoryEntrySchema = z.discriminatedUnion('kind', [
   initialEntrySchema,
   migratedEntrySchema,
@@ -139,6 +149,7 @@ export const labHistoryEntrySchema = z.discriminatedUnion('kind', [
   removalEntrySchema,
   payloadEntrySchema,
   carryOverEntrySchema,
+  workloadCarryOverEntrySchema,
 ]);
 export type LabHistoryEntry = z.infer<typeof labHistoryEntrySchema>;
 
@@ -159,6 +170,11 @@ function applyEntry(bounds: Bounds, entry: LabHistoryEntry, index: number): stri
       if (bounds.context.measurementDigest !== entry.fromDigest)
         return `${at} starts from digest ${entry.fromDigest}, but the history replays ${bounds.context.measurementDigest}`;
       bounds.context = { ...bounds.context, measurementDigest: entry.toDigest };
+      return null;
+    case 'workload-carry-over':
+      if (bounds.context.workloadDigest !== entry.fromDigest)
+        return `${at} starts from digest ${entry.fromDigest}, but the history replays ${bounds.context.workloadDigest}`;
+      bounds.context = { ...bounds.context, workloadDigest: entry.toDigest };
       return null;
     case 'ceiling-accept':
     case 'floor-accept':

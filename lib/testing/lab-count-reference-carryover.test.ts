@@ -81,4 +81,21 @@ test('carry-over re-keys only the matching step and digest, keeps every reviewed
   expect(labReferenceProblems({ ...references, steps: [moved] }, steps)).toEqual([
     `lab.field.clock-in: context.measurementDigest is "${'c'.repeat(64)}", but its history replays "${'a'.repeat(64)}"`,
   ]);
+  // A workload-file edit that left the workload as it was re-keys the workload digest the same way.
+  const workloadEntry = {
+    kind: 'workload-carry-over' as const,
+    fromDigest: 'b'.repeat(64),
+    toDigest: 'c'.repeat(64),
+    reason: 'a type-only edit',
+  };
+  const rekeyed = {
+    ...step,
+    context: { ...context, workloadDigest: 'c'.repeat(64) },
+    history: [...step.history, workloadEntry],
+  };
+  expect(labReferenceProblems({ ...references, steps: [rekeyed] }, steps)).toEqual([]);
+  const forged = { ...rekeyed, history: [...step.history, { ...workloadEntry, fromDigest: 'd'.repeat(64) }] };
+  expect(labReferenceProblems({ ...references, steps: [forged] }, steps).join()).toContain(
+    `starts from digest ${'d'.repeat(64)}, but the history replays ${'b'.repeat(64)}`,
+  );
 });

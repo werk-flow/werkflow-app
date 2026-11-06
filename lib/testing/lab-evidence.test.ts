@@ -145,24 +145,27 @@ describe('lab evidence', () => {
     expect(result.problems.join()).toContain('confirm nothing is missing');
   });
 
-  test('a record without a reference fails a required step in release mode only', () => {
+  // 2026-11-01: a type-only edit moved the workload digest, and every lab step
+  // of CI passed for days with no comparison (werk-flow/werkflow-app#151).
+  test('a record without a reference fails a required step wherever ceilings count', () => {
     const other = {
       ...observation(),
       context: { ...observation().context, measurementDigest: 'c'.repeat(64) },
     };
-    const judge = (release: boolean) =>
+    const judge = (enforceCeilings: boolean, comparison: 'required' | 'calibrating' = 'required') =>
       checkLabEvidence({
         directory: run([JSON.stringify(other)]),
         runKey: 'run-key',
         requiredSteps: [STEP.id],
         references: references(),
-        steps: [{ ...STEP, comparison: 'required' }],
-        enforceCeilings: true,
-        release,
+        steps: [{ ...STEP, comparison }],
+        enforceCeilings,
+        release: false,
       });
+    expect(judge(true).problems.join()).toContain('no reviewed lab reference');
     expect(judge(false).problems).toEqual([]);
     expect(judge(false).overTarget.join()).toContain('no reviewed lab reference');
-    expect(judge(true).problems.join()).toContain('no reviewed lab reference');
+    expect(judge(true, 'calibrating').problems).toEqual([]);
   });
 });
 

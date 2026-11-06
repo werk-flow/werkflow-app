@@ -7,7 +7,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "550ec4c31d4864dcee725c5e6a22fac305c7ecbffdb192c66b5d0a3779687e3f",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -220,6 +220,12 @@
           },
           "runKeys": ["2026-10-31T174358140Z-861d58"],
           "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. The lab also counts lazily loaded chunks. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -229,7 +235,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "a85a5531c186713490c285d344aa6640fcea14033c031ea7f203d388984768a2",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -338,6 +344,12 @@
           "to": { "reference": 536, "tolerance": 10 },
           "runKeys": ["2026-10-31T174358140Z-861d58"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail and work pack splits (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -347,7 +359,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "aae44ad46c9b694f007e5f09e05a706b81166d6f6af848a00737d325d6caaad2",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -468,6 +480,12 @@
           "to": { "reference": 493, "tolerance": 9 },
           "runKeys": ["2026-10-31T174358140Z-861d58"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The work pack split (#124) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -477,7 +495,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "0d5f0a916673aea8009551d6fdd6c146222f3f7954fc94e69318371b82747ab6",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -576,6 +594,12 @@
           "fromDigest": "cf210c619259e12ca3fc52e576974724e791d874ed33485269ca4b5fccdf52f8",
           "toDigest": "0d5f0a916673aea8009551d6fdd6c146222f3f7954fc94e69318371b82747ab6",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -585,7 +609,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "3fcf7815e92f90b025a46697601384c7ee0d62dca9cc9552581b8c3bdca9c7bd",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -694,6 +718,12 @@
           "to": { "reference": 708, "tolerance": 13 },
           "runKeys": ["2026-10-31T174358140Z-861d58"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The clock component split (#132) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -703,7 +733,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "44e1ce072b2d29e951a061c44c7b3ec7cbaccec0e6428b59feee794bc4cee214",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -778,6 +808,12 @@
           "fromDigest": "a15f8cb72ae4aa3cd7feeca02226bce8b0d5957e2f9f6cd72b30543017e28574",
           "toDigest": "44e1ce072b2d29e951a061c44c7b3ec7cbaccec0e6428b59feee794bc4cee214",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -787,7 +823,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "6bfa1480d7d32a5684360ee2f450592781f5752a71db05e9caf1832e7feeb73c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 375, "height": 812 },
@@ -914,6 +950,12 @@
           },
           "runKeys": ["2026-10-31T192644664Z-7546e0"],
           "reason": "#107 (Zeiterfassung keeps today's minutes after clock-out and names the running activity) keeps today's time after clock-out, so the state read after clock-out now returns today's row (1 instead of 0). Intended behavior of #107, which merged without a full run; requests and route renders are unchanged."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -923,7 +965,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "dd194789800d44dda412501de7c97e8186f3ae066fb0ff7c37a0492d02332c1c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1142,6 +1184,12 @@
           },
           "runKeys": ["2026-10-31T183529717Z-5e3e5e"],
           "reason": "The size-cap splits merged on 2026-10-31 grew the /auftraege cold start, which this step opens. Gzip of its entry chunks per merge build, a031b64d 469,119 to c7328f71 477,750 (+8,631): #127 +3147, #113 +1603, #132 +1254, #125 +1141, #121 +538, #119 +519, #118 +167, #134 +109, #126 +61, #117 +57, #124 +35, #110 +13, #128 +11; #116 -8, #135 -13, #120 -3. This local run measures 652,990; CI's builds measure about 654,800 (runs 41227836236 and 41227929297, Browser 8, on #115 and #131), above the old ceiling. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1151,7 +1199,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "6c03d2ad1f413ee819bdbd1208f6f4944ebfeea262a42bb4fed9a218ec7dd565",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1308,6 +1356,12 @@
           "to": { "reference": 1634, "tolerance": 31 },
           "runKeys": ["2026-10-31T174522133Z-e2d261"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The job detail split (#124) and the Auftrag split (#127) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1317,7 +1371,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "4a5fcc50e80d21f56d8caa548a6c61e69df0782327326c54948d9ed960d86960",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1400,6 +1454,12 @@
           "to": { "reference": 827, "tolerance": 15 },
           "runKeys": ["2026-10-31T174522133Z-e2d261"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag list split (#127) and the job detail split (#124) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1409,7 +1469,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "bbc6e784a88c05c49b3cf2643ec127bdda49defba3bc9240a9044bbb0f8e63b7",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1498,6 +1558,12 @@
           "fromDigest": "ced4147088dc157706558510bc66a122f827be345ac670fdd44163729c9f018c",
           "toDigest": "bbc6e784a88c05c49b3cf2643ec127bdda49defba3bc9240a9044bbb0f8e63b7",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1507,7 +1573,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "e7647ca92db8a09218bb8f699b6ad7b9436121be30e426b6b81f91f8be4edc4c",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1628,6 +1694,12 @@
           "to": { "reference": 5274, "tolerance": 101 },
           "runKeys": ["2026-10-31T174522133Z-e2d261"],
           "reason": "Each component the size-cap splits extracted renders once more per instance; no step does more DOM or data work. The Auftrag form split (#127) and the shared UI split (#125) add components to this step. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212). Requests, route renders and backend requests are unchanged in this run."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1637,7 +1709,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "b1e85967ef6758faa27e51adc5544e2cabcad65217bd4e67993a4def6f2cca37",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1712,6 +1784,12 @@
           "fromDigest": "e07402633999f0ae415462c017d9a14577ca7c988eb270617145372c791034fd",
           "toDigest": "b1e85967ef6758faa27e51adc5544e2cabcad65217bd4e67993a4def6f2cca37",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1721,7 +1799,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "d13e2461644951959461393f140ce8bc87326c4bb0afba845ef15cf4a34334a0",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1864,6 +1942,12 @@
           "fromDigest": "477dd36ad45613c7961e84122e344950b9bc001723d66f39e4047c1d4781f16a",
           "toDigest": "d13e2461644951959461393f140ce8bc87326c4bb0afba845ef15cf4a34334a0",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -1873,7 +1957,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "0b4fd73b80bf55727cf956371965fe08a888fef934c2581a6540fe07e141fcce",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -1887,8 +1971,7 @@
         "echoRenders": { "reference": 0, "tolerance": 0 },
         "actionRoundTrips": { "reference": 1, "tolerance": 0 },
         "backgroundReads": { "reference": 2, "tolerance": 0 },
-        "backendRequests": { "reference": 72, "tolerance": 1 },
-        "componentRenders": { "reference": 1035, "tolerance": 19 }
+        "backendRequests": { "reference": 72, "tolerance": 1 }
       },
       "payloads": {
         "action:/zeiterfassung": {
@@ -2006,6 +2089,20 @@
           "to": { "reference": 1035, "tolerance": 19 },
           "runKeys": ["2026-11-01T070519609Z-6e2e24"],
           "reason": "Debt splits merged after #141 (#137, #136, #109, #129): #129 splits components/zeiterfassung and the period page, which hold the time approval list, into smaller components that render separately (966 to 1035 renders, no extra reads). Behavior unchanged; owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ungate",
+          "target": "componentRenders",
+          "from": { "reference": 1035, "tolerance": 19 },
+          "to": null,
+          "runKeys": ["2026-11-06T040531584Z-1a8d88", "2026-11-06T040730589Z-90bc16"],
+          "reason": "Owner decision 2026-11-06 on werk-flow/werkflow-planning#94: the count took 906, 1042 and 1035 on one build on the Mac (werk-flow/werkflow-app#165), so it does not repeat on this step. The two runs named here held 1035 on the Linux PC; they did not reproduce the spread."
         }
       ]
     },
@@ -2015,7 +2112,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "49d2d86e7c4c64d85742c7cd519ef2a63676cc69a3f17c24a95cdf9e3b28cf92",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -2216,6 +2313,12 @@
           },
           "runKeys": ["2026-11-01T070519609Z-6e2e24"],
           "reason": "Debt splits merged after #141: #129 splits the /zeiterfassung components that the task list prefetches (32185 to 32999 bytes, the same mechanism as the #107 accept in #140). Owner decision 2026-10-31: accept now, win back later under werk-flow/werkflow-planning#212."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
         }
       ]
     },
@@ -2225,7 +2328,7 @@
       "labMeasurementVersion": 1,
       "context": {
         "measurementDigest": "85883b81346c248c99d89df77bd0708278889d41821a3a9f4e7928c30b144845",
-        "workloadDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+        "workloadDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
         "browser": "chromium",
         "browserVersion": "151.0.7922.34",
         "viewport": { "width": 1440, "height": 900 },
@@ -2251,7 +2354,7 @@
         },
         "script": {
           "requests": { "reference": 1, "tolerance": 0 },
-          "encodedBytes": { "reference": 8325, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 8941, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2326,6 +2429,30 @@
           "fromDigest": "7df03f8f09833a1bcd5802cecef824d2350d52bbe3f12fcc1af1b4d783167dec",
           "toDigest": "85883b81346c248c99d89df77bd0708278889d41821a3a9f4e7928c30b144845",
           "reason": "tests/audit/support/lab-network.ts now takes a shape's rows only from the requests whose body arrived: a request the app aborted (Network.loadingFailed, a superseded calendar read) no longer clears the rows of the read that replaced it. Requests, route renders and bytes are counted as before, and a step without an aborted request records the same rows."
+        },
+        {
+          "kind": "workload-carry-over",
+          "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
+          "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
+          "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8325, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 1, "tolerance": 0 },
+            "encodedBytes": { "reference": 8941, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-06T035544252Z-8c2fb1"],
+          "reason": "werk-flow/werkflow-app#147 split the Einstellungen components below the size caps with behavior unchanged. CI held about 8370 bytes through 2026-11-01 13:02 UTC and about 8960 from 13:36, with #147 the only merge between. Owner decision 2026-10-31: accept now, shrink later (werk-flow/werkflow-planning#212)."
         }
       ]
     }

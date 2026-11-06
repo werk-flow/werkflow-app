@@ -66,10 +66,11 @@ export type LabEvidenceCheck = z.infer<typeof labEvidenceSchema>;
 
 /**
  * Judges the lab records of one group run. Missing, duplicated or malformed
- * records fail in every mode. Ceilings, budgets, floors and shape changes fail
- * when `enforceCeilings` (the runner sets it in every plan: release, explicit
- * `--group` and a change plan that selected the group by scope); otherwise
- * they are notes. An improvement that was not ratcheted fails in release mode.
+ * records fail in every mode. Ceilings, budgets, floors, shape changes and a
+ * required step without a reference fail when `enforceCeilings` (the runner
+ * sets it in every plan: release, explicit `--group` and a change plan that
+ * selected the group by scope); otherwise they are notes. A step without a
+ * reference compares nothing, so it must never pass as a note. An improvement that was not ratcheted fails in release mode.
  */
 export function checkLabEvidence(input: {
   directory: string;
@@ -107,7 +108,7 @@ export function checkLabEvidence(input: {
     const reference = findLabReference(references, observation);
     if (!reference) {
       const note = `${stepId} has no reviewed lab reference for this context; record one with bun scripts/lab-counts.ts calibrate`;
-      if (step.comparison === 'required' && release) problems.push(note);
+      if (step.comparison === 'required' && enforceCeilings) problems.push(note);
       else overTarget.push(note);
       table.push(...formatLabTable(stepId, [], observation.wallClockMs));
       continue;
