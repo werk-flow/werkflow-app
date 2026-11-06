@@ -107,6 +107,21 @@ test('a second red run updates the open issue instead of opening another', () =>
   expect(writes[1]).toBe(`issue comment 12 --body Still failing: ${RUN_URL}\n`);
 });
 
+test('a run that tested nothing leaves the open issue body to the last run that did', () => {
+  writeOpenIssues([{ number: 12, title: TITLE }]);
+  const writes = issueWrites(['keep', TITLE, 'No date ran.']);
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toStartWith('issue comment 12 --body No date ran.');
+  expect(writes[0]).toContain(`Run: ${RUN_URL}`);
+});
+
+test('a run that tested nothing still opens an issue when none is open', () => {
+  const [create, ...rest] = issueWrites(['keep', TITLE, 'No date ran.']);
+  expect(rest).toEqual([]);
+  expect(create).toContain(`issue create --title ${TITLE}`);
+  expect(create).toContain('No date ran.');
+});
+
 test('a job a timeout cancelled counts as red', () => {
   expect(issueWrites(['run', TITLE, 'cancelled success'])[0]).toStartWith('issue create');
 });

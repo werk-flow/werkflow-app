@@ -93,9 +93,10 @@ After a failed release run, pass every failed group with `--group` before the ne
 - **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
+- **Date look-ahead.** `date-lookahead.yml` runs the suite nightly on a shifted clock and gates nothing ([Monitoring](recovery-and-incidents.md#monitoring)).
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
 - **Branch freshness.** A branch need not be up to date with `main`: the push to `main` and the full runs cover it.
-- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
+- **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 
 ## Commands
 
@@ -118,7 +119,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 ## How a run executes
 
-A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups. While the workspace lock is held, the edit guard refuses agent edits to proof inputs.
+A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups.
 
 Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:55, one Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
 
