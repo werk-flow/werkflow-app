@@ -134,3 +134,11 @@ The owner decided on 2026-11-05 that no step waits for approval just because it 
 ## Amendment 2026-11-06: a scheduled release holds for its time
 
 The owner expects the weekday release at 07:00 Berlin, the time decided on 2026-10-30, and GitHub starts this repository's scheduled runs up to 10 hours late. The cron line of `release.yml` now fires the evening before, and the run waits in its `Hold` job until 07:00. This changes "More release times a weekday are one schedule line each": a further time also needs its own hold.
+
+## Amendment 2026-11-06: a tiny change rides along
+
+A change of a few lines with no behavior effect goes into a PR that has to run anyway. It gets its own PR only when none is open.
+
+## Amendment 2026-11-06: secret scanning alerts, and does not block
+
+GitHub secret scanning runs on this repository in alert mode. Push protection stays off, because test data could stop an agent mid-push.

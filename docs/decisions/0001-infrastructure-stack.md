@@ -134,3 +134,9 @@ Reopen this decision if any of the following occurs:
 - [Commercial and finance](../features/commercial-and-finance.md) — retention and audit
 - [AI automations](../features/ai-automations.md) — Phase 2 hosting boundary
 - [Product offer](../product/offer.md) — storage allowance packaging
+
+## Amendment 2026-11-06: sign-in stays, and Stripe takes payments
+
+The owner re-evaluated sign-in. Supabase Auth stays and no managed identity provider is adopted for now. Reopen when a provider confirms sign-in without email in writing, or when several customers need company SSO that Supabase handles badly. The re-evaluation before the mobile app still applies.
+
+Stripe handles payments for WerkFlow's own subscriptions (werk-flow/werkflow-planning#245).
