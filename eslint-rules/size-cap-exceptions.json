@@ -1,12 +1,7 @@
 {
   "reasons": {
-    "default": "Predates the 800-line module cap or the 80-line function cap; split it when it next changes.",
-    "components/kalender/": "Calendar render behaviour is recorded: split only with a recalibration run."
+    "default": "Predates the 800-line module cap or the 80-line function cap; split it when it next changes."
   },
   "modules": {},
-  "functions": {
-    "components/kalender/mutations/use-calendar-park-mutations.ts": { "useCalendarParkMutations": 140 },
-    "components/kalender/mutations/use-calendar-visit-writes.ts": { "useCalendarVisitWrites": 170 },
-    "components/kalender/mutations/use-optimistic-run.ts": { "useOptimisticRun": 93 }
-  }
+  "functions": {}
 }
