@@ -37,7 +37,6 @@ export {
   string,
   union,
   unknown,
-  uuid,
   ZodIssueCode,
 } from 'zod';
 export type {
