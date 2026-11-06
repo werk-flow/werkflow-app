@@ -2,11 +2,15 @@ import { findBoardRowModel, resizedBarSpan } from '@/lib/calendar/board-slots';
 import { addLocalDays } from '@/lib/date-time/berlin';
 import { reassignmentChanges } from '@/lib/calendar/board-model';
 import { formatRefusalDate } from '@/lib/calendar/messages';
-import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../drag-engine/payload';
+import type {
+  CalendarDragCell,
+  CalendarDragPayload,
+  CalendarDragTarget,
+  DragModifiers,
+} from '../drag-engine/payload';
 import { boardRowName } from './board-surface-rules';
 import type { BoardSurfaceInput } from './use-board-surface';
 
-type CellTarget = Extract<CalendarDragTarget, { kind: 'cell' }>;
 type DropLabels = { targetName: string; dateLabel: string };
 
 export function moveSuccessMessage(
@@ -25,7 +29,7 @@ export function moveSuccessMessage(
 function dropOccurrence(
   { mutations, focusCard }: BoardSurfaceInput,
   payload: Extract<CalendarDragPayload, { kind: 'occurrence' }>,
-  target: CellTarget,
+  target: CalendarDragCell,
   modifiers: DragModifiers,
   { targetName, dateLabel }: DropLabels,
 ): void {
@@ -62,7 +66,7 @@ function dropOccurrence(
 function dropBarEdge(
   { mutations }: BoardSurfaceInput,
   payload: Extract<CalendarDragPayload, { kind: 'barEdge' }>,
-  target: CellTarget,
+  target: CalendarDragCell,
   dateLabel: string,
 ): void {
   const { job, edge } = payload;
@@ -83,10 +87,10 @@ function dropBarEdge(
 }
 
 /** A parked job dropped on a cell: scheduled there when its parking context is known. */
-function dropParked(
+function dropParkedOnCell(
   { mutations, parkingContexts, onParkedContextMissing }: BoardSurfaceInput,
   payload: Extract<CalendarDragPayload, { kind: 'parked' }>,
-  target: CellTarget,
+  target: CalendarDragCell,
   { targetName, dateLabel }: DropLabels,
 ): void {
   const context = parkingContexts?.get(payload.job.jobId ?? payload.job.id);
@@ -129,7 +133,7 @@ export function applyBoardDrop(
     return;
   }
   if (payload.kind === 'parked') {
-    dropParked(input, payload, target, { targetName, dateLabel });
+    dropParkedOnCell(input, payload, target, { targetName, dateLabel });
     return;
   }
   if (payload.kind === 'untimed') {

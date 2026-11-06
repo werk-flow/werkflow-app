@@ -43,6 +43,132 @@ export type DaySurfaceInput = {
   nowMs: () => number;
 };
 
+/** Reads the row edges once at drag start; the resolver then only reads scroll offsets. */
+function measureDaySlotMap(root: HTMLElement, input: DaySurfaceInput): SlotMap {
+  const { horizontalScroller, verticalScroller, rows } = input;
+  const rowElements = [...root.querySelectorAll<HTMLElement>('[data-day-row]')];
+  const rowRects = rowElements.map((element) => element.getBoundingClientRect());
+  const rowStarts = rowRects.map((rect) => rect.top);
+  const lastRow = rowRects.at(-1);
+  if (lastRow) rowStarts.push(lastRow.bottom);
+  const rootRect = root.getBoundingClientRect();
+  const horizontal = horizontalScroller();
+  const vertical = verticalScroller();
+  return {
+    rowStarts,
+    rows,
+    timelineLeft: rootRect.left + DAY_NAME_COLUMN_PX,
+    horizontalScroller: horizontal,
+    verticalScroller: vertical,
+    scrollLeft: horizontal?.scrollLeft ?? 0,
+    scrollTop: vertical?.scrollTop ?? 0,
+    contentTop: rootRect.top,
+  };
+}
+
+/** The row under the pointer and the snapped minutes of the card's edge. */
+function dayTargetAt(
+  map: SlotMap,
+  { hourWidth, dateIso }: DaySurfaceInput,
+  point: { x: number; y: number },
+  payload: CalendarDragPayload,
+  modifiers: DragModifiers,
+  origin: { x: number; y: number },
+): CalendarDragTarget | null {
+  const dy = (map.verticalScroller?.scrollTop ?? 0) - map.scrollTop;
+  const dx = (map.horizontalScroller?.scrollLeft ?? 0) - map.scrollLeft;
+  const rowIndex = indexAtOffset(map.rowStarts, point.y + dy);
+  if (rowIndex === null) return null;
+  const row = map.rows[rowIndex];
+  if (!row) return null;
+  // The origin is the real time edge for a resize, or the card's start for a move.
+  // A minimum visual width must never add minutes to a short block's resize.
+  const minutes = dayMinutesAtPoint({
+    x: payload.kind === 'barEdge' ? point.x : origin.x,
+    scrollDelta: dx,
+    timelineLeft: map.timelineLeft,
+    hourWidth,
+    fine: modifiers.fine,
+  });
+  // An edge drag stays on its own row, the unassigned one included.
+  const targetRow =
+    payload.kind === 'resizeJob' || payload.kind === 'resizeBlock'
+      ? (dayRowFor(map.rows, payload.sourceRowKey) ?? row)
+      : row;
+  return {
+    kind: 'cell',
+    employeeRecordId: targetRow.row?.employeeRecordId ?? null,
+    userId: targetRow.userId,
+    date: dateIso,
+    minutes,
+  };
+}
+
+/** The span the highlight covers: a move keeps its length, a resize moves one edge. */
+function highlightSpan(
+  { dayStart, nowMs }: DaySurfaceInput,
+  minutes: number,
+  payload: CalendarDragPayload,
+): { start: number; end: number } {
+  if (payload.kind === 'resizeJob') {
+    return edgeResizedSpan({
+      ...jobSpanMinutes(payload.job),
+      edge: payload.edge,
+      edgeAt: minutes,
+      minimumLength: MIN_ITEM_MINUTES,
+    });
+  }
+  if (payload.kind === 'resizeBlock') {
+    const blockStart = payload.session.clockIn
+      ? wallMinutesFrom(dayStart, new Date(payload.session.clockIn.timestamp).getTime())
+      : 0;
+    // A running session ends now, as in the drop and its verdict.
+    const blockEnd = wallMinutesFrom(
+      dayStart,
+      payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs(),
+    );
+    return edgeResizedSpan({
+      start: blockStart,
+      end: blockEnd,
+      edge: payload.edge,
+      edgeAt: minutes,
+      minimumLength: MIN_ITEM_MINUTES,
+    });
+  }
+  return { start: minutes, end: minutes + payloadDuration(payload) };
+}
+
+/** Moves the one highlight onto the target's span, or hides it when no cell is targeted. */
+function paintDayHighlight(
+  input: DaySurfaceInput,
+  map: SlotMap | null,
+  target: CalendarDragTarget | null,
+  verdict: DragVerdict | null,
+  payload: CalendarDragPayload,
+): void {
+  const highlight = input.highlightRef.current;
+  const { hourWidth } = input;
+  if (!highlight) return;
+  if (!target || target.kind !== 'cell' || !map || target.minutes === undefined) {
+    highlight.hidden = true;
+    return;
+  }
+  const targetRowKey = dayRowKey(target);
+  const rowIndex = map.rows.findIndex((row) => row.key === targetRowKey);
+  if (rowIndex < 0) {
+    highlight.hidden = true;
+    return;
+  }
+  const top = (map.rowStarts[rowIndex] ?? 0) - map.contentTop;
+  const bottom = (map.rowStarts[rowIndex + 1] ?? 0) - map.contentTop;
+  const { start, end } = highlightSpan(input, target.minutes, payload);
+  highlight.hidden = false;
+  highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
+  highlight.style.transform = `translate3d(${Math.round(DAY_NAME_COLUMN_PX + (start / 60) * hourWidth)}px, ${Math.round(top)}px, 0)`;
+  highlight.style.width = `${Math.max(4, Math.round(((end - start) / 60) * hourWidth))}px`;
+  highlight.style.height = `${Math.round(bottom - top)}px`;
+}
+
 /**
  * The day view's drag surface (P1-24a, package C): rows by y, minutes by x
  * on the hour axis snapped to 15 (5 with Shift), the same pre-checks as the
@@ -57,27 +183,9 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
   });
 
   const prepare = useCallback(() => {
-    const { rootRef, horizontalScroller, verticalScroller, rows } = inputRef.current;
-    const root = rootRef.current;
+    const root = inputRef.current.rootRef.current;
     if (!root) return;
-    const rowElements = [...root.querySelectorAll<HTMLElement>('[data-day-row]')];
-    const rowRects = rowElements.map((element) => element.getBoundingClientRect());
-    const rowStarts = rowRects.map((rect) => rect.top);
-    const lastRow = rowRects.at(-1);
-    if (lastRow) rowStarts.push(lastRow.bottom);
-    const rootRect = root.getBoundingClientRect();
-    const horizontal = horizontalScroller();
-    const vertical = verticalScroller();
-    mapRef.current = {
-      rowStarts,
-      rows,
-      timelineLeft: rootRect.left + DAY_NAME_COLUMN_PX,
-      horizontalScroller: horizontal,
-      verticalScroller: vertical,
-      scrollLeft: horizontal?.scrollLeft ?? 0,
-      scrollTop: vertical?.scrollTop ?? 0,
-      contentTop: rootRect.top,
-    };
+    mapRef.current = measureDaySlotMap(root, inputRef.current);
   }, []);
 
   const resolveTarget = useCallback(
@@ -88,35 +196,8 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
       origin: { x: number; y: number },
     ): CalendarDragTarget | null => {
       const map = mapRef.current;
-      const { hourWidth, dateIso } = inputRef.current;
       if (!map) return null;
-      const dy = (map.verticalScroller?.scrollTop ?? 0) - map.scrollTop;
-      const dx = (map.horizontalScroller?.scrollLeft ?? 0) - map.scrollLeft;
-      const rowIndex = indexAtOffset(map.rowStarts, point.y + dy);
-      if (rowIndex === null) return null;
-      const row = map.rows[rowIndex];
-      if (!row) return null;
-      // The origin is the real time edge for a resize, or the card's start for a move.
-      // A minimum visual width must never add minutes to a short block's resize.
-      const minutes = dayMinutesAtPoint({
-        x: payload.kind === 'barEdge' ? point.x : origin.x,
-        scrollDelta: dx,
-        timelineLeft: map.timelineLeft,
-        hourWidth,
-        fine: modifiers.fine,
-      });
-      // An edge drag stays on its own row, the unassigned one included.
-      const targetRow =
-        payload.kind === 'resizeJob' || payload.kind === 'resizeBlock'
-          ? (dayRowFor(map.rows, payload.sourceRowKey) ?? row)
-          : row;
-      return {
-        kind: 'cell',
-        employeeRecordId: targetRow.row?.employeeRecordId ?? null,
-        userId: targetRow.userId,
-        date: dateIso,
-        minutes,
-      };
+      return dayTargetAt(map, inputRef.current, point, payload, modifiers, origin);
     },
     [],
   );
@@ -129,54 +210,7 @@ export function useDaySurface(input: DaySurfaceInput): DragSurface {
 
   const onTargetChange = useCallback(
     (target: CalendarDragTarget | null, verdict: DragVerdict | null, payload: CalendarDragPayload) => {
-      const highlight = inputRef.current.highlightRef.current;
-      const map = mapRef.current;
-      const { hourWidth } = inputRef.current;
-      if (!highlight) return;
-      if (!target || target.kind !== 'cell' || !map || target.minutes === undefined) {
-        highlight.hidden = true;
-        return;
-      }
-      const targetRowKey = dayRowKey(target);
-      const rowIndex = map.rows.findIndex((row) => row.key === targetRowKey);
-      if (rowIndex < 0) {
-        highlight.hidden = true;
-        return;
-      }
-      const top = (map.rowStarts[rowIndex] ?? 0) - map.contentTop;
-      const bottom = (map.rowStarts[rowIndex + 1] ?? 0) - map.contentTop;
-      let start = target.minutes;
-      let end = target.minutes + payloadDuration(payload);
-      if (payload.kind === 'resizeJob') {
-        ({ start, end } = edgeResizedSpan({
-          ...jobSpanMinutes(payload.job),
-          edge: payload.edge,
-          edgeAt: target.minutes,
-          minimumLength: MIN_ITEM_MINUTES,
-        }));
-      } else if (payload.kind === 'resizeBlock') {
-        const { dayStart, nowMs } = inputRef.current;
-        const blockStart = payload.session.clockIn
-          ? wallMinutesFrom(dayStart, new Date(payload.session.clockIn.timestamp).getTime())
-          : 0;
-        // A running session ends now, as in the drop and its verdict.
-        const blockEnd = wallMinutesFrom(
-          dayStart,
-          payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs(),
-        );
-        ({ start, end } = edgeResizedSpan({
-          start: blockStart,
-          end: blockEnd,
-          edge: payload.edge,
-          edgeAt: target.minutes,
-          minimumLength: MIN_ITEM_MINUTES,
-        }));
-      }
-      highlight.hidden = false;
-      highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
-      highlight.style.transform = `translate3d(${Math.round(DAY_NAME_COLUMN_PX + (start / 60) * hourWidth)}px, ${Math.round(top)}px, 0)`;
-      highlight.style.width = `${Math.max(4, Math.round(((end - start) / 60) * hourWidth))}px`;
-      highlight.style.height = `${Math.round(bottom - top)}px`;
+      paintDayHighlight(inputRef.current, mapRef.current, target, verdict, payload);
     },
     [],
   );

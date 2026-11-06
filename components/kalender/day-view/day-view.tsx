@@ -50,37 +50,19 @@ export type DayViewProps = {
   phone?: boolean;
 };
 
-/**
- * The day view (P1-24a, package C): people rows against the hour axis in
- * the same scroller as the page, rows growing with their lanes, recorded
- * blocks and planned visits side by side, an untimed tray per person, the
- * now line, drag-to-create on empty time, and every gesture through the
- * shared engine, pre-checks and the optimistic owner.
- */
-export function DayView(props: DayViewProps): React.JSX.Element {
-  const {
-    date,
-    todayIso,
-    zoom,
-    onZoomChange,
-    entries,
-    jobs,
-    members,
-    board,
-    holidays,
-    organizationSettings,
-    currentUserId,
-    currentUserRole,
-    changeRequestMap,
-    mutations,
-    actions,
-    parkingContexts,
-    onParkedContextMissing,
-    onSessionClick,
-    highlightMemberId,
-    verticalScroller,
-    phone = false,
-  } = props;
+/** The holiday or closure the day's header names. */
+function dayHeaderLabel(holidays: OrganizationHolidayCalendar, dateIso: string): string | null {
+  const year = Number(dateIso.slice(0, 4));
+  const holiday = getHolidayContextDays(holidays, year, year).find((day) => day.date === dateIso);
+  const closure = holidays.closureDays.find((day) => day.closureDate === dateIso);
+  return holiday?.name ?? (closure ? (closure.label ?? 'Betriebsruhe') : null);
+}
+
+/** The day view's clock, axis, rows and drag surface, in the order the view renders them. */
+function useDayViewState(props: DayViewProps) {
+  const { date, todayIso, zoom, onZoomChange, entries, jobs, members, board, holidays } = props;
+  const { organizationSettings, mutations, actions, parkingContexts, onParkedContextMissing } = props;
+  const { verticalScroller, phone = false } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const { startDrag } = useCalendarDrag();
@@ -96,7 +78,6 @@ export function DayView(props: DayViewProps): React.JSX.Element {
     scroller: verticalScroller,
     enabled: !phone,
   });
-  const timelineWidth = 24 * hourWidth;
 
   const { days, rows } = useDayRows({
     board,
@@ -130,17 +111,41 @@ export function DayView(props: DayViewProps): React.JSX.Element {
   });
   useDragSurface(surface);
 
-  const headerLabel = useMemo(() => {
-    const year = Number(dateIso.slice(0, 4));
-    const holiday = getHolidayContextDays(holidays, year, year).find((day) => day.date === dateIso);
-    const closure = holidays.closureDays.find((day) => day.closureDate === dateIso);
-    return holiday?.name ?? (closure ? (closure.label ?? 'Betriebsruhe') : null);
-  }, [dateIso, holidays]);
+  const headerLabel = useMemo(() => dayHeaderLabel(holidays, dateIso), [dateIso, holidays]);
 
   const canCreate = actions.isManager;
   const createDrag = useDayCreateDrag({ canCreate, hourWidth, dateIso, actions });
 
   const nowMinutes = isToday ? minutesIntoDay(new Date(nowTick), dayStart) : null;
+  return {
+    rootRef,
+    highlightRef,
+    startDrag,
+    dateIso,
+    nowTick,
+    hourWidth,
+    rows,
+    headerLabel,
+    canCreate,
+    createDrag,
+    nowMinutes,
+  };
+}
+
+/**
+ * The day view (P1-24a, package C): people rows against the hour axis in
+ * the same scroller as the page, rows growing with their lanes, recorded
+ * blocks and planned visits side by side, an untimed tray per person, the
+ * now line, drag-to-create on empty time, and every gesture through the
+ * shared engine, pre-checks and the optimistic owner.
+ */
+export function DayView(props: DayViewProps): React.JSX.Element {
+  const { organizationSettings, currentUserId, currentUserRole, changeRequestMap, actions } = props;
+  const { onSessionClick, highlightMemberId, phone = false } = props;
+  const state = useDayViewState(props);
+  const { rootRef, highlightRef, startDrag, dateIso, nowTick, hourWidth, rows } = state;
+  const { headerLabel, canCreate, createDrag, nowMinutes } = state;
+  const timelineWidth = 24 * hourWidth;
 
   if (phone) {
     return (

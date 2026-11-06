@@ -6,6 +6,8 @@ import { canManageBlock } from '@/lib/calendar/day-row-status';
 import type { DayRow, DayRowItem } from '@/lib/calendar/day-rows';
 import { formatMinutesOfDay } from '@/lib/calendar/drag-math';
 import { createSessionFromCalendarBlock } from '@/lib/time-tracking/calendar-blocks';
+import type { InteractiveCalendarSession } from '@/lib/time-tracking/types';
+import type { DragSession } from '../drag-engine/drag-engine';
 import { CalendarCard } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
 import { TimeBlock } from './time-block';
@@ -27,6 +29,159 @@ function resizePointerOffset(
   const timeline = event.currentTarget.closest<HTMLElement>('[data-day-timeline]');
   if (!timeline) throw new Error('A calendar resize needs its timeline.');
   return { x: event.clientX - timeline.getBoundingClientRect().left - (minutes / 60) * hourWidth, y: 12 };
+}
+
+type BlockItem = Extract<DayRowItem, { kind: 'block' }>;
+type JobItem = Extract<DayRowItem, { kind: 'job' }>;
+
+/** The drag of a recorded block's body: a move of the whole block. */
+function blockMoveSession(
+  event: React.PointerEvent<HTMLButtonElement>,
+  item: BlockItem,
+  session: InteractiveCalendarSession,
+  dateIso: string,
+): DragSession {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return {
+    payload: {
+      kind: 'timeBlock',
+      session,
+      sourceUserId: item.block.startEntry.userId,
+      sourceDate: dateIso,
+      durationMinutes: item.endMinutes - item.startMinutes,
+    },
+    ghost: {
+      label: `Arbeitszeit ${formatMinutesOfDay(item.startMinutes)}–${formatMinutesOfDay(item.endMinutes)}`,
+      width: Math.min(rect.width, 240),
+      height: rect.height,
+    },
+    pointerOffset: {
+      x: Math.min(event.clientX - rect.left, 240),
+      y: event.clientY - rect.top,
+    },
+  };
+}
+
+/** The drag of a recorded block's edge: its start or end on the same row. */
+function blockEdgeSession(
+  event: React.PointerEvent<HTMLSpanElement>,
+  {
+    item,
+    session,
+    edge,
+    rowKey,
+    hourWidth,
+  }: {
+    item: BlockItem;
+    session: InteractiveCalendarSession;
+    edge: 'start' | 'end';
+    rowKey: string;
+    hourWidth: number;
+  },
+): DragSession {
+  return {
+    payload: {
+      kind: 'resizeBlock',
+      session,
+      edge,
+      sourceUserId: item.block.startEntry.userId,
+      sourceRowKey: rowKey,
+    },
+    ghost: {
+      label: edge === 'start' ? 'Beginn ändern' : 'Ende ändern',
+      width: 120,
+      height: 24,
+    },
+    pointerOffset: resizePointerOffset(
+      event,
+      edge === 'start' ? item.startMinutes : item.endMinutes,
+      hourWidth,
+    ),
+  };
+}
+
+/** The drag of a visit's card: a move in time or to another person. */
+function visitDragSession(
+  event: React.PointerEvent<HTMLButtonElement>,
+  { row, item, dateIso }: Pick<DayLaneItemProps, 'row' | 'dateIso'> & { item: JobItem },
+): DragSession {
+  const { model } = row;
+  const { job } = item;
+  const rect = event.currentTarget.getBoundingClientRect();
+  return {
+    payload: {
+      kind: 'occurrence',
+      job,
+      sourceEmployeeRecordId: model.row?.employeeRecordId ?? null,
+      sourceUserId: model.userId,
+      sourceDate: dateIso,
+    },
+    ghost: {
+      label: job.title,
+      secondary: `${formatMinutesOfDay(item.startMinutes)} · ${job.clientName ?? ''}`.trim(),
+      width: Math.min(rect.width, 240),
+      height: rect.height,
+    },
+    pointerOffset: {
+      x: Math.min(event.clientX - rect.left, 240),
+      y: event.clientY - rect.top,
+    },
+  };
+}
+
+const VISIT_EDGE_HANDLES = {
+  start: {
+    hitClassName: 'absolute inset-y-0 -left-2 w-6 cursor-ew-resize',
+    markClassName:
+      'absolute inset-y-0 left-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60',
+    ghostLabel: 'Beginn ändern',
+  },
+  end: {
+    hitClassName: 'absolute inset-y-0 -right-2 w-6 cursor-ew-resize',
+    markClassName:
+      'absolute inset-y-0 right-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60',
+    ghostLabel: 'Ende ändern',
+  },
+} as const;
+
+/** A movable visit's edge: its own drag, which changes the time instead of moving the card. */
+function visitEdgeHandle(
+  edge: keyof typeof VISIT_EDGE_HANDLES,
+  {
+    row,
+    item,
+    hourWidth,
+    startDrag,
+  }: Pick<DayLaneItemProps, 'row' | 'hourWidth' | 'startDrag'> & {
+    item: JobItem;
+  },
+): React.JSX.Element {
+  const { hitClassName, markClassName, ghostLabel } = VISIT_EDGE_HANDLES[edge];
+  return (
+    <span
+      role="presentation"
+      className={hitClassName}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        startDrag(event, {
+          payload: {
+            kind: 'resizeJob',
+            job: item.job,
+            edge,
+            sourceRowKey: row.model.key,
+          },
+          ghost: { label: ghostLabel, width: 120, height: 24 },
+          pointerOffset: resizePointerOffset(
+            event,
+            edge === 'start' ? item.startMinutes : item.endMinutes,
+            hourWidth,
+          ),
+        });
+      }}
+    >
+      <span className={markClassName} />
+    </span>
+  );
 }
 
 /** One item in a person's lanes: a recorded block or a planned visit. */
@@ -53,7 +208,7 @@ function DayLaneBlock({
   changeRequestMap,
   onSessionClick,
   organizationSettings,
-}: DayLaneItemProps & { item: Extract<DayRowItem, { kind: 'block' }> }): React.JSX.Element {
+}: DayLaneItemProps & { item: BlockItem }): React.JSX.Element {
   const { model, role } = row;
   const manage = canManageBlock(item.block, role, { ...actions, currentUserRole, currentUserId });
   const clock = useClock();
@@ -75,47 +230,11 @@ function DayLaneBlock({
       onPointerDownMove={(event, block) => {
         if (block.isOpen) return;
         const session = createSessionFromCalendarBlock(block, new Date(clock()), organizationSettings);
-        const rect = event.currentTarget.getBoundingClientRect();
-        startDrag(event, {
-          payload: {
-            kind: 'timeBlock',
-            session,
-            sourceUserId: item.block.startEntry.userId,
-            sourceDate: dateIso,
-            durationMinutes: item.endMinutes - item.startMinutes,
-          },
-          ghost: {
-            label: `Arbeitszeit ${formatMinutesOfDay(item.startMinutes)}–${formatMinutesOfDay(item.endMinutes)}`,
-            width: Math.min(rect.width, 240),
-            height: rect.height,
-          },
-          pointerOffset: {
-            x: Math.min(event.clientX - rect.left, 240),
-            y: event.clientY - rect.top,
-          },
-        });
+        startDrag(event, blockMoveSession(event, item, session, dateIso));
       }}
       onPointerDownEdge={(event, block, edge) => {
         const session = createSessionFromCalendarBlock(block, new Date(clock()), organizationSettings);
-        startDrag(event, {
-          payload: {
-            kind: 'resizeBlock',
-            session,
-            edge,
-            sourceUserId: item.block.startEntry.userId,
-            sourceRowKey: model.key,
-          },
-          ghost: {
-            label: edge === 'start' ? 'Beginn ändern' : 'Ende ändern',
-            width: 120,
-            height: 24,
-          },
-          pointerOffset: resizePointerOffset(
-            event,
-            edge === 'start' ? item.startMinutes : item.endMinutes,
-            hourWidth,
-          ),
-        });
+        startDrag(event, blockEdgeSession(event, { item, session, edge, rowKey: model.key, hourWidth }));
       }}
     />
   );
@@ -133,7 +252,7 @@ function DayLaneJob({
   nowTick,
   actions,
   startDrag,
-}: DayLaneItemProps & { item: Extract<DayRowItem, { kind: 'job' }> }): React.JSX.Element {
+}: DayLaneItemProps & { item: JobItem }): React.JSX.Element {
   const { model } = row;
   const { job } = item;
   const locked = isStartedOccurrence(job, nowTick);
@@ -156,69 +275,12 @@ function DayLaneJob({
         className="h-full w-full"
         {...(model.row ? { 'data-employee-record-id': model.row.employeeRecordId } : {})}
         onOpen={(element) => actions.onOpenCard(job, element, model.row)}
-        onPointerDown={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          startDrag(event, {
-            payload: {
-              kind: 'occurrence',
-              job,
-              sourceEmployeeRecordId: model.row?.employeeRecordId ?? null,
-              sourceUserId: model.userId,
-              sourceDate: dateIso,
-            },
-            ghost: {
-              label: job.title,
-              secondary: `${formatMinutesOfDay(item.startMinutes)} · ${job.clientName ?? ''}`.trim(),
-              width: Math.min(rect.width, 240),
-              height: rect.height,
-            },
-            pointerOffset: {
-              x: Math.min(event.clientX - rect.left, 240),
-              y: event.clientY - rect.top,
-            },
-          });
-        }}
+        onPointerDown={(event) => startDrag(event, visitDragSession(event, { row, item, dateIso }))}
       >
         {draggable && !locked && (
           <>
-            <span
-              role="presentation"
-              className="absolute inset-y-0 -left-2 w-6 cursor-ew-resize"
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                startDrag(event, {
-                  payload: {
-                    kind: 'resizeJob',
-                    job,
-                    edge: 'start',
-                    sourceRowKey: model.key,
-                  },
-                  ghost: { label: 'Beginn ändern', width: 120, height: 24 },
-                  pointerOffset: resizePointerOffset(event, item.startMinutes, hourWidth),
-                });
-              }}
-            >
-              <span className="absolute inset-y-0 left-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60" />
-            </span>
-            <span
-              role="presentation"
-              className="absolute inset-y-0 -right-2 w-6 cursor-ew-resize"
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                startDrag(event, {
-                  payload: {
-                    kind: 'resizeJob',
-                    job,
-                    edge: 'end',
-                    sourceRowKey: model.key,
-                  },
-                  ghost: { label: 'Ende ändern', width: 120, height: 24 },
-                  pointerOffset: resizePointerOffset(event, item.endMinutes, hourWidth),
-                });
-              }}
-            >
-              <span className="absolute inset-y-0 right-2 w-2 bg-calendar-planning-strong opacity-0 transition-opacity group-hover/card:opacity-60" />
-            </span>
+            {visitEdgeHandle('start', { row, item, hourWidth, startDrag })}
+            {visitEdgeHandle('end', { row, item, hourWidth, startDrag })}
           </>
         )}
       </CalendarCard>

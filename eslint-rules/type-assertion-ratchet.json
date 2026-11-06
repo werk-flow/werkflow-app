@@ -1,6 +1,4 @@
 {
-  "components/kalender/day-view/day-timeline-row.tsx": 1,
-  "components/kalender/day-view/use-day-create-drag.ts": 1,
   "lib/data/background-read-client.ts": 1,
   "lib/supabase/rpc-args.ts": 1,
   "tests/golden/support/scenario-measurement.ts": 2

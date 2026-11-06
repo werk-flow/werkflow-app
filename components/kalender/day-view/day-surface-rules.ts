@@ -17,9 +17,14 @@ import {
 } from '@/lib/calendar/refusal-checks';
 import { calendarRefusalMessage, formatRefusalDate } from '@/lib/calendar/messages';
 import type { CalendarJob } from '@/lib/jobs/types';
-import type { CalendarDragPayload, CalendarDragTarget, DragModifiers } from '../drag-engine/payload';
+import type {
+  CalendarDragCell,
+  CalendarDragPayload,
+  CalendarDragTarget,
+  DragModifiers,
+} from '../drag-engine/payload';
 import type { DragVerdict } from '@/lib/calendar/drag-ghost';
-import { dayRowFor, dayRowKey } from '@/lib/calendar/day-rows';
+import { dayRowFor, dayRowKey, type DayRowModel } from '@/lib/calendar/day-rows';
 import type { DaySurfaceInput } from './use-day-surface';
 
 export function payloadDuration(payload: CalendarDragPayload): number {
@@ -43,6 +48,92 @@ export function jobSpanMinutes(job: CalendarJob): { start: number; end: number }
   return { start, end: start + (job.estimatedDurationMinutes ?? DEFAULT_VISIT_MINUTES) };
 }
 
+/** What every case of the day pre-check reads about the target. */
+type DayTargetFacts = {
+  minutes: number;
+  row: DayRowModel | null;
+  name: string;
+  timeLabel: (start: number, end: number) => string;
+};
+
+/** A visit placed on the axis: the board's rules, and the visit stays inside the day. */
+function visitVerdict(
+  { days, nowMs }: DaySurfaceInput,
+  target: CalendarDragCell,
+  payload: Extract<CalendarDragPayload, { kind: 'occurrence' | 'untimed' | 'parked' }>,
+  modifiers: DragModifiers,
+  { minutes, row, name, timeLabel }: DayTargetFacts,
+): DragVerdict {
+  const day = dayFor(days, target.employeeRecordId, target.date);
+  const duration = payloadDuration(payload);
+  if (payload.kind !== 'parked') {
+    const movable = checkOccurrenceMovable(payload.job, nowMs());
+    if (!movable.ok) return { ok: false, message: movable.message };
+  }
+  if (payload.kind === 'occurrence' && target.employeeRecordId !== payload.sourceEmployeeRecordId) {
+    const assigned = checkNotAlreadyAssigned(
+      payload.job,
+      target.employeeRecordId,
+      payload.sourceEmployeeRecordId,
+      name,
+    );
+    if (!assigned.ok) return { ok: false, message: assigned.message };
+  }
+  const person = checkPersonDay({
+    row: row?.row ?? null,
+    day,
+    date: target.date,
+    allowWarnings: modifiers.fine,
+  });
+  if (!person.ok) return { ok: false, message: person.message };
+  if (minutes + duration > 24 * 60)
+    return { ok: false, message: calendarRefusalMessage('outside_day') ?? '' };
+  return { ok: true, label: timeLabel(minutes, minutes + duration) };
+}
+
+/** A recorded block moved or resized: it keeps clear of the person's other blocks and of the future. */
+function recordedBlockVerdict(
+  { dayStart, nowMs }: DaySurfaceInput,
+  target: CalendarDragCell,
+  payload: Extract<CalendarDragPayload, { kind: 'timeBlock' | 'resizeBlock' }>,
+  { minutes, row, name, timeLabel }: DayTargetFacts,
+): DragVerdict {
+  const session = payload.session;
+  const clockInMs = session.clockIn ? new Date(session.clockIn.timestamp).getTime() : dayStart.getTime();
+  const clockOutMs = session.clockOut ? new Date(session.clockOut.timestamp).getTime() : nowMs();
+  let startMs: number;
+  let endMs: number;
+  if (payload.kind === 'timeBlock') {
+    startMs = instantAtMinutes(dayStart, minutes);
+    endMs = startMs + (clockOutMs - clockInMs);
+  } else {
+    const next = edgeResizedSpan({
+      start: clockInMs,
+      end: clockOutMs,
+      edge: payload.edge,
+      edgeAt: instantAtMinutes(dayStart, minutes),
+      minimumLength: MIN_ITEM_MINUTES * 60_000,
+    });
+    startMs = next.start;
+    endMs = next.end;
+  }
+  if (!row || target.userId === null)
+    return { ok: false, message: calendarRefusalMessage('time_block_needs_person') ?? '' };
+  const blockId = session.calendarBlockId ?? null;
+  const check = checkTimeBlockTarget({
+    startMs,
+    endMs,
+    nowMs: nowMs(),
+    targetName: name,
+    otherBlocks: row.blocks.filter((block) => block.id !== blockId),
+  });
+  if (!check.ok) return { ok: false, message: check.message };
+  return {
+    ok: true,
+    label: timeLabel(wallMinutesFrom(dayStart, startMs), wallMinutesFrom(dayStart, endMs)),
+  };
+}
+
 /**
  * The day view's pre-check for one target: the board's refusal rules plus the
  * time rules (the visit stays inside the day, a recorded block keeps clear of
@@ -55,7 +146,7 @@ export function dayTargetVerdict(
   payload: CalendarDragPayload,
   modifiers: DragModifiers,
 ): DragVerdict {
-  const { days, rows, dayStart, nowMs, dateIso, parkingContexts } = input;
+  const { rows, nowMs, dateIso, parkingContexts } = input;
   if (payload.kind === 'parked' && target.kind !== 'zone') {
     const parked = checkParkedContext(parkingContexts, payload.job);
     if (!parked.ok) return { ok: false, message: parked.message };
@@ -67,38 +158,14 @@ export function dayTargetVerdict(
   const minutes = target.minutes ?? 0;
   const row = dayRowFor(rows, dayRowKey(target));
   const name = row?.name ?? 'Ohne Zuweisung';
-  const day = dayFor(days, target.employeeRecordId, target.date);
   const timeLabel = (start: number, end: number) =>
     `${name}, ${formatMinutesOfDay(start)}–${formatMinutesOfDay(end)}`;
+  const facts: DayTargetFacts = { minutes, row, name, timeLabel };
   switch (payload.kind) {
     case 'occurrence':
     case 'untimed':
-    case 'parked': {
-      const duration = payloadDuration(payload);
-      if (payload.kind !== 'parked') {
-        const movable = checkOccurrenceMovable(payload.job, nowMs());
-        if (!movable.ok) return { ok: false, message: movable.message };
-      }
-      if (payload.kind === 'occurrence' && target.employeeRecordId !== payload.sourceEmployeeRecordId) {
-        const assigned = checkNotAlreadyAssigned(
-          payload.job,
-          target.employeeRecordId,
-          payload.sourceEmployeeRecordId,
-          name,
-        );
-        if (!assigned.ok) return { ok: false, message: assigned.message };
-      }
-      const person = checkPersonDay({
-        row: row?.row ?? null,
-        day,
-        date: target.date,
-        allowWarnings: modifiers.fine,
-      });
-      if (!person.ok) return { ok: false, message: person.message };
-      if (minutes + duration > 24 * 60)
-        return { ok: false, message: calendarRefusalMessage('outside_day') ?? '' };
-      return { ok: true, label: timeLabel(minutes, minutes + duration) };
-    }
+    case 'parked':
+      return visitVerdict(input, target, payload, modifiers, facts);
     case 'resizeJob': {
       const movable = checkOccurrenceMovable(payload.job, nowMs());
       if (!movable.ok) return { ok: false, message: movable.message };
@@ -112,42 +179,8 @@ export function dayTargetVerdict(
       return { ok: true, label: timeLabel(next.start, next.end) };
     }
     case 'timeBlock':
-    case 'resizeBlock': {
-      const session = payload.session;
-      const clockInMs = session.clockIn ? new Date(session.clockIn.timestamp).getTime() : dayStart.getTime();
-      const clockOutMs = session.clockOut ? new Date(session.clockOut.timestamp).getTime() : nowMs();
-      let startMs: number;
-      let endMs: number;
-      if (payload.kind === 'timeBlock') {
-        startMs = instantAtMinutes(dayStart, minutes);
-        endMs = startMs + (clockOutMs - clockInMs);
-      } else {
-        const next = edgeResizedSpan({
-          start: clockInMs,
-          end: clockOutMs,
-          edge: payload.edge,
-          edgeAt: instantAtMinutes(dayStart, minutes),
-          minimumLength: MIN_ITEM_MINUTES * 60_000,
-        });
-        startMs = next.start;
-        endMs = next.end;
-      }
-      if (!row || target.userId === null)
-        return { ok: false, message: calendarRefusalMessage('time_block_needs_person') ?? '' };
-      const blockId = session.calendarBlockId ?? null;
-      const check = checkTimeBlockTarget({
-        startMs,
-        endMs,
-        nowMs: nowMs(),
-        targetName: name,
-        otherBlocks: row.blocks.filter((block) => block.id !== blockId),
-      });
-      if (!check.ok) return { ok: false, message: check.message };
-      return {
-        ok: true,
-        label: timeLabel(wallMinutesFrom(dayStart, startMs), wallMinutesFrom(dayStart, endMs)),
-      };
-    }
+    case 'resizeBlock':
+      return recordedBlockVerdict(input, target, payload, facts);
     case 'barEdge':
       return {
         ok: false,
