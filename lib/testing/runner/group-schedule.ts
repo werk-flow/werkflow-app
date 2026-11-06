@@ -11,6 +11,15 @@ import { resolveBusinessDate } from './business-date';
  */
 export const MIDNIGHT_START_WINDOW = { leadMs: 20 * 60_000, trailMs: 10 * 60_000 } as const;
 
+/** `timeout-minutes` of the `browser` job in .github/workflows/ci.yml; a test keeps the two equal. */
+export const CI_BROWSER_JOB_TIMEOUT_MS = 45 * 60_000;
+
+/** The lead of a CI hold: a Browser job that starts before it ends, at the latest, as the window opens. */
+const CI_HOLD_LEAD_MS = MIDNIGHT_START_WINDOW.leadMs + CI_BROWSER_JOB_TIMEOUT_MS;
+
+/** The longest CI hold; the `midnight` job's own timeout in ci.yml covers it. */
+export const CI_MIDNIGHT_HOLD_MAX_MS = CI_HOLD_LEAD_MS + MIDNIGHT_START_WINDOW.trailMs;
+
 const HOUR_MS = 3_600_000;
 
 /** Berlin is UTC+1 or UTC+2 and changes offset at 02:00 or 03:00 local time, never at midnight. */
@@ -22,20 +31,47 @@ function berlinMidnight(date: string): number {
     : utcMidnight - HOUR_MS;
 }
 
+/** Milliseconds from `now` until the window closes, when `now` is at most `leadMs` before Berlin midnight or inside the trail. */
+function waitUntilWindowCloses(now: Date, leadMs: number): number {
+  const time = now.getTime();
+  const midnight = berlinMidnight(resolveBusinessDate(undefined, new Date(time + leadMs)));
+  const closesAt = midnight + MIDNIGHT_START_WINDOW.trailMs;
+  return time >= midnight - leadMs && time < closesAt ? closesAt - time : 0;
+}
+
 /** Milliseconds until a browser group may start: zero outside the midnight window, never more than the window. */
 export function midnightStartWaitMs(now: Date): number {
-  const time = now.getTime();
-  const midnight = berlinMidnight(
-    resolveBusinessDate(undefined, new Date(time + MIDNIGHT_START_WINDOW.leadMs)),
-  );
-  const closesAt = midnight + MIDNIGHT_START_WINDOW.trailMs;
-  return time >= midnight - MIDNIGHT_START_WINDOW.leadMs && time < closesAt ? closesAt - time : 0;
+  return waitUntilWindowCloses(now, MIDNIGHT_START_WINDOW.leadMs);
+}
+
+/**
+ * When a CI run's browser shards may start, or undefined to start them now. CI's `Plan` asks this,
+ * and the wait runs in the `midnight` job, so a Browser job's timeout measures browser work only.
+ * The hold opens one Browser timeout before the window: a shard that starts earlier cannot reach a
+ * group inside it, because the job ends first.
+ */
+export function ciBrowserHoldUntil(now: Date): Date | undefined {
+  const waitMs = waitUntilWindowCloses(now, CI_HOLD_LEAD_MS);
+  return waitMs ? new Date(now.getTime() + waitMs) : undefined;
+}
+
+/** The hold of a CI proof run (`midnight_proof_minutes` in ci.yml), which pretends the window is open. Never on a branch that ships. */
+export function midnightProofHoldUntil(input: { now: Date; minutes: string; ref: string }): Date {
+  if (input.ref === 'main' || input.ref === 'production')
+    throw new Error(`A midnight proof run never runs on ${input.ref}.`);
+  const minutes = Number(input.minutes);
+  const longest = CI_MIDNIGHT_HOLD_MAX_MS / 60_000;
+  if (!Number.isInteger(minutes) || minutes < 1 || minutes > longest)
+    throw new Error(`A midnight proof holds 1 to ${longest} minutes.`);
+  return new Date(input.now.getTime() + minutes * 60_000);
 }
 
 /**
  * Holds a browser group until the midnight window closes; the signal cancels the wait. A CI job's
  * timeout counts the wait as work, so in CI the group is blocked at once instead: the shard ends
- * with a classified result, never a cancellation. Returns the block reason, if any.
+ * with a classified result, never a cancellation. `ciBrowserHoldUntil` keeps a run's shards out of
+ * the window; this block is left for a shard that started late, after a queue or a manual rerun.
+ * Returns the block reason, if any.
  */
 export async function holdOutsideMidnightWindow(input: {
   groupId: string;

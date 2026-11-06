@@ -81,11 +81,11 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs on an unreadable diff, a changed tooling input, and in a full run.
 - **Tooling input.** A file that changes how every group installs, builds or runs makes a full run: `TOOLING_INPUTS` and `runnerModules` in `ci-plan.ts`.
-- **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
+- **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
+- **Branch freshness.** A stale branch may merge: a push to `main` runs `Check` on its diff, and the full runs cover every group.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 
 ## Commands
@@ -111,7 +111,7 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 `scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree), each with a disposable organization in the local Supabase stack. Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI the wait would spend the job timeout, so the group is blocked (harness, `midnight start window`); rerun the failed job after 00:10 Berlin.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree), each with a disposable organization in the local Supabase stack. Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds a run's shards from 22:55, one Browser timeout ahead. A shard that still reaches the window is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
 
 ## Specs
 
