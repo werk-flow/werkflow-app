@@ -104,11 +104,11 @@ function dayTargetAt(
   };
 }
 
-/** The span the highlight covers: a move keeps its length, a resize moves one edge. */
-function highlightSpan(
+/** The span a resize would leave: the dragged edge moves, a running block ends now. */
+function resizedHighlightSpan(
   { dayStart, nowMs }: DaySurfaceInput,
   minutes: number,
-  payload: CalendarDragPayload,
+  payload: Extract<CalendarDragPayload, { kind: 'resizeJob' | 'resizeBlock' }>,
 ): { start: number; end: number } {
   if (payload.kind === 'resizeJob') {
     return edgeResizedSpan({
@@ -118,24 +118,21 @@ function highlightSpan(
       minimumLength: MIN_ITEM_MINUTES,
     });
   }
-  if (payload.kind === 'resizeBlock') {
-    const blockStart = payload.session.clockIn
-      ? wallMinutesFrom(dayStart, new Date(payload.session.clockIn.timestamp).getTime())
-      : 0;
-    // A running session ends now, as in the drop and its verdict.
-    const blockEnd = wallMinutesFrom(
-      dayStart,
-      payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs(),
-    );
-    return edgeResizedSpan({
-      start: blockStart,
-      end: blockEnd,
-      edge: payload.edge,
-      edgeAt: minutes,
-      minimumLength: MIN_ITEM_MINUTES,
-    });
-  }
-  return { start: minutes, end: minutes + payloadDuration(payload) };
+  const blockStart = payload.session.clockIn
+    ? wallMinutesFrom(dayStart, new Date(payload.session.clockIn.timestamp).getTime())
+    : 0;
+  // A running session ends now, as in the drop and its verdict.
+  const blockEnd = wallMinutesFrom(
+    dayStart,
+    payload.session.clockOut ? new Date(payload.session.clockOut.timestamp).getTime() : nowMs(),
+  );
+  return edgeResizedSpan({
+    start: blockStart,
+    end: blockEnd,
+    edge: payload.edge,
+    edgeAt: minutes,
+    minimumLength: MIN_ITEM_MINUTES,
+  });
 }
 
 /** Moves the one highlight onto the target's span, or hides it when no cell is targeted. */
@@ -161,7 +158,10 @@ function paintDayHighlight(
   }
   const top = (map.rowStarts[rowIndex] ?? 0) - map.contentTop;
   const bottom = (map.rowStarts[rowIndex + 1] ?? 0) - map.contentTop;
-  const { start, end } = highlightSpan(input, target.minutes, payload);
+  let start = target.minutes;
+  let end = target.minutes + payloadDuration(payload);
+  if (payload.kind === 'resizeJob' || payload.kind === 'resizeBlock')
+    ({ start, end } = resizedHighlightSpan(input, target.minutes, payload));
   highlight.hidden = false;
   highlight.dataset.state = verdict?.ok ? 'valid' : 'refused';
   highlight.style.transform = `translate3d(${Math.round(DAY_NAME_COLUMN_PX + (start / 60) * hourWidth)}px, ${Math.round(top)}px, 0)`;

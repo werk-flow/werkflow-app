@@ -48,13 +48,10 @@ export function jobSpanMinutes(job: CalendarJob): { start: number; end: number }
   return { start, end: start + (job.estimatedDurationMinutes ?? DEFAULT_VISIT_MINUTES) };
 }
 
-/** What every case of the day pre-check reads about the target. */
-type DayTargetFacts = {
-  minutes: number;
-  row: DayRowModel | null;
-  name: string;
-  timeLabel: (start: number, end: number) => string;
-};
+/** A valid target's label: the person and the resulting span. */
+function dayTimeLabel(name: string, start: number, end: number): string {
+  return `${name}, ${formatMinutesOfDay(start)}–${formatMinutesOfDay(end)}`;
+}
 
 /** A visit placed on the axis: the board's rules, and the visit stays inside the day. */
 function visitVerdict(
@@ -62,8 +59,10 @@ function visitVerdict(
   target: CalendarDragCell,
   payload: Extract<CalendarDragPayload, { kind: 'occurrence' | 'untimed' | 'parked' }>,
   modifiers: DragModifiers,
-  { minutes, row, name, timeLabel }: DayTargetFacts,
+  row: DayRowModel | null,
+  name: string,
 ): DragVerdict {
+  const minutes = target.minutes ?? 0;
   const day = dayFor(days, target.employeeRecordId, target.date);
   const duration = payloadDuration(payload);
   if (payload.kind !== 'parked') {
@@ -88,7 +87,7 @@ function visitVerdict(
   if (!person.ok) return { ok: false, message: person.message };
   if (minutes + duration > 24 * 60)
     return { ok: false, message: calendarRefusalMessage('outside_day') ?? '' };
-  return { ok: true, label: timeLabel(minutes, minutes + duration) };
+  return { ok: true, label: dayTimeLabel(name, minutes, minutes + duration) };
 }
 
 /** A recorded block moved or resized: it keeps clear of the person's other blocks and of the future. */
@@ -96,8 +95,10 @@ function recordedBlockVerdict(
   { dayStart, nowMs }: DaySurfaceInput,
   target: CalendarDragCell,
   payload: Extract<CalendarDragPayload, { kind: 'timeBlock' | 'resizeBlock' }>,
-  { minutes, row, name, timeLabel }: DayTargetFacts,
+  row: DayRowModel | null,
+  name: string,
 ): DragVerdict {
+  const minutes = target.minutes ?? 0;
   const session = payload.session;
   const clockInMs = session.clockIn ? new Date(session.clockIn.timestamp).getTime() : dayStart.getTime();
   const clockOutMs = session.clockOut ? new Date(session.clockOut.timestamp).getTime() : nowMs();
@@ -130,7 +131,7 @@ function recordedBlockVerdict(
   if (!check.ok) return { ok: false, message: check.message };
   return {
     ok: true,
-    label: timeLabel(wallMinutesFrom(dayStart, startMs), wallMinutesFrom(dayStart, endMs)),
+    label: dayTimeLabel(name, wallMinutesFrom(dayStart, startMs), wallMinutesFrom(dayStart, endMs)),
   };
 }
 
@@ -158,14 +159,11 @@ export function dayTargetVerdict(
   const minutes = target.minutes ?? 0;
   const row = dayRowFor(rows, dayRowKey(target));
   const name = row?.name ?? 'Ohne Zuweisung';
-  const timeLabel = (start: number, end: number) =>
-    `${name}, ${formatMinutesOfDay(start)}–${formatMinutesOfDay(end)}`;
-  const facts: DayTargetFacts = { minutes, row, name, timeLabel };
   switch (payload.kind) {
     case 'occurrence':
     case 'untimed':
     case 'parked':
-      return visitVerdict(input, target, payload, modifiers, facts);
+      return visitVerdict(input, target, payload, modifiers, row, name);
     case 'resizeJob': {
       const movable = checkOccurrenceMovable(payload.job, nowMs());
       if (!movable.ok) return { ok: false, message: movable.message };
@@ -176,11 +174,11 @@ export function dayTargetVerdict(
         minimumLength: MIN_ITEM_MINUTES,
       });
       if (next.end > 24 * 60) return { ok: false, message: calendarRefusalMessage('outside_day') ?? '' };
-      return { ok: true, label: timeLabel(next.start, next.end) };
+      return { ok: true, label: dayTimeLabel(name, next.start, next.end) };
     }
     case 'timeBlock':
     case 'resizeBlock':
-      return recordedBlockVerdict(input, target, payload, facts);
+      return recordedBlockVerdict(input, target, payload, row, name);
     case 'barEdge':
       return {
         ok: false,
