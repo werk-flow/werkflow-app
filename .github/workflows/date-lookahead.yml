@@ -58,8 +58,9 @@ jobs:
           SQL: ${{ steps.groups.outputs.sql }}
           ASKED_DATE: ${{ inputs.date }}
         run: |
+          # No pipe: this shell has no pipefail, and a failed lookup must fail the plan.
           open_alert="$(gh issue list --state open --label ci-alert --json title,body \
-            | jq --raw-output --arg title "$TITLE" '.[] | select(.title == $title) | .body')"
+            --jq '.[] | select(.title == env.TITLE) | .body')"
           OPEN_ALERT="$open_alert" bun scripts/date-lookahead-plan.ts
 
   leg:
