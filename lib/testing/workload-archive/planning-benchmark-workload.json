@@ -1,0 +1,57 @@
+{
+  "date": "2026-06-11",
+  "occurrenceCounts": [
+    2,
+    2,
+    2
+  ],
+  "assignmentCounts": [
+    4,
+    4,
+    4
+  ],
+  "initialStartTimes": [
+    [
+      "2026-06-11T07:00:00.000Z",
+      "2026-06-12T07:00:00.000Z"
+    ],
+    [
+      "2026-06-16T07:00:00.000Z",
+      "2026-06-17T07:00:00.000Z"
+    ],
+    [
+      "2026-06-23T07:00:00.000Z",
+      "2026-06-24T07:00:00.000Z"
+    ]
+  ],
+  "plannedVisits": [
+    {
+      "firstDate": "2026-06-11",
+      "secondDate": "2026-06-12",
+      "recurringTime": "09:00",
+      "additionalTime": "09:30",
+      "durationHours": 1
+    },
+    {
+      "firstDate": "2026-06-16",
+      "secondDate": "2026-06-17",
+      "recurringTime": "09:00",
+      "additionalTime": "09:30",
+      "durationHours": 1
+    },
+    {
+      "firstDate": "2026-06-23",
+      "secondDate": "2026-06-24",
+      "recurringTime": "09:00",
+      "additionalTime": "09:30",
+      "durationHours": 1
+    }
+  ],
+  "protocol": "three disjoint workday pairs, each with one confirmed standalone overlapping visit on its second date; then role-specific fresh-context month entry",
+  "mutationTotalCounts": [
+    7,
+    8,
+    9
+  ],
+  "legacyDate": "2026-06-28"
+}

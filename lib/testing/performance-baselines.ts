@@ -22,6 +22,8 @@ import {
 
 const APPROVED_PERFORMANCE_TOLERANCE = { relative: 0.25, absoluteMs: 250 } as const;
 
+const digestPattern = /^[a-f0-9]{64}$/;
+
 const baselineSchema = z
   .object({
     scenarioId: z.string().min(1),
@@ -41,10 +43,22 @@ const baselineSchema = z
       reason: z.string().min(1),
       reviewedAt: z.string().datetime(),
     }),
+    /** Each edit to a workload file that left the seeded workload as it was. The reference keeps its value. */
+    workloadCarryOvers: z
+      .array(
+        z
+          .object({
+            fromDigest: z.string().regex(digestPattern),
+            toDigest: z.string().regex(digestPattern),
+            reason: z.string().min(1),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict();
 
-const performanceBaselinesSchema = z
+export const performanceBaselinesSchema = z
   .object({
     version: z.literal(1),
     measurementVersion: z.number().int().positive(),
@@ -61,9 +75,7 @@ const performanceBaselinesSchema = z
 export type PerformanceBaseline = z.infer<typeof baselineSchema>;
 export type PerformanceBaselines = z.infer<typeof performanceBaselinesSchema>;
 
-const digestPattern = /^[a-f0-9]{64}$/;
-
-const referenceCarryoverSchema = z
+export const referenceCarryoverSchema = z
   .object({
     reason: z.string().min(1),
     entries: z.array(

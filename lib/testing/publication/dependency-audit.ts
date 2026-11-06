@@ -48,6 +48,8 @@ export type DependencyFinding = {
   severity: z.infer<typeof severity>;
   disposition: 'reviewed-exception' | 'blocked';
 };
+type AffectedInstall = Omit<DependencyFinding, 'disposition'>;
+type DependencyException = z.infer<typeof exceptionSchema>;
 
 export function dependencyDigest(manifest: string, lockfile: string): string {
   // Only dependency declarations affect this digest, not an unrelated script edit.
@@ -67,26 +69,57 @@ export function dependencyDigest(manifest: string, lockfile: string): string {
     .digest('hex');
 }
 
-/** A withdrawn advisory or an upgraded package leaves its exception behind as dead policy. */
-function unmatchedExceptionProblems(
-  exceptions: readonly z.infer<typeof exceptionSchema>[],
+function covers(exception: DependencyException, install: AffectedInstall): boolean {
+  return (
+    exception.package === install.package &&
+    exception.version === install.version &&
+    exception.advisory === install.advisory &&
+    exception.severity === install.severity &&
+    exception.paths.includes(install.path)
+  );
+}
+
+function reviewWindowOpen(exception: DependencyException, today: string): boolean {
+  return exception.reviewedOn <= today && today <= exception.expiresOn;
+}
+
+/**
+ * A lapsed review and a review a finding outgrew fail, whether or not anything still matches.
+ * Only an exception nothing needs any more is a note: the registry can narrow or withdraw an
+ * advisory with no change here, and that good news must not turn every run red. A note is output
+ * only. Dispositions never read it, and its expiry still ends it as a failure.
+ */
+function exceptionFollowUps(
+  exceptions: readonly DependencyException[],
   findings: readonly DependencyFinding[],
-): string[] {
-  return exceptions
-    .filter(
-      (exception) =>
-        !findings.some(
-          (finding) =>
-            finding.package === exception.package &&
-            finding.version === exception.version &&
-            finding.advisory === exception.advisory &&
-            exception.paths.includes(finding.path),
-        ),
-    )
-    .map(
-      (exception) =>
-        `Exception ${exception.package}@${exception.version} (${exception.advisory}) matches no current finding; remove it.`,
-    );
+  today: string,
+): { problems: string[]; notes: string[] } {
+  const problems: string[] = [];
+  const notes: string[] = [];
+  for (const exception of exceptions) {
+    const label = `Exception ${exception.package}@${exception.version} (${exception.advisory})`;
+    if (!reviewWindowOpen(exception, today)) {
+      problems.push(
+        `${label} is outside its review window, ${exception.reviewedOn} to ${exception.expiresOn}; review it again or remove it.`,
+      );
+    } else if (findings.some((finding) => covers(exception, finding))) {
+      continue;
+    } else if (
+      findings.some(
+        (finding) =>
+          finding.disposition === 'blocked' &&
+          finding.package === exception.package &&
+          finding.advisory === exception.advisory,
+      )
+    ) {
+      problems.push(`${label} no longer covers a current finding of that advisory; review it again.`);
+    } else {
+      notes.push(
+        `${label} matches no current finding; remove it from lib/security/dependency-exceptions.json. After ${exception.expiresOn} it fails this check.`,
+      );
+    }
+  }
+  return { problems, notes };
 }
 
 export function inspectDependencyAudit(input: {
@@ -96,7 +129,7 @@ export function inspectDependencyAudit(input: {
   lockfile: string;
   policy: unknown;
   today: string;
-}): { findings: DependencyFinding[]; problems: string[] } {
+}): { passed: boolean; findings: DependencyFinding[]; problems: string[]; notes: string[] } {
   // An exit code outside the audit's contract says more than the output it left behind.
   if (![0, 1].includes(input.exitCode)) throw new Error('Inconsistent audit completion');
   const audit = auditSchema.parse(JSON.parse(input.stdout));
@@ -131,25 +164,16 @@ export function inspectDependencyAudit(input: {
       );
       if (!affected.length) throw new Error('Advisory range does not match locked versions');
       for (const entry of affected) {
-        const exception = policy.exceptions.find(
-          (candidate) =>
-            candidate.package === name &&
-            candidate.version === entry.version &&
-            candidate.advisory === advisory.url &&
-            candidate.severity === advisory.severity &&
-            candidate.paths.includes(entry.path),
-        );
-        const reviewed =
-          digestMatches &&
-          exception &&
-          exception.reviewedOn <= today &&
-          exception.expiresOn >= today &&
-          exception.expiresOn >= exception.reviewedOn;
-        const finding: DependencyFinding = {
+        const install: AffectedInstall = {
           package: name,
           ...entry,
           advisory: advisory.url,
           severity: advisory.severity,
+        };
+        const exception = policy.exceptions.find((candidate) => covers(candidate, install));
+        const reviewed = digestMatches && exception && reviewWindowOpen(exception, today);
+        const finding: DependencyFinding = {
+          ...install,
           disposition: reviewed ? 'reviewed-exception' : 'blocked',
         };
         findings.set(`${name}:${entry.version}:${entry.path}:${advisory.url}`, finding);
@@ -160,8 +184,15 @@ export function inspectDependencyAudit(input: {
     problems.push(
       'Dependency declarations or lockfile changed; review exceptions against the new dependency tree.',
     );
-  problems.push(...unmatchedExceptionProblems(policy.exceptions, [...findings.values()]));
-  return { findings: [...findings.values()], problems };
+  const current = [...findings.values()];
+  const followUps = exceptionFollowUps(policy.exceptions, current, today);
+  problems.push(...followUps.problems);
+  return {
+    passed: !problems.length && current.every((finding) => finding.disposition !== 'blocked'),
+    findings: current,
+    problems,
+    notes: followUps.notes,
+  };
 }
 
 export const DEPENDENCY_GATE_INPUTS = [

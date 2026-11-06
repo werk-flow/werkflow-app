@@ -40,8 +40,22 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 
 1. A lower count needs no reason: `ratchet` lowers it.
 2. A higher count, a larger payload or a smaller one needs `accept` with a reason a reviewer can check.
-3. A changed lab test or recorder module orphans its references. Recalibrate from five runs, or add a carry-over entry with its reason to `lib/testing/lab-count-reference-carryover.json` when the change cannot alter what is counted. A changed typical profile (`tests/audit/support/performance-profile.ts`) changes every workload: calibrate lab steps and wall-clock scenarios from runs on one build.
+3. A changed lab test, recorder module or workload file orphans its references: [move them to the new digest](#move-a-reference-to-a-new-digest).
 4. `gate` and `reject` move a metric in or out of the gate with its evidence. A count that takes two values on one step leaves that step with `ungate`; never widen its tolerance.
+
+### Move a reference to a new digest
+
+A reference counts only under the digests of the code and the workload it measured. Lab groups run nightly, so the unit suite derives both digests from the tree (`lib/testing/reference-digests.ts`) and fails the PR that moves one. The failure names the references and prints the fix.
+
+A workload digest hashes its files with the workload a run archived. `lib/testing/workload-archive/` keeps the reviewed archives byte for byte, so never reformat them.
+
+- **The seeded workload did not change**, as with a type-only edit to `tests/audit/support/performance-profile.ts`: run `bun scripts/lab-counts.ts rekey-workload --from <old digest> --reason "<why the seeded rows stay the same>"`. It re-keys lab and wall-clock references, keeps every value and needs no local stack. A wrong claim fails the next run that measures it.
+- **The workload changed:** calibrate the lab steps from five runs on one build, then copy a run's `performance-workload.json` or `planning-benchmark-workload.json` into `lib/testing/workload-archive/`. This takes a local stack; without one, hand the change over.
+- **The measured code changed but not what it counts:** put the printed entry, with its reason, into `lib/testing/lab-count-reference-carryover.json` or `lib/testing/performance-reference-carryover.json`. An entry applies once, from the stored digest, so it replaces an earlier entry for the same reference.
+- **The measured code changed what it counts:** recalibrate from five runs.
+- **A wall-clock reference needs recalibrating:** only the machine it names can do that. From another machine, set the scenario's `comparison` to `'calibrating'`, and leave the reference to that machine. The check reads no machine field.
+
+The check sees edits to digest inputs. A change elsewhere that alters what a seed writes, and a new browser version in a reference's context, still surface in the next lab run.
 
 ### Check layout stability
 
@@ -49,7 +63,7 @@ Each lab group prints one table per step with reference, value, ceiling, floor a
 
 ## What each instrument proves
 
-- **Wall-clock scenarios** (`audit:performance:*`) judge medians against a budget and a reference on this machine. They run alone and never in CI.
+- **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They hold every sample to its budget and compare the median with a reference recorded on that machine, and run alone. Nothing proves them on a schedule ([selection](testing.md#how-selection-works)). A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next `--fresh` run, as "no reviewed baseline"; recalibrate then. Without `--fresh`, a run can reuse an earlier pass. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. They run nightly, in the release gate and with `--group`; a change plan selects them only when their own spec or support changed.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { inspectDependencyAudit } from '../lib/testing/publication/dependency-audit';
@@ -26,6 +26,22 @@ async function readBounded(stream: ReadableStream<Uint8Array>): Promise<string> 
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
+/**
+ * scripts/verify.ts keeps a group's output in a log that CI uploads only on failure, so a passing
+ * check reaches a reader through the job summary. A summary that cannot be written fails no gate.
+ */
+function publishNotes(notes: readonly string[]): void {
+  for (const note of notes) console.log(`[security:dependencies] note: ${note}`);
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (!summary || !notes.length) return;
+  try {
+    const items = notes.map((note) => `- ${note}\n`).join('');
+    appendFileSync(summary, `### Dependency exceptions to clean up\n\n${items}\n`);
+  } catch {
+    console.error('[security:dependencies] the job summary could not take the notes');
+  }
+}
+
 await withWorkspaceTestLock({ operation: 'dependency security audit' }, async () => {
   const startedAt = new Date().toISOString();
   const child = Bun.spawn([process.execPath, 'audit', '--json'], {
@@ -51,19 +67,26 @@ await withWorkspaceTestLock({ operation: 'dependency security audit' }, async ()
       today: startedAt.slice(0, 10),
     });
     const blocked = result.findings.filter((finding) => finding.disposition === 'blocked');
-    const passed = blocked.length === 0 && result.problems.length === 0;
+    const { passed, ...evidence } = result;
     writeFileSync(
       reportPath,
       JSON.stringify(
-        { startedAt, completedAt: new Date().toISOString(), status: passed ? 'passed' : 'failed', ...result },
+        {
+          startedAt,
+          completedAt: new Date().toISOString(),
+          status: passed ? 'passed' : 'failed',
+          ...evidence,
+        },
         null,
         2,
       ),
     );
     console.log(
-      `[security:dependencies] ${passed ? 'passed' : 'failed'}; ${blocked.length} unreviewed affected installations; ${result.findings.length - blocked.length} reviewed exceptions; report ${reportPath}`,
+      `[security:dependencies] ${passed ? 'passed' : 'failed'}; ${blocked.length} unreviewed affected installations; ${result.findings.length - blocked.length} reviewed exceptions; ${result.notes.length} cleanup notes; report ${reportPath}`,
     );
     for (const finding of blocked) console.log(`${finding.package}@${finding.version}: ${finding.advisory}`);
+    for (const problem of result.problems) console.log(problem);
+    publishNotes(result.notes);
     process.exitCode = passed ? 0 : 1;
   } catch {
     child.kill();

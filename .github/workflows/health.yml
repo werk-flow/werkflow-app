@@ -144,8 +144,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write # open, update and close the weekly health issue
     steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
       - name: Open, update or close the health issue
         env:
           GH_TOKEN: ${{ github.token }}
@@ -154,33 +160,21 @@ jobs:
           REPOSITORY_FAILED: ${{ needs.repository.outputs.failed }}
           PRODUCTION: ${{ needs.production.result }}
           PRODUCTION_FAILED: ${{ needs.production.outputs.failed }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          # The owner's account, assigned so a failure reaches them beside the run's own mail.
-          ASSIGNEE: tamaycbn
         run: |
           title='Weekly health check failed'
-          issue="$(gh issue list --state open --search "\"${title}\" in:title" --json number,title \
-            | jq -r --arg title "$title" '[.[] | select(.title == $title)][0].number // empty')"
           failed="$(printf '%s %s' "$REPOSITORY_FAILED" "$PRODUCTION_FAILED" | xargs -n 1 | sort -u)"
           # A job that failed before its checks ran still names itself.
           test "$REPOSITORY" = success || test -n "$REPOSITORY_FAILED" || failed="$(printf '%s\nrepository-credentials-job' "$failed")"
           test "$PRODUCTION" = success || test -n "$PRODUCTION_FAILED" || failed="$(printf '%s\nproduction-credentials-job' "$failed")"
           failed="$(sed '/^$/d' <<< "$failed")"
           if test -z "$failed"; then
-            if test -n "$issue"; then
-              gh issue close "$issue" --comment "All checks passed again: ${RUN_URL}"
-            fi
+            bash .github/scripts/alert-issue.sh close "$title"
             exit 0
           fi
           mapfile -t names <<< "$failed"
           list="$(printf -- '- %s\n' "${names[@]}")"
-          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nRun: %s\n\nThe step of each check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it.' \
-            "$list" "$RUN_URL" "$GH_REPO")"
-          if test -n "$issue"; then
-            gh issue edit "$issue" --body "$body"
-            gh issue comment "$issue" --body "Still failing: ${RUN_URL}"
-          else
-            gh issue create --title "$title" --body "$body" --assignee "$ASSIGNEE"
-          fi
+          body="$(printf 'The weekly health check failed. Failed checks:\n\n%s\n\nThe step of each check in the run names its credential. [Credentials](https://github.com/%s/blob/main/docs/technical/environments.md#credentials) says how to rotate it.' \
+            "$list" "$GH_REPO")"
+          bash .github/scripts/alert-issue.sh open "$title" "$body"
           echo "::error::Failed checks: $(paste -sd ' ' <<< "$failed")"
           exit 1

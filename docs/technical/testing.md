@@ -33,15 +33,24 @@ A useful test survives an equivalent implementation. Check a regression test aga
 3. Before you finish: `bun run test:plan`, and read why each group is selected.
 4. At the end: `bun run test:verify` for the whole plan.
 
-### Handle a failure
+### Wait for a long run
 
-Read the evidence before you run anything again, and follow [Failures](#failures). When the test seems wrong, compare it with the catalog clause and the feature spec before you touch the assertion.
+Only a child thread and a PR watch wake a thread when they end. A shell run never does, even in the background. Start any run that can outlast one tool call notified:
+
+```bash
+bun scripts/run-notified.ts --began "[verify] starting " -- bun run test:verify --mode release
+```
+
+It survives your turn and the harness, keeps the whole log, and sends your thread the command's own exit code. It refuses to start without a reachable thread.
+
+- `--began` is log text only real work prints. The script returns on it, or with the exit code of an ended command. Exit 75: not proven running; never report it as running.
+- A lead may end its turn after `began work`.
+- A delegated child stays in its turn and polls with the printed command: its turn end is its hand-back.
+- A failed wake leaves `UNHEARD RUN`, which the next notified run resends or prints.
 
 ### Grow a shrink-only list
 
 CI refuses a new entry or a raised ceiling in a `SHRINK_ONLY_LISTS` list (`lib/testing/publication/shrink-only-lists.ts`). Fix the code. When an exception is right, open a PR naming the added entries and ask the owner for the label `approved: list growth`. Never add the label yourself: it waives growth for the whole PR. Changing it reruns Unit (`list-growth.yml`); if that fails, push a commit.
-
-A shrink counts too. When a function on `eslint-rules/size-cap-exceptions.json` gets shorter, lower its ceiling in the same change, or `module-caps.test.ts` fails.
 
 ## When a proof is valid
 
@@ -56,10 +65,10 @@ Each browser group has a `changeTrigger` (`lib/testing/selection/change-triggers
 - **Critical journeys** (`CRITICAL_JOURNEYS`, one or more per role) run when a product file, migration, dependency or shared test support changed.
 - **Permission groups** keep selection by declared scope: every group that drives an `outsiderPage` session or has a `ROLE_DENIAL_GROUPS` row. The auth path and dependency files add `audit:security:account`.
 - **Other groups** run nightly and in release mode.
-- A spec or support file selects the groups that import it. A documentation-only change selects no browser group.
-- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, CI's full runs, with `--group`, or when their own test code changed (never a wall-clock group).
+- A spec or support file selects the groups that import it.
+- The speed measurements, captures and sweeps (`audit:lab:*`, `audit:performance:*`, `audit:visual*`, `audit:layout*`) run only in release mode, with `--group`, or, except wall-clock groups, in CI's full runs or when their test code changed.
 - Static gates run in every plan. Unit, SQL and component groups run when their inputs changed.
-- Browser groups whose own spec or support changed run first. When one fails, later browser groups are blocked for that attempt.
+- Browser groups whose own spec or support changed run first.
 - `test:verify` refuses to start while the latest failed attempt of a group it would run is unclassified.
 
 ### Repair mode
@@ -77,15 +86,15 @@ After a failed release run, pass every failed group with `--group` before the ne
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, and every push to `main`. Its job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)). The SQL and browser jobs start a fresh Supabase CLI stack with every committed migration.
+`.github/workflows/ci.yml` runs on every PR to `main`, except a label change, and every push to `main`. Its job `Check` is the one required check ([decision 0009](../decisions/0009-pull-requests-and-ci.md)).
 
 - **Selection.** `lib/testing/selection/ci-plan.ts` picks browser groups with the change-mode rules: a PR's diff against its merge base, a push's diff against the previous `main` commit. Every browser group runs on an unreadable diff, a changed tooling input, and in a full run.
 - **Tooling input.** A file that changes how every group installs, builds or runs makes a full run: `TOOLING_INPUTS` and `runnerModules` in `ci-plan.ts`.
-- **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`, also started by hand), and the release gate.
+- **Full run.** `ci.yml` called with `full` from a job named `Full run` (check `Full run / Check`): nightly on `main` (`nightly.yml`), and the release gate.
 - **Release gate.** `release.yml` ships a commit only when the newest `Full run / Check` of a nightly or release run on `main` at that commit is green. Without one it runs the full suite first.
 - **One build.** `Build` builds the app once per run without a stack. Each browser shard serves it with `bun run test:server local --prebuilt`, which fails when the shard's source or `.env.local` differs from the build.
 - **Not in CI.** The wall-clock `audit:performance:*` groups and the cloud canary stay local release checks.
-- **Branch freshness.** A branch need not be up to date with `main`: a push to `main` runs `Check` on its diff, and the full runs cover every group.
+- **Branch freshness.** A branch need not be up to date with `main`: the push to `main` and the full runs cover it.
 - **Evidence.** A failed job uploads `.agent-logs/` as `evidence-<job>`: `gh run download <run-id> -n evidence-<job>`. Then follow [Failures](#failures). A rerun (`gh run rerun --failed`) follows the retry rules of a local repeat.
 
 ## Commands
@@ -109,16 +118,15 @@ bun run test:audit:focused --grep "@ACCEPT <set>"                # acceptance ca
 
 ## How a run executes
 
-`scripts/verify.ts` plans, takes the workspace lock, and runs static, unit, SQL, component, then browser groups. A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups. While the lock is held, the edit guard refuses agent edits to proof inputs.
+A failed static gate, an input edited during the run, an interruption, or a failed changed-spec tier blocks later groups. While the workspace lock is held, the edit guard refuses agent edits to proof inputs.
 
-Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree), each with a disposable organization in the local Supabase stack. Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI the wait would spend the job timeout, so the group is blocked (harness, `midnight start window`); rerun the failed job after 00:10 Berlin.
+Browser groups run against the recorded production build on the checkout's [port](environments.md#work-in-a-worktree). Groups that measure freshness, readiness or a scenario run alone, also against other worktrees. No browser group starts from 23:40 to 00:10 Berlin time, because a group fixes its business date at start. The runner waits locally. In CI, `Midnight wait` holds shards from 22:55, one Browser timeout ahead. A shard still reaching it is blocked (harness, `midnight start window`); rerun it after 00:10 Berlin.
 
 ## Specs
 
 A browser group is one spec file with one disposable organization, a rough check that the [catalog](../product/user-flow-catalog.md) flows still work. Its tests share the world.
 
-World and layout fixture names come from `worldName` (`lib/testing/seed-world-plan.ts`), whose fixed unbroken part makes a missing wrap fail every run.
-
+- World and layout fixture names come from `worldName` (`lib/testing/seed-world-plan.ts`).
 - A helper goes into its area module under `tests/golden/support/steps/` or `db/`, or `shared` when two areas need it. Never re-export one module from another.
 - To add a group, add `tests/golden/<slice>.spec.ts` or a row in `auditDefinitions` (SQL: `sqlDefinitions`). Declare its scopes, map its flows in `coverage-map.json`, and register its run-day offsets ([integrated-test-state.md](integrated-test-state.md)).
 
@@ -135,7 +143,7 @@ Lint (`eslint-rules/test-hygiene-rules.mjs`, unit tests too) and `spec-conventio
 - **Confirmed records.** An outcome assertion reads through `confirmed`, which skips `data-unconfirmed` content. An absence after a change goes through `expectGone`.
 - **Stale premise.** A session whose premise is outdated state calls `freezeLiveUpdates` before it opens the page, or holds that state in an open dialog.
 - **No swallowed failure.** A wait that may time out branches through `settledBeforeTimeout`. A real best effort says why in a `// best-effort: <reason>` comment.
-- **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue. The nightly summary lists every quarantine.
+- **Quarantine last.** Skip only a diagnosed defect whose fix is an open planning issue.
 
 ## Deadlines and measured scenarios
 
@@ -143,7 +151,7 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. [Per
 
 - `expectLiveWithin` measures from submission to the new fact in the receiving session, `expectReadyWithin` from opening to usable controls. A slow but correct observation completes its test; the runner judges the timing afterwards.
 - Scenarios live in `lib/testing/measured-scenarios.ts`, reviewed references in `lib/testing/performance-baselines.json`. A new scenario takes its boundary's budget, a cross-session one the live target.
-- Every required scenario has a reviewed reference at its measurement digest. Editing a measured support file moves every digest.
+- Every required scenario has a reference at its measurement and workload digests. Editing measured support files moves every digest.
 - To calibrate: pass the measured groups (a scenario without a reference passes only as `comparison: 'calibrating'`; restore `'required'` after the copy). Run `bun scripts/calibrate-performance.ts --runs <up to three run keys> --reason "<review basis>"`. Review the draft under `.agent-logs/performance-calibration/` before you copy it.
 - A support-file edit that cannot change what a scenario measures re-keys the references in `lib/testing/performance-reference-carryover.json` with its reason. Any other edit recalibrates.
 
@@ -152,8 +160,8 @@ The [freshness contract](realtime-and-caching.md) owns the product targets. [Per
 ## Failures
 
 1. Open the failed browser group's `error-context.md`, screenshot and trace under `.agent-logs/playwright-runs/<run-key>/`. The verification log names the run key; `.agent-logs/test-server/` holds the server output. Any other group's log is under `.agent-logs/verification/<report-id>/`.
-2. Find the cause and fix it. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
-3. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its group id, or `<group-id>@<report-id>` for a failed attempt in that report. The command keeps the diagnosis beside its report: in the run manifest, or in the report's `diagnoses.json`.
+2. Find the cause and fix it. When the test seems wrong, compare it with the catalog clause and the feature spec first. Add prevention at the highest reachable tier of the [enforcement ladder](../decisions/0005-enforcement-ladder.md).
+3. Classify: `bun run test:runs classify <run-key> <class> "<cause>" "<prevention>"`. A group without a run key takes its group id, or `<group-id>@<report-id>` for a failed attempt in that report.
 4. Clean the retained world: `bun run test:runs cleanup <run-key>`.
 5. Run `bun run test:verify`. Repair mode selects the failed groups; their pass closes the repair.
 
@@ -171,14 +179,14 @@ A preflight failure that creates no run is blocked verification, not a product f
 
 ## Recurring traps
 
-Causes that failed runs more than once. Check them before you classify.
+Check these before you classify.
 
 - **Another worktree's migration.** The shared stack can hold a migration this branch lacks. An SQL failure on an object the branch does not define is `environment`; compare `supabase migration list --local` with `supabase/migrations/`.
 - **Stale fakes.** When a read changes its `select` shape, update every unit-test fake of that table. Embedded relations come back as arrays.
-- **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`. Use `recover-interrupted`, and give long plans a timeout that outlasts them.
+- **The agent's tool killed the run.** A background limit or session end (SIGTERM, exit 137) is `environment`; [start it notified](#wait-for-a-long-run) next time.
 - **Host network.** `net::ERR_NETWORK_CHANGED`, or a Realtime socket that reconnects every few seconds, is a host network problem: `environment`. Run no heavy load beside a browser or measured group.
 - **Time zone and run day.** CI runs in UTC; a window computed in process time misses the Berlin window. A fixture on a DST switch or a run-day-dependent week fails on some days only. Check the run's business date and reproduce in UTC.
-- **Press before hydration.** A server-rendered button ignores a press before hydration. Wait for the hydrated control.
+- **Press before hydration.** A server-rendered button ignores it. Wait for the hydrated control.
 - **Menus.** A Radix menu opened by mouse can select the item under the pointer on release; open menus through the area module. The row actions menu closes on scroll, and a sideways-overflowing table scrolls on click.
 - **Moved reads.** A hold on a Server Action POST never matches once the read moves to `GET /api/background-read`. Move the hold with the read.
 - **Mid-animation captures.** Axe and screenshots read mid fade or slide. Wait for the settled state.

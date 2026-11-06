@@ -27,7 +27,7 @@ You own the change. GPT Sol reviews it in rounds until you agree or the budget e
 
 1. Call `orchestrator_capabilities`. Pick the newest `gpt-*-sol` model of the Codex provider unless the owner named one. Set `reasoningEffort: "high"` unless told otherwise.
 2. Call `delegate_task` with `role: "review"`, `mode: "async"`, `isolation: "worktree"`, the Codex `providerInstanceId`, the model, and `clientRequestId: "sol-loop-<branch>-r<round>"`.
-3. End your turn and wait for the completion notice. Do not poll, and do not edit the scoped files while a round runs.
+3. End your turn and wait for the round's completion notice. Do not poll, and do not edit the scoped files while a round runs. Only a delegated round wakes you this way; a shell run never does ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
 4. A timeout, an error or silence is not approval. Cancel with `task_cancel`, confirm with `task_status`, and restart the round.
 5. On a rate limit, or when no Sol model is listed, ask the owner through the question tool. Never substitute another model.
 
