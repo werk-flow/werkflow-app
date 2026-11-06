@@ -49,6 +49,8 @@ Restore a trashed document in the app (`/dokumente`, Papierkorb). A permanently 
 
 Signals: Vercel deployment logs and runtime errors (no drains or alerts), Supabase logs, advisors and usage pages, and provider e-mail notifications. A notification setting does not prove an outage raises an alert; never provoke an outage to test it. Redact provider details and personal data before you export a log.
 
+A red nightly or release, a scheduled release that stopped at a red full run, and a scheduled run that never started each open or update one issue with the label `ci-alert`: `CI alert: nightly` or `CI alert: release` (`.github/scripts/alert-issue.sh`). The next green run closes it. A release that stops because `main` equals `production` leaves the issue as it is, because it proves nothing. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine: it finds a run that never started and hands each open issue to one T3 thread. These issues only report; no release decision reads them.
+
 ## Incident handling
 
 | Step | Who | Action |
