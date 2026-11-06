@@ -53,6 +53,7 @@ function bash(cwd: string, script: string, args: string[]) {
     cwd,
     encoding: 'utf8',
     env: {
+      NODE_ENV: 'test',
       PATH: `${stub}:${process.env.PATH}`,
       STUB: stub,
       GH_REPO: 'owner/repo',
@@ -127,7 +128,13 @@ test('a green run with no open issue writes nothing', () => {
 
 test('a release stopped by a red full run is reported though every job passed', () => {
   const reason = 'The newest full run on main (abc) ended failure: https://github.test/run';
-  const [create] = issueWrites(['run', 'CI alert: release', 'success skipped skipped skipped', 'red-run', reason]);
+  const [create] = issueWrites([
+    'run',
+    'CI alert: release',
+    'success skipped skipped skipped',
+    'red-run',
+    reason,
+  ]);
   expect(create).toContain('issue create --title CI alert: release');
   expect(create).toContain(`The scheduled release did not ship. ${reason}`);
 });
