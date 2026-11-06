@@ -1,5 +1,5 @@
 import { beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
-import { z } from '@/lib/zod';
+import { z } from 'zod';
 
 // The settings write appends to `break_policy_history` and writes it back.
 // It read the current value from a 300-second cache, so a second change
