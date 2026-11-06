@@ -3,11 +3,17 @@ name: Nightly
 # Every browser group on main once a night, so a date- or data-dependent
 # failure surfaces without a change. 02:30 UTC stays clear of the runner's
 # Berlin midnight window (MIDNIGHT_START_WINDOW in lib/testing/runner/group-schedule.ts).
-# A manual run gives a main commit its full run before a release.
+# A manual run gives a main commit its full run before a release. A red run on
+# main opens or updates the issue "CI alert: nightly"; the next green run closes it.
 on:
   schedule:
     - cron: '30 2 * * *'
   workflow_dispatch:
+    inputs:
+      alert_proof:
+        description: 'Proof run only: failure or success. Skips the suite and reports on "CI alert: nightly (proof)"'
+        type: string
+        default: ''
 
 # The browser shards of ci.yml read the Build job's state.
 permissions:
@@ -19,6 +25,7 @@ jobs:
     # The release reuses a green full run on the commit it ships by this check name,
     # `Full run / Check` (.github/workflows/release.yml).
     name: Full run
+    if: ${{ !inputs.alert_proof }}
     # A called workflow gets no permission its caller lacks: ci.yml's Unit job asks for pull-requests.
     permissions:
       contents: read
@@ -33,9 +40,47 @@ jobs:
     # A skipped test carries a quarantine comment that names its planning
     # issue (test-hygiene/no-excluded-test); the nightly summary lists them all.
     name: Quarantined tests
+    if: ${{ !inputs.alert_proof }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
       - uses: ./.github/actions/setup
       - run: bun scripts/list-quarantines.ts | tee -a "$GITHUB_STEP_SUMMARY"
+
+  proof:
+    name: Alert proof
+    if: ${{ inputs.alert_proof }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: End as asked
+        env:
+          PROOF: ${{ inputs.alert_proof }}
+        run: test "$PROOF" = success
+
+  alert:
+    name: Alert
+    needs: [full, quarantine, proof]
+    # Only main speaks for the nightly, and a run a person cancelled says nothing about it. Nothing
+    # needs this job and the release gate reads only `Full run / Check`, so it changes no release.
+    if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # name the failed jobs
+      issues: write # open, update and close the alert issue
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: "CI alert: nightly${{ inputs.alert_proof && ' (proof)' || '' }}"
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: bash .github/scripts/alert-issue.sh run "$TITLE" "$RESULTS"

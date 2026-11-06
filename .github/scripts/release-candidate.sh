@@ -2,8 +2,8 @@
 # The release decision for .github/workflows/release.yml, on the checked-out main commit.
 # Usage: release-candidate.sh <manual|scheduled|dry-run>
 #
-# Writes sha, verified (a green full run exists) and release (the run goes on) to
-# $GITHUB_OUTPUT. A manual release always goes on. A scheduled one goes on only when
+# Writes sha, verified (a green full run exists), release (the run goes on) and, for a run
+# that stops, skip and skip_reason to $GITHUB_OUTPUT. A manual release always goes on. A scheduled one goes on only when
 # main moved since production and its newest full run is green, or it has none yet and
 # the release runs its own. A dry run decides like a scheduled run and changes nothing.
 # Needs GH_TOKEN, GITHUB_REF, GITHUB_REPOSITORY, and origin/production fetched.
@@ -19,14 +19,19 @@ echo "sha=$sha" >> "$GITHUB_OUTPUT"
 git merge-base --is-ancestor origin/production "$sha" \
   || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
 
+# Ends the run green. The skip, no-change or red-run, tells alert-issue.sh whether to speak.
 skip() {
-  echo "release=false" >> "$GITHUB_OUTPUT"
-  echo "::notice title=No release::$1"
+  {
+    echo "release=false"
+    echo "skip=$1"
+    echo "skip_reason=$2"
+  } >> "$GITHUB_OUTPUT"
+  echo "::notice title=No release::$2"
   exit 0
 }
 
 if test "$mode" != manual && test -z "$(git rev-list origin/production.."$sha")"; then
-  skip "main (${sha}) equals production; nothing to release."
+  skip no-change "main (${sha}) equals production; nothing to release."
 fi
 
 # A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
@@ -51,7 +56,7 @@ if test "$conclusion" = success; then
   plan="reuses its green full run"
 elif test "$mode" != manual && test -n "$latest"; then
   # A scheduled release never reruns a red full run until it passes; main is repaired through a PR.
-  skip "The newest full run on main (${sha}) ended ${conclusion}: $(echo "$latest" | cut -d ' ' -f 3)"
+  skip red-run "The newest full run on main (${sha}) ended ${conclusion}: $(echo "$latest" | cut -d ' ' -f 3)"
 else
   verified=false
   plan="runs the full suite first and ships only on green"
