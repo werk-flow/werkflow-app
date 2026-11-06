@@ -5,6 +5,5 @@
   "components/kalender/day-view/use-day-create-drag.ts": 1,
   "components/kalender/drag-engine/drag-engine.tsx": 1,
   "lib/data/background-read-client.ts": 1,
-  "lib/supabase/rpc-args.ts": 1,
-  "tests/golden/support/scenario-measurement.ts": 2
+  "lib/supabase/rpc-args.ts": 1
 }
