@@ -157,7 +157,7 @@ test('an unheard entry exists until a wake went through', () => {
   const unheard = temporaryDirectory();
   const record = runRecord(directory, unheard);
   saveRecord(record);
-  expect(readRecord(record.unheardPath).outcome?.exitCode).toBe(3);
+  expect(readRecord(record.unheardPath).outcome?.exitCode, 'the unheard entry keeps the outcome').toBe(3);
   saveRecord({ ...record, wake: 'failed', wakeError: 'Thread gone' });
   expect(readRecord(record.unheardPath).wakeError).toBe('Thread gone');
   saveRecord({ ...record, wake: 'sent' });
