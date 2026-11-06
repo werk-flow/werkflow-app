@@ -1,5 +1,5 @@
 // Rule test: a carried-over reference keeps the measured code its review saw.
-// The change that adds an entry proves it; no entry is open, so no file-digest proof remains here.
+// The change that adds an entry proves it; this test only proves each entry still re-keys a reference.
 import { expect, test } from 'bun:test';
 
 import baselineFile from './performance-baselines.json';

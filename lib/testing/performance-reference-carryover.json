@@ -1,4 +1,135 @@
 {
-  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it.",
-  "entries": []
+  "reason": "A carry-over entry re-keys a reviewed reference from the measurement digest it was recorded under (fileDigest) to the current one (measuredTestDigest) when a support-file edit cannot change what the scenario measures; each entry is proven in the change that adds it. Current entries: tests/golden/support/scenario-measurement.ts replaced two type casts on performance.getEntriesByType in readAttribution with instanceof narrowing. The change touches only attribution, which is read after the measured interval has ended and is never compared, and every entry that call returns is an instance of the narrowed class, so measuredMs and every recorded attribution value stay as they were.",
+  "entries": [
+    {
+      "scenarioId": "customers.list.open",
+      "fileDigest": "05598191ea2c43349993f569fb4fb510637be9089456766d4ce6d7e28bfc4fe7",
+      "measuredTestDigest": "770a2f2f7df409b7218bb18f04e5b88ae5fb40c9f4a0418c7f6086b3a09b2547"
+    },
+    {
+      "scenarioId": "jobs.list.open",
+      "fileDigest": "83f533102717ce2600c974d8f635ab3339405821d53d8ac5b524ff018fc440f9",
+      "measuredTestDigest": "72fc6d95b3f567345cacc2de27038c2319ad91a95d5e61bb616a25e689363fc1"
+    },
+    {
+      "scenarioId": "jobs.detail.open",
+      "fileDigest": "a873965288a3635aae8a112de429232397dca0da35fc77b8333ed60700a0ff2e",
+      "measuredTestDigest": "ec311d5d85c2538f695d53baa770fe0bd32a48fa9047e72fa73859eb30c82507"
+    },
+    {
+      "scenarioId": "equipment.list.open",
+      "fileDigest": "52ac1b2e1fe805aebeb0b88131be2917803d8cb5bb0deaa94944bb25b422696e",
+      "measuredTestDigest": "6f488457097638ff5061c2c0b778b604fe6263404dd9500a40ee2acd8f929f09"
+    },
+    {
+      "scenarioId": "tasks.list.open",
+      "fileDigest": "6341573f15e500159d70f8f01f85e68746af6664a09c272e6bcef15c83ec11b4",
+      "measuredTestDigest": "55f622187436ca1ec1c7a25f4679649c045937ecb2082b183c9e5602fc95d107"
+    },
+    {
+      "scenarioId": "calendar.board.cold-open",
+      "fileDigest": "4bb343c5da235475950de6c831677754c8a1455fee30696c6427a1be32e14325",
+      "measuredTestDigest": "7143166d7b9a5c0108b2a238ed3dcb86b104fac4b873396b0a162d9e71834cbd"
+    },
+    {
+      "scenarioId": "calendar.board.reassign.visible",
+      "fileDigest": "b4331101020f8e2bf3e916f75e607c5a5dca3765338fc561290018b8c38b5046",
+      "measuredTestDigest": "aac4853e60e805372e9e838b6e79efd4600ca66db49ddd156080409cb1885a9a"
+    },
+    {
+      "scenarioId": "calendar.board.reassign.settled",
+      "fileDigest": "6bd087a37b39bbdefdf075c13b2acdd4d8f2bfeaff16b15f17bbf11fdfee138b",
+      "measuredTestDigest": "d068b1d830095238ef6ae543641def6ad57d6d28ce999ff3c5e2bebc4f34ea08"
+    },
+    {
+      "scenarioId": "calendar.board-to-day.covered",
+      "fileDigest": "adff044f6e470e78b946c09d7f96fb683d620a4f0e4b45a6830338fa42a59f7a",
+      "measuredTestDigest": "37fd78299cb00b1acc86bdc2b792bbaf7cf9e5865c172dc04660054d97c731c3"
+    },
+    {
+      "scenarioId": "calendar.day.resize.settled",
+      "fileDigest": "7878116154778397f646126b0a84cd1c97fc683f0dca00acc52f7169a45fff6c",
+      "measuredTestDigest": "6af0e553aab95cfbf48de408e2e39d2f272ec0de9e114d843f2fa4ade366ca41"
+    },
+    {
+      "scenarioId": "calendar.day-to-board.covered",
+      "fileDigest": "5cbf169cc1d63a5d7a1ae2c8432853a810a57dafd99482dd28bfecc6ade85e96",
+      "measuredTestDigest": "2c639ee93e510f90e9fcf1f949788e8a28ec2d099df8a182221d3c5faf7a9d3e"
+    },
+    {
+      "scenarioId": "calendar.board.six-weeks",
+      "fileDigest": "0b8ac2741de02953f5534a6e82c395c82f668d5308545ce9670b4f872c56059c",
+      "measuredTestDigest": "e7a40001501c65d1ad42e5f9ea9f689c4c0b05f709bc6b6d0267d4ef78ac225f"
+    },
+    {
+      "scenarioId": "calendar.board-to-month.uncovered",
+      "fileDigest": "7bc6306e46c28f5b7b78bc716410f1a4ac33b43aae398cbca0e31553cb4e7533",
+      "measuredTestDigest": "42065dac442e874512c5f59c228eed0fdbc05d69704b95888371de363d93f9d0"
+    },
+    {
+      "scenarioId": "calendar.month.move.visible",
+      "fileDigest": "70441f0c809d269ce7ba72fc8450f9bf527d9b1eed60b188a747682a8f5f6196",
+      "measuredTestDigest": "82047af89ec331836531986d7e5f09c294e3ca3505ce10ce968c974e1263a78e"
+    },
+    {
+      "scenarioId": "calendar.month.move.settled",
+      "fileDigest": "02e66b907a66456c5b4ab79e904fc0c6b700ba9dc104da3907728d3c8ee2c9fe",
+      "measuredTestDigest": "a8bfbd8b19df05ce913a311cf3f21dfd11ff81749a3cb682dee20923ff390453"
+    },
+    {
+      "scenarioId": "calendar.month-next.uncovered",
+      "fileDigest": "c2d4093fed2fe039882e0021288f1e0ce2e74c6878261222a3c1fdecbbf8a790",
+      "measuredTestDigest": "7bb975911e5143b052233d9def04a5819814a9c03bef4a08f0e518dfad84a5ba"
+    },
+    {
+      "scenarioId": "calendar.month-to-board.covered",
+      "fileDigest": "73f947a69043c49743e01c857f41a32f687d38712edc5a4e4777f9a90076df9e",
+      "measuredTestDigest": "be12b3d8a1d0dcd30613ca13ef8885875512b9482a9a8d531de406fa1a7837ce"
+    },
+    {
+      "scenarioId": "planning.occurrence.cross-session",
+      "fileDigest": "82dbfd5851ca84ec81d5b6a543e2e6c97744f2cce5be878ad16f08b5b4e0e246",
+      "measuredTestDigest": "56107bc2c130db6b67943a30ac0681abae4ee59db9170d37a20adfc4639a947a"
+    },
+    {
+      "scenarioId": "calendar.month.employee-open-to-event",
+      "fileDigest": "857fa38b81667987b11411d866d4f20cfe4b71d6cd6e8cc86625d5dcd6a93db2",
+      "measuredTestDigest": "115d543f94fe816eb12d885c004d332f609ef2d4057154111b39c2ae2bc5ce66"
+    },
+    {
+      "scenarioId": "calendar.month.admin-open-to-legacy-event",
+      "fileDigest": "f9ed0c9aef563a12d99d31649cbde02a479bbf277fd1872c7ecfd21a16495f4a",
+      "measuredTestDigest": "5a14af24c2dbccffb2e8f25c6bb46b7d9c0b171228c6b171d67cd991af397a3c"
+    },
+    {
+      "scenarioId": "time.clock-in.visible",
+      "fileDigest": "f612d5a05290575deb006ebb70a4bf397436385a70fe8d4a8b2c89a40ccaf303",
+      "measuredTestDigest": "f8bbd770a04f1b5ca9ef392b0ba11264c9ed3814188938e09cc9c481684461f7"
+    },
+    {
+      "scenarioId": "time.clock-out.visible",
+      "fileDigest": "b60aad81d7b68c3d9a99b8ef0910928c7ded576a147649a6fde411a243815f97",
+      "measuredTestDigest": "6aa9eab86a51ab13402e84369f086cc0af321fc5cda8fbb012b9ed2a0a58d2f1"
+    },
+    {
+      "scenarioId": "time.clock-in.settled",
+      "fileDigest": "24bdf2f40428d55dfd61e19d8416ae61aa7bd6b6243eddea18a87d0fe5c3b0f9",
+      "measuredTestDigest": "923abca5adb9081deeb373f4d943a5014bd5bb60766043ed53e65198140fa0a6"
+    },
+    {
+      "scenarioId": "time.clock-out.settled",
+      "fileDigest": "cf4402065a992c8bf33400ea3c1f3ad43b10a024a2ed1880994fd472b9f3be19",
+      "measuredTestDigest": "544a57a343846581b0e9e6078f7c73274c3dbad92a7b978170f53ed7db782e1a"
+    },
+    {
+      "scenarioId": "time.approval.cross-session",
+      "fileDigest": "6a8f7c231dfc3a12154a8dd3109738094609704b795c90bd7bac82a75b252447",
+      "measuredTestDigest": "221d35e5418d7fbfe07786658d350c3fc8470423f07fef5f9ba0e61f41a80741"
+    },
+    {
+      "scenarioId": "jobs.list.assignment.cross-session",
+      "fileDigest": "b03c80816efba57da1ddff3f9359a7fc262d8d3d2a130d7c013907683c8ee18f",
+      "measuredTestDigest": "0ae0882b93716ca6fcaf0d9ef8291e0cb5cf8b918bf693f17a0a88d486a6891a"
+    }
+  ]
 }
