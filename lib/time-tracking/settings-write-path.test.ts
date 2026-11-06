@@ -1,5 +1,5 @@
 import { beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
-import { z } from 'zod';
+import { z } from '@/lib/zod';
 
 // The settings write appends to `break_policy_history` and writes it back.
 // It read the current value from a 300-second cache, so a second change
@@ -17,7 +17,7 @@ type StoredSettings = {
 };
 type RpcCall = { name: string; args: Record<string, unknown> };
 // The history as written, every field kept, so an entry compares whole.
-const writtenHistorySchema = z.array(z.looseObject({ breakMode: z.string() }));
+const writtenHistorySchema = z.array(z.object({ breakMode: z.string() }).loose());
 
 const recordedEntry = {
   breakMode: 'manual',
