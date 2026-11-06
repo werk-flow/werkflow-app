@@ -9,7 +9,7 @@ name: Date look-ahead
 # one date, to reproduce a failure; that run reports nothing.
 on:
   schedule:
-    # Clear of the nightly's 02:30: GitHub starts both hours late, so they keep their distance.
+    # GitHub starts this hours late, so it arrives in the afternoon, clear of the nightly (22:30 Berlin).
     - cron: '15 5 * * *'
   workflow_dispatch:
     inputs:
