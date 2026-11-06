@@ -49,6 +49,9 @@ export type CalendarDragTarget =
     }
   | { kind: 'zone'; zone: 'parkplatz' };
 
+/** A target on a surface's grid, the case every surface's drop and pre-check works on. */
+export type CalendarDragCell = Extract<CalendarDragTarget, { kind: 'cell' }>;
+
 export type DragModifiers = {
   /** Alt held at the drop: copy instead of move (board). */
   copy: boolean;

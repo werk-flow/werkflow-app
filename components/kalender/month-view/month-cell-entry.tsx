@@ -30,54 +30,56 @@ type MonthCellEntryProps = {
   onSessionClick: (session: InteractiveCalendarSession) => void;
 };
 
-/** One line in a month day cell: a visit card or a recorded work block, each a drag source for managers. */
-export function MonthCellEntry(props: MonthCellEntryProps): React.JSX.Element {
-  const {
-    item,
-    full,
+/** A visit's line: the card, a drag source that keeps the first assigned person. */
+function monthVisitCard(
+  { draggable, full, nowTick, actions, startDrag }: MonthCellEntryProps,
+  { job }: Extract<MonthCellItem, { kind: 'job' }>,
+): React.JSX.Element {
+  const sourceUserId = job.assignedUserIds[0] ?? null;
+  return (
+    <CalendarCard
+      job={job}
+      size="month"
+      draggable={draggable}
+      locked={isStartedOccurrence(job, nowTick)}
+      className={cn('w-full', full ? 'h-7' : 'h-6')}
+      onOpen={(element) => actions.onOpenCard(job, element, null)}
+      onPointerDown={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect();
+        startDrag(event, {
+          payload: {
+            kind: 'occurrence',
+            job,
+            sourceEmployeeRecordId: job.assignedEmployeeRecordIds?.[0] ?? null,
+            sourceUserId,
+            sourceDate: job.plannedDate ?? '',
+          },
+          ghost: {
+            label: job.title,
+            secondary: job.plannedTime ?? undefined,
+            width: Math.min(rect.width, 200),
+            height: rect.height,
+          },
+          pointerOffset: { x: Math.min(event.clientX - rect.left, 200), y: event.clientY - rect.top },
+        });
+      }}
+    />
+  );
+}
+
+/** A recorded block's line: opens the session and, for those who may manage it, drags to another day. */
+function monthBlockLine(
+  {
     draggable,
     canManage,
     isAdminOrManager,
-    nowTick,
     organizationSettings,
-    actions,
     startDrag,
     onSessionClick,
-  } = props;
-  const clock = useClock();
-  if (item.kind === 'job') {
-    const { job } = item;
-    const sourceUserId = job.assignedUserIds[0] ?? null;
-    return (
-      <CalendarCard
-        job={job}
-        size="month"
-        draggable={draggable}
-        locked={isStartedOccurrence(job, nowTick)}
-        className={cn('w-full', full ? 'h-7' : 'h-6')}
-        onOpen={(element) => actions.onOpenCard(job, element, null)}
-        onPointerDown={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          startDrag(event, {
-            payload: {
-              kind: 'occurrence',
-              job,
-              sourceEmployeeRecordId: job.assignedEmployeeRecordIds?.[0] ?? null,
-              sourceUserId,
-              sourceDate: job.plannedDate ?? '',
-            },
-            ghost: {
-              label: job.title,
-              secondary: job.plannedTime ?? undefined,
-              width: Math.min(rect.width, 200),
-              height: rect.height,
-            },
-            pointerOffset: { x: Math.min(event.clientX - rect.left, 200), y: event.clientY - rect.top },
-          });
-        }}
-      />
-    );
-  }
+  }: MonthCellEntryProps,
+  item: Extract<MonthCellItem, { kind: 'block' }>,
+  clock: () => number,
+): React.JSX.Element {
   const pending =
     item.block.isPending ||
     item.block.sourceEntries.some((entry) => entry.status === 'pending' || entry.status === 'pending_delete');
@@ -119,4 +121,11 @@ export function MonthCellEntry(props: MonthCellEntryProps): React.JSX.Element {
       </span>
     </PlainButton>
   );
+}
+
+/** One line in a month day cell: a visit card or a recorded work block, each a drag source for managers. */
+export function MonthCellEntry(props: MonthCellEntryProps): React.JSX.Element {
+  const clock = useClock();
+  const { item } = props;
+  return item.kind === 'job' ? monthVisitCard(props, item) : monthBlockLine(props, item, clock);
 }

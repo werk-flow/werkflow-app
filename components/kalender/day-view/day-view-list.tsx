@@ -16,7 +16,41 @@ import {
 import type { CalendarSurfaceActions } from '../board/types';
 import { CalendarCard } from '../surface/calendar-card';
 import { useClock } from '../surface/use-now-tick';
-import type { DayRow } from '@/lib/calendar/day-rows';
+import type { DayRow, DayRowItem } from '@/lib/calendar/day-rows';
+
+/** A recorded block in the phone's list: activity, span, its segments and what still waits. */
+function dayListBlock(
+  item: Extract<DayRowItem, { kind: 'block' }>,
+  changeRequestMap: EntryChangeRequestMap,
+  onOpen: () => void,
+): React.JSX.Element {
+  return (
+    <ListRow key={item.key} interactive asChild className="block">
+      <PlainButton type="button" className="min-h-11 w-full text-left" onClick={onOpen}>
+        <span className="block text-sm font-medium">
+          {item.block.isOnBreak
+            ? 'Pause'
+            : TIME_ACTIVITY_LABELS[item.block.startEntry.activityKind ?? 'work']}
+        </span>
+        <span className="block text-sm tabular-nums text-muted-foreground">
+          {formatMinutesOfDay(item.startMinutes)}–
+          {item.block.isOpen ? 'jetzt' : formatMinutesOfDay(item.endMinutes)}
+        </span>
+        {item.segments.length > 1 &&
+          item.segments.map((segment) => (
+            <span key={segment.id} className="block text-xs tabular-nums text-muted-foreground">
+              {segment.type === 'break' ? 'Pause' : 'Arbeitszeit'} {formatMinutesOfDay(segment.startMinutes)}–
+              {formatMinutesOfDay(segment.endMinutes)}
+            </span>
+          ))}
+        {item.block.isPending && <span className="block text-xs text-warning-text">Freigabe ausstehend</span>}
+        {item.block.sourceEntries.some((entry) => changeRequestMap[entry.id]) && (
+          <span className="block text-xs text-warning-text">Korrektur ausstehend</span>
+        )}
+      </PlainButton>
+    </ListRow>
+  );
+}
 
 /** The day on a phone: one section per person with the untimed visits first, then the day in time order. */
 export function DayViewList({
@@ -74,40 +108,11 @@ export function DayViewList({
                   onOpen={(element) => actions.onOpenCard(item.job, element, model.row)}
                 />
               ) : (
-                <ListRow key={item.key} interactive asChild className="block">
-                  <PlainButton
-                    type="button"
-                    className="min-h-11 w-full text-left"
-                    onClick={() =>
-                      onSessionClick(
-                        createSessionFromCalendarBlock(item.block, new Date(clock()), organizationSettings),
-                      )
-                    }
-                  >
-                    <span className="block text-sm font-medium">
-                      {item.block.isOnBreak
-                        ? 'Pause'
-                        : TIME_ACTIVITY_LABELS[item.block.startEntry.activityKind ?? 'work']}
-                    </span>
-                    <span className="block text-sm tabular-nums text-muted-foreground">
-                      {formatMinutesOfDay(item.startMinutes)}–
-                      {item.block.isOpen ? 'jetzt' : formatMinutesOfDay(item.endMinutes)}
-                    </span>
-                    {item.segments.length > 1 &&
-                      item.segments.map((segment) => (
-                        <span key={segment.id} className="block text-xs tabular-nums text-muted-foreground">
-                          {segment.type === 'break' ? 'Pause' : 'Arbeitszeit'}{' '}
-                          {formatMinutesOfDay(segment.startMinutes)}–{formatMinutesOfDay(segment.endMinutes)}
-                        </span>
-                      ))}
-                    {item.block.isPending && (
-                      <span className="block text-xs text-warning-text">Freigabe ausstehend</span>
-                    )}
-                    {item.block.sourceEntries.some((entry) => changeRequestMap[entry.id]) && (
-                      <span className="block text-xs text-warning-text">Korrektur ausstehend</span>
-                    )}
-                  </PlainButton>
-                </ListRow>
+                dayListBlock(item, changeRequestMap, () =>
+                  onSessionClick(
+                    createSessionFromCalendarBlock(item.block, new Date(clock()), organizationSettings),
+                  ),
+                )
               ),
             )}
           {items.length === 0 && untimed.length === 0 && (

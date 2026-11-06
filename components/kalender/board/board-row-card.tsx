@@ -34,25 +34,73 @@ export function boardLaneStyle({ column, span, lane }: { column: number; span: n
   return { gridColumn: `${column + 2} / span ${span}`, gridRow: lane + 1 } as const;
 }
 
+/** The drag of a card: the ghost takes the card's size, at most 240 px wide. */
+function occurrenceDragSession(
+  event: React.PointerEvent<HTMLButtonElement>,
+  { job, row, startDate }: Pick<BoardRowCardProps, 'job' | 'row' | 'startDate'>,
+): DragSession {
+  const rect = event.currentTarget.getBoundingClientRect();
+  return {
+    payload: {
+      kind: 'occurrence',
+      job,
+      sourceEmployeeRecordId: row?.employeeRecordId ?? null,
+      sourceUserId: row?.userId ?? null,
+      sourceDate: startDate,
+    },
+    ghost: {
+      label: job.title,
+      secondary: job.plannedTime
+        ? `${job.plannedTime} · ${job.clientName ?? ''}`.trim()
+        : (job.clientName ?? undefined),
+      width: Math.min(rect.width, 240),
+      height: rect.height,
+    },
+    pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top },
+  };
+}
+
+const BAR_EDGE_HANDLES = {
+  start: {
+    className: 'absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30',
+    ghostLabel: 'Beginn ändern',
+  },
+  end: {
+    className: 'absolute inset-y-0 right-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30',
+    ghostLabel: 'Ende ändern',
+  },
+} as const;
+
+/** An edge of an all-day bar: its own drag, which changes the span instead of moving the card. */
+function barEdgeHandle(
+  edge: keyof typeof BAR_EDGE_HANDLES,
+  { job, row, startDrag }: Pick<BoardRowCardProps, 'job' | 'row' | 'startDrag'>,
+): React.JSX.Element {
+  const { className, ghostLabel } = BAR_EDGE_HANDLES[edge];
+  return (
+    <span
+      role="presentation"
+      className={className}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        startDrag(event, {
+          payload: { kind: 'barEdge', job, edge, sourceEmployeeRecordId: row?.employeeRecordId ?? null },
+          ghost: { label: ghostLabel, width: 120, height: 24 },
+          pointerOffset: { x: 60, y: 12 },
+        });
+      }}
+    />
+  );
+}
+
 /**
  * One occurrence in a Plantafel row: the card with its dispatch and
  * readiness chips, the drag source, and the edge handles of an all-day bar.
  * Memoized on its shown props, so a row renders again only its changed cards.
  */
 export const BoardRowCard = memo(function BoardRowCard(props: BoardRowCardProps): React.JSX.Element {
-  const {
-    job,
-    startDate,
-    row,
-    dispatchState,
-    materialDemand,
-    compact,
-    locked,
-    actions,
-    startDrag,
-    hovered,
-    onHoverLink,
-  } = props;
+  const { job, startDate, row, dispatchState, materialDemand, compact, locked, actions, startDrag } = props;
+  const { hovered, onHoverLink } = props;
   const note = isNoteEntry(job);
   const chips =
     note || job.entryKind === 'internal'
@@ -75,64 +123,12 @@ export const BoardRowCard = memo(function BoardRowCard(props: BoardRowCardProps)
         {...(row ? { 'data-employee-record-id': row.employeeRecordId } : {})}
         onHoverLink={onHoverLink}
         onOpen={(element) => actions.onOpenCard(job, element, row)}
-        onPointerDown={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          startDrag(event, {
-            payload: {
-              kind: 'occurrence',
-              job,
-              sourceEmployeeRecordId: row?.employeeRecordId ?? null,
-              sourceUserId: row?.userId ?? null,
-              sourceDate: startDate,
-            },
-            ghost: {
-              label: job.title,
-              secondary: job.plannedTime
-                ? `${job.plannedTime} · ${job.clientName ?? ''}`.trim()
-                : (job.clientName ?? undefined),
-              width: Math.min(rect.width, 240),
-              height: rect.height,
-            },
-            pointerOffset: { x: Math.min(event.clientX - rect.left, 240), y: event.clientY - rect.top },
-          });
-        }}
+        onPointerDown={(event) => startDrag(event, occurrenceDragSession(event, props))}
       >
         {draggable && allDay && job.occurrenceId && (
           <>
-            <span
-              role="presentation"
-              className="absolute inset-y-0 left-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30"
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                startDrag(event, {
-                  payload: {
-                    kind: 'barEdge',
-                    job,
-                    edge: 'start',
-                    sourceEmployeeRecordId: row?.employeeRecordId ?? null,
-                  },
-                  ghost: { label: 'Beginn ändern', width: 120, height: 24 },
-                  pointerOffset: { x: 60, y: 12 },
-                });
-              }}
-            />
-            <span
-              role="presentation"
-              className="absolute inset-y-0 right-0 w-2 cursor-ew-resize hover:bg-calendar-planning-strong/30"
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                startDrag(event, {
-                  payload: {
-                    kind: 'barEdge',
-                    job,
-                    edge: 'end',
-                    sourceEmployeeRecordId: row?.employeeRecordId ?? null,
-                  },
-                  ghost: { label: 'Ende ändern', width: 120, height: 24 },
-                  pointerOffset: { x: 60, y: 12 },
-                });
-              }}
-            />
+            {barEdgeHandle('start', props)}
+            {barEdgeHandle('end', props)}
           </>
         )}
       </CalendarCard>

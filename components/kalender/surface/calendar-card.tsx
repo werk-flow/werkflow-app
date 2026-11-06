@@ -104,6 +104,94 @@ export type CalendarCardProps = {
   'data-employee-record-id'?: string;
 };
 
+type CardFacts = {
+  size: CalendarCardSize;
+  note: boolean;
+  inactive: boolean;
+  locked: boolean;
+  oneLine: boolean;
+};
+
+/** The title line: kind icon, title and the marks for locked, series, inactive and the month's job number. */
+function cardTitleLine(
+  job: CalendarJob,
+  { size, note, inactive, locked, oneLine }: CardFacts,
+): React.JSX.Element {
+  const statusLabel = job.occurrenceStatus
+    ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
+    : undefined;
+  const Icon = note ? StickyNote : job.entryKind === 'internal' ? CalendarDays : Briefcase;
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <Icon
+        className={cn(
+          'size-3 shrink-0',
+          note ? 'text-calendar-note-foreground' : 'text-calendar-planning-strong',
+        )}
+        aria-hidden="true"
+      />
+      <span
+        className={cn(
+          'min-w-0 font-medium',
+          !oneLine ? 'line-clamp-2 break-words' : 'truncate',
+          inactive && 'line-through',
+        )}
+      >
+        {job.title}
+      </span>
+      {locked && <Lock className="ml-auto size-3 shrink-0 opacity-70" aria-hidden="true" />}
+      {job.seriesId && (
+        <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />
+      )}
+      {inactive && statusLabel && (
+        <span className="shrink-0 rounded-sm bg-muted px-1 text-xs text-muted-foreground">{statusLabel}</span>
+      )}
+      {size === 'month' && job.jobNumber && (
+        <span className="ml-auto hidden shrink-0 font-mono text-xs opacity-70 sm:inline">
+          {job.jobNumber}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The job number and the subtitle under the title. */
+function cardSubtitleLine(job: CalendarJob, subtitle: string, size: CalendarCardSize): React.JSX.Element {
+  return (
+    <span
+      className={cn(
+        'flex min-w-0 gap-1 text-xs opacity-80',
+        size === 'day' ? 'flex-col items-start' : 'items-center',
+      )}
+    >
+      {job.jobNumber && size !== 'day' && <span className="shrink-0 font-mono">{job.jobNumber}</span>}
+      {subtitle && (
+        <span className={cn('min-w-0', size === 'day' ? 'line-clamp-2 break-words' : 'truncate')}>
+          {subtitle}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function cardChipRow(chips: readonly CalendarCardChip[]): React.JSX.Element {
+  return (
+    <span className="flex min-w-0 flex-wrap gap-1 pt-0.5">
+      {chips.map((chip) => (
+        <span
+          key={chip.label}
+          className={cn(
+            'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-xs leading-4',
+            CHIP_CLASS[chip.tone],
+          )}
+        >
+          {chip.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(function CalendarCard(
   {
     job,
@@ -127,11 +215,7 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
   const inactive = isInactiveOccurrence(job);
   const inert = inactive || locked;
   const note = isNoteEntry(job);
-  const statusLabel = job.occurrenceStatus
-    ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
-    : undefined;
   const subtitle = cardSubtitle(job);
-  const Icon = note ? StickyNote : job.entryKind === 'internal' ? CalendarDays : Briefcase;
   const oneLine = size === 'month' || compact;
   return (
     <PlainButton
@@ -170,71 +254,12 @@ export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(fun
       onFocus={() => onHoverLink?.(job.occurrenceId ?? null)}
       onBlur={() => onHoverLink?.(null)}
     >
-      <span className="flex min-w-0 items-center gap-1">
-        <Icon
-          className={cn(
-            'size-3 shrink-0',
-            note ? 'text-calendar-note-foreground' : 'text-calendar-planning-strong',
-          )}
-          aria-hidden="true"
-        />
-        <span
-          className={cn(
-            'min-w-0 font-medium',
-            !oneLine ? 'line-clamp-2 break-words' : 'truncate',
-            inactive && 'line-through',
-          )}
-        >
-          {job.title}
-        </span>
-        {locked && <Lock className="ml-auto size-3 shrink-0 opacity-70" aria-hidden="true" />}
-        {job.seriesId && (
-          <Repeat2 className="size-3 shrink-0 opacity-70" role="img" aria-label="Serientermin" />
-        )}
-        {inactive && statusLabel && (
-          <span className="shrink-0 rounded-sm bg-muted px-1 text-xs text-muted-foreground">
-            {statusLabel}
-          </span>
-        )}
-        {size === 'month' && job.jobNumber && (
-          <span className="ml-auto hidden shrink-0 font-mono text-xs opacity-70 sm:inline">
-            {job.jobNumber}
-          </span>
-        )}
-      </span>
+      {cardTitleLine(job, { size, note, inactive, locked, oneLine })}
       {!oneLine && job.plannedTime && (
         <span className="text-xs tabular-nums opacity-80">{cardTime(job)}</span>
       )}
-      {!oneLine && (subtitle || job.jobNumber) && (
-        <span
-          className={cn(
-            'flex min-w-0 gap-1 text-xs opacity-80',
-            size === 'day' ? 'flex-col items-start' : 'items-center',
-          )}
-        >
-          {job.jobNumber && size !== 'day' && <span className="shrink-0 font-mono">{job.jobNumber}</span>}
-          {subtitle && (
-            <span className={cn('min-w-0', size === 'day' ? 'line-clamp-2 break-words' : 'truncate')}>
-              {subtitle}
-            </span>
-          )}
-        </span>
-      )}
-      {!oneLine && chips.length > 0 && (
-        <span className="flex min-w-0 flex-wrap gap-1 pt-0.5">
-          {chips.map((chip) => (
-            <span
-              key={chip.label}
-              className={cn(
-                'max-w-full truncate whitespace-nowrap rounded-sm px-1 text-xs leading-4',
-                CHIP_CLASS[chip.tone],
-              )}
-            >
-              {chip.label}
-            </span>
-          ))}
-        </span>
-      )}
+      {!oneLine && (subtitle || job.jobNumber) && cardSubtitleLine(job, subtitle, size)}
+      {!oneLine && chips.length > 0 && cardChipRow(chips)}
       {children}
     </PlainButton>
   );

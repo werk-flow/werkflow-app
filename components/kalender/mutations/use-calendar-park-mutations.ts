@@ -11,22 +11,7 @@ import type { OptimisticOperation } from './use-optimistic-run';
 import type { MutationFeedback } from './use-mutation-feedback';
 import type { UseCalendarMutationsOptions } from './use-calendar-mutations';
 
-/**
- * Parking from the grid. Park by drag hands the write to the context dialog
- * and returns the release for its outcome; unpark by drag is one server call
- * whose warning changes nothing and is repeated with the approval.
- */
-export function useCalendarParkMutations({
-  beginMutation,
-  updateJobs,
-  updateParkedJobs,
-  jobsRef,
-  showBanner,
-  requestApproval,
-  silentRefresh,
-  feedback,
-  run,
-}: Pick<
+type ParkMutationInput = Pick<
   UseCalendarMutationsOptions,
   | 'beginMutation'
   | 'updateJobs'
@@ -38,14 +23,24 @@ export function useCalendarParkMutations({
 > & {
   feedback: MutationFeedback;
   run: (operation: OptimisticOperation) => Promise<boolean>;
-}) {
-  const { announce, isScopeActive, lastUndoRef } = feedback;
+};
+
+function useBeginPark({
+  beginMutation,
+  updateJobs,
+  updateParkedJobs,
+  jobsRef,
+  showBanner,
+  silentRefresh,
+  feedback,
+}: ParkMutationInput) {
+  const { announce, lastUndoRef } = feedback;
   /**
    * Park by drag: the card leaves the grid now and the context dialog owns
    * the write. Returns the release for the dialog's outcome: `saved` keeps
    * the placement and offers Undo, `cancelled` and `failed` restore it.
    */
-  const beginPark = useCallback(
+  return useCallback(
     (job: CalendarJob) => {
       const jobId = job.jobId ?? job.id;
       const originalVisits = jobsRef.current.filter((entry) => (entry.jobId ?? entry.id) === jobId);
@@ -101,9 +96,19 @@ export function useCalendarParkMutations({
     },
     [announce, beginMutation, jobsRef, showBanner, silentRefresh, updateJobs, updateParkedJobs, lastUndoRef],
   );
+}
 
+function useUnparkJob({
+  updateJobs,
+  updateParkedJobs,
+  jobsRef,
+  requestApproval,
+  feedback,
+  run,
+}: ParkMutationInput) {
+  const { isScopeActive } = feedback;
   /** Unpark by drag: one server call; after a qualification warning the same call with the approval. */
-  const unparkJob = useCallback(
+  return useCallback(
     (input: UnparkRequest & { successMessage: string; context?: CalendarRefusalContext | undefined }) => {
       const { job, parkingContext } = input;
       const { jobId, placed, schedule, restoreContext } = unparkPlacement(input);
@@ -162,6 +167,15 @@ export function useCalendarParkMutations({
     },
     [isScopeActive, jobsRef, requestApproval, run, updateJobs, updateParkedJobs],
   );
+}
 
+/**
+ * Parking from the grid. Park by drag hands the write to the context dialog
+ * and returns the release for its outcome; unpark by drag is one server call
+ * whose warning changes nothing and is repeated with the approval.
+ */
+export function useCalendarParkMutations(input: ParkMutationInput) {
+  const beginPark = useBeginPark(input);
+  const unparkJob = useUnparkJob(input);
   return { beginPark, unparkJob };
 }

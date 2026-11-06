@@ -11,7 +11,6 @@ import { CALENDAR_DISPATCH_STATE_LABELS } from '@/lib/calendar/board';
 import {
   CALENDAR_DISPATCH_FILTERS,
   CALENDAR_HORIZON_WEEKS,
-  type CalendarHorizonWeeks,
   type CalendarPreferences,
 } from '@/lib/calendar/preferences';
 import { cn } from '@/lib/utils';
@@ -23,6 +22,135 @@ export type BoardToolbarProps = {
   showActualTime: boolean;
   onHelp: () => void;
 };
+
+type PreferenceChange = BoardToolbarProps['onChange'];
+
+function horizonSelect(preferences: CalendarPreferences, onChange: PreferenceChange): React.JSX.Element {
+  return (
+    <Select
+      value={String(preferences.horizonWeeks)}
+      onValueChange={(value) => {
+        const horizonWeeks = CALENDAR_HORIZON_WEEKS.find((weeks) => String(weeks) === value);
+        if (horizonWeeks !== undefined) onChange({ horizonWeeks });
+      }}
+    >
+      <SelectTrigger className="h-9 w-[7.5rem]" aria-label="Horizont">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {CALENDAR_HORIZON_WEEKS.map((weeks) => (
+          <SelectItem key={weeks} value={String(weeks)}>
+            {weeks === 1 ? '1 Woche' : `${weeks} Wochen`}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function dispatchStateFilter(
+  preferences: CalendarPreferences,
+  onChange: PreferenceChange,
+): React.JSX.Element {
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="text-sm font-medium">Einsatzstatus</legend>
+      {CALENDAR_DISPATCH_FILTERS.map((state) => (
+        <label key={state} className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={preferences.dispatchStates.includes(state)}
+            onCheckedChange={(checked) =>
+              onChange({
+                dispatchStates: checked
+                  ? [...preferences.dispatchStates, state]
+                  : preferences.dispatchStates.filter((entry) => entry !== state),
+              })
+            }
+          />
+          {CALENDAR_DISPATCH_STATE_LABELS[state]}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+function displayOptions(
+  preferences: CalendarPreferences,
+  showActualTime: boolean,
+  onChange: PreferenceChange,
+): React.JSX.Element {
+  return (
+    <fieldset className="space-y-1.5">
+      <legend className="text-sm font-medium">Anzeige</legend>
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <Checkbox
+          checked={preferences.onlyConflicts}
+          onCheckedChange={(checked) => onChange({ onlyConflicts: checked === true })}
+        />
+        Nur Konflikte
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <Checkbox
+          checked={preferences.hideWeekends}
+          onCheckedChange={(checked) => onChange({ hideWeekends: checked === true })}
+        />
+        Wochenende ausblenden
+      </label>
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <Checkbox
+          checked={showActualTime}
+          onCheckedChange={(checked) => onChange({ showActualTime: checked === true })}
+        />
+        Ist-Zeiten anzeigen
+      </label>
+    </fieldset>
+  );
+}
+
+function filterPopover({
+  preferences,
+  onChange,
+  teams,
+  showActualTime,
+}: Omit<BoardToolbarProps, 'onHelp'>): React.JSX.Element {
+  const activeFilters =
+    preferences.teamIds.length + preferences.dispatchStates.length + (preferences.onlyConflicts ? 1 : 0);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 gap-2"
+          aria-label={`Filter${activeFilters ? `, ${activeFilters} aktiv` : ''}`}
+        >
+          <Filter className="size-4" aria-hidden="true" />
+          <span className="sr-only sm:not-sr-only">Filter</span>
+          {activeFilters > 0 && (
+            <span className="rounded-full bg-primary-foreground px-1.5 text-xs text-primary">
+              {activeFilters}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 space-y-4">
+        <div className="space-y-1.5">
+          <span className="text-sm font-medium">Team</span>
+          <SearchableMultiSelect
+            options={teams.map((team) => ({ value: team.id, label: team.name }))}
+            selectedIds={preferences.teamIds}
+            onSelectionChange={(teamIds) => onChange({ teamIds })}
+            placeholder="Alle Teams"
+            ariaLabel="Teams filtern"
+            allowNone
+          />
+        </div>
+        {dispatchStateFilter(preferences, onChange)}
+        {displayOptions(preferences, showActualTime, onChange)}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /**
  * The board's own controls (P1-24a): horizon, density, the search, and a
@@ -36,25 +164,9 @@ export function BoardToolbar({
   showActualTime,
   onHelp,
 }: BoardToolbarProps): React.JSX.Element {
-  const activeFilters =
-    preferences.teamIds.length + preferences.dispatchStates.length + (preferences.onlyConflicts ? 1 : 0);
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Plantafel-Einstellungen">
-      <Select
-        value={String(preferences.horizonWeeks)}
-        onValueChange={(value) => onChange({ horizonWeeks: Number(value) as CalendarHorizonWeeks })}
-      >
-        <SelectTrigger className="h-9 w-[7.5rem]" aria-label="Horizont">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {CALENDAR_HORIZON_WEEKS.map((weeks) => (
-            <SelectItem key={weeks} value={String(weeks)}>
-              {weeks === 1 ? '1 Woche' : `${weeks} Wochen`}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      {horizonSelect(preferences, onChange)}
       <SearchInput
         value={preferences.search}
         onValueChange={(value) => onChange({ search: value })}
@@ -62,79 +174,7 @@ export function BoardToolbar({
         aria-label="Plantafel durchsuchen"
         wrapperClassName="w-40 sm:w-52"
       />
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2"
-            aria-label={`Filter${activeFilters ? `, ${activeFilters} aktiv` : ''}`}
-          >
-            <Filter className="size-4" aria-hidden="true" />
-            <span className="sr-only sm:not-sr-only">Filter</span>
-            {activeFilters > 0 && (
-              <span className="rounded-full bg-primary-foreground px-1.5 text-xs text-primary">
-                {activeFilters}
-              </span>
-            )}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 space-y-4">
-          <div className="space-y-1.5">
-            <span className="text-sm font-medium">Team</span>
-            <SearchableMultiSelect
-              options={teams.map((team) => ({ value: team.id, label: team.name }))}
-              selectedIds={preferences.teamIds}
-              onSelectionChange={(teamIds) => onChange({ teamIds })}
-              placeholder="Alle Teams"
-              ariaLabel="Teams filtern"
-              allowNone
-            />
-          </div>
-          <fieldset className="space-y-1.5">
-            <legend className="text-sm font-medium">Einsatzstatus</legend>
-            {CALENDAR_DISPATCH_FILTERS.map((state) => (
-              <label key={state} className="flex cursor-pointer items-center gap-2 text-sm">
-                <Checkbox
-                  checked={preferences.dispatchStates.includes(state)}
-                  onCheckedChange={(checked) =>
-                    onChange({
-                      dispatchStates: checked
-                        ? [...preferences.dispatchStates, state]
-                        : preferences.dispatchStates.filter((entry) => entry !== state),
-                    })
-                  }
-                />
-                {CALENDAR_DISPATCH_STATE_LABELS[state]}
-              </label>
-            ))}
-          </fieldset>
-          <fieldset className="space-y-1.5">
-            <legend className="text-sm font-medium">Anzeige</legend>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={preferences.onlyConflicts}
-                onCheckedChange={(checked) => onChange({ onlyConflicts: checked === true })}
-              />
-              Nur Konflikte
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={preferences.hideWeekends}
-                onCheckedChange={(checked) => onChange({ hideWeekends: checked === true })}
-              />
-              Wochenende ausblenden
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox
-                checked={showActualTime}
-                onCheckedChange={(checked) => onChange({ showActualTime: checked === true })}
-              />
-              Ist-Zeiten anzeigen
-            </label>
-          </fieldset>
-        </PopoverContent>
-      </Popover>
+      {filterPopover({ preferences, onChange, teams, showActualTime })}
       <Button
         variant="outline"
         size="sm"
