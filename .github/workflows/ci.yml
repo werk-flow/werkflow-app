@@ -230,16 +230,11 @@ jobs:
     # Above the longest hold, CI_MIDNIGHT_HOLD_MAX_MS; a test keeps the two in step.
     timeout-minutes: 80
     permissions: {}
-    env:
-      UNTIL: ${{ needs.plan.outputs.midnight_until }}
     steps:
-      # A step of its own: GitHub shows a step's summary only when the step ends.
-      - name: Say why the run waits
-        run: |
-          message="This run is waiting on purpose: the browser shards start at $UNTIL. No browser group starts from 23:40 to 00:10 Berlin time, and a Browser job that started now could reach that window within its timeout. The other jobs run meanwhile; Check reports after the shards."
-          echo "::notice title=Midnight wait::$message"
-          echo "$message" >> "$GITHUB_STEP_SUMMARY"
+      # GitHub shows a job's summary when the job ends, so Plan says why the run waits.
       - name: Wait until the shards may start
+        env:
+          UNTIL: ${{ needs.plan.outputs.midnight_until }}
         run: |
           end="$(date --date "$UNTIL" +%s)"
           while left=$((end - $(date +%s))); test "$left" -gt 0; do

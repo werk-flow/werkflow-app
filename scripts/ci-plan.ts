@@ -69,10 +69,13 @@ const holdUntil = proofMinutes
   ? midnightProofHoldUntil({ now, minutes: proofMinutes, ref: process.env.GITHUB_REF_NAME ?? '' })
   : ciBrowserHoldUntil(now);
 const midnightUntil = plan.shards.length && holdUntil ? holdUntil.toISOString() : '';
-if (midnightUntil)
-  console.info(
-    `[ci-plan] The browser shards hold until ${midnightUntil}${proofMinutes ? ' (proof run)' : ''}.`,
-  );
+if (midnightUntil) {
+  const message = `This run waits on purpose${proofMinutes ? ' (proof run)' : ''}: the browser shards start at ${midnightUntil}. No browser group starts from 23:40 to 00:10 Berlin time, and a Browser job that started now could reach that window within its timeout. The other jobs run meanwhile; Check reports after the shards.`;
+  console.info(`::notice title=Midnight wait::${message}`);
+  // This job ends before the wait starts, so its summary is on the run page during the wait.
+  const summary = process.env.GITHUB_STEP_SUMMARY;
+  if (summary) appendFileSync(summary, `${message}\n`);
+}
 const output = process.env.GITHUB_OUTPUT;
 if (output)
   appendFileSync(
