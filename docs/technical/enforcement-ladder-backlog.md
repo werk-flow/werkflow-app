@@ -15,6 +15,7 @@ Open candidates for moving a rule up the ladder of [decision 0005](../decisions/
 | --- | --- | --- |
 | Server Actions passed as values | `lib/conventions/live-view-reads.test.ts` misses an action returned by a hook or passed through `memo(…)` or `forwardRef(…)`. | Tier 1: a branded type on Server Action references that an effect or a live-view `read` cannot call. |
 | Calendar draft reset in an effect | `components/kalender/use-entry-details-draft.ts` sits on `derivedStateEffectExceptions` in `eslint.config.mjs`. | Tier 2: in the run that recalibrates the calendar references, adopt the open key during render and delete the exception. |
+| Browser version in a reference | `lib/testing/reference-digests.ts` compares only digests, so a Playwright upgrade that moves `browserVersion` in a lab context fails in the next lab run, not on its PR. | Tier 2: compare the references with the Chromium version `playwright-core/browsers.json` pins. |
 | Document library transition | `components/dokumente/document-library-content.tsx` keeps `useTransition` (`transitionExemptFiles`). | Tier 2: bind the pending flag to `pendingNavigation`, delete the exemption, prove it in the documents browser groups. |
 
 ## Security

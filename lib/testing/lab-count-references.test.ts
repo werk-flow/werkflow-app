@@ -4,10 +4,9 @@ import { expect, test } from 'bun:test';
 
 import referenceFile from './lab-count-references.json';
 import { labReferenceProblems, labReferencesSchema } from './lab-counts';
-import { LAB_MEASUREMENT_VERSION } from './lab-record';
-import { labMeasurementDigest } from './lab-count-context';
 import { readLabReferences } from './lab-evidence';
 import { LAB_STEPS } from './lab-steps';
+import { labDigestProblems } from './reference-digests';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
 
@@ -16,23 +15,11 @@ test('the reference file has its shape and passes the structural rules', () => {
   expect(labReferenceProblems(references, LAB_STEPS)).toEqual([]);
 });
 
-// A changed lab test or recorder module orphans its references; a required step
-// without a reference at its current digest would fail the next release plan.
-test('every required lab step has a reference at its current measurement digest', () => {
-  const references = readLabReferences();
-  const orphaned = LAB_STEPS.filter((step) => step.comparison === 'required')
-    .filter(
-      (step) =>
-        !references.steps.some(
-          (reference) =>
-            reference.stepId === step.id &&
-            reference.stepVersion === step.version &&
-            reference.labMeasurementVersion === LAB_MEASUREMENT_VERSION &&
-            reference.context.measurementDigest === labMeasurementDigest(repositoryRoot, step),
-        ),
-    )
-    .map((step) => step.id);
-  expect(orphaned).toEqual([]);
+// A changed lab test, recorder module or workload file orphans its references. Lab
+// groups run nightly, so without this test the PR that moves a digest merges green.
+test('every required lab step has a reference at its current measurement and workload digest', () => {
+  const problems = labDigestProblems(repositoryRoot, readLabReferences(), LAB_STEPS);
+  expect(problems, problems.join('\n')).toEqual([]);
 });
 
 test('a gated metric carries its stability and relevance evidence, and a rejected one gates nothing', () => {
