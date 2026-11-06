@@ -4,10 +4,7 @@
   "components/kalender/day-view/day-timeline-row.tsx": 1,
   "components/kalender/day-view/use-day-create-drag.ts": 1,
   "components/kalender/drag-engine/drag-engine.tsx": 1,
-  "lib/attention/actions.ts": 1,
   "lib/data/background-read-client.ts": 1,
   "lib/supabase/rpc-args.ts": 1,
-  "lib/testing/runs/archive-state.ts": 1,
-  "lib/testing/spec-support/pre-submit-callbacks.test.ts": 1,
   "tests/golden/support/scenario-measurement.ts": 2
 }

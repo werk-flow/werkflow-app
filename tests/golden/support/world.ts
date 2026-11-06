@@ -64,7 +64,7 @@ const testUserSchema = z.looseObject({
   lastName: z.string(),
 }) satisfies z.ZodType<TestUser>;
 
-const testWorldSchema = z.looseObject({
+export const testWorldSchema = z.looseObject({
   runId: z.string(),
   seedStatus: z.enum(['seeding', 'ready']).exactOptional(),
   additionalUserEmails: z.array(z.string()).exactOptional(),

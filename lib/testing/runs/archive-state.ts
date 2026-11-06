@@ -1,17 +1,29 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { z } from 'zod';
 import type { RunManifest } from '../../../tests/golden/support/run-state';
-import type { TestWorld } from '../../../tests/golden/support/world';
+
+/**
+ * Only the identities retention compares and the seed state a restore checks. A retained file
+ * outlives the shape that wrote it, so a field added later must not cost an old world its
+ * protection. Loose objects keep every other key.
+ */
+export const worldIdentitySchema = z.looseObject({
+  runId: z.string(),
+  seedStatus: z.unknown().exactOptional(),
+  orgId: z.string(),
+  outsider: z.looseObject({ orgId: z.string() }),
+});
 
 export function readRetainedWorldState(
   manifest: Pick<RunManifest, 'runKey' | 'world'>,
   path: string,
-): TestWorld {
+): z.infer<typeof worldIdentitySchema> {
   if (!existsSync(path))
     throw new Error(
       `Retained run ${manifest.runKey} is missing archived world.json. Refusing to omit its owned resources from cleanup protection.`,
     );
-  const world = JSON.parse(readFileSync(path, 'utf8')) as TestWorld;
+  const world = worldIdentitySchema.parse(JSON.parse(readFileSync(path, 'utf8')));
   validateRetainedWorldIdentity(manifest.world, world);
   return world;
 }
