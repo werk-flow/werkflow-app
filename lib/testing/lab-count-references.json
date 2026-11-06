@@ -2102,7 +2102,7 @@
           "from": { "reference": 1035, "tolerance": 19 },
           "to": null,
           "runKeys": ["2026-11-06T040531584Z-1a8d88", "2026-11-06T040730589Z-90bc16"],
-          "reason": "Owner decision 2026-11-06 on werk-flow/werkflow-planning#94: the count took 906, 1042 and 1035 on one build on the Mac (werk-flow/werkflow-app#165), so it does not repeat on this step. The two runs named here held 1035 on the Linux PC; they did not reproduce the spread."
+          "reason": "On 2026-11-01 CI read this count as 906 (run 41303379980) and 1042 (run 41309276961) among 17 readings of 1035, so it does not repeat on this step (performance.md). The debt lead asked for the ungate on werk-flow/werkflow-planning#94; it was not an owner decision. The two runs named here are Linux PC runs that held 1035."
         }
       ]
     },
