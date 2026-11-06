@@ -36,9 +36,10 @@ Start each child of the current stage with `delegate_task` (`isolation: "worktre
 - Update the **Current Product Baseline** of the feature spec in the same PR as the behavior.
 - Run `bun run check:changed` and the done-when commands. Run `sol-loop` for level 1 and 2.
 - Open the PR with `file-pr`. Do not watch or merge it.
+- Never end your turn while a shell run you wait on is going: your turn end is your hand-back ([wait for a long run](../../../docs/technical/testing.md#wait-for-a-long-run)).
 - End with: `PR <full URL>, head <SHA>, checks and reviews <state>.`
 
-End your turn. Each completion notice wakes you. Do not poll.
+End your turn. A child's completion notice wakes you, and so does a PR watch, so do not poll them. A shell run wakes nobody: [start it notified](../../../docs/technical/testing.md#wait-for-a-long-run).
 
 ## 4. Merge in order
 
@@ -55,7 +56,7 @@ Start the next stage only after every child of this stage merged.
 
 ## 5. Close
 
-1. On the merged `main`, run the feature's end-to-end journeys: `bun run test:verify --group <ids> --fresh` with its `golden:*` and `audit:*` groups from `lib/testing/selection/test-groups.ts`. A wave end adds `bun run test:verify --mode release`.
+1. On the merged `main`, run the feature's end-to-end journeys: `bun run test:verify --group <ids> --fresh` with its `golden:*` and `audit:*` groups from `lib/testing/selection/test-groups.ts`. A wave end adds `bun run test:verify --mode release`. [Start each notified](../../../docs/technical/testing.md#wait-for-a-long-run).
 2. Check that each child updated the **Current Product Baseline** of every spec whose behavior it changed.
 3. Check every done-when of the epic against `main`.
 4. Comment the result on the epic: each child with its PR, targets before and after, decisions you made, anything unverified. Close the epic.
