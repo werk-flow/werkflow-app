@@ -65,6 +65,8 @@ jobs:
     # Only main speaks for the nightly, and a run a person cancelled says nothing about it. Nothing
     # needs this job and the release gate reads only `Full run / Check`, so it changes no release.
     if: ${{ !cancelled() && (github.ref == 'refs/heads/main' || inputs.alert_proof) }}
+    # Two runs ending together must not both find no issue. release.yml's runs already queue.
+    concurrency: nightly-alert
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

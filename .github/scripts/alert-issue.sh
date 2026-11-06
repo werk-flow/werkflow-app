@@ -16,14 +16,14 @@ label=ci-alert
 assignee=tamaycbn
 run_url="${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
 
-open_issue() {
+open_issues() {
   gh issue list --state open --label "$label" --json number,title \
-    | jq -r --arg title "$1" '[.[] | select(.title == $title)][0].number // empty'
+    | jq -r --arg title "$1" '.[] | select(.title == $title) | .number'
 }
 
 open_alert() {
   local issue body
-  issue="$(open_issue "$1")"
+  issue="$(open_issues "$1" | sed -n 1p)"
   body="$(printf '%s\n\nRun: %s' "$2" "$run_url")"
   if test -n "$issue"; then
     gh issue edit "$issue" --body "$body"
@@ -33,12 +33,12 @@ open_alert() {
   fi
 }
 
+# Every match: GitHub has no create-if-absent, so a race can leave a second issue of one title.
 close_alert() {
   local issue
-  issue="$(open_issue "$1")"
-  if test -n "$issue"; then
+  for issue in $(open_issues "$1"); do
     gh issue close "$issue" --comment "Green again: ${run_url}"
-  fi
+  done
 }
 
 # This run's jobs that ended badly, with the steps that did; a Static gates step names its groups.

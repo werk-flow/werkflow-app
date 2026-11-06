@@ -122,6 +122,17 @@ test('a green run closes the open issue of its own title only', () => {
   ]);
 });
 
+test('a green run closes a duplicate a race left behind', () => {
+  writeOpenIssues([
+    { number: 14, title: TITLE },
+    { number: 15, title: TITLE },
+  ]);
+  expect(issueWrites(['run', TITLE, 'success'])).toEqual([
+    `issue close 14 --comment Green again: ${RUN_URL}`,
+    `issue close 15 --comment Green again: ${RUN_URL}\n`,
+  ]);
+});
+
 test('a green run with no open issue writes nothing', () => {
   expect(issueWrites(['run', TITLE, 'success success'])).toEqual([]);
 });
