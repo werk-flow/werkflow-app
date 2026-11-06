@@ -75,7 +75,7 @@ export const performanceBaselinesSchema = z
 export type PerformanceBaseline = z.infer<typeof baselineSchema>;
 export type PerformanceBaselines = z.infer<typeof performanceBaselinesSchema>;
 
-const referenceCarryoverSchema = z
+export const referenceCarryoverSchema = z
   .object({
     reason: z.string().min(1),
     entries: z.array(

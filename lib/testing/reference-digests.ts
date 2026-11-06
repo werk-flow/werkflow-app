@@ -21,6 +21,15 @@ const REVIEWED_WORKLOAD_DIRECTORY = 'lib/testing/workload-archive';
 
 const HOW_TO = 'See docs/technical/performance.md, "Move a reference to a new digest".';
 
+const REPLACING = ', replacing any entry for the same reference';
+
+/**
+ * The reference file as stored, and with its carry-over entries applied. A run
+ * judges the carried digest; a carry-over entry applies once, from the stored
+ * digest, so a printed entry starts there.
+ */
+type Referenced<References> = { stored: References; carried: References };
+
 const reviewedArchive = (repositoryRoot: string): string =>
   resolve(repositoryRoot, REVIEWED_WORKLOAD_DIRECTORY);
 
@@ -51,7 +60,7 @@ function measurementProblems(entries: readonly string[], advice: string): string
 /** Every required lab step that a run would find without a reference, with what to do about it. */
 export function labDigestProblems(
   repositoryRoot: string,
-  references: LabReferences,
+  { stored, carried }: Referenced<LabReferences>,
   steps: readonly LabStep[],
 ): string[] {
   const toDigest = labWorkloadDigest(repositoryRoot, reviewedArchive(repositoryRoot));
@@ -59,19 +68,19 @@ export function labDigestProblems(
   const workload: MovedWorkload[] = [];
   for (const step of steps.filter((candidate) => candidate.comparison === 'required')) {
     const digest = labMeasurementDigest(repositoryRoot, step);
-    const rows = references.steps.filter(
-      (reference) =>
-        reference.stepId === step.id &&
-        reference.stepVersion === step.version &&
-        reference.labMeasurementVersion === LAB_MEASUREMENT_VERSION,
-    );
-    const current = rows.find((reference) => reference.context.measurementDigest === digest);
+    const sameStep = (reference: LabReferences['steps'][number]): boolean =>
+      reference.stepId === step.id &&
+      reference.stepVersion === step.version &&
+      reference.labMeasurementVersion === LAB_MEASUREMENT_VERSION;
+    const current = carried.steps
+      .filter(sameStep)
+      .find((reference) => reference.context.measurementDigest === digest);
     if (current) {
       if (current.context.workloadDigest !== toDigest)
         workload.push({ id: step.id, fromDigest: current.context.workloadDigest, toDigest });
       continue;
     }
-    const [recorded] = rows;
+    const recorded = stored.steps.find(sameStep);
     measurement.push(
       recorded
         ? `${step.id}: its measured code moved. Carry-over entry: ${JSON.stringify({ stepId: step.id, fromDigest: recorded.context.measurementDigest, toDigest: digest, reason: '<why the counts stay the same>' })}`
@@ -81,7 +90,7 @@ export function labDigestProblems(
   return [
     ...measurementProblems(
       measurement,
-      'If the edit cannot change what is counted, add each entry below to lib/testing/lab-count-reference-carryover.json. Otherwise recalibrate from five runs.',
+      `If the edit cannot change what is counted, put each entry below into lib/testing/lab-count-reference-carryover.json${REPLACING}. Otherwise recalibrate from five runs.`,
     ),
     ...workloadProblems(
       workload,
@@ -96,7 +105,7 @@ export function labDigestProblems(
  */
 export function wallClockDigestProblems(
   repositoryRoot: string,
-  baselines: PerformanceBaselines,
+  { stored, carried }: Referenced<PerformanceBaselines>,
   scenarios: readonly MeasuredScenario[],
 ): string[] {
   const measurement: string[] = [];
@@ -104,17 +113,18 @@ export function wallClockDigestProblems(
   for (const scenario of scenarios.filter((candidate) => candidate.comparison === 'required')) {
     const digest = measurementDigest(repositoryRoot, scenario);
     const toDigest = reviewedWorkloadDigest(repositoryRoot, scenario);
-    const rows = baselines.baselines.filter(
-      (baseline) => baseline.scenarioId === scenario.id && baseline.scenarioVersion === scenario.version,
-    );
-    const current = rows.filter((baseline) => baseline.context.measurementDigest === digest);
+    const sameScenario = (baseline: PerformanceBaselines['baselines'][number]): boolean =>
+      baseline.scenarioId === scenario.id && baseline.scenarioVersion === scenario.version;
+    const current = carried.baselines
+      .filter(sameScenario)
+      .filter((baseline) => baseline.context.measurementDigest === digest);
     if (current.some((baseline) => baseline.context.workloadDigest === toDigest)) continue;
     const [sameCode] = current;
     if (sameCode) {
       workload.push({ id: scenario.id, fromDigest: sameCode.context.workloadDigest, toDigest });
       continue;
     }
-    const [recorded] = rows;
+    const recorded = stored.baselines.find(sameScenario);
     measurement.push(
       recorded
         ? `${scenario.id}: its measured code moved. Carry-over entry: ${JSON.stringify({ scenarioId: scenario.id, fileDigest: recorded.context.measurementDigest, measuredTestDigest: digest })}`
@@ -125,7 +135,7 @@ export function wallClockDigestProblems(
   return [
     ...measurementProblems(
       measurement,
-      `If the edit cannot change what a scenario measures, add each entry below to lib/testing/performance-reference-carryover.json. Otherwise ${elsewhere}.`,
+      `If the edit cannot change what a scenario measures, put each entry below into lib/testing/performance-reference-carryover.json${REPLACING}. Otherwise ${elsewhere}.`,
     ),
     ...workloadProblems(
       workload,

@@ -2,7 +2,8 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import { MEASURED_SCENARIOS } from './measured-scenarios';
-import { readPerformanceBaselines } from './performance-baselines';
+import baselineFile from './performance-baselines.json';
+import { performanceBaselinesSchema, readPerformanceBaselines } from './performance-baselines';
 import { wallClockDigestProblems } from './reference-digests';
 
 const repositoryRoot = resolve(import.meta.dir, '../..');
@@ -15,6 +16,11 @@ const repositoryRoot = resolve(import.meta.dir, '../..');
 // current digest, or mark the scenario `calibrating` until that happens. The
 // same holds for a moved workload digest (2026-11-01: #151).
 test('every required scenario has a reviewed reference at its current measurement and workload digest', () => {
-  const problems = wallClockDigestProblems(repositoryRoot, readPerformanceBaselines(), MEASURED_SCENARIOS);
+  const stored = performanceBaselinesSchema.parse(baselineFile);
+  const problems = wallClockDigestProblems(
+    repositoryRoot,
+    { stored, carried: readPerformanceBaselines() },
+    MEASURED_SCENARIOS,
+  );
   expect(problems, problems.join('\n')).toEqual([]);
 });

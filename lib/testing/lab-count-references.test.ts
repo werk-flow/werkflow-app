@@ -18,7 +18,8 @@ test('the reference file has its shape and passes the structural rules', () => {
 // A changed lab test, recorder module or workload file orphans its references. Lab
 // groups run nightly, so without this test the PR that moves a digest merges green.
 test('every required lab step has a reference at its current measurement and workload digest', () => {
-  const problems = labDigestProblems(repositoryRoot, readLabReferences(), LAB_STEPS);
+  const stored = labReferencesSchema.parse(referenceFile);
+  const problems = labDigestProblems(repositoryRoot, { stored, carried: readLabReferences() }, LAB_STEPS);
   expect(problems, problems.join('\n')).toEqual([]);
 });
 

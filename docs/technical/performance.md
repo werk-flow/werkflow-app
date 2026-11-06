@@ -51,7 +51,7 @@ A workload digest hashes its files with the workload a run archived. `lib/testin
 
 - **The seeded workload did not change**, as with a type-only edit to `tests/audit/support/performance-profile.ts`: run `bun scripts/lab-counts.ts rekey-workload --from <old digest> --reason "<why the seeded rows stay the same>"`. It re-keys lab and wall-clock references, keeps every value and needs no local stack. A wrong claim fails the next run that measures it.
 - **The workload changed:** calibrate the lab steps from five runs on one build, then copy a run's `performance-workload.json` or `planning-benchmark-workload.json` into `lib/testing/workload-archive/`. This takes a local stack; without one, hand the change over.
-- **The measured code changed but not what it counts:** add the printed entry, with its reason, to `lib/testing/lab-count-reference-carryover.json` or `lib/testing/performance-reference-carryover.json`.
+- **The measured code changed but not what it counts:** put the printed entry, with its reason, into `lib/testing/lab-count-reference-carryover.json` or `lib/testing/performance-reference-carryover.json`. An entry applies once, from the stored digest, so it replaces an earlier entry for the same reference.
 - **The measured code changed what it counts:** recalibrate from five runs.
 - **A wall-clock reference needs recalibrating:** only the machine it names can do that. From another machine, set the scenario's `comparison` to `'calibrating'`, and leave the reference to that machine. The check reads no machine field.
 
