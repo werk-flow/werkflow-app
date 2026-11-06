@@ -32,6 +32,121 @@ export type TimeBlockProps = {
   ) => void;
 };
 
+/** The minutes of one segment type: the block's work or its breaks. */
+function segmentMinutes(segments: TimeBlockSegment[], type: TimeBlockSegment['type']): number {
+  return segments
+    .filter((segment) => segment.type === type)
+    .reduce((total, segment) => total + (segment.endMinutes - segment.startMinutes), 0);
+}
+
+/** A break inside the block, with its cup once it is wide enough to show one. */
+function breakMark(
+  segment: TimeBlockSegment,
+  startMinutes: number,
+  hourWidth: number,
+): React.JSX.Element | false {
+  return (
+    segment.type === 'break' && (
+      <span
+        key={segment.id}
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-y-0 flex items-center justify-center border-l border-calendar-actual-border bg-calendar-break text-calendar-break-foreground"
+        style={{
+          left: ((segment.startMinutes - startMinutes) / 60) * hourWidth,
+          width: Math.max(4, ((segment.endMinutes - segment.startMinutes) / 60) * hourWidth),
+        }}
+      >
+        {((segment.endMinutes - segment.startMinutes) / 60) * hourWidth > 28 && (
+          <Coffee className="size-3 opacity-70" />
+        )}
+      </span>
+    )
+  );
+}
+
+/** The block's text: the span and duration when it is wide enough, else its activity and duration. */
+function blockText(facts: {
+  block: CalendarWorkBlock;
+  compact: boolean;
+  pendingDelete: boolean;
+  hasRequest: boolean;
+  startMinutes: number;
+  recordedEndMinutes: number;
+  durationMinutes: number;
+  activityLabel: string;
+}): React.JSX.Element {
+  const { block, compact, pendingDelete, hasRequest, startMinutes, recordedEndMinutes } = facts;
+  const { durationMinutes, activityLabel } = facts;
+  return (
+    <span
+      className={cn(
+        'pointer-events-none relative z-10 flex min-w-0 items-center gap-1',
+        compact ? 'px-2' : 'px-3',
+      )}
+    >
+      {!compact &&
+        (pendingDelete ? (
+          <ArrowDown className="size-3 shrink-0" aria-hidden="true" />
+        ) : (
+          <Clock className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+        ))}
+      {!compact && (
+        <span className="truncate">
+          <span className="font-medium tabular-nums">
+            {formatMinutesOfDay(startMinutes)}–
+            {block.isOpen ? 'jetzt' : formatMinutesOfDay(recordedEndMinutes)}
+          </span>
+          <span className="ml-1 opacity-80">
+            {pendingDelete ? 'Löschen' : formatDuration(durationMinutes)}
+          </span>
+          {hasRequest && <ArrowUp className="ml-1 inline size-3 opacity-70" aria-hidden="true" />}
+        </span>
+      )}
+      {compact && (
+        <span className="min-w-0 text-xs leading-tight">
+          <span className="block truncate font-medium">{activityLabel}</span>
+          <span className="block truncate tabular-nums">
+            {block.isOpen ? 'läuft' : formatDuration(durationMinutes)}
+          </span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** The two resize handles; a running block has no end to move. */
+function blockEdgeHandles(
+  block: CalendarWorkBlock,
+  onPointerDownEdge: TimeBlockProps['onPointerDownEdge'],
+): React.JSX.Element {
+  return (
+    <>
+      <span
+        role="presentation"
+        className="absolute inset-y-0 -left-2 w-6 cursor-ew-resize"
+        onPointerDown={(event) => {
+          event.stopPropagation();
+          onPointerDownEdge(event, block, 'start');
+        }}
+      >
+        <span className="absolute inset-y-0 left-2 w-2 opacity-0 transition-opacity group-hover/block:opacity-100 group-focus-visible/block:opacity-100 bg-calendar-actual-border" />
+      </span>
+      {!block.isOpen && (
+        <span
+          role="presentation"
+          className="absolute inset-y-0 -right-2 w-6 cursor-ew-resize"
+          onPointerDown={(event) => {
+            event.stopPropagation();
+            onPointerDownEdge(event, block, 'end');
+          }}
+        >
+          <span className="absolute inset-y-0 right-2 w-2 opacity-0 transition-opacity group-hover/block:opacity-100 group-focus-visible/block:opacity-100 bg-calendar-actual-border" />
+        </span>
+      )}
+    </>
+  );
+}
+
 /**
  * One recorded block on the hour axis (P1-24a, package C): work segments in
  * the actual tone, breaks quieter, pending entries hatched in the waiting
@@ -39,21 +154,8 @@ export type TimeBlockProps = {
  * body drags, the 8px edges resize (24px hit area).
  */
 export const TimeBlock = memo(function TimeBlock(props: TimeBlockProps) {
-  const {
-    block,
-    segments,
-    startMinutes,
-    endMinutes,
-    hourWidth,
-    laneTop,
-    laneHeight,
-    changeRequestMap,
-    showName,
-    canManage,
-    onOpen,
-    onPointerDownMove,
-    onPointerDownEdge,
-  } = props;
+  const { block, segments, startMinutes, endMinutes, hourWidth, laneTop, laneHeight } = props;
+  const { changeRequestMap, showName, canManage, onOpen, onPointerDownMove, onPointerDownEdge } = props;
   const pending =
     block.isPending ||
     block.sourceEntries.some((entry) => entry.status === 'pending' || entry.status === 'pending_delete');
@@ -61,12 +163,8 @@ export const TimeBlock = memo(function TimeBlock(props: TimeBlockProps) {
   const hasRequest = block.sourceEntries.some((entry) => changeRequestMap[entry.id]);
   const recordedWidth = ((endMinutes - startMinutes) / 60) * hourWidth;
   const width = Math.max(DAY_MIN_ITEM_WIDTH, recordedWidth);
-  const durationMinutes = segments
-    .filter((segment) => segment.type === 'work')
-    .reduce((total, segment) => total + (segment.endMinutes - segment.startMinutes), 0);
-  const breakMinutes = segments
-    .filter((segment) => segment.type === 'break')
-    .reduce((total, segment) => total + (segment.endMinutes - segment.startMinutes), 0);
+  const durationMinutes = segmentMinutes(segments, 'work');
+  const breakMinutes = segmentMinutes(segments, 'break');
   const compact = width < 90;
   const activityLabel = block.isOnBreak
     ? 'Pause'
@@ -98,24 +196,7 @@ export const TimeBlock = memo(function TimeBlock(props: TimeBlockProps) {
         if (canManage) onPointerDownMove(event, block);
       }}
     >
-      {segments.map(
-        (segment) =>
-          segment.type === 'break' && (
-            <span
-              key={segment.id}
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 flex items-center justify-center border-l border-calendar-actual-border bg-calendar-break text-calendar-break-foreground"
-              style={{
-                left: ((segment.startMinutes - startMinutes) / 60) * hourWidth,
-                width: Math.max(4, ((segment.endMinutes - segment.startMinutes) / 60) * hourWidth),
-              }}
-            >
-              {((segment.endMinutes - segment.startMinutes) / 60) * hourWidth > 28 && (
-                <Coffee className="size-3 opacity-70" />
-              )}
-            </span>
-          ),
-      )}
+      {segments.map((segment) => breakMark(segment, startMinutes, hourWidth))}
       {recordedWidth < DAY_MIN_ITEM_WIDTH && (
         <span
           aria-hidden="true"
@@ -129,65 +210,17 @@ export const TimeBlock = memo(function TimeBlock(props: TimeBlockProps) {
           className="pointer-events-none absolute inset-0 bg-[repeating-linear-gradient(-45deg,transparent,transparent_4px,var(--warning)_4px,var(--warning)_5px)] opacity-30"
         />
       )}
-      <span
-        className={cn(
-          'pointer-events-none relative z-10 flex min-w-0 items-center gap-1',
-          compact ? 'px-2' : 'px-3',
-        )}
-      >
-        {!compact &&
-          (pendingDelete ? (
-            <ArrowDown className="size-3 shrink-0" aria-hidden="true" />
-          ) : (
-            <Clock className="size-3 shrink-0 opacity-70" aria-hidden="true" />
-          ))}
-        {!compact && (
-          <span className="truncate">
-            <span className="font-medium tabular-nums">
-              {formatMinutesOfDay(startMinutes)}–
-              {block.isOpen ? 'jetzt' : formatMinutesOfDay(recordedEndMinutes)}
-            </span>
-            <span className="ml-1 opacity-80">
-              {pendingDelete ? 'Löschen' : formatDuration(durationMinutes)}
-            </span>
-            {hasRequest && <ArrowUp className="ml-1 inline size-3 opacity-70" aria-hidden="true" />}
-          </span>
-        )}
-        {compact && (
-          <span className="min-w-0 text-xs leading-tight">
-            <span className="block truncate font-medium">{activityLabel}</span>
-            <span className="block truncate tabular-nums">
-              {block.isOpen ? 'läuft' : formatDuration(durationMinutes)}
-            </span>
-          </span>
-        )}
-      </span>
-      {canManage && (
-        <>
-          <span
-            role="presentation"
-            className="absolute inset-y-0 -left-2 w-6 cursor-ew-resize"
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              onPointerDownEdge(event, block, 'start');
-            }}
-          >
-            <span className="absolute inset-y-0 left-2 w-2 opacity-0 transition-opacity group-hover/block:opacity-100 group-focus-visible/block:opacity-100 bg-calendar-actual-border" />
-          </span>
-          {!block.isOpen && (
-            <span
-              role="presentation"
-              className="absolute inset-y-0 -right-2 w-6 cursor-ew-resize"
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                onPointerDownEdge(event, block, 'end');
-              }}
-            >
-              <span className="absolute inset-y-0 right-2 w-2 opacity-0 transition-opacity group-hover/block:opacity-100 group-focus-visible/block:opacity-100 bg-calendar-actual-border" />
-            </span>
-          )}
-        </>
-      )}
+      {blockText({
+        block,
+        compact,
+        pendingDelete,
+        hasRequest,
+        startMinutes,
+        recordedEndMinutes,
+        durationMinutes,
+        activityLabel,
+      })}
+      {canManage && blockEdgeHandles(block, onPointerDownEdge)}
     </PlainButton>
   );
 });

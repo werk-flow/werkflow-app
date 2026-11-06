@@ -36,6 +36,74 @@ export type DayTimelineProps = {
   organizationSettings: OrganizationTimeTrackingSettings;
 };
 
+/** The timeline's box and the two widths its hour grid draws with. */
+function timelineStyle(
+  timelineWidth: number,
+  hourWidth: number,
+): React.CSSProperties & Record<'--calendar-hour-width' | '--calendar-subline-width', string> {
+  return {
+    width: timelineWidth,
+    '--calendar-hour-width': `${hourWidth}px`,
+    '--calendar-subline-width': `${hourWidth / (hourWidth >= 220 ? 4 : 2)}px`,
+  };
+}
+
+/** The sticky name cell with its plan button and day note. */
+function dayRowHeader(
+  { row, dateIso, canCreate, actions }: DayTimelineProps & { row: DayRow },
+  label: string | null,
+): React.JSX.Element {
+  const { model } = row;
+  return (
+    <div
+      role="rowheader"
+      className={cn(
+        'sticky left-0 flex shrink-0 flex-col justify-center gap-0.5 border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1',
+        CALENDAR_LAYER_CLASS.sticky,
+      )}
+      style={{ width: DAY_NAME_COLUMN_PX }}
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate text-sm font-medium">{model.name}</span>
+        {/* The button presets its person, which the entry dialog takes as a login. */}
+        {canCreate && model.userId !== null && (
+          <PlainButton
+            type="button"
+            className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100"
+            aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`}
+            onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId ?? undefined })}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+          </PlainButton>
+        )}
+      </span>
+      {label && <span className="truncate text-xs text-muted-foreground">{label}</span>}
+    </div>
+  );
+}
+
+/** The travel minutes between two visits, where the gap is wide enough to read. */
+function travelGapLabel(
+  gap: ReturnType<typeof travelGaps>[number],
+  hourWidth: number,
+): React.JSX.Element | false {
+  return (
+    ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth > 36 && (
+      <span
+        key={gap.startMinutes}
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-0.5 truncate text-center text-xs tabular-nums text-muted-foreground"
+        style={{
+          left: (gap.startMinutes / 60) * hourWidth,
+          width: ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth,
+        }}
+      >
+        {gap.endMinutes - gap.startMinutes} min
+      </span>
+    )
+  );
+}
+
 /**
  * One person's row against the hour axis: the sticky name with its plan
  * button and day note, the timeline with the create overlay, the untimed
@@ -44,7 +112,7 @@ export type DayTimelineProps = {
 export function DayTimelineRow(
   props: DayTimelineProps & { row: DayRow; highlighted: boolean },
 ): React.JSX.Element {
-  const { row, highlighted, dateIso, hourWidth, timelineWidth, canCreate, actions, createDrag } = props;
+  const { row, highlighted, dateIso, hourWidth, timelineWidth, canCreate, createDrag } = props;
   const { model, boardDay, lanes, laneCount, untimed } = row;
   const trayHeight = untimed.length > 0 ? DAY_TRAY_HEIGHT : 0;
   const height = trayHeight + laneCount * DAY_LANE_HEIGHT;
@@ -60,30 +128,7 @@ export function DayTimelineRow(
       className={cn('group/row flex flex-1', highlighted && 'animate-row-highlight')}
       style={{ minHeight: height, maxHeight: Math.max(height, DAY_LANE_HEIGHT * 3) }}
     >
-      <div
-        role="rowheader"
-        className={cn(
-          'sticky left-0 flex shrink-0 flex-col justify-center gap-0.5 border-b border-r border-calendar-grid-strong bg-calendar-gutter px-3 py-1',
-          CALENDAR_LAYER_CLASS.sticky,
-        )}
-        style={{ width: DAY_NAME_COLUMN_PX }}
-      >
-        <span className="flex min-w-0 items-center gap-1">
-          <span className="min-w-0 truncate text-sm font-medium">{model.name}</span>
-          {/* The button presets its person, which the entry dialog takes as a login. */}
-          {canCreate && model.userId !== null && (
-            <PlainButton
-              type="button"
-              className="ml-auto rounded-md p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/row:opacity-100"
-              aria-label={`Termin am ${formatRefusalDate(dateIso)} für ${model.name} planen`}
-              onClick={() => actions.onAddEntry({ date: dateIso, userId: model.userId ?? undefined })}
-            >
-              <Plus className="size-3.5" aria-hidden="true" />
-            </PlainButton>
-          )}
-        </span>
-        {label && <span className="truncate text-xs text-muted-foreground">{label}</span>}
-      </div>
+      {dayRowHeader(props, label)}
       <div
         role="gridcell"
         data-day-timeline=""
@@ -93,13 +138,7 @@ export function DayTimelineRow(
           off ? 'bg-calendar-cell-off' : 'bg-background',
           canCreate && 'cursor-crosshair',
         )}
-        style={
-          {
-            width: timelineWidth,
-            '--calendar-hour-width': `${hourWidth}px`,
-            '--calendar-subline-width': `${hourWidth / (hourWidth >= 220 ? 4 : 2)}px`,
-          } as React.CSSProperties
-        }
+        style={timelineStyle(timelineWidth, hourWidth)}
         onPointerDown={(event) => createDrag.handleCreatePointerDown(event, model.userId)}
         onPointerMove={createDrag.handleCreatePointerMove}
         onPointerUp={createDrag.handleCreatePointerUp}
@@ -115,22 +154,7 @@ export function DayTimelineRow(
           )}
         />
         {untimed.length > 0 && <DayUntimedTray {...props} />}
-        {gaps.map(
-          (gap) =>
-            ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth > 36 && (
-              <span
-                key={gap.startMinutes}
-                aria-hidden="true"
-                className="pointer-events-none absolute bottom-0.5 truncate text-center text-xs tabular-nums text-muted-foreground"
-                style={{
-                  left: (gap.startMinutes / 60) * hourWidth,
-                  width: ((gap.endMinutes - gap.startMinutes) / 60) * hourWidth,
-                }}
-              >
-                {gap.endMinutes - gap.startMinutes} min
-              </span>
-            ),
-        )}
+        {gaps.map((gap) => travelGapLabel(gap, hourWidth))}
         {lanes.map(({ item, lane }) => (
           <DayLaneItem
             key={item.key}

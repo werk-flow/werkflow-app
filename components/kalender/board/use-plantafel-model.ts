@@ -36,6 +36,22 @@ type PlantafelModelInput = {
   collapsedTeams: ReadonlySet<string>;
 };
 
+/** The lookups of the board context, each memoized on its own source. */
+function useBoardIndexes(board: CalendarBoardContext) {
+  const days = useMemo(() => indexBoardDays(board.days), [board.days]);
+  const dispatch = useMemo(() => indexBoardDispatch(board.dispatch), [board.dispatch]);
+  const materialDemandJobIds = useMemo(
+    () => new Set(board.materialDemandJobIds),
+    [board.materialDemandJobIds],
+  );
+  const recordIdByUserId = useMemo(
+    () =>
+      new Map(board.rows.flatMap((row) => (row.userId ? [[row.userId, row.employeeRecordId] as const] : []))),
+    [board.rows],
+  );
+  return { days, dispatch, materialDemandJobIds, recordIdByUserId };
+}
+
 /**
  * The Plantafel's derived data (P1-24a): columns, the day and dispatch
  * indexes, planned and actual minutes, the filtered team groups, the visible
@@ -56,17 +72,7 @@ export function usePlantafelModel(input: PlantafelModelInput) {
       }),
     [anchorIso, preferences.hideWeekends, preferences.horizonWeeks, todayIso],
   );
-  const days = useMemo(() => indexBoardDays(board.days), [board.days]);
-  const dispatch = useMemo(() => indexBoardDispatch(board.dispatch), [board.dispatch]);
-  const materialDemandJobIds = useMemo(
-    () => new Set(board.materialDemandJobIds),
-    [board.materialDemandJobIds],
-  );
-  const recordIdByUserId = useMemo(
-    () =>
-      new Map(board.rows.flatMap((row) => (row.userId ? [[row.userId, row.employeeRecordId] as const] : []))),
-    [board.rows],
-  );
+  const { days, dispatch, materialDemandJobIds, recordIdByUserId } = useBoardIndexes(board);
   const planned = useMemo(
     () =>
       plannedMinutesByEmployeeDate(
@@ -130,3 +136,5 @@ export function usePlantafelModel(input: PlantafelModelInput) {
 
   return { columns, days, dispatch, materialDemandJobIds, planned, actual, groups, rowModels, jobsByRow };
 }
+
+export type PlantafelModel = ReturnType<typeof usePlantafelModel>;

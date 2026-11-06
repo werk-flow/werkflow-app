@@ -21,25 +21,21 @@ import type { UseCalendarMutationsOptions } from './use-calendar-mutations';
 
 type PendingJobMoves = { confirmed: CalendarJob; latest: number; tail: Promise<ActionResult | null> };
 
-/**
- * Visit writes: the job or planning write with the qualification and planning
- * dialogs, ordered moves per visit (every gesture applies at once, writes run
- * in gesture order, Undo joins the same queue), and the Alt-drag copy.
- */
-export function useCalendarVisitWrites({
-  updateJobs,
+type VisitWriteInput = Pick<
+  UseCalendarMutationsOptions,
+  'updateJobs' | 'requestApproval' | 'requestPlanningApproval'
+> & {
+  isScopeActive: () => boolean;
+  run: (operation: OptimisticOperation) => Promise<boolean>;
+};
+
+function useWriteJob({
   requestApproval,
   requestPlanningApproval,
   isScopeActive,
-  run,
-}: Pick<UseCalendarMutationsOptions, 'updateJobs' | 'requestApproval' | 'requestPlanningApproval'> & {
-  isScopeActive: () => boolean;
-  run: (operation: OptimisticOperation) => Promise<boolean>;
-}) {
-  const pendingJobMovesRef = useRef(new Map<string, PendingJobMoves>());
-
+}: Pick<VisitWriteInput, 'requestApproval' | 'requestPlanningApproval' | 'isScopeActive'>) {
   /** The existing job write with the qualification and planning dialogs (unchanged rules). */
-  const writeJob = useCallback(
+  return useCallback(
     async (job: CalendarJob, changes: MoveJobChanges): Promise<ActionResult> =>
       calendarActionResult(async () => {
         if (!isScopeActive()) return { success: false as const, error: 'calendar_scope_changed' };
@@ -79,16 +75,21 @@ export function useCalendarVisitWrites({
       }),
     [isScopeActive, requestApproval, requestPlanningApproval],
   );
+}
 
-  const setJob = useCallback(
-    (jobId: string, next: (job: CalendarJob) => CalendarJob) => {
-      updateJobs((previous) => previous.map((job) => (job.id === jobId ? next(job) : job)));
-    },
-    [updateJobs],
-  );
-
+function useMoveJob({
+  pendingJobMovesRef,
+  isScopeActive,
+  run,
+  setJob,
+  writeJob,
+}: Pick<VisitWriteInput, 'isScopeActive' | 'run'> & {
+  pendingJobMovesRef: React.RefObject<Map<string, PendingJobMoves>>;
+  setJob: (jobId: string, next: (job: CalendarJob) => CalendarJob) => void;
+  writeJob: (job: CalendarJob, changes: MoveJobChanges) => Promise<ActionResult>;
+}) {
   /** Move, resize or reassign one visit; the inverse restores every changed field. */
-  const moveJob = useCallback(
+  return useCallback(
     (input: {
       job: CalendarJob;
       changes: MoveJobChanges;
@@ -150,11 +151,14 @@ export function useCalendarVisitWrites({
         if (pending.latest === revision) pendingJobMovesRef.current.delete(job.id);
       });
     },
-    [isScopeActive, run, setJob, writeJob],
+    // The ref is a stable object, so listing it changes no identity.
+    [isScopeActive, pendingJobMovesRef, run, setJob, writeJob],
   );
+}
 
+function useCopyJob({ updateJobs, run }: Pick<VisitWriteInput, 'updateJobs' | 'run'>) {
   /** Alt-drag: a copy of the visit for another person or day through the create action. */
-  const copyJob = useCallback(
+  return useCallback(
     (input: {
       job: CalendarJob;
       plannedDate: string;
@@ -206,6 +210,29 @@ export function useCalendarVisitWrites({
     },
     [run, updateJobs],
   );
+}
 
+/**
+ * Visit writes: the job or planning write with the qualification and planning
+ * dialogs, ordered moves per visit (every gesture applies at once, writes run
+ * in gesture order, Undo joins the same queue), and the Alt-drag copy.
+ */
+export function useCalendarVisitWrites({
+  updateJobs,
+  requestApproval,
+  requestPlanningApproval,
+  isScopeActive,
+  run,
+}: VisitWriteInput) {
+  const pendingJobMovesRef = useRef(new Map<string, PendingJobMoves>());
+  const writeJob = useWriteJob({ requestApproval, requestPlanningApproval, isScopeActive });
+  const setJob = useCallback(
+    (jobId: string, next: (job: CalendarJob) => CalendarJob) => {
+      updateJobs((previous) => previous.map((job) => (job.id === jobId ? next(job) : job)));
+    },
+    [updateJobs],
+  );
+  const moveJob = useMoveJob({ pendingJobMovesRef, isScopeActive, run, setJob, writeJob });
+  const copyJob = useCopyJob({ updateJobs, run });
   return { writeJob, moveJob, copyJob };
 }

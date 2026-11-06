@@ -24,13 +24,84 @@ type MonthDayCellProps = {
   onAdd: (dateIso: string) => void;
 };
 
+/** The date header: the day number opens the day, then the holiday label and the „+". */
+function dayCellHeader(
+  { cell, index, label, onOpenDay, canAdd, onAdd }: MonthDayCellProps,
+  cellDate: Date,
+): React.JSX.Element {
+  return (
+    <div
+      role="gridcell"
+      className={cn(
+        'group/cell relative z-[1] flex min-w-0 items-start gap-1 px-1.5 pt-1',
+        !cell.inMonth && 'text-muted-foreground',
+      )}
+      style={{ gridColumn: index + 1, gridRow: 1 }}
+    >
+      <PlainButton
+        // A pointer target only: the keyboard opens the day from its cell, one tab stop for the grid.
+        tabIndex={-1}
+        data-month-day-number={cell.date}
+        className={cn(
+          'flex size-6 shrink-0 items-center justify-center rounded-full text-sm tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          cell.isToday &&
+            'bg-calendar-planning-strong font-semibold text-calendar-planning-strong-foreground hover:bg-calendar-planning-strong',
+        )}
+        aria-label={`${formatRefusalDate(cell.date)} in der Tagesansicht öffnen`}
+        onClick={() => onOpenDay(cellDate)}
+      >
+        {Number(cell.date.slice(8, 10))}
+      </PlainButton>
+      {label && (
+        <span
+          data-calendar-holiday=""
+          className="pointer-events-none min-w-0 truncate pt-1 text-xs text-calendar-holiday-foreground"
+          title={label}
+        >
+          {label}
+        </span>
+      )}
+      {canAdd && (
+        <PlainButton
+          type="button"
+          className="ml-auto rounded-md px-1 text-xs text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/cell:opacity-100"
+          aria-label={`Termin am ${formatRefusalDate(cell.date)} planen`}
+          onClick={() => onAdd(cell.date)}
+        >
+          +
+        </PlainButton>
+      )}
+    </div>
+  );
+}
+
+/** „+n mehr": every item of the day in a popover. */
+function moreItemsPopover(
+  { cell, items, itemFor, openMore, onOpenMore }: MonthDayCellProps,
+  hidden: number,
+): React.JSX.Element {
+  return (
+    <Popover open={openMore === cell.date} onOpenChange={(open) => onOpenMore(open ? cell.date : null)}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-6 justify-start px-1.5 text-xs text-muted-foreground">
+          +{hidden} mehr
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 space-y-1 p-2" data-month-day-popover={cell.date}>
+        <p className="px-1 pb-1 text-sm font-medium">{formatRefusalDate(cell.date)}</p>
+        {items.map((item) => itemFor(item, true))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /**
  * One day of the month grid: the background grid cell, the date header
  * with its holiday label and „+", and the items with „+n mehr" in a popover.
  * The three parts are grid cells of the week row, placed per column.
  */
 export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
-  const { cell, index, label, items, itemFor, openMore, onOpenMore, onOpenDay, canAdd, onAdd } = props;
+  const { cell, index, label, items, itemFor, onOpenDay } = props;
   const visible = items.slice(0, MONTH_MAX_VISIBLE_ITEMS);
   const hidden = items.length - visible.length;
   const cellDate = new Date(`${cell.date}T12:00:00`);
@@ -54,48 +125,7 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         onDoubleClick={() => onOpenDay(cellDate)}
       />
       {/* A row of the grid holds cells only: the date header and the items are cells of the day too. */}
-      <div
-        role="gridcell"
-        className={cn(
-          'group/cell relative z-[1] flex min-w-0 items-start gap-1 px-1.5 pt-1',
-          !cell.inMonth && 'text-muted-foreground',
-        )}
-        style={{ gridColumn: index + 1, gridRow: 1 }}
-      >
-        <PlainButton
-          // A pointer target only: the keyboard opens the day from its cell, one tab stop for the grid.
-          tabIndex={-1}
-          data-month-day-number={cell.date}
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full text-sm tabular-nums hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            cell.isToday &&
-              'bg-calendar-planning-strong font-semibold text-calendar-planning-strong-foreground hover:bg-calendar-planning-strong',
-          )}
-          aria-label={`${formatRefusalDate(cell.date)} in der Tagesansicht öffnen`}
-          onClick={() => onOpenDay(cellDate)}
-        >
-          {Number(cell.date.slice(8, 10))}
-        </PlainButton>
-        {label && (
-          <span
-            data-calendar-holiday=""
-            className="pointer-events-none min-w-0 truncate pt-1 text-xs text-calendar-holiday-foreground"
-            title={label}
-          >
-            {label}
-          </span>
-        )}
-        {canAdd && (
-          <PlainButton
-            type="button"
-            className="ml-auto rounded-md px-1 text-xs text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/cell:opacity-100"
-            aria-label={`Termin am ${formatRefusalDate(cell.date)} planen`}
-            onClick={() => onAdd(cell.date)}
-          >
-            +
-          </PlainButton>
-        )}
-      </div>
+      {dayCellHeader(props, cellDate)}
       <div
         role="gridcell"
         data-month-day={cell.date}
@@ -103,23 +133,7 @@ export function MonthDayCell(props: MonthDayCellProps): React.JSX.Element {
         style={{ gridColumn: index + 1, gridRow: -2 }}
       >
         {visible.map((item) => itemFor(item, false))}
-        {hidden > 0 && (
-          <Popover open={openMore === cell.date} onOpenChange={(open) => onOpenMore(open ? cell.date : null)}>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 justify-start px-1.5 text-xs text-muted-foreground"
-              >
-                +{hidden} mehr
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-72 space-y-1 p-2" data-month-day-popover={cell.date}>
-              <p className="px-1 pb-1 text-sm font-medium">{formatRefusalDate(cell.date)}</p>
-              {items.map((item) => itemFor(item, true))}
-            </PopoverContent>
-          </Popover>
-        )}
+        {hidden > 0 && moreItemsPopover(props, hidden)}
       </div>
     </div>
   );

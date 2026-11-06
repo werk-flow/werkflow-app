@@ -38,6 +38,28 @@ export type BoardCellProps = {
   employed: boolean;
 };
 
+/** Planned against target hours in the cell's corner; compact keeps only a full or overbooked day. */
+function capacityCorner(
+  state: CapacityState,
+  plannedMinutes: number,
+  targetMinutes: number,
+  compact: boolean,
+): React.JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'pointer-events-none absolute bottom-0.5 right-1 rounded-sm px-1 text-xs tabular-nums leading-4',
+        CAPACITY_CLASS[state],
+        compact && state !== 'overbooked' && state !== 'full' && 'hidden',
+      )}
+    >
+      {formatShortHours(plannedMinutes)}
+      {compact ? '' : ` / ${formatShortHours(targetMinutes)}`}
+    </span>
+  );
+}
+
 /**
  * One person-day (P1-24a, criterion 6): the background tells the day's
  * nature (weekend, holiday, closure, absence, today), the corner tells the
@@ -91,19 +113,7 @@ export const BoardCell = memo(function BoardCell({
       style={{ gridColumn: columnIndex + 2, gridRow: '1 / -1' }}
       title={description || undefined}
     >
-      {row && day && state !== 'off' && (
-        <span
-          aria-hidden="true"
-          className={cn(
-            'pointer-events-none absolute bottom-0.5 right-1 rounded-sm px-1 text-xs tabular-nums leading-4',
-            CAPACITY_CLASS[state],
-            compact && state !== 'overbooked' && state !== 'full' && 'hidden',
-          )}
-        >
-          {formatShortHours(plannedMinutes)}
-          {compact ? '' : ` / ${formatShortHours(day.targetMinutes)}`}
-        </span>
-      )}
+      {row && day && state !== 'off' && capacityCorner(state, plannedMinutes, day.targetMinutes, compact)}
       {actual && actual.minutes > 0 && (
         <span
           aria-hidden="true"
