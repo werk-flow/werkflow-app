@@ -104,16 +104,18 @@ export type CalendarCardProps = {
   'data-employee-record-id'?: string;
 };
 
+type CardFacts = {
+  size: CalendarCardSize;
+  note: boolean;
+  inactive: boolean;
+  locked: boolean;
+  oneLine: boolean;
+};
+
 /** The title line: kind icon, title and the marks for locked, series, inactive and the month's job number. */
 function cardTitleLine(
   job: CalendarJob,
-  {
-    size,
-    note,
-    inactive,
-    locked,
-    oneLine,
-  }: Pick<CardFacts, 'size' | 'note' | 'inactive' | 'locked' | 'oneLine'>,
+  { size, note, inactive, locked, oneLine }: CardFacts,
 ): React.JSX.Element {
   const statusLabel = job.occurrenceStatus
     ? PLANNING_OCCURRENCE_STATUS_LABELS[job.occurrenceStatus]
@@ -189,14 +191,6 @@ function cardChipRow(chips: readonly CalendarCardChip[]): React.JSX.Element {
     </span>
   );
 }
-
-type CardFacts = {
-  size: CalendarCardSize;
-  note: boolean;
-  inactive: boolean;
-  locked: boolean;
-  oneLine: boolean;
-};
 
 export const CalendarCard = forwardRef<HTMLButtonElement, CalendarCardProps>(function CalendarCard(
   {

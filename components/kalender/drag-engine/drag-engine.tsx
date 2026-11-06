@@ -330,7 +330,7 @@ function writeGhostLabels(ghost: HTMLDivElement | null, session: DragSession): v
 }
 
 /** A press on a draggable: the drag opens, the ghost takes its labels, and a touch arms its long press. */
-function pressDrag(
+function beginDragPress(
   event: React.PointerEvent,
   session: DragSession,
   { activeRef, surfaceRef, zonesRef, ghostRef }: Omit<DragLoop, 'finish' | 'schedule' | 'step'>,
@@ -401,7 +401,7 @@ export function CalendarDragProvider({ children }: { children: ReactNode }): Rea
 
   const startDrag = useCallback(
     (event: React.PointerEvent, session: DragSession) =>
-      pressDrag(event, session, { activeRef, surfaceRef, zonesRef, ghostRef }, schedule),
+      beginDragPress(event, session, { activeRef, surfaceRef, zonesRef, ghostRef }, schedule),
     [schedule],
   );
 

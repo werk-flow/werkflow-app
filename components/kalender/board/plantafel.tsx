@@ -4,7 +4,6 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { EmptyState } from '@/components/ui/empty-state';
 import { cn } from '@/lib/utils';
 import type { CalendarBoardContext } from '@/lib/calendar/board';
-import type { BoardTeamGroup } from '@/lib/calendar/board-model';
 import { boardArrowTarget } from '@/lib/calendar/board-row-filters';
 import type { CalendarPreferences } from '@/lib/calendar/preferences';
 import type { CalendarJob } from '@/lib/jobs/types';
@@ -120,7 +119,7 @@ function boardTeamGroups(
   shared: BoardRowShared,
 ): React.JSX.Element[] {
   let rowCounter = 0;
-  return groups.map((group: BoardTeamGroup) => {
+  return groups.map((group) => {
     const collapsed = collapsedTeams.has(group.key);
     const showHeader = group.key !== 'unassigned';
     return (

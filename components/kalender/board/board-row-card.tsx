@@ -34,7 +34,7 @@ export function boardLaneStyle({ column, span, lane }: { column: number; span: n
   return { gridColumn: `${column + 2} / span ${span}`, gridRow: lane + 1 } as const;
 }
 
-/** The drag of a card: the ghost takes its size, capped so a multi-day bar stays a card under the pointer. */
+/** The drag of a card: the ghost takes the card's size, at most 240 px wide. */
 function occurrenceDragSession(
   event: React.PointerEvent<HTMLButtonElement>,
   { job, row, startDate }: Pick<BoardRowCardProps, 'job' | 'row' | 'startDate'>,
