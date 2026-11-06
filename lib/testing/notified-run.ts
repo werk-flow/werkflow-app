@@ -203,7 +203,10 @@ export function resendUnheardRuns(
       record.supervisorPid === null &&
       now() - Date.parse(record.startedAt) < SUPERVISOR_START_GRACE_MILLISECONDS;
     if (starting) continue;
-    if (record.supervisorPid !== null && supervisorAlive(record.supervisorPid)) continue;
+    // A failed wake is the supervisor's last write, so a live process on its pid is a reused pid.
+    const supervised =
+      record.wake !== 'failed' && record.supervisorPid !== null && supervisorAlive(record.supervisorPid);
+    if (supervised) continue;
     const failure = send(record.thread, wakeMessage(record));
     if (failure === null) saveRecord({ ...record, wake: 'sent', wakeError: null });
     else

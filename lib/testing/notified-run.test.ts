@@ -248,6 +248,18 @@ test('an unreadable entry is reported and stops no other run', () => {
   expect(existsSync(record.unheardPath)).toBe(false);
 });
 
+test('a failed wake is resent even when another process took the supervisor pid', () => {
+  const unheard = temporaryDirectory();
+  saveRecord(runRecord(temporaryDirectory(), unheard, { wake: 'failed', wakeError: 'Thread gone' }));
+  const sent: string[] = [];
+  const send = (_thread: string, message: string): string | null => {
+    sent.push(message);
+    return null;
+  };
+  resendUnheardRuns(unheard, send, () => true);
+  expect(sent).toHaveLength(1);
+});
+
 test('a record whose supervisor has not saved its pid yet is starting, not dead, for a minute', () => {
   const unheard = temporaryDirectory();
   const startedAt = '2026-11-06T10:00:00.000Z';
