@@ -39,7 +39,6 @@ function runRecord(directory: string, unheardDirectory: string, changes: Partial
   const log = join(directory, 'output.log');
   writeFileSync(log, '');
   return {
-    id: 'run-1',
     command: ['bun', 'run', 'test:verify'],
     thread: 'thread-1',
     log,

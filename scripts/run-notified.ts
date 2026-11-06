@@ -78,7 +78,6 @@ function createRun(options: RunOptions): RunRecord {
   const directory = resolve('.agent-logs', 'notified-runs', id);
   mkdirSync(directory, { recursive: true });
   return {
-    id,
     command: [...options.command],
     thread: options.thread,
     log: join(directory, 'output.log'),

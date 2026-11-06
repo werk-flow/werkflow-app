@@ -19,7 +19,6 @@ const runOutcomeSchema = z.object({
 });
 
 const runRecordSchema = z.object({
-  id: z.string(),
   command: z.array(z.string()),
   thread: z.string(),
   log: z.string(),
