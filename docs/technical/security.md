@@ -105,7 +105,9 @@ A reader cached across requests throws `CachedReadError` on a failed read, so th
 
 ### Supply chain
 
-Every plan carries an advisory check under 24 hours old. An unknown finding, a changed applicability input, an expired exception and an exception that matches no current finding fail. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
+Every plan carries an advisory check under 24 hours old. An unknown finding fails. So does an exception on a changed dependency tree, or one that is expired or outgrown, even when it matches nothing. An exception in `lib/security/dependency-exceptions.json` names its path, reason, digest and expiry. A workflow pins each outside action to a commit SHA and its release.
+
+An exception that matches no finding on an unchanged tree means the registry narrowed the advisory: the check passes with a note in its output, report and CI job summary. Remove the exception.
 
 ## Never
 

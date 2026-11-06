@@ -44,43 +44,137 @@ const reviewedPolicySchema = z.object({
 
 test('accepts clean audit and narrowly reviewed exact findings', () => {
   const clean = { ...input, stdout: '{}', exitCode: 0, policy: { ...policy, exceptions: [] } };
-  expect(inspectDependencyAudit(clean)).toEqual({ findings: [], problems: [] });
+  expect(inspectDependencyAudit(clean)).toEqual({ passed: true, findings: [], problems: [], notes: [] });
   expect(inspectDependencyAudit(input).findings[0]?.disposition).toBe('reviewed-exception');
   expect(
     inspectDependencyAudit({ ...input, policy: { ...policy, exceptions: [] } }).findings[0]?.disposition,
   ).toBe('blocked');
 });
 
-test('changed advisory, severity, installed path, version or dependency digest cannot inherit review', () => {
-  for (const changed of [
-    { advisory: advisory.replace('abcd', 'dcba') },
-    { severity: 'moderate' },
-    { paths: ['nested/tool'] },
-    { version: '1.2.2' },
-  ]) {
-    expect(
-      inspectDependencyAudit({ ...input, policy: { ...policy, exceptions: [{ ...exception, ...changed }] } })
-        .findings[0]?.disposition,
-    ).toBe('blocked');
+test('a new unreviewed finding fails, and a note on another exception cannot pass it', () => {
+  const unreviewed = inspectDependencyAudit({ ...input, policy: { ...policy, exceptions: [] } });
+  expect(unreviewed.passed).toBe(false);
+  expect(unreviewed.findings[0]?.disposition).toBe('blocked');
+  // The reviewed advisory went away and a new one arrived on the same installed package.
+  const replaced = inspectDependencyAudit({
+    ...input,
+    stdout: JSON.stringify({ tool: [{ ...audit.tool[0], url: advisory.replace('abcd', 'dcba') }] }),
+  });
+  expect(replaced.passed).toBe(false);
+  expect(replaced.findings[0]?.disposition).toBe('blocked');
+  expect(replaced.notes).toHaveLength(1);
+});
+
+test('an exception a changed path, severity or version outgrew fails as a review, never a note', () => {
+  for (const changed of [{ severity: 'moderate' }, { paths: ['nested/tool'] }, { version: '1.2.2' }]) {
+    const result = inspectDependencyAudit({
+      ...input,
+      policy: { ...policy, exceptions: [{ ...exception, ...changed }] },
+    });
+    expect(result.passed).toBe(false);
+    expect(result.findings[0]?.disposition).toBe('blocked');
+    expect(result.problems).toHaveLength(1);
+    expect(result.notes).toEqual([]);
   }
+});
+
+test('a stale dependency digest fails, also when the tree change removed every finding', () => {
   const changed = inspectDependencyAudit({ ...input, manifest: '{"dependencies":{"tool":"^1.2.3"}}' });
+  expect(changed.passed).toBe(false);
   expect(changed.findings[0]?.disposition).toBe('blocked');
   expect(changed.problems).toHaveLength(1);
-});
-
-test('an exception that matches no current finding fails as dead policy', () => {
-  // A withdrawn advisory disappears from the audit while its exception stays behind.
-  const withdrawn = inspectDependencyAudit({ ...input, stdout: '{}', exitCode: 0 });
-  expect(withdrawn.findings).toEqual([]);
-  expect(withdrawn.problems).toEqual([
-    `Exception tool@1.2.3 (${advisory}) matches no current finding; remove it.`,
+  // Good news from this repository's own diff is still a tree nobody reviewed against the exceptions.
+  const upgraded = inspectDependencyAudit({
+    ...input,
+    stdout: '{}',
+    exitCode: 0,
+    lockfile: lockfile.replaceAll('1.2.3', '1.2.4'),
+  });
+  expect(upgraded.passed).toBe(false);
+  expect(upgraded.problems).toEqual([
+    'Dependency declarations or lockfile changed; review exceptions against the new dependency tree.',
   ]);
-  expect(inspectDependencyAudit(input).problems).toEqual([]);
 });
 
-test('expired and future-dated reviews fail closed', () => {
+test('a withdrawn advisory leaves a cleanup note and the check passes', () => {
+  const withdrawn = inspectDependencyAudit({ ...input, stdout: '{}', exitCode: 0 });
+  expect(withdrawn).toEqual({
+    passed: true,
+    findings: [],
+    problems: [],
+    notes: [
+      `Exception tool@1.2.3 (${advisory}) matches no current finding; remove it from lib/security/dependency-exceptions.json. After 2026-10-07 it fails this check.`,
+    ],
+  });
+  expect(inspectDependencyAudit(input).notes).toEqual([]);
+});
+
+test('the advisory narrowing of 2026-11-05 passes with a note on the same commit', () => {
+  const url = 'https://github.com/advisories/GHSA-g3hv-75wg-m249';
+  const estree = '@typescript-eslint/typescript-estree/minimatch';
+  const lock = JSON.stringify({
+    lockfileVersion: 1,
+    packages: { minimatch: ['minimatch@3.1.5'], [estree]: ['minimatch@9.0.9'] },
+  });
+  const reviewed = { ...exception, package: 'minimatch', advisory: url, severity: 'moderate' };
+  const day = {
+    ...input,
+    lockfile: lock,
+    today: '2026-11-05',
+    policy: {
+      ...policy,
+      dependencyDigest: dependencyDigest(manifest, lock),
+      exceptions: [
+        { ...reviewed, version: '3.1.5', paths: ['minimatch'], expiresOn: '2026-11-30' },
+        { ...reviewed, version: '9.0.9', paths: [estree], expiresOn: '2026-11-30' },
+      ],
+    },
+  };
+  const range = (vulnerable_versions: string): string =>
+    JSON.stringify({ minimatch: [{ url, severity: 'moderate', vulnerable_versions }] });
+
+  const before = inspectDependencyAudit({ ...day, stdout: range('<11.0.1') });
+  expect(before.passed).toBe(true);
+  expect(before.notes).toEqual([]);
+
+  const after = inspectDependencyAudit({ ...day, stdout: range('>=7.0.0 <11.0.1') });
+  expect(after.passed).toBe(true);
+  expect(after.problems).toEqual([]);
+  expect(after.notes).toEqual([
+    `Exception minimatch@3.1.5 (${url}) matches no current finding; remove it from lib/security/dependency-exceptions.json. After 2026-11-30 it fails this check.`,
+  ]);
+  expect(after.findings.map((finding) => [finding.version, finding.disposition])).toEqual([
+    ['9.0.9', 'reviewed-exception'],
+  ]);
+});
+
+test('a review window that is closed fails, whether or not the exception still matches', () => {
+  const inverted = { ...exception, reviewedOn: '2026-09-07', expiresOn: '2026-09-06' };
   for (const today of ['2026-09-06', '2026-10-08']) {
-    expect(inspectDependencyAudit({ ...input, today }).findings[0]?.disposition).toBe('blocked');
+    const matching = inspectDependencyAudit({ ...input, today });
+    expect(matching.passed).toBe(false);
+    expect(matching.findings[0]?.disposition).toBe('blocked');
+    expect(matching.problems).toHaveLength(1);
+    // A cleanup note must not outlive its review: the old "matches nothing" failure covered this case.
+    const unmatched = inspectDependencyAudit({ ...input, today, stdout: '{}', exitCode: 0 });
+    expect(unmatched.passed).toBe(false);
+    expect(unmatched.problems).toHaveLength(1);
+    expect(unmatched.notes).toEqual([]);
+  }
+  const reversed = inspectDependencyAudit({
+    ...input,
+    stdout: '{}',
+    exitCode: 0,
+    policy: { ...policy, exceptions: [inverted] },
+  });
+  expect(reversed.passed).toBe(false);
+});
+
+test('an invalid exception date stops the check, whether or not the exception still matches', () => {
+  for (const date of [{ expiresOn: '2026-13-01' }, { reviewedOn: 'soon' }]) {
+    const invalid = { ...policy, exceptions: [{ ...exception, ...date }] };
+    expect(() => inspectDependencyAudit({ ...input, policy: invalid })).toThrow();
+    expect(() => inspectDependencyAudit({ ...input, stdout: '{}', exitCode: 0, policy: invalid })).toThrow();
   }
 });
 
