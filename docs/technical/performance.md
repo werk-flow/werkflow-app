@@ -63,7 +63,7 @@ The check sees edits to digest inputs. A change elsewhere that alters what a see
 
 ## What each instrument proves
 
-- **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They judge medians against a budget and a reference recorded on that machine, and run alone. They never run in CI, so nothing proves them on a schedule: only `--group` and `--mode release` run them. A moved digest fails on its PR, but a changed machine shows only at the next manual run, as "no reviewed baseline". Recalibrate after the machine's memory changes. Measure on mains power: a laptop on battery runs far slower and breaks budgets.
+- **Wall-clock scenarios** (`audit:performance:*`) are a manual tool for one machine. They judge medians against a budget and a reference recorded on that machine, and run alone. They never run in CI, so nothing proves them on a schedule: only `--group` and `--mode release` run them. A moved digest fails on its PR. A change to what the reference records about the machine, such as its memory or CPU, shows only at the next manual run, as "no reviewed baseline"; recalibrate then. Anything it does not record shows as slower readings and no warning: a laptop on battery runs far slower and breaks budgets, so measure on mains power.
 - **Lab counts** (`audit:lab:*`) prove a step does the same work as its reference. A count does not show when a page became usable, and it counts background reads that cost the user nothing. Read it with the wall-clock time. They run nightly, in the release gate and with `--group`; a change plan selects them only when their own spec or support changed.
 - **Payload budgets**: the ceiling catches growth, the floor lost data.
 
