@@ -171,6 +171,33 @@ test('the production alert workflow offers every title the production watcher ra
   expect(workflow).toContain('group: production-alert-${{ inputs.title }}\n');
 });
 
+// The recovery rehearsal runs on the owner's PC, outside GitHub Actions (ops/recovery-rehearsal.py in werkflow-planning).
+test('a caller outside GitHub Actions names its own run in the issue', () => {
+  const run = 'recovery rehearsal of 2026-11-07 18:30 UTC at abc1234';
+  const title = 'CI alert: recovery rehearsal';
+  const local = (args: string[]) => {
+    writeFileSync(join(stub, 'gh.log'), '');
+    const result = spawnSync('bash', [alertScript, ...args], {
+      encoding: 'utf8',
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${stub}:${process.env.PATH}`,
+        STUB: stub,
+        GH_REPO: 'owner/repo',
+        ALERT_RUN: run,
+      },
+    });
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    return readFileSync(join(stub, 'gh.log'), 'utf8');
+  };
+  expect(local(['open', title, 'The rehearsal failed.'])).toContain(
+    `issue create --title ${title} --body The rehearsal failed.\n\nRun: ${run} --label ci-alert\n`,
+  );
+  writeOpenIssues([{ number: 16, title }]);
+  expect(local(['close', title])).toContain(`issue close 16 --comment Green again: ${run}\n`);
+});
+
 test('a failed issue lookup fails the job instead of passing without a report', () => {
   rmSync(join(stub, 'issues.json'));
   for (const args of [
