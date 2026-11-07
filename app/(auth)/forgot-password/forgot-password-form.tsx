@@ -94,7 +94,7 @@ export function ForgotPasswordForm({
 
   return (
     <Form {...form}>
-      <form className="grid gap-4" onSubmit={handleSubmit}>
+      <form className="grid gap-4" method="post" onSubmit={handleSubmit}>
         <ErrorText>{serverErrorMessage}</ErrorText>
         <FormField
           control={form.control}
