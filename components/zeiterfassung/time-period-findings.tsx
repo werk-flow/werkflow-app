@@ -40,25 +40,23 @@ function severityText(severity: string): string {
   return 'Information';
 }
 
-// A running session blocks the close in the database. It shows as a blocking
-// finding from the live sessions, also when the calculation predates it.
-function OpenSessionFinding({ session }: { session: OpenPeriodSession }) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border bg-card p-4">
-      <FindingIcon severity="close_blocked" />
-      <div className="min-w-0 wrap-anywhere">
-        <p className="font-medium">
-          {session.status === 'recovery_required'
-            ? FINDING_LABELS.recovery_session
-            : FINDING_LABELS.open_session}
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {session.employeeName} · seit {formatBerlin(session.startedAt, 'shortDateTime')} · muss vor dem
-          Abschluss beendet werden
-        </p>
-      </div>
-    </div>
-  );
+// A running session blocks the close in the database. It joins the card of
+// its kind from the live sessions, also when the calculation predates it.
+function liveSessionFinding(session: OpenPeriodSession): PeriodFinding {
+  return {
+    id: `live-session:${session.employeeRecordId}`,
+    employeeRecordId: session.employeeRecordId,
+    employeeName: session.employeeName,
+    kind: session.status === 'recovery_required' ? 'recovery_session' : 'open_session',
+    severity: 'close_blocked',
+    explanation: { startedAt: session.startedAt },
+    decision: null,
+    canApprove: false,
+  };
+}
+
+function isSessionFinding(finding: PeriodFinding): boolean {
+  return finding.kind === 'open_session' || finding.kind === 'recovery_session';
 }
 
 function peopleCountText(findings: readonly PeriodFinding[]): string {
@@ -116,6 +114,14 @@ function UnallocatedTimeEntries({ finding }: { finding: PeriodFinding }) {
 /** The facts behind one person's finding that a decision needs. */
 function FindingDetail({ finding }: { finding: PeriodFinding }) {
   if (finding.kind === 'unallocated_time') return <UnallocatedTimeEntries finding={finding} />;
+  if (isSessionFinding(finding)) {
+    const startedAt = finding.explanation.startedAt;
+    return typeof startedAt === 'string' ? (
+      <p className="text-sm text-muted-foreground">
+        seit {formatBerlin(startedAt, 'shortDateTime')} · muss vor dem Abschluss beendet werden
+      </p>
+    ) : null;
+  }
   if (finding.kind === 'positive_overtime') {
     const minutes = finding.explanation.minutes;
     return typeof minutes === 'number' ? (
@@ -138,6 +144,7 @@ function needsPersonRows(
 ) {
   if (group.severity === 'approval_required') return true;
   if (fix?.target === 'person' && canFixFinding(fix, viewer)) return true;
+  if (group.findings.some(isSessionFinding)) return true;
   return group.findings.some(
     (finding) => finding.kind !== 'missing_policy' && readFindingDates(finding.explanation) !== null,
   );
@@ -257,20 +264,18 @@ export function TimePeriodFindings({
 }: {
   periodId: string;
   findings: TimePeriodDetail['findings'];
+  /** Running sessions the calculation has no finding for yet (the page filters them). */
   liveSessions: readonly OpenPeriodSession[];
   viewer: FindingViewer;
 }): ReactElement {
-  const groups = groupPeriodFindings(findings);
+  const groups = groupPeriodFindings([...findings, ...liveSessions.map(liveSessionFinding)]);
   return (
     <section className="space-y-3" aria-labelledby="time-period-findings-title">
       <h3 id="time-period-findings-title" className="font-semibold">
         Prüfhinweise
       </h3>
       <div className="space-y-2">
-        {liveSessions.map((session) => (
-          <OpenSessionFinding key={session.employeeRecordId} session={session} />
-        ))}
-        {groups.length === 0 && liveSessions.length === 0 ? (
+        {groups.length === 0 ? (
           <EmptyState size="compact" title="Keine Prüfhinweise." />
         ) : (
           groups.map((group) => (

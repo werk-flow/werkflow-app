@@ -127,6 +127,29 @@ describe('period findings', () => {
     expect(schedule).not.toContain('href=');
   });
 
+  test('running sessions join one card with the stored finding of their kind', () => {
+    const markup = renderToStaticMarkup(
+      <BannerProvider>
+        <TimePeriodFindings
+          periodId={PERIOD_ID}
+          findings={[finding(0, 'open_session', 'close_blocked', { startedAt: '2026-09-30T05:00:00.000Z' })]}
+          liveSessions={[1, 2].map((index) => ({
+            employeeRecordId: PEOPLE[index]?.id ?? '',
+            employeeName: PEOPLE[index]?.name ?? '',
+            startedAt: '2026-09-30T06:00:00.000Z',
+            status: 'open' as const,
+          }))}
+          viewer={{ isAdmin: true, isOffice: true }}
+        />
+      </BannerProvider>,
+    );
+    expect(markup.match(/<article /g)).toHaveLength(1);
+    const sessions = card(markup, 'Laufende Zeiterfassung');
+    expect(sessions).toContain('3 Personen');
+    for (const person of PEOPLE) expect(sessions).toContain(person.name);
+    expect(sessions).toContain('seit 30.09.26, 08:00 · muss vor dem Abschluss beendet werden');
+  });
+
   test('„Zeit ohne Zuordnung“ names the day, the minutes and the entry, and labels its reason field', () => {
     const unallocated = card(render({ isAdmin: true, isOffice: true }), 'Zeit ohne Zuordnung');
     expect(unallocated).toContain('Mo., 07.09.2026 · 08:00–09:15 · Arbeit · 1 Std. 15 Min.');
