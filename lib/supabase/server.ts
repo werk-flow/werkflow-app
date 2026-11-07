@@ -2,12 +2,13 @@ import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import { getSupabasePublishableKey, getSupabaseUrl } from '@/lib/env/public';
+import type { Database } from './database.types';
 import { fetchWithTimeout } from './fetch-with-timeout';
 
-export async function createSupabaseServerClient(): Promise<SupabaseClient> {
+export async function createSupabaseServerClient(): Promise<SupabaseClient<Database>> {
   const cookieStore = await cookies();
 
-  return createServerClient(getSupabaseUrl(), getSupabasePublishableKey(), {
+  return createServerClient<Database>(getSupabaseUrl(), getSupabasePublishableKey(), {
     global: {
       // A stalled request must reject instead of hanging the server action.
       fetch: fetchWithTimeout,

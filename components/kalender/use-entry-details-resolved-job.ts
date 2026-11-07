@@ -41,29 +41,18 @@ export function useEntryDetailsResolvedJob({
       .select('title, description, job_number, projects(project_number)')
       .eq('id', session.jobId)
       .single()
-      .then(
-        ({
-          data,
-        }: {
-          data: {
-            title: string;
-            description: string | null;
-            job_number: string | null;
-            projects: { project_number: string } | null;
-          } | null;
-        }) => {
-          if (!cancelled && data) {
-            setResolvedJob({
-              title: getJobDisplayTitle({
-                title: data.title,
-                description: data.description,
-              }),
-              jobNumber: data.job_number,
-              projectNumber: data.projects?.project_number ?? null,
-            });
-          }
-        },
-      );
+      .then(({ data }) => {
+        if (!cancelled && data) {
+          setResolvedJob({
+            title: getJobDisplayTitle({
+              title: data.title,
+              description: data.description,
+            }),
+            jobNumber: data.job_number,
+            projectNumber: data.projects?.project_number ?? null,
+          });
+        }
+      });
 
     return () => {
       cancelled = true;

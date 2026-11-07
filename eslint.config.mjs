@@ -1086,6 +1086,18 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  // An annotation on an `any` value asserts its type with no `as` and no check:
+  // `const detail: { entries?: TimeEntry[] } | null = event.detail` passed every
+  // check (werk-flow/werkflow-planning#221). Parse or narrow the value instead.
+  // Product code only for now; tests, scripts and tests/** follow in the next
+  // debt child.
+  {
+    files: [...productFiles, 'proxy.ts'],
+    ignores: ['**/*.test.*', 'lib/testing/**'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'error',
+    },
+  },
   {
     files: ['**/*.{ts,tsx}'],
     rules: {
