@@ -5,8 +5,6 @@ name: Production alert
 # own actions, so an issue it opened and assigned would reach no inbox. This job writes as
 # github-actions, so the owner's assignment notifies them (docs/technical/recovery-and-incidents.md#monitoring).
 on:
-  push:
-    branches: [t3/ci-owner-prod-alerts]
   workflow_dispatch:
     inputs:
       title:
@@ -29,7 +27,6 @@ concurrency:
 jobs:
   alert:
     name: Open or update the alert
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
