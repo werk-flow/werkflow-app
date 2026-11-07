@@ -53,6 +53,16 @@ set document_date = (document.created_at at time zone 'Europe/Berlin')::date,
 -- @destructive: after release e713fa96: that build never names document_date, so its inserts take the default
 alter table public.documents alter column document_date set not null;
 
+-- The archive data stays with Admin and Büro: clients, which read documents
+-- only through Realtime, keep the columns they had and get none of the new ones.
+-- @destructive: after release e713fa96: that build reads documents from the browser only through Realtime, whose payload keeps every column it carried
+revoke select on table public.documents from authenticated;
+grant select (
+  id, organization_id, folder_id, storage_bucket, storage_path, original_file_name, display_name, mime_type,
+  size_bytes, uploaded_by, copied_from_document_id, metadata, created_at, updated_at, deleted_at, deleted_by,
+  delete_reason, category, current_version_number
+) on public.documents to authenticated;
+
 create index documents_retention_ends_on_idx
   on public.documents (organization_id, retention_ends_on)
   where retention_ends_on is not null;
@@ -69,7 +79,7 @@ where not app_private.p1_24_is_protected_document(document.id);
 create function app_private.guard_document_retention()
 returns trigger
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 begin
@@ -258,9 +268,9 @@ alter table public.document_audit_events
     'filed'
   ));
 
--- The active ordinary document a retention write may change, locked: the
--- checks of lock_active_document, and no protected personnel document.
--- It runs as the calling function's owner and no role executes it directly.
+-- The active, unfiled ordinary document a retention write may change, locked,
+-- for a manager. A protected personnel document is refused whatever its
+-- class. It runs as its caller, the service role, which may execute it.
 create function app_private.lock_ordinary_document_for_retention(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -276,7 +286,16 @@ declare
 begin
   -- Waits for a running delete_organization, which then finds the period.
   perform 1 from public.organizations organization where organization.id = p_organization_id for key share;
-  v_document := app_private.lock_active_document(p_actor_id, p_organization_id, p_document_id);
+  if not app_private.is_document_manager(p_organization_id, p_actor_id) then
+    raise exception 'not_authorized';
+  end if;
+  select * into v_document from public.documents document
+  where document.id = p_document_id and document.organization_id = p_organization_id
+    and document.deleted_at is null
+  for update;
+  if not found then
+    raise exception 'document_not_found';
+  end if;
   if exists (
     select 1 from public.personnel_documents protected
     where protected.organization_id = p_organization_id and protected.document_id = p_document_id
@@ -302,7 +321,7 @@ create function public.update_document_retention(
 )
 returns public.documents
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
@@ -347,7 +366,7 @@ create function public.file_document(
 )
 returns public.documents
 language plpgsql
-security definer
+security invoker
 set search_path to ''
 as $$
 declare
@@ -375,7 +394,8 @@ $$;
 
 revoke all on function app_private.guard_document_retention() from public, anon, authenticated, service_role;
 revoke all on function app_private.lock_ordinary_document_for_retention(uuid, uuid, uuid)
-  from public, anon, authenticated, service_role;
+  from public, anon, authenticated;
+grant execute on function app_private.lock_ordinary_document_for_retention(uuid, uuid, uuid) to service_role;
 revoke all on function public.update_document_retention(uuid, uuid, uuid, date, public.document_retention_class)
   from public, anon, authenticated;
 revoke all on function public.file_document(uuid, uuid, uuid) from public, anon, authenticated;

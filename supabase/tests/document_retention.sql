@@ -99,6 +99,21 @@ begin
       or has_function_privilege('authenticated', v_function, 'execute')
     then raise exception '% is not executable by the service role alone', v_function; end if;
   end loop;
+  if has_function_privilege('authenticated', 'app_private.lock_ordinary_document_for_retention(uuid, uuid, uuid)', 'execute')
+    or (select bool_or(prosecdef) from pg_proc where oid in (
+      'public.file_document(uuid, uuid, uuid)'::regprocedure,
+      'public.update_document_retention(uuid, uuid, uuid, date, public.document_retention_class)'::regprocedure))
+  then raise exception 'a retention write runs with more rights than its service-role caller'; end if;
+  -- A client reads documents only through Realtime and RLS, which admit an
+  -- assigned employee: the archive data never reaches that grant.
+  foreach v_function in array array['document_date', 'retention_class', 'retention_ends_on', 'filed_at', 'filed_by'] loop
+    if has_column_privilege('authenticated', 'public.documents', v_function, 'select')
+      or has_column_privilege('anon', 'public.documents', v_function, 'select')
+    then raise exception 'a client may read documents.%', v_function; end if;
+  end loop;
+  if not has_column_privilege('authenticated', 'public.documents', 'storage_path', 'select') then
+    raise exception 'the client lost a document column it read before';
+  end if;
 end;
 $$;
 
