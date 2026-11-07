@@ -229,6 +229,10 @@ test('a shell command that reads Vercel logs from production is refused', () => 
     'echo "$(printf x; echo "$(vercel logs)")"',
     'cat <<EOF\n$(vercel logs --json)\nEOF',
     'cat <<EOF\n$(\nvercel logs\n)\nEOF',
+    // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
+    '# <<EOF\nvercel logs',
+    'echo "<<EOF"\nvercel logs',
+    "echo 'a\n<<EOF'\nvercel logs",
     'cat <<EOF\nfirst\n`vercel logs`\nEOF\necho done',
     'vercel inspect dpl_a --logs',
     'vercel inspect dpl_a -l',
@@ -255,6 +259,8 @@ test('other Vercel commands and mentions of the log command pass', () => {
     // Single quotes and a quoted heredoc keep a substitution literal.
     "echo '$(vercel logs)'",
     "cat > note.md <<'EOF'\nThe hook refuses `vercel logs` and $(vercel logs).\nEOF",
+    'cat <<<"vercel logs"',
+    "cat > a.md <<'A' && cat > b.md <<B\nvercel logs\nA\nplain\nB",
     'git commit -m "Refuse \\`vercel logs\\`"',
     'tail ~/.local/state/ci-alert.log',
   ])

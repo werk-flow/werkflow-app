@@ -33,6 +33,9 @@ test('rm on a variable or a relative wildcard is refused, with any flags and wit
     'value=$(rm "$target")',
     'echo "$(cd /tmp/ev35 && rm -rf *)"',
     'cat <<EOF\n$(\nrm -rf logs/*\n)\nEOF',
+    // A `<<` in a comment or in quotes opens no heredoc, so the next line still runs.
+    '# <<EOF\nrm -rf logs/*',
+    'echo "<<EOF"\nrm -rf logs/*',
     'cd /tmp/ev35 && rm -Rf ${OUT}/*',
     'cd /tmp/ev35 && rm -rf $(ls)',
     'cd /tmp/ev35 && rm -rf /tmp/$name/*',
