@@ -2197,7 +2197,7 @@
         },
         "script": {
           "requests": { "reference": 4, "tolerance": 0 },
-          "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
+          "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
           "decodedBytes": null,
           "rows": null
         }
@@ -2355,6 +2355,24 @@
           "fromDigest": "caedeec9a74c6fbf6237fed97e3018910554d62fde5058a92e281fb0b387c310",
           "toDigest": "b226be9602e374b37085120d3736cde2f381bb3bd8f1fae55e547d15e170793b",
           "reason": "#151 typed tests/audit/support/performance-profile.ts without changing the seeded workload: that file at its parent plus a run's archived counts reproduces the old digest exactly, so the edit alone moved it. The counts stay as reviewed."
+        },
+        {
+          "kind": "ceiling-accept",
+          "target": "script",
+          "from": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 32999, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "to": {
+            "requests": { "reference": 4, "tolerance": 0 },
+            "encodedBytes": { "reference": 33652, "tolerance": { "relative": 0.01, "absolute": 512 } },
+            "decodedBytes": null,
+            "rows": null
+          },
+          "runKeys": ["2026-11-07T212454898Z-a83f9b"],
+          "reason": "werk-flow/werkflow-app#232: #225 put the manual entry bridge and its Zod schemas into the startup chunk of every page through the menu sign-out (cold start 54 to 55 requests). Its fix keeps only an import-free clear in the sign-out, so the bridge returns to the /zeiterfassung chunks the task list prefetches (32720 to 33652 bytes) while every cold start loads 602426 to 599628 script bytes and 39 to 38 scripts."
         }
       ]
     },
