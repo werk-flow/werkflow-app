@@ -142,3 +142,7 @@ A change of a few lines with no behavior effect goes into a PR that has to run a
 ## Amendment 2026-11-06: secret scanning alerts, and does not block
 
 GitHub secret scanning runs on this repository in alert mode. Push protection stays off, because test data could stop an agent mid-push.
+
+## Amendment 2026-11-07: live by 05:00
+
+The owner decided on 2026-11-07 that a new version is live on PROD by 05:00 Berlin every weekday, because field workers clock in early. This replaces the 07:00 of the amendments of 2026-10-29 and 2026-11-06. The cron lines of `release.yml` and `nightly.yml` fire at 17:00 Berlin the evening before, and the release holds until 03:30, so a run that GitHub starts 10 hours late still ends its own full run before 05:00, even behind a nightly full run on the same commit. Every gate stays: a scheduled run ships only a commit with a green full run, and it decides as before.
