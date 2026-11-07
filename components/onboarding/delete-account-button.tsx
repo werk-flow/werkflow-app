@@ -20,7 +20,7 @@ import { describeFailure, SHARED_FAILURE_MESSAGES } from '@/lib/action-messages'
 import { deleteAccount } from '@/lib/auth/actions';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 const ERROR_MESSAGES: Readonly<Record<string, string>> = {
   has_memberships: 'Du kannst dein Konto nicht löschen, da du Mitglied einer Organisation bist.',

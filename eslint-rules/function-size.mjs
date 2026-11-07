@@ -1,8 +1,7 @@
-// The one measurement of a function's size and its stable name, shared by the
-// quality/function-size lint rule (eslint-rules/quality-rules.mjs) and the
-// stale-entry check of the size-cap exceptions
-// (lib/conventions/module-caps.test.ts). Both walk the ESLint AST, so the rule
-// and the check can never disagree about a function's size or its key.
+// The measurement of a function's size and its stable name for the
+// quality/function-size lint rule (eslint-rules/quality-rules.mjs), which
+// names the function in its message. lib/conventions/module-caps.test.ts pins
+// the names.
 
 const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
