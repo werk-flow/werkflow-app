@@ -56,6 +56,10 @@ const RESPONSIBILITY_GUARD: ExportReference = {
   module: 'lib/responsibilities/server.ts',
   exportName: 'authorizeResponsibilityForTarget',
 };
+const RESPONSIBILITY_BATCH_GUARD: ExportReference = {
+  module: 'lib/responsibilities/server.ts',
+  exportName: 'authorizeResponsibilityForTargets',
+};
 const CLOSED_PERIOD_PREDICATE: ExportReference = {
   module: CLOSED_PERIOD_DATES,
   exportName: 'isDateInClosedPeriod',
@@ -165,7 +169,7 @@ export const ACTION_PRECHECKS: readonly ActionPrecheck[] = [
     actions: [{ module: TIME_REVIEWS, exportName: 'reviewEntries' }],
     screenedReads: ['pending-sessions'],
     props: ['canApprove'],
-    server: { kind: 'typescript', guards: [RESPONSIBILITY_GUARD] },
+    server: { kind: 'typescript', guards: [RESPONSIBILITY_BATCH_GUARD] },
     exempt: {
       'components/kalender/entry-details-commands.ts':
         "Runs the review the entry details dialog offers only where getEntryDetailsPermissions allows it, which asks canApproveEntries with the caller's time_approval holder.",
