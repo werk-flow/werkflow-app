@@ -55,7 +55,7 @@ mock.module('next/headers', () => ({
   headers: async () => ({ get: () => null }),
 }));
 
-const scope = { timeTrackedPeople: 0, closedPeriods: 0 };
+const scope = { timeTrackedPeople: 0, closedPeriods: 0, retainedDocuments: 0 };
 let databaseRefusal: string | null = null;
 world.rpc = ({ name, args }) => {
   if (name === 'get_organization_deletion_scope') {
@@ -68,6 +68,7 @@ world.rpc = ({ name, args }) => {
       jobs: 3,
       employee_records: 1,
       documents: 2,
+      retained_documents: scope.retainedDocuments,
       time_tracked_people: scope.timeTrackedPeople,
       closed_periods: scope.closedPeriods,
       payroll_exports: 0,
@@ -96,10 +97,12 @@ const reset = (): void => {
   signInAs(world, 'admin');
 };
 
-// Recorded time, and a closed period alone, refuse before any file goes.
+// Recorded time, a closed period alone, and a document inside its retention
+// period alone refuse before any file goes.
 for (const [label, retained] of [
-  ['recorded time', { timeTrackedPeople: 1, closedPeriods: 0 }],
-  ['a closed period', { timeTrackedPeople: 0, closedPeriods: 1 }],
+  ['recorded time', { timeTrackedPeople: 1, closedPeriods: 0, retainedDocuments: 0 }],
+  ['a closed period', { timeTrackedPeople: 0, closedPeriods: 1, retainedDocuments: 0 }],
+  ['a retained document', { timeTrackedPeople: 0, closedPeriods: 0, retainedDocuments: 1 }],
 ] as const) {
   reset();
   Object.assign(scope, retained);
@@ -112,7 +115,7 @@ for (const [label, retained] of [
   assert.equal(bucket.size, ownObjects.length + 1, `${label}: a refused deletion removed files`);
   assert.ok(organizationRemains(), `${label}: a refused deletion removed the organization`);
 }
-Object.assign(scope, { timeTrackedPeople: 0, closedPeriods: 0 });
+Object.assign(scope, { timeTrackedPeople: 0, closedPeriods: 0, retainedDocuments: 0 });
 
 // A failed file deletion is visible and leaves the organization for a retry.
 reset();

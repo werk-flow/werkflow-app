@@ -13,6 +13,9 @@ import type { DocumentLibrarySelection } from './use-document-library-selection'
 const PERMANENT_DELETE_ERROR_MESSAGES = {
   document_has_equipment_history:
     'Die Datei gehört zur Anlagenhistorie und kann nicht endgültig gelöscht werden. Entferne zuerst die Anlagenverknüpfung.',
+  document_filed: 'Die Datei ist festgeschrieben und lässt sich nicht löschen.',
+  retention_period_running:
+    'Die Aufbewahrungsfrist der Datei läuft noch. Bis zu ihrem Ende lässt sie sich nicht endgültig löschen.',
 } satisfies Record<string, string>;
 
 export type DocumentConfirmDialogState = {

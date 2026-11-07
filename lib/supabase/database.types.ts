@@ -1221,12 +1221,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -1242,12 +1249,19 @@ export type Database = {
           deleted_at?: string | null;
           deleted_by?: string | null;
           display_name: string;
+          document_date?: string;
+          filed_at?: string | null;
+          filed_by?: string | null;
           folder_id?: string | null;
           id?: string;
           metadata?: Json;
           mime_type?: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class?:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on?: string | null;
           size_bytes: number;
           storage_bucket?: string;
           storage_path: string;
@@ -1263,12 +1277,19 @@ export type Database = {
           deleted_at?: string | null;
           deleted_by?: string | null;
           display_name?: string;
+          document_date?: string;
+          filed_at?: string | null;
+          filed_by?: string | null;
           folder_id?: string | null;
           id?: string;
           metadata?: Json;
           mime_type?: string | null;
           organization_id?: string;
           original_file_name?: string;
+          retention_class?:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on?: string | null;
           size_bytes?: number;
           storage_bucket?: string;
           storage_path?: string;
@@ -1293,6 +1314,13 @@ export type Database = {
           {
             foreignKeyName: "documents_deleted_by_fkey";
             columns: ["deleted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_filed_by_fkey";
+            columns: ["filed_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
@@ -12798,12 +12826,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string | null;
+          document_date: string | null;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string | null;
           metadata: Json | null;
           mime_type: string | null;
           organization_id: string | null;
           original_file_name: string | null;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number | null;
           storage_bucket: string | null;
           storage_path: string | null;
@@ -12819,12 +12854,19 @@ export type Database = {
           deleted_at?: string | null;
           deleted_by?: string | null;
           display_name?: string | null;
+          document_date?: string | null;
+          filed_at?: string | null;
+          filed_by?: string | null;
           folder_id?: string | null;
           id?: string | null;
           metadata?: Json | null;
           mime_type?: string | null;
           organization_id?: string | null;
           original_file_name?: string | null;
+          retention_class?:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on?: string | null;
           size_bytes?: number | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
@@ -12840,12 +12882,19 @@ export type Database = {
           deleted_at?: string | null;
           deleted_by?: string | null;
           display_name?: string | null;
+          document_date?: string | null;
+          filed_at?: string | null;
+          filed_by?: string | null;
           folder_id?: string | null;
           id?: string | null;
           metadata?: Json | null;
           mime_type?: string | null;
           organization_id?: string | null;
           original_file_name?: string | null;
+          retention_class?:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on?: string | null;
           size_bytes?: number | null;
           storage_bucket?: string | null;
           storage_path?: string | null;
@@ -12870,6 +12919,13 @@ export type Database = {
           {
             foreignKeyName: "documents_deleted_by_fkey";
             columns: ["deleted_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "documents_filed_by_fkey";
+            columns: ["filed_by"];
             isOneToOne: false;
             referencedRelation: "profiles";
             referencedColumns: ["id"];
@@ -13415,12 +13471,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -14560,6 +14623,47 @@ export type Database = {
         };
         Returns: string;
       };
+      file_document: {
+        Args: {
+          p_actor_id: string;
+          p_document_id: string;
+          p_organization_id: string;
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       finalize_document_upload: {
         Args: {
           p_actor_id: string;
@@ -14584,12 +14688,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -14623,12 +14734,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -15280,12 +15398,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -15688,12 +15813,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -17255,12 +17387,19 @@ export type Database = {
           deleted_at: string | null;
           deleted_by: string | null;
           display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
           folder_id: string | null;
           id: string;
           metadata: Json;
           mime_type: string | null;
           organization_id: string;
           original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
           size_bytes: number;
           storage_bucket: string;
           storage_path: string;
@@ -17292,6 +17431,49 @@ export type Database = {
           added_count: number;
           removed_count: number;
         }[];
+      };
+      update_document_retention: {
+        Args: {
+          p_actor_id: string;
+          p_document_date: string;
+          p_document_id: string;
+          p_organization_id: string;
+          p_retention_class: Database["public"]["Enums"]["document_retention_class"];
+        };
+        Returns: {
+          category: string;
+          copied_from_document_id: string | null;
+          created_at: string;
+          current_version_number: number;
+          delete_reason: string | null;
+          deleted_at: string | null;
+          deleted_by: string | null;
+          display_name: string;
+          document_date: string;
+          filed_at: string | null;
+          filed_by: string | null;
+          folder_id: string | null;
+          id: string;
+          metadata: Json;
+          mime_type: string | null;
+          organization_id: string;
+          original_file_name: string;
+          retention_class:
+            | Database["public"]["Enums"]["document_retention_class"]
+            | null;
+          retention_ends_on: string | null;
+          size_bytes: number;
+          storage_bucket: string;
+          storage_path: string;
+          updated_at: string;
+          uploaded_by: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "documents";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
       };
       update_employee_capability: {
         Args: {
@@ -17790,6 +17972,7 @@ export type Database = {
         | "instruction_changed"
         | "batch_reschedule";
       dispatch_status: "active" | "cancelled";
+      document_retention_class: "ten_years";
       entry_change_type: "edit" | "delete";
       installed_equipment_category:
         | "heat_generation"
@@ -18428,6 +18611,7 @@ export const Constants = {
         "batch_reschedule",
       ],
       dispatch_status: ["active", "cancelled"],
+      document_retention_class: ["ten_years"],
       entry_change_type: ["edit", "delete"],
       installed_equipment_category: [
         "heat_generation",

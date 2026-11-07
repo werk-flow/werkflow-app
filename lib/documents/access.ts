@@ -8,6 +8,7 @@ import { createSupabaseAdminClient } from '@/lib/supabase/admin';
 import type { Database } from '@/lib/supabase/database.types';
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import type { ParsedDocumentUploadTarget } from './action-schemas';
+import { earlyDeletionRefusal } from './retention';
 import { toDocumentCategory, type DocumentFolderRow, type DocumentLinkRow, type DocumentRow } from './types';
 
 // The authorization layer of the document Server Actions: the caller's
@@ -603,12 +604,35 @@ export async function getDeletedDocumentForManager(
   return { success: true, document };
 }
 
+/**
+ * A filed document keeps its bytes and never reaches the trash. The trigger
+ * documents_retention_guard repeats this under every write.
+ */
+export function refuseFiledDocument(document: DocumentRow): ActionResult {
+  return document.filed_at ? { success: false, error: 'document_filed' } : { success: true };
+}
+
+/**
+ * Permanent deletion never takes a filed document, nor one whose retention
+ * end is today or later (Berlin). The trigger documents_retention_guard
+ * repeats this.
+ */
+export function refuseEarlyDeletion(document: DocumentRow): ActionResult {
+  const refusal = earlyDeletionRefusal({
+    filedAt: document.filed_at,
+    retentionEndsOn: document.retention_ends_on,
+  });
+  return refusal ? { success: false, error: refusal } : { success: true };
+}
+
 export async function getVersionableDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
 ): Promise<ActionResult<{ document: DocumentRow }>> {
   const existing = await getManageableDocument(context, documentId);
   if (!existing.success) return existing;
+  const filed = refuseFiledDocument(existing.document);
+  if (!filed.success) return filed;
 
   const category = toDocumentCategory(existing.document.category);
   if (!['contract', 'invoice', 'offer', 'report'].includes(category)) {

@@ -310,7 +310,7 @@ export async function finalizeDocumentVersionUpload(
     const failure = documentWriteFailure(
       'Failed to store the new document version',
       error,
-      ['version_conflict', 'document_not_found', 'versioning_not_supported'],
+      ['version_conflict', 'document_not_found', 'versioning_not_supported', 'document_filed'],
       'version_failed',
     );
     // A concurrent finalize may have made an object of this same path current:
