@@ -220,6 +220,7 @@ const VERCEL_LOG_TOOLS = new Set([
   'get_runtime_logs',
   'get_runtime_errors',
   'list_deployment_events',
+  'get_deployment_build_logs',
   'get_project_trace',
 ]);
 

@@ -166,6 +166,7 @@ test('a Vercel tool that returns log text from production is refused', () => {
     ['get_runtime_logs', { ...scope, group_by: 'level' }],
     ['get_runtime_errors', scope],
     ['list_deployment_events', { idOrUrl: 'dpl_a', builds: 1 }],
+    ['get_deployment_build_logs', { idOrUrl: 'dpl_a', teamId: 'team_a' }],
     ['get_project_trace', { ...scope, requestId: 'r' }],
   ] as const) {
     const reason = refusal(`${VERCEL}${tool}`, input);
