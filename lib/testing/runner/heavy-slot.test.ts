@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
   HEAVY_SLOT_VARIABLE,
@@ -131,7 +131,8 @@ if (hasFlock()) {
 
   test('an aborted signal ends the wait for a slot while every slot is busy', async () => {
     const directory = slotDirectory();
-    for (const slot of [0, 1, 2]) await held(directory, slot, owner().pid);
+    // Every slot this machine's runner uses: its count follows memory.
+    for (let slot = 0; slot < heavySlotCount(totalmem()); slot += 1) await held(directory, slot, owner().pid);
     const waiting = slotScript(
       directory,
       "const stop = new AbortController(); process.on('SIGTERM', () => stop.abort(new Error('stopped'))); try { await acquireHeavySlot('abort test', stop.signal); } catch (error) { console.log(`aborted: ${error.message}`); process.exit(3); }",
