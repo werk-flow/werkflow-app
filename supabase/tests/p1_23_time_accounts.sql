@@ -62,6 +62,8 @@ declare
   decision_id uuid;
   replayed_decision_id uuid;
   decide_source text;
+  july_period_id uuid;
+  later_decision_finding_id uuid;
 begin
   select id into admin_employee_id from public.employee_records
     where organization_id = '23000000-0000-0000-0000-000000000010'
@@ -360,6 +362,85 @@ begin
   if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
      or (select version from public.time_accounts where id = employee_account_id) <> account_version_after_submit
     then raise exception 'rejected adjustment mutated the account root'; end if;
+
+  -- The close counts only the latest decision of an approval-required
+  -- finding, the decision the period page shows
+  -- (readLatestFindingDecisions in lib/time-accounts/decision-reads.ts).
+  -- A test runs in one transaction, so every decision it takes through the
+  -- function shares one decided_at. The earlier decision is therefore
+  -- written directly, one minute back; the later one goes through the
+  -- function.
+  july_period_id := (select period_id from public.time_period_calculations where id = v_calculation_id);
+  v_calculation_id := public.prepare_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    '2026-07-01', '2026-07-31',
+    app_private.compute_p1_23_source_fingerprint(
+      '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'),
+    jsonb_set(jsonb_set(employee_results,
+      '{0,id}', '"23000000-0000-0000-0000-000000000032"'),
+      '{1,id}', '"23000000-0000-0000-0000-000000000033"'),
+    '[]', '[]',
+    jsonb_build_array(jsonb_build_object(
+      'employee_record_id', employee_id, 'local_date', null,
+      'finding_kind', 'positive_overtime', 'severity', 'approval_required',
+      'source_fingerprint', repeat('c', 64), 'explanation', '{"minutes":60}'::jsonb
+    )), '23000000-0000-0000-0000-000000000080', repeat('9', 64));
+  select finding.id into later_decision_finding_id from public.time_period_findings finding
+    where finding.calculation_id = v_calculation_id;
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot, decided_at
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'approved', 'Geprüft',
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000081',
+    '{"responsibility":"time_approval"}', now() - interval '1 minute'
+  );
+  perform public.decide_time_period_finding(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    later_decision_finding_id, 'rejected', 'Doch nicht freigegeben',
+    '23000000-0000-0000-0000-000000000082');
+  begin
+    perform public.close_time_period(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      july_period_id, '23000000-0000-0000-0000-000000000083', repeat('a', 64));
+    raise exception 'a period closed on an approval that a later rejection withdrew';
+  exception when others then
+    if sqlerrm not like '%approval_required_finding%' then raise; end if;
+  end;
+
+  v_calculation_id := public.prepare_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    '2026-07-01', '2026-07-31',
+    app_private.compute_p1_23_source_fingerprint(
+      '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'),
+    jsonb_set(jsonb_set(employee_results,
+      '{0,id}', '"23000000-0000-0000-0000-000000000034"'),
+      '{1,id}', '"23000000-0000-0000-0000-000000000035"'),
+    '[]', '[]',
+    jsonb_build_array(jsonb_build_object(
+      'employee_record_id', employee_id, 'local_date', null,
+      'finding_kind', 'positive_overtime', 'severity', 'approval_required',
+      'source_fingerprint', repeat('c', 64), 'explanation', '{"minutes":60}'::jsonb
+    )), '23000000-0000-0000-0000-000000000084', repeat('b', 64));
+  select finding.id into later_decision_finding_id from public.time_period_findings finding
+    where finding.calculation_id = v_calculation_id;
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot, decided_at
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'rejected', 'Erst prüfen',
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000085',
+    '{"responsibility":"time_approval"}', now() - interval '1 minute'
+  );
+  perform public.decide_time_period_finding(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    later_decision_finding_id, 'approved', 'Geprüft',
+    '23000000-0000-0000-0000-000000000086');
+  perform public.close_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    july_period_id, '23000000-0000-0000-0000-000000000087', repeat('c', 64));
+  if (select state from public.time_periods where id = july_period_id) <> 'closed'
+    then raise exception 'a period did not close on an approval that followed a rejection'; end if;
 end;
 $$;
 
@@ -379,7 +460,9 @@ begin
   ) then
     raise exception 'closed periods can lose their close version';
   end if;
-  if (select count(*) from public.time_period_employee_results) <> 1
+  -- The first calculation's Admin row and own row: only the own row is visible.
+  if (select count(*) from public.time_period_employee_results
+      where id in ('23000000-0000-0000-0000-000000000030', '23000000-0000-0000-0000-000000000031')) <> 1
     then raise exception 'employee result visibility was not limited to own row'; end if;
 end;
 $$;
