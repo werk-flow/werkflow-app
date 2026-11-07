@@ -21,7 +21,7 @@ import { createSupabaseTransientBrowserClient } from '@/lib/supabase/transient-c
 // GoTrue's PUT /user checks `current_password` before it changes a password.
 // auth-js's UserAttributes does not declare it; updateUser sends every
 // attribute as the request body, so the declared extra key reaches the server.
-type PasswordChangeAttributes = UserAttributes & { current_password: string; password: string };
+type PasswordChangeAttributes = UserAttributes & { current_password: string };
 
 const currentPasswordSchema = z.object({
   currentPassword: z.string().min(1, 'Bitte gib dein aktuelles Passwort ein.'),
