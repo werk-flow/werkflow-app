@@ -9,6 +9,7 @@ import { clearEmailChangeChallengeBeforeSignOut } from '@/lib/settings/email-cha
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { logError } from '@/lib/logging';
 import { clockOutBeforeSignOut } from '@/lib/time-tracking/clock-state-actions';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
 
 /**
  * Best-effort step before every sign-out: a pending email-change challenge
@@ -66,6 +67,7 @@ export function useSignOut() {
         }
 
         await clearEmailChangeChallengeQuietly();
+        clearManualEntryBridge();
 
         // Explicit global: the menu sign-out currently ends the user's sessions
         // on every device (pre-existing behavior, made explicit by the scope

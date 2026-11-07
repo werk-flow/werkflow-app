@@ -238,6 +238,7 @@ function useScopedCalendarFlows(
   const mutations = useScopedCalendarMutations(reads);
 
   const handleManualEntrySuccess = useManualEntryBridge({
+    userId: currentUserId,
     organizationId,
     needed,
     beginOperation: handleOperationStart,
