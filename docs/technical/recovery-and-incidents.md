@@ -16,16 +16,18 @@ The owner accepted these limits until the point-in-time upgrade below. No restor
 
 ## Planned provider upgrades
 
-The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until the first paying customer. Whoever completes a checklist updates this page.
+The team moved to Vercel Pro on 2026-11-05; its checklist is open in werk-flow/werkflow-planning#216. The owner deferred point-in-time recovery until the first customer who pays about $1000 a month, after Willert; Supabase gets no further spend before Willert pays ([decision 0008](../decisions/0008-development-workflow.md#amendment-2026-11-07-point-in-time-recovery-waits-for-a-larger-customer)). Whoever completes a checklist updates this page.
 
 | Upgrade | Why | Checklist after enabling |
 | --- | --- | --- |
 | Vercel Pro for the team | Active since 2026-11-05. It brings Firewall rate limits. | Rate-limit `/login`, `/auth/*`, `/api/*` and Server Action POSTs (`Next-Action` header), sized for shared office IPs. Add runtime-log alerts or a drain. Confirm deployment protection. Record the settings in [environments](environments.md). |
-| Supabase point-in-time recovery on PROD | Too expensive before revenue. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. |
+| Supabase point-in-time recovery on PROD | Too expensive before that customer. | Enable it on PROD only and record the recovery objectives here. Within a month, rehearse the provider restore in a disposable target, never shared DEV. Then repeat that drill quarterly, automated where the provider allows. No schedule runs it before then. |
 
 ## Recovery rehearsal
 
-Run `bun scripts/rehearse-recovery.ts` quarterly and after every backup or storage change. It needs healthy local containers and `.env.local-stack-backup`, takes the workspace test lock, and backs up and restores a synthetic schema with file bytes in disposable local databases and buckets. It journals each operation to `.agent-logs/recovery/<run-id>/journal.json`.
+`bun scripts/rehearse-recovery.ts` backs up and restores a synthetic schema with file bytes in disposable local databases and buckets. It needs healthy local containers and `.env.local-stack-backup`, takes the workspace test lock, and journals each operation to `.agent-logs/recovery/<run-id>/journal.json`.
+
+`ops/recovery-rehearsal.py` in `werk-flow/werkflow-planning` runs it as a systemd user timer on the owner's PC: at 04:00 Berlin on the first Monday of January, April, July and October, in a checkout of its own at `origin/main`. After a backup or storage change, run that script with `--revision <branch>`. It shares the stack with every worktree: it adds two databases and three buckets for seconds and restarts nothing, so it takes no heavy slot. A stopped or unhealthy stack fails it. A failure opens or updates `CI alert: recovery rehearsal`, the next pass closes it, and `ops/ci-alert.py` hands it to a thread and reports a quarter without a run. It assigns nobody: no production data is at stake.
 
 - A cleanup or journal failure prevents acceptance. After a killed run, reconcile the journal's exact resource names before you run again.
 - Never drop a resource by prefix search, remove a shared bucket or database, reset the shared stack, or load a production or DEV dump into it.

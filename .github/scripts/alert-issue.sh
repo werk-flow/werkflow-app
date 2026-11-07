@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One open issue per alert title, for health.yml, nightly.yml and release.yml: a failure opens
+# One open issue per alert title, for health.yml, nightly.yml, release.yml and the recovery rehearsal: a failure opens
 # it or updates it, and the next green run closes it. It only reports; no release decision
 # reads it. docs/technical/recovery-and-incidents.md#monitoring says who picks it up.
 #
@@ -19,7 +19,8 @@ set -euo pipefail
 
 label=ci-alert
 owner=tamaycbn
-run_url="${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
+# A caller outside GitHub Actions names its run: ops/recovery-rehearsal.py in werkflow-planning.
+run_url="${ALERT_RUN:-${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}}"
 
 case "${AFFECTS_PRODUCTION:-false}" in
   true | false) ;;
