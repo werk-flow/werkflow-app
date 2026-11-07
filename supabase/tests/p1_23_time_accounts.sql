@@ -62,6 +62,8 @@ declare
   decision_id uuid;
   replayed_decision_id uuid;
   decide_source text;
+  july_period_id uuid;
+  later_decision_finding_id uuid;
 begin
   select id into admin_employee_id from public.employee_records
     where organization_id = '23000000-0000-0000-0000-000000000010'
@@ -360,6 +362,112 @@ begin
   if (select current_balance_minutes from public.time_accounts where id = employee_account_id) <> 15
      or (select version from public.time_accounts where id = employee_account_id) <> account_version_after_submit
     then raise exception 'rejected adjustment mutated the account root'; end if;
+
+  -- The close counts only the latest decision of an approval-required
+  -- finding, the decision the period page shows
+  -- (readLatestFindingDecisions in lib/time-accounts/decision-reads.ts).
+  -- The earlier decision of each case is a fixture for a decision already
+  -- stored, written directly with its own decided_at; the later one goes
+  -- through the function where the case needs it.
+  july_period_id := (select period_id from public.time_period_calculations where id = v_calculation_id);
+  v_calculation_id := public.prepare_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    '2026-07-01', '2026-07-31',
+    app_private.compute_p1_23_source_fingerprint(
+      '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'),
+    jsonb_set(jsonb_set(employee_results,
+      '{0,id}', '"23000000-0000-0000-0000-000000000032"'),
+      '{1,id}', '"23000000-0000-0000-0000-000000000033"'),
+    '[]', '[]',
+    jsonb_build_array(jsonb_build_object(
+      'employee_record_id', employee_id, 'local_date', null,
+      'finding_kind', 'positive_overtime', 'severity', 'approval_required',
+      'source_fingerprint', repeat('c', 64), 'explanation', '{"minutes":60}'::jsonb
+    )), '23000000-0000-0000-0000-000000000080', repeat('9', 64));
+  select finding.id into later_decision_finding_id from public.time_period_findings finding
+    where finding.calculation_id = v_calculation_id;
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot, decided_at
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'approved', 'Geprüft',
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000081',
+    '{"responsibility":"time_approval"}', now() - interval '1 minute'
+  );
+  -- The function now refuses a decision after an approval, but rows written
+  -- before that rule can hold one, so the rejection is written directly too.
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'rejected',
+    'Doch nicht freigegeben', '23000000-0000-0000-0000-000000000001',
+    '23000000-0000-0000-0000-000000000082', '{"responsibility":"time_approval"}'
+  );
+  begin
+    perform public.close_time_period(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      july_period_id, '23000000-0000-0000-0000-000000000083', repeat('a', 64));
+    raise exception 'a period closed on an approval that a later rejection withdrew';
+  exception when others then
+    if sqlerrm not like '%approval_required_finding%' then raise; end if;
+  end;
+
+  v_calculation_id := public.prepare_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    '2026-07-01', '2026-07-31',
+    app_private.compute_p1_23_source_fingerprint(
+      '23000000-0000-0000-0000-000000000010', '2026-07-01', '2026-07-31'),
+    jsonb_set(jsonb_set(employee_results,
+      '{0,id}', '"23000000-0000-0000-0000-000000000034"'),
+      '{1,id}', '"23000000-0000-0000-0000-000000000035"'),
+    '[]', '[]',
+    jsonb_build_array(jsonb_build_object(
+      'employee_record_id', employee_id, 'local_date', null,
+      'finding_kind', 'positive_overtime', 'severity', 'approval_required',
+      'source_fingerprint', repeat('c', 64), 'explanation', '{"minutes":60}'::jsonb
+    )), '23000000-0000-0000-0000-000000000084', repeat('b', 64));
+  select finding.id into later_decision_finding_id from public.time_period_findings finding
+    where finding.calculation_id = v_calculation_id;
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot, decided_at
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'rejected', 'Erst prüfen',
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000085',
+    -- A rejection whose transaction began after this one but committed first:
+    -- its time is later than this transaction's start. The approval that
+    -- follows must still sort after it.
+    '{"responsibility":"time_approval"}', clock_timestamp()
+  );
+  perform public.decide_time_period_finding(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    later_decision_finding_id, 'approved', 'Geprüft',
+    '23000000-0000-0000-0000-000000000086');
+  -- An approval is final: a stale second form can neither withdraw nor repeat it.
+  begin
+    perform public.decide_time_period_finding(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      later_decision_finding_id, 'rejected', 'Veraltetes Formular',
+      '23000000-0000-0000-0000-000000000088');
+    raise exception 'a rejection was recorded after an approval';
+  exception when others then
+    if sqlerrm not like '%finding_already_decided%' then raise; end if;
+  end;
+  begin
+    perform public.decide_time_period_finding(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      later_decision_finding_id, 'approved', 'Doppelt',
+      '23000000-0000-0000-0000-000000000089');
+    raise exception 'a second approval was recorded';
+  exception when others then
+    if sqlerrm not like '%finding_already_decided%' then raise; end if;
+  end;
+  perform public.close_time_period(
+    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+    july_period_id, '23000000-0000-0000-0000-000000000087', repeat('c', 64));
+  if (select state from public.time_periods where id = july_period_id) <> 'closed'
+    then raise exception 'a period did not close on an approval that followed a rejection'; end if;
 end;
 $$;
 
@@ -379,8 +487,14 @@ begin
   ) then
     raise exception 'closed periods can lose their close version';
   end if;
-  if (select count(*) from public.time_period_employee_results) <> 1
-    then raise exception 'employee result visibility was not limited to own row'; end if;
+  -- Each calculation holds an Admin row and the employee's own row: only the
+  -- three own rows are visible.
+  if (select count(*) from public.time_period_employee_results) <> 3
+     or (select count(*) from public.time_period_employee_results
+         where id in ('23000000-0000-0000-0000-000000000031',
+                      '23000000-0000-0000-0000-000000000033',
+                      '23000000-0000-0000-0000-000000000035')) <> 3
+    then raise exception 'employee result visibility was not limited to own rows'; end if;
 end;
 $$;
 
