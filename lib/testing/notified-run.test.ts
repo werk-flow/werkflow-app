@@ -695,6 +695,8 @@ test('the real script keeps its supervisor out of the process tree and wakes an 
   try {
     // Reading starts inside the try, so its finally always closes the pipe.
     const wake = readPipe(wakeFile);
+    // A read error stays visible at `await wake`, but never surfaces as unhandled when an earlier step failed.
+    wake.catch(() => undefined);
     const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
       cwd: directory,
       env,
