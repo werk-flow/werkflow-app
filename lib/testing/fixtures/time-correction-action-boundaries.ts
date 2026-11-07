@@ -3,7 +3,10 @@
 // history, form-option and summary read, a request of another organization is
 // refused before any revision or decision is written, an employee reads no
 // colleague's summary, and a withdrawal acts as the session user, so another
-// person's request is refused by its one call. A refused call writes nothing.
+// person's request is refused by its one call. A proposed fact names only the
+// request's subject, except in a reassignment: a fact for a coworker or for
+// another organization's record is refused before any time of that person is
+// read. A refused call writes nothing.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -22,14 +25,18 @@ const foreignUserId = '85000000-0000-4000-8000-000000000004';
 const foreignRequestId = '85000000-0000-4000-8000-000000000005';
 const unknownRequestId = '85000000-0000-4000-8000-000000000006';
 const operationId = '85000000-0000-4000-8000-000000000007';
+const coworkerRecordId = '85000000-0000-4000-8000-000000000008';
+const ownEntryId = '85000000-0000-4000-8000-000000000009';
 
 const world = installActionWorld({
   employee_records: [
     { id: ownRecordId, organization_id: ORGANIZATION_A, user_id: CALLER_ID },
     { id: foreignRecordId, organization_id: ORGANIZATION_B, user_id: foreignUserId },
+    { id: coworkerRecordId, organization_id: ORGANIZATION_A, user_id: colleagueId },
   ],
   organization_members: [
     { organization_id: ORGANIZATION_A, user_id: CALLER_ID, role: 'employee' },
+    { organization_id: ORGANIZATION_A, user_id: colleagueId, role: 'employee' },
     { organization_id: ORGANIZATION_B, user_id: foreignUserId, role: 'employee' },
   ],
   time_correction_requests: [
@@ -42,10 +49,35 @@ const world = installActionWorld({
       current_revision: 1,
     },
   ],
+  time_entries: [
+    {
+      id: ownEntryId,
+      organization_id: ORGANIZATION_A,
+      user_id: CALLER_ID,
+      entry_type: 'clock_in',
+      timestamp: '2026-10-20T05:00:00.000Z',
+      job_id: null,
+      is_manual: false,
+      status: 'approved',
+      created_at: '2026-10-20T05:00:00.000Z',
+      updated_at: '2026-10-20T05:00:00.000Z',
+    },
+  ],
+});
+// The tables every action call reads or writes, to prove what a refusal never reached.
+const touchedTables = new Set<string>();
+const tables = world.tables;
+world.tables = new Proxy(tables, {
+  get: (target, table) => {
+    if (typeof table === 'string') touchedTables.add(table);
+    return Reflect.get(target, table);
+  },
 });
 // withdraw_time_correction refuses an actor who did not file the request
 // (supabase/tests/p1_22_*.sql); here only that check.
 world.rpc = ({ name, args }) => {
+  if (name === 'create_time_correction_request')
+    return { data: null, error: { code: 'P0001', message: 'unexpected_submission' } };
   assert.equal(name, 'withdraw_time_correction');
   const request = tableRows(world, 'time_correction_requests').find((row) => row.id === args.p_request_id);
   if (!request) return { data: null, error: { code: 'P0001', message: 'time_correction_not_found' } };
@@ -156,4 +188,71 @@ assert.deepEqual(await getProvisionalTimeSummary({ organizationId: ORGANIZATION_
   success: false,
   error: 'not_authorized',
 });
+
+// Every kind but a reassignment proposes facts of its subject only. A fact
+// for a coworker, or for another organization's record, is refused before
+// any time is read, so the refusal reveals nothing about that person's day.
+const ownFact = (factId: string, entryType: 'clock_in' | 'clock_out', timestamp: string) => ({
+  factId,
+  employeeRecordId: ownRecordId,
+  entryType,
+  timestamp,
+});
+const ownSource = { kind: 'legacy_entry' as const, id: ownEntryId };
+for (const namedRecordId of [coworkerRecordId, foreignRecordId]) {
+  const named = {
+    ...ownFact('named', 'clock_out', '2026-10-20T16:00:00+02:00'),
+    employeeRecordId: namedRecordId,
+  };
+  const proposals = [
+    {
+      kind: 'add' as const,
+      source: null,
+      proposedFacts: [ownFact('start', 'clock_in', '2026-10-20T07:00:00+02:00'), named],
+    },
+    {
+      kind: 'missed_clock' as const,
+      source: null,
+      proposedFacts: [ownFact('start', 'clock_in', '2026-10-20T07:00:00+02:00'), named],
+    },
+    { kind: 'edit' as const, source: ownSource, proposedFacts: [named] },
+    { kind: 'reclassify' as const, source: ownSource, proposedFacts: [named] },
+    { kind: 'reallocate' as const, source: ownSource, proposedFacts: [named] },
+    {
+      kind: 'split' as const,
+      source: ownSource,
+      proposedFacts: [
+        ownFact('first-start', 'clock_in', '2026-10-20T07:00:00+02:00'),
+        ownFact('first-end', 'clock_out', '2026-10-20T12:00:00+02:00'),
+        ownFact('second-start', 'clock_in', '2026-10-20T12:00:00+02:00'),
+        named,
+      ],
+    },
+    // A deletion proposes no fact, so it cannot name anyone.
+  ];
+  for (const proposal of proposals) {
+    touchedTables.clear();
+    assert.deepEqual(
+      await submitTimeCorrection({
+        organizationId: ORGANIZATION_A,
+        subjectEmployeeRecordId: ownRecordId,
+        reason: 'Zeit korrigieren',
+        operationId,
+        ...proposal,
+      }),
+      { success: false, error: 'invalid_shape' },
+      `${proposal.kind} naming ${namedRecordId === coworkerRecordId ? 'a coworker' : 'a foreign record'}`,
+    );
+    assert.deepEqual(
+      [...touchedTables].filter((table) => table.startsWith('time_')),
+      [],
+      `${proposal.kind} reads no time before its refusal`,
+    );
+  }
+}
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.name),
+  ['withdraw_time_correction'],
+  'no refused correction is written',
+);
 assert.equal(databaseSnapshot(world), initialDatabase, 'no refused call may write');
