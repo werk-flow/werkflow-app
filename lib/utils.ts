@@ -32,7 +32,7 @@ const BERLIN_LABEL_STYLES = {
   monthYear: { month: 'long', year: 'numeric' },
   /** Sept. 2026 */
   shortMonthYear: { month: 'short', year: 'numeric' },
-  /** Sept. */
+  /** Sep */
   shortMonth: { month: 'short' },
   /** 10:15 */
   time: { hour: '2-digit', minute: '2-digit' },
@@ -84,7 +84,17 @@ export function formatBerlin(value: string | Date, style: BerlinLabelStyle): str
     });
     berlinLabelFormatters.set(style, formatter);
   }
-  return formatter.format(new Date(value));
+  const date = new Date(value);
+  if (!('weekday' in BERLIN_LABEL_STYLES[style])) return formatter.format(date);
+  // ICU builds disagree on the separator after the weekday: Bun on Linux and
+  // Node render „Do., 03.09.2026“, the macOS system ICU „Do. 03.09.2026“. The
+  // label sets its own.
+  const parts = formatter.formatToParts(date);
+  return parts
+    .map((part, index) =>
+      index === 1 && parts[0]?.type === 'weekday' && part.type === 'literal' ? ', ' : part.value,
+    )
+    .join('');
 }
 
 /** A Date that stands for a day of the viewer's local calendar, labeled as that day. */
