@@ -186,7 +186,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
 
       if (session?.access_token) {
-        supabase.realtime.setAuth(session.access_token);
+        void supabase.realtime.setAuth(session.access_token);
       }
 
       channelRef.current = subscribeOrganizationChannel({
@@ -205,7 +205,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       data: { subscription: authListener },
     } = supabase.auth.onAuthStateChange((_event: string, session: { access_token?: string } | null) => {
       if (session?.access_token) {
-        supabase.realtime.setAuth(session.access_token);
+        void supabase.realtime.setAuth(session.access_token);
       }
     });
 
@@ -219,7 +219,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       authListener.unsubscribe();
       stopWatchingAbsence();
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+        void supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
     };

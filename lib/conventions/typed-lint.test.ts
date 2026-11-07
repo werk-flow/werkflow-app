@@ -5,7 +5,8 @@ import { readTypeAssertionRatchet } from './type-assertions';
 
 // Planted-violation probes for the type-aware rules of eslint.config.mjs and
 // the assertion ban. Each rule must fail its planted violation in product
-// code, tests and scripts, and pass the correct form.
+// code, tests and scripts, and pass the correct form; no-unsafe-assignment
+// covers product code only so far (werk-flow/werkflow-planning#221).
 
 const eslint = createProbeLinter({ typed: true });
 
@@ -110,6 +111,48 @@ describe('type-aware lint rules', () => {
         await ruleMessages(rule, 'export const width = JSON.parse("1") as number;\n', filePath),
       ).toHaveLength(1);
       expect(await ruleMessages(rule, "export const kinds = ['a', 'b'] as const;\n", filePath)).toEqual([]);
+    }
+  });
+
+  test('an annotation on an any value fails in product code; a parsed or narrowed value passes', async () => {
+    const rule = '@typescript-eslint/no-unsafe-assignment';
+    const entries = "import { z } from '@/lib/zod';\n\ntype Detail = { entries?: string[] } | null;\n";
+    const detailSchema =
+      'const detailSchema = z.object({ entries: z.array(z.string()).optional() }).nullable();\n';
+    for (const filePath of [
+      'lib/typed-lint-probe.ts',
+      'components/typed-lint-probe.tsx',
+      'hooks/typed-lint-probe.ts',
+      'app/typed-lint-probe.tsx',
+    ]) {
+      expect(
+        await ruleMessages(
+          rule,
+          `${entries}export function read(event: CustomEvent): Detail {\n  const detail: Detail = event.detail;\n  return detail;\n}\n`,
+          filePath,
+        ),
+      ).toHaveLength(1);
+      expect(
+        await ruleMessages(
+          rule,
+          'export function width(text: string): number {\n  const value: number = JSON.parse(text);\n  return value;\n}\n',
+          filePath,
+        ),
+      ).toHaveLength(1);
+      expect(
+        await ruleMessages(
+          rule,
+          `${entries}${detailSchema}export function read(event: CustomEvent): Detail {\n  const detail = detailSchema.parse(event.detail);\n  return detail;\n}\n`,
+          filePath,
+        ),
+      ).toEqual([]);
+      expect(
+        await ruleMessages(
+          rule,
+          "export function width(text: string): number {\n  const value: unknown = JSON.parse(text);\n  return typeof value === 'number' ? value : 0;\n}\n",
+          filePath,
+        ),
+      ).toEqual([]);
     }
   });
 

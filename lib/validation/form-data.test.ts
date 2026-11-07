@@ -18,6 +18,12 @@ test('a field named like an Object.prototype key is an ordinary field', () => {
   expect(parseFormData(data, schema)).toBe(data);
 });
 
+test('a missing field named like an Object.prototype key reads as missing, not inherited', () => {
+  const schema = z.object({ constructor: z.string().optional() });
+  const data = form([['name', 'a']]);
+  expect(parseFormData(data, schema)).toBe(data);
+});
+
 test('a field sent twice is refused', () => {
   const schema = z.object({ name: z.string() });
   expect(

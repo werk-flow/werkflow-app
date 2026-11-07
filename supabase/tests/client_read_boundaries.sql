@@ -6,6 +6,8 @@
 -- organization; an employee reads only the jobs they are assigned to, the
 -- assignments of those jobs and the projects that contain one of them
 -- (docs/features/jobs-and-projects.md, "Assignment and qualifications").
+-- Documents: an employee assigned to a document's job reads the document, but
+-- not its versions or audit events, which stay with Admin and Büro.
 -- Profiles: a user changes their own name and avatar, never the email the
 -- Auth account owns.
 -- Suspension: RLS consults effective personnel access, so a Büro member or an
@@ -125,6 +127,63 @@ select pg_temp.expect_work('cb000000-0000-4000-8000-000000000004',
 -- Another organization's admin reads nothing of this organization.
 select pg_temp.expect_work('cb000000-0000-4000-8000-000000000005',
   'jobs= | projects= | assignments= | assignments_raw=0');
+
+-- Documents: the version and audit history of an ordinary document stay with
+-- Admin and Büro (docs/features/document-management.md). The employee
+-- assigned to the document's job reads the document itself, but none of its
+-- versions or audit events; another organization's admin reads nothing.
+reset role;
+set local session_replication_role = replica;
+insert into public.documents (
+  id, organization_id, display_name, original_file_name, storage_path, size_bytes, category,
+  current_version_number, uploaded_by
+) values
+('cb000000-0000-4000-8000-000000000160', 'cb000000-0000-4000-8000-000000000010', 'Vertrag.pdf', 'Vertrag.pdf',
+ 'cb000000-0000-4000-8000-000000000010/cb000000-0000-4000-8000-000000000160/vertrag.pdf', 42, 'contract', 2,
+ 'cb000000-0000-4000-8000-000000000001');
+insert into public.document_links (organization_id, document_id, job_id, created_by) values
+('cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000160',
+ 'cb000000-0000-4000-8000-000000000030', 'cb000000-0000-4000-8000-000000000001');
+insert into public.document_versions (
+  organization_id, document_id, version_number, storage_path, original_file_name, mime_type, size_bytes, uploaded_by
+)
+select 'cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000160', version_number,
+  'cb000000-0000-4000-8000-000000000010/cb000000-0000-4000-8000-000000000160/versions/' || version_number || '.pdf',
+  'Vertrag.pdf', 'application/pdf', 42, 'cb000000-0000-4000-8000-000000000001'
+from generate_series(1, 2) as version_number;
+insert into public.document_audit_events (organization_id, document_id, actor_id, event_type) values
+('cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000160',
+ 'cb000000-0000-4000-8000-000000000001', 'version_uploaded');
+set local session_replication_role = origin;
+
+create function pg_temp.visible_document_history() returns text language sql as $$
+  select concat_ws(' ',
+    'document=' || (select count(*) from public.documents where id = 'cb000000-0000-4000-8000-000000000160'),
+    'versions=' || (select count(*) from public.document_versions
+      where document_id = 'cb000000-0000-4000-8000-000000000160'),
+    'audit=' || (select count(*) from public.document_audit_events
+      where document_id = 'cb000000-0000-4000-8000-000000000160')
+  );
+$$;
+grant execute on function pg_temp.visible_document_history() to authenticated;
+
+create function pg_temp.expect_document_history(p_user uuid, p_expected text) returns void language plpgsql as $$
+declare actual text;
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_user, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  actual := pg_temp.visible_document_history();
+  execute 'reset role';
+  if actual is distinct from p_expected then
+    raise exception 'Visible document history for % is "%", expected "%"', p_user, actual, p_expected;
+  end if;
+end;
+$$;
+
+select pg_temp.expect_document_history('cb000000-0000-4000-8000-000000000001', 'document=1 versions=2 audit=1');
+select pg_temp.expect_document_history('cb000000-0000-4000-8000-000000000002', 'document=1 versions=2 audit=1');
+select pg_temp.expect_document_history('cb000000-0000-4000-8000-000000000003', 'document=1 versions=0 audit=0');
+select pg_temp.expect_document_history('cb000000-0000-4000-8000-000000000005', 'document=0 versions=0 audit=0');
 
 -- Removing the assignment removes the read at once.
 set local role service_role;

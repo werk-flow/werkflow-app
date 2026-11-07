@@ -115,7 +115,8 @@ async function readWorkArtifactAttentionTargets(
     assignedJobIds: new Set((jobAssignmentsResult.data ?? []).map((assignment) => assignment.job_id)),
     assignedProjectIds: new Set(
       (projectAssignmentsResult.data ?? []).flatMap((assignment) => {
-        const joined = Array.isArray(assignment.jobs) ? assignment.jobs[0] : assignment.jobs;
+        // PostgREST embeds the job as an object; an embed seeded as an array reads its first job.
+        const [joined] = [assignment.jobs].flat();
         return joined?.project_id ? [joined.project_id] : [];
       }),
     ),
