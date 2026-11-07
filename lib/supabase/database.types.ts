@@ -14713,6 +14713,18 @@ export type Database = {
         };
         Returns: Json;
       };
+      find_client_request_caller_matches: {
+        Args: {
+          p_limit: number;
+          p_organization_id: string;
+          p_request_id: string;
+        };
+        Returns: {
+          client_id: string;
+          client_name: string;
+          matched_on: string[];
+        }[];
+      };
       fulfill_instruction_evidence: {
         Args: {
           p_actor_id: string;

@@ -21,7 +21,7 @@ Both run Micro compute, whose latency rises steeply with concurrency. The owner 
 
 - Every variable exists twice: one row for Production (PROD project, production bucket, production domain), one for all pre-production environments (DEV project, dev bucket, staging URL as `NEXT_PUBLIC_SITE_URL`).
 - The staging URL is the branch alias of `main`, `https://werkflow-app-git-main-werkflows-projects.vercel.app`, behind Vercel Authentication. DEV's auth redirect list must allow it, or invite and password links break on staging.
-- `vercel.json` installs from the frozen `bun.lock`. The app runtime and `next build` stay on Node.
+- The app runtime and `next build` stay on Node; `vercel.json` installs from `bun.lock`.
 - `production` is the only branch Vercel deploys from Git (`vercel.json`): PR branches never deploy, and `.github/workflows/staging.yml` deploys staging after DEV's migrations.
 - `SUPABASE_ACCESS_TOKEN` is never on Vercel. Recheck the scopes when deployment configuration changes.
 
@@ -38,13 +38,14 @@ Auth settings, mail templates, SMTP and rate limits are no schema and no migrati
 
 This table is the one home of every credential the deployments and workflows use. No check copies a secret elsewhere to test it.
 
-- `.github/workflows/health.yml` checks every row each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed". The next green run closes it. Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
-- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both accept only a request with the header `x-health-check-token`; without it they answer like a missing route. The answer names each check `ok` or `failed`, never a value.
+- `.github/workflows/health.yml` checks every row in GitHub's reach each Monday with a read-only call where the value lives. A failed run fails the step named after the credential (a 404 from a health endpoint names a token mismatch, a 401 from staging the bypass secret) and opens or updates the issue "Weekly health check failed". Only a failed check marked `prod` assigns the owner ([monitoring](recovery-and-incidents.md#monitoring)); a run off `main` or with `break_check` reports on "… (proof)".
+- The app checks its runtime credentials at `GET /api/health`, each Supabase project at its `health` function. Both answer only a request with the header `x-health-check-token`. The answer names each check `ok` or `failed`, never a value.
 
 | Credential | Lives in | Used by | Expires | Rotate |
 | --- | --- | --- | --- | --- |
 | `SUPABASE_ACCESS_TOKEN` | GitHub repository secret | Staging and release: deploy the edge functions | 2027-10-26 | Supabase account settings, Access Tokens; `gh secret set`; revoke the old one. |
 | `VERCEL_TOKEN` | GitHub repository secret | Staging deploys, release promotes | 2027-10-26 | Vercel account settings, Tokens, team-scoped; `gh secret set`. |
+| `werkflow app prod-watch` | The owner's PC: `~/.config/werkflow/prod-watch.env`, mode 600 | The [production watcher](recovery-and-incidents.md#monitoring), which checks it | 2027-11-07 | Vercel Tokens: same name, team-scoped (`werkflows-projects`, also werkflow-website), 1 year; set the file's `VERCEL_TOKEN=`. |
 | `SIBLING_REPOSITORIES_TOKEN` | GitHub repository secret | CI clones werkflow-business for `docs:check` | 2027-10-26 | Fine-grained GitHub token, read access to werkflow-business contents; `gh secret set`. |
 | `DEV_DATABASE_URL` | GitHub repository secret | Staging: `supabase db push` | With its password | DEV Database settings: reset the password; `gh secret set` the new connection string. |
 | `PROD_DATABASE_URL` | GitHub environment `production` | Release: `supabase db push` | With its password | As for DEV, with `gh secret set --env production`. |
@@ -70,7 +71,7 @@ The test groups run against the Supabase CLI's Docker composition: Docker Engine
 - Analytics is off: Logflare filled the disk. The lab recorder reads Kong's access log through `docker logs`.
 - PostgREST truncates at its row limit without an error, locally and hosted. Read in pages ([add a list](realtime-and-caching.md#add-a-list)). Never raise the limit to hide the bound.
 - The stack answers on `http://127.0.0.1:54321`. `bun run env:local` writes that origin and this checkout's test-server origin into `.env.local`. Rebuild after a switch: `NEXT_PUBLIC_*` values are baked into the build.
-- `bun run test:server local` waits for a healthy stack before it builds. Keep it running while you verify.
+- Keep `bun run test:server local` running while you verify.
 - A reset or crash stops the edge runtime; the test server and CI wait start it.
 - An edge function imports only relative modules. The runtime fetches a remote one (`jsr:`, `npm:`, `https:`) on its first request, so a stalled registry hangs a fresh stack.
 - A restarted edge-runtime container keeps its old configuration. After you change `[edge_runtime.secrets]`, reload the runtime and verify the capture endpoint before an email browser group.
@@ -89,7 +90,7 @@ A local file never affects the deployed app. Never run the test harness or a des
 
 ## Which tool reaches what
 
-Agents never read PROD data through any tool, because every tool result goes to the model provider. The one exception is `bun run prod:inspect`, which returns metadata only. The hook below enforces this for MCP only; the [backlog](enforcement-ladder-backlog.md) records the shell and `env:prod` paths. For MCP, `.claude/hooks/refuse-production-mcp.ts` refuses, in Claude Code and Codex, a tool whose server name contains `prod` or whose input or server configuration names the production ref, and a Supabase server whose configuration names no other project or local stack. It reads the ref from the `Supabase project` row above; `lib/security/production-access.test.ts` fails when that row changes shape. Codex skips a new or changed project hook until someone trusts it: after a change to `.codex/hooks.json`, the owner runs `/hooks` in Codex on each machine and trusts it.
+Agents never read PROD data through any tool: every tool result goes to the model provider. Metadata is allowed: `bun run prod:inspect`, Vercel's deployment state and `vercel.request.count` counts. Two hooks enforce this in Claude Code and Codex; the [backlog](enforcement-ladder-backlog.md) records the other shell and `env:prod` paths. `.claude/hooks/refuse-production-mcp.ts` refuses an MCP tool that reaches the production Supabase project, or returns Vercel's logs, build events or traces. `.claude/hooks/refuse-production-logs.ts` refuses `vercel logs` and `vercel inspect --logs`. Preview runtime logs pass. Keep the `Supabase project` row's shape: the MCP hook reads the production ref there. Codex skips a new or changed project hook until someone trusts it: after a change to `.codex/hooks.json`, the owner runs `/hooks` in Codex on each machine and trusts it.
 
 | Access path | Prod | Dev | Notes |
 | --- | --- | --- | --- |
@@ -112,7 +113,7 @@ Agents never read PROD data through any tool, because every tool result goes to 
 7. Never edit the `*baseline*` repair migrations.
 8. A Realtime transport change has no expand step: pause writes, drain requests from the old app, change the database, deploy the compatible app, make open tabs reload, verify an authorized receiver, then reopen writes.
 
-Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files. None compares the complete DEV and PROD schemas, and a matching migration name does not prove an identical function body. When parity matters, run `bun run prod:inspect`: it compares every app object's definition by hash and fails on drift once both ledgers match.
+Between releases, merged migrations wait on DEV. `migrations:check`, `types:check` and `realtime:check` each compare one thing against the committed files; none compares the complete schemas, and a matching migration name does not prove an identical function body. When parity matters, run `bun run prod:inspect`: it compares every app object's definition by hash and fails on drift once both ledgers match.
 
 ## Work in a worktree
 
@@ -149,5 +150,5 @@ T3 Code gives every thread its own worktree and runs `scripts/setup-worktree.ts`
 
 1. `.github/workflows/release.yml` ships a `main` commit to PROD only after a green full run ([release gate](testing.md#ci)). PROD is live weekdays by 05:00 Berlin: GitHub starts cron runs up to 10 hours late, so a run fires at 17:00 and holds until 03:30. A scheduled run ships its starting commit only when `main` moved since `production` and its newest full run, or its own, passed. A manual run queues behind a held one: `gh run cancel` it first. By hand, when a green `main` should not wait ("release main"): `gh workflow run release`, then `gh run watch`; `-f dry_run=true` prints a scheduled run's decision and, with a candidate, checks the serving build (step 3). `production` has no approval step (owner's decision). When it fails, repair `main` by PR and release again; a rerun is safe.
 2. Rollback: Vercel Instant Rollback switches the domain to the previous build within seconds. It changes code only; rule 6 of the migration rule names the limit for data. After a rollback Vercel stops assigning new production builds to the domain, so the next release must promote explicitly, which the workflow does.
-3. The last job checks production without reading data: the build serves, the login page renders, `health` answers, and five minutes later Vercel shows no runtime error from the last ten. If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
+3. The last job checks production without reading data: the build serves, the login page renders, `health` answers, and five minutes later Vercel counts no server error from the build. If it fails, the coordinator thread, else the owner, rolls back (step 2) and reports.
 4. Never roll back the database. Fix forward with a new migration. Point-in-time restore is a last resort that loses every write since the restore point ([recovery](recovery-and-incidents.md)).

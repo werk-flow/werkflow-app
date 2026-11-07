@@ -20,6 +20,9 @@ type CaptureView =
   | { kind: 'tab'; value: string }
   | { kind: 'dialog'; opener: DialogOpenerId };
 
+/** A seeded record a capture opens instead of its route's layout record (acceptance-records.ts). */
+export type AcceptanceRecord = 'caller-match-request' | 'promoted-caller-request';
+
 export type CaptureSpec = {
   /** Unique within its set; part of the image name and the citation token. */
   id: string;
@@ -34,6 +37,8 @@ export type CaptureSpec = {
   reveal?: string;
   /** Captured while the role works on the layout job; the capture clocks out afterwards. */
   clockedIn?: true;
+  /** The seeded record to open instead of the route's layout record. */
+  record?: AcceptanceRecord;
 };
 
 /** A screen outside the app shell, opened with the session its inventory entry names. */
@@ -318,6 +323,38 @@ function clockDockCaptures(): AcceptanceSet {
   };
 }
 
+/**
+ * werk-flow/werkflow-planning#142 of 2026-11-07: an unmatched caller who is
+ * already a customer, and the conversion of a promoted caller that starts with
+ * the captured address as Einsatzort.
+ */
+function callerMatchCaptures(): AcceptanceSet {
+  const both = { widths: [1280, 375], schemes: ['light', 'dark'] } as const;
+  return {
+    id: 'caller-match-2026-11-07',
+    captures: [
+      {
+        id: 'buero-anfrage-treffer',
+        role: 'buero',
+        route: '/anfragen/[requestId]',
+        view: { kind: 'page' },
+        record: 'caller-match-request',
+        ...both,
+      },
+      {
+        id: 'buero-anfrage-umwandeln',
+        role: 'buero',
+        route: '/anfragen/[requestId]',
+        view: { kind: 'dialog', opener: 'requests.convert' },
+        record: 'promoted-caller-request',
+        reveal: 'Ort',
+        ...both,
+      },
+    ],
+    standalone: [],
+  };
+}
+
 export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   uiRoundCaptures(),
   fieldTargetCaptures(),
@@ -329,4 +366,5 @@ export const ACCEPTANCE_SETS: readonly AcceptanceSet[] = [
   timeAccountOpeningCaptures(),
   periodBlockerCaptures(),
   clockDockCaptures(),
+  callerMatchCaptures(),
 ];

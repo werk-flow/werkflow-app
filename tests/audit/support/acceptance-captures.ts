@@ -17,6 +17,7 @@ import {
 import { currentRunKey } from '../../golden/support/run-state';
 import type { TestWorld } from '../../golden/support/world';
 import { standaloneScreen } from '../../../lib/testing/selection/standalone-route-inventory';
+import { ACCEPTANCE_RECORDS } from './acceptance-records';
 import type { CaptureSpec, StandaloneCaptureSpec } from './acceptance-sets';
 import { stateCapturePlan, type CaptureState } from './acceptance-state-plan';
 import { withState } from './acceptance-states';
@@ -200,7 +201,9 @@ export async function captureAcceptance(
 ): Promise<void> {
   const { page, world, businessDate, testInfo } = input;
   await page.setViewportSize(DESKTOP);
-  const destination = await surfaceDestination(capture.route, page, world, businessDate);
+  const destination = capture.record
+    ? await ACCEPTANCE_RECORDS[capture.record](world)
+    : await surfaceDestination(capture.route, page, world, businessDate);
   if (capture.state) {
     await captureState(input, set, { ...capture, state: capture.state }, destination.route);
     return;

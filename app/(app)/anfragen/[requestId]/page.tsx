@@ -12,6 +12,7 @@ import {
   type ClientRequestEvent,
 } from '@/lib/requests/types';
 import { getRequestDocuments } from '@/lib/documents/actions';
+import { getCallerMatches } from '@/lib/requests/actions';
 import {
   RequestDetailContent,
   type RequestDetailData,
@@ -138,6 +139,7 @@ function requestDetailData({
   assignees,
   documents,
   convertedServiceCase,
+  callerMatches,
   labelWave: [
     clientResult,
     siteResult,
@@ -154,6 +156,7 @@ function requestDetailData({
   assignees: RequestDetailData['assignees'];
   documents: RequestDetailData['documents'];
   convertedServiceCase: { case_number: string } | null;
+  callerMatches: RequestDetailData['callerMatches'];
   labelWave: LabelWave;
 }): RequestDetailData {
   const actorById = new Map((actorsResult.data ?? []).map((profile) => [profile.id, profile]));
@@ -170,22 +173,15 @@ function requestDetailData({
 
   const site = siteResult.data;
   const contact = contactResult.data;
+  const siteAddress = site
+    ? formatSiteAddress({ street: site.street, postalCode: site.postal_code, city: site.city })
+    : '';
 
   return {
     request,
     clientName: clientResult.data?.name ?? null,
-    siteLabel: site
-      ? [
-          site.name,
-          formatSiteAddress({
-            street: site.street,
-            postalCode: site.postal_code,
-            city: site.city,
-          }),
-        ]
-          .filter(Boolean)
-          .join(' · ')
-      : null,
+    siteLabel: site ? [site.name, siteAddress].filter(Boolean).join(' · ') : null,
+    siteAddress: siteAddress || null,
     contactLabel: contact
       ? [contact.name, contact.role ? `(${contact.role})` : null].filter(Boolean).join(' ')
       : null,
@@ -197,6 +193,7 @@ function requestDetailData({
       convertedServiceCase,
     ),
     documents,
+    callerMatches,
     events: eventsFailed || actorsResult.error ? null : eventEntries,
     assignees,
   };
@@ -227,6 +224,7 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
     assignees,
     documentsResult,
     convertedServiceCaseResult,
+    callerMatchesResult,
   ] = await Promise.all([
     admin
       .from('client_requests')
@@ -248,6 +246,8 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
       .eq('organization_id', activeOrgId)
       .eq('source_request_id', requestId)
       .maybeSingle(),
+    // Empty for a matched or finished request.
+    getCallerMatches(requestId),
   ]);
 
   if (requestError) {
@@ -284,6 +284,9 @@ export default async function AnfrageDetailPage({ params }: { params: Promise<{ 
         assignees: assignees.options,
         documents: documentsResult.success ? documentsResult.documents : null,
         convertedServiceCase: convertedServiceCaseResult.data,
+        callerMatches: callerMatchesResult.success
+          ? { matches: callerMatchesResult.matches, moreMatches: callerMatchesResult.moreMatches }
+          : null,
         labelWave,
       })}
     />

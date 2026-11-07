@@ -178,8 +178,15 @@ type ConversionFields = Pick<
   | 'setTemplateVersionId'
 >;
 
-/** The conversion fields, starting from the request; `prefill` refills them from it. */
-function useConversionFields(request: ClientRequest): { fields: ConversionFields; prefill: () => void } {
+/**
+ * The conversion fields, starting from the request; `prefill` refills them
+ * from it. „Ort“ starts with the request's work site, else the captured address.
+ */
+function useConversionFields(
+  request: ClientRequest,
+  requestSiteAddress: string | null,
+): { fields: ConversionFields; prefill: () => void } {
+  const requestLocation = requestSiteAddress ?? request.callerAddress ?? '';
   const [title, setTitle] = useState(request.summary);
   const [description, setDescription] = useState(request.details ?? '');
   const [clientId, setClientId] = useState(request.clientId ?? '');
@@ -188,7 +195,7 @@ function useConversionFields(request: ClientRequest): { fields: ConversionFields
   const [priority, setPriority] = useState<JobPriority>(requestUrgencyToJobPriority(request.urgency));
   const [plannedDate, setPlannedDate] = useState('');
   const [plannedTime, setPlannedTime] = useState('');
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState(requestLocation);
   const [templateVersionId, setTemplateVersionId] = useState('');
 
   const prefill = () => {
@@ -200,7 +207,7 @@ function useConversionFields(request: ClientRequest): { fields: ConversionFields
     setPriority(requestUrgencyToJobPriority(request.urgency));
     setPlannedDate('');
     setPlannedTime('');
-    setLocation('');
+    setLocation(requestLocation);
     setTemplateVersionId('');
   };
 
@@ -291,18 +298,20 @@ async function convertRequest(
 /** Form state of the conversion dialog: prefill, number suggestion, validation and submit. */
 export function useConvertRequestForm({
   request,
+  requestSiteAddress,
   open,
   onOpenChange,
   onSaved,
 }: {
   request: ClientRequest;
+  requestSiteAddress: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (() => void) | undefined;
 }): ConvertRequestForm {
   const { showBanner } = useBanner();
   const [target, setTarget] = useState<ConversionTarget>('job');
-  const { fields, prefill } = useConversionFields(request);
+  const { fields, prefill } = useConversionFields(request, requestSiteAddress);
   const [qualificationWarning, setQualificationWarning] = useState<AssignmentEvaluation | null>(null);
   const { run: runConvert, isPending: isLoading } = usePendingTask();
   const [error, setError] = useState<string | null>(null);
