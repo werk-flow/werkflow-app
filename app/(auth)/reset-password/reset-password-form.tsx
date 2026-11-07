@@ -10,7 +10,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { logError } from '@/lib/logging';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 import {
   type PasswordWithConfirmationValues,
   translateSupabasePasswordError,
