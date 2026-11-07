@@ -592,7 +592,6 @@ const script = resolve(import.meta.dir, '../../scripts/run-notified.ts');
 const exited = (child: ChildProcess): Promise<number | null> =>
   new Promise((resolveExit) => child.once('exit', resolveExit));
 
-/** Settles once the unheard directory is empty: the supervisor's last acts drop the entry and its send lock. */
 /** A named pipe: a read waits for its writer, and a write for its reader, with no clock and no file events. */
 function namedPipe(path: string): string {
   expect(spawnSync('mkfifo', [path]).status).toBe(0);
