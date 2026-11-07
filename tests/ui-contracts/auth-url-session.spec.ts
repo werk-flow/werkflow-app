@@ -128,3 +128,13 @@ test('the reset page signs nobody in from tokens in its link', async ({ page }) 
   expect(await sessionCookieNames(page)).toEqual([]);
   expect(linkedCredentialUses).toEqual([]);
 });
+
+test('the reset page lets the confirmed account set its password without using link tokens', async ({
+  page,
+}) => {
+  const linkedCredentialUses = await openWithTokenLink(page, 'auth-url-reset-form', { storedSession: true });
+  await expect(page.getByLabel('Neues Passwort')).toBeVisible();
+  await expect(page.getByLabel('Passwort bestätigen')).toBeVisible();
+  expect(await sessionCookieNames(page)).toEqual([CONTRACT_SESSION_COOKIE]);
+  expect(linkedCredentialUses).toEqual([]);
+});
