@@ -33,6 +33,8 @@ interface ConvertRequestDialogProps {
   request: ClientRequest;
   /** The request's customer as the page shows it. */
   requestClient: ClientSelectItem | null;
+  /** The request's work site as one address line, null without a site. */
+  requestSiteAddress: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Fires after the server confirmed; the page marks itself until refreshed props land. */
@@ -108,11 +110,12 @@ function ConvertRequestTargetFields({ form }: { form: ConvertRequestForm }) {
 export function ConvertRequestDialog({
   request,
   requestClient,
+  requestSiteAddress,
   open,
   onOpenChange,
   onSaved,
 }: ConvertRequestDialogProps) {
-  const form = useConvertRequestForm({ request, open, onOpenChange, onSaved });
+  const form = useConvertRequestForm({ request, requestSiteAddress, open, onOpenChange, onSaved });
   const {
     target,
     description,

@@ -11,7 +11,12 @@ import { ErrorText } from '@/components/ui/error-text';
 import { ContextualDocumentsSection } from '@/components/dokumente/contextual-documents-section';
 import { RegionLoadError } from '@/components/shared/region-load-error';
 import { useRealtimeRouterRefresh } from '@/hooks/use-realtime-router-refresh';
-import { REQUEST_CATEGORY_LABELS, REQUEST_SOURCE_LABELS, type ClientRequest } from '@/lib/requests/types';
+import {
+  REQUEST_CATEGORY_LABELS,
+  REQUEST_SOURCE_LABELS,
+  type CallerMatchList,
+  type ClientRequest,
+} from '@/lib/requests/types';
 import type { OrganizationDocument } from '@/lib/documents/types';
 import { RequestStatusBadge, RequestUrgencyBadge } from './request-badges';
 import { CloseRequestDialog } from './close-request-dialog';
@@ -36,12 +41,16 @@ export type RequestDetailData = {
   request: ClientRequest;
   clientName: string | null;
   siteLabel: string | null;
+  /** The request's work site as one address line, the conversion's default „Ort“. */
+  siteAddress: string | null;
   contactLabel: string | null;
   contactPhone: string | null;
   assigneeName: string | null;
   convertedLink: { label: string; href: string | null } | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   documents: OrganizationDocument[] | null;
+  /** Customers the unmatched caller may already be; null when the lookup failed. */
+  callerMatches: CallerMatchList | null;
   /** Null when the read failed, so the region shows the failure instead of "none". */
   events: RequestEventEntry[] | null;
   assignees: Array<{ userId: string; name: string }>;
@@ -137,6 +146,7 @@ function RequestDetailDialogs({
         requestClient={
           request.clientId && data.clientName ? { id: request.clientId, name: data.clientName } : null
         }
+        requestSiteAddress={data.siteAddress}
         open={convertOpen}
         onOpenChange={onConvertOpenChange}
         onSaved={onSaved}
@@ -160,19 +170,29 @@ function RequestDetailDialogs({
   );
 }
 
+/**
+ * Refreshes the page when the request, its documents or, while the caller is
+ * unmatched, the customers and contacts its caller matches against change.
+ */
+function useRequestLiveUpdates(callerUnmatched: boolean): void {
+  // One hook, so one burst across these tables refreshes the route once.
+  useRealtimeRouterRefresh({
+    tables: callerUnmatched
+      ? ['client_requests', 'documents', 'document_links', 'clients', 'client_contacts']
+      : ['client_requests', 'documents', 'document_links'],
+  });
+}
+
 export function RequestDetailContent({ data }: { data: RequestDetailData }) {
   const { request } = data;
-  const actions = useRequestDetailActions(request);
+  const actions = useRequestDetailActions(request, (data.callerMatches?.matches.length ?? 0) > 0);
   const { isPending, shownStatus, markSettling } = actions;
   const [convertOpen, setConvertOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
-  useRealtimeRouterRefresh({
-    tables: ['client_requests', 'documents', 'document_links'],
-  });
-
   const isEditable = request.status === 'offen' || request.status === 'in_klaerung';
+  useRequestLiveUpdates(isEditable && !request.clientId);
 
   return (
     <PageShell>
@@ -200,8 +220,10 @@ export function RequestDetailContent({ data }: { data: RequestDetailData }) {
             data={data}
             isEditable={isEditable}
             isPending={isPending}
-            promoteError={actions.promoteError}
+            promoteArmed={actions.promoteArmed}
+            customerError={actions.customerError}
             onMatch={() => actions.setMatchOpen(true)}
+            onAssignMatch={actions.handleAssignMatch}
             onPromote={actions.handlePromote}
           />
         </div>
