@@ -167,7 +167,7 @@ export function productionMcpRefusal(
   const toolName = call.tool_name;
   const server = mcpServerOf(toolName);
   if (!server) return undefined;
-  const logs = vercelLogToolRefusal(toolName.slice(toolName.lastIndexOf('__') + 2), call.tool_input);
+  const logs = vercelLogToolRefusal(server, toolName.slice(toolName.lastIndexOf('__') + 2), call.tool_input);
   if (logs) return logs;
   const unknown = (what: string) =>
     refuse(`the hook could not read ${what}, so it cannot tell whether "${server}" reaches PROD.`);
@@ -223,6 +223,13 @@ const VERCEL_LOG_TOOLS = new Set([
   'get_deployment_build_logs',
   'get_project_trace',
 ]);
+
+/**
+ * On a Vercel server, any tool named for logs, traces or events, so a tool Vercel
+ * adds later (CI logs, agent run traces) is refused too. Only Vercel servers:
+ * Supabase's `get_logs` on DEV stays allowed.
+ */
+const VERCEL_LOG_TOOL_NAME = /(?:^|_)(?:logs?|traces?|events)(?:_|$)/;
 
 /**
  * The metric dimensions a query may group or filter by: codes and ids, never a
@@ -297,11 +304,12 @@ const LOG_ENDPOINT = /\/(?:logs|runtime-logs|events|traces?)(?:[/?]|$)/;
 const QUERY_ENDPOINT = /\/(?:metrics\/v\d|v\d\/observability\/query)\b/;
 
 /** Why a Vercel MCP tool call would return PROD log text or request data, or undefined. */
-function vercelLogToolRefusal(tool: string, input: unknown): string | undefined {
+function vercelLogToolRefusal(server: string, tool: string, input: unknown): string | undefined {
   const refuse = (why: string) => `Refused: ${why} ${LOGS_INSTEAD}`;
   const preview =
     typeof input === 'object' && input !== null && Reflect.get(input, 'environment') === 'preview';
-  if (VERCEL_LOG_TOOLS.has(tool) && !(tool === 'get_runtime_logs' && preview))
+  const logTool = VERCEL_LOG_TOOLS.has(tool) || (/vercel/i.test(server) && VERCEL_LOG_TOOL_NAME.test(tool));
+  if (logTool && !(tool === 'get_runtime_logs' && preview))
     return refuse(`"${tool}" returns log text from production, not metadata.`);
   const query = tool === 'create_observability_query' ? observabilityQueryRefusal(input) : undefined;
   return query && refuse(query);
@@ -417,6 +425,8 @@ function vercelCliRefusal(words: readonly ShellWord[]): string | undefined {
   if (expanding.length > 0)
     return `the shell expands ${expanding.map((word) => word.text).join(' ')} in a Vercel call, so the guard cannot see which command, flag or dimension it runs. Write the arguments out.`;
   const args = withoutRedirections(words).map((word) => word.text);
+  // Help prints the CLI's own text, never data.
+  if (args.includes('--help') || args.includes('-h')) return undefined;
   if (args.includes('logs') && !previewOnly(args))
     return '`vercel logs` returns runtime log lines or request records from production.';
   if (args.includes('inspect') && args.some((arg) => arg === '-l' || /^--logs(?:=|$)/.test(arg)))

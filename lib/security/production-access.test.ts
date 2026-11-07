@@ -56,6 +56,8 @@ test('the cloud-backend table of the environments doc yields both Supabase refs'
 test('DEV, local and unrelated MCP tools pass', () => {
   expect(refusal('mcp__supabase__execute_sql', { query: 'select 1' })).toBeUndefined();
   expect(refusal('mcp__supabase__list_migrations')).toBeUndefined();
+  // The Vercel log-name rule leaves DEV Supabase logs alone.
+  expect(refusal('mcp__supabase__get_logs', { service: 'api' })).toBeUndefined();
   expect(refusal('mcp__t3-code__task_status', { taskId: 'a' })).toBeUndefined();
   // "prod" in the tool part names no server.
   expect(refusal('mcp__shop__list_products')).toBeUndefined();
@@ -167,6 +169,12 @@ test('a Vercel tool that returns log text from production is refused', () => {
     ['get_runtime_errors', scope],
     ['list_deployment_events', { idOrUrl: 'dpl_a', builds: 1 }],
     ['get_deployment_build_logs', { idOrUrl: 'dpl_a', teamId: 'team_a' }],
+    // Named for logs, traces or events on a Vercel server, including tools Vercel adds later.
+    ['get_agent_run_trace', scope],
+    ['get_vercel_ci_invocation_logs', scope],
+    ['get_vercel_ci_task_run_logs', scope],
+    ['get_session_command_logs', scope],
+    ['list_user_events', scope],
     ['get_project_trace', { ...scope, requestId: 'r' }],
   ] as const) {
     const reason = refusal(`${VERCEL}${tool}`, input);
@@ -307,6 +315,10 @@ test('other Vercel commands and mentions of the log command pass', () => {
     `vercel metrics vercel.request.count --prod ${SAFE.map((dimension) => `--group-by ${dimension}`).join(' ')}`,
     "vercel metrics vercel.request.count --filter 'environment:production AND httpStatus >= 500' --group-by=errorCode",
     'vercel metrics schema vercel.request.count',
+    // Help prints the CLI's own text.
+    'vercel metrics --help',
+    'vercel metrics vercel.request.count -h',
+    'vercel logs --help',
     'vercel api /v2/observability/schema/vercel.request.count',
     'vercel api /v4/aliases/app.werk-flow.app',
     'git commit -m "Refuse vercel logs"',
