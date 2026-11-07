@@ -112,8 +112,9 @@ jobs:
           echo "failed=$(jq -r '[to_entries[] | select(.value.outcome == "failure") | .key] | join(" ")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
           echo "production=$(jq -r 'any(.[]; .outcome == "failure" and .outputs.environment == "prod")' <<< "$STEPS")" >> "$GITHUB_OUTPUT"
 
-  # The week's queue p50 and p90 land in the job summary. 10 min at p90 sits below the week
-  # before werk-flow/werkflow-planning#291 (pull requests 11.9 min, main 9.5 min).
+  # The week's queue p50 and p90 land in the job summary. The ceiling sits just above the week
+  # before werk-flow/werkflow-planning#291 (pull requests 11.9 min, main 9.5 min), so it fires on a
+  # rise above that level; #291 lowers it once a comparable week after the change is measured.
   ci-queue:
     name: CI queue
     runs-on: ubuntu-24.04
@@ -127,10 +128,10 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github/scripts
-      - name: CI jobs waited at most 10 min for a runner at p90 this week
+      - name: CI jobs waited at most 12 min for a runner at p90 this week
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/ci-queue.sh 10
+        run: bash .github/scripts/ci-queue.sh 12
 
   production:
     name: Production credentials
