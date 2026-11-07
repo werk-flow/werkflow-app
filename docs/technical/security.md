@@ -139,7 +139,7 @@ List every residual exposure the owner accepted here until it closes.
 - Injected inline scripts are not blocked. The script policy allows `'unsafe-inline'`, so it stops foreign scripts but not an injected inline one. A per-request nonce needs every page rendered per request, which `cacheComponents` rules out. The `htmlSinkSelectors` lint set keeps product code from creating an injection point.
 - No edge rate limit covers every request. The app limits operations that send mail, redeem a capability or activate billing; Supabase Auth limits its own endpoints. Edge limiting is the owner's Vercel plan decision.
 - The deletion transport lets current members receive the identity of a deleted row. It carries no record content.
-- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with the payment slice.
+- `simulatePayment` in `lib/subscription/actions.ts` lets a signed-in user without an organization activate a subscription for their own account, once. It is the beta activation path and closes with werk-flow/werkflow-planning#248.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit. Its constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time. `P1-33` owns complete offboarding and asset return.

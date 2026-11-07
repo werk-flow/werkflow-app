@@ -51,6 +51,22 @@ Signals: Vercel deployment logs and runtime errors (no drains or alerts), Supaba
 
 A red nightly or release, a scheduled release that stopped at a red full run, and a scheduled run that never started each open or update one issue with the label `ci-alert`: `CI alert: nightly` or `CI alert: release` (`.github/scripts/alert-issue.sh`). The next green run closes it. A release that stops because `main` equals `production` leaves the issue as it is, because it proves nothing. `ops/ci-alert.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine: it finds a run that never started and hands each open issue to one T3 thread. These issues only report; no release decision reads them.
 
+`.github/workflows/date-lookahead.yml` runs the suite nightly on dates still to come, so a test that fails on a date alone surfaces weeks before that date. It reports the same way, on `CI alert: date look-ahead`, and a failed job's name is its date. Each job steps its runner's kernel clock (`.github/scripts/shift-clock.sh`). Containers share that clock, so Bun, Chromium, the app, Postgres and the Supabase services all show the date, and SQL tests read it too. A job fails if the shell, Bun or Postgres shows another date, or if the clock leaves the shift.
+
+| Dates | Groups |
+| --- | --- |
+| The next 14 days, the first month end and year end past them, and the year turn (00:30 in Berlin, still December 31 in UTC) | Unit, SQL and component |
+| Day 14, on Sundays also that month end and year end, and every date the open issue names for a browser job | Every browser group |
+
+A date keeps its browser jobs while the issue names it, so a green run cannot close the issue on a date it skipped. Started by hand, `gh workflow run date-lookahead.yml -f date=<YYYY-MM-DD>` reruns one date and reports nothing.
+
+The look-ahead does not cover:
+
+- A spec merged after its date was day 14: only the suite groups and the real nightly reach that date.
+- Any hour but midday, apart from the year turn.
+- Data that aged into the date: the stack migrates on the real clock, and each browser group seeds a fresh world on the shifted one.
+- The cloud providers: every job uses the local stack.
+
 ## Incident handling
 
 | Step | Who | Action |

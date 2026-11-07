@@ -1,6 +1,6 @@
 # Pull-request reviews
 
-Every PR to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): your own read, a `sol-loop` review by GPT Sol, and for the riskiest changes one CodeRabbit app review. A reviewer is no authority. Check that a suggested fix keeps the SHK context, the role-specific workflows, the organization boundaries and field-worker usability.
+CodeRabbit is the only review bot on this repository. Every PR to `main` gets the reviews its level needs ([decision 0009](../decisions/0009-pull-requests-and-ci.md)): your own read, a `sol-loop` review by GPT Sol, and for the riskiest changes one CodeRabbit app review. A reviewer is no authority. Check that a suggested fix keeps the SHK context, the role-specific workflows, the organization boundaries and field-worker usability.
 
 `.coderabbit.yaml` points CodeRabbit at each virtue's owner doc. Automatic review is off. Change it only when an owner doc moves, a top-level folder needs its pointer, or the policy changes, and validate it against the schema its first line declares.
 
@@ -97,4 +97,4 @@ bun run review -- findings                              # replay the stored find
 - A useful finding names the behavior, the evidence and the consequence. Prefer bugs, data loss, privacy leaks, security issues and role confusion over style.
 - Zero findings certify nothing. A failed review stays missing; never present a manual review as a CodeRabbit review.
 - Batch related corrections into one push. Stop an unproductive loop.
-- A CodeRabbit Deep Scan is a separately billed whole-repository scan, not part of any required review. Get the owner's approval for the cost first.
+- A CodeRabbit Deep Scan is a separately billed whole-repository scan, not part of any required review. Get the owner's approval for the cost first. Its settings live in the dashboard, not in `.coderabbit.yaml`: it skips `temporary-transcripts/**`, `tests/**`, `docs/**` and `.agents/**`, and it has a short repository context.

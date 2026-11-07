@@ -4,6 +4,7 @@
 # reads it. docs/technical/recovery-and-incidents.md#monitoring says who picks it up.
 #
 # Usage: alert-issue.sh open <title> <body>
+#        alert-issue.sh keep <title> <note>
 #        alert-issue.sh close <title>
 #        alert-issue.sh run <title> <job results> [<skip> <skip reason>]
 #
@@ -30,6 +31,17 @@ open_alert() {
     gh issue comment "$issue" --body "Still failing: ${run_url}"
   else
     gh issue create --title "$1" --body "$body" --label "$label" --assignee "$assignee"
+  fi
+}
+
+# For a run that tested nothing: the open issue's body keeps what the last real run found.
+keep_alert() {
+  local issue
+  issue="$(open_issues "$1" | sed -n 1p)"
+  if test -n "$issue"; then
+    gh issue comment "$issue" --body "$(printf '%s\n\nRun: %s' "$2" "$run_url")"
+  else
+    open_alert "$1" "$2"
   fi
 }
 
@@ -64,6 +76,7 @@ action="$1"
 shift
 case "$action" in
   open) open_alert "$@" ;;
+  keep) keep_alert "$@" ;;
   close) close_alert "$@" ;;
   run) report_run "$@" ;;
   *) echo "::error::Unknown action ${action}."; exit 1 ;;
