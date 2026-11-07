@@ -143,7 +143,7 @@ List each owner-accepted residual exposure here until it closes.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
-- Organization deletion removes stored files after the rows; a storage failure then leaves them, unreachable, under the organization's prefix, and is logged.
+- Organization deletion removes stored files after the rows; a storage failure leaves them under the organization's prefix, logged and unreachable through the app.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception; `lib/security/dependency-exceptions.json` holds its reason and expiry.
 - Two provider facts are unverified, each needing a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 

@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
 import { discardStorageObjects, listStorageObjectPaths } from '@/lib/storage/r2';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
@@ -41,6 +41,21 @@ async function listOrganizationFiles(organizationId: string): Promise<string[] |
 async function discardOrganizationFiles(organizationId: string, listed: readonly string[]): Promise<void> {
   const late = (await listOrganizationFiles(organizationId)) ?? [];
   await discardStorageObjects({ organizationId, paths: [...new Set([...listed, ...late])] });
+}
+
+/**
+ * True only when a read confirms the organization row is gone. A failed call
+ * can still have committed, when only its response was lost: then the
+ * deletion finished and its files must go.
+ */
+async function organizationIsGone(admin: AdminClient, organizationId: string): Promise<boolean> {
+  const { data, error } = await admin
+    // tenant-scope: by-id-then-verified — the caller's own organization, whose ownership the action verified
+    .from('organizations')
+    .select('id')
+    .eq('id', organizationId)
+    .maybeSingle();
+  return !error && !data;
 }
 
 /**
@@ -110,7 +125,7 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       p_actor_id: userId,
       p_confirmation_name: parsedConfirmation.data.trim(),
     });
-    if (orgDeleteError) {
+    if (orgDeleteError && !(await organizationIsGone(admin, activeOrgId))) {
       return deleteRefusal(
         orgDeleteError,
         'delete_org_failed',

@@ -32,6 +32,10 @@ const ownObjects = [
 const foreignObject = `${ORGANIZATION_B}/documents/fremd.pdf`;
 const bucket = new Set<string>();
 let failListing = false;
+// A second listing, once the rows are gone, fails.
+let failListingAfterDeletion = false;
+// The database deletes the rows, but the response is lost.
+let lostResponse = false;
 let failFileRemoval = false;
 // An upload finalized while the deletion runs, after the first listing.
 let lateUpload: string | null = null;
@@ -44,7 +48,8 @@ mock.module('@/lib/storage/r2', () => ({
   listStorageObjectPaths: async ({ organizationId, prefix }: { organizationId: string; prefix: string }) => {
     steps.push('list');
     assert.equal(prefix, `${organizationId}/`, 'the listing reaches beyond the organization');
-    if (failListing) throw new Error('listing failed');
+    if (failListing || (failListingAfterDeletion && !organizationRemains(organizationId)))
+      throw new Error('listing failed');
     return [...bucket].filter((path) => path.startsWith(prefix));
   },
   deleteStorageObjects: async (): Promise<never> => {
@@ -103,6 +108,7 @@ world.rpc = ({ name, args }) => {
     world.tables.organizations = (world.tables.organizations ?? []).filter(
       (row) => row.id !== args.p_organization_id,
     );
+    if (lostResponse) return { data: null, error: { code: '', message: 'TypeError: fetch failed' } };
     return { data: null, error: null };
   }
   return { data: null, error: { code: 'P0001', message: `unexpected_function_${name}` } };
@@ -190,6 +196,31 @@ for (const [refusal, error] of [
   assertNothingDeleted(`database refusal ${refusal}`);
 }
 databaseRefusal = null;
+
+const restoreOrganization = (): void => {
+  world.tables.organizations = [
+    { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
+    ...(world.tables.organizations ?? []),
+  ];
+};
+
+// A failed second listing still removes the files listed first.
+reset();
+failListingAfterDeletion = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
+assert.deepEqual([...bucket], [foreignObject], 'a failed second listing kept the files listed first');
+failListingAfterDeletion = false;
+restoreOrganization();
+
+// A lost response after the rows went is a finished deletion: the files go and the action says so.
+reset();
+lostResponse = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.ok(!organizationRemains(), 'the organization remains');
+assert.deepEqual([...bucket], [foreignObject], 'a lost response kept the files of a deleted organization');
+lostResponse = false;
+restoreOrganization();
 
 // After the rows went, a failed file removal leaves orphaned objects; the
 // organization is deleted, and the action says so.
