@@ -1,6 +1,8 @@
 // Actual Anfragen actions over the in-memory database: only managers pass,
-// a request of another organization is unreachable, invalid input writes
-// nothing, and a request converts exactly once.
+// a request of another organization is unreachable, the caller match lookup
+// never lists another organization's customer, invalid input writes nothing,
+// a caller who matches a customer is promoted only after a confirmation, and
+// a request converts exactly once.
 import assert from 'node:assert/strict';
 import {
   CALLER_ID,
@@ -18,6 +20,9 @@ const anonymousRequestId = '60000000-0000-4000-8000-000000000004';
 const clientId = '70000000-0000-4000-8000-000000000001';
 const secondClientId = '70000000-0000-4000-8000-000000000002';
 const foreignClientId = '70000000-0000-4000-8000-000000000009';
+const matchingClientId = '70000000-0000-4000-8000-000000000003';
+const foreignTwinClientId = '70000000-0000-4000-8000-000000000008';
+const matchingRequestId = '60000000-0000-4000-8000-000000000009';
 const siteId = '80000000-0000-4000-8000-000000000001';
 const now = '2026-10-01T08:00:00.000Z';
 
@@ -71,12 +76,17 @@ const world = installActionWorld(
         closed_at: now,
       }),
       requestRow(anonymousRequestId, ORGANIZATION_A, { caller_name: null }),
+      requestRow(matchingRequestId, ORGANIZATION_A, { caller_name: 'Erika Sommer' }),
     ],
     client_request_events: [],
     clients: [
       { id: clientId, organization_id: ORGANIZATION_A, name: 'Bestandskunde' },
       { id: secondClientId, organization_id: ORGANIZATION_A, name: 'Zweiter Kunde' },
       { id: foreignClientId, organization_id: ORGANIZATION_B, name: 'Fremder Kunde' },
+      { id: matchingClientId, organization_id: ORGANIZATION_A, name: 'Erika Sommer' },
+      // The other organization's customer is the caller of every request here.
+      { id: foreignTwinClientId, organization_id: ORGANIZATION_B, name: 'Erika Muster' },
+      { id: '70000000-0000-4000-8000-000000000007', organization_id: ORGANIZATION_B, name: 'Erika Sommer' },
     ],
     client_sites: [
       {
@@ -101,6 +111,24 @@ const world = installActionWorld(
 );
 const actions = await import('@/lib/requests/actions');
 
+// find_client_request_caller_matches as supabase/tests/request_caller_matches.sql
+// proves it, reduced to the name: a request outside the passed organization is
+// request_not_found, a matched one has no matches, and only the passed
+// organization's customers are compared.
+const lookUpCallerMatches = (args: Record<string, unknown>): ReturnType<typeof world.rpc> => {
+  const request = tableRows(world, 'client_requests').find(
+    (row) => row.id === args.p_request_id && row.organization_id === args.p_organization_id,
+  );
+  if (!request) return { data: null, error: { message: 'request_not_found' } };
+  if (request.client_id) return { data: [], error: null };
+  const matches = tableRows(world, 'clients')
+    .filter(
+      (client) => client.organization_id === args.p_organization_id && client.name === request.caller_name,
+    )
+    .map((client) => ({ client_id: client.id, client_name: client.name, matched_on: ['name'] }));
+  return { data: matches, error: null };
+};
+
 const requestById = (id: string): Record<string, unknown> => {
   const row = tableRows(world, 'client_requests').find((candidate) => candidate.id === id);
   assert.ok(row, `request ${id} exists`);
@@ -115,6 +143,7 @@ const everyAction = (requestId: string): Array<Promise<{ success: boolean; error
   actions.createClientRequest({ summary: 'Neue Anfrage' }),
   actions.updateClientRequest(requestId, { summary: 'Geändert' }),
   actions.promoteCallerToClient(requestId),
+  actions.getCallerMatches(requestId),
   actions.closeClientRequest(requestId, { reason: 'kein_bedarf' }),
   actions.reopenClientRequest(closedRequestId),
   actions.convertRequestToJob(requestId, { title: 'Auftrag', clientId }),
@@ -143,6 +172,64 @@ const foreignResults = await Promise.all([
   actions.convertRequestToProject(foreignRequestId, { name: 'Projekt', clientId, projectNumber: 'P-1' }),
 ]);
 for (const result of foreignResults) assert.deepEqual(result, { success: false, error: 'request_not_found' });
+
+// The caller match lookup lists only customers of the caller's organization,
+// never the other organization's customer with the same name, and asks the
+// database with the server-resolved organization only.
+world.rpc = ({ name, args }) =>
+  name === 'find_client_request_caller_matches'
+    ? lookUpCallerMatches(args)
+    : { data: null, error: { message: 'unexpected call' } };
+world.rpcCalls.length = 0;
+assert.deepEqual(await actions.getCallerMatches(matchingRequestId), {
+  success: true,
+  matches: [{ clientId: matchingClientId, clientName: 'Erika Sommer', matchedOn: ['name'] }],
+  moreMatches: false,
+});
+assert.deepEqual(await actions.getCallerMatches(openRequestId), {
+  success: true,
+  matches: [],
+  moreMatches: false,
+});
+assert.deepEqual(await actions.getCallerMatches(foreignRequestId), {
+  success: false,
+  error: 'request_not_found',
+});
+assert.deepEqual(
+  world.rpcCalls.map((call) => call.args.p_organization_id),
+  [ORGANIZATION_A, ORGANIZATION_A, ORGANIZATION_A],
+);
+// A manager of the other organization reaches no request of this one, so no
+// customer of either organization through it, and lists only its own customers.
+signInAs(world, 'buero', ORGANIZATION_B);
+assert.deepEqual(await actions.getCallerMatches(matchingRequestId), {
+  success: false,
+  error: 'request_not_found',
+});
+assert.deepEqual(await actions.getCallerMatches(foreignRequestId), {
+  success: true,
+  matches: [{ clientId: foreignTwinClientId, clientName: 'Erika Muster', matchedOn: ['name'] }],
+  moreMatches: false,
+});
+signInAs(world, 'buero');
+assert.deepEqual(await actions.getCallerMatches('not-a-uuid'), { success: false, error: 'invalid_input' });
+world.rpc = () => ({ data: null, error: { message: 'connection failure' } });
+assert.deepEqual(await actions.getCallerMatches(openRequestId), { success: false, error: 'load_failed' });
+// One row past the listed matches says that more customers match.
+world.rpc = () => ({
+  data: Array.from({ length: 11 }, (_, index) => ({
+    client_id: `70000000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`,
+    client_name: `Kunde ${index}`,
+    matched_on: ['phone', 'unknown'],
+  })),
+  error: null,
+});
+const manyMatches = await actions.getCallerMatches(openRequestId);
+assert.ok(manyMatches.success);
+assert.equal(manyMatches.matches.length, 10);
+assert.equal(manyMatches.moreMatches, true);
+assert.deepEqual(manyMatches.matches[0]?.matchedOn, ['phone']);
+world.rpc = () => ({ data: null, error: null });
 
 // Capture rejects bad input without writing a request. Foreign references, a
 // non-member assignee and a taken number are refused by create_client_request
@@ -346,6 +433,7 @@ const promotedClientId = '70000000-0000-4000-8000-000000000005';
 world.tables.client_requests?.push(requestRow(promotedRequestId, ORGANIZATION_A));
 world.rpcCalls.length = 0;
 world.rpc = ({ name, args }) => {
+  if (name === 'find_client_request_caller_matches') return lookUpCallerMatches(args);
   assert.equal(name, 'promote_client_request_caller');
   const request = requestById(String(args.p_request_id));
   world.tables.clients?.push({
@@ -362,38 +450,66 @@ world.rpc = ({ name, args }) => {
 const promoted = await actions.promoteCallerToClient(promotedRequestId);
 assert.ok(promoted.success);
 assert.equal(promoted.request.clientId, promotedClientId);
-assert.deepEqual(world.rpcCalls, [
-  {
-    name: 'promote_client_request_caller',
-    args: {
-      p_actor_id: CALLER_ID,
-      p_organization_id: ORGANIZATION_A,
-      p_request_id: promotedRequestId,
-      p_name: 'Erika Muster',
-      p_client_type: 'privat',
-    },
+const promoteArgs = (requestId: string, name: string) => ({
+  name: 'promote_client_request_caller',
+  args: {
+    p_actor_id: CALLER_ID,
+    p_organization_id: ORGANIZATION_A,
+    p_request_id: requestId,
+    p_name: name,
+    p_client_type: 'privat',
   },
+});
+const lookupArgs = (requestId: string) => ({
+  name: 'find_client_request_caller_matches',
+  args: { p_organization_id: ORGANIZATION_A, p_request_id: requestId, p_limit: 11 },
+});
+assert.deepEqual(world.rpcCalls, [
+  lookupArgs(promotedRequestId),
+  promoteArgs(promotedRequestId, 'Erika Muster'),
 ]);
 assert.deepEqual(await actions.promoteCallerToClient(promotedRequestId), {
   success: false,
   error: 'already_matched',
 });
-assert.equal(tableRows(world, 'clients').length, 4);
+assert.equal(tableRows(world, 'clients').length, 7);
+
+// A caller who matches a customer is promoted only when the user confirmed
+// after seeing the match; an unconfirmed press creates nothing.
+world.rpcCalls.length = 0;
+assert.deepEqual(await actions.promoteCallerToClient(matchingRequestId), {
+  success: false,
+  error: 'caller_matches_customer',
+});
+assert.deepEqual(world.rpcCalls, [lookupArgs(matchingRequestId)]);
+assert.equal(tableRows(world, 'clients').length, 7);
+world.rpcCalls.length = 0;
+const confirmed = await actions.promoteCallerToClient(matchingRequestId, { createDespiteMatches: true });
+assert.ok(confirmed.success);
+assert.deepEqual(world.rpcCalls, [promoteArgs(matchingRequestId, 'Erika Sommer')]);
+// A lookup that cannot complete refuses the unconfirmed promotion.
+const unreadRequestId = '60000000-0000-4000-8000-00000000000a';
+world.tables.client_requests?.push(requestRow(unreadRequestId, ORGANIZATION_A));
+world.rpc = () => ({ data: null, error: { message: 'connection failure' } });
+assert.deepEqual(await actions.promoteCallerToClient(unreadRequestId), {
+  success: false,
+  error: 'load_failed',
+});
 
 // A refusal under the database lock keeps its code; any other failure is promote_failed.
 const racedRequestId = '60000000-0000-4000-8000-000000000006';
 world.tables.client_requests?.push(requestRow(racedRequestId, ORGANIZATION_A));
 world.rpc = () => ({ data: null, error: { message: 'already_matched' } });
-assert.deepEqual(await actions.promoteCallerToClient(racedRequestId), {
+assert.deepEqual(await actions.promoteCallerToClient(racedRequestId, { createDespiteMatches: true }), {
   success: false,
   error: 'already_matched',
 });
 world.rpc = () => ({ data: null, error: { message: 'history refused' } });
-assert.deepEqual(await actions.promoteCallerToClient(racedRequestId), {
+assert.deepEqual(await actions.promoteCallerToClient(racedRequestId, { createDespiteMatches: true }), {
   success: false,
   error: 'promote_failed',
 });
-assert.equal(tableRows(world, 'clients').length, 4);
+assert.equal(tableRows(world, 'clients').length, 8);
 
 // A conversion is one call of convert_client_request_to_project with
 // server-resolved values only; the stub applies the claim as the SQL test

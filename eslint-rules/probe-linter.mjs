@@ -16,6 +16,7 @@ const repositoryRoot = resolve(import.meta.dirname, '..');
 const TYPE_AWARE_RULES = [
   '@typescript-eslint/switch-exhaustiveness-check',
   '@typescript-eslint/no-floating-promises',
+  '@typescript-eslint/no-unsafe-assignment',
 ];
 const typedFiles = { files: ['**/*.{ts,tsx}'], ignores: ['supabase/functions/**'] };
 

@@ -13,6 +13,7 @@ import { CACHE_TAGS } from '@/lib/data/cached';
 import { updateTag } from 'next/cache';
 import type { ClientType } from '@/lib/jobs/types';
 import {
+  type CallerMatchesResult,
   type ClientRequest,
   type ClientRequestResult,
   type ClientRequestRow,
@@ -21,6 +22,7 @@ import {
   type RequestCloseReason,
   type RequestSource,
   type RequestUrgency,
+  toCallerMatch,
   toClientRequest,
 } from '@/lib/requests/types';
 import { logError } from '@/lib/logging';
@@ -113,6 +115,7 @@ const promoteCallerArgumentsSchema = z.object({
     .object({
       name: z.string().max(300).optional(),
       clientType: z.enum(Constants.public.Enums.client_type).optional(),
+      createDespiteMatches: z.boolean().optional(),
     })
     .optional(),
 });
@@ -352,6 +355,51 @@ export async function updateClientRequest(
   }
 }
 
+// The strongest matches the request page lists; it says when more exist.
+const CALLER_MATCH_LIMIT = 10;
+
+// The customers of the caller's organization that the caller of an open,
+// unmatched request may already be; a request outside it is request_not_found.
+async function readCallerMatches(
+  admin: AdminClient,
+  orgId: string,
+  requestId: string,
+): Promise<CallerMatchesResult> {
+  // One row past the shown matches tells whether more exist.
+  const { data, error } = await admin.rpc('find_client_request_caller_matches', {
+    p_organization_id: orgId,
+    p_request_id: requestId,
+    p_limit: CALLER_MATCH_LIMIT + 1,
+  });
+  if (error) {
+    if (error.message === 'request_not_found') return { success: false, error: 'request_not_found' };
+    logError('readCallerMatches: caller match lookup failed', error);
+    return { success: false, error: 'load_failed' };
+  }
+  return {
+    success: true,
+    matches: data.slice(0, CALLER_MATCH_LIMIT).map(toCallerMatch),
+    moreMatches: data.length > CALLER_MATCH_LIMIT,
+  };
+}
+
+/** The customers the caller of an open, unmatched request may already be. */
+export async function getCallerMatches(rawRequestId: string): Promise<CallerMatchesResult> {
+  const parsedRequestId = uuidSchema.safeParse(rawRequestId);
+  if (!parsedRequestId.success) return { success: false, error: 'invalid_input' };
+  try {
+    const auth = await authenticateAndAuthorize();
+    if (!auth.success) return auth;
+    if (!auth.context.isManagerOrAbove) {
+      return { success: false, error: 'not_authorized' };
+    }
+    return await readCallerMatches(createSupabaseAdminClient(), auth.context.orgId, parsedRequestId.data);
+  } catch (error) {
+    logError('Unexpected error in getCallerMatches:', error);
+    return { success: false, error: 'unexpected_error' };
+  }
+}
+
 // The refusals of promote_client_request_caller, each an action failure code.
 const PROMOTE_REFUSALS: ReadonlySet<string> = new Set([
   'invalid_input',
@@ -363,10 +411,12 @@ const PROMOTE_REFUSALS: ReadonlySet<string> = new Set([
 ]);
 
 // Promote an unknown caller into a customer record without retyping: the new
-// customer is created from the captured caller fields and linked immediately.
+// customer, its first work site and its contact are created from the captured
+// caller fields and linked immediately. While the caller matches a customer,
+// only a promotion the user confirmed creates another one.
 export async function promoteCallerToClient(
   rawRequestId: string,
-  rawInput?: { name?: string; clientType?: ClientType },
+  rawInput?: { name?: string; clientType?: ClientType; createDespiteMatches?: boolean },
 ): Promise<ClientRequestResult> {
   const parsedArguments = promoteCallerArgumentsSchema.safeParse({
     requestId: rawRequestId,
@@ -392,8 +442,14 @@ export async function promoteCallerToClient(
       return { success: false, error: 'caller_name_required' };
     }
 
-    // One call creates the customer, links it and records the history row,
-    // or refuses with one of PROMOTE_REFUSALS and changes nothing.
+    if (!input?.createDespiteMatches) {
+      const lookup = await readCallerMatches(admin, orgId, requestId);
+      if (!lookup.success) return lookup;
+      if (lookup.matches.length > 0) return { success: false, error: 'caller_matches_customer' };
+    }
+
+    // One call creates the customer with its site and contact, links them and
+    // records the history row, or refuses with one of PROMOTE_REFUSALS and changes nothing.
     const { data, error } = await admin.rpc(
       'promote_client_request_caller',
       rpcArgs('promote_client_request_caller', {
