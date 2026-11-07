@@ -307,6 +307,22 @@ export async function withdrawTimeCorrection(rawInput: {
   return toCorrectionResult(data);
 }
 
+/**
+ * Whether a stored proposal names someone other than its request's subject.
+ * A request stored before the subject rule may; only a reassignment names
+ * another person, so any other such proposal is never carried forward.
+ */
+function namesAnotherPerson(
+  request: Pick<Tables<'time_correction_requests'>, 'kind' | 'subject_user_id'>,
+  proposed: Json,
+): boolean {
+  if (request.kind === 'reassign') return false;
+  return (
+    !isTimeCorrectionSnapshot(proposed) ||
+    proposed.facts.some((fact) => fact.userId !== request.subject_user_id)
+  );
+}
+
 export async function resubmitTimeCorrection(rawInput: {
   requestId: string;
   expectedRevision: number;
@@ -367,15 +383,8 @@ export async function resubmitTimeCorrection(rawInput: {
   // A failed source read must never submit a revision without its source links.
   if (revisionError || sourcesError || !sources) return { success: false, error: 'load_failed' };
   if (!revision) return { success: false, error: 'request_not_found' };
-  // A request stored before the subject rule may name someone else; it is
-  // never carried forward. Only a reassignment names another person.
-  if (
-    request.kind !== 'reassign' &&
-    (!isTimeCorrectionSnapshot(revision.proposed_snapshot) ||
-      revision.proposed_snapshot.facts.some((fact) => fact.userId !== request.subject_user_id))
-  ) {
+  if (namesAnotherPerson(request, revision.proposed_snapshot))
     return { success: false, error: 'invalid_shape' };
-  }
   const sourcePayload = sources.flatMap((source) => {
     const sourceId = correctionSourceId(source);
     return sourceId ? [{ kind: source.source_kind, id: sourceId, version: source.source_version }] : [];
