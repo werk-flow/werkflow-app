@@ -182,4 +182,72 @@ begin
   end if;
 end $$;
 
+-- A take books against its material line under the line's lock and only for
+-- the item the caller read on the line: a line whose item changed since that
+-- read refuses the take with no movement, no stock change and no taken
+-- quantity, and an unchanged line still books.
+insert into public.inventory_items (id, organization_id, name, item_type, unit, created_by)
+values (
+  '98000000-0000-4000-8000-000000000007', '98000000-0000-4000-8000-000000000002',
+  'Swapped-in item', 'material', 'piece', '98000000-0000-4000-8000-000000000001'
+);
+
+insert into public.job_material_lines (id, organization_id, project_id, item_id, planned_quantity)
+values (
+  '98000000-0000-4000-8000-000000000008', '98000000-0000-4000-8000-000000000002',
+  '98000000-0000-4000-8000-000000000005', '98000000-0000-4000-8000-000000000003', 2
+);
+
+do $$
+declare
+  v_org constant uuid := '98000000-0000-4000-8000-000000000002';
+  v_actor constant uuid := '98000000-0000-4000-8000-000000000001';
+  v_read_item constant uuid := '98000000-0000-4000-8000-000000000003';
+  v_new_item constant uuid := '98000000-0000-4000-8000-000000000007';
+  v_location constant uuid := '98000000-0000-4000-8000-000000000004';
+  v_project constant uuid := '98000000-0000-4000-8000-000000000005';
+  v_line constant uuid := '98000000-0000-4000-8000-000000000008';
+  v_refusal text;
+  v_taken numeric;
+  v_read_stock numeric;
+  v_new_stock numeric;
+  v_count integer;
+begin
+  perform public.record_inventory_movement(v_org, v_actor, v_new_item, v_location, 'initial_count', 5);
+
+  -- The caller read the line with its first item; a manager then changed the item.
+  update public.job_material_lines set item_id = v_new_item where id = v_line;
+
+  begin
+    perform public.record_inventory_movement(v_org, v_actor, v_read_item, v_location, 'job_take', -2, null, v_project, v_line);
+    v_refusal := null;
+  exception when others then
+    v_refusal := sqlerrm;
+  end;
+  if v_refusal is distinct from 'material_line_item_changed' then
+    raise exception 'a take for an item the line no longer carries must be refused with material_line_item_changed, got %', v_refusal;
+  end if;
+
+  select taken_quantity into v_taken from public.job_material_lines where id = v_line;
+  select quantity_on_hand into v_read_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_read_item and location_id = v_location;
+  select quantity_on_hand into v_new_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_new_item and location_id = v_location;
+  select count(*) into v_count from public.inventory_movements where job_material_line_id = v_line;
+  if v_taken <> 0 or v_read_stock <> 10 or v_new_stock <> 5 or v_count <> 0 then
+    raise exception 'a take refused for a changed item must leave the line, both stock levels and the movement ledger unchanged';
+  end if;
+
+  perform public.record_inventory_movement(v_org, v_actor, v_new_item, v_location, 'job_take', -2, null, v_project, v_line);
+  select taken_quantity into v_taken from public.job_material_lines where id = v_line;
+  select quantity_on_hand into v_new_stock
+  from public.inventory_stock_levels
+  where organization_id = v_org and item_id = v_new_item and location_id = v_location;
+  if v_taken <> 2 or v_new_stock <> 3 then
+    raise exception 'a take for the item the line carries must be booked on the line and the stock';
+  end if;
+end $$;
+
 rollback;
