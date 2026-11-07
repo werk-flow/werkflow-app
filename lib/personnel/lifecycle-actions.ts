@@ -26,6 +26,7 @@ import {
   personnelDocumentUploadCleanupInputSchema,
   personnelDocumentUploadTicketInputSchema,
   personnelDocumentReleaseInputSchema,
+  isSelfConfirmableRequirement,
   type PersonnelDocumentAccessClass,
   type PersonnelDocumentEvidenceState,
 } from './lifecycle';
@@ -516,6 +517,21 @@ export async function acknowledgePersonnelRequirement(
   const context = await getSelfContext();
   if (!context.success) return context;
   const request = parsed.data;
+  const { data: requirement, error: requirementError } = await loggedRead(
+    'acknowledgePersonnelRequirement: requirement read failed',
+    context.admin
+      .from('personnel_onboarding_requirements')
+      .select('requirement_type')
+      .eq('id', request.requirementId)
+      .eq('organization_id', context.organizationId)
+      .eq('employee_record_id', context.employeeRecordId)
+      .maybeSingle(),
+  );
+  if (requirementError) return { success: false, error: 'load_failed' };
+  if (!requirement) return { success: false, error: 'requirement_not_found' };
+  if (!isSelfConfirmableRequirement(requirement.requirement_type)) {
+    return { success: false, error: 'not_authorized' };
+  }
   const { data, error } = await context.admin.rpc(
     'acknowledge_personnel_item',
     rpcArgs('acknowledge_personnel_item', {
