@@ -100,7 +100,7 @@ describe('type-aware lint rules', () => {
     ).toEqual([]);
   });
 
-  test('a type assertion fails outside the ratchet; `as const` passes', async () => {
+  test('a type assertion fails outside the listed files; `as const` passes', async () => {
     const rule = '@typescript-eslint/consistent-type-assertions';
     for (const filePath of [
       ...PROBE_PATHS,
@@ -159,7 +159,7 @@ describe('type-aware lint rules', () => {
     }
   });
 
-  test('a file on the ratchet keeps its recorded assertions without a lint error', async () => {
+  test('a listed file keeps its permanent assertions without a lint error', async () => {
     const [listed] = Object.keys(readTypeAssertionRatchet());
     if (listed === undefined) return;
     expect(

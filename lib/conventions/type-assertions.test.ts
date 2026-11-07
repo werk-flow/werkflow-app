@@ -11,10 +11,10 @@ import {
   typeAssertionRatchetProblems,
 } from './type-assertions';
 
-// Tier 2 for the type-assertion ratchet: `@typescript-eslint/consistent-type-assertions`
+// Tier 2 for the permanent type assertions: `@typescript-eslint/consistent-type-assertions`
 // is off only for the files in eslint-rules/type-assertion-ratchet.json, so
-// this test holds each listed count to the code. A count may only fall, and
-// the entry falls with it.
+// this test holds each listed count to the code. A second cast in a listed
+// file fails, and an entry whose cast is gone must go with it.
 
 describe('type-assertion ratchet', () => {
   test('every listed file carries exactly its recorded number of type assertions', () => {
