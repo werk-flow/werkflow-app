@@ -4,7 +4,7 @@ import type { DocumentRetentionTerms, OrganizationDocument } from '@/lib/documen
 
 declare global {
   interface Window {
-    documentArchiveContract: { writes: DocumentRetentionTerms[] };
+    documentArchiveContract: { writes: DocumentRetentionTerms[]; refuseNext: boolean };
   }
 }
 
@@ -39,7 +39,11 @@ const invoice: OrganizationDocument = {
   },
 };
 
-/** „Aufbewahrung“ of an unfiled invoice; each retention write is recorded and applied as the details apply it. */
+/**
+ * „Aufbewahrung“ of an unfiled invoice. Each retention write is recorded and
+ * applied at once, as the details apply it; `refuseNext` makes the next write
+ * fail and puts the stored terms back.
+ */
 export function DocumentArchiveContractFixture(): React.JSX.Element {
   const [document, setDocument] = useState(invoice);
   return (
@@ -48,9 +52,15 @@ export function DocumentArchiveContractFixture(): React.JSX.Element {
         document={document}
         disabled={false}
         isTrashView={false}
-        onUpdateRetention={(current, terms) => {
-          window.documentArchiveContract.writes.push(terms);
+        onUpdateRetention={async (current, terms) => {
+          const contract = window.documentArchiveContract;
+          contract.writes.push(terms);
           if (current.archive) setDocument({ ...current, archive: { ...current.archive, ...terms } });
+          await Promise.resolve();
+          if (!contract.refuseNext) return true;
+          contract.refuseNext = false;
+          setDocument(current);
+          return false;
         }}
         onFile={() => undefined}
       />
@@ -59,5 +69,5 @@ export function DocumentArchiveContractFixture(): React.JSX.Element {
 }
 
 export function initializeDocumentArchiveBoundary(): void {
-  window.documentArchiveContract = { writes: [] };
+  window.documentArchiveContract = { writes: [], refuseNext: false };
 }

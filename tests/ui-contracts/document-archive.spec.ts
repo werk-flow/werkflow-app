@@ -48,3 +48,24 @@ test('a typed document date stays a draft until it is saved', async ({ page }) =
   await expect(page.getByRole('button', { name: 'Belegdatum speichern' })).toHaveCount(0);
   await expect(picker).toHaveText(/01\.03\.2025/);
 });
+
+test('a refused document date stays typed for a retry', async ({ page }) => {
+  const picker = documentDate(page);
+  await picker.locator('[data-segment="year"]').click();
+  await page.keyboard.type('2025');
+  await page.evaluate(() => {
+    window.documentArchiveContract.refuseNext = true;
+  });
+  const save = page.getByRole('button', { name: 'Belegdatum speichern' });
+  await save.click();
+  await expect(save).toBeVisible();
+  await expect(picker).toHaveText(/14\.03\.2025/);
+
+  await save.click();
+  expect(await retentionWrites(page)).toEqual([
+    { documentDate: '2025-03-14', retentionClass: 'ten_years' },
+    { documentDate: '2025-03-14', retentionClass: 'ten_years' },
+  ]);
+  await expect(save).toHaveCount(0);
+  await expect(picker).toHaveText(/14\.03\.2025/);
+});

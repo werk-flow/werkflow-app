@@ -15,7 +15,8 @@ const ARCHIVE_FAILURE_MESSAGES = {
 /**
  * Runs a retention or filing write under the document's busy id. The result
  * shows in the details dialog while it still shows that document; a refusal
- * puts the document back and names the reason there.
+ * puts the document back and names the reason there. Resolves whether the
+ * write was saved.
  */
 function runArchiveWrite({
   details,
@@ -29,7 +30,7 @@ function runArchiveWrite({
   document: OrganizationDocument;
   write: () => Promise<DocumentResult>;
   fallback: string;
-}): void {
+}): Promise<boolean> {
   const { detailsDialogIdRef, setDetailsDialog, setDetailsError } = details;
   const fail = (error: string) => {
     if (detailsDialogIdRef.current !== document.id) return;
@@ -37,16 +38,20 @@ function runArchiveWrite({
     setDetailsError(describeFailure(error, ARCHIVE_FAILURE_MESSAGES, fallback));
   };
   setDetailsError(null);
-  void busy
+  return busy
     .run(document.id, async () => {
       const result = await write();
       if (!result.success) {
         fail(result.error);
-        return;
+        return false;
       }
       if (detailsDialogIdRef.current === document.id) setDetailsDialog(result.document);
+      return true;
     })
-    .catch(() => fail('request_failed'));
+    .catch(() => {
+      fail('request_failed');
+      return false;
+    });
 }
 
 /**
@@ -67,10 +72,13 @@ export function useDocumentArchiveActions({
 }) {
   const { busy } = mutations;
 
-  function handleUpdateRetention(document: OrganizationDocument, terms: DocumentRetentionTerms) {
-    if (isTrashView || !document.archive) return;
+  function handleUpdateRetention(
+    document: OrganizationDocument,
+    terms: DocumentRetentionTerms,
+  ): Promise<boolean> {
+    if (isTrashView || !document.archive) return Promise.resolve(false);
     details.setDetailsDialog({ ...document, archive: { ...document.archive, ...terms } });
-    runArchiveWrite({
+    return runArchiveWrite({
       details,
       busy,
       document,
@@ -86,7 +94,7 @@ export function useDocumentArchiveActions({
       description: `„${document.displayName}“ wird endgültig festgeschrieben. Danach lassen sich Inhalt, Belegdatum und Aufbewahrungsfrist nicht mehr ändern, und die Datei lässt sich nicht mehr löschen. Name, Ordner, Kategorie und Verknüpfungen bleiben änderbar.`,
       confirmLabel: 'Festschreiben',
       onConfirm: () =>
-        runArchiveWrite({
+        void runArchiveWrite({
           details,
           busy,
           document,

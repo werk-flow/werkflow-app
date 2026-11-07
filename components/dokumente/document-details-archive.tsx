@@ -36,16 +36,18 @@ type RetentionFieldProps = {
   archive: DocumentArchive;
   editable: boolean;
   disabled: boolean;
-  onChange: (terms: DocumentRetentionTerms) => void;
+  /** Resolves whether the change was saved; a refusal has put the stored terms back. */
+  onChange: (terms: DocumentRetentionTerms) => Promise<boolean>;
 };
 
 /**
  * The picker reports every typed segment, a lone day digit or a paused year
  * included, so the date stays a draft until „Speichern“: only a date the user
- * confirms reaches the audited write.
+ * confirms reaches the audited write. The draft outlives a refused save, so
+ * the user can retry it, and gives way to the stored date once saved.
  */
 function DocumentDateField({ archive, editable, disabled, onChange }: RetentionFieldProps) {
-  const [draft, setDraft] = useState(() => parseIsoLocalDate(archive.documentDate));
+  const [draft, setDraft] = useState<Date | null>(null);
   const draftDate = draft ? toLocalDateString(draft) : archive.documentDate;
   return (
     <div>
@@ -54,7 +56,7 @@ function DocumentDateField({ archive, editable, disabled, onChange }: RetentionF
         {editable ? (
           <div className="flex items-center gap-2">
             <DatePicker
-              value={draft}
+              value={draft ?? parseIsoLocalDate(archive.documentDate)}
               onChange={(date) => {
                 if (date) setDraft(date);
               }}
@@ -67,7 +69,13 @@ function DocumentDateField({ archive, editable, disabled, onChange }: RetentionF
                 variant="outline"
                 size="sm"
                 aria-label="Belegdatum speichern"
-                onClick={() => onChange({ documentDate: draftDate, retentionClass: archive.retentionClass })}
+                onClick={() =>
+                  void onChange({ documentDate: draftDate, retentionClass: archive.retentionClass }).then(
+                    (saved) => {
+                      if (saved) setDraft(null);
+                    },
+                  )
+                }
                 disabled={disabled}
               >
                 Speichern
@@ -92,7 +100,7 @@ function RetentionClassField({ archive, editable, disabled, onChange }: Retentio
             value={archive.retentionClass ?? NO_RETENTION_CLASS}
             onValueChange={(value) => {
               const retentionClass = DOCUMENT_RETENTION_CLASSES.find((candidate) => candidate === value);
-              onChange({ documentDate: archive.documentDate, retentionClass: retentionClass ?? null });
+              void onChange({ documentDate: archive.documentDate, retentionClass: retentionClass ?? null });
             }}
             disabled={disabled}
           >
@@ -122,7 +130,7 @@ export type DocumentDetailsArchiveProps = {
   document: OrganizationDocument;
   disabled: boolean;
   isTrashView: boolean;
-  onUpdateRetention: (document: OrganizationDocument, terms: DocumentRetentionTerms) => void;
+  onUpdateRetention: (document: OrganizationDocument, terms: DocumentRetentionTerms) => Promise<boolean>;
   onFile: (document: OrganizationDocument) => void;
 };
 
@@ -172,7 +180,7 @@ export function DocumentDetailsArchive({
         )}
       </div>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <DocumentDateField key={archive.documentDate} {...fieldProps} />
+        <DocumentDateField key={document.id} {...fieldProps} />
         <RetentionClassField {...fieldProps} />
       </div>
       <p className="mt-2 text-muted-foreground">{retentionSummary(archive)}</p>
