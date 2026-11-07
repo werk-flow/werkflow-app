@@ -138,12 +138,10 @@ test('the clock dock publishes its height for the layout reserve, keeps its butt
   const launcher = page.getByRole('button', { name: 'Zeiterfassung starten', exact: true });
   await expect(launcher).toBeDisabled();
   const buttonBox = (name: string): Promise<{ x: number; y: number }> =>
-    page
-      .getByRole('button', { name, exact: true })
-      .evaluate((element) => ({
-        x: element.getBoundingClientRect().x,
-        y: element.getBoundingClientRect().y,
-      }));
+    page.getByRole('button', { name, exact: true }).evaluate((element) => ({
+      x: element.getBoundingClientRect().x,
+      y: element.getBoundingClientRect().y,
+    }));
   const loading = await buttonBox('Zeiterfassung starten');
   releaseRead();
   await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
