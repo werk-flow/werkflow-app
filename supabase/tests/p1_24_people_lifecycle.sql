@@ -520,6 +520,64 @@ set local role service_role;
 update public.documents set deleted_at = null
 where id = '24000000-0000-0000-0000-000000000020';
 
+-- An employee confirms only acknowledgement requirements; Admin or Büro
+-- completes every other type.
+do $$
+declare
+  test_organization_id constant uuid := '24000000-0000-0000-0000-000000000010';
+  actor_id constant uuid := '24000000-0000-0000-0000-000000000001';
+  employee_user_id constant uuid := '24000000-0000-0000-0000-000000000003';
+  employee_id uuid;
+  self_plan_id uuid;
+  self_requirement_id uuid;
+  refused_type public.personnel_requirement_type;
+begin
+  select id into employee_id from public.employee_records
+  where organization_id = test_organization_id and user_id = employee_user_id;
+  self_plan_id := public.create_personnel_onboarding_plan(
+    actor_id, test_organization_id, employee_id, null, 'Selbstbestätigung',
+    current_date + 7, gen_random_uuid(), repeat('3', 64)
+  );
+  foreach refused_type in array enum_range(null::public.personnel_requirement_type) loop
+    continue when refused_type = 'acknowledgement';
+    self_requirement_id := public.save_personnel_onboarding_requirement(
+      actor_id, test_organization_id, self_plan_id, null, 0, refused_type,
+      'Vom Büro zu prüfen', null, true, true, employee_id, current_date + 3,
+      'missing', null, gen_random_uuid(), repeat('4', 64)
+    );
+    begin
+      perform public.acknowledge_personnel_item(
+        employee_user_id, test_organization_id, 'requirement_completed',
+        null, null, self_requirement_id, 1, 'Selbst erledigt.',
+        gen_random_uuid(), repeat('5', 64)
+      );
+      raise exception 'employee self-confirmed a % requirement', refused_type;
+    exception when others then
+      if sqlerrm not like '%forbidden%' then raise; end if;
+    end;
+  end loop;
+
+  self_requirement_id := public.save_personnel_onboarding_requirement(
+    actor_id, test_organization_id, self_plan_id, null, 0, 'acknowledgement',
+    'Unterweisung bestätigen', null, true, true, employee_id, current_date + 3,
+    'missing', null, gen_random_uuid(), repeat('6', 64)
+  );
+  perform public.acknowledge_personnel_item(
+    employee_user_id, test_organization_id, 'requirement_completed',
+    null, null, self_requirement_id, 1, 'Gelesen.',
+    gen_random_uuid(), repeat('7', 64)
+  );
+  if (select state from public.personnel_onboarding_requirements
+      where id = self_requirement_id) <> 'fulfilled'
+    then raise exception 'employee could not confirm an acknowledgement requirement'; end if;
+  if exists (
+    select 1 from public.personnel_onboarding_requirements
+    where plan_id = self_plan_id and requirement_type <> 'acknowledgement'
+      and state <> 'missing'
+  ) then raise exception 'a refused self-confirmation changed its requirement'; end if;
+end;
+$$;
+
 do $$
 declare
   test_organization_id constant uuid := '24000000-0000-0000-0000-000000000010';
