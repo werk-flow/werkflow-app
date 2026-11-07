@@ -118,12 +118,22 @@ begin
   )
   returning id into v_client_id;
 
+  -- A contact's email is one address or blank (lib/clients/contact-email.ts).
+  -- Only a captured email that matches a stricter pattern than that check
+  -- moves to the contact; any other text, such as "keine", stays on the
+  -- request, so the contact editor never blocks on it.
   insert into public.client_contacts (
     organization_id, client_id, name, email, phone, is_primary, created_by
   ) values (
     p_organization_id, v_client_id,
     coalesce(nullif(btrim(v_request.caller_name), ''), v_name),
-    nullif(btrim(v_request.caller_email), ''), nullif(btrim(v_request.caller_phone), ''),
+    case
+      when length(btrim(v_request.caller_email)) <= 320
+        and btrim(v_request.caller_email)
+          ~ '^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$'
+      then btrim(v_request.caller_email)
+    end,
+    nullif(btrim(v_request.caller_phone), ''),
     true, p_actor_id
   )
   returning id into v_contact_id;

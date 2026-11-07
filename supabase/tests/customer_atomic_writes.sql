@@ -48,7 +48,7 @@ values
 ('41530000-0000-0000-0000-000000000041', '41530000-0000-0000-0000-000000000010', 'Ohne Namen',
  null, null, null, null),
 ('41530000-0000-0000-0000-000000000044', '41530000-0000-0000-0000-000000000010', 'Freie Adresse',
- 'Max Hof', ' 0171 2345678 ', null, '  Hinterhof links  '),
+ 'Max Hof', ' 0171 2345678 ', 'keine', '  Hinterhof links  '),
 ('41530000-0000-0000-0000-000000000049', '41530000-0000-0000-0000-000000000011', 'Fremde Anfrage',
  'Fremder Anrufer', null, null, null);
 insert into public.client_requests (id, organization_id, client_id, summary) values
@@ -285,6 +285,9 @@ begin
     or v_contact.client_id is distinct from v_request.client_id
     or v_contact.name <> 'Max Hof' or v_contact.phone <> '0171 2345678' or v_contact.email is not null
   then raise exception 'a free-text address or a phone-only caller was not kept: %, %', to_jsonb(v_site), to_jsonb(v_contact); end if;
+  -- Text that is not one email address stays on the request, never on the contact.
+  if v_request.caller_email is distinct from 'keine'
+  then raise exception 'a promotion dropped the captured email text from the request'; end if;
   if (
     select array_agg(event_type || ':' || (event_payload ->> 'clientId') || ':' || (event_payload ->> 'clientName')
       || ':' || created_by::text)
