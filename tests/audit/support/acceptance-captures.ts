@@ -205,13 +205,17 @@ export async function captureAcceptance(
     await captureState(input, set, { ...capture, state: capture.state }, destination.route);
     return;
   }
-  if (capture.clockedIn) {
-    await prepareLayoutDetails(world);
-    await clockInOnJob(page, layoutNames(world).job);
-  }
-  await openSurface(page, destination);
   const context = { page, role: capture.role, world, businessDate, route: destination.route };
+  // Later captures in the same world expect a stopped clock, so a failed
+  // capture still clocks out once the clock-in went through.
+  let clockedIn = false;
   try {
+    if (capture.clockedIn) {
+      await prepareLayoutDetails(world);
+      await clockInOnJob(page, layoutNames(world).job);
+      clockedIn = true;
+    }
+    await openSurface(page, destination);
     for (const [index, width] of capture.widths.entries()) {
       let scope: Locator = page.locator('[data-page-body]').first();
       if (capture.view.kind === 'dialog') {
@@ -243,7 +247,7 @@ export async function captureAcceptance(
     }
   } finally {
     await page.emulateMedia({ colorScheme: 'light' });
-    if (capture.clockedIn) await clockOut(page);
+    if (clockedIn) await clockOut(page);
   }
 }
 

@@ -150,13 +150,16 @@ test('the clock dock publishes its height for the layout reserve, keeps its butt
   const dock = clockDock(page);
   const published = (): Promise<string> =>
     page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--clock-dock-height'));
-  await expect.poll(published).toMatch(/px$/);
+  // The layout pads the page column by the published height: it must be the
+  // dock's own. The publisher writes the dock's whole-pixel height after the
+  // hot keys' row resizes it, so the poll waits for that write.
+  const ownHeight = (): Promise<string> =>
+    dock.evaluate((element) => (element instanceof HTMLElement ? `${element.offsetHeight}px` : 'no element'));
+  await expect.poll(async () => (await published()) === (await ownHeight())).toBe(true);
   const box = await dock.evaluate((element) => {
     const rect = element.getBoundingClientRect();
-    return { height: rect.height, bottom: rect.bottom, width: rect.width };
+    return { bottom: rect.bottom, width: rect.width };
   });
-  // The layout pads the page column by the published height: it must be the dock's own.
-  expect(await published()).toBe(`${box.height}px`);
   expect(box.bottom).toBe(812);
   expect(box.width).toBe(375);
   const keyTops = await Promise.all(

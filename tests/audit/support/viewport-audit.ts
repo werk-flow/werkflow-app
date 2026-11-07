@@ -195,9 +195,21 @@ async function controlsUnderClock(page: Page): Promise<string[]> {
     ): { left: number; top: number; right: number; bottom: number } => {
       const box = element.getBoundingClientRect();
       let { left, top, right, bottom } = box;
+      // A fixed box escapes the clipping of its ancestors up to the first one
+      // that contains fixed boxes, so a fixed create button stays measured.
+      const containsFixedBoxes = (style: CSSStyleDeclaration): boolean =>
+        style.transform !== 'none' ||
+        style.filter !== 'none' ||
+        style.perspective !== 'none' ||
+        /paint|layout|strict|content/.test(style.contain) ||
+        /transform|filter|perspective/.test(style.willChange);
+      let escaping = getComputedStyle(element).position === 'fixed';
       for (let parent = element.parentElement; parent; parent = parent.parentElement) {
         const style = getComputedStyle(parent);
-        if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
+        const clips = !escaping || containsFixedBoxes(style);
+        if (clips) escaping = false;
+        if (style.position === 'fixed') escaping = true;
+        if (!clips || (style.overflowX === 'visible' && style.overflowY === 'visible')) continue;
         const clip = parent.getBoundingClientRect();
         left = Math.max(left, clip.left);
         top = Math.max(top, clip.top);
