@@ -6,6 +6,8 @@
 -- An employee assigned to a job of a project reads the project's work state
 -- and the project's own documents; an unassigned colleague and another
 -- organization read neither.
+-- The assigned employee ticks the checklist of open work only; finished or
+-- cancelled work keeps its checklist, which Admin and Büro still change.
 begin;
 
 insert into auth.users (
@@ -64,7 +66,92 @@ insert into public.document_links (organization_id, document_id, project_id, cre
 ('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000060',
  '14170000-0000-0000-0000-000000000050', '14170000-0000-0000-0000-000000000001');
 
+-- Two jobs of the employee, each with a checklist, for the read-only checklist of finished work.
+insert into public.jobs (id, organization_id, title, job_number, created_by) values
+('14170000-0000-0000-0000-000000000070', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste fertig', 'WORK-SQL-3', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000071', '14170000-0000-0000-0000-000000000010',
+ 'Checkliste storniert', 'WORK-SQL-4', '14170000-0000-0000-0000-000000000001');
+insert into public.job_assignments (organization_id, job_id, user_id, assigned_by) values
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000070',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000010', '14170000-0000-0000-0000-000000000071',
+ '14170000-0000-0000-0000-000000000003', '14170000-0000-0000-0000-000000000001');
+insert into public.job_instruction_items (id, organization_id, job_id, content, sort_order, created_by) values
+('14170000-0000-0000-0000-000000000072', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000070', 'Ventil prüfen', 0, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000073', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000070', 'Druck dokumentieren', 1, '14170000-0000-0000-0000-000000000001'),
+('14170000-0000-0000-0000-000000000074', '14170000-0000-0000-0000-000000000010',
+ '14170000-0000-0000-0000-000000000071', 'Material abholen', 0, '14170000-0000-0000-0000-000000000001');
+
 set local role service_role;
+
+-- The field work pack shows the checklist read-only once work is finished or
+-- cancelled (isFieldWorkPackReadOnly); the function refuses the assigned
+-- employee there, and Admin and Büro still correct the list.
+do $$
+declare
+  v_org constant uuid := '14170000-0000-0000-0000-000000000010';
+  v_admin constant uuid := '14170000-0000-0000-0000-000000000001';
+  v_employee constant uuid := '14170000-0000-0000-0000-000000000003';
+  v_finished_job constant uuid := '14170000-0000-0000-0000-000000000070';
+  v_cancelled_job constant uuid := '14170000-0000-0000-0000-000000000071';
+  v_ticked constant uuid := '14170000-0000-0000-0000-000000000072';
+  v_open constant uuid := '14170000-0000-0000-0000-000000000073';
+  v_cancelled_item constant uuid := '14170000-0000-0000-0000-000000000074';
+  v_events integer;
+  v_attempt record;
+begin
+  -- Open work: the assigned employee ticks an item.
+  if public.set_instruction_item_completion(v_org, v_employee, v_ticked, 0, true) <> 1 then
+    raise exception 'the assigned employee could not tick an item of open work';
+  end if;
+
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_finished_job,
+    p_to_state => 'in_progress', p_expected_version => 0, p_actor_id => v_admin
+  );
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_finished_job,
+    p_to_state => 'execution_complete', p_expected_version => 1, p_actor_id => v_admin,
+    p_override_gates => true, p_reason => 'Restpunkt wird in der Übergabe ausgewiesen.'
+  );
+  perform public.transition_work_execution(
+    p_organization_id => v_org, p_target_type => 'job', p_target_id => v_cancelled_job,
+    p_to_state => 'cancelled', p_expected_version => 0, p_actor_id => v_admin,
+    p_reason => 'Kunde hat abgesagt.'
+  );
+
+  select count(*) into v_events from public.job_instruction_item_events
+  where organization_id = v_org;
+  for v_attempt in
+    select * from (values
+      (v_ticked, 1::bigint, false, 'unticked an item of finished work'),
+      (v_open, 0::bigint, true, 'ticked an item of finished work'),
+      (v_cancelled_item, 0::bigint, true, 'ticked an item of cancelled work')
+    ) attempt(item_id, expected_version, is_completed, label)
+  loop
+    begin
+      perform public.set_instruction_item_completion(
+        v_org, v_employee, v_attempt.item_id, v_attempt.expected_version, v_attempt.is_completed
+      );
+      raise exception 'the assigned employee %', v_attempt.label;
+    exception when others then
+      if sqlerrm <> 'instruction_item_not_authorized' then raise; end if;
+    end;
+  end loop;
+  if (select count(*) from public.job_instruction_item_events where organization_id = v_org) <> v_events
+    or (select is_completed from public.job_instruction_items where id = v_ticked) is not true
+    or (select is_completed from public.job_instruction_items where id = v_open) is not false
+  then raise exception 'a refused checklist change on finished work left a trace'; end if;
+
+  -- Admin and Büro keep correcting the checklist of finished work.
+  if public.set_instruction_item_completion(v_org, v_admin, v_open, 0, true) <> 1 then
+    raise exception 'the admin could not tick an item of finished work';
+  end if;
+end;
+$$;
 
 do $$
 declare
