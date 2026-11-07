@@ -65,7 +65,7 @@ export async function readLinkedDocuments(
     return {
       success: true,
       documents: await hydrateDocuments(
-        context.admin,
+        context,
         newestDocumentsFirst(documentRowsFromOrdinaryView(documents ?? [])),
       ),
     };

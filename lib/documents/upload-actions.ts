@@ -201,7 +201,7 @@ export async function finalizeDocumentUpload(rawInput: FinalizeDocumentUploadInp
   }
 
   revalidateDocuments();
-  return hydrateWrittenDocument(auth.context.admin, documentRow);
+  return hydrateWrittenDocument(auth.context, documentRow);
 }
 
 export async function createDocumentVersionUploadTicket(
