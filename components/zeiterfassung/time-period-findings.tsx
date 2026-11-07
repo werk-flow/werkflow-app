@@ -182,7 +182,7 @@ function PersonFindingRow({
       </div>
       {personLink ? (
         <Button asChild variant="outline" size="sm">
-          <Link href={personLink} aria-label={`Arbeitszeitmodell von ${name} öffnen`}>
+          <Link href={personLink} aria-label={`Arbeitszeitmodell öffnen: ${name}`}>
             Arbeitszeitmodell öffnen
           </Link>
         </Button>

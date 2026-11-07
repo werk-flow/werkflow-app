@@ -107,6 +107,10 @@ describe('period findings', () => {
       expect(group).not.toContain('Nur Admin');
     }
     expect(card(markup, 'Arbeitsplan fehlt')).toContain(`href="/mitarbeiter/${PEOPLE[2]?.id}"`);
+    // The accessible name keeps the visible text as one phrase, so a spoken „Arbeitszeitmodell öffnen“ finds it (WCAG 2.5.3).
+    expect(card(markup, 'Arbeitsplan fehlt')).toContain(
+      `aria-label="Arbeitszeitmodell öffnen: ${PEOPLE[2]?.name}"`,
+    );
   });
 
   test('as Büro, Admin-only gaps say „Nur Admin“ without a link, the Wochenplan stays linked', () => {
