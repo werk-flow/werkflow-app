@@ -28,7 +28,8 @@ export type AuthorizedDocumentContext = {
 type ProtectedDocumentAccess = {
   personnelDocumentId: string;
   releasedVersionNumbers: number[] | null;
-  canInspectHistory: boolean;
+  /** The caller manages the file by role; a release alone lets them read it, never change it. */
+  managedByCaller: boolean;
 };
 
 type AuthorizedDocument = ActionResult<{
@@ -343,7 +344,7 @@ async function authorizeProtectedDocument(
       protectedAccess: {
         personnelDocumentId: protectedDocument.id,
         releasedVersionNumbers: null,
-        canInspectHistory: true,
+        managedByCaller: true,
       },
     };
   }
@@ -354,7 +355,7 @@ async function authorizeProtectedDocument(
       protectedAccess: {
         personnelDocumentId: protectedDocument.id,
         releasedVersionNumbers: null,
-        canInspectHistory: true,
+        managedByCaller: true,
       },
     };
   }
@@ -384,7 +385,7 @@ async function authorizeProtectedDocument(
     protectedAccess: {
       personnelDocumentId: protectedDocument.id,
       releasedVersionNumbers,
-      canInspectHistory: false,
+      managedByCaller: false,
     },
   };
 }
@@ -489,6 +490,27 @@ export async function getAuthorizedDocument(
   return { success: true, document: row, protectedAccess: null };
 }
 
+/**
+ * The active document a write may change: any document of the organization
+ * for a manager, except a protected personnel document the caller reads only
+ * through its release. Every document write action authorizes through this.
+ */
+export async function getManageableDocument(
+  context: AuthorizedDocumentContext,
+  documentId: string,
+): Promise<ActionResult<{ document: DocumentRow }>> {
+  const manager = requireManager(context);
+  if (!manager.success) return manager;
+
+  const existing = await getAuthorizedDocument(context, documentId);
+  if (!existing.success) return existing;
+  if (existing.protectedAccess && !existing.protectedAccess.managedByCaller) {
+    return { success: false, error: 'not_authorized' };
+  }
+
+  return { success: true, document: existing.document };
+}
+
 export async function getDeletedDocumentForManager(
   context: AuthorizedDocumentContext,
   documentId: string,
@@ -536,10 +558,7 @@ export async function getVersionableDocument(
   context: AuthorizedDocumentContext,
   documentId: string,
 ): Promise<ActionResult<{ document: DocumentRow }>> {
-  const manager = requireManager(context);
-  if (!manager.success) return manager;
-
-  const existing = await getAuthorizedDocument(context, documentId);
+  const existing = await getManageableDocument(context, documentId);
   if (!existing.success) return existing;
 
   const category = toDocumentCategory(existing.document.category);

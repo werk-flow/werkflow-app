@@ -1,16 +1,18 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 
 import { useBanner } from '@/components/ui/banner';
 import { Button } from '@/components/ui/button';
 import { ErrorText } from '@/components/ui/error-text';
+import { Field } from '@/components/ui/field';
 import { InlinePending } from '@/components/ui/inline-pending';
 import { Input } from '@/components/ui/input';
 import { useServerAction } from '@/hooks/use-server-action';
 import { decidePeriodFinding } from '@/lib/time-accounts/decision-actions';
 import { getTimeAccountFailureMessage } from '@/lib/time-accounts/messages';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 type FindingDecision = 'approved' | 'rejected';
 
@@ -21,28 +23,25 @@ type FindingDecision = 'approved' | 'rejected';
 export function TimePeriodFindingDecisionForm({
   periodId,
   findingId,
-  findingLabel,
   canApprove,
 }: {
   periodId: string;
   findingId: string;
-  findingLabel: string;
   /** The reader asked the caller's approval scope for the finding's person. */
   canApprove: boolean;
 }) {
   const { showBanner } = useBanner();
-  const reasonRef = useRef<HTMLInputElement>(null);
+  const reasonFieldId = `period-finding-reason-${findingId}`;
   const [reason, setReason] = useState('Geprüft');
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const { run, isPending } = useServerAction(decidePeriodFinding);
 
   const decide = async (decision: FindingDecision) => {
     setError(null);
-    if (!reason.trim()) {
-      setError('Gib eine Begründung an.');
-      reasonRef.current?.focus();
-      return;
-    }
+    const nextReasonError = reason.trim() ? undefined : 'Gib eine Begründung an.';
+    setReasonError(nextReasonError);
+    if (focusFirstInvalidField({ [reasonFieldId]: nextReasonError })) return;
     const formData = new FormData();
     formData.set('periodId', periodId);
     formData.set('findingId', findingId);
@@ -74,15 +73,11 @@ export function TimePeriodFindingDecisionForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-end gap-2">
         <InlinePending active={isPending} keepSpace label="Entscheidung wird gespeichert" />
-        <Input
-          ref={reasonRef}
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          aria-label={`Begründung für ${findingLabel}`}
-          className="h-9 w-40"
-        />
+        <Field label="Begründung" htmlFor={reasonFieldId} required error={reasonError} className="w-40">
+          <Input id={reasonFieldId} value={reason} onChange={(event) => setReason(event.target.value)} />
+        </Field>
         <Button type="submit" size="sm" disabled={isPending} data-testid={`approve-finding-${findingId}`}>
           <CheckCircle2 className="size-4" />
           Freigeben

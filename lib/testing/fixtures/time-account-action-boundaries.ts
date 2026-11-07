@@ -225,6 +225,7 @@ assert.deepEqual(await getTimeAccountAccess(), {
   canManage: false,
   managementReadFailed: false,
   isAdmin: false,
+  isOffice: false,
   canProposeAdjustments: false,
   canExportPayroll: false,
 });
@@ -268,6 +269,7 @@ assert.deepEqual(await getTimeAccountAccess(), {
   canManage: true,
   managementReadFailed: false,
   isAdmin: false,
+  isOffice: false,
   canProposeAdjustments: false,
   canExportPayroll: false,
 });

@@ -19,6 +19,7 @@ import {
   getAuthorizedDocument,
   getAuthorizedDocumentContext,
   getDeletedDocumentForManager,
+  getManageableDocument,
   requireManager,
 } from './access';
 import {
@@ -332,6 +333,9 @@ export async function unlinkDocument(rawInput: UnlinkDocumentInput): Promise<Doc
     return { success: false, error: 'link_not_found' };
   }
 
+  const document = await getManageableDocument(auth.context, link.document_id);
+  if (!document.success) return document;
+
   const result = await writeDocumentLinks(auth.context, link.document_id, {
     removeLinkIds: [input.linkId],
     additions: [],
@@ -348,10 +352,7 @@ export async function updateDocumentLinks(
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const manager = requireManager(auth.context);
-  if (!manager.success) return manager;
-
-  const document = await getAuthorizedDocument(auth.context, input.documentId);
+  const document = await getManageableDocument(auth.context, input.documentId);
   if (!document.success) return document;
 
   const additions: DocumentLinkTarget[] = [
@@ -547,7 +548,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
       : scopedVersionsQuery.order('version_number', { ascending: false });
   const [versionsResult, auditResult] = await Promise.all([
     versionsPromise,
-    existing.protectedAccess && !existing.protectedAccess.canInspectHistory
+    existing.protectedAccess && !existing.protectedAccess.managedByCaller
       ? Promise.resolve({ data: [], error: null })
       : auth.context.admin
           .from('document_audit_events')
