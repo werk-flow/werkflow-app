@@ -4,11 +4,16 @@
 // creates one open join request and no membership; another owner's code is
 // refused; and codes come from the cryptographic random source.
 import assert from 'node:assert/strict';
+import { setSystemTime } from 'bun:test';
 import { CALLER_ID, installActionWorld, tableRows } from './action-boundary-world';
 
 // Fixture-only value: the secret keys the limiter's subject hash.
 process.env.EMAIL_OTP_HASH_SECRET = 'fixture-only-join-limit-secret';
 console.error = () => {};
+
+// A pinned clock; the hour window passes only when the fixture moves it.
+const startedAt = new Date('2026-10-05T08:00:00.000Z');
+setSystemTime(startedAt);
 
 const organizationId = '10000000-0000-4000-8000-000000000001';
 const otherUserId = '30000000-0000-4000-8000-000000000099';
@@ -42,9 +47,6 @@ world.rpc = ({ name, args }) => {
   recordedAttempts.set(key, [...live, now + Number(args.p_window_seconds) * 1000]);
   return { data: true, error: null };
 };
-const expireAllAttempts = (): void => {
-  for (const key of recordedAttempts.keys()) recordedAttempts.set(key, [Date.now() - 1]);
-};
 // Each limiter call takes one service-role client; every further one is the
 // action's own, which looks up the code first.
 const codeLookups = (): number => world.adminClientRequests - world.rpcCalls.length;
@@ -70,13 +72,13 @@ assert.deepEqual(await requestOrganizationJoin(validCode), { success: false, err
 assert.equal(codeLookups(), 10);
 assert.deepEqual(joinRequests(), []);
 
-// Another person's attempts never count against the caller, and the reverse.
+// The caller's attempts never count against another person.
 world.callerId = otherUserId;
 assert.deepEqual(await requestOrganizationJoin('ZZZZZZ'), { success: false, error: 'invalid_code' });
 world.callerId = CALLER_ID;
 
-// A limit that cannot be decided refuses the attempt without a lookup.
-expireAllAttempts();
+// The hour passes. A limit that cannot be decided refuses the attempt without a lookup.
+setSystemTime(new Date(startedAt.getTime() + 61 * 60 * 1000));
 limiterFails = true;
 const lookupsBeforeOutage = codeLookups();
 assert.deepEqual(await requestOrganizationJoin(validCode), { success: false, error: 'unexpected_error' });
