@@ -94,6 +94,7 @@ export type TimeCorrectionRequest = {
   subjectName: string;
   canReview: boolean;
   canWithdraw: boolean;
+  canResubmit: boolean;
 };
 
 export type TimeCorrectionResult =
@@ -175,4 +176,20 @@ export function correctionFactToEntry(
     correctionApplicationId: application.applicationId,
     correctionSourceFingerprint: application.sourceFingerprint,
   };
+}
+
+/**
+ * Whether a stored proposal names someone other than its request's subject.
+ * A request stored before the subject rule may; only a reassignment names
+ * another person, so any other such proposal is never resubmitted.
+ */
+export function namesAnotherPerson(
+  request: { kind: TimeCorrectionKind; subject_user_id: string },
+  proposed: Json,
+): boolean {
+  if (request.kind === 'reassign') return false;
+  return (
+    !isTimeCorrectionSnapshot(proposed) ||
+    proposed.facts.some((fact) => fact.userId !== request.subject_user_id)
+  );
 }

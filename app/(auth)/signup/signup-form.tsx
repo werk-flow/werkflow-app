@@ -305,7 +305,7 @@ export function SignupForm({ inviteCode = '', invitedEmail = null }: SignupFormP
 
   return (
     <Form {...form}>
-      <form className="grid gap-4" onSubmit={handleSubmit} noValidate>
+      <form className="grid gap-4" method="post" onSubmit={handleSubmit} noValidate>
         <SignupNameFields control={form.control} hasAttemptedSubmit={hasAttemptedSubmit} />
 
         <SignupEmailField

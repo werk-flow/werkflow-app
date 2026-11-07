@@ -12,6 +12,7 @@ import { TIME_CORRECTION_KIND_LABELS, type TimeCorrectionKind } from '@/lib/time
 import type { TimeEntry, TimeSegmentKind } from '@/lib/time-tracking/types';
 import { Constants } from '@/lib/supabase/database.types';
 import { constrainedValue } from '@/lib/validation/constrained-value';
+import { isManagerRole } from '@/lib/roles';
 import type { TimeCorrectionDialogForm } from './use-time-correction-dialog';
 
 const SOURCE_KINDS: TimeCorrectionKind[] = [
@@ -221,7 +222,13 @@ export function TimeCorrectionDialogFields({ entry, form }: TimeCorrectionDialog
     { kind: 'jobs', purpose: 'time-correction' },
     jobId && jobId !== 'none' ? [jobId] : [],
   );
-  const sourceKinds = entry ? SOURCE_KINDS : ADD_KINDS;
+  // Moving time to another person is an office decision: only Admin and Büro see it.
+  const callerRole = options?.people.find(
+    (person) => person.employeeRecordId === options.currentEmployeeRecordId,
+  )?.role;
+  const sourceKinds = entry
+    ? SOURCE_KINDS.filter((value) => value !== 'reassign' || (callerRole && isManagerRole(callerRole)))
+    : ADD_KINDS;
 
   return (
     <>
