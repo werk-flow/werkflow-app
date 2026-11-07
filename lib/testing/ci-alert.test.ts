@@ -227,21 +227,36 @@ test('an unreadable production flag fails the job instead of guessing', () => {
   expect(readFileSync(join(stub, 'gh.log'), 'utf8')).toBe('');
 });
 
-test('only the release and the health check can assign the owner', () => {
+test('only the release, its missed-run alert and the health check can assign the owner', () => {
   const workflows = join(repositoryRoot, '.github/workflows');
   const callers = readdirSync(workflows).filter((file) =>
     readFileSync(join(workflows, file), 'utf8').includes('AFFECTS_PRODUCTION'),
   );
-  expect(callers.sort()).toEqual(['health.yml', 'release.yml']);
-  expect(readFileSync(join(workflows, 'release.yml'), 'utf8')).toContain('AFFECTS_PRODUCTION: true\n');
+  expect(callers.sort()).toEqual(['health.yml', 'production-alert.yml', 'release.yml']);
+  for (const file of ['release.yml', 'production-alert.yml'])
+    expect(readFileSync(join(workflows, file), 'utf8'), file).toContain('AFFECTS_PRODUCTION: true\n');
 });
 
-test('every health check names its environment, and its step reports it even when it fails', () => {
-  const health = readFileSync(join(repositoryRoot, '.github/workflows/health.yml'), 'utf8');
-  const calls = health.match(/\$CHECK \S+/g) ?? [];
-  expect(calls.length).toBeGreaterThan(0);
-  for (const call of calls) expect(call).toMatch(/^\$CHECK (dev|prod)$/);
+test('every caller of the health check names its environment first', () => {
+  const callers = [
+    ...readdirSync(join(repositoryRoot, '.github/workflows')).map((file) => `.github/workflows/${file}`),
+    ...readdirSync(join(repositoryRoot, '.github/scripts')).map((file) => `.github/scripts/${file}`),
+  ];
+  const calls = callers.flatMap((file) =>
+    [
+      ...readFileSync(join(repositoryRoot, file), 'utf8').matchAll(
+        /(?:\$CHECK|bash \.github\/scripts\/health-check\.sh) (\S+)/g,
+      ),
+    ].map((call) => ({ file, environment: call[1] ?? '' })),
+  );
+  expect(calls.filter((call) => call.file === '.github/workflows/health.yml').length).toBeGreaterThan(0);
+  expect(calls.filter((call) => call.file === '.github/scripts/release-smoke.sh')).toEqual([
+    { file: '.github/scripts/release-smoke.sh', environment: 'prod' },
+  ]);
+  for (const call of calls) expect(call.environment, call.file).toMatch(/^(dev|prod)$/);
+});
 
+test('a health check step reports its environment even when it fails', () => {
   const healthScript = join(repositoryRoot, '.github/scripts/health-check.sh');
   const missing = bash(repositoryRoot, healthScript, [
     'prod',

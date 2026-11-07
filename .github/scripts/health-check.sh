@@ -26,7 +26,7 @@ fail() {
 }
 
 case "$environment" in
-  dev | prod) echo "environment=${environment}" >> "$GITHUB_OUTPUT" ;;
+  dev | prod) echo "environment=${environment}" >> "${GITHUB_OUTPUT:-/dev/null}" ;;
   *) fail "Unknown environment ${environment}: dev or prod." ;;
 esac
 

@@ -188,10 +188,9 @@ jobs:
             bash .github/scripts/alert-issue.sh close "$title"
             exit 0
           fi
-          # The owner hears of a failed prod check only; every check of the production job is one.
+          # The owner hears of a failed prod check only, not of a job that failed before its checks.
           export AFFECTS_PRODUCTION=false
-          if test "$REPOSITORY_PROD_FAILED" = true || test "$PRODUCTION_PROD_FAILED" = true \
-            || ! [[ "$PRODUCTION" =~ ^(success|skipped)$ ]]; then
+          if test "$REPOSITORY_PROD_FAILED" = true || test "$PRODUCTION_PROD_FAILED" = true; then
             AFFECTS_PRODUCTION=true
           fi
           mapfile -t names <<< "$failed"
