@@ -8,7 +8,8 @@
 -- Permanent deletion of any document whose retention end is today or later is
 -- refused, filed or not. An employee, another organization and a protected
 -- personnel document cannot be filed or reclassified. Only the service role
--- executes the functions.
+-- executes the functions. A former filer's account deletion is refused while
+-- the filed document exists.
 begin;
 
 insert into auth.users (
@@ -114,6 +115,11 @@ begin
   if not has_column_privilege('authenticated', 'public.documents', 'storage_path', 'select') then
     raise exception 'the client lost a document column it read before';
   end if;
+  -- The migration's backfill keeps updated_at with the trigger off; it must
+  -- leave the trigger on for every later write.
+  if (select trigger.tgenabled from pg_trigger trigger
+    where trigger.tgrelid = 'public.documents'::regclass and trigger.tgname = 'documents_set_updated_at') <> 'O'
+  then raise exception 'the backfill left documents_set_updated_at off'; end if;
 end;
 $$;
 
@@ -330,5 +336,26 @@ select pg_temp.expect_refusal('permanent deletion on the last day of the period'
     '28300000-0000-0000-0000-000000000010', '28300000-0000-0000-0000-000000000052')
 $sql$, 'retention_period_running');
 
+-- A former Büro member who filed a document keeps their account as long as the
+-- document exists, as a former uploader does: the profile, the filer and the
+-- actor of the `filed` event stay.
 reset role;
+delete from public.organization_members
+where organization_id = '28300000-0000-0000-0000-000000000010'
+  and user_id = '28300000-0000-0000-0000-000000000002';
+select pg_temp.expect_refusal('account deletion of a former filer', $sql$
+  delete from auth.users where id = '28300000-0000-0000-0000-000000000002'
+$sql$, 'update or delete on table "profiles" violates foreign key constraint "documents_filed_by_fkey" on table "documents"');
+do $$
+begin
+  if not exists (select 1 from public.profiles where id = '28300000-0000-0000-0000-000000000002')
+    or (select filed_by from public.documents where id = '28300000-0000-0000-0000-000000000050')
+      is distinct from '28300000-0000-0000-0000-000000000002'
+    or not exists (select 1 from public.document_audit_events
+      where document_id = '28300000-0000-0000-0000-000000000050' and event_type = 'filed'
+        and actor_id = '28300000-0000-0000-0000-000000000002')
+  then raise exception 'a refused account deletion lost the filer of a filed document'; end if;
+end;
+$$;
+
 rollback;

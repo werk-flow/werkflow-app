@@ -1,6 +1,7 @@
 'use client';
 
 import { Lock } from 'lucide-react';
+import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,21 +39,41 @@ type RetentionFieldProps = {
   onChange: (terms: DocumentRetentionTerms) => void;
 };
 
+/**
+ * The picker reports every typed segment, a lone day digit or a paused year
+ * included, so the date stays a draft until „Speichern“: only a date the user
+ * confirms reaches the audited write.
+ */
 function DocumentDateField({ archive, editable, disabled, onChange }: RetentionFieldProps) {
+  const [draft, setDraft] = useState(() => parseIsoLocalDate(archive.documentDate));
+  const draftDate = draft ? toLocalDateString(draft) : archive.documentDate;
   return (
     <div>
       <p className="text-xs text-muted-foreground">Belegdatum</p>
       <div className="mt-1">
         {editable ? (
-          <DatePicker
-            value={parseIsoLocalDate(archive.documentDate)}
-            onChange={(date) => {
-              if (date)
-                onChange({ documentDate: toLocalDateString(date), retentionClass: archive.retentionClass });
-            }}
-            disabled={disabled}
-            ariaLabel="Belegdatum der Datei"
-          />
+          <div className="flex items-center gap-2">
+            <DatePicker
+              value={draft}
+              onChange={(date) => {
+                if (date) setDraft(date);
+              }}
+              disabled={disabled}
+              ariaLabel="Belegdatum der Datei"
+            />
+            {draftDate !== archive.documentDate && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label="Belegdatum speichern"
+                onClick={() => onChange({ documentDate: draftDate, retentionClass: archive.retentionClass })}
+                disabled={disabled}
+              >
+                Speichern
+              </Button>
+            )}
+          </div>
         ) : (
           <p>{formatDate(archive.documentDate)}</p>
         )}
@@ -151,7 +172,7 @@ export function DocumentDetailsArchive({
         )}
       </div>
       <div className="mt-2 grid gap-3 sm:grid-cols-2">
-        <DocumentDateField {...fieldProps} />
+        <DocumentDateField key={archive.documentDate} {...fieldProps} />
         <RetentionClassField {...fieldProps} />
       </div>
       <p className="mt-2 text-muted-foreground">{retentionSummary(archive)}</p>

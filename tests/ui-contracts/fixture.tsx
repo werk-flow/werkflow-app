@@ -12,6 +12,10 @@ import {
 } from './calendar-views-boundaries';
 import { OptionContractFixture } from './option-boundaries';
 import { DocumentSearchFixture, ListNavigationFixture } from './list-navigation-boundaries';
+import {
+  DocumentArchiveContractFixture,
+  initializeDocumentArchiveBoundary,
+} from './document-archive-boundaries';
 import { OrganizationContractFixture } from './organization-boundaries';
 import { CalendarContractFixture } from './calendar-boundaries';
 import { FeedbackContractFixture, isFeedbackFixture } from './feedback-boundaries';
@@ -63,6 +67,7 @@ import { initializePersonnelBoundary } from './personnel-boundaries';
 
 initializeServiceBoundaries();
 initializeLifecycleBoundary();
+initializeDocumentArchiveBoundary();
 const personnelInitialData = initializePersonnelBoundary();
 
 function LifecycleRouteFixture(): React.JSX.Element {
@@ -563,6 +568,8 @@ createRoot(root).render(
     <ListNavigationFixture />
   ) : window.uiContractFixture === 'document-search' ? (
     <DocumentSearchFixture />
+  ) : window.uiContractFixture === 'document-archive' ? (
+    <DocumentArchiveContractFixture />
   ) : window.uiContractFixture === 'options' ? (
     <OptionContractFixture />
   ) : window.uiContractFixture === 'calendar' ? (

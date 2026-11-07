@@ -75,6 +75,7 @@ The owner's schedule (werk-flow/werkflow-planning#24) has one class: ten years f
 - An ordinary upload of an invoice, offer or contract gets the class. A copy, a generated report and a protected personnel document do not. The document date (`Belegdatum`) defaults to the Berlin day of the upload.
 - Admin and Büro change the document date and the class, each change with its audit event, until they file the document. A protected personnel document keeps its own rules: no class, no filing.
 - Filing (`Festschreiben`) is final and audited. `lib/documents/filing.ts` is the server-only path: a server that generates an original, such as an invoice, files it right after its registration. A filed document refuses a new version, any byte replacement and the trash. Rename, move, category label and links stay possible and audited.
+- A filed document names its filer (`filed_by`) for as long as it exists. As with the uploader, that person cannot delete their account while the document remains.
 - Permanent deletion refuses a filed document and any document whose retention end is today or later. Organization deletion refuses while such a document exists, the trash included.
 - `lib/documents/retention.ts` owns the deletion rule for the actions and the library. The trigger `documents_retention_guard` repeats every refusal under each database write, and lets organization teardown pass only once the organization row is gone.
 - Only Admin and Büro receive a document's archive data (`hydrateDocuments`).

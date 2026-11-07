@@ -38,11 +38,22 @@ alter table public.documents
     end
   ) stored,
   add column filed_at timestamptz,
-  add column filed_by uuid references public.profiles(id),
+  -- The filer stays named as long as the document exists. Like uploaded_by and
+  -- document_versions.uploaded_by, the reference refuses the deletion of the
+  -- profile, and with it of the account, while a document the person filed
+  -- remains; the `filed` audit event keeps its actor for the same reason.
+  add column filed_by uuid references public.profiles(id) on delete restrict,
   add constraint documents_filed_by_with_filed_at check ((filed_at is null) = (filed_by is null));
 
 -- Existing documents date from their upload day. Existing ordinary invoices,
--- offers and contracts get the class an upload gives them today.
+-- offers and contracts get the class an upload gives them today. The backfill
+-- is no change to a document: the library shows and sorts by updated_at, so
+-- documents_set_updated_at stays off for it, and the migration fails if any
+-- updated_at moved anyway.
+create temporary table documents_updated_at_before_backfill on commit drop as
+select document.id, document.updated_at from public.documents document;
+
+alter table public.documents disable trigger documents_set_updated_at;
 update public.documents document
 set document_date = (document.created_at at time zone 'Europe/Berlin')::date,
   retention_class = case
@@ -50,6 +61,17 @@ set document_date = (document.created_at at time zone 'Europe/Berlin')::date,
       select 1 from public.personnel_documents protected where protected.document_id = document.id
     ) then 'ten_years'::public.document_retention_class
   end;
+alter table public.documents enable trigger documents_set_updated_at;
+
+do $$
+begin
+  if exists (
+    select 1 from public.documents document
+    join pg_temp.documents_updated_at_before_backfill before_backfill on before_backfill.id = document.id
+    where document.updated_at is distinct from before_backfill.updated_at
+  ) then raise exception 'document_backfill_moved_updated_at'; end if;
+end;
+$$;
 -- @destructive: after release e713fa96: that build never names document_date, so its inserts take the default
 alter table public.documents alter column document_date set not null;
 

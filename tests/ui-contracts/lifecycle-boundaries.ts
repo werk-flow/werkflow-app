@@ -27,6 +27,7 @@ declare global {
       | 'options'
       | 'list-navigation'
       | 'document-search'
+      | 'document-archive'
       | 'calendar-board'
       | 'calendar-day'
       | 'calendar-month'
