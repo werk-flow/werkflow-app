@@ -69,3 +69,29 @@ test('a refused document date stays typed for a retry', async ({ page }) => {
   await expect(save).toHaveCount(0);
   await expect(picker).toHaveText(/14\.03\.2025/);
 });
+
+test('a paused partial year is refused at „Speichern“, marked and focused, and never written', async ({
+  page,
+}) => {
+  const picker = documentDate(page);
+  // „20“ and a pause: the picker commits the year 20.
+  await picker.locator('[data-segment="year"]').click();
+  await page.keyboard.type('20');
+  await page.clock.runFor(1000);
+  await expect(picker).toHaveText(/14\.03\.0020/);
+
+  await page.getByRole('button', { name: 'Belegdatum speichern' }).click();
+  expect(await retentionWrites(page)).toEqual([]);
+  await expect(picker).toHaveAttribute('data-invalid', 'true');
+  await expect(picker).toBeFocused();
+  await expect(picker).toHaveAccessibleDescription(
+    'Gib ein Belegdatum zwischen dem 01.01.1900 und dem 07.11.2027 ein.',
+  );
+
+  // Completing the year clears the mark and saves.
+  await picker.locator('[data-segment="year"]').click();
+  await page.keyboard.type('2025');
+  await expect(picker).not.toHaveAttribute('data-invalid');
+  await page.getByRole('button', { name: 'Belegdatum speichern' }).click();
+  expect(await retentionWrites(page)).toEqual([{ documentDate: '2025-03-14', retentionClass: 'ten_years' }]);
+});

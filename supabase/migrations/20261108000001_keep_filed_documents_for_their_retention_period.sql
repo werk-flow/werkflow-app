@@ -332,8 +332,10 @@ end;
 $$;
 
 -- Sets the document date and the retention class of an unfiled document, with
--- one audit event when either changes. Refusals: not_authorized,
--- document_not_found, protected_document_boundary, document_filed.
+-- one audit event when either changes. The document date lies between 1900
+-- and one year after today in Berlin, as lib/documents/retention.ts says.
+-- Refusals: not_authorized, document_not_found, protected_document_boundary,
+-- document_filed, document_date_out_of_range.
 create function public.update_document_retention(
   p_actor_id uuid,
   p_organization_id uuid,
@@ -354,6 +356,11 @@ declare
 begin
   if p_document_date is null then
     raise exception 'invalid_input';
+  end if;
+  if p_document_date < date '1900-01-01'
+    or p_document_date > ((now() at time zone 'Europe/Berlin')::date + interval '1 year')::date
+  then
+    raise exception 'document_date_out_of_range';
   end if;
   if v_document.document_date = p_document_date
     and v_document.retention_class is not distinct from p_retention_class

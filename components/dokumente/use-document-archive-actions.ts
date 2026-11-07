@@ -10,6 +10,7 @@ import type { DocumentLibraryMutations } from './use-document-library-mutations'
 const ARCHIVE_FAILURE_MESSAGES = {
   document_filed: 'Die Datei ist festgeschrieben und lässt sich nicht mehr ändern.',
   protected_document_boundary: 'Personalunterlagen haben eigene Aufbewahrungsregeln.',
+  document_date_out_of_range: 'Das Belegdatum muss zwischen 1900 und einem Jahr nach heute liegen.',
 } satisfies Record<string, string>;
 
 /**

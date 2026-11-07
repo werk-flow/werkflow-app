@@ -64,6 +64,7 @@ import type {
   UpdateDocumentLinksInput,
   UpdateDocumentLinksResult,
 } from './types';
+import { documentDateRange, isDocumentDateInRange } from './retention';
 import { documentWriteFailure, revalidateDocuments } from './write-support';
 
 // Types the in-app viewer actually previews. Everything else is delivered as a
@@ -638,6 +639,9 @@ export async function updateDocumentRetention(
 ): Promise<DocumentResult> {
   const input = parseActionInput(updateDocumentRetentionInputSchema, rawInput);
   if (!input) return INVALID_INPUT;
+  if (!isDocumentDateInRange(input.documentDate, documentDateRange())) {
+    return { success: false, error: 'document_date_out_of_range' };
+  }
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
@@ -660,7 +664,7 @@ export async function updateDocumentRetention(
     return documentWriteFailure(
       'Failed to update document retention',
       error,
-      ['document_not_found', 'protected_document_boundary', 'document_filed'],
+      ['document_not_found', 'protected_document_boundary', 'document_filed', 'document_date_out_of_range'],
       'update_failed',
     );
   }

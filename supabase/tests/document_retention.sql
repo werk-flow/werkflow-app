@@ -161,14 +161,14 @@ declare
   v_document public.documents;
 begin
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
-    '2037-12-31', 'ten_years');
-  if v_document.retention_ends_on <> '2047-12-31' then
-    raise exception 'a document of 2037-12-31 is kept until %, not 2047-12-31', v_document.retention_ends_on;
+    '2025-12-31', 'ten_years');
+  if v_document.retention_ends_on <> '2035-12-31' then
+    raise exception 'a document of 2025-12-31 is kept until %, not 2035-12-31', v_document.retention_ends_on;
   end if;
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
-    '2038-01-01', 'ten_years');
-  if v_document.retention_ends_on <> '2048-12-31' then
-    raise exception 'a document of 2038-01-01 is kept until %, not 2048-12-31', v_document.retention_ends_on;
+    '2026-01-01', 'ten_years');
+  if v_document.retention_ends_on <> '2036-12-31' then
+    raise exception 'a document of 2026-01-01 is kept until %, not 2036-12-31', v_document.retention_ends_on;
   end if;
   -- The office moves a photo into the class and back out, each change audited.
   v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000051',
@@ -180,8 +180,42 @@ begin
       where document_id = '28300000-0000-0000-0000-000000000051' and event_type = 'retention_changed') <> 2
     or not exists (select 1 from public.document_audit_events
       where document_id = '28300000-0000-0000-0000-000000000052' and event_type = 'retention_changed'
-        and event_payload->>'fromDocumentDate' = '2037-12-31' and event_payload->>'toDocumentDate' = '2038-01-01')
+        and event_payload->>'fromDocumentDate' = '2025-12-31' and event_payload->>'toDocumentDate' = '2026-01-01')
   then raise exception 'a retention change was not recorded with its audit event'; end if;
+end;
+$$;
+
+-- A document date outside 1900 to one year after today never starts or ends a
+-- period: a paused partial year (20 for 2020) is refused; both bounds are taken.
+select pg_temp.expect_refusal('a document date in the year 20', $sql$
+  select public.update_document_retention('28300000-0000-0000-0000-000000000002',
+    '28300000-0000-0000-0000-000000000010', '28300000-0000-0000-0000-000000000052', '0020-03-14', 'ten_years')
+$sql$, 'document_date_out_of_range');
+select pg_temp.expect_refusal('a document date before 1900', $sql$
+  select public.update_document_retention('28300000-0000-0000-0000-000000000002',
+    '28300000-0000-0000-0000-000000000010', '28300000-0000-0000-0000-000000000052', '1899-12-31', 'ten_years')
+$sql$, 'document_date_out_of_range');
+select pg_temp.expect_refusal('a document date more than a year ahead', $sql$
+  select public.update_document_retention('28300000-0000-0000-0000-000000000002',
+    '28300000-0000-0000-0000-000000000010', '28300000-0000-0000-0000-000000000052',
+    ((now() at time zone 'Europe/Berlin')::date + interval '1 year' + interval '1 day')::date, 'ten_years')
+$sql$, 'document_date_out_of_range');
+do $$
+declare
+  v_org constant uuid := '28300000-0000-0000-0000-000000000010';
+  v_office constant uuid := '28300000-0000-0000-0000-000000000002';
+  v_latest constant date := ((now() at time zone 'Europe/Berlin')::date + interval '1 year')::date;
+  v_document public.documents;
+begin
+  if (select document_date from public.documents where id = '28300000-0000-0000-0000-000000000052') <> '2026-01-01'
+  then raise exception 'a refused document date changed the document'; end if;
+  v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
+    '1900-01-01', 'ten_years');
+  v_document := public.update_document_retention(v_office, v_org, '28300000-0000-0000-0000-000000000052',
+    v_latest, 'ten_years');
+  if v_document.document_date <> v_latest then
+    raise exception 'the latest allowed document date % was not saved', v_latest;
+  end if;
 end;
 $$;
 

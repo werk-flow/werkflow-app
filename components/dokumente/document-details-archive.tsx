@@ -1,11 +1,12 @@
 'use client';
 
 import { Lock } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DatePicker } from '@/components/ui/date-picker';
+import { Field } from '@/components/ui/field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   DOCUMENT_RETENTION_CLASS_LABELS,
@@ -14,6 +15,8 @@ import {
   type DocumentRetentionTerms,
   type OrganizationDocument,
 } from '@/lib/documents/types';
+import { documentDateRange, isDocumentDateInRange } from '@/lib/documents/retention';
+import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 import { formatGermanDate as formatDate, parseIsoLocalDate, toLocalDateString } from '@/lib/utils';
 import { getUserDisplayName } from './document-library-file-labels';
 
@@ -43,45 +46,57 @@ type RetentionFieldProps = {
 /**
  * The picker reports every typed segment, a lone day digit or a paused year
  * included, so the date stays a draft until „Speichern“: only a date the user
- * confirms reaches the audited write. The draft outlives a refused save, so
- * the user can retry it, and gives way to the stored date once saved.
+ * confirms reaches the audited write, and only inside the document date range
+ * (a paused „20“ is the year 20). The draft outlives a refused save, so the
+ * user can retry it, and gives way to the stored date once saved.
  */
 function DocumentDateField({ archive, editable, disabled, onChange }: RetentionFieldProps) {
+  const controlId = useId();
   const [draft, setDraft] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const draftDate = draft ? toLocalDateString(draft) : archive.documentDate;
+  const save = () => {
+    const range = documentDateRange();
+    const nextError = isDocumentDateInRange(draftDate, range)
+      ? undefined
+      : `Gib ein Belegdatum zwischen dem ${formatDate(range.earliest)} und dem ${formatDate(range.latest)} ein.`;
+    setError(nextError ?? null);
+    if (focusFirstInvalidField({ [controlId]: nextError })) return;
+    void onChange({ documentDate: draftDate, retentionClass: archive.retentionClass }).then((saved) => {
+      if (saved) setDraft(null);
+    });
+  };
   return (
     <div>
       <p className="text-xs text-muted-foreground">Belegdatum</p>
       <div className="mt-1">
         {editable ? (
-          <div className="flex items-center gap-2">
-            <DatePicker
-              value={draft ?? parseIsoLocalDate(archive.documentDate)}
-              onChange={(date) => {
-                if (date) setDraft(date);
-              }}
-              disabled={disabled}
-              ariaLabel="Belegdatum der Datei"
-            />
-            {draftDate !== archive.documentDate && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                aria-label="Belegdatum speichern"
-                onClick={() =>
-                  void onChange({ documentDate: draftDate, retentionClass: archive.retentionClass }).then(
-                    (saved) => {
-                      if (saved) setDraft(null);
-                    },
-                  )
-                }
+          <Field label="Belegdatum" hideLabel htmlFor={controlId} error={error}>
+            <div className="flex items-center gap-2">
+              <DatePicker
+                value={draft ?? parseIsoLocalDate(archive.documentDate)}
+                onChange={(date) => {
+                  if (!date) return;
+                  setDraft(date);
+                  setError(null);
+                }}
                 disabled={disabled}
-              >
-                Speichern
-              </Button>
-            )}
-          </div>
+                ariaLabel="Belegdatum der Datei"
+              />
+              {draftDate !== archive.documentDate && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  aria-label="Belegdatum speichern"
+                  onClick={save}
+                  disabled={disabled}
+                >
+                  Speichern
+                </Button>
+              )}
+            </div>
+          </Field>
         ) : (
           <p>{formatDate(archive.documentDate)}</p>
         )}

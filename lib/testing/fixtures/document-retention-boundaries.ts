@@ -8,6 +8,7 @@
 // document without its archive data; Admin and Büro read it with.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
+import { addLocalDays, addLocalMonthsClamped, getBusinessTodayIso } from '@/lib/date-time/berlin';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -160,6 +161,42 @@ for (const role of ['buero', 'admin'] as const) {
     ],
     { success: false, error: 'document_not_found' },
     'reads',
+  );
+  // A document date outside 1900 to one year after today is refused before
+  // any read: a paused partial year never starts or ends a period.
+  await assertRefused(
+    world,
+    [
+      [
+        `${role} updateDocumentRetention year 20`,
+        () =>
+          updateDocumentRetention({
+            documentId: openInvoiceId,
+            documentDate: '0020-03-14',
+            retentionClass: 'ten_years',
+          }),
+      ],
+      [
+        `${role} updateDocumentRetention before 1900`,
+        () =>
+          updateDocumentRetention({
+            documentId: openInvoiceId,
+            documentDate: '1899-12-31',
+            retentionClass: 'ten_years',
+          }),
+      ],
+      [
+        `${role} updateDocumentRetention past next year`,
+        () =>
+          updateDocumentRetention({
+            documentId: openInvoiceId,
+            documentDate: addLocalDays(addLocalMonthsClamped(getBusinessTodayIso(), 12), 1),
+            retentionClass: 'ten_years',
+          }),
+      ],
+    ],
+    { success: false, error: 'document_date_out_of_range' },
+    'none',
   );
   // A filed document keeps its bytes, its terms and its place outside the trash.
   await assertRefused(
