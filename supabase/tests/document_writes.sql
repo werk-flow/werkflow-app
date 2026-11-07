@@ -4,7 +4,9 @@
 -- 20261004140200_export_work_artifacts_atomically.sql): a refusal of a later
 -- step leaves no document, link, folder or audit event behind. The functions
 -- refuse a foreign organization, a field worker outside the assigned job,
--- and, by owner decision, a field worker's export of a project artifact.
+-- by owner decision a field worker's export of a project artifact, and an
+-- office member's change of an Admin-only personnel document
+-- (20261107160000_refuse_office_writes_to_admin_only_personnel_documents.sql).
 -- Only the service role executes them.
 begin;
 
@@ -375,6 +377,103 @@ begin
              where id in ('26140000-0000-0000-0000-000000000091', '26140000-0000-0000-0000-000000000092')
                and deleted_at is not null)
   then raise exception 'the office restore of a standard or the Admin restore of a restricted personnel document failed'; end if;
+end;
+$$;
+
+-- A release lets an office member read an Admin-only personnel document about
+-- themselves, never change it: rename, reclassification, move, copy, trash and
+-- a new version refuse it and leave no row or audit event. An Admin changes
+-- it, and the office still changes a standard personnel document.
+reset role;
+insert into public.documents (
+  id, organization_id, storage_path, original_file_name, display_name, category, size_bytes, uploaded_by
+) values
+('26140000-0000-0000-0000-000000000093', '26140000-0000-0000-0000-000000000010',
+ '26140000-0000-0000-0000-000000000010/d93/abmahnung.pdf', 'abmahnung.pdf', 'abmahnung.pdf', 'contract', 10,
+ '26140000-0000-0000-0000-000000000001'),
+('26140000-0000-0000-0000-000000000094', '26140000-0000-0000-0000-000000000010',
+ '26140000-0000-0000-0000-000000000010/d94/attest.pdf', 'attest-buero.pdf', 'attest-buero.pdf', 'report', 10,
+ '26140000-0000-0000-0000-000000000004');
+insert into public.personnel_documents (
+  id, organization_id, employee_record_id, document_id, document_type, access_class
+)
+select protected.id, '26140000-0000-0000-0000-000000000010', record.id, protected.document_id,
+  protected.document_type, protected.access_class::public.personnel_document_access_class
+from public.employee_records record,
+  (values
+    ('26140000-0000-0000-0000-000000000095'::uuid, '26140000-0000-0000-0000-000000000093'::uuid,
+     'Abmahnung', 'admin_restricted'),
+    ('26140000-0000-0000-0000-000000000096'::uuid, '26140000-0000-0000-0000-000000000094'::uuid,
+     'Attest', 'health_evidence')
+  ) as protected (id, document_id, document_type, access_class)
+where record.organization_id = '26140000-0000-0000-0000-000000000010'
+  and record.user_id = '26140000-0000-0000-0000-000000000004';
+insert into public.personnel_document_releases (
+  organization_id, personnel_document_id, employee_record_id, document_version_number, released_by,
+  operation_id, request_hash
+)
+select protected.organization_id, protected.id, protected.employee_record_id, 1,
+  '26140000-0000-0000-0000-000000000001', gen_random_uuid(), repeat('0', 64)
+from public.personnel_documents protected
+where protected.id in ('26140000-0000-0000-0000-000000000095', '26140000-0000-0000-0000-000000000096');
+do $$
+begin
+  if (select count(*) from public.personnel_document_releases
+      where personnel_document_id in ('26140000-0000-0000-0000-000000000095',
+        '26140000-0000-0000-0000-000000000096')) <> 2
+  then raise exception 'the office member has no released Admin-only personnel documents to test'; end if;
+end;
+$$;
+set local role service_role;
+
+do $$
+declare
+  v_office constant uuid := '26140000-0000-0000-0000-000000000004';
+  v_org constant uuid := '26140000-0000-0000-0000-000000000010';
+  v_document uuid;
+  v_statement text;
+begin
+  foreach v_document in array array[
+    '26140000-0000-0000-0000-000000000093'::uuid, '26140000-0000-0000-0000-000000000094'::uuid
+  ] loop
+    foreach v_statement in array array[
+      format('select public.rename_document(%L, %L, %L, %L)', v_office, v_org, v_document, 'neu.pdf'),
+      format('select public.update_document_category(%L, %L, %L, %L)', v_office, v_org, v_document, 'invoice'),
+      format('select public.move_document(%L, %L, %L, %L, %L)', v_office, v_org, v_document,
+        '26140000-0000-0000-0000-000000000030', 'neu.pdf'),
+      format('select public.copy_document(%L, %L, %L, %L, null, %L, %L)', v_office, v_org, v_document,
+        gen_random_uuid(), v_org || '/copy/neu.pdf', 'neu.pdf'),
+      format('select public.trash_document(%L, %L, %L)', v_office, v_org, v_document),
+      format('select public.finalize_document_version_upload(%L, %L, %L, 1, %L, %L, %L, 10)',
+        v_office, v_org, v_document, v_org || '/versions/neu.pdf', 'neu.pdf', 'application/pdf')
+    ] loop
+      perform pg_temp.expect_refusal('a write of a released Admin-only personnel document by the office',
+        v_statement, 'not_authorized');
+    end loop;
+  end loop;
+  if exists (select 1 from public.documents
+             where id in ('26140000-0000-0000-0000-000000000093', '26140000-0000-0000-0000-000000000094')
+               and (display_name not in ('abmahnung.pdf', 'attest-buero.pdf') or category not in ('contract', 'report')
+                 or folder_id is not null or deleted_at is not null or current_version_number <> 1))
+    or exists (select 1 from public.document_versions
+               where document_id in ('26140000-0000-0000-0000-000000000093', '26140000-0000-0000-0000-000000000094'))
+    or exists (select 1 from public.document_audit_events
+               where document_id in ('26140000-0000-0000-0000-000000000093', '26140000-0000-0000-0000-000000000094')
+                 or event_payload->>'copiedFromDocumentId' in ('26140000-0000-0000-0000-000000000093',
+                   '26140000-0000-0000-0000-000000000094'))
+  then raise exception 'a refused office write changed an Admin-only personnel document'; end if;
+
+  perform public.rename_document('26140000-0000-0000-0000-000000000001', v_org,
+    '26140000-0000-0000-0000-000000000093', 'abmahnung-2026.pdf');
+  perform public.finalize_document_version_upload('26140000-0000-0000-0000-000000000001', v_org,
+    '26140000-0000-0000-0000-000000000093', 1, v_org || '/versions/abmahnung-2.pdf', 'abmahnung-2.pdf',
+    'application/pdf', 10);
+  perform public.rename_document(v_office, v_org, '26140000-0000-0000-0000-000000000092', 'vertrag-2026.pdf');
+  if (select display_name || '/' || current_version_number from public.documents
+      where id = '26140000-0000-0000-0000-000000000093') <> 'abmahnung-2026.pdf/2'
+    or (select display_name from public.documents where id = '26140000-0000-0000-0000-000000000092')
+      <> 'vertrag-2026.pdf'
+  then raise exception 'the Admin write of an Admin-only or the office write of a standard personnel document failed'; end if;
 end;
 $$;
 

@@ -205,7 +205,7 @@ mock.module('@/lib/data/cached', () => ({
 const responsibilities = await import('@/lib/responsibilities/server');
 mock.module('@/lib/responsibilities/server', () => ({
   ...responsibilities,
-  authorizeResponsibilityForTarget: async () => ({ success: true }),
+  authorizeResponsibilityForTargets: async () => ({ success: true }),
 }));
 const { addManualEntry, deleteEntry, deleteEntriesBatch, updateEntry } = await import(
   '@/lib/time-tracking/entry-write-actions'
@@ -301,15 +301,15 @@ assert.deepEqual(rpcCalls, [
 ]);
 
 // A review that names an entry of another organization refuses the whole
-// selection before the database function runs.
+// selection before the database function runs, as for an unknown id.
 rpcCalls.length = 0;
 assert.deepEqual(await reviewEntries([ownPending, foreignPending], 'approved'), {
   success: false,
-  error: 'invalid_input',
+  error: 'entry_not_found',
 });
 assert.deepEqual(await reviewEntries([foreignPending], 'approved'), {
   success: false,
-  error: 'not_a_member',
+  error: 'entry_not_found',
 });
 assert.deepEqual([ownPending, foreignPending].map(statusOf), ['pending', 'pending']);
 assert.deepEqual(rpcCalls, []);

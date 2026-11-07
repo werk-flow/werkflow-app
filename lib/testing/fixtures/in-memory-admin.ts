@@ -28,11 +28,25 @@ function comparable(value: unknown, filterValue: string): [number | string, numb
     : [String(value ?? ''), filterValue];
 }
 
+/** SQL `ilike` with `%` as its only wildcard: case-insensitive, anchored at both ends. */
+function ilikeMatcher(pattern: string): (text: string) => boolean {
+  const escaped = pattern
+    .split('%')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*');
+  const expression = new RegExp(`^${escaped}$`, 'isu');
+  return (text) => expression.test(text);
+}
+
 /** One `column.operator.value` term of a PostgREST `or` filter; `is` takes `null` only. */
 function orTerm(term: string): (row: Row) => boolean {
   const [column = '', operator = '', ...rest] = term.split('.');
   const value = rest.join('.');
   if (operator === 'is' && value === 'null') return (row) => (row[column] ?? null) === null;
+  if (operator === 'ilike') {
+    const matches = ilikeMatcher(value);
+    return (row) => typeof row[column] === 'string' && matches(row[column]);
+  }
   const compare = comparators[operator];
   if (!compare) throw new Error(`The in-memory admin does not implement the "${operator}" or-filter.`);
   return (row) => compare(...comparable(row[column], value));

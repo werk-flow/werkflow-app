@@ -16,8 +16,6 @@ test "$GITHUB_REF" = refs/heads/main \
   || { echo "::error::A release starts on main, not ${GITHUB_REF}."; exit 1; }
 sha="$(git rev-parse HEAD)"
 echo "sha=$sha" >> "$GITHUB_OUTPUT"
-git merge-base --is-ancestor origin/production "$sha" \
-  || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
 
 # Ends the run green. The skip, no-change or red-run, tells alert-issue.sh whether to speak.
 skip() {
@@ -30,9 +28,16 @@ skip() {
   exit 0
 }
 
-if test "$mode" != manual && test -z "$(git rev-list origin/production.."$sha")"; then
-  skip no-change "main (${sha}) equals production; nothing to release."
+# A scheduled run ships the commit it started on. A release that started later, or a rerun days
+# on, may find production already past it: that run has nothing to do, and it is no failure.
+if test "$mode" != manual && git merge-base --is-ancestor "$sha" origin/production; then
+  if test "$sha" = "$(git rev-parse origin/production)"; then
+    skip no-change "main (${sha}) equals production; nothing to release."
+  fi
+  skip no-change "production already contains ${sha}; a later release shipped it."
 fi
+git merge-base --is-ancestor origin/production "$sha" \
+  || { echo "::error::production is not an ancestor of main; it only ever moves forward."; exit 1; }
 
 # A full run is ci.yml called with `full` from a job named `Full run`, so its aggregate
 # job is `Full run / Check` (.github/workflows/nightly.yml). Only a nightly or release run

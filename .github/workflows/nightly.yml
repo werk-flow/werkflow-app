@@ -3,14 +3,14 @@ name: Nightly
 # Every browser group on main once a night, so a date- or data-dependent
 # failure surfaces without a change. GitHub starts this repository's scheduled runs up
 # to 10 hours late, least so in the evening: this cron line starts a run between about
-# 01:00 and 04:30 Berlin, past the runner's midnight window (MIDNIGHT_START_WINDOW in
-# lib/testing/runner/group-schedule.ts). It shares the release's cron line, so both usually
-# see one commit, and the release at 07:00 reuses this run on it.
+# 19:45 and 00:30 Berlin. One that meets the midnight window waits it out in ci.yml's
+# `midnight` job. It shares the release's cron line, so both usually see one commit,
+# and the release at 03:30 reuses this run on it.
 # A manual run gives a main commit its full run before a release. A red run on
 # main opens or updates the issue "CI alert: nightly"; the next green run closes it.
 on:
   schedule:
-    - cron: '30 22 * * *'
+    - cron: '0 17 * * *'
       timezone: Europe/Berlin
   workflow_dispatch:
     inputs:

@@ -18,6 +18,7 @@ import { FINDING_LABELS } from '../../../lib/time-accounts/presentation';
 import { textInDom, visibleText } from '../../golden/support/steps/shared';
 import {
   assignTimePolicy,
+  closeBlockedAlert,
   closeMonthButton,
   createExceptionTimePolicy,
   monthlyResultListRow,
@@ -141,7 +142,13 @@ test.describe('P1-23 time-account audit @AUDIT-W2-P1-23 @AUDIT-W2', () => {
         ).toBe(true);
         await adminPage.goto(`/zeiterfassung/perioden/${preparedPeriod.id}`);
         await expect(visibleText(adminPage, FINDING_LABELS.missing_clock)).toBeVisible();
-        await expect(closeMonthButton(adminPage)).toBeDisabled();
+        // The close stays pressable and answers with the blocker instead of closing.
+        await closeMonthButton(adminPage).click();
+        await expect(closeBlockedAlert(adminPage)).toBeVisible();
+        expect(
+          (await getP123State(world.orgId)).periods.find((candidate) => candidate.id === preparedPeriod.id)
+            ?.state,
+        ).toBe('prepared');
         return preparedPeriod.id;
       });
 

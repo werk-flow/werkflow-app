@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 // The actions need module mocks for identity, cookies and the database, which
 // would leak into other test files; the fixture runs them in its own process.
-test('contact and work-site actions admit only managers, never reach another organization, and save a primary row in one write', async () => {
+test('contact and work-site actions admit only managers, never reach another organization, refuse a contact email that is not one address, and save a primary row in one write', async () => {
   const child = Bun.spawn(
     [process.execPath, resolve(import.meta.dir, '../testing/fixtures/client-relation-action-boundaries.ts')],
     { cwd: resolve(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
