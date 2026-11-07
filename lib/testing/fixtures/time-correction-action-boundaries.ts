@@ -29,6 +29,7 @@ const operationId = '85000000-0000-4000-8000-000000000007';
 const coworkerRecordId = '85000000-0000-4000-8000-000000000008';
 const ownEntryId = '85000000-0000-4000-8000-000000000009';
 const ownReassignRequestId = '85000000-0000-4000-8000-000000000010';
+const legacyEditRequestId = '85000000-0000-4000-8000-000000000011';
 
 const world = installActionWorld({
   employee_records: [
@@ -61,7 +62,43 @@ const world = installActionWorld({
       source_scope_key: 'own-scope',
       current_revision: 1,
     },
+    // An edit stored before the subject rule, whose proposal names a coworker.
+    {
+      id: legacyEditRequestId,
+      organization_id: ORGANIZATION_A,
+      subject_user_id: CALLER_ID,
+      requested_by: CALLER_ID,
+      kind: 'edit',
+      status: 'clarification_required',
+      source_scope_key: 'legacy-scope',
+      current_revision: 1,
+    },
   ],
+  time_correction_request_revisions: [
+    {
+      organization_id: ORGANIZATION_A,
+      request_id: legacyEditRequestId,
+      revision: 1,
+      source_fingerprint: 'legacy',
+      before_snapshot: { schemaVersion: 1, facts: [] },
+      proposed_snapshot: {
+        schemaVersion: 1,
+        facts: [
+          {
+            factId: 'legacy',
+            employeeRecordId: coworkerRecordId,
+            userId: colleagueId,
+            entryType: 'clock_out',
+            timestamp: '2026-10-20T14:00:00.000Z',
+            jobId: null,
+            activityKind: null,
+            isManual: true,
+          },
+        ],
+      },
+    },
+  ],
+  time_correction_request_sources: [],
   time_entries: [
     {
       id: ownEntryId,
@@ -286,6 +323,19 @@ assert.deepEqual(
   [],
   'an employee reassignment reads no time before its refusal',
 );
+// A stored proposal that names someone other than its subject is never
+// carried forward by a resubmission.
+assert.deepEqual(
+  await resubmitTimeCorrection({
+    requestId: legacyEditRequestId,
+    expectedRevision: 1,
+    reason: 'Neu eingereicht',
+    operationId,
+  }),
+  { success: false, error: 'invalid_shape' },
+  'a stored proposal naming a coworker is resubmitted',
+);
+
 // Nor does an employee resubmit an earlier reassignment: the refusal comes
 // before any revision or source is read.
 touchedTables.clear();

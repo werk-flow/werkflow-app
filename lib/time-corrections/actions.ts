@@ -40,6 +40,7 @@ import {
 
 import {
   correctionSourceId,
+  isTimeCorrectionSnapshot,
   type TimeCorrectionRequest,
   type TimeCorrectionResult,
   type TimeCorrectionSource,
@@ -326,7 +327,7 @@ export async function resubmitTimeCorrection(rawInput: {
     admin
       // tenant-scope: by-id-then-verified — revise_time_correction_request refuses an actor who is not the request's author, and the rows read here only feed that call
       .from('time_correction_requests')
-      .select('organization_id, source_scope_key, current_revision, kind')
+      .select('organization_id, source_scope_key, current_revision, kind, subject_user_id')
       .eq('id', input.requestId)
       .maybeSingle(),
   );
@@ -366,6 +367,15 @@ export async function resubmitTimeCorrection(rawInput: {
   // A failed source read must never submit a revision without its source links.
   if (revisionError || sourcesError || !sources) return { success: false, error: 'load_failed' };
   if (!revision) return { success: false, error: 'request_not_found' };
+  // A request stored before the subject rule may name someone else; it is
+  // never carried forward. Only a reassignment names another person.
+  if (
+    request.kind !== 'reassign' &&
+    (!isTimeCorrectionSnapshot(revision.proposed_snapshot) ||
+      revision.proposed_snapshot.facts.some((fact) => fact.userId !== request.subject_user_id))
+  ) {
+    return { success: false, error: 'invalid_shape' };
+  }
   const sourcePayload = sources.flatMap((source) => {
     const sourceId = correctionSourceId(source);
     return sourceId ? [{ kind: source.source_kind, id: sourceId, version: source.source_version }] : [];

@@ -215,7 +215,7 @@ export function TimeCorrectionRequestCard({
           </div>
         ) : null}
 
-        {request.canReview || request.status === 'clarification_required' ? (
+        {request.canReview || request.canResubmit ? (
           <TimeCorrectionRequestComment request={request} comments={comments} setComments={setComments} />
         ) : null}
 
