@@ -258,6 +258,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TITLE: "CI alert: release${{ inputs.alert_proof && ' (proof)' || '' }}"
+          # A failed or held release is a production failure, so the alert assigns the owner.
+          AFFECTS_PRODUCTION: true
           RESULTS: ${{ join(needs.*.result, ' ') }}
           SKIP: ${{ needs.candidate.outputs.skip || inputs.alert_proof }}
           SKIP_REASON: ${{ needs.candidate.outputs.skip_reason || 'Proof run.' }}

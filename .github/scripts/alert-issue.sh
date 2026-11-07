@@ -10,12 +10,32 @@
 #
 # `run` decides from this run's `needs.*.result` and the skip of release-candidate.sh. Needs
 # GH_TOKEN and GH_REPO; `run` needs `actions: read` to name the failed jobs.
+#
+# Assignment is the owner's one notification, so it is kept for a failure that affects
+# production: the caller sets AFFECTS_PRODUCTION=true. Every other alert reaches a T3 thread
+# only (ops/ci-alert.py in werkflow-planning). An open alert that turns into a production
+# failure gains the owner; no update removes anyone.
 set -euo pipefail
 
 label=ci-alert
-# The owner's account, assigned so a new alert reaches them beside the run's own mail.
-assignee=tamaycbn
+owner=tamaycbn
 run_url="${GITHUB_SERVER_URL}/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}"
+
+case "${AFFECTS_PRODUCTION:-false}" in
+  true | false) ;;
+  *) echo "::error::AFFECTS_PRODUCTION is true or false, not ${AFFECTS_PRODUCTION}."; exit 1 ;;
+esac
+
+affects_production() {
+  test "${AFFECTS_PRODUCTION:-false}" = true
+}
+
+# Adds the owner to an open issue; the call does nothing when the owner is already assigned.
+assign_owner() {
+  if affects_production; then
+    gh issue edit "$1" --add-assignee "$owner"
+  fi
+}
 
 open_issues() {
   gh issue list --state open --label "$label" --json number,title \
@@ -29,8 +49,11 @@ open_alert() {
   if test -n "$issue"; then
     gh issue edit "$issue" --body "$body"
     gh issue comment "$issue" --body "Still failing: ${run_url}"
+    assign_owner "$issue"
+  elif affects_production; then
+    gh issue create --title "$1" --body "$body" --label "$label" --assignee "$owner"
   else
-    gh issue create --title "$1" --body "$body" --label "$label" --assignee "$assignee"
+    gh issue create --title "$1" --body "$body" --label "$label"
   fi
 }
 
@@ -40,6 +63,7 @@ keep_alert() {
   issue="$(open_issues "$1" | sed -n 1p)"
   if test -n "$issue"; then
     gh issue comment "$issue" --body "$(printf '%s\n\nRun: %s' "$2" "$run_url")"
+    assign_owner "$issue"
   else
     open_alert "$1" "$2"
   fi

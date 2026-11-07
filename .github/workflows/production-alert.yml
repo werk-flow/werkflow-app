@@ -1,0 +1,48 @@
+name: Production alert
+
+# Opens or updates a production alert for ops/ci-alert.py in werkflow-planning: a scheduled
+# release that never started. The PC's gh acts as the owner, and GitHub tells nobody of their
+# own actions, so an issue it opened and assigned would reach no inbox. This job writes as
+# github-actions, so the owner's assignment notifies them (docs/technical/recovery-and-incidents.md#monitoring).
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: The alert to open or update
+        type: choice
+        options:
+          - 'CI alert: release'
+          - 'CI alert: release (proof)'
+      note:
+        description: What happened, as the issue's body or a new comment
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: production-alert
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    name: Open or update the alert
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write # open or update the alert issue
+    steps:
+      # Only the script is read; no step needs the job token in .git/config.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open or update the alert issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TITLE: ${{ inputs.title }}
+          NOTE: ${{ inputs.note }}
+          AFFECTS_PRODUCTION: true
+        run: bash .github/scripts/alert-issue.sh keep "$TITLE" "$NOTE"
