@@ -30,6 +30,7 @@ import { buildWorkArtifactExport } from './export';
 import { mapArtifactError } from './errors';
 import { readRenderedExport, refuseWorkArtifactExport, registerWorkArtifactExport } from './export-storage';
 import { readArtifactForDetail, refuseHiddenCoworkerDraft, toVisibleArtifactDetail } from './detail';
+import { isExportableRevision, isHiddenCoworkerDraft } from './field-visibility';
 import {
   WORK_ARTIFACT_STATUSES,
   type SaveWorkArtifactInput,
@@ -145,12 +146,9 @@ export async function getWorkArtifacts(
     artifacts: artifacts.flatMap((artifact) => {
       const revision = artifact.current_revision_id ? revisionById.get(artifact.current_revision_id) : null;
       if (!revision) return [];
-      const isHiddenCoworkerDraft =
-        !auth.context.isManagerOrAbove &&
-        artifact.status === 'draft' &&
-        revision.visibility === 'internal_only' &&
-        revision.created_by !== auth.context.userId;
-      return isHiddenCoworkerDraft ? [] : [{ ...artifact, currentRevision: revision }];
+      return isHiddenCoworkerDraft(auth.context, artifact, revision)
+        ? []
+        : [{ ...artifact, currentRevision: revision }];
     }),
   };
 }
@@ -587,9 +585,13 @@ export async function exportWorkArtifact(
   if (artifact.project_id && !auth.context.isManagerOrAbove)
     return { success: false, error: 'not_authorized' };
   const revisionId = artifact.current_revision_id;
-  if (!revisionId || artifact.version !== input.expectedVersion) {
+  const currentRevision = artifact.revisions.find((revision) => revision.id === revisionId);
+  if (!revisionId || !currentRevision || artifact.version !== input.expectedVersion) {
     return { success: false, error: 'work_artifact_stale_version' };
   }
+  // Refused before the object is stored; export_work_artifact refuses it as well.
+  if (!isExportableRevision(currentRevision))
+    return { success: false, error: 'work_artifact_export_requires_customer_visibility' };
   const exportFile = buildWorkArtifactExport(artifact);
   const { bytes, contentHash, rendererVersion } = exportFile;
   const admin = createSupabaseAdminClient();

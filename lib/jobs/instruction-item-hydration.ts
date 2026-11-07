@@ -10,7 +10,10 @@ import {
   type JobInstructionItemWithDetails,
 } from './types';
 
-/** The people, evidence requirements and predecessors of the rows; null after a logged failed read. */
+/**
+ * The people, which of them are still members, the evidence requirements and
+ * the predecessors of the rows; null after a logged failed read.
+ */
 async function readInstructionItemMetadata(admin: AdminClient, orgId: string, rows: JobInstructionItemRow[]) {
   const profileIds = Array.from(
     new Set(
@@ -23,12 +26,19 @@ async function readInstructionItemMetadata(admin: AdminClient, orgId: string, ro
   const itemIds = rows.map((row) => row.id);
 
   // Each batch holds whole items, so the per-item `sort_order` survives batching.
-  const [profilesResult, evidenceResult, dependencyResult] = await Promise.all([
+  const [profilesResult, membersResult, evidenceResult, dependencyResult] = await Promise.all([
     readInBatches(profileIds, (batch) =>
       admin
         .from('profiles')
         .select('id, first_name, last_name, email, avatar_path')
         .in('id', [...batch]),
+    ),
+    readInBatches(profileIds, (batch) =>
+      admin
+        .from('organization_members')
+        .select('user_id')
+        .eq('organization_id', orgId)
+        .in('user_id', [...batch]),
     ),
     readInBatches(itemIds, (batch) =>
       admin
@@ -46,13 +56,15 @@ async function readInstructionItemMetadata(admin: AdminClient, orgId: string, ro
         .in('dependent_item_id', [...batch]),
     ),
   ]);
-  const metadataError = profilesResult.error ?? evidenceResult.error ?? dependencyResult.error;
+  const metadataError =
+    profilesResult.error ?? membersResult.error ?? evidenceResult.error ?? dependencyResult.error;
   if (metadataError) {
     logReadFailure('hydrateInstructionItems: metadata read failed', { code: metadataError.code });
     return null;
   }
   return {
     profiles: profilesResult.data,
+    memberIds: new Set(membersResult.data.map((member) => member.user_id)),
     evidence: evidenceResult.data,
     dependencies: dependencyResult.data,
   };
@@ -105,6 +117,10 @@ export async function hydrateInstructionItems(
   if (!metadata) return null;
   const profileMap = new Map<string, ProfileReferenceRow>();
   for (const profile of metadata.profiles) profileMap.set(profile.id, profile);
+  const actorReference = (userId: string | null) =>
+    userId
+      ? toProfileReference(profileMap.get(userId), metadata.memberIds.has(userId) ? 'member' : 'former')
+      : null;
   const requirementIds = metadata.evidence.map((requirement) => requirement.id);
   const contentById = new Map(rows.map((row) => [row.id, row.content]));
   // A single saved item is hydrated alone; its predecessors still need their labels.
@@ -127,10 +143,8 @@ export async function hydrateInstructionItems(
   );
   return rows.map((row) => ({
     ...toJobInstructionItem(row),
-    creator: toProfileReference(profileMap.get(row.created_by)),
-    lastStatusChangedByProfile: toProfileReference(
-      row.last_status_changed_by ? profileMap.get(row.last_status_changed_by) : null,
-    ),
+    creator: actorReference(row.created_by),
+    lastStatusChangedByProfile: actorReference(row.last_status_changed_by),
     evidenceRequirements: metadata.evidence
       .filter((item) => item.instruction_item_id === row.id)
       .map((item) => ({

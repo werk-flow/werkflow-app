@@ -35,6 +35,57 @@ insert into public.organization_members (organization_id, user_id, role) values
 ('39000000-0000-0000-0000-000000000010', '39000000-0000-0000-0000-000000000003', 'employee'),
 ('39000000-0000-0000-0000-000000000010', '39000000-0000-0000-0000-000000000005', 'employee');
 
+-- The responsibility holder lock lasts to the end of the transaction, and the
+-- Büro membership above already took it for People SQL. The lock probes below
+-- therefore run on an organization whose setup takes none: its owner
+-- membership is written with triggers off, and only employee memberships,
+-- which change no role-default holder, follow.
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+) values
+('39000000-0000-0000-0000-000000000006', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'people-invitee@example.test', '', now(), '{}',
+ '{"first_name":"Invitee","last_name":"People"}', now(), now()),
+('39000000-0000-0000-0000-000000000007', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'people-lock-owner@example.test', '', now(), '{}',
+ '{"first_name":"Owner","last_name":"Locks"}', now(), now()),
+('39000000-0000-0000-0000-000000000008', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'people-lock-holder-one@example.test', '', now(), '{}',
+ '{"first_name":"Holder","last_name":"One"}', now(), now()),
+('39000000-0000-0000-0000-000000000009', '00000000-0000-0000-0000-000000000000',
+ 'authenticated', 'authenticated', 'people-lock-holder-two@example.test', '', now(), '{}',
+ '{"first_name":"Holder","last_name":"Two"}', now(), now());
+
+set local session_replication_role = replica;
+insert into public.organizations (id, name, admin_id, unique_code) values
+('39000000-0000-0000-0000-000000000012', 'People Locks',
+ '39000000-0000-0000-0000-000000000007', 'PEOPLELOCKS');
+insert into public.organization_members (organization_id, user_id, role) values
+('39000000-0000-0000-0000-000000000012', '39000000-0000-0000-0000-000000000007', 'admin');
+set local session_replication_role = origin;
+
+insert into public.organization_members (organization_id, user_id, role) values
+('39000000-0000-0000-0000-000000000012', '39000000-0000-0000-0000-000000000008', 'employee'),
+('39000000-0000-0000-0000-000000000012', '39000000-0000-0000-0000-000000000009', 'employee');
+
+insert into public.organization_invites (organization_id, email, invite_code, invited_role) values
+('39000000-0000-0000-0000-000000000012', 'people-invitee@example.test',
+ '39000000-0000-0000-0000-0000000000c1', 'buero');
+
+-- True while this session holds the organization's responsibility holder lock.
+create function pg_temp.holds_responsibility_holder_lock(p_organization_id uuid)
+returns boolean language sql as $$
+  select exists (
+    select 1 from pg_locks held
+    where held.locktype = 'advisory' and held.pid = pg_backend_pid()
+      and held.granted and held.objsubid = 1
+      and ((held.classid::bigint << 32) | held.objid::bigint)
+        = hashtextextended(p_organization_id::text || ':responsibility-holders', 0)
+  );
+$$;
+grant execute on function pg_temp.holds_responsibility_holder_lock(uuid) to service_role;
+
 -- P1-03-F01/F05: every member got exactly one personnel record whose entry date is the
 -- membership's Berlin join date; nothing invented an employee number or an exit date.
 do $$
@@ -153,6 +204,111 @@ begin
   insert into public.job_qualification_assessments (
     organization_id, job_id, assessed_for_date, coverage_fingerprint, created_by
   ) values (org, job_id, '2026-09-15', 'people-sql', admin_user);
+end;
+$$;
+
+-- Every change to who holds a responsibility takes one organization lock: the
+-- owner's save, the last-holder check on a member removal and the role-default
+-- snapshot after a Büro invite is redeemed. The second of two concurrent
+-- changes waits for the first to commit, and its check, a new statement under
+-- read committed, sees the result. So two removals cannot each count the other
+-- as the remaining holder, and a redemption cannot append a role-default
+-- snapshot after the owner's selection without seeing it. Each probe rolls
+-- back, and the lock goes with it.
+do $$
+declare
+  org constant uuid := '39000000-0000-0000-0000-000000000012';
+  owner_user constant uuid := '39000000-0000-0000-0000-000000000007';
+  holder_one_record uuid;
+  holder_two_record uuid;
+  configuration_id uuid;
+  saved_configuration_id uuid;
+  save_source text;
+begin
+  select id into holder_one_record from public.employee_records
+  where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+  select id into holder_two_record from public.employee_records
+  where organization_id = org and user_id = '39000000-0000-0000-0000-000000000009';
+  insert into public.organization_responsibility_configurations (organization_id, responsibility, mode, created_by)
+  values (org, 'time_approval', 'selected', owner_user)
+  returning id into configuration_id;
+  insert into public.organization_responsibility_assignments (organization_id, configuration_id, employee_record_id, source)
+  values (org, configuration_id, holder_one_record, 'direct'),
+         (org, configuration_id, holder_two_record, 'direct');
+
+  if pg_temp.holds_responsibility_holder_lock(org)
+    then raise exception 'the responsibility holder lock was held before the probes'; end if;
+
+  begin
+    perform public.apply_responsibility_configuration(
+      org, 'leave_approval', 'selected', array[holder_one_record], owner_user, null);
+    if not pg_temp.holds_responsibility_holder_lock(org)
+      then raise exception 'the owner''s responsibility save does not take the organization holder lock'; end if;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+  if pg_temp.holds_responsibility_holder_lock(org)
+    then raise exception 'the responsibility holder lock outlived the save probe'; end if;
+
+  begin
+    -- The second holder stays, so removing the first one is legal.
+    delete from public.organization_members
+    where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+    if not pg_temp.holds_responsibility_holder_lock(org)
+      then raise exception 'a holder''s member removal does not take the organization holder lock'; end if;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  begin
+    perform public.redeem_organization_invite_for_user(
+      '39000000-0000-0000-0000-0000000000c1', '39000000-0000-0000-0000-000000000006');
+    if not pg_temp.holds_responsibility_holder_lock(org)
+      then raise exception 'a Büro invite redemption does not take the organization holder lock'; end if;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  -- A change that waited for the lock reads what committed meanwhile. Its
+  -- transaction began before that save, so reading by now() would hide it;
+  -- inside this test transaction every save lies after now() as well.
+  begin
+    saved_configuration_id := public.apply_responsibility_configuration(
+      org, 'time_approval', 'selected', array[holder_one_record], owner_user, configuration_id);
+    perform public.apply_responsibility_configuration(
+      org, 'time_approval', 'selected', array[holder_one_record], owner_user, saved_configuration_id);
+    begin
+      delete from public.organization_members
+      where organization_id = org and user_id = '39000000-0000-0000-0000-000000000008';
+      raise exception 'a removal ignored the selection saved after its transaction began';
+    exception when others then
+      if sqlerrm <> 'last_responsibility_holder:time_approval' then raise; end if;
+    end;
+    raise exception 'responsibility_holder_probe';
+  exception when others then
+    if sqlerrm <> 'responsibility_holder_probe' then raise; end if;
+  end;
+
+  -- Lock order: a member's row, then the organization lock, then personnel
+  -- records, which a role-default snapshot or a save locks through its
+  -- foreign keys after the organization lock. A removal locks the removed
+  -- person's record FOR UPDATE, so it takes the organization lock first. The
+  -- save keeps its per-responsibility lock, which delegations share, after
+  -- the organization lock.
+  save_source := pg_get_functiondef(
+    'public.remove_member_with_time_capture(uuid,uuid,uuid,uuid)'::regprocedure);
+  if strpos(save_source, ':responsibility-holders') = 0
+    or strpos(save_source, ':responsibility-holders') < strpos(save_source, 'from public.organization_members')
+    or strpos(save_source, ':responsibility-holders') > strpos(save_source, 'from public.employee_records')
+  then raise exception 'a member removal locks the personnel record before the organization holder lock'; end if;
+  save_source := pg_get_functiondef(
+    'public.apply_responsibility_configuration(uuid,public.organization_responsibility,public.responsibility_configuration_mode,uuid[],uuid,uuid)'::regprocedure);
+  if strpos(save_source, ':responsibility-holders') = 0
+    or strpos(save_source, ':responsibility-holders') > strpos(save_source, 'p_responsibility::text')
+  then raise exception 'the owner''s save takes the responsibility lock before the organization holder lock'; end if;
 end;
 $$;
 
