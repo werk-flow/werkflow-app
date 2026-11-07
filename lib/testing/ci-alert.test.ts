@@ -157,7 +157,13 @@ test('a caller outside GitHub Actions names its own run in the issue', () => {
     writeFileSync(join(stub, 'gh.log'), '');
     const result = spawnSync('bash', [alertScript, ...args], {
       encoding: 'utf8',
-      env: { PATH: `${stub}:${process.env.PATH}`, STUB: stub, GH_REPO: 'owner/repo', ALERT_RUN: run },
+      env: {
+        NODE_ENV: 'test',
+        PATH: `${stub}:${process.env.PATH}`,
+        STUB: stub,
+        GH_REPO: 'owner/repo',
+        ALERT_RUN: run,
+      },
     });
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
