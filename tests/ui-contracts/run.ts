@@ -152,12 +152,32 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             );
             builder.onResolve(
               {
-                filter:
-                  /^@\/lib\/(personnel\/(?:lifecycle|onboarding|document-download)-actions|documents\/upload-client)$/,
+                filter: /^@\/lib\/personnel\/(?:lifecycle|onboarding|document-download)-actions$/,
               },
-              () => ({
-                path: join(import.meta.dir, 'personnel-boundaries.ts'),
+              (args) => ({
+                path: join(
+                  import.meta.dir,
+                  args.importer.endsWith('lib/documents/upload-client.ts')
+                    ? 'document-upload-boundaries.tsx'
+                    : 'personnel-boundaries.ts',
+                ),
               }),
+            );
+            // The personnel sections get a stub upload client; the upload
+            // dialog runs the real one against stub Server Actions.
+            builder.onResolve({ filter: /^@\/lib\/documents\/upload-client$/ }, (args) => {
+              if (args.importer.includes('/components/mitarbeiter/'))
+                return { path: join(import.meta.dir, 'personnel-boundaries.ts') };
+            });
+            builder.onResolve(
+              {
+                filter:
+                  /^(?:@\/lib\/documents\/(?:upload|folder)-actions|@\/lib\/work-artifacts\/signature-upload-actions|\.\/(?:upload-)?actions)$/,
+              },
+              (args) => {
+                if (args.path.startsWith('@/') || args.importer.endsWith('lib/documents/upload-client.ts'))
+                  return { path: join(import.meta.dir, 'document-upload-boundaries.tsx') };
+              },
             );
             builder.onResolve(
               {

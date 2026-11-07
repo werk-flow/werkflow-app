@@ -13,12 +13,13 @@ import {
 } from './upload-actions';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
+import { getDocumentDetails } from './actions';
 import type {
   DocumentCategory,
   DocumentResult,
   DocumentUploadTarget,
-  DocumentUploadTicketResult,
-  VersionResult,
+  DocumentVersion,
+  OrganizationDocument,
 } from './types';
 import {
   cleanupPersonnelDocumentUpload,
@@ -34,7 +35,12 @@ export type UploadProgressHandler = (fraction: number) => void;
 // fails visibly instead of hanging until the signature expires.
 const UPLOAD_TIMEOUT_MS = 25 * 60 * 1000;
 
-function putFileWithProgress(url: string, file: File, onProgress?: UploadProgressHandler): Promise<void> {
+function putFileWithProgress(
+  url: string,
+  file: File,
+  onProgress?: UploadProgressHandler,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     // XMLHttpRequest instead of fetch because fetch has no upload progress.
     const xhr = new XMLHttpRequest();
@@ -59,49 +65,128 @@ function putFileWithProgress(url: string, file: File, onProgress?: UploadProgres
     xhr.onabort = () => reject(new Error('storage_put_aborted'));
     xhr.ontimeout = () => reject(new Error('storage_put_timeout'));
 
+    if (signal?.aborted) {
+      reject(new Error('storage_put_aborted'));
+      return;
+    }
+    signal?.addEventListener('abort', () => xhr.abort(), { once: true });
     xhr.send(file);
   });
 }
 
-async function putAndFinalizeUpload(
-  ticketResult: DocumentUploadTicketResult,
-  file: File,
-  target: DocumentUploadTarget,
-  category: DocumentCategory | undefined,
-  onProgress: UploadProgressHandler | undefined,
-): Promise<DocumentResult> {
-  if (!ticketResult.success) return ticketResult;
-  await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress);
-  return finalizeDocumentUpload({
-    documentId: ticketResult.ticket.documentId,
-    fileName: file.name,
-    category: category ?? null,
-    ...target,
-  });
+/** Why a file did not arrive. The upload dialog words each reason for the user. */
+export type UploadFailureReason =
+  | 'interrupted'
+  | 'timeout'
+  | 'storage_refused'
+  | 'too_large'
+  | 'empty'
+  | 'refused'
+  | 'not_saved'
+  | 'version_conflict';
+
+/**
+ * The upload whose bytes reached storage. A retry first registers these
+ * bytes instead of sending the file again, so a registration whose answer
+ * got lost never registers the file twice.
+ */
+export type TransferredUpload = { documentId: string; versionNumber: number | null; storagePath: string };
+
+/** A saved upload (`saved` is null when an earlier attempt registered it), or why it failed. */
+export type UploadOutcome<Saved> =
+  | { status: 'saved'; saved: Saved | null }
+  | { status: 'failed'; reason: UploadFailureReason; transferred: TransferredUpload | null };
+
+/** One try of one file: the earlier try's stored bytes, progress and cancellation. */
+export type UploadAttempt = {
+  transferred: TransferredUpload | null;
+  onProgress?: UploadProgressHandler;
+  signal?: AbortSignal;
+};
+
+function failedUpload<Saved>(
+  reason: UploadFailureReason,
+  transferred: TransferredUpload | null,
+): UploadOutcome<Saved> {
+  return { status: 'failed', reason, transferred };
 }
 
+/** The reason of a refusal the server answered with. */
+function refusalReason(error: string): UploadFailureReason {
+  switch (error) {
+    case 'file_too_large':
+      return 'too_large';
+    case 'file_empty':
+      return 'empty';
+    case 'version_conflict':
+      return 'version_conflict';
+    case 'ticket_failed':
+    case 'load_failed':
+    case 'upload_failed':
+    case 'file_missing':
+    case 'create_failed':
+    case 'version_failed':
+      return 'not_saved';
+    default:
+      return 'refused';
+  }
+}
+
+/** The reason of a transfer or Server Action call that threw. */
+function thrownReason(error: unknown): UploadFailureReason {
+  if (error instanceof Error && error.message === 'storage_put_timeout') return 'timeout';
+  if (error instanceof Error && error.message.startsWith('storage_put_failed_')) return 'storage_refused';
+  return 'interrupted';
+}
+
+/**
+ * Uploads one file into the library or onto a record. After a failed try,
+ * pass its `transferred` back: the retry registers the stored bytes, and
+ * sends the file again only when storage no longer holds them.
+ */
 export async function uploadDocumentDirect({
   file,
   target,
   category,
+  transferred,
   onProgress,
-}: {
+  signal,
+}: UploadAttempt & {
   file: File;
   target: DocumentUploadTarget;
   category?: DocumentCategory;
-  onProgress?: UploadProgressHandler;
-}): Promise<DocumentResult> {
+}): Promise<UploadOutcome<OrganizationDocument>> {
+  const registerDocument = (documentId: string) =>
+    finalizeDocumentUpload({ documentId, fileName: file.name, category: category ?? null, ...target });
+  let stored = transferred;
   try {
+    if (stored) {
+      const result = await registerDocument(stored.documentId);
+      if (result.success) return { status: 'saved', saved: result.document };
+      // The lost answer of the earlier try had registered the file.
+      if (result.error === 'already_finalized') return { status: 'saved', saved: null };
+      if (result.error !== 'file_missing') return failedUpload(refusalReason(result.error), stored);
+      stored = null;
+    }
     const ticketResult = await createDocumentUploadTicket({
       fileName: file.name,
       fileSizeBytes: file.size,
       mimeType: file.type || null,
       ...target,
     });
-    return await putAndFinalizeUpload(ticketResult, file, target, category, onProgress);
+    if (!ticketResult.success) return failedUpload(refusalReason(ticketResult.error), null);
+    await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress, signal);
+    stored = {
+      documentId: ticketResult.ticket.documentId,
+      versionNumber: null,
+      storagePath: ticketResult.ticket.storagePath,
+    };
+    const result = await registerDocument(stored.documentId);
+    if (result.success) return { status: 'saved', saved: result.document };
+    return failedUpload(refusalReason(result.error), stored);
   } catch (error) {
     logError('Direct document upload failed', error);
-    return { success: false, error: 'upload_failed' };
+    return failedUpload(thrownReason(error), stored);
   }
 }
 
@@ -122,42 +207,79 @@ export async function uploadWorkArtifactSignatureDirect({
       fileSizeBytes: file.size,
       mimeType: file.type || null,
     });
-    return await putAndFinalizeUpload(ticketResult, file, target, 'photo', undefined);
+    if (!ticketResult.success) return ticketResult;
+    await putFileWithProgress(ticketResult.ticket.uploadUrl, file);
+    return await finalizeDocumentUpload({
+      documentId: ticketResult.ticket.documentId,
+      fileName: file.name,
+      category: 'photo',
+      ...target,
+    });
   } catch (error) {
     logError('Direct signature upload failed', error);
     return { success: false, error: 'upload_failed' };
   }
 }
 
+/**
+ * True when the document's current or an archived version is the stored
+ * path: the lost answer of an earlier try had saved it. Each version number
+ * and file name has its own path, so another person's version never matches.
+ */
+async function holdsVersion(documentId: string, storagePath: string): Promise<boolean> {
+  const details = await getDocumentDetails(documentId);
+  return (
+    details.success &&
+    (details.document.storagePath === storagePath ||
+      details.versions.some((version) => version.storagePath === storagePath))
+  );
+}
+
+/**
+ * Uploads a new version of a document. A retry with the earlier try's
+ * `transferred` registers the stored bytes first, like `uploadDocumentDirect`.
+ * When another person saved a version meanwhile, the outcome is a
+ * `version_conflict`.
+ */
 export async function uploadDocumentVersionDirect({
   documentId,
   file,
+  transferred,
   onProgress,
-}: {
+  signal,
+}: UploadAttempt & {
   documentId: string;
   file: File;
-  onProgress?: UploadProgressHandler;
-}): Promise<VersionResult> {
+}): Promise<UploadOutcome<DocumentVersion>> {
+  const registerVersion = (versionNumber: number) =>
+    finalizeDocumentVersionUpload({ documentId, versionNumber, fileName: file.name });
+  let stored = transferred;
   try {
+    if (stored && stored.versionNumber !== null) {
+      const result = await registerVersion(stored.versionNumber);
+      if (result.success) return { status: 'saved', saved: result.version };
+      if (result.error === 'version_conflict' && (await holdsVersion(documentId, stored.storagePath))) {
+        return { status: 'saved', saved: null };
+      }
+      if (result.error !== 'file_missing') return failedUpload(refusalReason(result.error), stored);
+      stored = null;
+    }
     const ticketResult = await createDocumentVersionUploadTicket({
       documentId,
       fileName: file.name,
       fileSizeBytes: file.size,
       mimeType: file.type || null,
     });
-
-    if (!ticketResult.success) return ticketResult;
-
-    await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress);
-
-    return await finalizeDocumentVersionUpload({
-      documentId: ticketResult.ticket.documentId,
-      versionNumber: ticketResult.ticket.versionNumber,
-      fileName: file.name,
-    });
+    if (!ticketResult.success) return failedUpload(refusalReason(ticketResult.error), null);
+    await putFileWithProgress(ticketResult.ticket.uploadUrl, file, onProgress, signal);
+    const { versionNumber, storagePath } = ticketResult.ticket;
+    stored = { documentId, versionNumber, storagePath };
+    const result = await registerVersion(versionNumber);
+    if (result.success) return { status: 'saved', saved: result.version };
+    return failedUpload(refusalReason(result.error), stored);
   } catch (error) {
     logError('Direct version upload failed', error);
-    return { success: false, error: 'upload_failed' };
+    return failedUpload(thrownReason(error), stored);
   }
 }
 

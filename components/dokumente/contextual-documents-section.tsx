@@ -28,7 +28,7 @@ import {
 } from './contextual-documents-section-state';
 import { ContextualDocumentsToolbar } from './contextual-documents-toolbar';
 import { DocumentLinkDialog } from './document-link-dialog';
-import { DocumentUploadDialog } from './document-upload-dialog';
+import { DocumentBatchUploadDialog } from './document-upload-dialog';
 import { DocumentViewerDialog } from './document-viewer-dialog';
 import {
   ContextualDocumentsFrame,
@@ -234,7 +234,7 @@ function ContextualDocumentsLeadingDialogs({
   const { uploads, showFeedback } = section;
   return (
     <>
-      <DocumentUploadDialog
+      <DocumentBatchUploadDialog
         open={uploads.uploadDialogOpen}
         onOpenChange={uploads.setUploadDialogOpen}
         items={uploads.uploadItems}

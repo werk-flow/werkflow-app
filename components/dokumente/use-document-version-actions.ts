@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import {
   getDocumentDetails,
@@ -10,6 +10,7 @@ import {
 import type { DocumentVersion, OrganizationDocument, SignedDocumentUrlResult } from '@/lib/documents/types';
 import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
 import type { DocumentDetailsDialogState } from './use-document-details-dialog';
+import { failedUploadRow, isRetryableUploadRow, type DocumentUploadRow } from './document-upload-rows';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
 
 /** Opens a signed URL in a new tab under the busy id; a failure renders inside the dialog. */
@@ -80,10 +81,106 @@ async function showUploadedVersion({
   }
 }
 
+type VersionUpload = { document: OrganizationDocument; row: DocumentUploadRow };
+
+/**
+ * The upload of a new version. The upload dialog lists its file and keeps a
+ * failed upload with its reason and a retry; a cancel stops the transfer.
+ */
+function useVersionUpload({
+  details,
+  mutations,
+}: {
+  details: DocumentDetailsDialogState;
+  mutations: DocumentLibraryMutations;
+}) {
+  const { busy, showFeedback } = mutations;
+  const { detailsDialogIdRef, setIsDetailsLoading, setDetailsError } = details;
+  const versionInputRef = useRef<HTMLInputElement>(null);
+  const uploadIdRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const [versionUpload, setVersionUpload] = useState<VersionUpload | null>(null);
+
+  function updateVersionRow(rowId: string, update: Partial<DocumentUploadRow>) {
+    setVersionUpload((current) =>
+      current?.row.id === rowId ? { ...current, row: { ...current.row, ...update } } : current,
+    );
+  }
+
+  /** Reloads the dialog's details when it still shows the document, so its versions are current. */
+  function reloadDetails(activeDocument: OrganizationDocument) {
+    if (detailsDialogIdRef.current === activeDocument.id) details.openDetailsDialog(activeDocument);
+  }
+
+  function runVersionUpload(activeDocument: OrganizationDocument, row: DocumentUploadRow) {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    updateVersionRow(row.id, { status: 'uploading', progress: 0, failure: undefined });
+
+    void busy
+      .run(activeDocument.id, async () => {
+        const outcome = await uploadDocumentVersionDirect({
+          documentId: activeDocument.id,
+          file: row.file,
+          transferred: row.transferred,
+          onProgress: (fraction) => updateVersionRow(row.id, { progress: fraction }),
+          signal: controller.signal,
+        });
+
+        if (outcome.status === 'failed') {
+          updateVersionRow(row.id, failedUploadRow(outcome.reason, outcome.transferred));
+          if (outcome.reason === 'version_conflict') reloadDetails(activeDocument);
+          return;
+        }
+
+        setVersionUpload((current) => (current?.row.id === row.id ? null : current));
+        showFeedback('success', 'Neue Version wurde hochgeladen.');
+        if (outcome.saved) await showUploadedVersion({ details, activeDocument, version: outcome.saved });
+        else reloadDetails(activeDocument);
+      })
+      .catch(() => {
+        if (detailsDialogIdRef.current === activeDocument.id) setIsDetailsLoading(false);
+      });
+  }
+
+  function handleVersionUpload(files: FileList | null) {
+    const file = files?.[0];
+    if (!details.detailsDialog || !file) return;
+
+    uploadIdRef.current += 1;
+    const row: DocumentUploadRow = {
+      id: `version-upload-${uploadIdRef.current}`,
+      file,
+      status: 'queued',
+      transferred: null,
+    };
+    setDetailsError(null);
+    setVersionUpload({ document: details.detailsDialog, row });
+    runVersionUpload(details.detailsDialog, row);
+    if (versionInputRef.current) versionInputRef.current.value = '';
+  }
+
+  return {
+    versionInputRef,
+    versionUpload,
+    handleVersionUpload,
+    retryVersionUpload: () => {
+      if (versionUpload && isRetryableUploadRow(versionUpload.row)) {
+        runVersionUpload(versionUpload.document, versionUpload.row);
+      }
+    },
+    cancelVersionUpload: () => {
+      abortRef.current?.abort();
+      setVersionUpload(null);
+    },
+    closeVersionUpload: () => setVersionUpload(null),
+  };
+}
+
 /**
  * The file actions of the „Dateidetails" dialog: download, upload of a new
- * version and download of an older one. The button spins under the row's busy
- * id and failures render inside the dialog.
+ * version and download of an older one. Downloads spin under the row's busy
+ * id and their failures render inside the dialog.
  */
 export function useDocumentVersionActions({
   details,
@@ -92,9 +189,9 @@ export function useDocumentVersionActions({
   details: DocumentDetailsDialogState;
   mutations: DocumentLibraryMutations;
 }) {
-  const { busy, showFeedback } = mutations;
-  const { detailsDialog, detailsDialogIdRef, setIsDetailsLoading, setDetailsError } = details;
-  const versionInputRef = useRef<HTMLInputElement>(null);
+  const { busy } = mutations;
+  const { setDetailsError } = details;
+  const versionUpload = useVersionUpload({ details, mutations });
 
   function handleDownload(document: OrganizationDocument) {
     openSignedUrl({
@@ -104,43 +201,6 @@ export function useDocumentVersionActions({
       failure: 'Die Datei konnte nicht geöffnet werden.',
       setDetailsError,
     });
-  }
-
-  function handleVersionUpload(files: FileList | null) {
-    if (!detailsDialog || !files?.[0]) return;
-
-    const file = files[0];
-    const activeDocument = detailsDialog;
-    const documentId = activeDocument.id;
-    const uploadFailure = 'Die neue Version konnte nicht hochgeladen werden.';
-    setDetailsError(null);
-
-    void busy
-      .run(documentId, async () => {
-        const result = await uploadDocumentVersionDirect({
-          documentId,
-          file,
-        });
-
-        if (!result.success) {
-          if (detailsDialogIdRef.current === documentId) {
-            setDetailsError(uploadFailure);
-          }
-          return;
-        }
-
-        showFeedback('success', 'Neue Version wurde hochgeladen.');
-        await showUploadedVersion({ details, activeDocument, version: result.version });
-      })
-      .catch(() => {
-        if (detailsDialogIdRef.current === documentId) {
-          setDetailsError(uploadFailure);
-          setIsDetailsLoading(false);
-        }
-      })
-      .finally(() => {
-        if (versionInputRef.current) versionInputRef.current.value = '';
-      });
   }
 
   function handleDownloadVersion(versionId: string) {
@@ -157,9 +217,8 @@ export function useDocumentVersionActions({
   }
 
   return {
-    versionInputRef,
+    ...versionUpload,
     handleDownload,
-    handleVersionUpload,
     handleDownloadVersion,
   };
 }
