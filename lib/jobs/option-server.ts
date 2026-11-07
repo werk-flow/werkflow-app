@@ -6,7 +6,7 @@ import type { Database as DatabaseSchema } from '@/lib/supabase/database.types';
 import { logReadErrors } from '@/lib/data/read-request-cache';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { readInBatches } from '@/lib/supabase/query-batches';
+import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { uuidSchema } from '@/lib/validation/uuid';
 import { z } from '@/lib/zod';
 import { authenticateAndAuthorize, type AuthContext } from './auth';
@@ -184,18 +184,119 @@ async function loadEquipmentOptions(
   };
 }
 
+/** Purposes that offer open jobs only. */
+function offersOpenJobsOnly(input: Request): boolean {
+  return (
+    input.purpose === 'manual-entry' ||
+    input.purpose === 'time-correction' ||
+    (input.purpose === 'project-jobs' && !input.projectId)
+  );
+}
+
+/**
+ * The ids of the finished jobs the caller's own time names, legacy entries or
+ * segments, so a correction of that time still shows its job. Null when a
+ * read fails.
+ */
+async function jobsOfOwnTime(
+  database: Database,
+  context: AuthContext,
+  finishedIds: readonly string[],
+): Promise<Set<string> | null> {
+  const [entries, segments] = await Promise.all([
+    readInBatches(finishedIds, (ids) =>
+      readCompleteRows(
+        (from, to) =>
+          database
+            .from('time_entries')
+            .select('id,job_id')
+            .eq('organization_id', context.orgId)
+            .eq('user_id', context.userId)
+            .in('job_id', [...ids])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+    readInBatches(finishedIds, (ids) =>
+      readCompleteRows(
+        (from, to) =>
+          database
+            .from('time_segments')
+            .select('id,job_id,time_sessions!inner(user_id)')
+            .eq('organization_id', context.orgId)
+            .eq('time_sessions.user_id', context.userId)
+            .in('job_id', [...ids])
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
+  ]);
+  if (entries.error || segments.error) {
+    logReadErrors('jobsOfOwnTime: read failed', entries.error, segments.error);
+    return null;
+  }
+  return new Set([...entries.data, ...segments.data].flatMap((row) => (row.job_id ? [row.job_id] : [])));
+}
+
+/**
+ * The selected jobs a picker resolves. A manager resolves every selected job
+ * of the organization. An employee's selection follows the purpose's
+ * open-jobs rule, except for a finished job of the caller's own time. Null
+ * when a read fails.
+ */
+async function selectableJobs<Row extends { id: string; status: string }>(
+  database: Database,
+  context: AuthContext,
+  input: Request,
+  rows: Row[],
+): Promise<Row[] | null> {
+  const finishedIds = rows.flatMap((row) => (row.status === 'fertig' ? [row.id] : []));
+  if (context.isManagerOrAbove || !offersOpenJobsOnly(input) || finishedIds.length === 0) return rows;
+  const ownTime = await jobsOfOwnTime(database, context, finishedIds);
+  return ownTime && rows.filter((row) => row.status !== 'fertig' || ownTime.has(row.id));
+}
+
+/**
+ * The descriptions of the jobs among `rows` without a title, for a manager's
+ * labels. Null when the read fails.
+ */
+async function descriptionsOfUntitledJobs(
+  database: Database,
+  context: AuthContext,
+  rows: ReadonlyArray<{ id: string; title: string }>,
+): Promise<Map<string, string | null> | null> {
+  const untitledIds = rows.flatMap((row) => (row.title.trim() ? [] : [row.id]));
+  const descriptions = await readInBatches(untitledIds, (ids) =>
+    database
+      .from('jobs')
+      .select('id,description')
+      .eq('organization_id', context.orgId)
+      .in('id', [...ids]),
+  );
+  if (descriptions.error) {
+    logReadErrors('descriptionsOfUntitledJobs: read failed', descriptions.error);
+    return null;
+  }
+  return new Map(descriptions.data.map((row) => [row.id, row.description]));
+}
+
 async function loadJobOptions(
   database: Database,
   context: AuthContext,
   input: Request,
 ): Promise<JobOptionResult> {
+  // An employee never reads a job's description: not as a label, not as a
+  // search term that would test hidden text with yes-or-no answers. The page
+  // reads no description; a manager's labels add it below.
   const base = () => {
     let query = database
       .from('jobs')
       .select(
         readsOrganizationJobs(context, input)
-          ? 'id,title,description,job_number,client_id,project_id,status,job_assignments(user_id)'
-          : 'id,title,description,job_number,client_id,project_id,status,job_assignments!inner(user_id)',
+          ? 'id,title,job_number,client_id,project_id,status,job_assignments(user_id)'
+          : 'id,title,job_number,client_id,project_id,status,job_assignments!inner(user_id)',
       )
       .eq('organization_id', context.orgId);
     if (!readsOrganizationJobs(context, input)) query = query.eq('job_assignments.user_id', context.userId);
@@ -204,12 +305,7 @@ async function loadJobOptions(
   const search = filterText(input.query);
   let query = base();
   // The purpose's eligibility applies before the page boundary.
-  if (
-    input.purpose === 'manual-entry' ||
-    input.purpose === 'time-correction' ||
-    (input.purpose === 'project-jobs' && !input.projectId)
-  )
-    query = query.neq('status', 'fertig');
+  if (offersOpenJobsOnly(input)) query = query.neq('status', 'fertig');
   if (input.purpose === 'project-jobs') {
     query = input.projectId
       ? query.or(`project_id.is.null,project_id.eq.${input.projectId}`)
@@ -224,7 +320,11 @@ async function loadJobOptions(
     if (input.siteId) query = query.eq('site_id', input.siteId);
   }
   if (search)
-    query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%,job_number.ilike.%${search}%`);
+    query = query.or(
+      context.isManagerOrAbove
+        ? `title.ilike.%${search}%,description.ilike.%${search}%,job_number.ilike.%${search}%`
+        : `title.ilike.%${search}%,job_number.ilike.%${search}%`,
+    );
   const [page, selected] = await Promise.all([
     query
       .order('title')
@@ -236,10 +336,25 @@ async function loadJobOptions(
     logReadErrors('loadJobOptions: read failed', page.error, selected.error);
     return { success: false, error: 'options_failed' };
   }
+  const selectable = await selectableJobs(database, context, input, selected.data);
+  if (!selectable) return { success: false, error: 'options_failed' };
+  const descriptions = context.isManagerOrAbove
+    ? await descriptionsOfUntitledJobs(database, context, [...page.data, ...selected.data])
+    : new Map<string, string | null>();
+  if (!descriptions) return { success: false, error: 'options_failed' };
   const map = (row: (typeof page.data)[number]): JobEntityOption => ({
     value: row.id,
-    // The number leads, as people name a job by it; a job without one shows its title.
-    label: [row.job_number, getJobDisplayTitle(row)].filter(Boolean).join(' · '),
+    // The number leads, as people name a job by it. A manager sees a job
+    // without a title by its description; an employee by its number alone.
+    label:
+      [
+        row.job_number,
+        context.isManagerOrAbove
+          ? getJobDisplayTitle({ title: row.title, description: descriptions.get(row.id) ?? null })
+          : row.title.trim(),
+      ]
+        .filter(Boolean)
+        .join(' · ') || '—',
     number: row.job_number,
     clientId: row.client_id,
     projectId: row.project_id,
@@ -248,7 +363,7 @@ async function loadJobOptions(
   return {
     success: true,
     options: page.data.slice(0, PAGE_SIZE).map(map),
-    selected: selected.data.map(map),
+    selected: selectable.map(map),
     hasMore: page.data.length > PAGE_SIZE,
   };
 }

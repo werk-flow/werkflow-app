@@ -2,7 +2,7 @@
 import type { ActionFailure, ActionResult } from '@/lib/action-result';
 import { logReadFailure, logReadErrors } from '@/lib/data/read-request-cache';
 import { logError } from '@/lib/logging';
-import { resolveActionContextFor } from '@/lib/org/action-context';
+import { resolveActionContextFor, type ActionContext } from '@/lib/org/action-context';
 import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { readCompleteRows, readInBatches, LIST_ROW_CAP } from '@/lib/supabase/query-batches';
 import { getAuthenticatedUser } from '@/lib/data/cached';
@@ -26,7 +26,7 @@ import { endSessionBeforeSignOut } from './sign-out-session-end';
 import { createActivitySelection } from './segments';
 import { collectActiveJobIds } from './active-jobs';
 import { getOpenSessionOrgsForUserOnDay } from './open-session-orgs';
-import { getDayBounds, getUserEntriesForDay, verifyCurrentMembership } from './action-access';
+import { getDayBounds, getUserEntriesForDay } from './action-access';
 
 type OrganizationClockSettings = NonNullable<Awaited<ReturnType<typeof readOrganizationSettings>>>;
 
@@ -237,6 +237,49 @@ export async function getCurrentClockState(
 }
 
 /**
+ * The active jobs the caller may see, with their projects. An employee learns
+ * only which of their own assigned jobs, and the projects of those, someone
+ * works on; Admin and Büro see all of them. Null when a read fails.
+ */
+async function readVisibleActiveWork(
+  admin: AdminClient,
+  context: ActionContext,
+  activeJobIds: string[],
+): Promise<{ activeJobIds: string[]; activeProjectIds: string[] } | null> {
+  const [jobs, ownAssignments] = await Promise.all([
+    readInBatches(activeJobIds, (ids) =>
+      admin
+        .from('jobs')
+        .select('id,project_id')
+        .eq('organization_id', context.orgId)
+        .in('id', [...ids]),
+    ),
+    context.isManagerOrAbove
+      ? null
+      : readInBatches(activeJobIds, (ids) =>
+          admin
+            .from('job_assignments')
+            .select('job_id')
+            .eq('organization_id', context.orgId)
+            .eq('user_id', context.userId)
+            .in('job_id', [...ids]),
+        ),
+  ]);
+  if (jobs.error || ownAssignments?.error) {
+    logReadErrors('readVisibleActiveWork: read failed', jobs.error, ownAssignments?.error);
+    return null;
+  }
+  const assignedJobIds = ownAssignments && new Set(ownAssignments.data.map((row) => row.job_id));
+  const visible = (jobId: string) => !assignedJobIds || assignedJobIds.has(jobId);
+  return {
+    activeJobIds: activeJobIds.filter(visible),
+    activeProjectIds: [
+      ...new Set(jobs.data.flatMap((job) => (job.project_id && visible(job.id) ? [job.project_id] : []))),
+    ],
+  };
+}
+
+/**
  * Get the set of job IDs that currently have at least one worker clocked in.
  * Used for the "active work" pulsation indicator across all tables.
  */
@@ -247,15 +290,8 @@ export async function getActiveJobIdsForOrg(
     const parsed = uuidSchema.safeParse(rawOrganizationId);
     if (!parsed.success) return { success: false, error: 'invalid_input' };
     const organizationId = parsed.data;
-    const user = await getAuthenticatedUser();
-    if (!user) {
-      return { success: false, error: 'not_authenticated' };
-    }
-
-    const callerRole = await verifyCurrentMembership(organizationId);
-    if (!callerRole) {
-      return { success: false, error: 'not_a_member' };
-    }
+    const caller = await resolveActionContextFor(organizationId);
+    if (!caller.success) return caller;
 
     const admin = createSupabaseAdminClient();
     const { start } = getDayBounds(new Date());
@@ -298,22 +334,8 @@ export async function getActiveJobIdsForOrg(
     }
 
     const activeJobIds = collectActiveJobIds(legacyResult.data, canonicalResult.data);
-    const jobs = await readInBatches(activeJobIds, (ids) =>
-      admin
-        .from('jobs')
-        .select('id,project_id')
-        .eq('organization_id', organizationId)
-        .in('id', [...ids]),
-    );
-    if (jobs.error) {
-      logReadErrors('getActiveJobIdsForOrg: read failed', jobs.error);
-      return { success: false, error: 'fetch_failed' };
-    }
-    return {
-      success: true,
-      activeJobIds,
-      activeProjectIds: [...new Set(jobs.data.flatMap((job) => (job.project_id ? [job.project_id] : [])))],
-    };
+    const visible = await readVisibleActiveWork(admin, caller.context, activeJobIds);
+    return visible ? { success: true, ...visible } : { success: false, error: 'fetch_failed' };
   } catch (error) {
     logError('Unexpected error in getActiveJobIdsForOrg:', error);
     return { success: false, error: 'unexpected_error' };
