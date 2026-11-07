@@ -122,7 +122,7 @@ An exception that matches no finding on an unchanged tree means the registry nar
 - Cache a permission fact across requests, or an authenticated response at the CDN.
 - Add a retry or a cookie fallback that turns a failed identity check into access.
 - Write to PROD outside the `release` workflow.
-- Read PROD data in an agent session, through any tool: the result goes to the model provider. `bun run prod:inspect` returns metadata only. `.claude/hooks/refuse-production-mcp.ts` enforces the rule for MCP tools; the shell path is a [backlog](enforcement-ladder-backlog.md) row.
+- Read PROD data in an agent session: results reach the model provider (`bun run prod:inspect` returns metadata only). Hooks enforce it for MCP tools and `vercel logs`, against accidental reads, not deliberate evasion; other shell paths are a [backlog](enforcement-ladder-backlog.md) row.
 
 ## Verify your work
 

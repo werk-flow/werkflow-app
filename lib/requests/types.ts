@@ -145,11 +145,33 @@ export function requestUrgencyToJobPriority(
   }
 }
 
+/** What a caller and a customer share: the phone, the email or the name. */
+const CALLER_MATCH_FIELDS = ['phone', 'email', 'name'] as const;
+export type CallerMatchField = (typeof CALLER_MATCH_FIELDS)[number];
+
+/** A customer of the organization the caller of an unmatched request may already be. */
+export type CallerMatch = {
+  clientId: string;
+  clientName: string;
+  matchedOn: CallerMatchField[];
+};
+
+export const CALLER_MATCH_FIELD_LABELS: Record<CallerMatchField, string> = {
+  phone: 'Telefon',
+  email: 'E-Mail',
+  name: 'Name',
+};
+
 // ============================================
 // Result Types
 // ============================================
 
 export type ClientRequestResult = ActionResult<{ request: ClientRequest }>;
+
+/** The strongest matches; `moreMatches` says that more customers match than are listed. */
+export type CallerMatchList = { matches: CallerMatch[]; moreMatches: boolean };
+
+export type CallerMatchesResult = ActionResult<CallerMatchList>;
 
 /** A job conversion forwards createJob's failures, including its qualification warning. */
 export type ConvertRequestResult =
@@ -192,6 +214,21 @@ export function toClientRequest(row: ClientRequestRow): ClientRequest {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+type CallerMatchRow =
+  Database['public']['Functions']['find_client_request_caller_matches']['Returns'][number];
+
+function isCallerMatchField(value: string): value is CallerMatchField {
+  return CALLER_MATCH_FIELDS.some((field) => field === value);
+}
+
+export function toCallerMatch(row: CallerMatchRow): CallerMatch {
+  return {
+    clientId: row.client_id,
+    clientName: row.client_name,
+    matchedOn: row.matched_on.filter(isCallerMatchField),
   };
 }
 

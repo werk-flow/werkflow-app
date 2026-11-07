@@ -6,12 +6,14 @@ import { useBanner } from '@/components/ui/banner';
 import { usePendingTask } from '@/hooks/use-server-action';
 import { useSettleOnChange, type SettleOnChange } from '@/hooks/use-settle-on-change';
 import { promoteCallerToClient, reopenClientRequest, updateClientRequest } from '@/lib/requests/actions';
-import type { ClientRequest } from '@/lib/requests/types';
+import type { CallerMatch, ClientRequest } from '@/lib/requests/types';
 import { describeFailure } from '@/lib/action-messages';
 import { focusFirstInvalidField } from '@/lib/ui/field-validation';
 
 const PROMOTE_ERROR_MESSAGES = {
   caller_name_required: 'Zum Anlegen wird mindestens der Name der Anruferin / des Anrufers benötigt.',
+  caller_matches_customer:
+    'Inzwischen passt ein vorhandener Kunde zur Anruferin / zum Anrufer. Prüf die Treffer oder leg trotzdem neu an.',
 } satisfies Record<string, string>;
 
 interface RequestDetailActions {
@@ -20,10 +22,14 @@ interface RequestDetailActions {
   /** The status the header shows: the optimistic echo, else the stored one. */
   shownStatus: ClientRequest['status'];
   headerError: string | null;
-  promoteError: string | null;
+  /** A failed assignment or promotion, shown in the customer card. */
+  customerError: string | null;
+  /** The first press found matching customers; the next press creates one anyway. */
+  promoteArmed: boolean;
   markSettling: () => void;
   handleStatusToggle: () => void;
   handleReopen: () => void;
+  handleAssignMatch: (match: CallerMatch) => void;
   handlePromote: () => void;
   matchOpen: boolean;
   matchClientId: string;
@@ -194,8 +200,76 @@ function useRequestStatusToggle({
   return { shownStatus, handleStatusToggle };
 }
 
-/** Header, customer-card and match-dialog actions of one request with their pending and error state. */
-export function useRequestDetailActions(request: ClientRequest): RequestDetailActions {
+/**
+ * The customer card's actions: assign a matching customer in one press, or
+ * create a new one. While the caller matches a customer, the first press only
+ * arms the create button; the second creates the customer anyway.
+ */
+function useCustomerCardActions(
+  request: ClientRequest,
+  hasCallerMatches: boolean,
+  { runPendingTask, showBanner, router, markSettling }: DetailActionContext,
+): Pick<RequestDetailActions, 'customerError' | 'promoteArmed' | 'handleAssignMatch' | 'handlePromote'> {
+  const [customerError, setCustomerError] = useState<string | null>(null);
+  const [promoteArmed, setPromoteArmed] = useState(false);
+
+  function handleAssignMatch(match: CallerMatch): void {
+    setCustomerError(null);
+    void runPendingTask(async () => {
+      const result = await updateClientRequest(request.id, { clientId: match.clientId });
+      if (!result.success) {
+        setCustomerError(`${match.clientName} konnte nicht zugeordnet werden. Bitte versuche es erneut.`);
+        return;
+      }
+      showBanner({ variant: 'success', message: `${match.clientName} wurde zugeordnet.` });
+      router.refresh();
+      markSettling();
+    });
+  }
+
+  function handlePromote(): void {
+    setCustomerError(null);
+    if (!request.callerName?.trim()) {
+      setCustomerError(PROMOTE_ERROR_MESSAGES.caller_name_required);
+      return;
+    }
+    if (hasCallerMatches && !promoteArmed) {
+      setPromoteArmed(true);
+      return;
+    }
+    void runPendingTask(async () => {
+      const result = await promoteCallerToClient(request.id, { createDespiteMatches: promoteArmed });
+      if (!result.success) {
+        if (result.error === 'caller_matches_customer') {
+          setPromoteArmed(true);
+          router.refresh();
+        }
+        setCustomerError(
+          describeFailure(result.error, PROMOTE_ERROR_MESSAGES, 'Der Kunde konnte nicht angelegt werden.'),
+        );
+        return;
+      }
+      showBanner({
+        variant: 'success',
+        message: 'Kunde wurde angelegt und der Anfrage zugeordnet.',
+      });
+      router.refresh();
+      markSettling();
+    });
+  }
+
+  return { customerError, promoteArmed, handleAssignMatch, handlePromote };
+}
+
+/**
+ * Header, customer-card and match-dialog actions of one request with their
+ * pending and error state. `hasCallerMatches` is whether the page shows
+ * customers the caller may already be.
+ */
+export function useRequestDetailActions(
+  request: ClientRequest,
+  hasCallerMatches: boolean,
+): RequestDetailActions {
   const router = useRouter();
   const { run: runPendingTask, isPending } = usePendingTask();
   // After a confirmed change the header keeps its indicator until the
@@ -218,7 +292,7 @@ export function useRequestDetailActions(request: ClientRequest): RequestDetailAc
   const match = useRequestMatch(context);
   // Failures render where the action was taken: header, customer card, dialog.
   const [headerError, setHeaderError] = useState<string | null>(null);
-  const [promoteError, setPromoteError] = useState<string | null>(null);
+  const customer = useCustomerCardActions(request, hasCallerMatches, context);
   const { shownStatus, handleStatusToggle } = useRequestStatusToggle({
     request,
     context,
@@ -241,39 +315,15 @@ export function useRequestDetailActions(request: ClientRequest): RequestDetailAc
     });
   }
 
-  function handlePromote(): void {
-    setPromoteError(null);
-    if (!request.callerName?.trim()) {
-      setPromoteError(PROMOTE_ERROR_MESSAGES.caller_name_required);
-      return;
-    }
-    void runPendingTask(async () => {
-      const result = await promoteCallerToClient(request.id);
-      if (!result.success) {
-        setPromoteError(
-          describeFailure(result.error, PROMOTE_ERROR_MESSAGES, 'Der Kunde konnte nicht angelegt werden.'),
-        );
-        return;
-      }
-      showBanner({
-        variant: 'success',
-        message: 'Kunde wurde angelegt und der Anfrage zugeordnet.',
-      });
-      router.refresh();
-      markSettling();
-    });
-  }
-
   return {
     isPending,
     isSettling,
     shownStatus,
     headerError,
-    promoteError,
     markSettling,
     handleStatusToggle,
     handleReopen,
-    handlePromote,
+    ...customer,
     ...match,
   };
 }
