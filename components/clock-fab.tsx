@@ -95,6 +95,19 @@ function useClockFabControls(transitionActivity: ReturnType<typeof useClockState
   };
 }
 
+/** The confirmed state for measurements and tests; a pending transition is never "in" or "out". */
+function confirmedClockState(clock: {
+  isReady: boolean;
+  isPending: boolean;
+  isOnBreak: boolean;
+  isClockedIn: boolean;
+}): 'loading' | 'pending' | 'break' | 'in' | 'out' {
+  if (!clock.isReady) return 'loading';
+  if (clock.isPending) return 'pending';
+  if (clock.isOnBreak) return 'break';
+  return clock.isClockedIn ? 'in' : 'out';
+}
+
 export function ClockFAB() {
   const { activeOrgId, activeOrg } = useOrganization();
   const { state, isLoading, isReady, isPending, statusError, refresh, transitionActivity } = useClockState();
@@ -142,10 +155,7 @@ export function ClockFAB() {
       <div
         ref={publishDockHeight}
         data-clock-fab=""
-        // The confirmed state for measurements and tests; a pending transition is never "in" or "out".
-        data-clock-state={
-          !isReady ? 'loading' : isPending ? 'pending' : isOnBreak ? 'break' : isClockedIn ? 'in' : 'out'
-        }
+        data-clock-state={confirmedClockState({ isReady, isPending, isOnBreak, isClockedIn })}
         // The dock spans the content column; the app layout reserves its height, so no page control sits under it.
         // On a phone the button keeps the bottom: a late clock read adds the hot keys' row above, not under it.
         className="fixed inset-x-0 bottom-0 z-30 flex items-end gap-3 border-t bg-card px-4 py-2 will-change-transform sm:items-center sm:px-6 md:left-64"
@@ -157,7 +167,17 @@ export function ClockFAB() {
               Der Zeitstatus konnte nicht sicher geladen werden.
             </SectionError>
           ) : (
-            <ClockStatusLine isReady={isReady} isClockedIn={isClockedIn} currentLabel={currentLabel} />
+            // What runs now, or that nobody is clocked in; empty while the state loads. Inline, not a
+            // component: the dock renders with every clock change, and lab counts count components.
+            <p
+              data-clock-status=""
+              className={cn(
+                'min-h-5 min-w-0 truncate text-sm sm:max-w-80',
+                isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
+              )}
+            >
+              {!isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt'}
+            </p>
           )}
           <ClockHotKeys
             hotKeys={hotKeys}
@@ -175,30 +195,6 @@ export function ClockFAB() {
         />
       </div>
     </>
-  );
-}
-
-/** What runs now: the activity and its job, or that nobody is clocked in. Empty while the state loads. */
-function ClockStatusLine({
-  isReady,
-  isClockedIn,
-  currentLabel,
-}: {
-  isReady: boolean;
-  isClockedIn: boolean;
-  currentLabel: string | null;
-}) {
-  const text = !isReady ? null : isClockedIn ? currentLabel : 'Nicht eingestempelt';
-  return (
-    <p
-      data-clock-status=""
-      className={cn(
-        'min-h-5 min-w-0 truncate text-sm sm:max-w-80',
-        isClockedIn ? 'font-medium text-foreground' : 'text-muted-foreground',
-      )}
-    >
-      {text}
-    </p>
   );
 }
 
