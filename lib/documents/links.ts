@@ -9,7 +9,7 @@ import {
   ensureMaintenanceCoverageManagerAccess,
   ensureProjectManagerAccess,
   ensureServiceCaseManagerAccess,
-  getAuthorizedDocument,
+  getManageableDocument,
   requireManager,
   type AuthorizedDocumentContext,
 } from './access';
@@ -153,7 +153,7 @@ export async function linkDocumentToTarget(
   documentId: string,
   target: DocumentLinkTarget,
 ): Promise<ActionResult> {
-  const document = await getAuthorizedDocument(context, documentId);
+  const document = await getManageableDocument(context, documentId);
   if (!document.success) return document;
   return writeDocumentLinks(context, documentId, {
     removeLinkIds: [],
