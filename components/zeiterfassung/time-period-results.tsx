@@ -28,7 +28,7 @@ function ResultValue({ result, valueKey }: { result: PeriodResultRow; valueKey: 
 function UncomputedCause({ result }: { result: PeriodResultRow }) {
   if (result.outcome.computed) return null;
   return (
-    <span className="block text-sm font-normal text-muted-foreground">
+    <span className="block text-sm text-muted-foreground">
       Nicht berechnet: {result.outcome.causes.map((cause) => FINDING_LABELS[cause]).join(' · ')}
     </span>
   );
@@ -45,10 +45,10 @@ export function TimePeriodResults({ results }: { results: readonly PeriodResultR
       <div className="space-y-2 md:hidden">
         {results.map((result) => (
           <ListRow key={result.employeeRecordId} className="block space-y-2">
-            <p className="break-words font-medium">
-              {result.employeeName}
+            <div>
+              <p className="break-words font-medium">{result.employeeName}</p>
               <UncomputedCause result={result} />
-            </p>
+            </div>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
               {VALUE_TERMS.map(({ key, term }) => (
                 <div key={key} className="contents">
@@ -78,8 +78,8 @@ export function TimePeriodResults({ results }: { results: readonly PeriodResultR
           <TableBody>
             {results.map((result) => (
               <TableRow key={result.employeeRecordId}>
-                <TableCell className="font-medium">
-                  {result.employeeName}
+                <TableCell>
+                  <span className="block font-medium">{result.employeeName}</span>
                   <UncomputedCause result={result} />
                 </TableCell>
                 {VALUE_TERMS.map(({ key }) => (
