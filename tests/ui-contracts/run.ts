@@ -10,6 +10,7 @@ import { calculateCandidateFingerprint } from '@/lib/testing/evidence/candidate-
 import { withWorkspaceTestLock } from '@/lib/testing/runner/workspace-test-lock';
 import { runWithLogCleanup } from '@/lib/testing/runner/command-log';
 import { readUiContractReport } from './report';
+import { CONTRACT_SUPABASE_PUBLISHABLE_KEY, CONTRACT_SUPABASE_URL } from './supabase-contract-env';
 
 const repository = resolve(import.meta.dir, '../..');
 await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoot: repository }, async () => {
@@ -39,11 +40,23 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
       outdir: directory,
       target: 'browser',
       format: 'iife',
-      define: { 'process.env.NODE_ENV': JSON.stringify('production') },
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+        'process.env.NEXT_PUBLIC_SUPABASE_URL': JSON.stringify(CONTRACT_SUPABASE_URL),
+        'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': JSON.stringify(CONTRACT_SUPABASE_PUBLISHABLE_KEY),
+      },
       plugins: [
         {
           name: 'isolated-service-boundaries',
           setup(builder) {
+            // The auth URL contracts drive the real browser client against routed Auth requests.
+            builder.onResolve({ filter: /^@\/lib\/supabase\/client$/ }, (args) => {
+              if (
+                args.importer.endsWith('auth-url-boundaries.tsx') ||
+                args.importer.endsWith('reset-password-form.tsx')
+              )
+                return { path: join(repository, 'lib/supabase/client.ts') };
+            });
             builder.onResolve({ filter: /^@\/lib\/clients\/actions$/ }, () => ({
               path: join(import.meta.dir, 'customer-service-boundaries.ts'),
             }));
@@ -83,7 +96,8 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
                 args.importer.endsWith('clients-table.tsx') ||
                 args.importer.endsWith('page-header.tsx') ||
                 args.importer.endsWith('anfragen-content.tsx') ||
-                args.importer.endsWith('client-sites-card.tsx')
+                args.importer.endsWith('client-sites-card.tsx') ||
+                args.importer.endsWith('reset-password-form.tsx')
               )
                 return { path: join(import.meta.dir, 'day-view-link-boundary.tsx') };
             });

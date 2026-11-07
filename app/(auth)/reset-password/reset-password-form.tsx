@@ -20,101 +20,27 @@ const INVALID_LINK_MESSAGE =
 
 type TokenState = 'loading' | 'valid' | 'invalid';
 
-// Resolves the recovery link into a session: query-param errors, an existing
-// session, PKCE codes and the implicit-flow hash, in that order.
+// The confirmed reset link reaches this page as a session in cookies, which
+// the callback wrote (app/auth/callback/route.ts). Tokens in the URL sign
+// nobody in here: the browser client does not read them either.
 async function establishRecoverySession(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  resolveToken: (state: TokenState, message?: string) => void,
+  resolveToken: (state: TokenState) => void,
 ): Promise<void> {
-  if (typeof window === 'undefined') {
-    resolveToken('invalid', 'Ungültiger Link.');
-    return;
-  }
-
-  const currentUrl = new URL(window.location.href);
-  const error = currentUrl.searchParams.get('error');
-  const codeParam = currentUrl.searchParams.get('code');
-  const hash = window.location.hash;
-
-  // Check for errors in query params (server-side verification errors)
-  if (error) {
-    resolveToken('invalid', INVALID_LINK_MESSAGE);
+  // The callback refused the link.
+  if (new URL(window.location.href).searchParams.has('error')) {
+    resolveToken('invalid');
     return;
   }
 
   const {
-    data: { session: existingSession },
+    data: { session },
   } = await supabase.auth.getSession();
-
-  if (existingSession?.user) {
-    resolveToken('valid');
-    return;
-  }
-
-  // A PKCE code works only in the browser session that requested the link.
-  if (codeParam) {
-    resolveToken('invalid', INVALID_LINK_MESSAGE);
-    return;
-  }
-
-  if (!hash || hash.length <= 1) {
-    resolveToken('invalid', 'Ungültiger Link.');
-    return;
-  }
-
-  const params = new URLSearchParams(hash.slice(1));
-
-  // Check for errors in hash fragment (Supabase returns errors this way for implicit flow)
-  const hashError = params.get('error');
-  const hashErrorCode = params.get('error_code');
-
-  if (hashError) {
-    // Provide specific error messages based on error code
-    if (hashErrorCode === 'otp_expired') {
-      resolveToken(
-        'invalid',
-        'Der Link zum Zurücksetzen des Passworts ist abgelaufen. Links sind nur 1 Stunde gültig. Bitte fordere einen neuen Link an.',
-      );
-    } else if (hashErrorCode === 'otp_disabled') {
-      resolveToken('invalid', 'Der Link wurde bereits verwendet. Bitte fordere einen neuen Link an.');
-    } else {
-      resolveToken('invalid', INVALID_LINK_MESSAGE);
-    }
-    return;
-  }
-
-  const type = params.get('type');
-  const accessToken = params.get('access_token');
-  const refreshToken = params.get('refresh_token');
-
-  if (type !== 'recovery' || !accessToken || !refreshToken) {
-    resolveToken('invalid', 'Ungültiger Link.');
-    return;
-  }
-
-  try {
-    const { data, error: sessionError } = await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
-
-    if (sessionError) {
-      resolveToken('invalid', INVALID_LINK_MESSAGE);
-      return;
-    }
-
-    if (data.session?.user) {
-      resolveToken('valid');
-      return;
-    }
-  } catch {
-    resolveToken('invalid', 'Es ist ein Fehler aufgetreten. Bitte versuche es erneut.');
-    return;
-  }
+  resolveToken(session?.user ? 'valid' : 'invalid');
 }
 
 /**
- * Resolves the token state once: from the recovery link, from an auth event,
+ * Resolves the token state once: from the session the link left, from an auth event,
  * or as a failure after five seconds. Returns the cleanup of the effect.
  */
 function watchRecoveryToken({
@@ -164,10 +90,7 @@ function watchRecoveryToken({
       return;
     }
 
-    if (
-      event === 'PASSWORD_RECOVERY' ||
-      (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED'))
-    ) {
+    if (session?.user && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
       hasResolvedToken = true;
       setTokenState('valid');
       setTokenError(null);

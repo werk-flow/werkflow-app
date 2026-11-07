@@ -1,0 +1,39 @@
+diff --git a/dist/main/createBrowserClient.js b/dist/main/createBrowserClient.js
+index 170b5096a54a1a3ef03bbb970ee7757c9a6a5c48..c2cafbcf24f1d124deade25ee3de2b2b282dbb63 100644
+--- a/dist/main/createBrowserClient.js
++++ b/dist/main/createBrowserClient.js
+@@ -37,7 +37,7 @@ function createBrowserClient(supabaseUrl, supabaseKey, options) {
+                 : null),
+             flowType: "pkce",
+             autoRefreshToken: (0, utils_1.isBrowser)(),
+-            detectSessionInUrl: (0, utils_1.isBrowser)(),
++            detectSessionInUrl: options?.auth?.detectSessionInUrl ?? (0, utils_1.isBrowser)(),
+             persistSession: true,
+             storage,
+         },
+diff --git a/dist/module/createBrowserClient.js b/dist/module/createBrowserClient.js
+index a6d47c0c2da0e0bd92ac9011c40378227865e853..5b28cb38fc774fc5e6f540a7c3199bcc4e70a884 100644
+--- a/dist/module/createBrowserClient.js
++++ b/dist/module/createBrowserClient.js
+@@ -34,7 +34,7 @@ export function createBrowserClient(supabaseUrl, supabaseKey, options) {
+                 : null),
+             flowType: "pkce",
+             autoRefreshToken: isBrowser(),
+-            detectSessionInUrl: isBrowser(),
++            detectSessionInUrl: options?.auth?.detectSessionInUrl ?? isBrowser(),
+             persistSession: true,
+             storage,
+         },
+diff --git a/src/createBrowserClient.ts b/src/createBrowserClient.ts
+index 6f270ba56d872bd459744bae955ff5555c91d256..3c209de6ff0401a0c36233ea5e0af2abc2e6e6e7 100644
+--- a/src/createBrowserClient.ts
++++ b/src/createBrowserClient.ts
+@@ -138,7 +138,7 @@ export function createBrowserClient<
+         : null),
+       flowType: "pkce",
+       autoRefreshToken: isBrowser(),
+-      detectSessionInUrl: isBrowser(),
++      detectSessionInUrl: options?.auth?.detectSessionInUrl ?? isBrowser(),
+       persistSession: true,
+       storage,
+     },

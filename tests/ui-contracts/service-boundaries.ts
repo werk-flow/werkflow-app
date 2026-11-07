@@ -7,6 +7,7 @@ import {
   reviewEntriesContract,
 } from './time-approval-boundaries';
 import { createJobMaterialLineContract } from './material-boundaries';
+import { CONTRACT_SUPABASE_URL } from './supabase-contract-env';
 import type { InventoryLocation, InventoryLocationType } from '@/lib/inventory/types';
 // Keep framework redirect/error classification real; only navigation and
 // external services are substituted by this fixture.
@@ -52,6 +53,14 @@ export function initializeServiceBoundaries(): void {
         typeof input === 'string' &&
         input.startsWith('/api/time-tracking-state?') &&
         (init?.method ?? 'GET') === 'GET'
+      ) {
+        return browserFetch(input, init);
+      }
+      // The auth URL contracts record every Auth request at Playwright's network boundary.
+      if (
+        (window.uiContractFixture === 'auth-url-session' ||
+          window.uiContractFixture === 'auth-url-reset-form') &&
+        String(input instanceof Request ? input.url : input).startsWith(CONTRACT_SUPABASE_URL)
       ) {
         return browserFetch(input, init);
       }
