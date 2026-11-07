@@ -6,6 +6,7 @@
 // jobs and their projects. Admin and Büro keep the full read, and nobody
 // reaches another organization's job.
 import assert from 'node:assert/strict';
+import { setSystemTime } from 'bun:test';
 import {
   CALLER_ID,
   ORGANIZATION_A,
@@ -68,7 +69,9 @@ const jobs = [
   job(ids.finishedOwnSegment, { number: 'AUF-2026-6', title: 'Eigene Wartung', status: 'fertig' }, []),
   job(ids.foreign, { number: 'AUF-2026-7', title: 'Fremder Auftrag' }, [CALLER_ID], ORGANIZATION_B),
 ];
-const now = new Date().toISOString();
+// A fixed instant, so the coworker's clock-in stays on today's date.
+const now = '2026-11-04T09:00:00.000Z';
+setSystemTime(new Date('2026-11-04T10:00:00.000Z'));
 const earlier = '2026-01-05T08:00:00.000Z';
 
 const world = installActionWorld({
