@@ -14,7 +14,7 @@ Every rule here is hard, also where only review enforces it. Only the two Tier 3
 6. Filter every service-role query on the table by `organization_id`, or add a reviewed `tenant-scope:` comment.
 7. Run `bun run test:verify --group sql:security`, `bun run migrations:check`, `bun run types:check` and `bun run test:unit lib/conventions/tenant-scope.test.ts`.
 
-Wrong turn: a policy that checks membership but not the role. Every member then reads through the Data API what the UI shows only to managers.
+Wrong turn: a policy that checks membership but not the role, so every member reads through the Data API what only managers see.
 
 ### Add a Server Action or route handler
 
@@ -28,7 +28,7 @@ Wrong turn: a policy that checks membership but not the role. Every member then 
 8. Write the boundary test: copy `lib/testing/fixtures/join-request-boundaries.ts`, which runs the real actions on `action-boundary-world.ts`. Expect a refusal for a foreign organization's id and for a lower role.
 9. Run `bun run test:unit lib/security lib/conventions/server-action-input.test.ts` and the new boundary test.
 
-Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint, and anyone can send any id.
+Wrong turn: trusting an id because the UI offers only the caller's own records. Every export is a public POST endpoint that accepts any id.
 
 ### Add a privileged function
 
@@ -37,7 +37,7 @@ Wrong turn: trusting an id because the UI offers only the caller's own records. 
 3. Resolve organization and role in the server caller before it calls the function. A service-only list or search function revokes browser execution.
 4. Run `bun run test:verify --group sql:security` and the SQL group that owns the function.
 
-Wrong turn: granting `authenticated` so the browser can call the function. It then runs with its owner's rights past every policy.
+Wrong turn: granting `authenticated` so the browser can call the function, which then bypasses every policy with its owner's rights.
 
 ### Add a storage path
 
@@ -143,7 +143,7 @@ List each owner-accepted residual exposure here until it closes.
 - The code step keeps the address for up to one hour in an httpOnly cookie scoped to `/verify`.
 - The `health` edge function has no rate limit; a constant-time 64-hex token bounds it.
 - Member removal refuses a target with recorded time; `P1-33` owns offboarding and asset return.
-- Organization deletion removes stored files after the rows; a storage failure leaves them under the organization's prefix, logged and unreachable through the app.
+- Organization deletion removes stored files after the rows. If storage fails, or a lost delete response cannot be rechecked, they stay under its prefix, logged, unreachable through the app.
 - The lint toolchain's minimatch (GHSA-g3hv-75wg-m249) is a reviewed dependency exception; `lib/security/dependency-exceptions.json` holds its reason and expiry.
 - Two provider facts are unverified, each needing a stronger read token: the R2 buckets' CORS rules (`GetBucketCors` refuses runtime tokens) and the Vercel environment scopes.
 
