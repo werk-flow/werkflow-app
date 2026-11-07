@@ -84,7 +84,18 @@ const world = installActionWorld({
       job_id: ownJobId,
     },
   ],
-  jobs: [{ id: ownJobId, organization_id: ORGANIZATION_A, title: 'Heizung tauschen', job_number: 'A-1' }],
+  // The fake joins nothing: a job row carries its assignments, as the access read embeds them.
+  jobs: [
+    {
+      id: ownJobId,
+      organization_id: ORGANIZATION_A,
+      title: 'Heizung tauschen',
+      job_number: 'A-1',
+      project_id: null,
+      client_id: null,
+      job_assignments: [{ id: '8e000000-0000-4000-8000-0000000000b1', user_id: CALLER_ID }],
+    },
+  ],
   job_assignments: [
     {
       id: '8e000000-0000-4000-8000-0000000000b1',

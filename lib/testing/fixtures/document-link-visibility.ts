@@ -262,19 +262,21 @@ function documentOf(result: unknown, label: string): { links: LinkView[] } {
   return document;
 }
 
-const readers = {
+// The reads a field worker uses. The document details carry the version and
+// audit history, which stay with Admin and Büro, so only the office reads them.
+const fieldReaders = {
   jobDocuments: () => getJobDocuments(assignedJobId),
   projectOverview: () =>
     getProjectDocumentsOverview(projectId, [
       { id: assignedJobId, jobNumber: fieldFacts.jobNumber, title: fieldFacts.jobTitle },
     ]),
-  documentDetails: () => getDocumentDetails(documentId),
 };
+const readers = { ...fieldReaders, documentDetails: () => getDocumentDetails(documentId) };
 
 // The assigned field worker reads the document with its own links only, and no value of another record.
 signInAs(world, 'employee');
 assignCallerTo([assignedJobId]);
-for (const [label, read] of Object.entries(readers)) {
+for (const [label, read] of Object.entries(fieldReaders)) {
   const result = await read();
   const document = documentOf(result, label);
   assert.deepEqual(
@@ -302,8 +304,11 @@ for (const [label, read] of Object.entries(readers)) {
     assert.ok(!values.some((value) => value.includes(secret)), `${label}: the field worker receives ${name}`);
 }
 
+// The document details stay with the office: the field worker is refused.
+assert.deepEqual(await getDocumentDetails(documentId), { success: false, error: 'not_authorized' });
+
 // The project overview keeps only the assigned job's group.
-const projectOverview = await readers.projectOverview();
+const projectOverview = await fieldReaders.projectOverview();
 assert.ok(projectOverview.success, JSON.stringify(projectOverview));
 assert.deepEqual(
   projectOverview.jobDocumentGroups.map((group) => group.jobId),
@@ -312,13 +317,13 @@ assert.deepEqual(
 
 // An assignment read that cannot complete refuses the field worker; it never shows every link.
 world.failingTables.add('jobs');
-for (const [label, read] of Object.entries(readers))
+for (const [label, read] of Object.entries(fieldReaders))
   assert.equal((await read()).success, false, `${label}: a failed assignment read answers the field worker`);
 world.failingTables.delete('jobs');
 
 // A field worker without the assignment reads neither the job's documents nor the document.
 assignCallerTo([]);
-for (const [label, read] of Object.entries(readers))
+for (const [label, read] of Object.entries(fieldReaders))
   assert.deepEqual(
     await read(),
     { success: false, error: 'not_authorized' },
