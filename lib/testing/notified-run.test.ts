@@ -1,15 +1,19 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import {
+  closeSync,
+  constants,
   createReadStream,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -589,15 +593,17 @@ const exited = (child: ChildProcess): Promise<number | null> =>
   new Promise((resolveExit) => child.once('exit', resolveExit));
 
 /** Settles once the unheard directory is empty: the supervisor's last acts drop the entry and its send lock. */
-/**
- * The text the fake `t3 send` writes into `fifo`. Reading a FIFO waits for its
- * writer, so the test waits on the wake itself, not on the clock or on file
- * events, which macOS may drop under memory pressure.
- */
-function wakeThrough(fifo: string): Promise<string> {
+/** A named pipe: a read waits for its writer, and a write for its reader, with no clock and no file events. */
+function namedPipe(path: string): string {
+  expect(spawnSync('mkfifo', [path]).status).toBe(0);
+  return path;
+}
+
+/** Everything written into `pipe` until its writer closes it. */
+function readPipe(pipe: string): Promise<string> {
   return new Promise((settle, fail) => {
     let text = '';
-    createReadStream(fifo, 'utf8')
+    createReadStream(pipe, 'utf8')
       .on('data', (chunk) => (text += chunk))
       .on('end', () => settle(text))
       .on('error', fail);
@@ -605,20 +611,31 @@ function wakeThrough(fifo: string): Promise<string> {
 }
 
 /**
- * Stops the run's detached supervisor once the test read what it needs, so no
- * test waits out its poll. Its command ended, so a signal ends it.
+ * Ends a reader still blocked on `pipe`, so a failed test leaves no open read or
+ * waiting process: opening for write without blocking fails when nobody reads.
  */
-function stopSupervisor(recordPath: string): void {
-  const { supervisorPid } = readRecord(recordPath);
-  if (supervisorPid === null) return;
+function closePipe(pipe: string): void {
   try {
-    process.kill(supervisorPid, 'SIGTERM');
+    closeSync(openSync(pipe, constants.O_WRONLY | constants.O_NONBLOCK));
   } catch (error) {
-    if (errorCode(error) !== 'ESRCH') throw error;
+    if (errorCode(error) !== 'ENXIO') throw error;
   }
 }
 
-/** The supervisor's decision on a run whose thread is idle now: a heard run settles as heard and sends nothing. */
+/** A command that prints `began`, then waits until the test releases it, then exits with `exitCode`. */
+function heldCommand(directory: string, release: string, exitCode: number, before = ''): string {
+  const command = join(directory, 'command.sh');
+  writeFileSync(command, `#!/bin/sh\n${before}echo began\nread go < "${release}"\nexit ${exitCode}\n`, {
+    mode: 0o755,
+  });
+  return command;
+}
+
+/**
+ * The supervisor's decision on a run whose thread is idle now, made in-process
+ * on the record the real script wrote, with a fixed clock: a heard run settles
+ * as heard and sends nothing.
+ */
 async function settleAsIdle(recordPath: string): Promise<string[]> {
   const sent: string[] = [];
   await settleWake(recordPath, {
@@ -629,7 +646,7 @@ async function settleAsIdle(recordPath: string): Promise<string[]> {
     threadBusy: () => false,
     supervisorAlive: () => false,
     wait: () => Promise.resolve(),
-    now: Date.now,
+    now: () => Date.parse('2026-11-07T12:00:00.000Z'),
   });
   return sent;
 }
@@ -672,36 +689,36 @@ test('the real script keeps its supervisor out of the process tree and wakes an 
   const directory = temporaryDirectory();
   const { wakeFile, idleFile, env } = fakeT3(directory);
   writeFileSync(idleFile, '');
-  spawnSync('mkfifo', [wakeFile]);
-  const wake = wakeThrough(wakeFile);
+  const wake = readPipe(namedPipe(wakeFile));
+  const release = namedPipe(join(directory, 'release'));
   const parentFile = join(directory, 'supervisor-parent.txt');
-  const command = join(directory, 'command.sh');
-  writeFileSync(
-    command,
-    `#!/bin/sh\nps -o ppid= -p "$PPID" > "${parentFile}"\necho began\nsleep 1\nexit 6\n`,
-    {
-      mode: 0o755,
-    },
-  );
-
-  const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
-    cwd: directory,
-    env,
-    stdio: 'ignore',
-  });
-
-  expect(await exited(foreground), 'the foreground leaves once the log shows work began').toBe(0);
-  expect(await wake).toContain('exit code 6');
-  stopSupervisor(onlyRecordPath(directory));
-  expect(Number(readFileSync(parentFile, 'utf8'))).not.toBe(foreground.pid);
-  expect(
-    await exited(spawn(process.execPath, [script, '--wait', onlyRecordPath(directory)], { stdio: 'ignore' })),
-  ).toBe(6);
+  const command = heldCommand(directory, release, 6, `ps -o ppid= -p "$PPID" > "${parentFile}"\n`);
+  try {
+    const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
+      cwd: directory,
+      env,
+      stdio: 'ignore',
+    });
+    expect(await exited(foreground), 'the foreground leaves once the log shows work began').toBe(0);
+    await writeFile(release, 'go\n');
+    expect(await wake).toContain('exit code 6');
+    expect(Number(readFileSync(parentFile, 'utf8'))).not.toBe(foreground.pid);
+    expect(
+      await exited(
+        spawn(process.execPath, [script, '--wait', onlyRecordPath(directory)], { stdio: 'ignore' }),
+      ),
+    ).toBe(6);
+  } finally {
+    closePipe(wakeFile);
+    closePipe(release);
+  }
 });
 
+// The thread stays busy in both heard tests, so the detached supervisor can only settle the run
+// as heard itself; the in-process settleWake then makes the decision it would make once idle.
 test('the real script sends no wake for a refusal its foreground reported', async () => {
   const directory = temporaryDirectory();
-  const { env } = fakeT3(directory);
+  const { wakeFile, env } = fakeT3(directory);
   const command = join(directory, 'command.sh');
   writeFileSync(command, '#!/bin/sh\necho refused\nexit 2\n', { mode: 0o755 });
   const foreground = spawn(process.execPath, [script, '--began', 'never printed', '--', command], {
@@ -710,34 +727,38 @@ test('the real script sends no wake for a refusal its foreground reported', asyn
     stdio: 'ignore',
   });
   expect(await exited(foreground)).toBe(2);
-  // The thread stays busy, so the supervisor holds its wake; stopped, it leaves the decision to us.
   const recordPath = onlyRecordPath(directory);
-  stopSupervisor(recordPath);
   expect(await settleAsIdle(recordPath), 'the refusal the foreground reported counts as heard').toEqual([]);
   expect(readRecord(recordPath).wake).toBe('heard');
+  expect(existsSync(wakeFile)).toBe(false);
 });
 
 // The race: the run ends while its thread's `--wait` watches it, in a turn that is still running.
 test('the real script sends no wake for a run its busy thread heard through --wait', async () => {
   const directory = temporaryDirectory();
-  const { env } = fakeT3(directory);
-  const command = join(directory, 'command.sh');
-  writeFileSync(command, '#!/bin/sh\necho began\nsleep 1\nexit 4\n', { mode: 0o755 });
-  const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
-    cwd: directory,
-    env,
-    stdio: 'ignore',
-  });
-  expect(await exited(foreground)).toBe(0);
-  const wait = spawn(process.execPath, [script, '--wait', onlyRecordPath(directory)], {
-    env,
-    stdio: 'ignore',
-  });
-  expect(await exited(wait)).toBe(4);
+  const { wakeFile, env } = fakeT3(directory);
+  const release = namedPipe(join(directory, 'release'));
+  const command = heldCommand(directory, release, 4);
+  try {
+    const foreground = spawn(process.execPath, [script, '--began', 'began', '--', command], {
+      cwd: directory,
+      env,
+      stdio: 'ignore',
+    });
+    expect(await exited(foreground)).toBe(0);
+    const wait = spawn(process.execPath, [script, '--wait', onlyRecordPath(directory)], {
+      env,
+      stdio: 'ignore',
+    });
+    await writeFile(release, 'go\n');
+    expect(await exited(wait)).toBe(4);
+  } finally {
+    closePipe(release);
+  }
   const recordPath = onlyRecordPath(directory);
-  stopSupervisor(recordPath);
   expect(await settleAsIdle(recordPath), 'the run --wait reported counts as heard').toEqual([]);
   expect(readRecord(recordPath).wake).toBe('heard');
+  expect(existsSync(wakeFile)).toBe(false);
 });
 
 test('a wait on a run whose supervisor died fails instead of waiting on', async () => {
