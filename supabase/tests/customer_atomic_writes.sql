@@ -2,9 +2,12 @@
 -- A new primary contact or work site clears the previous primary of the same
 -- customer inside its own statement, and the database keeps one primary per
 -- customer (migration 20261004153000_keep_one_primary_client_contact_and_site.sql).
--- Promoting the caller of an Anfrage creates the customer, links it and
--- records the history row in one call that refuses with the action's failure
--- codes (migration 20261004153100_promote_request_caller_atomically.sql).
+-- Promoting the caller of an Anfrage creates the customer, its first work
+-- site from the captured address and its primary contact from the caller,
+-- links them and records the history row in one call that refuses with the
+-- action's failure codes (migrations
+-- 20261004153100_promote_request_caller_atomically.sql and
+-- 20261107200000_promote_caller_with_site_and_find_matches.sql).
 begin;
 
 insert into auth.users (
@@ -44,6 +47,8 @@ values
  'Erika Muster', '0301234567', 'erika@example.test', 'Hauptstraße 1, 10115 Berlin'),
 ('41530000-0000-0000-0000-000000000041', '41530000-0000-0000-0000-000000000010', 'Ohne Namen',
  null, null, null, null),
+('41530000-0000-0000-0000-000000000044', '41530000-0000-0000-0000-000000000010', 'Freie Adresse',
+ 'Max Hof', ' 0171 2345678 ', null, '  Hinterhof links  '),
 ('41530000-0000-0000-0000-000000000049', '41530000-0000-0000-0000-000000000011', 'Fremde Anfrage',
  'Fremder Anrufer', null, null, null);
 insert into public.client_requests (id, organization_id, client_id, summary) values
@@ -213,17 +218,28 @@ begin
     or (select client_id from public.client_requests where id = '41530000-0000-0000-0000-000000000040') is not null
     or exists (select 1 from public.client_request_events where organization_id = '41530000-0000-0000-0000-000000000010')
     or (select client_id from public.client_requests where id = '41530000-0000-0000-0000-000000000049') is not null
-  then raise exception 'a refused promotion changed customers, requests or history'; end if;
+    or exists (
+      select 1 from public.client_sites where organization_id = '41530000-0000-0000-0000-000000000010'
+        and client_id not in ('41530000-0000-0000-0000-000000000020', '41530000-0000-0000-0000-000000000021')
+    )
+    or exists (
+      select 1 from public.client_contacts where organization_id = '41530000-0000-0000-0000-000000000010'
+        and client_id not in ('41530000-0000-0000-0000-000000000020', '41530000-0000-0000-0000-000000000021')
+    )
+  then raise exception 'a refused promotion changed customers, sites, contacts, requests or history'; end if;
 end;
 $$;
 
--- A clean promotion creates one customer from the caller fields, links it and records it.
+-- A clean promotion creates one customer from the caller fields, its first
+-- work site and its primary contact, links all three and records it.
 set local role service_role;
 
 do $$
 declare
   v_request public.client_requests;
   v_client public.clients;
+  v_site public.client_sites;
+  v_contact public.client_contacts;
 begin
   v_request := public.promote_client_request_caller('41530000-0000-0000-0000-000000000002',
     '41530000-0000-0000-0000-000000000010', '41530000-0000-0000-0000-000000000040', '  ', 'gewerblich');
@@ -238,6 +254,37 @@ begin
   then raise exception 'a promotion did not create the customer from the caller fields: %', to_jsonb(v_client); end if;
   if (select client_id from public.client_requests where id = '41530000-0000-0000-0000-000000000040') <> v_client.id
   then raise exception 'a promotion did not link the customer'; end if;
+  select * into v_contact from public.client_contacts where client_id = v_client.id;
+  if v_contact.id is null
+    or v_contact.organization_id <> '41530000-0000-0000-0000-000000000010'
+    or v_contact.name <> 'Erika Muster'
+    or v_contact.phone <> '0301234567'
+    or v_contact.email <> 'erika@example.test'
+    or not v_contact.is_primary
+  then raise exception 'a promotion did not make the caller the primary contact: %', to_jsonb(v_contact); end if;
+  select * into v_site from public.client_sites where client_id = v_client.id;
+  if v_site.id is null
+    or v_site.organization_id <> '41530000-0000-0000-0000-000000000010'
+    or v_site.name <> 'Hauptstandort'
+    or v_site.street <> 'Hauptstraße 1'
+    or v_site.postal_code <> '10115'
+    or v_site.city <> 'Berlin'
+    or v_site.primary_contact_id is distinct from v_contact.id
+    or not v_site.is_primary
+  then raise exception 'a promotion did not make the captured address the first work site: %', to_jsonb(v_site); end if;
+  if v_request.site_id is distinct from v_site.id or v_request.contact_id is distinct from v_contact.id
+  then raise exception 'a promotion did not link the new work site and contact to the request'; end if;
+
+  -- An address that is not "street, postal code city" stays whole in the street.
+  v_request := public.promote_client_request_caller('41530000-0000-0000-0000-000000000002',
+    '41530000-0000-0000-0000-000000000010', '41530000-0000-0000-0000-000000000044', null, 'privat');
+  select * into v_site from public.client_sites where id = v_request.site_id;
+  select * into v_contact from public.client_contacts where id = v_request.contact_id;
+  if v_site.client_id is distinct from v_request.client_id
+    or v_site.street <> 'Hinterhof links' or v_site.postal_code is not null or v_site.city is not null
+    or v_contact.client_id is distinct from v_request.client_id
+    or v_contact.name <> 'Max Hof' or v_contact.phone <> '0171 2345678' or v_contact.email is not null
+  then raise exception 'a free-text address or a phone-only caller was not kept: %, %', to_jsonb(v_site), to_jsonb(v_contact); end if;
   if (
     select array_agg(event_type || ':' || (event_payload ->> 'clientId') || ':' || (event_payload ->> 'clientName')
       || ':' || created_by::text)
@@ -251,6 +298,15 @@ begin
   if (select name || ':' || client_type::text from public.clients where id = v_request.client_id)
     <> 'Neue Kundin:privat'
   then raise exception 'a promotion ignored the typed name or the default type'; end if;
+  -- Without an address the customer gets no site; the typed name is its contact.
+  if v_request.site_id is not null
+    or exists (select 1 from public.client_sites where client_id = v_request.client_id)
+  then raise exception 'a promotion without an address created a site'; end if;
+  if (
+    select name || ':' || coalesce(phone, '-') || ':' || is_primary::text
+    from public.client_contacts where id = v_request.contact_id and client_id = v_request.client_id
+  ) is distinct from 'Neue Kundin:-:true'
+  then raise exception 'a promotion without phone and email did not make the named caller the contact'; end if;
 end;
 $$;
 
