@@ -366,9 +366,9 @@ begin
   -- The close counts only the latest decision of an approval-required
   -- finding, the decision the period page shows
   -- (readLatestFindingDecisions in lib/time-accounts/decision-reads.ts).
-  -- A test runs in one transaction, so every decision it takes through the
-  -- function shares one decided_at. The earlier decision is therefore
-  -- written directly, one minute back.
+  -- The earlier decision of each case is a fixture for a decision already
+  -- stored, written directly with its own decided_at; the later one goes
+  -- through the function where the case needs it.
   july_period_id := (select period_id from public.time_period_calculations where id = v_calculation_id);
   v_calculation_id := public.prepare_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
