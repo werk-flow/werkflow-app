@@ -524,7 +524,7 @@ test('a send lock left empty by a crash holds no wake back', async () => {
   expect(sent).toHaveLength(1);
 });
 
-test('a resend leaves a thread to the supervisor that holds its send lock, so no run is sent twice', async () => {
+test('a resend leaves a thread to the supervisor that holds its send lock, whose wake carries every orphaned run once', async () => {
   const unheard = temporaryDirectory();
   const orphan = runRecord(
     temporaryDirectory(),
@@ -533,6 +533,9 @@ test('a resend leaves a thread to the supervisor that holds its send lock, so no
     'run-0',
   );
   saveRecord(orphan);
+  const failedWake = { exitCode: 8, signal: null, endedAt: '2026-11-06T10:00:30.000Z' };
+  saveRecord(runRecord(temporaryDirectory(), unheard, { wake: 'failed', outcome: failedWake }, 'run-a'));
+  saveRecord(runRecord(temporaryDirectory(), unheard, { supervisorPid: 999_999, outcome: null }, 'run-b'));
   const record = endedRun(unheard, 'run-1', 5);
   const sent: string[] = [];
   const send = (_thread: string, message: string): string | null => {
@@ -554,6 +557,9 @@ test('a resend leaves a thread to the supervisor that holds its send lock, so no
   expect(sent).toHaveLength(1);
   expect(sent[0]).toContain('exit code 7');
   expect(sent[0]).toContain('exit code 5');
+  expect(sent[0], 'a failed wake').toContain('exit code 8');
+  expect(sent[0], 'a supervisor killed before the end').toContain('exit code is unknown');
+  expect(readdirSync(unheard)).toEqual([]);
 });
 
 const script = resolve(import.meta.dir, '../../scripts/run-notified.ts');

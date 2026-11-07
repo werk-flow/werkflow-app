@@ -242,6 +242,18 @@ export const isAlive = (pid: number): boolean => {
 
 const SUPERVISOR_START_GRACE_MILLISECONDS = 60_000;
 
+/** Whether no supervisor will settle the run's wake any more: a resend, or another run's wake, must carry it. */
+function orphaned(record: RunRecord, supervisorAlive: (pid: number) => boolean, now: () => number): boolean {
+  // A run saves its record before its supervisor saves a pid, so a young record without one is starting.
+  const starting =
+    record.supervisorPid === null &&
+    now() - Date.parse(record.startedAt) < SUPERVISOR_START_GRACE_MILLISECONDS;
+  // A failed wake is the supervisor's last write, so a live process on its pid is a reused pid.
+  const supervised =
+    record.wake !== 'failed' && record.supervisorPid !== null && supervisorAlive(record.supervisorPid);
+  return !starting && !supervised;
+}
+
 /**
  * Resends each run whose supervisor is gone and whose wake never went through,
  * as one wake per thread, under the thread's send lock. A thread whose lock a
@@ -265,15 +277,8 @@ export function resendUnheardRuns(
       unheard.push(`UNHEARD RUN: ${path} cannot be read. Delete it once someone has checked it.`);
       continue;
     }
-    // A run saves its record before its supervisor saves a pid, so a young record without one is starting.
-    const starting =
-      record.supervisorPid === null &&
-      now() - Date.parse(record.startedAt) < SUPERVISOR_START_GRACE_MILLISECONDS;
-    if (starting) continue;
-    // A failed wake is the supervisor's last write, so a live process on its pid is a reused pid.
-    const supervised =
-      record.wake !== 'failed' && record.supervisorPid !== null && supervisorAlive(record.supervisorPid);
-    if (!supervised) due.set(record.thread, [...(due.get(record.thread) ?? []), path]);
+    if (orphaned(record, supervisorAlive, now))
+      due.set(record.thread, [...(due.get(record.thread) ?? []), path]);
   }
   const holder = `resend:${process.pid}`;
   for (const [thread, paths] of due) {
@@ -354,18 +359,19 @@ function releaseSendLock(path: string, holder: string): void {
   if (current !== 'gone' && current !== 'unreadable' && current.holder === holder) rmSync(path);
 }
 
-/** The ended runs of `thread` in `directory` that still wait for their wake, oldest first. */
-function waitingRuns(directory: string, thread: string): RunRecord[] {
+/**
+ * The runs of `thread` in `directory` whose wake a sender carries, oldest first:
+ * the ended ones still waiting, and the orphaned ones a resend skips while the
+ * sender holds the thread's lock.
+ */
+function waitingRuns(directory: string, thread: string, dependencies: WakeDependencies): RunRecord[] {
   return readdirSync(directory)
     .filter((file) => file.endsWith('.json'))
     .flatMap((name) => {
       const record = readEntry(join(directory, name));
-      return record !== null &&
-        record.thread === thread &&
-        record.outcome !== null &&
-        record.wake === 'pending'
-        ? [record]
-        : [];
+      if (record === null || record.thread !== thread) return [];
+      const ended = record.outcome !== null && record.wake === 'pending';
+      return ended || orphaned(record, dependencies.supervisorAlive, dependencies.now) ? [record] : [];
     })
     .sort((first, second) => first.startedAt.localeCompare(second.startedAt));
 }
@@ -395,7 +401,7 @@ export async function settleWake(recordPath: string, dependencies: WakeDependenc
         (dependencies.now() > deadline || !dependencies.threadBusy(thread));
       if (sends) {
         // Read under the lock, so a run another sender settled is not sent twice.
-        const runs = waitingRuns(directory, thread);
+        const runs = waitingRuns(directory, thread, dependencies);
         const failure = await deliverWake(dependencies.send, runs, dependencies.wait);
         for (const record of runs) settle(record, failure);
         return;
