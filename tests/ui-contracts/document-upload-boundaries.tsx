@@ -11,7 +11,6 @@ import type { OrganizationDocument } from '@/lib/documents/types';
 
 type UploadActions = typeof import('@/lib/documents/upload-actions');
 type FolderActions = typeof import('@/lib/documents/folder-actions');
-type DocumentActions = typeof import('@/lib/documents/actions');
 type SignatureActions = typeof import('@/lib/work-artifacts/signature-upload-actions');
 type PersonnelActions = typeof import('@/lib/personnel/lifecycle-actions');
 
@@ -157,21 +156,6 @@ export async function finalizeDocumentVersionUpload(
   };
 }
 
-export async function getDocumentDetails(
-  documentId: Parameters<DocumentActions['getDocumentDetails']>[0],
-): ReturnType<DocumentActions['getDocumentDetails']> {
-  const current = currentVersion();
-  return {
-    success: true,
-    document: {
-      ...contractDocument(documentId, 'angebot.pdf'),
-      currentVersionNumber: current.versionNumber,
-      storagePath: current.storagePath,
-    },
-    auditEvents: [],
-    versions: [],
-  };
-}
 export const createDocumentFolder: FolderActions['createDocumentFolder'] = unexpectedDocumentAction;
 export const createWorkArtifactSignatureUploadTicket: SignatureActions['createWorkArtifactSignatureUploadTicket'] =
   unexpectedDocumentAction;

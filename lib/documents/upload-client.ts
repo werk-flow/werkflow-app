@@ -13,7 +13,6 @@ import {
 } from './upload-actions';
 import type { ActionResult } from '@/lib/action-result';
 import { logError } from '@/lib/logging';
-import { getDocumentDetails } from './actions';
 import type {
   DocumentCategory,
   DocumentResult,
@@ -83,7 +82,8 @@ export type UploadFailureReason =
   | 'empty'
   | 'refused'
   | 'not_saved'
-  | 'version_conflict';
+  | 'version_conflict'
+  | 'version_unconfirmed';
 
 /**
  * The upload whose bytes reached storage. A retry first registers these
@@ -222,24 +222,11 @@ export async function uploadWorkArtifactSignatureDirect({
 }
 
 /**
- * True when the document's current or an archived version is the stored
- * path: the lost answer of an earlier try had saved it. Each version number
- * and file name has its own path, so another person's version never matches.
- */
-async function holdsVersion(documentId: string, storagePath: string): Promise<boolean> {
-  const details = await getDocumentDetails(documentId);
-  return (
-    details.success &&
-    (details.document.storagePath === storagePath ||
-      details.versions.some((version) => version.storagePath === storagePath))
-  );
-}
-
-/**
  * Uploads a new version of a document. A retry with the earlier try's
  * `transferred` registers the stored bytes first, like `uploadDocumentDirect`.
- * When another person saved a version meanwhile, the outcome is a
- * `version_conflict`.
+ * When another person saved a version meanwhile, a first try is a
+ * `version_conflict`. A retry that meets a newer version is
+ * `version_unconfirmed`: it cannot tell its own lost save from another one.
  */
 export async function uploadDocumentVersionDirect({
   documentId,
@@ -258,9 +245,9 @@ export async function uploadDocumentVersionDirect({
     if (stored && stored.versionNumber !== null) {
       const result = await registerVersion(stored.versionNumber);
       if (result.success) return { status: 'saved', saved: result.version };
-      if (result.error === 'version_conflict' && (await holdsVersion(documentId, stored.storagePath))) {
-        return { status: 'saved', saved: null };
-      }
+      // A lost answer of the earlier try and another person's version look
+      // the same here, so the outcome says the save is unconfirmed.
+      if (result.error === 'version_conflict') return failedUpload('version_unconfirmed', stored);
       if (result.error !== 'file_missing') return failedUpload(refusalReason(result.error), stored);
       stored = null;
     }

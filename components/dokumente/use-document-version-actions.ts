@@ -8,7 +8,7 @@ import {
   getDocumentVersionSignedUrl,
 } from '@/lib/documents/actions';
 import type { DocumentVersion, OrganizationDocument, SignedDocumentUrlResult } from '@/lib/documents/types';
-import { uploadDocumentVersionDirect } from '@/lib/documents/upload-client';
+import { uploadDocumentVersionDirect, type UploadFailureReason } from '@/lib/documents/upload-client';
 import type { DocumentDetailsDialogState } from './use-document-details-dialog';
 import { failedUploadRow, isRetryableUploadRow, type DocumentUploadRow } from './document-upload-rows';
 import type { DocumentLibraryMutations } from './use-document-library-mutations';
@@ -81,6 +81,11 @@ async function showUploadedVersion({
   }
 }
 
+/** The upload met a newer version, so the details reload to show which versions were saved. */
+function meetsNewerVersion(reason: UploadFailureReason): boolean {
+  return reason === 'version_conflict' || reason === 'version_unconfirmed';
+}
+
 type VersionUpload = { document: OrganizationDocument; row: DocumentUploadRow };
 
 /**
@@ -129,7 +134,7 @@ function useVersionUpload({
 
         if (outcome.status === 'failed') {
           updateVersionRow(row.id, failedUploadRow(outcome.reason, outcome.transferred));
-          if (outcome.reason === 'version_conflict') reloadDetails(activeDocument);
+          if (meetsNewerVersion(outcome.reason)) reloadDetails(activeDocument);
           return;
         }
 

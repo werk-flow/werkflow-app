@@ -170,36 +170,46 @@ test('a cancel request ends with its run, so a retry runs without the loss warni
   await expect(dialog).not.toContainText('gehen verloren');
 });
 
+/** Another person's version 2 of the versioned document, under the same file name as ours. */
+const COLLEAGUE_VERSION = {
+  versionNumber: 2,
+  storagePath: 'contract-organization/contract-versioned/v2/angebot-v2.pdf',
+};
+
 /** Uploads a new version of the versioned document, then retries with the first try's stored bytes. */
 async function uploadVersionTwice(page: Page, beforeRetry: 'nothing' | 'another person saves a version') {
-  return page.evaluate(async (between) => {
-    const file = new File(['Version 2'], 'angebot-v2.pdf', { type: 'application/pdf' });
-    const documentId = 'contract-versioned';
-    const first = await window.uiContractUploadVersion({ documentId, file, transferred: null });
-    if (first.status !== 'failed') throw new Error('expected the first try to fail');
-    if (between === 'another person saves a version') {
-      window.uiContractDocumentUpload.versions.push({
-        versionNumber: 2,
-        storagePath: 'contract-organization/contract-versioned/v2/kollege.pdf',
+  return page.evaluate(
+    async ({ between, colleagueVersion }) => {
+      const file = new File(['Version 2'], 'angebot-v2.pdf', { type: 'application/pdf' });
+      const documentId = 'contract-versioned';
+      const first = await window.uiContractUploadVersion({ documentId, file, transferred: null });
+      if (first.status !== 'failed') throw new Error('expected the first try to fail');
+      if (between === 'another person saves a version') {
+        window.uiContractDocumentUpload.versions.push(colleagueVersion);
+      }
+      const retry = await window.uiContractUploadVersion({
+        documentId,
+        file,
+        transferred: first.transferred,
       });
-    }
-    const retry = await window.uiContractUploadVersion({ documentId, file, transferred: first.transferred });
-    return {
-      first: first.reason,
-      retry: retry.status === 'failed' ? retry.reason : retry.status,
-      versions: window.uiContractDocumentUpload.versions.map((version) => version.storagePath),
-    };
-  }, beforeRetry);
+      return {
+        first: first.reason,
+        retry: retry.status === 'failed' ? retry.reason : retry.status,
+        versions: window.uiContractDocumentUpload.versions.map((version) => version.storagePath),
+      };
+    },
+    { between: beforeRetry, colleagueVersion: COLLEAGUE_VERSION },
+  );
 }
 
-test('a version retry after a lost save answer counts the saved version, not a conflict', async ({
+test('a version retry after a lost save answer reports the save unconfirmed, never saved', async ({
   page,
 }) => {
   const puts = await openUploadDialog(page, { loseFinalizeAnswer: ['angebot-v2.pdf'] });
 
   expect(await uploadVersionTwice(page, 'nothing')).toEqual({
     first: 'interrupted',
-    retry: 'saved',
+    retry: 'version_unconfirmed',
     versions: [
       'contract-organization/contract-versioned/v1/angebot.pdf',
       'contract-organization/contract-versioned/v2/angebot-v2.pdf',
@@ -208,15 +218,44 @@ test('a version retry after a lost save answer counts the saved version, not a c
   expect(puts.get('angebot-v2.pdf')).toBe(1);
 });
 
-test('a version retry after another person saved a version stays a conflict', async ({ page }) => {
+test('a version retry after another person saved the same file name never reports it saved', async ({
+  page,
+}) => {
   await openUploadDialog(page, { failFinalize: ['angebot-v2.pdf'] });
 
   expect(await uploadVersionTwice(page, 'another person saves a version')).toEqual({
     first: 'not_saved',
-    retry: 'version_conflict',
+    retry: 'version_unconfirmed',
     versions: [
       'contract-organization/contract-versioned/v1/angebot.pdf',
-      'contract-organization/contract-versioned/v2/kollege.pdf',
+      'contract-organization/contract-versioned/v2/angebot-v2.pdf',
     ],
   });
+});
+
+test('a first version upload after another person saved a version is a conflict', async ({ page }) => {
+  const puts = await openUploadDialog(page, {
+    // Another person saves version 2 while our version's bytes are on their way.
+    answer: async (fileName, _attempt, route) => {
+      if (fileName === 'angebot-v2.pdf') {
+        await page.evaluate((colleagueVersion) => {
+          window.uiContractDocumentUpload.versions.push(colleagueVersion);
+        }, COLLEAGUE_VERSION);
+      }
+      await route.fulfill({ status: 200, body: '' });
+    },
+  });
+
+  const outcome = await page.evaluate(async () => {
+    const file = new File(['Version 2'], 'angebot-v2.pdf', { type: 'application/pdf' });
+    const result = await window.uiContractUploadVersion({
+      documentId: 'contract-versioned',
+      file,
+      transferred: null,
+    });
+    return result.status === 'failed' ? result.reason : result.status;
+  });
+
+  expect(outcome).toBe('version_conflict');
+  expect(puts.get('angebot-v2.pdf')).toBe(1);
 });

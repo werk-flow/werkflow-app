@@ -172,7 +172,7 @@ await withWorkspaceTestLock({ operation: 'UI component contracts', repositoryRoo
             builder.onResolve(
               {
                 filter:
-                  /^(?:@\/lib\/documents\/(?:upload|folder)-actions|@\/lib\/work-artifacts\/signature-upload-actions|\.\/(?:upload-)?actions)$/,
+                  /^(?:@\/lib\/documents\/(?:upload|folder)-actions|@\/lib\/work-artifacts\/signature-upload-actions|\.\/upload-actions)$/,
               },
               (args) => {
                 if (args.path.startsWith('@/') || args.importer.endsWith('lib/documents/upload-client.ts'))
