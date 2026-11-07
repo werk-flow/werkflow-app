@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -525,11 +524,13 @@ test('a send lock left empty by a crash holds no wake back', async () => {
   expect(sent).toHaveLength(1);
 });
 
+// A directory in the lock's place fails every read (EISDIR), whatever the process's privileges.
 test('a send lock that cannot be read is not taken over, so a live holder keeps its single wake', async () => {
   const unheard = temporaryDirectory();
   await stuckHolder(endedRun(unheard, 'run-1', 4));
   const [lock = ''] = readdirSync(unheard).filter((name) => name.endsWith('.send-lock'));
-  chmodSync(join(unheard, lock), 0o000);
+  rmSync(join(unheard, lock));
+  mkdirSync(join(unheard, lock));
   const record = endedRun(unheard, 'run-2', 5);
   let waits = 0;
   const { sent, dependencies } = wakeWorld(0, {
@@ -540,7 +541,6 @@ test('a send lock that cannot be read is not taken over, so a live holder keeps 
     },
   });
   await expect(settleWake(record.recordPath, dependencies)).rejects.toThrow('still waiting');
-  chmodSync(join(unheard, lock), 0o600);
   expect(sent, 'a second sender took the lock').toEqual([]);
 });
 
