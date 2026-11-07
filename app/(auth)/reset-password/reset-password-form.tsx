@@ -25,7 +25,7 @@ type TokenState = 'loading' | 'valid' | 'invalid';
 // nobody in here: the browser client does not read them either.
 async function establishRecoverySession(
   supabase: ReturnType<typeof createSupabaseBrowserClient>,
-  resolveToken: (state: TokenState) => void,
+  resolveToken: (state: TokenState, message?: string) => void,
 ): Promise<void> {
   // The callback refused the link.
   if (new URL(window.location.href).searchParams.has('error')) {
@@ -36,7 +36,12 @@ async function establishRecoverySession(
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  resolveToken(session?.user ? 'valid' : 'invalid');
+  if (session?.user) {
+    resolveToken('valid');
+    return;
+  }
+  // Opened without a confirmed link.
+  resolveToken('invalid', 'Ungültiger Link.');
 }
 
 /**

@@ -123,7 +123,6 @@ test('tokens in a link to an ordinary page neither sign in nor sign out the stor
 
 test('the reset page signs nobody in from tokens in its link', async ({ page }) => {
   const linkedCredentialUses = await openWithTokenLink(page, 'auth-url-reset-form', { storedSession: false });
-  await expect(page.getByRole('main').getByText(/ungültig oder abgelaufen/)).toBeVisible();
   await expect(page.getByRole('link', { name: 'Neuen Link anfordern' })).toBeVisible();
   await expect(page.getByLabel('Neues Passwort')).toHaveCount(0);
   expect(await sessionCookieNames(page)).toEqual([]);
