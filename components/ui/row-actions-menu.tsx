@@ -3,6 +3,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -214,11 +215,15 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     }
   }
 
+  // Focus the first item in the commit that opens the menu, before the opening event returns.
+  // A focus deferred to a later frame would land after a fast keyboard user's next choice and
+  // move it back to the first item.
+  useLayoutEffect(() => {
+    if (open) menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    const frame = window.requestAnimationFrame(() => {
-      menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-    });
 
     function handlePointerDown(event: PointerEvent): void {
       const target = event.target;
@@ -239,7 +244,6 @@ export function RowActionsMenu({ actions, disabled = false }: RowActionsMenuProp
     window.addEventListener('resize', handleViewportChange);
     window.addEventListener('scroll', handleScroll, true);
     return () => {
-      window.cancelAnimationFrame(frame);
       document.removeEventListener('pointerdown', handlePointerDown, true);
       window.removeEventListener('resize', handleViewportChange);
       window.removeEventListener('scroll', handleScroll, true);
