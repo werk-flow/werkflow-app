@@ -18,21 +18,32 @@ export type ProfileReference = {
 /** The signed-in user's own profile, as the app shell reads it and the profile context holds it. */
 export type UserProfile = {
   id: string;
-  firstName: string;
-  lastName: string;
+  firstName: string | null;
+  lastName: string | null;
   email: string;
   avatarPath: string | null;
   avatarUrl: string | null;
 };
 
-/** The reference for a loaded profile row; a missing row (deleted or unreadable profile) is null. */
-export function toProfileReference(profile?: ProfileReferenceRow | null): ProfileReference | null {
+/** Whether the referenced person is still a member of the organization the record belongs to. */
+export type ProfileReferenceMembership = 'member' | 'former';
+
+/**
+ * The reference for a loaded profile row; a missing row (deleted or unreadable profile) is null.
+ * A former member stays named on the record, but the reader gets neither the
+ * person's current email nor their avatar: both belong to the person, not to the record.
+ */
+export function toProfileReference(
+  profile?: ProfileReferenceRow | null,
+  membership: ProfileReferenceMembership = 'member',
+): ProfileReference | null {
   if (!profile) return null;
+  const isMember = membership === 'member';
   return {
     userId: profile.id,
     firstName: profile.first_name,
     lastName: profile.last_name,
-    email: profile.email,
-    avatarPath: profile.avatar_path,
+    email: isMember ? profile.email : null,
+    avatarPath: isMember ? profile.avatar_path : null,
   };
 }

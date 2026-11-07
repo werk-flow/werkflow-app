@@ -58,19 +58,20 @@ A PR is ready when all of these hold on its latest commit:
 - The proof covers every change in the diff.
 - The level's reviews are done, and each finding is fixed or dismissed with a reason in its thread.
 - GitHub reports the PR mergeable and not `DIRTY` (`gh pr view <n> --json mergeable,mergeStateStatus`).
-- No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours. One overlap needs no new run: the only shared file is `eslint-rules/size-cap-exceptions.json`, no entry is changed on both sides, neither side changes the base caps in `eslint-rules/size-caps.mjs`, the merge is clean, and on the merged result `bun run test:unit lib/conventions` passes and `bunx eslint` passes on every file either side changed since the PR's last green run and every file whose exception entry changed.
+- No commit that reached `main` after the last green run touches this PR's files. Otherwise merge `origin/main` into the branch, push, and wait for green again. The ruleset does not require an up-to-date branch, so this check is yours.
+- Each group this PR selects that an open `ci-alert` issue's run failed has passed on the branch. List the failed groups of each alert's run (`gh run view <run> --log-failed | grep -E '\[verify\] [^ ]+: failed'`), using the full run a release alert links, and compare them with `bun run test:plan`. Pass the overlap with `bun run test:verify --group <ids>`. A red run in other groups never blocks a merge.
 
 Merge with `gh pr merge --squash`, after a fresh `git fetch` and a last look at the PR. Never use `--admin` or another bypass.
 
 ### The CodeRabbit queue
 
-`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes as a systemd user timer on the owner's machine, so no thread has to stay alive to hand out reviews. Each pass:
+`ops/coderabbit-queue.py` in `werk-flow/werkflow-planning` runs every 10 minutes on [the PC and the Mac](environments.md#background-jobs), so no thread has to stay alive to hand out reviews. Each pass on the machine that holds its lease:
 
 1. Lists the open PRs labelled `needs-coderabbit`, and skips any that already got a CodeRabbit review or a request after their latest push.
 2. In [trial mode](#trial-mode-until-2026-11-12), before `TRIAL_ENDS`, requests up to ten waiting PRs and skips the 65-minute wait. Afterward, does nothing while CodeRabbit posted a review, a "Review finished" note or a rate-limit notice, or received a request, on any PR in the last 65 minutes, or before a notice's "available in N minutes" ends.
-3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread: the one on its head branch, else the newest that links the PR, such as an epic's lead.
+3. Selects PRs oldest label first, one per pass outside trial mode. Comments `@coderabbitai review` on each, relabels it `coderabbit-requested`, and sends one sentence to the PR's T3 thread on that machine: the one on its head branch, else the newest that links the PR, such as an epic's lead. A thread on the other machine hears of the review through its own watch.
 
-The log is `~/.local/state/coderabbit-queue.log`, and `journalctl --user -u coderabbit-queue` shows each run. Automatic review is off, so a PR without the label gets no CodeRabbit review.
+Each machine logs its passes to `~/.local/state/coderabbit-queue.log`. Automatic review is off, so a PR without the label gets no CodeRabbit review.
 
 ### Give a review its context
 

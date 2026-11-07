@@ -1,8 +1,9 @@
 // The actual organization deletion over the in-memory database and an
-// in-memory bucket: recorded time or a closed period refuses before any file
-// or row goes, a failed file deletion leaves the organization in place, and a
-// deletion removes every stored file of the organization, and only those,
-// before delete_organization removes the rows.
+// in-memory bucket. Storage is not transactional, so the database decides
+// first: the action lists the organization's files, delete_organization
+// removes the rows, and only then do the listed files go. A refusal before or
+// in the database touches no file; a failed file removal after the rows went
+// leaves orphaned objects and still reports the deletion.
 import { mock } from 'bun:test';
 import assert from 'node:assert/strict';
 import {
@@ -13,10 +14,12 @@ import {
   signInAs,
 } from './action-boundary-world';
 
+const OTHER_OWNER_ID = '30000000-0000-4000-8000-000000000002';
+
 const world = installActionWorld({
   organizations: [
     { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
-    { id: ORGANIZATION_B, name: 'Fremdbetrieb', unique_code: 'GHIJKL', admin_id: CALLER_ID },
+    { id: ORGANIZATION_B, name: 'Fremdbetrieb', unique_code: 'GHIJKL', admin_id: OTHER_OWNER_ID },
   ],
   organization_members: [],
 });
@@ -28,17 +31,41 @@ const ownObjects = [
 ];
 const foreignObject = `${ORGANIZATION_B}/documents/fremd.pdf`;
 const bucket = new Set<string>();
-let failFileDeletion = false;
+let failListing = false;
+// A second listing, once the rows are gone, fails.
+let failListingAfterDeletion = false;
+// The database deletes the rows, but the response is lost.
+let lostResponse = false;
+let failFileRemoval = false;
+// An upload finalized while the deletion runs, after the first listing.
+let lateUpload: string | null = null;
 const steps: string[] = [];
+
+const organizationRemains = (organizationId: string = ORGANIZATION_A): boolean =>
+  (world.tables.organizations ?? []).some((row) => row.id === organizationId);
 
 mock.module('@/lib/storage/r2', () => ({
   listStorageObjectPaths: async ({ organizationId, prefix }: { organizationId: string; prefix: string }) => {
+    steps.push('list');
     assert.equal(prefix, `${organizationId}/`, 'the listing reaches beyond the organization');
+    if (failListing || (failListingAfterDeletion && !organizationRemains(organizationId)))
+      throw new Error('listing failed');
     return [...bucket].filter((path) => path.startsWith(prefix));
   },
-  deleteStorageObjects: async ({ paths }: { paths: readonly string[] }) => {
+  deleteStorageObjects: async (): Promise<never> => {
+    throw new Error('the deletion removes files that a row may still reference');
+  },
+  // Like the real one, it logs a failed removal and never throws.
+  discardStorageObjects: async ({
+    organizationId,
+    paths,
+  }: {
+    organizationId: string;
+    paths: readonly string[];
+  }) => {
     steps.push('files');
-    if (failFileDeletion) throw new Error('Failed to delete 1 object(s)');
+    assert.ok(!organizationRemains(organizationId), 'files went while the organization row still exists');
+    if (failFileRemoval) return;
     for (const path of paths) bucket.delete(path);
   },
 }));
@@ -76,10 +103,12 @@ world.rpc = ({ name, args }) => {
   }
   if (name === 'delete_organization') {
     steps.push('rows');
+    if (lateUpload) bucket.add(lateUpload);
     if (databaseRefusal) return { data: null, error: { code: 'P0001', message: databaseRefusal } };
     world.tables.organizations = (world.tables.organizations ?? []).filter(
       (row) => row.id !== args.p_organization_id,
     );
+    if (lostResponse) return { data: null, error: { code: '', message: 'TypeError: fetch failed' } };
     return { data: null, error: null };
   }
   return { data: null, error: { code: 'P0001', message: `unexpected_function_${name}` } };
@@ -87,16 +116,48 @@ world.rpc = ({ name, args }) => {
 
 const { deleteOrganization } = await import('@/lib/org/delete-action');
 
-const organizationRemains = (): boolean =>
-  (world.tables.organizations ?? []).some((row) => row.id === ORGANIZATION_A);
 const reset = (): void => {
   for (const path of [...ownObjects, foreignObject]) bucket.add(path);
   steps.length = 0;
   world.rpcCalls.length = 0;
   signInAs(world, 'admin');
 };
+const assertNothingDeleted = (label: string): void => {
+  assert.ok(!steps.includes('files'), `${label}: files went`);
+  assert.equal(bucket.size, ownObjects.length + 1, `${label}: files went`);
+  assert.ok(organizationRemains(ORGANIZATION_A), `${label}: the organization went`);
+  assert.ok(organizationRemains(ORGANIZATION_B), `${label}: the foreign organization went`);
+};
 
-// Recorded time, and a closed period alone, refuse before any file goes.
+// A caller who is not the owner, and a caller without a membership whose
+// cookie names a foreign organization, are refused before any file or row.
+reset();
+world.tables.organizations = (world.tables.organizations ?? []).map((row) =>
+  row.id === ORGANIZATION_A ? { ...row, admin_id: OTHER_OWNER_ID } : row,
+);
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: false, error: 'not_authorized' });
+assert.deepEqual(steps, [], 'a non-owner reached storage or the database');
+assertNothingDeleted('non-owner');
+world.tables.organizations = (world.tables.organizations ?? []).map((row) =>
+  row.id === ORGANIZATION_A ? { ...row, admin_id: CALLER_ID } : row,
+);
+
+reset();
+signInAs(world, null);
+world.activeOrganizationCookie = ORGANIZATION_B;
+assert.deepEqual(await deleteOrganization('Fremdbetrieb'), { success: false, error: 'org_not_found' });
+assert.deepEqual(steps, [], 'a foreign organization id reached storage or the database');
+assertNothingDeleted('foreign organization');
+
+// A cookie naming a foreign organization never selects it: the caller's own
+// organization stays active, so the foreign name does not match it.
+reset();
+world.activeOrganizationCookie = ORGANIZATION_B;
+assert.deepEqual(await deleteOrganization('Fremdbetrieb'), { success: false, error: 'name_mismatch' });
+assert.deepEqual(steps, [], 'a foreign organization cookie reached storage or the database');
+assertNothingDeleted('foreign organization cookie');
+
+// Recorded time, and a closed period alone, refuse before any file or row.
 for (const [label, retained] of [
   ['recorded time', { timeTrackedPeople: 1, closedPeriods: 0 }],
   ['a closed period', { timeTrackedPeople: 0, closedPeriods: 1 }],
@@ -108,36 +169,88 @@ for (const [label, retained] of [
     { success: false, error: 'has_time_records' },
     label,
   );
-  assert.deepEqual(steps, [], `${label}: a refused deletion removed files or rows`);
-  assert.equal(bucket.size, ownObjects.length + 1, `${label}: a refused deletion removed files`);
-  assert.ok(organizationRemains(), `${label}: a refused deletion removed the organization`);
+  assert.deepEqual(steps, [], `${label}: a refused deletion reached storage or the database`);
+  assertNothingDeleted(label);
 }
 Object.assign(scope, { timeTrackedPeople: 0, closedPeriods: 0 });
 
-// A failed file deletion is visible and leaves the organization for a retry.
+// A failed listing refuses before the database, so the owner can try again.
 reset();
-failFileDeletion = true;
-assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: false, error: 'files_delete_failed' });
-assert.deepEqual(steps, ['files'], 'the rows went although the files did not');
-assert.ok(organizationRemains(), 'a failed file deletion removed the organization');
-failFileDeletion = false;
+failListing = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: false, error: 'delete_org_failed' });
+assert.deepEqual(steps, ['list'], 'the rows went although the files could not be listed');
+assertNothingDeleted('failed listing');
+failListing = false;
 
-// The database's own refusal under its lock, after the files went, says so.
-reset();
-databaseRefusal = 'has_time_records';
-assert.deepEqual(await deleteOrganization('Musterbetrieb'), {
-  success: false,
-  error: 'time_recorded_during_deletion',
-});
-assert.ok(organizationRemains(), 'a database refusal removed the organization');
-assert.deepEqual(steps, ['files', 'rows'], 'the late refusal did not follow the file deletion');
-assert.deepEqual([...bucket], [foreignObject], 'the late refusal left own files in the bucket');
+// The database's refusal under its lock touches no file: time recorded, a
+// rename, or any other failure since the checks above.
+for (const [refusal, error] of [
+  ['has_time_records', 'has_time_records'],
+  ['name_mismatch', 'name_mismatch'],
+  ['connection lost', 'delete_org_failed'],
+] as const) {
+  reset();
+  databaseRefusal = refusal;
+  assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: false, error }, refusal);
+  assert.deepEqual(steps, ['list', 'rows'], `${refusal}: the database refusal did not keep the files`);
+  assertNothingDeleted(`database refusal ${refusal}`);
+}
 databaseRefusal = null;
 
-// The deletion removes every file of the organization first, then its rows.
+const restoreOrganization = (): void => {
+  world.tables.organizations = [
+    { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
+    ...(world.tables.organizations ?? []),
+  ];
+};
+
+// A failed second listing still removes the files listed first.
+reset();
+failListingAfterDeletion = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
+assert.deepEqual([...bucket], [foreignObject], 'a failed second listing kept the files listed first');
+failListingAfterDeletion = false;
+restoreOrganization();
+
+// A lost response after the rows went is a finished deletion: the files go and the action says so.
+reset();
+lostResponse = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.ok(!organizationRemains(), 'the organization remains');
+assert.deepEqual([...bucket], [foreignObject], 'a lost response kept the files of a deleted organization');
+lostResponse = false;
+restoreOrganization();
+
+// After the rows went, a failed file removal leaves orphaned objects; the
+// organization is deleted, and the action says so.
+reset();
+failFileRemoval = true;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
+assert.ok(!organizationRemains(), 'the organization remains');
+assert.equal(bucket.size, ownObjects.length + 1, 'the failed removal still removed files');
+failFileRemoval = false;
+world.tables.organizations = [
+  { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
+  ...(world.tables.organizations ?? []),
+];
+
+// A file finalized after the first listing goes too: the folder is listed again once the rows are gone.
+reset();
+lateUpload = `${ORGANIZATION_A}/documents/spaet.pdf`;
+assert.deepEqual(await deleteOrganization('Musterbetrieb'), { success: true, nextOrgId: null });
+assert.deepEqual([...bucket], [foreignObject], 'a file uploaded during the deletion stayed behind');
+lateUpload = null;
+world.tables.organizations = [
+  { id: ORGANIZATION_A, name: 'Musterbetrieb', unique_code: 'ABCDEF', admin_id: CALLER_ID },
+  ...(world.tables.organizations ?? []),
+];
+
+// The deletion removes the rows first, then every file of the organization, and only those.
 reset();
 assert.deepEqual(await deleteOrganization(' Musterbetrieb '), { success: true, nextOrgId: null });
-assert.deepEqual(steps, ['files', 'rows']);
+assert.deepEqual(steps, ['list', 'rows', 'list', 'files']);
 assert.deepEqual([...bucket], [foreignObject], 'the deletion left own files or removed foreign ones');
 assert.ok(!organizationRemains(), 'the organization remains');
 assert.deepEqual(

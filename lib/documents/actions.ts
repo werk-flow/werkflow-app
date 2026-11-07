@@ -19,6 +19,7 @@ import {
   getAuthorizedDocument,
   getAuthorizedDocumentContext,
   getDeletedDocumentForManager,
+  getDocumentWithHistory,
   getManageableDocument,
   requireManager,
 } from './access';
@@ -497,7 +498,7 @@ export async function getDocumentVersionSignedUrl(
   }
 
   const versionRow = version;
-  const existing = await getAuthorizedDocument(auth.context, versionRow.document_id, {
+  const existing = await getDocumentWithHistory(auth.context, versionRow.document_id, {
     protectedVersionNumber: versionRow.version_number,
   });
   if (!existing.success) return existing;
@@ -529,7 +530,7 @@ export async function getDocumentDetails(rawDocumentId: string): Promise<Documen
   const auth = await getAuthorizedDocumentContext();
   if (!auth.success) return auth;
 
-  const existing = await getAuthorizedDocument(auth.context, documentId);
+  const existing = await getDocumentWithHistory(auth.context, documentId);
   if (!existing.success) return existing;
 
   const releasedVersionNumbers = existing.protectedAccess?.releasedVersionNumbers ?? null;

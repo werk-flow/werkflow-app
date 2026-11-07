@@ -543,6 +543,23 @@ export async function getManageableDocument(
   return { success: true, document: existing.document };
 }
 
+/**
+ * The active document whose version and audit history the caller reads: an
+ * ordinary document only for a manager, a protected personnel document under
+ * its own rule. A job assignment opens the current version, never the history.
+ */
+export async function getDocumentWithHistory(
+  context: AuthorizedDocumentContext,
+  documentId: string,
+  options: { protectedVersionNumber?: number } = {},
+): Promise<AuthorizedDocument> {
+  const existing = await getAuthorizedDocument(context, documentId, options);
+  if (!existing.success || existing.protectedAccess) return existing;
+  const manager = requireManager(context);
+  if (!manager.success) return manager;
+  return existing;
+}
+
 export async function getDeletedDocumentForManager(
   context: AuthorizedDocumentContext,
   documentId: string,

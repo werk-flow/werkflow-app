@@ -1,4 +1,30 @@
-import type { WorkArtifactActionRow } from './types';
+import type { WorkArtifactActionRow, WorkArtifactRevisionRow, WorkArtifactRow } from './types';
+
+/**
+ * A coworker's internal draft, which only its author, Admin and Büro read. The
+ * database refuses the coworker's review request for it as well.
+ */
+export function isHiddenCoworkerDraft(
+  viewer: { userId: string; isManagerOrAbove: boolean },
+  artifact: Pick<WorkArtifactRow, 'status'>,
+  currentRevision: Pick<WorkArtifactRevisionRow, 'visibility' | 'created_by'>,
+): boolean {
+  return (
+    !viewer.isManagerOrAbove &&
+    artifact.status === 'draft' &&
+    currentRevision.visibility === 'internal_only' &&
+    currentRevision.created_by !== viewer.userId
+  );
+}
+
+/**
+ * An export becomes a report document that every reader of the job or project
+ * opens, so only a customer-facing revision is exported. The database refuses
+ * an internal one too.
+ */
+export function isExportableRevision(revision: Pick<WorkArtifactRevisionRow, 'visibility'>): boolean {
+  return revision.visibility === 'customer_facing';
+}
 
 export function redactWorkArtifactActionForField(
   action: WorkArtifactActionRow,

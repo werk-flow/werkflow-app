@@ -521,6 +521,10 @@ export async function toggleJobInstructionItemCompletion(
   });
 
   if (error) {
+    // The function refuses an employee on finished, handed over or cancelled work.
+    if (error.message.includes('instruction_item_not_authorized')) {
+      return { success: false, error: 'not_authorized' };
+    }
     logError('Failed to toggle instruction item completion:', error);
     const known = ['instruction_predecessor_incomplete', 'instruction_item_stale_version'].find((code) =>
       error.message.includes(code),

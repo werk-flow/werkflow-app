@@ -258,3 +258,21 @@ tables.job_material_lines = [
 expect(await returnJobMaterial(returnInput)).toEqual({ success: false, error: 'return_exceeds_taken' });
 expect(rpcCalls).toHaveLength(1);
 expect(logged).toEqual([]);
+
+// 9. A take the function refuses because the line's item changed since the
+//    server read the line reaches the caller as line_changed, unlogged.
+reset(refusal('material_line_item_changed'));
+tables.job_material_lines = [
+  { id: LINE, organization_id: ORG, job_id: JOB, item_id: ITEM, taken_quantity: 0, returned_quantity: 0 },
+];
+expect(await takeJobMaterial({ jobId: JOB, lineId: LINE, locationId: LOCATION, quantity: 1 })).toEqual({
+  success: false,
+  error: 'line_changed',
+});
+expect(rpcCalls).toEqual([
+  {
+    name: 'record_inventory_movement',
+    args: expect.objectContaining({ p_item_id: ITEM, p_job_material_line_id: LINE }),
+  } satisfies Record<string, unknown>,
+]);
+expect(logged).toEqual([]);

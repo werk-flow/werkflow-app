@@ -44,14 +44,16 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 | Action | `admin` and `buero` | `employee` |
 | --- | --- | --- |
-| `/dokumente` library, folders, trash, audit, versions | Yes | No; the route redirects |
+| `/dokumente` library, folders, trash | Yes | No; the route redirects |
 | Upload on a job page | Yes | Only on an assigned job |
 | Upload on a project, customer or employee page | Yes | No |
-| View or download | Yes | Only when linked to an assigned job, or to a project with an assigned job |
+| View or download the current version | Yes | Only when linked to an assigned job, or to a project with an assigned job |
+| Earlier versions and audit history | Yes | No |
 | Rename, move, copy, delete, link, unlink, reclassify, new version | Yes | No |
 
 - Field access follows assigned work: `lib/documents/access.ts` decides it, and `app_private.can_access_document` holds the same rule for Realtime. A customer or employee link alone grants nothing.
 - A field worker's document carries only the links `readableDocumentLinks` keeps: an assigned job, that job's project or customer, and the worker. `hydrateDocuments` takes the caller's context, so no reader resolves another link's names for them.
+- The version and audit history of an ordinary document stays with managers: both history actions authorize through `getDocumentWithHistory`, and the `document_versions` and `document_audit_events` policies give an assignment no ordinary row. A protected personnel document keeps its own rule below.
 - Every project-level write needs a manager, the upload ticket and finalize included. Exporting a project-level `Arbeitsnachweis` is such a write.
 - Protected personnel documents: the affected employee reads a version only through an unrevoked release of that version, and can upload requested own health evidence. Admin reads all classes. Büro manages only `personnel_standard` and reads no `admin_restricted` or `health_evidence` bytes, nor restores or permanently deletes such a trashed document (`getDeletedDocumentForManager`, `restore_document`). A release grants reading only: every document write authorizes through `getManageableDocument`, and `lock_active_document` and `finalize_document_version_upload` refuse a non-Admin on an Admin-only class, so a Büro member's own released file of that class stays read-only to them. Assignment, planning, document access and approval responsibility never widen this. Operational consumers get a status, never bytes.
 
@@ -67,4 +69,4 @@ Server actions in `lib/documents/actions.ts` and RLS through `app_private` helpe
 
 ## Storage cleanup
 
-Deleting an organization deletes every object under its prefix before its rows, as the demo seeder reset does; a failed deletion leaves the organization in place. Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.
+Deleting an organization lists every object under its prefix, deletes its rows, and only then deletes the listed objects, so a refusal in the database keeps every file. A failed object deletion after the rows went is logged and leaves orphaned objects. Apart from that, no feature reports or deletes orphaned objects (a staging object whose finalize never ran). When reconciliation becomes a need, build an admin maintenance page with a reviewed authorization boundary and follow the [recovery runbook](recovery-and-incidents.md#restore-procedure-database): list candidates, never purge by prefix, keep objects for review.

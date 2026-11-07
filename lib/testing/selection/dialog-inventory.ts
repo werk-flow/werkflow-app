@@ -525,6 +525,9 @@ export const DIALOG_INVENTORY = {
   'components/auftraege/shared/client-assignment-dialog.tsx#ClientAssignmentDialog|{title}': {
     audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.assign-client' }],
   },
+  'components/auftraege/shared/create-site-dialog.tsx#CreateSiteDialog|Einsatzort anlegen': {
+    audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.create-site' }],
+  },
   'components/auftraege/shared/qualification-warning-dialog.tsx#QualificationWarningDialogContent|Zuweisung prüfen':
     {
       audits: [{ route: '/auftraege/[jobNumber]', role: 'admin', opener: 'work.qualification-warning' }],

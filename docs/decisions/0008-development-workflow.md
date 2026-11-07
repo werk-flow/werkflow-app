@@ -76,3 +76,7 @@ A decision record is immutable once accepted. The overhaul commit `20c9ca8` of 2
 ## Amendment 2026-11-05: Vercel Pro came before the first payment
 
 The team moved to Vercel Pro on 2026-11-05, ahead of the first paying customer, so that Vercel's data processing agreement applies before Willert's first real data. The first paying customer now triggers only point-in-time recovery and the preview password.
+
+## Amendment 2026-11-07: point-in-time recovery waits for a larger customer
+
+The owner moved the point-in-time recovery trigger. It turns on with the first customer who pays about $1000 a month, after Willert, not with the first paying customer. Supabase gets no further spend before Willert pays. This supersedes point-in-time recovery in "What was considered and rejected", in the first paying customer's revisit trigger and in the 2026-11-05 amendment. The first paying customer still triggers the preview password. Once point-in-time recovery is on, the provider restore drill repeats quarterly, automated where the provider allows (werk-flow/werkflow-planning#271).

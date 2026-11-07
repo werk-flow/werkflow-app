@@ -73,6 +73,7 @@ export function ConvertRequestCustomerFields({
           onContactChange={setContactId}
           disabled={isLoading}
           idPrefix="convert"
+          offerSiteCreation
         />
       )}
     </>

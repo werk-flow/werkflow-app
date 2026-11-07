@@ -9,6 +9,7 @@ import { untilPageLeaves, usePendingTask } from '@/hooks/use-server-action';
 import { clearEmailChangeChallengeQuietly } from '@/hooks/use-sign-out';
 import { loadDocument } from '@/lib/navigation/document-load';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
+import { clearManualEntryBridge } from '@/lib/time-tracking/manual-entry-bridge-storage';
 
 interface SignOutAndRedirectButtonProps {
   /** The validated invite code, or null when it is no longer known. */
@@ -31,6 +32,7 @@ export function SignOutAndRedirectButton({ inviteCode }: SignOutAndRedirectButto
     await runSignOut(async () => {
       try {
         await clearEmailChangeChallengeQuietly();
+        clearManualEntryBridge();
 
         // Sign out the current user (explicit global preserves the pre-existing
         // default behavior of this flow).

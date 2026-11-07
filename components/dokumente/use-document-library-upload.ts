@@ -9,7 +9,7 @@ import {
   readDroppedEntries,
   type DroppedFile,
 } from './document-drop-entries';
-import type { DocumentUploadItem } from './document-upload-dialog';
+import type { DocumentUploadItem } from './document-upload-rows';
 
 type DocumentLibraryUploadOptions = {
   canUseUploadActions: boolean;

@@ -13,6 +13,7 @@ import { resolveProjectHandoverExecutionState } from '@/lib/work-handover/projec
 import { LIST_ROW_CAP, readCompleteRows, readInBatches } from '@/lib/supabase/query-batches';
 import { readHandoverCandidateProjects } from '@/lib/attention/pending-sets';
 import type { Tables } from '@/lib/supabase/database.types';
+import { isHiddenCoworkerDraft } from '@/lib/work-artifacts/field-visibility';
 import { logError } from '@/lib/logging';
 import { workTargetHref, workTargetLabel } from './task-labels';
 import type { AttentionTask } from './types';
@@ -25,7 +26,7 @@ type WorkArtifactAttentionRow = Pick<
 >;
 type WorkArtifactRevisionAttentionRow = Pick<
   Tables<'work_artifact_revisions'>,
-  'id' | 'title' | 'kind' | 'revision_number' | 'created_by'
+  'id' | 'title' | 'kind' | 'revision_number' | 'created_by' | 'visibility'
 >;
 type WorkDefectAttentionRow = Pick<
   Tables<'work_artifact_defect_details'>,
@@ -115,7 +116,8 @@ async function readWorkArtifactAttentionTargets(
     assignedJobIds: new Set((jobAssignmentsResult.data ?? []).map((assignment) => assignment.job_id)),
     assignedProjectIds: new Set(
       (projectAssignmentsResult.data ?? []).flatMap((assignment) => {
-        const joined = Array.isArray(assignment.jobs) ? assignment.jobs[0] : assignment.jobs;
+        // PostgREST embeds the job as an object; an embed seeded as an array reads its first job.
+        const [joined] = [assignment.jobs].flat();
         return joined?.project_id ? [joined.project_id] : [];
       }),
     ),
@@ -139,7 +141,8 @@ function toWorkArtifactTasks(
   for (const artifact of artifacts) {
     if (!artifact.current_revision_id) continue;
     const revision = revisions.get(artifact.current_revision_id);
-    if (!revision) continue;
+    // A coworker's internal draft yields no task, as its detail readers refuse it.
+    if (!revision || isHiddenCoworkerDraft(context, artifact, revision)) continue;
     const job = artifact.job_id ? jobs.get(artifact.job_id) : undefined;
     const project = artifact.project_id ? projects.get(artifact.project_id) : undefined;
     const targetHref = workTargetHref(job, project);
@@ -294,7 +297,7 @@ async function readWorkArtifactTaskFacts(
   const revisionsResult = await readInBatches(revisionIds, (batch) =>
     admin
       .from('work_artifact_revisions')
-      .select('id, title, kind, revision_number, created_by')
+      .select('id, title, kind, revision_number, created_by, visibility')
       .eq('organization_id', context.orgId)
       .in('id', [...batch]),
   );

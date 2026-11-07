@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createProbeLinter } from '../../eslint-rules/probe-linter.mjs';
 import { formatQuarantines, quarantinesIn } from '../testing/quarantines';
+import { effectiveLintRules } from './effective-lint-rules';
 import { repositoryRoot } from './product-sources';
 
 const eslint = createProbeLinter();
@@ -304,17 +305,17 @@ describe('test-hygiene scope', () => {
       SUPPORT,
       'tests/canary/support/probe.ts',
     ]) {
-      const config = await eslint.calculateConfigForFile(file);
-      for (const rule of shared) expect(config.rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
-      expect(config.rules['test-hygiene/no-unpinned-clock']?.[0] === 2, file).toBe(file.startsWith('lib/'));
+      const rules = effectiveLintRules(await eslint.calculateConfigForFile(file));
+      for (const rule of shared) expect(rules[`test-hygiene/${rule}`]?.[0], `${file} ${rule}`).toBe(2);
+      expect(rules['test-hygiene/no-unpinned-clock']?.[0] === 2, file).toBe(file.startsWith('lib/'));
     }
     for (const file of [
       'scripts/run-unit-tests.ts',
       'playwright.audit.config.ts',
       'lib/testing/runner/probe-runner.ts',
     ]) {
-      const config = await eslint.calculateConfigForFile(file);
-      expect(config.rules['test-hygiene/no-retries'], file).toEqual([2, { flags: true }]);
+      const rules = effectiveLintRules(await eslint.calculateConfigForFile(file));
+      expect(rules['test-hygiene/no-retries'], file).toEqual([2, { flags: true }]);
     }
   });
 });
