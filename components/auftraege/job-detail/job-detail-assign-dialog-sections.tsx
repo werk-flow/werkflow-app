@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useOrganization } from '@/components/organization/organization-context';
 import { ErrorText } from '@/components/ui/error-text';
 import { Field } from '@/components/ui/field';
 import { SectionError } from '@/components/ui/section-error';
@@ -17,27 +18,32 @@ type AvailabilityRead =
 
 /**
  * Who cannot be planned on the visit date (left, not yet started, app access
- * ended), read while the dialog is open. The save checks the same facts on
- * the server, so a failed read only loses the marks.
+ * ended), read while the dialog is open. For a job with a planned visit the
+ * save checks the same facts on the server; without one, only these marks
+ * show them. The read names the organization, so a switch refuses it.
  */
 function useAssignmentAvailability(open: boolean, localDate: string | null) {
+  const { activeOrgId } = useOrganization();
+  const organizationId = activeOrgId ?? '';
   const [attempt, setAttempt] = useState(0);
-  const requestKey = `${localDate ?? 'heute'}:${attempt}`;
+  const requestKey = `${organizationId}:${localDate ?? 'heute'}:${attempt}`;
   const [settled, setSettled] = useState<{ key: string; read: AvailabilityRead } | null>(null);
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    void readInBackground('assignment-availability', { localDate }, controller.signal).then((result) => {
-      if (controller.signal.aborted) return;
-      setSettled({
-        key: requestKey,
-        read: result.success
-          ? { state: 'loaded', notes: new Map(result.notes.map((entry) => [entry.userId, entry.note])) }
-          : { state: 'failed' },
-      });
-    });
+    void readInBackground('assignment-availability', { organizationId, localDate }, controller.signal).then(
+      (result) => {
+        if (controller.signal.aborted) return;
+        setSettled({
+          key: requestKey,
+          read: result.success
+            ? { state: 'loaded', notes: new Map(result.notes.map((entry) => [entry.userId, entry.note])) }
+            : { state: 'failed' },
+        });
+      },
+    );
     return () => controller.abort();
-  }, [open, localDate, requestKey]);
+  }, [open, organizationId, localDate, requestKey]);
   const read: AvailabilityRead = settled?.key === requestKey ? settled.read : { state: 'loading' };
   return { read, retry: () => setAttempt((count) => count + 1) };
 }
@@ -78,8 +84,8 @@ function JobDetailAssignDialogBody({
       </Field>
       {availability.read.state === 'failed' && (
         <SectionError onRetry={availability.retry}>
-          Austritte und beendete App-Zugänge konnten nicht geladen werden. Beim Speichern prüft WerkFlow sie
-          trotzdem.
+          Austritte und beendete App-Zugänge konnten nicht geladen werden. Für einen geplanten Termin prüft
+          WerkFlow sie beim Speichern trotzdem.
         </SectionError>
       )}
       <ErrorText className="mt-3">{assignError}</ErrorText>

@@ -263,8 +263,9 @@ export const BACKGROUND_READS = {
   ),
   'approved-artifact-actions': defineRead(targetInput, (input) => getApprovedArtifactActionsForTarget(input)),
   'assignment-team-options': defineRead(noInput, () => getAssignmentTeamOptions()),
-  'assignment-availability': defineRead(assignmentAvailabilityInputSchema, (input) =>
-    getAssignmentAvailability(input),
+  'assignment-availability': defineRead(
+    assignmentAvailabilityInputSchema.extend({ organizationId: uuidSchema }),
+    (input) => getAssignmentAvailability({ localDate: input.localDate }),
   ),
   'client-relations': defineRead(z.object({ clientId: uuidSchema }), (input) =>
     getClientRelations(input.clientId),
