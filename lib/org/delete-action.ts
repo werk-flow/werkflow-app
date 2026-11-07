@@ -3,9 +3,9 @@
 import { cookies } from 'next/headers';
 import { updateTag } from 'next/cache';
 import type { ActionResult } from '@/lib/action-result';
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseAdminClient, type AdminClient } from '@/lib/supabase/admin';
 import { writeRefusalFor } from '@/lib/supabase/write-refusal';
-import { deleteStorageObjects, listStorageObjectPaths } from '@/lib/storage/r2';
+import { discardStorageObjects, listStorageObjectPaths } from '@/lib/storage/r2';
 import { readOrganizationDeletionScope } from '@/lib/org/deletion-scope';
 import { CURRENT_ORG_COOKIE, CURRENT_ORG_MAX_AGE } from '@/lib/org/cookies';
 import { resolveActionContext } from '@/lib/org/action-context';
@@ -18,7 +18,44 @@ export type DeleteOrgResult = ActionResult<{ nextOrgId: string | null }>;
 
 const confirmationNameSchema = z.string();
 
-const deleteRefusal = writeRefusalFor(new Set(['org_not_found', 'not_authorized', 'name_mismatch']));
+const deleteRefusal = writeRefusalFor(
+  new Set(['org_not_found', 'not_authorized', 'name_mismatch', 'has_time_records']),
+);
+
+/** Every stored file of the organization; null when the listing fails. */
+async function listOrganizationFiles(organizationId: string): Promise<string[] | null> {
+  try {
+    return await listStorageObjectPaths({ organizationId, prefix: `${organizationId}/` });
+  } catch (error) {
+    logError('deleteOrganization: stored file listing failed', error);
+    return null;
+  }
+}
+
+/**
+ * Removes the files of a deleted organization. No row references them any
+ * more, so the folder is listed again: an upload finalized after the first
+ * list goes too. A failed list or removal is logged and leaves orphaned
+ * objects, never a second error for a finished deletion.
+ */
+async function discardOrganizationFiles(organizationId: string, listed: readonly string[]): Promise<void> {
+  const late = (await listOrganizationFiles(organizationId)) ?? [];
+  await discardStorageObjects({ organizationId, paths: [...new Set([...listed, ...late])] });
+}
+
+/**
+ * True only when a read confirms the organization row is gone. A failed call
+ * can still have committed, when only its response was lost: then the
+ * deletion finished and its files must go.
+ */
+async function organizationIsGone(admin: AdminClient, organizationId: string): Promise<boolean> {
+  const { data, error } = await admin
+    .from('organizations')
+    .select('id')
+    .eq('id', organizationId)
+    .maybeSingle();
+  return !error && !data;
+}
 
 /**
  * Delete an organization and all its associated data.
@@ -28,12 +65,13 @@ const deleteRefusal = writeRefusalFor(new Set(['org_not_found', 'not_authorized'
  * - The confirmation name must match the organization name exactly
  * - Recorded working time or a closed period refuses the deletion, here and
  *   again in delete_organization under its lock
- * - Deletes every stored file of the organization first, as the demo seeder
- *   reset does: a failed file deletion leaves the organization in place, so
- *   the owner can try again
- * - delete_organization deletes the organization row; the foreign key cascade
- *   removes its memberships, invites and all other organization data in the
- *   same statement
+ * - Storage is not transactional, so the database decides first: the action
+ *   lists the organization's stored files, delete_organization deletes the
+ *   organization row, and only then do the listed files go. A refusal leaves
+ *   every file in place; a failed file removal after the row went is logged
+ *   and leaves orphaned objects, the lesser failure
+ * - The foreign key cascade removes the memberships, invites and all other
+ *   organization data in the same statement as the organization row
  * - Users who lose their only org will be redirected to onboarding on next login
  */
 export async function deleteOrganization(confirmationName: string): Promise<DeleteOrgResult> {
@@ -68,19 +106,15 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       return { success: false, error: 'name_mismatch' };
     }
 
-    // Checked before any file goes: the database repeats it, but only after
-    // the files are deleted.
+    // The database repeats this check under its lock.
     const scope = await readOrganizationDeletionScope(activeOrgId);
     if (!scope.success) return scope;
     if (scope.scope.retainsTimeRecords) return { success: false, error: 'has_time_records' };
 
-    try {
-      const paths = await listStorageObjectPaths({ organizationId: activeOrgId, prefix: `${activeOrgId}/` });
-      await deleteStorageObjects({ organizationId: activeOrgId, paths });
-    } catch (error) {
-      logError('deleteOrganization: stored file deletion failed', error);
-      return { success: false, error: 'files_delete_failed' };
-    }
+    // Listed while the rows still name the organization: without the list,
+    // the deletion would knowingly leave every file behind.
+    const paths = await listOrganizationFiles(activeOrgId);
+    if (!paths) return { success: false, error: 'delete_org_failed' };
 
     // One statement: the cascade removes the memberships, invites and every
     // other organization row with it, or nothing. Deleting the memberships
@@ -90,19 +124,15 @@ export async function deleteOrganization(confirmationName: string): Promise<Dele
       p_actor_id: userId,
       p_confirmation_name: parsedConfirmation.data.trim(),
     });
-
-    // The files are gone by now: a refusal says so, and a retry finishes the
-    // deletion once nothing retains the organization.
-    if (orgDeleteError?.message === 'has_time_records') {
-      return { success: false, error: 'time_recorded_during_deletion' };
-    }
-    if (orgDeleteError) {
+    if (orgDeleteError && !(await organizationIsGone(admin, activeOrgId))) {
       return deleteRefusal(
         orgDeleteError,
         'delete_org_failed',
         'deleteOrganization: organization delete failed',
       );
     }
+
+    await discardOrganizationFiles(activeOrgId, paths);
 
     // Get the user's remaining organizations using admin client
     // (to bypass RLS - the org we just deleted might affect RLS queries)
