@@ -17,6 +17,9 @@
 -- prestart employee reads their onboarding state but not their Zeitkonto.
 -- Substitutes: a substitute reads through a delegation only while the holder
 -- who named them has effective access.
+-- Office columns: an assigned employee reads material lines, dispatch
+-- revisions and close versions without their billing, readiness and
+-- organization total columns.
 -- Arbeitsnachweis: a client reads only the artifact rows.
 -- Revisions, actions and all detail tables carry content the
 -- server hides from coworkers (lib/work-artifacts/actions.ts), so only the
@@ -578,5 +581,98 @@ begin
   end if;
 end;
 $$;
+
+-- Field rows without the office's columns: an assigned employee reads their
+-- job's material lines, the current revision of a dispatch sent to them and
+-- the close version of a period with their own result, but not the billing
+-- of the material, the readiness snapshot of the dispatch or the
+-- organization's period totals. The server reads those with the service role
+-- (docs/features/inventory.md, calendar-and-resource-planning.md,
+-- time-tracking.md).
+create temporary table field_employee as
+select id from public.employee_records
+where organization_id = 'cb000000-0000-4000-8000-000000000010'
+  and user_id = 'cb000000-0000-4000-8000-000000000004';
+set local session_replication_role = replica;
+insert into public.inventory_items (id, organization_id, name) values
+('cb000000-0000-4000-8000-000000000200', 'cb000000-0000-4000-8000-000000000010', 'Pressfitting');
+insert into public.job_material_lines (
+  id, organization_id, item_id, job_id, planned_quantity, billable_quantity, is_billable
+) values
+('cb000000-0000-4000-8000-000000000201', 'cb000000-0000-4000-8000-000000000010',
+ 'cb000000-0000-4000-8000-000000000200', 'cb000000-0000-4000-8000-000000000030', 4, 3, true);
+insert into public.planning_dispatches (id, organization_id, job_id, current_revision_id) values
+('cb000000-0000-4000-8000-000000000202', 'cb000000-0000-4000-8000-000000000010',
+ 'cb000000-0000-4000-8000-000000000030', 'cb000000-0000-4000-8000-000000000203');
+insert into public.planning_dispatch_revisions (
+  id, organization_id, dispatch_id, revision_number, change_kind, job_id, location_text, dispatch_note,
+  material_fingerprint, readiness_snapshot
+) values
+('cb000000-0000-4000-8000-000000000203', 'cb000000-0000-4000-8000-000000000010',
+ 'cb000000-0000-4000-8000-000000000202', 1, 'issued', 'cb000000-0000-4000-8000-000000000030', 'Keller',
+ 'Schlüssel beim Hausmeister', repeat('c', 64), '{"visits":[{"title":"Fremder Einsatz"}]}');
+insert into public.planning_dispatch_recipients (organization_id, dispatch_id, revision_id, employee_record_id)
+select 'cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000202',
+  'cb000000-0000-4000-8000-000000000203', id
+from field_employee;
+insert into public.time_periods (id, organization_id, period_start_date, period_end_date, prepared_by, state) values
+('cb000000-0000-4000-8000-000000000204', 'cb000000-0000-4000-8000-000000000010', '2026-08-01', '2026-08-31',
+ 'cb000000-0000-4000-8000-000000000001', 'reopened');
+insert into public.time_period_employee_results (
+  organization_id, calculation_id, employee_record_id, previous_balance_minutes, target_minutes, source_seconds,
+  source_minutes, credited_minutes, vacation_minutes, sickness_minutes, account_event_minutes,
+  period_delta_minutes, overtime_candidate_minutes, closing_balance_minutes, authoritative_targets
+)
+select 'cb000000-0000-4000-8000-000000000010', 'cb000000-0000-4000-8000-000000000205', id,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, true
+from field_employee;
+insert into public.time_period_close_versions (
+  id, organization_id, period_id, calculation_id, closed_by, version, source_fingerprint,
+  opening_balance_total_minutes, period_delta_total_minutes, closing_balance_total_minutes
+) values
+('cb000000-0000-4000-8000-000000000206', 'cb000000-0000-4000-8000-000000000010',
+ 'cb000000-0000-4000-8000-000000000204', 'cb000000-0000-4000-8000-000000000205',
+ 'cb000000-0000-4000-8000-000000000001', 1, repeat('d', 64), 600, 120, 720);
+set local session_replication_role = origin;
+
+create function pg_temp.expect_field_columns(p_relation text, p_id uuid, p_readable text, p_hidden text[])
+returns void language plpgsql as $$
+declare
+  visible bigint;
+  hidden_column text;
+begin
+  perform set_config('request.jwt.claims',
+    '{"sub":"cb000000-0000-4000-8000-000000000004","role":"authenticated"}', true);
+  execute 'set local role authenticated';
+  execute format('select count(*) from (select %s from public.%I where id = $1) row_read', p_readable, p_relation)
+    into visible using p_id;
+  if visible <> 1 then
+    raise exception 'Assigned employee reads % % row(s) of %, expected 1', visible, p_relation, p_id;
+  end if;
+  foreach hidden_column in array p_hidden loop
+    begin
+      execute format('select %I from public.%I where id = $1', hidden_column, p_relation) using p_id;
+      raise exception 'Assigned employee reads %.% through the Data API', p_relation, hidden_column;
+    exception when insufficient_privilege then null;
+    end;
+  end loop;
+  execute 'reset role';
+end;
+$$;
+
+select pg_temp.expect_field_columns('job_material_lines', 'cb000000-0000-4000-8000-000000000201',
+  'id, organization_id, job_id, project_id, item_id, preferred_location_id, planned_quantity, taken_quantity, '
+  || 'returned_quantity, is_unplanned, status, notes, created_by, created_at, updated_at, '
+  || 'work_template_application_id, source_work_template_material_line_id',
+  array['is_billable', 'billable_quantity']);
+select pg_temp.expect_field_columns('planning_dispatch_revisions', 'cb000000-0000-4000-8000-000000000203',
+  'id, organization_id, dispatch_id, revision_number, change_kind, occurrence_id, job_id, planned_start_at, '
+  || 'planned_end_at, planned_start_date, planned_end_date_exclusive, location_text, site_id, dispatch_note, '
+  || 'material_fingerprint, readiness_fingerprint, created_by, created_at',
+  array['readiness_snapshot']);
+select pg_temp.expect_field_columns('time_period_close_versions', 'cb000000-0000-4000-8000-000000000206',
+  'id, organization_id, period_id, calculation_id, version, supersedes_close_version_id, source_fingerprint, '
+  || 'closed_by, closed_at',
+  array['opening_balance_total_minutes', 'period_delta_total_minutes', 'closing_balance_total_minutes']);
 
 rollback;
