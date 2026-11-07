@@ -74,6 +74,15 @@ function hasValidChronology(snapshot: TimeCorrectionSnapshot): boolean {
 
 /** The refusal of a submission's shape, decided before any read; null when the shape fits. */
 export function submissionShapeError(input: SubmitTimeCorrectionInput): string | null {
+  // Only a reassignment proposes time for another person. Any other fact for
+  // someone else is refused here, before the timeline check could answer
+  // about that person's recorded time.
+  if (
+    input.kind !== 'reassign' &&
+    input.proposedFacts.some((fact) => fact.employeeRecordId !== input.subjectEmployeeRecordId)
+  ) {
+    return 'invalid_shape';
+  }
   if (
     input.calendarAdjustment &&
     (input.source !== null || input.proposedFacts.length !== 0 || !['edit', 'reassign'].includes(input.kind))

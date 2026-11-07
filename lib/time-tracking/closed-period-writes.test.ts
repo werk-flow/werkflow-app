@@ -127,7 +127,7 @@ async function runFixture(): Promise<void> {
   const responsibilities = await import('@/lib/responsibilities/server');
   mock.module('@/lib/responsibilities/server', () => ({
     ...responsibilities,
-    authorizeResponsibilityForTarget: async () => ({ success: true }),
+    authorizeResponsibilityForTargets: async () => ({ success: true }),
   }));
   const { addManualEntry, updateEntry, deleteEntry, deleteEntriesBatch } = await import(
     '@/lib/time-tracking/entry-write-actions'

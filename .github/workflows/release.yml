@@ -1,7 +1,7 @@
 name: release
 
 # The owner's release (docs/technical/environments.md, "Release and rollback").
-# It runs each weekday at 07:00 Berlin, or by hand: gh workflow run release. It releases
+# It decides each weekday at 03:30 Berlin, so PROD is live by 05:00, or by hand: gh workflow run release. It releases
 # the main commit it starts on, and only after a green full run on exactly that
 # commit: a nightly or manual one it finds, or its own. A scheduled run ends without
 # a change when main equals production or its newest full run is red
@@ -9,11 +9,13 @@ name: release
 # stopped at a red full run, opens or updates the issue "CI alert: release"; the next
 # release that ships closes it.
 on:
-  # GitHub starts this repository's scheduled runs up to 10 hours late, so a cron line at 07:00
-  # runs in the working day. This one fires the evening before a weekday, and the Hold job
-  # waits for 07:00. It stays a schedule event, so it decides as a scheduled run.
+  # GitHub starts this repository's scheduled runs up to 10 hours late, so this line fires at
+  # 17:00 the evening before a weekday: even 10 hours late, and behind a nightly full run on the
+  # same commit (ci.yml queues them), its own full run ends before 05:00. The Hold job waits for
+  # 03:30. It stays a schedule event, so it decides as a scheduled run (lib/testing/ci-schedule.test.ts
+  # keeps these times).
   schedule:
-    - cron: '30 22 * * 0-4'
+    - cron: '0 17 * * 0-4'
       timezone: Europe/Berlin
   workflow_dispatch:
     inputs:
@@ -41,9 +43,9 @@ env:
 
 jobs:
   hold:
-    name: Hold until 07:00
+    name: Hold until 03:30
     # Only a scheduled run waits. A job lasts 6 hours at most, so two legs in turn cover the
-    # evening: the second ends at once when the first reached 07:00. A failed leg stops the
+    # evening: the second ends at once when the first reached 03:30. A failed leg stops the
     # release, and the alert reports it.
     strategy:
       max-parallel: 1
@@ -58,9 +60,9 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: .github/scripts
-      - name: Wait for 07:00 Berlin
+      - name: Wait for 03:30 Berlin
         if: github.event_name == 'schedule'
-        run: bash .github/scripts/hold-until.sh 07:00
+        run: bash .github/scripts/hold-until.sh 03:30
 
   candidate:
     name: Find a full run
@@ -258,6 +260,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TITLE: "CI alert: release${{ inputs.alert_proof && ' (proof)' || '' }}"
+          # A failed or held release is a production failure, so the alert assigns the owner.
+          AFFECTS_PRODUCTION: true
           RESULTS: ${{ join(needs.*.result, ' ') }}
           SKIP: ${{ needs.candidate.outputs.skip || inputs.alert_proof }}
           SKIP_REASON: ${{ needs.candidate.outputs.skip_reason || 'Proof run.' }}

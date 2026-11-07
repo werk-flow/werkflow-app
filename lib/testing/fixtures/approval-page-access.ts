@@ -310,5 +310,5 @@ await decideVacation(employeeRequestId, 'decided');
 
 // An admin of another organization decides nothing of this one.
 actAs(adminId, 'admin', ORGANIZATION_B);
-await review(employeeEntries, 'not_a_member');
+await review(employeeEntries, 'entry_not_found');
 await decideVacation(employeeRequestId, 'request_not_found');

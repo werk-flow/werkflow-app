@@ -436,6 +436,32 @@ export async function authorizeResponsibilityForTarget(input: {
     }
   | ActionFailure
 > {
+  const { targetUserId, targetRole, ...authority } = input;
+  return authorizeResponsibilityForTargets({
+    ...authority,
+    targets: [{ userId: targetUserId, role: targetRole }],
+  });
+}
+
+/**
+ * The actor's authority over every target, resolved from one load of the
+ * responsibility state: a decision over several people costs one load,
+ * however many people it covers. Refuses with the first target the actor may
+ * not decide for.
+ */
+export async function authorizeResponsibilityForTargets(input: {
+  organizationId: string;
+  responsibility: OrganizationResponsibility;
+  actorUserId: string;
+  targets: ReadonlyArray<{ userId: string | null; role: OrgRole | null }>;
+}): Promise<
+  | {
+      success: true;
+      holder: EffectiveResponsibilityHolder;
+      effective: EffectiveResponsibility;
+    }
+  | ActionFailure
+> {
   const state = await loadResponsibilityRuntimeState(input.organizationId);
   if (!state) return { success: false, error: 'responsibility_load_failed' };
 
@@ -446,11 +472,14 @@ export async function authorizeResponsibilityForTarget(input: {
     ...state,
   });
   const holder = effective.holders.find((candidate) => candidate.userId === input.actorUserId);
+  const refused = input.targets.find(
+    (target) => !holder || !canHolderApproveTarget(holder, target.userId, target.role),
+  );
 
-  if (!holder || !canHolderApproveTarget(holder, input.targetUserId, input.targetRole)) {
+  if (!holder || refused) {
     return {
       success: false,
-      error: input.actorUserId === input.targetUserId ? 'self_approval_not_allowed' : 'not_responsible',
+      error: refused?.userId === input.actorUserId ? 'self_approval_not_allowed' : 'not_responsible',
     };
   }
 

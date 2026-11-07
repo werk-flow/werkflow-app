@@ -22,6 +22,7 @@ export type ContactDialogState = {
   draft: ContactDraft;
   error: string | null;
   nameError?: string | null;
+  emailError?: string | null;
 };
 
 /** The open site dialog; `siteId` is null while a new site is entered. */

@@ -1,16 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { z } from '@/lib/zod';
 import { listProductSources, repositoryRoot } from './product-sources';
 
 // Tier 1 and 2 for Zod's eval probe (AGENTS.md "3. Security"). The content
 // security policy has no 'unsafe-eval'. Zod 4 probes `Function("")` when the
 // first object schema is built, and in the browser every page load then
-// reported one `eval` violation to /api/csp-report. lib/zod.ts sets
+// reported one `eval` violation to /api/csp-report. lib/zod-members.ts sets
 // `jitless` before any schema exists, which holds only while every schema
-// module imports `z` from there.
+// module imports `z` from lib/zod.ts.
 
 const ENTRY = 'lib/zod.ts';
+const MEMBERS = 'lib/zod-members.ts';
 const ZOD_SPECIFIER = /\bfrom\s+['"]zod(?:\/[^'"]*)?['"]|\bimport\s*\(\s*['"]zod(?:\/[^'"]*)?['"]\s*\)/;
 
 /** How many times the `Function` constructor runs while a schema from `entry` is built and used. */
@@ -36,7 +38,7 @@ function functionConstructorCalls(entry: string): number {
 describe('Zod entry point', () => {
   test('product code imports Zod only through lib/zod.ts', () => {
     const offenders = listProductSources().filter(
-      (file) => file !== ENTRY && ZOD_SPECIFIER.test(readFileSync(resolve(repositoryRoot, file), 'utf8')),
+      (file) => file !== MEMBERS && ZOD_SPECIFIER.test(readFileSync(resolve(repositoryRoot, file), 'utf8')),
     );
     expect(offenders, "Import `z` from '@/lib/zod' so jitless is set before the schema is built.").toEqual(
       [],
@@ -45,6 +47,10 @@ describe('Zod entry point', () => {
 
   test('building and parsing a schema through the entry point never calls the Function constructor', () => {
     expect(functionConstructorCalls(resolve(repositoryRoot, ENTRY))).toBe(0);
+  });
+
+  test('the namespace names its members, so the bundle drops the locales and the JSON Schema conversion', () => {
+    for (const member of ['locales', 'toJSONSchema', 'fromJSONSchema']) expect(z).not.toHaveProperty(member);
   });
 
   test('the probe detection works: plain Zod calls the Function constructor', () => {
