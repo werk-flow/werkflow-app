@@ -1,7 +1,8 @@
 // Actual contact and work-site actions over the in-memory database: only
 // managers pass, a customer, contact or site of another organization is
-// unreachable, and saving a primary row writes that row alone. Clearing the
-// previous primary is the database's job (supabase/tests/customer_atomic_writes.sql).
+// unreachable, a contact email is one address or blank, and saving a primary
+// row writes that row alone. Clearing the previous primary is the database's
+// job (supabase/tests/customer_atomic_writes.sql).
 import assert from 'node:assert/strict';
 import {
   ORGANIZATION_A,
@@ -104,6 +105,44 @@ assert.deepEqual(await Promise.all(everyAction(foreignClientId, foreignContactId
 ]);
 assert.equal(databaseSnapshot(), initialDatabase, 'no denied or rejected call may write');
 
+// A contact email is one address or blank: any other text is refused on
+// create and update, for an own and a foreign record alike, before any read.
+const requestsBeforeEmails = world.adminClientRequests;
+for (const email of [
+  'erste@example.de, zweite@example.de',
+  'name@example.de?x',
+  'name@example.de&x',
+  'name@example.de%0A',
+  'kein Postfach',
+]) {
+  for (const [owner, contactId] of [
+    [clientId, primaryContactId],
+    [foreignClientId, foreignContactId],
+  ] as const) {
+    assert.deepEqual(
+      await actions.createClientContact(owner, { name: 'Neu', email }),
+      { success: false, error: 'invalid_input' },
+      `create refuses ${email}`,
+    );
+    assert.deepEqual(
+      await actions.updateClientContact(contactId, { email }),
+      { success: false, error: 'invalid_input' },
+      `update refuses ${email}`,
+    );
+  }
+}
+assert.equal(
+  world.adminClientRequests,
+  requestsBeforeEmails,
+  'a malformed email is refused before the database',
+);
+// A well-formed email does not open another organization's contact.
+assert.deepEqual(await actions.updateClientContact(foreignContactId, { email: 'kunde@example.de' }), {
+  success: false,
+  error: 'contact_not_found',
+});
+assert.equal(databaseSnapshot(), initialDatabase, 'no refused email may write');
+
 // A new primary contact and site are one insert each; the action itself never
 // rewrites the previous primary row.
 const contact = await actions.createClientContact(clientId, { name: 'Neue Hauptperson', isPrimary: true });
@@ -140,3 +179,14 @@ assert.deepEqual(
   tableRows(world, 'client_sites').find((row) => row.id === foreignSiteId),
   siteRow(foreignSiteId, ORGANIZATION_B, foreignClientId),
 );
+
+// A well-formed email is saved trimmed, and a blank one clears it.
+const withEmail = await actions.createClientContact(clientId, {
+  name: 'Mit E-Mail',
+  email: ' kunde@example.de ',
+});
+assert.ok(withEmail.success);
+assert.equal(withEmail.contact.email, 'kunde@example.de');
+const cleared = await actions.updateClientContact(withEmail.contact.id, { email: '  ' });
+assert.ok(cleared.success);
+assert.equal(cleared.contact.email, null);
