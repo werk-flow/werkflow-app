@@ -2,19 +2,16 @@
 // clocked in at another organization keeps a new open entry out, and the
 // refusal names that organization only to a caller who is a member there.
 import assert from 'node:assert/strict';
-import { mock } from 'bun:test';
-import { getLocalDayStart } from '@/lib/date-time/berlin';
+import { mock, setSystemTime } from 'bun:test';
 import { ORGANIZATION_A, ORGANIZATION_B, installActionWorld, signInAs } from './action-boundary-world';
 import { databaseSnapshot } from './workforce-boundary-support';
 
 const employeeId = '8d000000-0000-4000-8000-000000000001';
 const otherOrganizationName = 'Andere Haustechnik GmbH';
-// Hours into yesterday's local day, so every entry lies on one past day at any time of day.
-const yesterdayStart = getLocalDayStart(new Date(Date.now() - 24 * 60 * 60 * 1000));
-const yesterdayAt = (hour: number): string =>
-  new Date(yesterdayStart.getTime() + hour * 60 * 60 * 1000).toISOString();
-// The employee clocked in at organization B yesterday and never clocked out.
-const openSessionStart = yesterdayAt(8);
+// A fixed instant: both entries lie on the day before, 08:00 and 09:00 in Berlin.
+setSystemTime(new Date('2026-11-04T10:00:00.000Z'));
+// The employee clocked in at organization B that day and never clocked out.
+const openSessionStart = '2026-11-03T07:00:00.000Z';
 
 const world = installActionWorld({
   organizations: [
@@ -58,7 +55,7 @@ const openEntryIn = (organizationId: string) =>
   addManualEntry({
     organizationId,
     targetUserId: employeeId,
-    entries: [{ entryType: 'clock_in', timestamp: yesterdayAt(9) }],
+    entries: [{ entryType: 'clock_in', timestamp: '2026-11-03T08:00:00.000Z' }],
   });
 const initialDatabase = databaseSnapshot(world);
 
