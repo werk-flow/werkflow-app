@@ -241,6 +241,24 @@ async function jobsOfOwnTime(
 }
 
 /**
+ * The selected jobs a picker resolves. A manager resolves every selected job
+ * of the organization. An employee's selection follows the purpose's
+ * open-jobs rule, except for a finished job of the caller's own time. Null
+ * when a read fails.
+ */
+async function selectableJobs<Row extends { id: string; status: string }>(
+  database: Database,
+  context: AuthContext,
+  input: Request,
+  rows: Row[],
+): Promise<Row[] | null> {
+  const finishedIds = rows.flatMap((row) => (row.status === 'fertig' ? [row.id] : []));
+  if (context.isManagerOrAbove || !offersOpenJobsOnly(input) || finishedIds.length === 0) return rows;
+  const ownTime = await jobsOfOwnTime(database, context, finishedIds);
+  return ownTime && rows.filter((row) => row.status !== 'fertig' || ownTime.has(row.id));
+}
+
+/**
  * The descriptions of the jobs among `rows` without a title, for a manager's
  * labels. Null when the read fails.
  */
@@ -318,15 +336,8 @@ async function loadJobOptions(
     logReadErrors('loadJobOptions: read failed', page.error, selected.error);
     return { success: false, error: 'options_failed' };
   }
-  // A manager resolves every selected job of the organization. An employee's
-  // selection follows the purpose's open-jobs rule, except for a finished job
-  // of the caller's own time.
-  const finishedIds = selected.data.flatMap((row) => (row.status === 'fertig' ? [row.id] : []));
-  const resolvableFinishedIds =
-    context.isManagerOrAbove || !offersOpenJobsOnly(input) || finishedIds.length === 0
-      ? new Set(finishedIds)
-      : await jobsOfOwnTime(database, context, finishedIds);
-  if (!resolvableFinishedIds) return { success: false, error: 'options_failed' };
+  const selectable = await selectableJobs(database, context, input, selected.data);
+  if (!selectable) return { success: false, error: 'options_failed' };
   const descriptions = context.isManagerOrAbove
     ? await descriptionsOfUntitledJobs(database, context, [...page.data, ...selected.data])
     : new Map<string, string | null>();
@@ -352,9 +363,7 @@ async function loadJobOptions(
   return {
     success: true,
     options: page.data.slice(0, PAGE_SIZE).map(map),
-    selected: selected.data
-      .filter((row) => row.status !== 'fertig' || resolvableFinishedIds.has(row.id))
-      .map(map),
+    selected: selectable.map(map),
     hasMore: page.data.length > PAGE_SIZE,
   };
 }
