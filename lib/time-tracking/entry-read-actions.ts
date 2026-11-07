@@ -20,6 +20,7 @@ import {
   type GetTimeEntryAuditEventsResult,
   type TimeEntryRow,
   type TimeEntryStatus,
+  type WorkSession,
   toTimeEntries,
 } from './types';
 import { calculateWorkSessions, canViewEntries } from './helpers';
@@ -248,102 +249,38 @@ function userDayKey(entry: TimeEntry): string {
   return `${entry.userId}:${entry.organizationId}:${formatBerlinLocalDate(new Date(entry.timestamp))}`;
 }
 
-/**
- * The legacy sessions a job's clock-ins open, read with the whole local days
- * they sit in, merged by id with the job's canonical entries; null when the
- * day read fails.
- */
-async function collectJobSessionEntries(
-  admin: ReturnType<typeof createSupabaseAdminClient>,
-  job: { organizationId: string; jobId: string },
-  targetClockIns: readonly TimeEntry[],
-  canonicalEntries: readonly TimeEntry[],
-): Promise<TimeEntry[] | null> {
-  const userIds = [...new Set(targetClockIns.map((entry) => entry.userId))];
-  const targetDayKeys = new Set(targetClockIns.map(userDayKey));
-  const timestamps = targetClockIns.map((entry) => new Date(entry.timestamp).getTime());
-  const rangeStart = getLocalDayStart(new Date(Math.min(...timestamps))).toISOString();
-  const rangeEnd = getLocalDayEnd(new Date(Math.max(...timestamps))).toISOString();
+/** What one job's time read needs: the caller and the approved corrections the caller loaded once. */
+type JobReadScope = {
+  organizationId: string;
+  userId: string;
+  isManager: boolean;
+  projectionTime: string;
+  correctionApplications: readonly TimeCorrectionApplicationProjection[];
+};
 
-  // Every clock-in above belongs to the job's organization. One user sits in
-  // one batch, so each user's days keep their timestamp order.
-  const { data, error } = await readInBatches(userIds, (batch) =>
-    readCompleteRows(
-      (from, to) =>
-        admin
-          .from('time_entries')
-          .select('*')
-          .in('user_id', [...batch])
-          .eq('organization_id', job.organizationId)
-          .gte('timestamp', rangeStart)
-          .lte('timestamp', rangeEnd)
-          .neq('status', 'rejected')
-          .order('timestamp', { ascending: true })
-          .order('created_at', { ascending: true })
-          .order('id')
-          .range(from, to),
-      LIST_ROW_CAP,
-    ),
-  );
+/** One job's canonical entries and the legacy clock-ins that open its sessions. */
+type JobSources = { jobId: string; canonicalEntries: TimeEntry[]; clockIns: TimeEntry[] };
 
-  if (error) {
-    logError('Error fetching session-aware time entries for job:', error);
-    return null;
+/** Runs `read` over the items, at most four at a time, in item order. */
+async function mapInWindows<Item, Result>(
+  items: readonly Item[],
+  read: (item: Item) => Promise<Result>,
+): Promise<Result[]> {
+  const windowSize = 4;
+  const results: Result[] = [];
+  for (let offset = 0; offset < items.length; offset += windowSize) {
+    results.push(...(await Promise.all(items.slice(offset, offset + windowSize).map(read))));
   }
-
-  const relevantEntries = toTimeEntries(data || []).filter((entry) => targetDayKeys.has(userDayKey(entry)));
-  const entriesByUserDay = new Map<string, TimeEntry[]>();
-
-  for (const entry of relevantEntries) {
-    const key = userDayKey(entry);
-    const existing = entriesByUserDay.get(key);
-    if (existing) {
-      existing.push(entry);
-    } else {
-      entriesByUserDay.set(key, [entry]);
-    }
-  }
-
-  const dedupedEntries = new Map<string, TimeEntry>();
-
-  for (const entry of canonicalEntries) {
-    dedupedEntries.set(entry.id, entry);
-  }
-
-  for (const entriesForDay of entriesByUserDay.values()) {
-    const sessions = calculateWorkSessions(entriesForDay).filter(
-      (session) => session.clockIn?.jobId === job.jobId,
-    );
-
-    for (const session of sessions) {
-      if (session.clockIn) {
-        dedupedEntries.set(session.clockIn.id, session.clockIn);
-      }
-      if (session.clockOut) {
-        dedupedEntries.set(session.clockOut.id, session.clockOut);
-      }
-    }
-  }
-  return [...dedupedEntries.values()];
+  return results;
 }
 
-/**
- * The corrected time entries of one job the caller may see; null when a read
- * fails. The caller authorized the job and loaded the
- * approved corrections once for its whole request.
- */
-async function readJobTimeEntries(
+/** The canonical entries and legacy clock-ins of one job the caller may see; null when a read fails. */
+async function readJobSources(
   admin: ReturnType<typeof createSupabaseAdminClient>,
-  scope: {
-    organizationId: string;
-    jobId: string;
-    userId: string;
-    isManager: boolean;
-    projectionTime: string;
-    correctionApplications: readonly TimeCorrectionApplicationProjection[];
-  },
-): Promise<TimeEntry[] | null> {
-  const { organizationId, jobId, userId, isManager, projectionTime } = scope;
+  scope: JobReadScope,
+  jobId: string,
+): Promise<JobSources | null> {
+  const { organizationId, userId, isManager, projectionTime } = scope;
   const canonicalResult = await getCanonicalTimeEntries({
     organizationId,
     from: '1970-01-01T00:00:00.000Z',
@@ -353,11 +290,6 @@ async function readJobTimeEntries(
     referenceTime: projectionTime,
   });
   if (!canonicalResult.success) return null;
-  const canonicalEntries = canonicalResult.entries;
-  const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
-    applyApprovedTimeCorrections(entries, scope.correctionApplications, organizationId).filter(
-      (entry) => entry.jobId === jobId && (isManager || entry.userId === userId),
-    );
   let jobClockInsQuery = admin
     .from('time_entries')
     .select('*')
@@ -380,23 +312,147 @@ async function readJobTimeEntries(
     logError('Error fetching clock-ins for job:', jobClockInsError);
     return null;
   }
+  return { jobId, canonicalEntries: canonicalResult.entries, clockIns: toTimeEntries(jobClockIns || []) };
+}
 
-  const targetClockIns = toTimeEntries(jobClockIns || []);
-  if (targetClockIns.length === 0) return projectJobEntries(canonicalEntries);
+/**
+ * The whole local days each job's clock-ins span, merged where they overlap,
+ * each with the people whose days it reads.
+ */
+function clockInDaySpans(
+  jobs: readonly JobSources[],
+): Array<{ start: number; end: number; userIds: Set<string> }> {
+  const spans = jobs
+    .filter((job) => job.clockIns.length > 0)
+    .map((job) => {
+      const timestamps = job.clockIns.map((entry) => new Date(entry.timestamp).getTime());
+      return {
+        start: getLocalDayStart(new Date(Math.min(...timestamps))).getTime(),
+        end: getLocalDayEnd(new Date(Math.max(...timestamps))).getTime(),
+        userIds: new Set(job.clockIns.map((entry) => entry.userId)),
+      };
+    })
+    .sort((left, right) => left.start - right.start);
+  const merged: typeof spans = [];
+  for (const span of spans) {
+    const last = merged.at(-1);
+    if (last && span.start <= last.end) {
+      last.end = Math.max(last.end, span.end);
+      for (const userId of span.userIds) last.userIds.add(userId);
+    } else {
+      merged.push(span);
+    }
+  }
+  return merged;
+}
 
-  const sessionEntries = await collectJobSessionEntries(
-    admin,
-    { organizationId, jobId },
-    targetClockIns,
-    canonicalEntries,
+/**
+ * The legacy entries of every local day a clock-in of the jobs sits in,
+ * grouped by person and day. Each day is read once for all the jobs, not once
+ * per job; null when a read fails.
+ */
+async function readClockInDays(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  organizationId: string,
+  jobs: readonly JobSources[],
+): Promise<Map<string, TimeEntry[]> | null> {
+  const targetDayKeys = new Set(jobs.flatMap((job) => job.clockIns.map(userDayKey)));
+  // Every clock-in above belongs to the organization. One user sits in one
+  // batch of a span, and spans hold whole days, so each user's day keeps its
+  // timestamp order.
+  const results = await mapInWindows(clockInDaySpans(jobs), (span) =>
+    readInBatches([...span.userIds], (batch) =>
+      readCompleteRows(
+        (from, to) =>
+          admin
+            .from('time_entries')
+            .select('*')
+            .in('user_id', [...batch])
+            .eq('organization_id', organizationId)
+            .gte('timestamp', new Date(span.start).toISOString())
+            .lte('timestamp', new Date(span.end).toISOString())
+            .neq('status', 'rejected')
+            .order('timestamp', { ascending: true })
+            .order('created_at', { ascending: true })
+            .order('id')
+            .range(from, to),
+        LIST_ROW_CAP,
+      ),
+    ),
   );
-  if (!sessionEntries) return null;
+  const failed = results.find((result) => result.error);
+  if (failed?.error) {
+    logError('Error fetching session-aware time entries for job:', failed.error);
+    return null;
+  }
 
-  return projectJobEntries(sessionEntries).sort((a, b) => {
+  const entriesByUserDay = new Map<string, TimeEntry[]>();
+  for (const entry of toTimeEntries(results.flatMap((result) => result.data))) {
+    const key = userDayKey(entry);
+    if (!targetDayKeys.has(key)) continue;
+    const existing = entriesByUserDay.get(key);
+    if (existing) {
+      existing.push(entry);
+    } else {
+      entriesByUserDay.set(key, [entry]);
+    }
+  }
+  return entriesByUserDay;
+}
+
+/**
+ * One job's corrected entries the caller may see: its canonical entries and
+ * the legacy sessions its own clock-ins open on their days.
+ */
+function jobTimeEntries(
+  scope: JobReadScope,
+  job: JobSources,
+  sessionsByUserDay: ReadonlyMap<string, WorkSession[]>,
+): TimeEntry[] {
+  const projectJobEntries = (entries: readonly TimeEntry[]): TimeEntry[] =>
+    applyApprovedTimeCorrections(entries, scope.correctionApplications, scope.organizationId).filter(
+      (entry) => entry.jobId === job.jobId && (scope.isManager || entry.userId === scope.userId),
+    );
+  if (job.clockIns.length === 0) return projectJobEntries(job.canonicalEntries);
+
+  const jobDayKeys = new Set(job.clockIns.map(userDayKey));
+  const dedupedEntries = new Map(job.canonicalEntries.map((entry) => [entry.id, entry]));
+  for (const [dayKey, sessions] of sessionsByUserDay) {
+    if (!jobDayKeys.has(dayKey)) continue;
+    for (const { clockIn, clockOut } of sessions) {
+      if (clockIn?.jobId !== job.jobId) continue;
+      dedupedEntries.set(clockIn.id, clockIn);
+      if (clockOut) dedupedEntries.set(clockOut.id, clockOut);
+    }
+  }
+
+  return projectJobEntries([...dedupedEntries.values()]).sort((a, b) => {
     const timestampDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
     if (timestampDiff !== 0) return timestampDiff;
     return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
+}
+
+/**
+ * The corrected time entries of each job the caller may see, in job order;
+ * null when a read fails. The caller authorized the jobs and loaded the
+ * approved corrections once for its whole request; the jobs' days are read
+ * once for all of them.
+ */
+async function readJobsTimeEntries(
+  admin: ReturnType<typeof createSupabaseAdminClient>,
+  scope: JobReadScope,
+  jobIds: readonly string[],
+): Promise<Array<{ jobId: string; entries: TimeEntry[] }> | null> {
+  const sources = await mapInWindows(jobIds, (jobId) => readJobSources(admin, scope, jobId));
+  const jobs = sources.flatMap((source) => (source ? [source] : []));
+  if (jobs.length !== sources.length) return null;
+  const entriesByUserDay = await readClockInDays(admin, scope.organizationId, jobs);
+  if (!entriesByUserDay) return null;
+  const sessionsByUserDay = new Map(
+    [...entriesByUserDay].map(([dayKey, entries]) => [dayKey, calculateWorkSessions(entries)]),
+  );
+  return jobs.map((job) => ({ jobId: job.jobId, entries: jobTimeEntries(scope, job, sessionsByUserDay) }));
 }
 
 /**
@@ -451,14 +507,18 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
       to: projectionTime,
       ...(!isManager ? { userIds: [user.id] } : {}),
     });
-    const entries = await readJobTimeEntries(admin, {
-      organizationId: job.organization_id,
-      jobId,
-      userId: user.id,
-      isManager,
-      projectionTime,
-      correctionApplications,
-    });
+    const jobs = await readJobsTimeEntries(
+      admin,
+      {
+        organizationId: job.organization_id,
+        userId: user.id,
+        isManager,
+        projectionTime,
+        correctionApplications,
+      },
+      [jobId],
+    );
+    const entries = jobs?.[0]?.entries;
     if (!entries) return { success: false, error: 'fetch_failed' };
     const participants = await loadJobParticipants(admin, isManager, entries);
     if (!participants) return { success: false, error: 'fetch_failed' };
@@ -471,7 +531,8 @@ export async function getTimeEntriesForJob(rawJobId: string): Promise<GetTimeEnt
 
 /**
  * The corrected time entries of each authorized job of one project, with the
- * approved corrections read once for all of them; null when a read fails.
+ * approved corrections and the days read once for all of them; null when a
+ * read fails.
  */
 async function readProjectJobTimeEntries(
   admin: ReturnType<typeof createSupabaseAdminClient>,
@@ -485,28 +546,17 @@ async function readProjectJobTimeEntries(
     to: projectionTime,
     ...(!scope.isManager ? { userIds: [scope.userId] } : {}),
   });
-  const jobs: Array<{ jobId: string; entries: TimeEntry[] | null }> = [];
-  const jobReadConcurrency = 4;
-  for (let offset = 0; offset < scope.jobIds.length; offset += jobReadConcurrency) {
-    const batch = scope.jobIds.slice(offset, offset + jobReadConcurrency);
-    jobs.push(
-      ...(await Promise.all(
-        batch.map(async (jobId) => ({
-          jobId,
-          entries: await readJobTimeEntries(admin, {
-            organizationId: scope.organizationId,
-            jobId,
-            userId: scope.userId,
-            isManager: scope.isManager,
-            projectionTime,
-            correctionApplications,
-          }),
-        })),
-      )),
-    );
-  }
-  const readJobs = jobs.flatMap(({ jobId, entries }) => (entries ? [{ jobId, entries }] : []));
-  return readJobs.length === jobs.length ? readJobs : null;
+  return readJobsTimeEntries(
+    admin,
+    {
+      organizationId: scope.organizationId,
+      userId: scope.userId,
+      isManager: scope.isManager,
+      projectionTime,
+      correctionApplications,
+    },
+    scope.jobIds,
+  );
 }
 
 export async function getTimeEntriesForProjectJobs(
