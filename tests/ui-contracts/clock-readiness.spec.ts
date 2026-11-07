@@ -120,15 +120,35 @@ test('a break resumes its job from the hot key and the sheet, and hot keys wait 
   await expect(page.getByRole('button', { name: 'Pause', exact: true })).toBeEnabled();
 });
 
-test('the clock dock publishes its height for the layout reserve, and its hot keys share one row on a phone', async ({
+test('the clock dock publishes its height for the layout reserve, keeps its button still on a late read, and its hot keys share one row on a phone', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.route('**/api/time-tracking-state?**', (route) =>
-    route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } }),
-  );
+  let releaseRead: () => void = () => {
+    throw new Error('Read barrier was not initialized.');
+  };
+  const heldRead = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  await page.route('**/api/time-tracking-state?**', async (route) => {
+    await heldRead;
+    await route.fulfill({ json: { success: true, state: BREAK_CLOCK_STATE } });
+  });
   await mountClock(page, { withStyles: true });
+  const launcher = page.getByRole('button', { name: 'Zeiterfassung starten', exact: true });
+  await expect(launcher).toBeDisabled();
+  const buttonBox = (name: string): Promise<{ x: number; y: number }> =>
+    page
+      .getByRole('button', { name, exact: true })
+      .evaluate((element) => ({
+        x: element.getBoundingClientRect().x,
+        y: element.getBoundingClientRect().y,
+      }));
+  const loading = await buttonBox('Zeiterfassung starten');
+  releaseRead();
   await expect(page.getByRole('button', { name: 'Weiter ohne Auftrag', exact: true })).toBeEnabled();
+  // The read adds the hot keys' row above; the round button stays where the finger expects it.
+  expect(await buttonBox('Laufende Zeiterfassung öffnen')).toEqual(loading);
   const dock = clockDock(page);
   const published = (): Promise<string> =>
     page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--clock-dock-height'));

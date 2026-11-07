@@ -147,10 +147,11 @@ export function ClockFAB() {
           !isReady ? 'loading' : isPending ? 'pending' : isOnBreak ? 'break' : isClockedIn ? 'in' : 'out'
         }
         // The dock spans the content column; the app layout reserves its height, so no page control sits under it.
-        className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-3 border-t bg-card px-4 py-2 will-change-transform sm:px-6 md:left-64"
+        // On a phone the button keeps the bottom: a late clock read adds the hot keys' row above, not under it.
+        className="fixed inset-x-0 bottom-0 z-30 flex items-end gap-3 border-t bg-card px-4 py-2 will-change-transform sm:items-center sm:px-6 md:left-64"
         style={{ contain: 'layout style' }}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 self-center sm:flex-row sm:items-center sm:gap-3">
           {statusError ? (
             <SectionError className="min-w-0 flex-1" onRetry={() => void refresh()}>
               Der Zeitstatus konnte nicht sicher geladen werden.
