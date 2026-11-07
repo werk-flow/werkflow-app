@@ -368,8 +368,7 @@ begin
   -- (readLatestFindingDecisions in lib/time-accounts/decision-reads.ts).
   -- A test runs in one transaction, so every decision it takes through the
   -- function shares one decided_at. The earlier decision is therefore
-  -- written directly, one minute back; the later one goes through the
-  -- function.
+  -- written directly, one minute back.
   july_period_id := (select period_id from public.time_period_calculations where id = v_calculation_id);
   v_calculation_id := public.prepare_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
@@ -395,10 +394,16 @@ begin
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000081',
     '{"responsibility":"time_approval"}', now() - interval '1 minute'
   );
-  perform public.decide_time_period_finding(
-    '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
-    later_decision_finding_id, 'rejected', 'Doch nicht freigegeben',
-    '23000000-0000-0000-0000-000000000082');
+  -- The function now refuses a decision after an approval, but rows written
+  -- before that rule can hold one, so the rejection is written directly too.
+  insert into public.time_period_finding_decisions (
+    organization_id, finding_id, decision, reason, decided_by, operation_id,
+    responsibility_snapshot
+  ) values (
+    '23000000-0000-0000-0000-000000000010', later_decision_finding_id, 'rejected',
+    'Doch nicht freigegeben', '23000000-0000-0000-0000-000000000001',
+    '23000000-0000-0000-0000-000000000082', '{"responsibility":"time_approval"}'
+  );
   begin
     perform public.close_time_period(
       '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
@@ -436,6 +441,25 @@ begin
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     later_decision_finding_id, 'approved', 'Geprüft',
     '23000000-0000-0000-0000-000000000086');
+  -- An approval is final: a stale second form can neither withdraw nor repeat it.
+  begin
+    perform public.decide_time_period_finding(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      later_decision_finding_id, 'rejected', 'Veraltetes Formular',
+      '23000000-0000-0000-0000-000000000088');
+    raise exception 'a rejection was recorded after an approval';
+  exception when others then
+    if sqlerrm not like '%finding_already_decided%' then raise; end if;
+  end;
+  begin
+    perform public.decide_time_period_finding(
+      '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
+      later_decision_finding_id, 'approved', 'Doppelt',
+      '23000000-0000-0000-0000-000000000089');
+    raise exception 'a second approval was recorded';
+  exception when others then
+    if sqlerrm not like '%finding_already_decided%' then raise; end if;
+  end;
   perform public.close_time_period(
     '23000000-0000-0000-0000-000000000001', '23000000-0000-0000-0000-000000000010',
     july_period_id, '23000000-0000-0000-0000-000000000087', repeat('c', 64));
@@ -460,10 +484,14 @@ begin
   ) then
     raise exception 'closed periods can lose their close version';
   end if;
-  -- The first calculation's Admin row and own row: only the own row is visible.
-  if (select count(*) from public.time_period_employee_results
-      where id in ('23000000-0000-0000-0000-000000000030', '23000000-0000-0000-0000-000000000031')) <> 1
-    then raise exception 'employee result visibility was not limited to own row'; end if;
+  -- Each calculation holds an Admin row and the employee's own row: only the
+  -- three own rows are visible.
+  if (select count(*) from public.time_period_employee_results) <> 3
+     or (select count(*) from public.time_period_employee_results
+         where id in ('23000000-0000-0000-0000-000000000031',
+                      '23000000-0000-0000-0000-000000000033',
+                      '23000000-0000-0000-0000-000000000035')) <> 3
+    then raise exception 'employee result visibility was not limited to own rows'; end if;
 end;
 $$;
 
