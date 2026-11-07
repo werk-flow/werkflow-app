@@ -246,7 +246,8 @@ const MESSAGES: ActionMessages = {
     messages: {
       forbidden: 'Du darfst diesen Prüfhinweis nicht entscheiden.',
       finding_not_found: 'Diesen Prüfhinweis gibt es nicht mehr. Lade die Seite neu.',
-      finding_already_decided: 'Dieser Prüfhinweis ist schon entschieden. Lade die Seite neu.',
+      finding_already_decided:
+        'Dieser Prüfhinweis ist schon entschieden. Lade die Seite neu. Steht er danach noch auf „Abgelehnt“, bereite die Periode neu vor.',
       period_not_found: PERIOD_NOT_FOUND,
     },
     fallback: 'Die Entscheidung konnte nicht gespeichert werden. Versuche es erneut.',
