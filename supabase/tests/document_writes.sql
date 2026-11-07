@@ -4,7 +4,9 @@
 -- 20261004140200_export_work_artifacts_atomically.sql): a refusal of a later
 -- step leaves no document, link, folder or audit event behind. The functions
 -- refuse a foreign organization, a field worker outside the assigned job,
--- by owner decision a field worker's export of a project artifact, and an
+-- by owner decision a field worker's export of a project artifact and every
+-- export of an internal revision
+-- (20261108020000_export_only_customer_facing_work_artifacts.sql), and an
 -- office member's change of an Admin-only personnel document
 -- (20261107160000_refuse_office_writes_to_admin_only_personnel_documents.sql).
 -- Only the service role executes them.
@@ -600,7 +602,8 @@ $$;
 
 -- Export: the report document, its link, the artifact relation and action and
 -- the audit event, or nothing. A field worker exports an assigned job's
--- artifact, never a project artifact.
+-- artifact, never a project artifact. Only a customer-facing revision is
+-- exported: an internal one stays out of the documents, even for a manager.
 do $$
 declare
   v_org constant uuid := '26140000-0000-0000-0000-000000000010';
@@ -612,14 +615,14 @@ begin
     p_organization_id => v_org, p_artifact_id => '26140000-0000-0000-0000-000000000070',
     p_revision_id => '26140000-0000-0000-0000-000000000071', p_job_id => null,
     p_project_id => '26140000-0000-0000-0000-000000000020', p_kind => 'work_report',
-    p_visibility => 'internal_only', p_title => 'Projektbericht',
+    p_visibility => 'customer_facing', p_title => 'Projektbericht',
     p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
     p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
     p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_admin);
   perform public.create_work_artifact_revision(
     p_organization_id => v_org, p_artifact_id => '26140000-0000-0000-0000-000000000072',
     p_revision_id => '26140000-0000-0000-0000-000000000073', p_job_id => '26140000-0000-0000-0000-000000000022',
-    p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only', p_title => 'Auftragsbericht',
+    p_project_id => null, p_kind => 'work_report', p_visibility => 'customer_facing', p_title => 'Auftragsbericht',
     p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
     p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
     p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_employee);
@@ -651,9 +654,37 @@ begin
       '26140000-0000-0000-0000-000000000076', %L, 'bericht.html', 10, 'v1', repeat('a', 64))
   $sql$, '26140000-0000-0000-0000-000000000011', '26140000-0000-0000-0000-000000000003',
     '26140000-0000-0000-0000-000000000011/work-artifact-exports/71/v1-a.html'), 'work_artifact_not_found');
-  if exists (select 1 from public.documents where id = '26140000-0000-0000-0000-000000000076')
-    or exists (select 1 from public.document_links where document_id = '26140000-0000-0000-0000-000000000076')
-  then raise exception 'a refused export left its document or link behind'; end if;
+  perform public.create_work_artifact_revision(
+    p_organization_id => v_org, p_artifact_id => '26140000-0000-0000-0000-000000000080',
+    p_revision_id => '26140000-0000-0000-0000-000000000081', p_job_id => '26140000-0000-0000-0000-000000000022',
+    p_project_id => null, p_kind => 'work_report', p_visibility => 'internal_only', p_title => 'Interne Notiz',
+    p_content => '{"summary":"Anlage geprüft","performedWork":"Filter gereinigt","visitStartedAt":"2026-09-01T06:00:00Z","visitEndedAt":"2026-09-01T07:00:00Z"}'::jsonb,
+    p_captured_at => now(), p_correction_reason => null, p_corrects_revision_id => null,
+    p_expected_version => null, p_submit => false, p_submit_action_id => null, p_actor_id => v_admin);
+  perform pg_temp.expect_refusal('export of an internal revision', format($sql$
+    select public.export_work_artifact(%L, %L, '26140000-0000-0000-0000-000000000080',
+      '26140000-0000-0000-0000-000000000081', '26140000-0000-0000-0000-000000000082',
+      '26140000-0000-0000-0000-000000000083',
+      (select version from public.work_artifacts where id = '26140000-0000-0000-0000-000000000080'),
+      '26140000-0000-0000-0000-000000000084', %L, 'intern.html', 10, 'v1', repeat('c', 64))
+  $sql$, v_org, v_admin, v_org || '/work-artifact-exports/81/v1-c.html'),
+    'work_artifact_export_requires_customer_visibility');
+  perform pg_temp.expect_refusal('finalize of an internal revision', format($sql$
+    select public.finalize_work_artifact_export(%L, %L, '26140000-0000-0000-0000-000000000080',
+      '26140000-0000-0000-0000-000000000081', '26140000-0000-0000-0000-000000000082',
+      '26140000-0000-0000-0000-000000000083',
+      (select version from public.work_artifacts where id = '26140000-0000-0000-0000-000000000080'),
+      '26140000-0000-0000-0000-000000000040', 'v1', repeat('c', 64))
+  $sql$, v_org, v_admin), 'work_artifact_export_requires_customer_visibility');
+  if exists (select 1 from public.documents where id in (
+      '26140000-0000-0000-0000-000000000076', '26140000-0000-0000-0000-000000000084'))
+    or exists (select 1 from public.document_links where document_id in (
+      '26140000-0000-0000-0000-000000000076', '26140000-0000-0000-0000-000000000084'))
+    or exists (select 1 from public.work_artifact_revision_documents
+      where revision_id = '26140000-0000-0000-0000-000000000081')
+    or exists (select 1 from public.work_artifact_actions
+      where artifact_id = '26140000-0000-0000-0000-000000000080' and action_type = 'exported')
+  then raise exception 'a refused export left its document, link, relation or action behind'; end if;
 
   v_result := public.export_work_artifact(v_org, v_admin, '26140000-0000-0000-0000-000000000070',
     '26140000-0000-0000-0000-000000000071', '26140000-0000-0000-0000-000000000074',
