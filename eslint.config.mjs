@@ -18,7 +18,6 @@ import {
   COMPONENT_FILE_LINE_LIMIT,
   FUNCTION_LINE_LIMIT,
   MODULE_LINE_LIMIT,
-  SIZE_CAP_EXCEPTIONS,
 } from './eslint-rules/size-caps.mjs';
 
 // ENFORCEMENT LADDER TIER 2 (docs/decisions/0005-enforcement-ladder.md).
@@ -1107,10 +1106,9 @@ const eslintConfig = defineConfig([
     : []),
   // Size limits (eslint-rules/size-caps.mjs): modules stay under 800 raw
   // lines, component and route files under 500, functions under 80 lines
-  // without blanks and comments (quality/function-size). The modules and
-  // functions that predate these caps are listed with their ceiling in
-  // eslint-rules/size-cap-exceptions.json; lib/conventions/module-caps.test.ts
-  // fails on a stale entry and refuses a directive that disables a size rule.
+  // without blanks and comments (quality/function-size). Only the generated
+  // database types are exempt; lib/conventions/module-caps.test.ts refuses a
+  // directive that disables a size rule.
   {
     files: productFiles,
     ignores: ['lib/supabase/database.types.ts'],
@@ -1124,23 +1122,12 @@ const eslintConfig = defineConfig([
       'max-lines': ['error', { max: COMPONENT_FILE_LINE_LIMIT, skipBlankLines: false, skipComments: false }],
     },
   },
-  // A listed module keeps its recorded ceiling (a function matcher: the paths
-  // hold glob characters such as (app) and [jobId]).
-  ...Object.entries(SIZE_CAP_EXCEPTIONS.modules).map(([file, ceiling]) => ({
-    files: [(filePath) => relative(import.meta.dirname, filePath).replaceAll('\\', '/') === file],
-    rules: {
-      'max-lines': ['error', { max: ceiling, skipBlankLines: false, skipComments: false }],
-    },
-  })),
   {
     files: productFiles,
     ignores: ['**/*.test.*'],
     plugins: { quality: qualityRules },
     rules: {
-      'quality/function-size': [
-        'error',
-        { max: FUNCTION_LINE_LIMIT, exceptions: SIZE_CAP_EXCEPTIONS.functions },
-      ],
+      'quality/function-size': ['error', { max: FUNCTION_LINE_LIMIT }],
     },
   },
   // Narrow instead of asserting: `!` hides the missing-value branch the strict
