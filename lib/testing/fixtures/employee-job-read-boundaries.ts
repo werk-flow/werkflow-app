@@ -134,6 +134,15 @@ const world = installActionWorld({
       ended_at: null,
       time_sessions: [{ user_id: coworkerId, status: 'open', ended_at: null }],
     },
+    // A coworker's ended segment on a finished job: it never resolves that job for the caller.
+    {
+      id: '35000000-0000-4000-8000-000000000003',
+      organization_id: ORGANIZATION_A,
+      job_id: ids.finished,
+      kind: 'work',
+      ended_at: earlier,
+      time_sessions: [{ user_id: coworkerId, status: 'closed', ended_at: earlier }],
+    },
   ],
 });
 const { readEntityOptions } = await import('@/lib/jobs/option-server');
