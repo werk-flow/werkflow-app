@@ -612,12 +612,15 @@ function readPipe(pipe: string): Promise<string> {
 /**
  * Ends a reader still blocked on `pipe`, so a failed test leaves no open read or
  * waiting process: opening for write without blocking fails when nobody reads.
+ * A reader that has not opened yet would block later, so the pipe goes away and
+ * its open fails instead.
  */
 function closePipe(pipe: string): void {
   try {
     closeSync(openSync(pipe, constants.O_WRONLY | constants.O_NONBLOCK));
   } catch (error) {
     if (errorCode(error) !== 'ENXIO') throw error;
+    rmSync(pipe, { force: true });
   }
 }
 
